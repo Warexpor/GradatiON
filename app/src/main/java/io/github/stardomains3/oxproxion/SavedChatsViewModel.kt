@@ -19,16 +19,28 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         private const val MAX_IMPORT_MESSAGES = 5000
     }
     private val repository: ChatRepository
+    private val rpRepository: RpRepository
     val allSessions: LiveData<List<ChatSession>>
 
     init {
-        val chatDao = AppDatabase.getDatabase(application).chatDao()
-        repository = ChatRepository(chatDao)
+        val db = AppDatabase.getDatabase(application)
+        repository = ChatRepository(db.chatDao())
+        rpRepository = RpRepository(db.rpDao())
         allSessions = repository.allSessions
     }
 
+    fun sessionsForMode(mode: ChatMode): LiveData<List<ChatSession>> =
+        repository.sessionsByMode(mode)
+
     fun deleteSession(sessionId: Long) = viewModelScope.launch {
         repository.deleteSession(sessionId)
+        val prefs = SharedPreferencesHelper(getApplication())
+        listOf(ChatMode.ASK, ChatMode.RP).forEach { mode ->
+            if (prefs.getRpDraftSessionId(mode) == sessionId) {
+                prefs.saveRpDraftSessionId(mode, null)
+            }
+        }
+        prefs.clearRpSwipeJson(sessionId)
     }
 
     fun updateSessionTitle(sessionId: Long, newTitle: String) = viewModelScope.launch {
@@ -37,6 +49,8 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
     suspend fun getChatsAsJson(): String {
         val sessionsWithMessages = repository.getAllSessionsWithMessages()
         val exportedSessions = sessionsWithMessages.map { sessionWithMessages ->
+            val charId = sessionWithMessages.session.characterId
+            val exportKey = charId?.let { rpRepository.getCharacterById(it)?.exportKey }
             ExportedChatSession(
                 title = sessionWithMessages.session.title,
                 modelUsed = sessionWithMessages.session.modelUsed,
@@ -45,7 +59,11 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
                         role = message.role,
                         content = message.content
                     )
-                }
+                },
+                mode = sessionWithMessages.session.mode,
+                characterId = charId,
+                characterExportKey = exportKey,
+                isLlm = sessionWithMessages.session.isLlm
             )
         }
         val backup = ChatBackup(sessions = exportedSessions)
@@ -72,9 +90,19 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             for (exportedSession in backup.sessions) {
+                val characterId = when {
+                    !exportedSession.characterExportKey.isNullOrBlank() ->
+                        rpRepository.getCharacterByExportKey(exportedSession.characterExportKey)?.id
+                    exportedSession.characterId != null ->
+                        exportedSession.characterId.takeIf { rpRepository.getCharacterById(it) != null }
+                    else -> null
+                }
                 val session = ChatSession(
                     title = exportedSession.title,
-                    modelUsed = exportedSession.modelUsed
+                    modelUsed = exportedSession.modelUsed,
+                    mode = exportedSession.mode,
+                    characterId = characterId,
+                    isLlm = exportedSession.isLlm
                 )
                 val messages = exportedSession.messages.map { exportedMessage ->
                     ChatMessage(
@@ -91,7 +119,7 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    suspend fun searchSessions(query: String): List<ChatSession> {
-        return repository.searchSessions(query)
+    suspend fun searchSessions(query: String, mode: ChatMode = ChatMode.ASK): List<ChatSession> {
+        return repository.searchSessions(query, mode)
     }
 }

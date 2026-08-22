@@ -36,7 +36,7 @@
             android:layout_height="40dp"
             android:layout_marginEnd="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Expand/collapse"
+            android:contentDescription="@string/cd_toggle_expand"
             android:padding="8dp"
             android:rotation="0"
             android:src="@drawable/ic_arrow_downward"
@@ -47,7 +47,7 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Edit preset"
+            android:contentDescription="@string/cd_edit_preset"
             android:padding="8dp"
             android:src="@drawable/ic_editnote"
             app:tint="@color/xai_mute" />

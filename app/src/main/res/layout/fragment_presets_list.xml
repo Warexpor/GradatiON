@@ -16,7 +16,7 @@
         android:background="@color/xai_canvas"
         app:navigationIcon="@drawable/is_backarrow"
         app:navigationIconTint="@color/xai_ink"
-        app:title="Presets"
+        app:title="@string/settings_presets"
         app:titleTextColor="@color/xai_ink" />
 
     <LinearLayout
@@ -34,10 +34,10 @@
             android:id="@+id/switchClearChat"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Clear chat?"
+            android:text="@string/presets_clear_chat"
             android:textColor="@color/xai_ink"
             android:textSize="14sp"
-            android:contentDescription="Toggle to clear chat history when applying a preset"
+            android:contentDescription="@string/cd_preset_clear_chat"
             app:useMaterialThemeColors="true" />
     </LinearLayout>
 
@@ -55,7 +55,7 @@
         style="@style/Widget.Grokion.Button.Text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Add"
-        android:contentDescription="Add Preset" />
+        android:text="@string/action_add"
+        android:contentDescription="@string/cd_add_preset" />
 
 </LinearLayout>

@@ -10,10 +10,15 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import java.io.File
 import java.io.RandomAccessFile
 
-@Database(entities = [ChatSession::class, ChatMessage::class], version = 1, exportSchema = false)
+@Database(
+    entities = [ChatSession::class, ChatMessage::class, RpCharacter::class, RpLorebook::class],
+    version = 3,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun chatDao(): ChatDao
+    abstract fun rpDao(): RpDao
 
     companion object {
         const val DB_NAME = "chat_database"
@@ -46,6 +51,7 @@ abstract class AppDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(passphrase.copyOf())
             return Room.databaseBuilder(context, AppDatabase::class.java, DB_NAME)
                 .openHelperFactory(factory)
+                .addMigrations(DatabaseMigrations.MIGRATION_1_2, DatabaseMigrations.MIGRATION_2_3)
                 .build()
         }
 

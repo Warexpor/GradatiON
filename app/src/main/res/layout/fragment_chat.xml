@@ -34,7 +34,7 @@
                 style="@style/Widget.Grokion.IconButton"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:contentDescription="History"
+                android:contentDescription="@string/cd_history"
                 app:icon="@drawable/ic_grok_menu"
                 app:iconSize="24dp"
                 app:iconTint="@color/xai_ink"
@@ -50,6 +50,7 @@
                 android:layout_width="44dp"
                 android:layout_height="44dp"
                 android:visibility="gone"
+                android:contentDescription="@string/cd_copy_and_return"
                 app:backgroundTint="@android:color/transparent"
                 app:icon="@drawable/backcopy"
                 app:iconSize="22dp"
@@ -71,6 +72,24 @@
                 app:barrierDirection="start"
                 app:constraint_referenced_ids="newChatButton" />
 
+            <TextView
+                android:id="@+id/chatModeChip"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_model_chip"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="@string/rp_mode_ask"
+                android:textColor="@color/gradation_gold"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:layout_constraintStart_toEndOf="@id/topBarStartBarrier"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
             <!-- Model chip — centered in top bar (Grok parity) -->
             <TextView
                 android:id="@+id/modelNameTextView"
@@ -80,7 +99,7 @@
                 android:background="@drawable/bg_model_chip"
                 android:clickable="true"
                 android:focusable="true"
-                android:contentDescription="Active model"
+                android:contentDescription="@string/cd_active_model"
                 android:ellipsize="end"
                 android:singleLine="true"
                 android:gravity="center_vertical"
@@ -138,6 +157,7 @@
                 android:layout_width="44dp"
                 android:layout_height="44dp"
                 android:visibility="gone"
+                android:contentDescription="@string/cd_back_to_app"
                 app:backgroundTint="@android:color/transparent"
                 app:icon="@drawable/backtoapp"
                 app:iconSize="22dp"
@@ -151,6 +171,7 @@
                 android:layout_width="44dp"
                 android:layout_height="44dp"
                 android:visibility="gone"
+                android:contentDescription="@string/cd_home"
                 app:backgroundTint="@android:color/transparent"
                 app:icon="@drawable/ic_home"
                 app:iconSize="22dp"
@@ -271,7 +292,7 @@
                 android:background="@color/xai_canvas"
                 android:clipToPadding="false"
                 android:paddingTop="12dp"
-                android:paddingBottom="16dp"
+                android:paddingBottom="56dp"
                 android:paddingStart="4dp"
                 android:paddingEnd="4dp"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
@@ -431,7 +452,7 @@
                             android:layout_width="48dp"
                             android:layout_height="48dp"
                             android:layout_marginEnd="12dp"
-                            android:contentDescription="Attach file"
+                            android:contentDescription="@string/cd_attach_file"
                             app:icon="@drawable/ic_attachdoc"
                             app:iconSize="24dp"
                             app:iconTint="@color/xai_body"
@@ -443,7 +464,7 @@
                             android:layout_width="48dp"
                             android:layout_height="48dp"
                             android:layout_marginEnd="12dp"
-                            android:contentDescription="Attach image or audio"
+                            android:contentDescription="@string/cd_attach_media"
                             app:icon="@drawable/ic_imgup"
                             app:iconSize="24dp"
                             app:iconTint="@color/xai_body"
@@ -456,7 +477,7 @@
                             android:layout_height="48dp"
                             android:layout_marginEnd="12dp"
                             android:visibility="gone"
-                            android:contentDescription="Image generation"
+                            android:contentDescription="@string/cd_image_gen"
                             app:icon="@drawable/ic_palette"
                             app:iconSize="24dp"
                             app:iconTint="@color/xai_body"
@@ -468,7 +489,7 @@
                             android:layout_width="48dp"
                             android:layout_height="48dp"
                             android:layout_marginEnd="12dp"
-                            android:contentDescription="New chat"
+                            android:contentDescription="@string/cd_new_chat"
                             app:icon="@drawable/ic_rechat"
                             app:iconSize="24dp"
                             app:iconTint="@color/xai_body"
@@ -480,7 +501,7 @@
                             android:layout_width="48dp"
                             android:layout_height="48dp"
                             android:layout_marginEnd="12dp"
-                            android:contentDescription="System message"
+                            android:contentDescription="@string/cd_system_message"
                             app:icon="@drawable/ic_tune"
                             app:iconSize="24dp"
                             app:iconTint="@color/xai_body"
@@ -493,7 +514,7 @@
                             android:layout_height="48dp"
                             android:layout_marginEnd="12dp"
                             android:visibility="gone"
-                            android:contentDescription="Paste"
+                            android:contentDescription="@string/cd_paste"
                             app:icon="@drawable/ic_paste"
                             app:iconSize="24dp"
                             app:iconTint="@color/xai_body"
@@ -505,7 +526,7 @@
                             android:layout_width="48dp"
                             android:layout_height="48dp"
                             android:visibility="gone"
-                            android:contentDescription="Clear input"
+                            android:contentDescription="@string/cd_clear_input"
                             app:icon="@drawable/ic_clearchat"
                             app:iconSize="24dp"
                             app:iconTint="@color/xai_body"
@@ -744,7 +765,7 @@
                     app:iconSize="20dp"
                     app:iconTint="@color/xai_body"
                     app:backgroundTint="@color/xai_canvas_card"
-                    android:contentDescription="Increase font" />
+                    android:contentDescription="@string/cd_font_increase" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnDecreaseFont"
@@ -755,7 +776,7 @@
                     app:iconSize="20dp"
                     app:iconTint="@color/xai_body"
                     app:backgroundTint="@color/xai_canvas_card"
-                    android:contentDescription="Decrease font" />
+                    android:contentDescription="@string/cd_font_decrease" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnDoneFont"
@@ -766,7 +787,7 @@
                     app:iconSize="20dp"
                     app:iconTint="@color/xai_body"
                     app:backgroundTint="@color/xai_canvas_card"
-                    android:contentDescription="Done" />
+                    android:contentDescription="@string/cd_done" />
             </LinearLayout>
 
             <View
@@ -787,6 +808,92 @@
                 android:focusable="false"
                 android:focusableInTouchMode="false" />
         </FrameLayout>
+
+        <!-- RP extras: Reminder insert + swipe alternate replies -->
+        <LinearLayout
+            android:id="@+id/rpComposerExtras"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:visibility="gone">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/rpReminderButton"
+                style="@style/Widget.Grokion.Button.Text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:contentDescription="@string/rp_insert_reminder_a11y"
+                android:text="@string/rp_insert_reminder" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/rpStreamButton"
+                style="@style/Widget.Grokion.IconButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:contentDescription="@string/toggle_streaming"
+                app:icon="@drawable/ic_stream"
+                app:iconSize="22dp"
+                app:iconTint="@color/xai_body"
+                app:backgroundTint="@color/xai_canvas_soft" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <LinearLayout
+                android:id="@+id/rpSwipeBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/rpSwipePrevButton"
+                    style="@style/Widget.Grokion.Button.Text"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="@string/rp_swipe_prev"
+                    android:insetLeft="0dp"
+                    android:insetTop="0dp"
+                    android:insetRight="0dp"
+                    android:insetBottom="0dp"
+                    android:minWidth="0dp"
+                    android:padding="0dp"
+                    android:text="@string/rp_swipe_chevron_prev" />
+
+                <TextView
+                    android:id="@+id/rpSwipeCounter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:textColor="@color/xai_ink"
+                    android:textSize="13sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/rpSwipeNextButton"
+                    style="@style/Widget.Grokion.Button.Text"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="@string/rp_swipe_next"
+                    android:insetLeft="0dp"
+                    android:insetTop="0dp"
+                    android:insetRight="0dp"
+                    android:insetBottom="0dp"
+                    android:minWidth="0dp"
+                    android:padding="0dp"
+                    android:text="@string/rp_swipe_chevron_next" />
+            </LinearLayout>
+        </LinearLayout>
 
         <!-- ── Bottom composer: tall panel, model chip inside ── -->
         <LinearLayout
@@ -863,7 +970,7 @@
                         style="@style/Widget.Grokion.IconButton.Filled"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        android:contentDescription="Attach"
+                        android:contentDescription="@string/attach_content_description"
                         android:background="@drawable/bg_send_disabled"
                         app:backgroundTint="@null"
                         app:rippleColor="@color/press_ripple_none"
@@ -898,7 +1005,7 @@
                         android:layout_width="44dp"
                         android:layout_height="44dp"
                         android:visibility="gone"
-                        android:contentDescription="Voice input"
+                        android:contentDescription="@string/cd_voice_input"
                         app:icon="@drawable/ic_mic"
                         app:iconGravity="textStart"
                         app:iconSize="22dp"
@@ -917,7 +1024,7 @@
                         android:layout_width="40dp"
                         android:layout_height="40dp"
                         android:layout_marginStart="4dp"
-                        android:contentDescription="Send message"
+                        android:contentDescription="@string/cd_send"
                         android:background="@drawable/bg_send_pill"
                         app:backgroundTint="@null"
                         app:cornerRadius="20dp"

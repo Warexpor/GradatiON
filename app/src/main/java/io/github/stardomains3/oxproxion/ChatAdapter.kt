@@ -52,6 +52,7 @@ class ChatAdapter(
     private val ttsAvailable: Boolean,
     private val onEditMessage: (Int, String) -> Unit,
     private val onRedoMessage: (Int, JsonElement) -> Unit,
+    private val onInstructMessage: (Int) -> Unit,
     private val onDeleteMessage: (Int) -> Unit,
     private val onEditAssistantMessage: (Int, String) -> Unit,
     private val onSaveMarkdown: (Int, String) -> Unit,
@@ -65,6 +66,44 @@ class ChatAdapter(
     private val onForkNavigate: (Int) -> Unit
 
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
+    var isRpMode: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            if (messages.isNotEmpty()) notifyDataSetChanged()
+        }
+
+    /** Shown above assistant bubbles in RP when a character is active. */
+    var rpSpeakerName: String? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            if (isRpMode && messages.isNotEmpty()) notifyDataSetChanged()
+        }
+
+    var rpSpeakerAvatarUri: String? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            if (isRpMode && messages.isNotEmpty()) notifyDataSetChanged()
+        }
+
+    var rpSpeakerAvatarFile: File? = null
+        set(value) {
+            if (field?.absolutePath == value?.absolutePath) {
+                // Same path can still be a rewritten JPEG — force Coil rebind in RP.
+                if (isRpMode && messages.isNotEmpty()) notifyDataSetChanged()
+                return
+            }
+            field = value
+            if (isRpMode && messages.isNotEmpty()) notifyDataSetChanged()
+        }
+
+    /** Bust avatar cache after character edit saves a new JPEG at the same path. */
+    fun refreshRpSpeakerAvatars() {
+        if (isRpMode && messages.isNotEmpty()) notifyDataSetChanged()
+    }
 
     // --- STATE & CACHE ---
     // Changed to Map to use stable keys (content hash) instead of unstable positions
@@ -592,7 +631,7 @@ class ChatAdapter(
                             }
                             itemView.context.startActivity(intent)
                         } catch (e: Exception) {
-                            AppToast.makeText(itemView.context, "Could not open image", AppToast.LENGTH_SHORT).show()
+                            AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_could_not_open_image), AppToast.LENGTH_SHORT).show()
                         }
                     }
                 } catch (e: Exception) {
@@ -620,7 +659,7 @@ class ChatAdapter(
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Copied Markdown", rawUserContent)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(itemView.context, "Raw Markdown copied to clipboard", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_raw_md_copied), AppToast.LENGTH_SHORT).show()
                 true
             }
             editButton.setOnClickListener {
@@ -651,6 +690,7 @@ class ChatAdapter(
         private val pngButton: ImageButton = itemView.findViewById(R.id.pngButton)
         val ttsButton: ImageButton = itemView.findViewById(R.id.ttsButton)
         private val regenerateButton: ImageButton = itemView.findViewById(R.id.regenerateButton)
+        private val instructButton: ImageButton = itemView.findViewById(R.id.instructButton)
         private val generatedImageView: ImageView = itemView.findViewById(R.id.generatedImageView)
         val messageContainer: ConstraintLayout = itemView.findViewById(R.id.messageContainer)
         private var pulseAnimator: ObjectAnimator? = null
@@ -672,6 +712,9 @@ class ChatAdapter(
         private val forkPrev: ImageButton = itemView.findViewById(R.id.forkPrev)
         private val forkNext: ImageButton = itemView.findViewById(R.id.forkNext)
         private val forkLabel: TextView = itemView.findViewById(R.id.forkLabel)
+        private val rpSpeakerHeader: View = itemView.findViewById(R.id.rpSpeakerHeader)
+        private val rpSpeakerAvatar: ImageView = itemView.findViewById(R.id.rpSpeakerAvatar)
+        private val rpSpeakerNameView: TextView = itemView.findViewById(R.id.rpSpeakerName)
         private var thinkingBarAnimators: List<ObjectAnimator>? = null
         // Configuration for "Long Message" detection
         private val CHAR_THRESHOLD = 350
@@ -703,6 +746,7 @@ class ChatAdapter(
             if (isThinking) {
                 thinkingRow.visibility = View.VISIBLE
                 messageContainer.visibility = View.GONE
+                rpSpeakerHeader.visibility = View.GONE
                 startThinkingBars()
             } else {
                 thinkingRow.visibility = View.GONE
@@ -711,7 +755,39 @@ class ChatAdapter(
             }
         }
 
+        private fun bindRpSpeakerHeader(isThinking: Boolean) {
+            val name = rpSpeakerName
+            if (!isRpMode || isThinking || name.isNullOrBlank()) {
+                rpSpeakerHeader.visibility = View.GONE
+                return
+            }
+            rpSpeakerHeader.visibility = View.VISIBLE
+            rpSpeakerNameView.text = name
+            val model: Any? = when {
+                !rpSpeakerAvatarUri.isNullOrBlank() -> rpSpeakerAvatarUri
+                rpSpeakerAvatarFile?.exists() == true -> rpSpeakerAvatarFile
+                else -> null
+            }
+            if (model != null) {
+                val request = ImageRequest.Builder(itemView.context)
+                    .data(model)
+                    .transformations(coil.transform.CircleCropTransformation())
+                    .target(rpSpeakerAvatar)
+                if (model is File) {
+                    request.memoryCacheKey("rp-avatar-${model.absolutePath}-${model.lastModified()}")
+                    request.diskCacheKey("rp-avatar-${model.absolutePath}-${model.lastModified()}")
+                }
+                ImageLoader(itemView.context).enqueue(request.build())
+            } else {
+                rpSpeakerAvatar.setImageResource(R.drawable.ic_gradation_mark)
+            }
+        }
+
         private fun bindForkNavigator(position: Int) {
+            if (isRpMode) {
+                forkNavigator.visibility = View.GONE
+                return
+            }
             val forkNav = forkNavStateForPosition(position)
             if (forkNav == null) {
                 forkNavigator.visibility = View.GONE
@@ -740,9 +816,9 @@ class ChatAdapter(
             }
             reasoningBlock.visibility = View.VISIBLE
             reasoningTitle.text = if (streaming && getMessageText(message.content).isBlank()) {
-                "Thinking…"
+                itemView.context.getString(R.string.thinking_label)
             } else {
-                "Thinking"
+                itemView.context.getString(R.string.thinking_label_idle)
             }
             val key = "reasoning_${reasoning.hashCode()}"
             // Expanded while streaming so the user can watch thoughts; collapse default after.
@@ -916,12 +992,13 @@ class ChatAdapter(
             // 3. UI STATE LOGIC
             ttsButton.visibility = if (ttsAvailable) View.VISIBLE else View.GONE
 
-            val isError = message.role == "assistant" && text.startsWith("**Error:**")
+            val isError = message.role == "assistant" && isRpErrorText(text)
 
             itemView.findViewById<View>(R.id.aiActionRow).visibility =
                 if (isThinking) View.GONE else View.VISIBLE
 
             bindThinkingState(isThinking)
+            bindRpSpeakerHeader(isThinking)
 
             messageContainer.setBackgroundResource(R.drawable.bg_ai_message)
             if (isError) {
@@ -960,7 +1037,7 @@ class ChatAdapter(
                             }
                             itemView.context.startActivity(intent)
                         } catch (e: Exception) {
-                            AppToast.makeText(itemView.context, "Could not open image", AppToast.LENGTH_SHORT).show()
+                            AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_could_not_open_image), AppToast.LENGTH_SHORT).show()
                         }
                     }
                 } catch (e: Exception) {
@@ -985,9 +1062,8 @@ class ChatAdapter(
                 } else false
             }
             editButton.setOnClickListener {
-                // Pass the position and the raw text to the fragment
-                val fullRawMarkdown = ensureTableSpacing(reasoningText + text)
-                onEditAssistantMessage(bindingAdapterPosition, fullRawMarkdown)
+                // Edit the visible reply only — do not bake reasoning into content/swipe alts.
+                onEditAssistantMessage(bindingAdapterPosition, ensureTableSpacing(text))
             }
             regenerateButton.setOnClickListener {
                 val pos = bindingAdapterPosition
@@ -997,12 +1073,29 @@ class ChatAdapter(
                     onRedoMessage(pos - 1, prev.content)
                 }
             }
+            instructButton.setOnClickListener {
+                val pos = bindingAdapterPosition
+                if (pos < 0 || pos >= messages.size) return@setOnClickListener
+                onInstructMessage(pos)
+            }
+            val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" }
+            val lastUserIndex = messages.indexOfLast { it.role == "user" }
+            val hasUserTurn = lastUserIndex >= 0
+            // Instruct/regen only when there is an assistant reply after the last user turn
+            // (not the opening greeting after a cancelled request). Error bubbles still allow retry.
+            val showRpActions = isRpMode &&
+                hasUserTurn &&
+                position == lastAssistantIndex &&
+                lastAssistantIndex > lastUserIndex &&
+                !isThinking
+            instructButton.visibility = if (showRpActions) View.VISIBLE else View.GONE
             regenerateButton.visibility = if (
                 position > 0 &&
                 position < messages.size &&
                 messages[position - 1].role == "user" &&
                 !isThinking &&
-                !isError
+                (!isRpMode || (position == lastAssistantIndex && position > lastUserIndex)) &&
+                (!isError || isRpMode)
             ) View.VISIBLE else View.GONE
             copyButton.setOnClickListener {
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -1016,7 +1109,7 @@ class ChatAdapter(
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Copied Markdown", fullRawMarkdown)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(itemView.context, "Raw Markdown copied to clipboard", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_raw_md_copied), AppToast.LENGTH_SHORT).show()
                 true
             }
 
@@ -1024,9 +1117,9 @@ class ChatAdapter(
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, messageTextView.text.toString())
-                    putExtra(Intent.EXTRA_SUBJECT, "AI Assistant Message")
+                    putExtra(Intent.EXTRA_SUBJECT, itemView.context.getString(R.string.share_subject_message))
                 }
-                itemView.context.startActivity(Intent.createChooser(shareIntent, "Share message via"))
+                itemView.context.startActivity(Intent.createChooser(shareIntent, itemView.context.getString(R.string.toast_share_message)))
             }
 
             shareButton.setOnLongClickListener {
@@ -1034,10 +1127,10 @@ class ChatAdapter(
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, fullRawMarkdown)
-                    putExtra(Intent.EXTRA_SUBJECT, "AI Assistant Raw Markdown")
+                    putExtra(Intent.EXTRA_SUBJECT, itemView.context.getString(R.string.share_subject_markdown))
                 }
-                itemView.context.startActivity(Intent.createChooser(shareIntent, "Share raw markdown via"))
-                AppToast.makeText(itemView.context, "Sharing raw markdown", AppToast.LENGTH_SHORT).show()
+                itemView.context.startActivity(Intent.createChooser(shareIntent, itemView.context.getString(R.string.toast_share_markdown)))
+                AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_sharing_markdown), AppToast.LENGTH_SHORT).show()
                 true
             }
 
@@ -1054,7 +1147,7 @@ class ChatAdapter(
                     ForegroundService.stopTtsSpeaking()
                     onSpeakText(textToSpeak, position)
                 } else {
-                    AppToast.makeText(itemView.context, "No text to speak", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_no_text_speak), AppToast.LENGTH_SHORT).show()
                 }
             }
 
@@ -1064,7 +1157,7 @@ class ChatAdapter(
                     ForegroundService.stopTtsSpeaking()
                     onSynthesizeToWavFile(textToSpeak, position)
                 } else {
-                    AppToast.makeText(itemView.context, "No text to save", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_no_text_save), AppToast.LENGTH_SHORT).show()
                 }
                 true
             }
@@ -1106,17 +1199,16 @@ class ChatAdapter(
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
                         // Create the system chooser intent
-                        val chooserIntent = Intent.createChooser(intent, "Open Folder")
+                        val chooserIntent = Intent.createChooser(intent, itemView.context.getString(R.string.action_open_folder))
 
-                        // Show Snackbar with the action
-                        Snackbar.make(itemView, "PDF saved to Downloads", Snackbar.LENGTH_LONG)
-                            .setAction("Open Folder") {
+                        Snackbar.make(itemView, R.string.toast_pdf_saved, Snackbar.LENGTH_LONG)
+                            .setAction(R.string.action_open_folder) {
                                 context.startActivity(chooserIntent)
                             }
                             .show()
                     } else {
                         // Keep the failure toast as it provides immediate error feedback
-                        AppToast.makeText(itemView.context, "Failed to save PDF", AppToast.LENGTH_SHORT).show()
+                        AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_pdf_failed), AppToast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -1170,6 +1262,9 @@ class ChatAdapter(
             messageTextView.maxLines = if (isCollapsed) 4 else Int.MAX_VALUE
             messageTextView.ellipsize = if (isCollapsed) android.text.TextUtils.TruncateAt.END else null
         }
+
+        private fun isRpErrorText(text: String): Boolean =
+            text.startsWith("**Error:**")
     }
     inner class HiddenViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView)
 }

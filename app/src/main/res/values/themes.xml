@@ -69,6 +69,21 @@
         <item name="android:foreground">@drawable/bg_press_svg</item>
     </style>
 
+    <style name="Widget.Grokion.Button.SettingsRow" parent="Widget.Grokion.Button.Text">
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:textSize">16sp</item>
+        <item name="backgroundTint">@android:color/transparent</item>
+        <item name="iconGravity">start</item>
+        <item name="iconPadding">16dp</item>
+        <item name="iconSize">22dp</item>
+        <item name="iconTint">@color/xai_ink</item>
+        <item name="rippleColor">@color/press_ripple_none</item>
+    </style>
+
     <style name="Widget.Grokion.IconButton" parent="Widget.Material3.Button.IconButton">
         <item name="rippleColor">@color/press_ripple_none</item>
         <item name="android:stateListAnimator">@animator/press_scale</item>

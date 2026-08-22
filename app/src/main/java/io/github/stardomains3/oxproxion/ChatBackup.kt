@@ -11,7 +11,11 @@ data class ChatBackup(
 data class ExportedChatSession(
     val title: String,
     val modelUsed: String,
-    val messages: List<ExportedChatMessage>
+    val messages: List<ExportedChatMessage>,
+    val mode: String = ChatMode.ASK.storageValue,
+    val characterId: Long? = null,
+    val characterExportKey: String? = null,
+    val isLlm: Boolean = false
 )
 
 @Serializable

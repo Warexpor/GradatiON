@@ -38,6 +38,7 @@ GradatiON shell: sparse top bar, composer pill, history drawer, grouped settings
 - In-chat forks (edit / resend / delete with branch navigator)
 - On-device PDF export; Markwon markdown
 - Tool calling (workspace files, calendar, timers, Brave search, …) — off by default
+- **GradatiON RP** — local character/persona/lore roleplay (Ask ↔ RP; long-press chip opens hub; character export includes avatars)
 - Workspace: `Download/gradation` (reads legacy `grokion` / `oxproxion`)
 - TTS + file transcription models; **live STT / Voice settings disabled** in this build
 - SQLCipher chat DB; Keystore-wrapped API keys; no trackers or ads

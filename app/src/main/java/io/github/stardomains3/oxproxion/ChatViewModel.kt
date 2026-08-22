@@ -63,6 +63,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -285,7 +286,42 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private val repository: ChatRepository
+    private val rpRepository: RpRepository
+    private val rpDelegate: RpChatDelegate
+    private val rpSwipeStore: RpSwipeStore
     private var currentSessionId: Long? = null
+
+    private val _chatMode = MutableLiveData<ChatMode>()
+    val chatMode: LiveData<ChatMode> = _chatMode
+    private val _activeRpCharacter = MutableLiveData<RpCharacter?>()
+    val activeRpCharacter: LiveData<RpCharacter?> = _activeRpCharacter
+    private var rpSwipeState: RpSwipeState = RpSwipeState()
+    /** When true, the next finalized RP assistant reply is appended to swipe alts. */
+    private var pendingRpSwipeAppend = false
+    /** Stop mid-regen restore when the prior bubble was an error (not in swipe alts). */
+    private var rpRegenRestoreFallback: String? = null
+    /** Bumped to invalidate delayed swipe restores after load / new chat / mode switch. */
+    private var rpSwipeRestoreToken = 0
+    /** Cancels overlapping load / mode switch / character start / cold-start restore. */
+    private var sessionTransitionJob: Job? = null
+    /** Bumped when the open session/mode identity changes; aborts in-flight autosaves. */
+    private var sessionEpoch = 0L
+    /** RP prompt-build before network starts; Stop must cancel this and clear early awaiting. */
+    private var rpPrepJob: Job? = null
+    /**
+     * Preserves an orphaned session characterId across autosave so delete→re-import remapping
+     * still finds rows (active prefs are cleared when the character row is missing).
+     */
+    private var preservedSessionCharacterId: Long? = null
+    private val _rpSwipeNav = MutableLiveData<RpSwipeNav?>()
+    val rpSwipeNav: LiveData<RpSwipeNav?> = _rpSwipeNav
+
+    data class RpSwipeNav(
+        val index: Int,
+        val total: Int,
+        val canPrev: Boolean,
+        val canNext: Boolean
+    )
 
     // State Management
     private val _chatMessages = MutableLiveData<List<FlexibleMessage>>(emptyList())
@@ -320,6 +356,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val toolUiEvent: LiveData<Event<String>> = _toolUiEvent
     private val _toastUiEvent = MutableLiveData<Event<String>>()
     val toastUiEvent: LiveData<Event<String>> = _toastUiEvent
+    private val _composerRestoreEvent = MutableLiveData<Event<String>>()
+    val composerRestoreEvent: LiveData<Event<String>> = _composerRestoreEvent
+    /** Fired when RP chrome must refresh even if active character LiveData is unchanged (e.g. LLM toggle). */
+    private val _rpChromeRefreshEvent = MutableLiveData<Event<Unit>>()
+    val rpChromeRefreshEvent: LiveData<Event<Unit>> = _rpChromeRefreshEvent
     private val _isChatLoading = MutableLiveData(false)
     val isChatLoading: LiveData<Boolean> = _isChatLoading
     private val _isExtendedDockEnabled = MutableLiveData<Boolean>()
@@ -343,8 +384,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var networkJob: Job? = null
     /** Index of the in-flight assistant placeholder / streaming bubble in `_chatMessages`. */
     private var streamingAssistantIndex: Int = -1
-    private val _autosendEvent = MutableLiveData<Event<Unit>>()
-    val autosendEvent: LiveData<Event<Unit>> = _autosendEvent
+    /**
+     * True after an RP (non-regen) send has added its thinking/stream bubble.
+     * Used so Stop discards that partial without wiping a finished prior reply during prep.
+     */
+    private var discardableRpAssistantInFlight = false
+    private val _autosendEvent = MutableLiveData<Event<String>>()
+    val autosendEvent: LiveData<Event<String>> = _autosendEvent
     private val _userScrolledDuringStream = MutableLiveData(false)
     val userScrolledDuringStream: LiveData<Boolean> = _userScrolledDuringStream
     val _isToolsEnabled = MutableLiveData(false)
@@ -448,6 +494,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         sharedPreferencesHelper.saveExtPreference2(newValue)
     }
     fun toggleWebSearch() {
+        if (isRpMode() && !(_isWebSearchEnabled.value ?: false)) return
         val newNotiState = !(_isWebSearchEnabled.value ?: false)
         _isWebSearchEnabled.value = newNotiState
         sharedPreferencesHelper.saveWebSearchEnabled(newNotiState)
@@ -464,10 +511,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         sharedPreferencesHelper.saveExpandableInput(newValue)
     }
     fun toggleToolsEnabled() {
+        if (isRpMode() && !(_isToolsEnabled.value ?: false)) return
         val newValue = !(_isToolsEnabled.value ?: false)
         _isToolsEnabled.value = newValue
         sharedPreferencesHelper.saveToolsPreference(newValue)
     }
+
+    /** LiveData-only off switch for RP chrome — does not write Ask prefs. */
+    fun forceDisableToolsAndWebForRp() {
+        if (_isToolsEnabled.value == true) _isToolsEnabled.value = false
+        if (_isWebSearchEnabled.value == true) _isWebSearchEnabled.value = false
+    }
+
     fun toggleReasoning() {
         val newValue = !(_isReasoningEnabled.value ?: false)
         _isReasoningEnabled.value = newValue
@@ -499,6 +554,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // soundManager = SoundManager(application)
         val chatDao = AppDatabase.getDatabase(application).chatDao()
         repository = ChatRepository(chatDao)
+        val rpDao = AppDatabase.getDatabase(application).rpDao()
+        rpRepository = RpRepository(rpDao)
+        rpDelegate = RpChatDelegate(rpRepository, sharedPreferencesHelper)
+        rpSwipeStore = RpSwipeStore(sharedPreferencesHelper)
+        // Drop any instruct left by a killed mid-regen process.
+        sharedPreferencesHelper.saveRpPendingInstruct(null)
+        _chatMode.value = sharedPreferencesHelper.getChatMode()
+        sessionTransitionJob = viewModelScope.launch {
+            refreshActiveRpCharacter()
+            restoreDraftOrNewChat(_chatMode.value ?: ChatMode.ASK)
+        }
         sharedPreferencesHelper.setTimeoutChangedListener(object :
             SharedPreferencesHelper.OnTimeoutChangedListener {
             override fun onTimeoutChanged(newMinutes: Int) {
@@ -555,6 +621,39 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getCurrentSessionId(): Long? = currentSessionId
 
+    /** Cancel overlapping session transitions (load / mode switch / character start / cold restore). */
+    private fun beginSessionTransition(block: suspend () -> Unit): Job {
+        // Restore mid-regen first so a truncated hole isn't autosaved into the old session.
+        cancelCurrentRequest(restoreSwipeAlt = true)
+        sessionEpoch++
+        sessionTransitionJob?.cancel()
+        val job = viewModelScope.launch { block() }
+        sessionTransitionJob = job
+        return job
+    }
+
+    /**
+     * Clear the open transcript without cancelling [sessionTransitionJob] or bumping [sessionEpoch].
+     * Used inside an active transition so nested clears don't cancel the parent job.
+     *
+     * @param clearDraft when false, leave the mode's draft session id alone (keeps a parked
+     * keepDraftId from LLM-mismatch ephemeral UI, or a just-parked prior RP session).
+     */
+    private fun clearOpenTranscript(clearDraft: Boolean = true) {
+        cancelCurrentRequest(restoreSwipeAlt = false, clearAwaiting = false)
+        if (clearDraft) {
+            val mode = _chatMode.value ?: ChatMode.ASK
+            sharedPreferencesHelper.saveRpDraftSessionId(mode, null)
+        }
+        _isChatLoading.value = false
+        _chatMessages.value = emptyList()
+        pendingUserImageUri = null
+        currentSessionId = null
+        preservedSessionCharacterId = null
+        clearForkMemory()
+        clearRpSwipeMemory()
+    }
+
     suspend fun getCurrentSessionTitle(): String? {
         val sessionId = currentSessionId ?: return null
         val session = repository.getSessionById(sessionId) ?: return null
@@ -562,88 +661,85 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun saveCurrentChat(title: String, saveAsNew: Boolean = false) {
+        // Snapshot identity at schedule time so a later Ask↔RP / load cannot rewrite the wrong row.
+        val epoch = sessionEpoch
+        val openSessionId = currentSessionId
+        val modeAtSave = sessionModeValue()
+        val characterIdAtSave = sessionCharacterId()
+        val isLlmAtSave = sessionIsLlm()
+        val modelAtSave = _activeChatModel.value ?: ""
+        val messagesSnapshot = (_chatMessages.value ?: emptyList()).map { it.copy() }
+        val stripImages = hasImagesInChat() || hasGeneratedImagesInChat()
+
         viewModelScope.launch {
-            val currentSessionId = getCurrentSessionId()  // This is Long? (nullable)
-            // Determine sessionId based on saveAsNew
-            val sessionId = if (saveAsNew || currentSessionId == null) {
-                repository.getNextSessionId()  // Always non-null Long
+            val rowExists = if (!saveAsNew && openSessionId != null) {
+                repository.getSessionById(openSessionId) != null
             } else {
-                currentSessionId  // Safe here? No—still typed as Long?, but we know it's non-null from the else
+                false
             }
-
-            val existingSession = if (!saveAsNew && currentSessionId != null) {
-                repository.getSessionById(currentSessionId)  // Pass nullable? No—use !! here for safety
-            } else {
-                null
-            }
-
-            // Logic for overwrite vs. new
-            if (!saveAsNew && existingSession != null) {
-                // Overwrite mode: We're in a safe block (currentSessionId != null guaranteed)
-                // FIXED: Extract to non-nullable local var to satisfy type checker (avoids multiple !!)
-                val existingId = currentSessionId!!  // Non-null assertion: safe due to outer if guard
-
-                val currentModel = _activeChatModel.value ?: ""
-                val titleUnchanged = existingSession.title == title
-                val modelUnchanged = existingSession.modelUsed == currentModel
-                val hasImages = hasImagesInChat() || hasGeneratedImagesInChat()
-                val isPureTitleUpdate = titleUnchanged && modelUnchanged && !hasImages  // Simple heuristic
-
-                if (isPureTitleUpdate && title != existingSession.title) {  // Edge: title changed but nothing else
-                    // FIXED: Use non-nullable existingId
-                    repository.updateSessionTitle(existingId, title)
-                } else {
-                    // Full replace: Overwrite session/messages/model under existing ID
-                    val session = ChatSession(
-                        id = existingId,  // FIXED: Use non-nullable
-                        title = title,
-                        modelUsed = currentModel  // Capture any model change
-                    )
-                    val originalMessages = _chatMessages.value ?: emptyList()
-                    val messagesToSave = if (hasImages) {
-                        originalMessages.map { message ->
-                            val cleanedContent = removeImagesFromJsonElement(message.content)
-                            message.copy(content = cleanedContent)
-                        }
-                    } else {
-                        originalMessages
-                    }
-                    val chatMessages = messagesToSave.map {
-                        ChatMessage(
-                            sessionId = existingId,  // FIXED: Use non-nullable
-                            role = it.role,
-                            content = json.encodeToString(JsonElement.serializer(), it.content)
-                        )
-                    }
-                    ChatSessionSaver.save(repository, session, chatMessages)
-                }
-            } else {
-                // New chat mode: Always full insert with new ID (sessionId is already non-null)
-                val session = ChatSession(
-                    id = sessionId,
-                    title = title,
-                    modelUsed = _activeChatModel.value ?: ""
+            when (
+                ChatSaveGate.decide(
+                    epochAtSchedule = epoch,
+                    currentEpoch = sessionEpoch,
+                    openSessionId = openSessionId,
+                    liveSessionId = currentSessionId,
+                    rowExists = rowExists,
+                    saveAsNew = saveAsNew
                 )
-                val originalMessages = _chatMessages.value ?: emptyList()
-                val messagesToSave = if (hasImagesInChat() || hasGeneratedImagesInChat()) {
-                    originalMessages.map { message ->
-                        val cleanedContent = removeImagesFromJsonElement(message.content)
-                        message.copy(content = cleanedContent)
-                    }
-                } else {
-                    originalMessages
-                }
-                val chatMessages = messagesToSave.map {
-                    ChatMessage(
-                        sessionId = sessionId,  // Non-null by construction
-                        role = it.role,
-                        content = json.encodeToString(JsonElement.serializer(), it.content)
-                    )
-                }
-                ChatSessionSaver.save(repository, session, chatMessages)
+            ) {
+                ChatSaveGate.Outcome.Abort -> return@launch
+                ChatSaveGate.Outcome.ProceedExisting,
+                ChatSaveGate.Outcome.ProceedAllocateNew -> Unit
             }
-            // Set currentSessionId to the final ID (new or existing; sessionId is always non-null here)
+
+            val messagesToSave = if (stripImages) {
+                messagesSnapshot.map { message ->
+                    message.copy(content = removeImagesFromJsonElement(message.content))
+                }
+            } else {
+                messagesSnapshot
+            }
+
+            val existingId = if (!saveAsNew && rowExists && openSessionId != null) openSessionId else null
+            if (epoch != sessionEpoch) return@launch
+
+            val sessionId = existingId ?: repository.getNextSessionId()
+            val session = ChatSession(
+                id = sessionId,
+                title = title,
+                modelUsed = modelAtSave,
+                mode = modeAtSave,
+                characterId = characterIdAtSave,
+                isLlm = isLlmAtSave
+            )
+            val chatMessages = messagesToSave.map {
+                ChatMessage(
+                    sessionId = sessionId,
+                    role = it.role,
+                    content = json.encodeToString(JsonElement.serializer(), it.content)
+                )
+            }
+            if (epoch != sessionEpoch) return@launch
+            ChatSessionSaver.save(repository, session, chatMessages)
+            if (
+                ChatSaveGate.decide(
+                    epochAtSchedule = epoch,
+                    currentEpoch = sessionEpoch,
+                    openSessionId = openSessionId,
+                    liveSessionId = currentSessionId,
+                    rowExists = true,
+                    saveAsNew = saveAsNew
+                ) == ChatSaveGate.Outcome.Abort
+            ) {
+                return@launch
+            }
             this@ChatViewModel.currentSessionId = sessionId
+            sharedPreferencesHelper.saveRpDraftSessionId(
+                ChatMode.fromStorage(modeAtSave),
+                sessionId
+            )
+            // First autosave often mints the id after swipe alts were seeded in-memory only.
+            persistRpSwipeState()
             persistForkToPrefs()
         }
     }
@@ -669,85 +765,199 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun autoSaveChat() {
-        viewModelScope.launch {
-            val messages = _chatMessages.value ?: return@launch
-            if (messages.isEmpty() || messages.none { it.role == "assistant" }) return@launch
+        val epoch = sessionEpoch
+        val messages = _chatMessages.value ?: emptyList()
+        val modeAtSave = _chatMode.value ?: ChatMode.ASK
+        val isLlmAtSave = modeAtSave == ChatMode.RP && sharedPreferencesHelper.isRpLlmMode()
+        val sessionIdAtSave = currentSessionId
+        val hasAssistant = messages.any { it.role == "assistant" }
 
-            // Already saved — reuse existing title, don't regenerate on every message
-            if (currentSessionId != null) {
-                val existing = repository.getSessionById(currentSessionId!!)
+        when (
+            ChatSaveGate.autoSaveKind(
+                sessionId = sessionIdAtSave,
+                hasAssistant = hasAssistant,
+                messagesEmpty = messages.isEmpty()
+            )
+        ) {
+            ChatSaveGate.AutoSaveKind.Skip -> return
+            ChatSaveGate.AutoSaveKind.ReuseExisting,
+            ChatSaveGate.AutoSaveKind.FirstSaveNeedsAssistant -> Unit
+        }
+
+        viewModelScope.launch {
+            if (epoch != sessionEpoch) return@launch
+            if (sessionIdAtSave != null && currentSessionId != null && currentSessionId != sessionIdAtSave) {
+                return@launch
+            }
+
+            // Already saved — reuse existing title (including empty / user-only after truncate).
+            // RP: one-shot upgrade when still on bare character/LLM label after the first user turn.
+            if (sessionIdAtSave != null) {
+                val existing = repository.getSessionById(sessionIdAtSave)
                 val reusedTitle = existing?.title
-                if (!reusedTitle.isNullOrBlank()) {
-                    saveCurrentChat(reusedTitle)
+                if (existing != null && !reusedTitle.isNullOrBlank()) {
+                    if (epoch != sessionEpoch) return@launch
+                    val titleToSave = if (modeAtSave == ChatMode.RP) {
+                        maybeUpgradeRpSessionTitle(reusedTitle, messages, isLlmAtSave)
+                    } else {
+                        reusedTitle
+                    }
+                    saveCurrentChat(titleToSave)
                     return@launch
                 }
+                // Row gone — don't mint.
+                if (existing == null) return@launch
             }
 
-            // First save — generate title via AI, fallback to first user message
-            val title = try {
-                var suggested = getSuggestedChatTitle()
-                if (suggested != null && suggested.startsWith("Error:")) suggested = null
-                suggested
-            } catch (_: Exception) {
-                null
-            }
-            val finalTitle = if (title.isNullOrBlank()) {
-                val firstUserMsg = messages.firstOrNull { it.role == "user" }
-                if (firstUserMsg != null) {
-                    val raw = getMessageText(firstUserMsg.content).trim()
-                    if (raw.length > 60) raw.take(57) + "..." else raw
-                } else {
-                    java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
-                        .format(java.util.Date())
-                }
+            // First save — still requires an assistant message (greeting or reply).
+            if (messages.isEmpty() || !hasAssistant) return@launch
+
+            val finalTitle = if (modeAtSave == ChatMode.RP) {
+                // Skip title LLM — character name (+ first user snippet) or LLM label/snippet.
+                buildRpAutosaveTitle(messages, isLlmAtSave)
             } else {
-                title
+                val title = try {
+                    var suggested = getSuggestedChatTitle()
+                    if (suggested != null && suggested.startsWith("Error:")) suggested = null
+                    suggested
+                } catch (_: Exception) {
+                    null
+                }
+                if (epoch != sessionEpoch) return@launch
+                if (title.isNullOrBlank()) {
+                    val firstUserMsg = messages.firstOrNull { it.role == "user" }
+                    if (firstUserMsg != null) {
+                        val raw = getMessageText(firstUserMsg.content).trim()
+                        if (raw.length > 60) raw.take(57) + "..." else raw
+                    } else {
+                        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+                            .format(java.util.Date())
+                    }
+                } else {
+                    title
+                }
             }
-            if (finalTitle.isNotBlank()) {
+            if (epoch != sessionEpoch) return@launch
+            if (finalTitle.isNotBlank() && epoch == sessionEpoch) {
                 saveCurrentChat(finalTitle)
             }
         }
     }
 
+    /** RP session title from character/LLM label plus optional first user snippet. */
+    private suspend fun buildRpAutosaveTitle(
+        messages: List<FlexibleMessage>,
+        isLlm: Boolean
+    ): String {
+        val firstUserMsg = messages.firstOrNull { it.role == "user" }
+        val raw = firstUserMsg?.let { getMessageText(it.content).trim() }.orEmpty()
+        if (isLlm) {
+            return when {
+                raw.length > 60 -> raw.take(57) + "..."
+                raw.isNotBlank() -> raw
+                else -> rpDelegate.sessionTitle(null)
+            }
+        }
+        val base = rpDelegate.sessionTitle(rpDelegate.getActiveCharacter())
+        return when {
+            raw.isBlank() -> base
+            raw.length > 40 -> "$base — ${raw.take(37)}..."
+            else -> "$base — $raw"
+        }
+    }
+
+    /**
+     * After greeting autosave locked the bare character/LLM name, upgrade once the first user
+     * turn exists — but never overwrite a user-renamed title.
+     */
+    private suspend fun maybeUpgradeRpSessionTitle(
+        currentTitle: String,
+        messages: List<FlexibleMessage>,
+        isLlm: Boolean
+    ): String {
+        val bare = if (isLlm) {
+            rpDelegate.sessionTitle(null)
+        } else {
+            rpDelegate.sessionTitle(rpDelegate.getActiveCharacter())
+        }
+        if (currentTitle != bare) return currentTitle
+        return buildRpAutosaveTitle(messages, isLlm)
+    }
+
     fun loadChat(sessionId: Long) {
-      //  generatedImages.clear()
+        beginSessionTransition {
+            loadChatInternal(sessionId)
+        }
+    }
+
+    private suspend fun loadChatInternal(sessionId: Long) {
+        if (networkJob?.isActive == true) {
+            _isChatLoading.value = false
+            return
+        }
         _isChatLoading.value = true
-        viewModelScope.launch {
-            try {
-                // Parallel fetch for efficiency
+        try {
+            val previousMode = _chatMode.value ?: ChatMode.ASK
+            val previousSessionId = currentSessionId
+
+            // Parallel fetch for efficiency
+            val (session, messages) = coroutineScope {
                 val sessionDeferred = async { repository.getSessionById(sessionId) }
                 val messagesDeferred = async { repository.getMessagesForSession(sessionId) }
-
-                val session = sessionDeferred.await()
-                val messages = messagesDeferred.await()
-
-                _chatMessages.postValue(messages.map {
-                    FlexibleMessage(
-                        role = it.role,
-                        content = try {
-                            json.parseToJsonElement(it.content)
-                        } catch (e: Exception) {
-                            JsonPrimitive(it.content)
-                        }
-                    )
-                })
-                currentSessionId = sessionId
-
-                session?.let {
-                    _activeChatModel.postValue(it.modelUsed)
-                    _modelPreferenceToSave.postValue(it.modelUsed)
-                   /* withContext(Dispatchers.Main) {
-                        if (sharedPreferencesHelper.getNotiPreference()) {
-                            val apiIdentifier = it.modelUsed ?: "Unknown Model"
-                            val displayName = getModelDisplayName(apiIdentifier)
-                            ForegroundService.updateNotificationStatusSilently(displayName, "Saved Chat Loaded")
-                        }
-                    }*/
-                }
-                loadForkFromPrefs(sessionId)
-            } finally {
-                _isChatLoading.postValue(false)
+                sessionDeferred.await() to messagesDeferred.await()
             }
+
+            _chatMessages.value = messages.map {
+                FlexibleMessage(
+                    role = it.role,
+                    content = try {
+                        json.parseToJsonElement(it.content)
+                    } catch (e: Exception) {
+                        JsonPrimitive(it.content)
+                    }
+                )
+            }
+            currentSessionId = sessionId
+
+            session?.let {
+                val loadedMode = it.chatMode()
+                if (previousSessionId != null && previousSessionId != sessionId) {
+                    sharedPreferencesHelper.saveRpDraftSessionId(previousMode, previousSessionId)
+                }
+                sharedPreferencesHelper.saveRpDraftSessionId(loadedMode, sessionId)
+                if (loadedMode == ChatMode.RP) {
+                    _chatMode.value = ChatMode.RP
+                    sharedPreferencesHelper.saveChatMode(ChatMode.RP)
+                    sharedPreferencesHelper.saveRpLlmMode(it.isLlm)
+                    if (it.isLlm) {
+                        // LLM session rows store no characterId — keep any parked id for LLM-off restore.
+                        preservedSessionCharacterId = null
+                    } else {
+                        val sessionCharId = it.characterId
+                        val validCharId = sessionCharId?.let { cid ->
+                            if (rpRepository.getCharacterById(cid) != null) cid else null
+                        }
+                        preservedSessionCharacterId =
+                            if (sessionCharId != null && validCharId == null) sessionCharId else null
+                        sharedPreferencesHelper.saveRpActiveCharacterId(validCharId)
+                        if (sessionCharId != null && validCharId == null) {
+                            _toastUiEvent.value =
+                                Event(getApplication<Application>().getString(R.string.rp_orphan_character))
+                        }
+                    }
+                } else {
+                    preservedSessionCharacterId = null
+                    _chatMode.value = ChatMode.ASK
+                    sharedPreferencesHelper.saveChatMode(ChatMode.ASK)
+                }
+                refreshActiveRpCharacter()
+                _activeChatModel.value = it.modelUsed
+                _modelPreferenceToSave.value = it.modelUsed
+            }
+            loadForkFromPrefs(sessionId)
+            loadRpSwipeForSession(sessionId)
+        } finally {
+            _isChatLoading.value = false
         }
     }
 
@@ -836,16 +1046,103 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return renderer.render(document).trim()
     }
 
-    fun cancelCurrentRequest() {
+    fun cancelCurrentRequest(restoreSwipeAlt: Boolean = true, clearAwaiting: Boolean = true) {
+        // Capture before clearing pending — mode may already be flipping away from RP.
+        val wasRpRegen = pendingRpSwipeAppend
+        val discardPartial = discardableRpAssistantInFlight
+        pendingRpSwipeAppend = false
+        discardableRpAssistantInFlight = false
+        rpPrepJob?.cancel()
+        rpPrepJob = null
         networkJob?.cancel()
         lanFetchJob?.cancel()
+        sharedPreferencesHelper.saveRpPendingInstruct(null)
+        if (restoreSwipeAlt && wasRpRegen) {
+            // Restore immediately so Fragment autosave-on-awaiting-clear cannot persist a hole.
+            restoreRpSwipeAltIfMissingAssistant()
+            rpSwipeRestoreToken++
+        } else if (restoreSwipeAlt && discardPartial) {
+            // Normal RP send Stop mid-stream: drop the partial so it isn't autosaved as canon.
+            discardIncompleteRpAssistantAfterLastUser()
+            rpSwipeRestoreToken++
+        } else {
+            rpSwipeRestoreToken++
+        }
+        // Skip when clearing an already-idle transcript (clearOpenTranscript) so we don't
+        // re-fire Fragment autosave into an emptied / null sessionId mid-transition.
+        if (clearAwaiting && _isAwaitingResponse.value == true) {
+            _isAwaitingResponse.value = false
+        }
+    }
+
+    /**
+     * After cancel/error mid-regen, put the selected swipe alt back as the reply.
+     * Covers both pre-token (placeholder) and mid-stream (partial) cases so Stop does not
+     * leave a truncated bubble that later gets stashed as a new alt.
+     * Does not require [isRpMode] so Ask↔RP mid-regen can restore before the transcript is swapped.
+     */
+    private fun restoreRpSwipeAltIfMissingAssistant() {
+        val messages = _chatMessages.value?.toMutableList() ?: return
+        while (messages.isNotEmpty() && isAssistantPlaceholder(messages.last())) {
+            messages.removeAt(messages.lastIndex)
+        }
+        val lastUserIndex = messages.indexOfLast { it.role == "user" }
+        if (lastUserIndex < 0) return
+        val alt = rpSwipeState.alts.getOrNull(rpSwipeState.index)
+            ?: rpRegenRestoreFallback
+            ?: return
+        rpRegenRestoreFallback = null
+        val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        if (lastAssistantIndex > lastUserIndex) {
+            // Mid-stream regen left a partial — replace with the stashed full alt.
+            messages[lastAssistantIndex] = messages[lastAssistantIndex].copy(
+                content = JsonPrimitive(alt),
+                reasoning = null,
+                thinking = null
+            )
+        } else {
+            messages.add(FlexibleMessage(role = "assistant", content = JsonPrimitive(alt)))
+        }
+        streamingAssistantIndex = -1
+        _chatMessages.value = messages
+        updateRpSwipeNav()
+        autoSaveChat()
+    }
+
+    /** Drop a partial/thinking assistant after the last user turn (Stop mid-stream on a normal send). */
+    private fun discardIncompleteRpAssistantAfterLastUser() {
+        val messages = _chatMessages.value?.toMutableList() ?: return
+        val lastUserIndex = messages.indexOfLast { it.role == "user" }
+        if (lastUserIndex < 0) return
+        var changed = false
+        while (messages.lastIndex > lastUserIndex) {
+            val last = messages.last()
+            if (last.role != "assistant") break
+            messages.removeAt(messages.lastIndex)
+            changed = true
+        }
+        if (!changed) return
+        streamingAssistantIndex = -1
+        _chatMessages.value = messages
     }
     private var toolCallsHandledForTurn = false
     private var toolRecursionDepth = 0
     fun sendUserMessage(
         userContent: JsonElement,
-        systemMessage: String? = null
-    ) {
+        systemMessage: String? = null,
+        clearRpSwipeOnStart: Boolean = false
+    ): Boolean {
+        val restore = sessionTransitionJob
+        if (restore != null && restore.isActive) {
+            _isAwaitingResponse.value = true
+            viewModelScope.launch {
+                restore.join()
+                if (!sendUserMessage(userContent, systemMessage, clearRpSwipeOnStart)) {
+                    if (networkJob?.isActive != true) _isAwaitingResponse.value = false
+                }
+            }
+            return true
+        }
         toolCallsHandledForTurn = false
         toolRecursionDepth = 0
         var userMessage = FlexibleMessage(role = "user", content = userContent)
@@ -863,14 +1160,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (lanEndpoint == null) {
                 AppToast.makeText(
                     getApplication<Application>().applicationContext,
-                    "Please configure LAN endpoint in settings",
+                    getApplication<Application>().getString(R.string.toast_lan_endpoint_missing),
                     AppToast.LENGTH_SHORT
                 ).show()
-                return
+                _isAwaitingResponse.value = false
+                return false
             }
             activeChatUrl = "$lanEndpoint/v1/chat/completions"
             val lanKey = sharedPreferencesHelper.getLanApiKeyForRequest()
             activeChatApiKey = lanKey
+        }
+
+        // Only wipe alts once the send is known to proceed (after early returns above).
+        if (clearRpSwipeOnStart && isRpMode()) {
+            pendingRpSwipeAppend = false
+            rpSwipeState = RpSwipeState()
+            currentSessionId?.let { rpSwipeStore.clear(it) }
+            _rpSwipeNav.value = null
         }
 
         val thinkingMessage = THINKING_MESSAGE
@@ -890,18 +1196,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         messagesForApiRequest.add(userMessage)
-        //new for msg count
-        val memoryCount = sharedPreferencesHelper.getChatMemoryCount()
-        if (messagesForApiRequest.size > memoryCount) {
-            // Keep system message if present, then keep last N messages
-            val systemMessages = messagesForApiRequest.filter { it.role == "system" }
-            val recentMessages = messagesForApiRequest.filter { it.role != "system" }
-                .takeLast(memoryCount - systemMessages.size)
-
-            messagesForApiRequest.clear()
-            messagesForApiRequest.addAll(systemMessages)
-            messagesForApiRequest.addAll(recentMessages)
-        }
+        trimMessagesForApiMemory(messagesForApiRequest)
 
         val uiMessages = _chatMessages.value?.toMutableList() ?: mutableListOf()
         uiMessages.add(userMessage)
@@ -912,6 +1207,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _chatMessages.value = uiMessages
         _isAwaitingResponse.value = true
         _userScrolledDuringStream.value = false
+        // Mark only non-regen RP streams so Stop can discard the partial (not a finished prior reply).
+        discardableRpAssistantInFlight = isRpMode() && !pendingRpSwipeAppend
 
         startNetworkJob {
             try {
@@ -934,18 +1231,33 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: CancellationException) {
                 withContext(Dispatchers.Main) {
-                    removeAssistantPlaceholder(thinkingMessage)
+                    val wasRpRegen = pendingRpSwipeAppend
+                    val discardPartial = discardableRpAssistantInFlight
+                    pendingRpSwipeAppend = false
+                    discardableRpAssistantInFlight = false
+                    if (wasRpRegen) {
+                        restoreRpSwipeAltIfMissingAssistant()
+                    } else if (discardPartial) {
+                        discardIncompleteRpAssistantAfterLastUser()
+                    } else {
+                        removeAssistantPlaceholder(thinkingMessage)
+                    }
                 }
                 throw e
             } catch (e: Throwable) {
                 handleError(e, thinkingMessage)
             } finally {
-                _isAwaitingResponse.postValue(false)
-                if (_userScrolledDuringStream.value != true) {
-                    _scrollToBottomEvent.postValue(Event(Unit))
+                // Only the active network turn may clear awaiting (Stop→Send must not be killed by a stale finally).
+                if (networkJob === coroutineContext[Job]) {
+                    discardableRpAssistantInFlight = false
+                    _isAwaitingResponse.postValue(false)
+                    if (_userScrolledDuringStream.value != true) {
+                        _scrollToBottomEvent.postValue(Event(Unit))
+                    }
                 }
             }
         }
+        return true
     }
     suspend fun transcribeAudioForInput(audioBytes: ByteArray, audioFormat: String, fileName: String): String? {
         // STT disabled
@@ -1012,8 +1324,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     handleError(e, thinkingMessage)
                 }
             } finally {
-                _isAwaitingResponse.postValue(false)
-                _scrollToBottomEvent.postValue(Event(Unit))
+                if (networkJob === coroutineContext[Job]) {
+                    _isAwaitingResponse.postValue(false)
+                    _scrollToBottomEvent.postValue(Event(Unit))
+                }
             }
         }
     }
@@ -1077,8 +1391,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     handleError(e, thinkingMessage)
                 }
             } finally {
-                _isAwaitingResponse.postValue(false)
-                _scrollToBottomEvent.postValue(Event(Unit))
+                if (networkJob === coroutineContext[Job]) {
+                    _isAwaitingResponse.postValue(false)
+                    _scrollToBottomEvent.postValue(Event(Unit))
+                }
             }
         }
     }
@@ -1088,13 +1404,56 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val messageToUpdate = currentList[position]
-        val updatedMessage = messageToUpdate.copy(
+                val updatedMessage = messageToUpdate.copy(
             content = JsonPrimitive(newContent),
-            reasoning = null
+            reasoning = null,
+            thinking = null
         )
         val newList = currentList.toMutableList()
         newList[position] = updatedMessage
         _chatMessages.value = newList
+        syncRpSwipeAltAfterAssistantEdit(position, newContent)
+        autoSaveChat()
+    }
+
+    /** Keep swipe alts in sync when the user edits the last assistant bubble. */
+    private fun syncRpSwipeAltAfterAssistantEdit(position: Int, newContent: String) {
+        if (!isRpMode() || rpSwipeState.alts.isEmpty()) return
+        val messages = _chatMessages.value ?: return
+        val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        if (position != lastAssistantIndex) return
+        val index = rpSwipeState.index.coerceIn(0, rpSwipeState.alts.lastIndex)
+        val alts = rpSwipeState.alts.toMutableList()
+        alts[index] = newContent
+        rpSwipeState = RpSwipeState(alts = alts, index = index)
+        persistRpSwipeState()
+        updateRpSwipeNav()
+    }
+
+    fun notifySessionDeleted(sessionId: Long) {
+        if (currentSessionId != sessionId) return
+        if (isRpMode()) {
+            // Greeting in-memory only — autosave would immediately resurrect a history row.
+            beginSessionTransition {
+                currentSessionId = null
+                clearForkMemory()
+                clearRpSwipeMemory()
+                sharedPreferencesHelper.saveRpDraftSessionId(ChatMode.RP, null)
+                startNewRpChatKeepingCharacterInternal(persist = false)
+            }
+        } else {
+            startNewChat()
+        }
+    }
+
+    fun rememberDeletedCharacterForRematch(characterId: Long) {
+        if (characterId <= 0L) return
+        // LLM parked deletes must not clobber an open orphan rematch target.
+        if (sharedPreferencesHelper.isRpLlmMode()) return
+        val activeId = sharedPreferencesHelper.getRpActiveCharacterId()
+        if (activeId == characterId || preservedSessionCharacterId == characterId) {
+            preservedSessionCharacterId = characterId
+        }
     }
     // NEW: Specialized resend for existing user prompt (keeps original UI bubble intact)
     fun resendExistingPrompt(userMessageIndex: Int, systemMessage: String? = null) {
@@ -1125,7 +1484,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             userMessage
         }
 
-        truncateHistory(userMessageIndex + 1, anchorAssistantIndex = userMessageIndex + 1)
+        if (isRpMode()) {
+            truncateWithoutFork(userMessageIndex + 1)
+            clearForkMemory()
+        } else {
+            truncateHistory(userMessageIndex + 1, anchorAssistantIndex = userMessageIndex + 1)
+        }
 
         val messagesForApiRequest = mutableListOf<FlexibleMessage>()
         if (systemMessage != null) {
@@ -1140,22 +1504,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         messagesForApiRequest.addAll(currentMessages.take(userMessageIndex))
         // Use messageWithImage instead of userMessage
         messagesForApiRequest.add(messageWithImage)
-        val memoryCount = sharedPreferencesHelper.getChatMemoryCount()
-        if (messagesForApiRequest.size > memoryCount) {
-            // Keep system message if present, then keep last N messages
-            val systemMessages = messagesForApiRequest.filter { it.role == "system" }
-            val recentMessages = messagesForApiRequest.filter { it.role != "system" }
-                .takeLast(memoryCount - systemMessages.size)
-
-            messagesForApiRequest.clear()
-            messagesForApiRequest.addAll(systemMessages)
-            messagesForApiRequest.addAll(recentMessages)
-        }
+        trimMessagesForApiMemory(messagesForApiRequest)
 
         val uiMessages = _chatMessages.value?.toMutableList() ?: mutableListOf()
         uiMessages.add(THINKING_MESSAGE)
         streamingAssistantIndex = uiMessages.lastIndex
-        markForkAnchorIfPending(streamingAssistantIndex)
+        if (!isRpMode()) {
+            markForkAnchorIfPending(streamingAssistantIndex)
+        }
         _chatMessages.value = uiMessages
 
         _isAwaitingResponse.value = true
@@ -1169,10 +1525,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (lanEndpoint == null) {
                 AppToast.makeText(
                     getApplication<Application>().applicationContext,
-                    "Please configure LAN endpoint in settings",
+                    getApplication<Application>().getString(R.string.toast_lan_endpoint_missing),
                     AppToast.LENGTH_SHORT
                 ).show()
+                pendingRpSwipeAppend = false
                 _isAwaitingResponse.value = false
+                removeAssistantPlaceholder(THINKING_MESSAGE)
+                // Also drop a trailing thinking bubble if identity didn't match.
+                val cleaned = _chatMessages.value?.toMutableList()
+                if (cleaned != null) {
+                    while (cleaned.isNotEmpty() && isAssistantPlaceholder(cleaned.last())) {
+                        cleaned.removeAt(cleaned.lastIndex)
+                    }
+                    _chatMessages.value = cleaned
+                }
+                restoreRpSwipeAltIfMissingAssistant()
                 return
             }
             activeChatUrl = "$lanEndpoint/v1/chat/completions"
@@ -1201,18 +1568,50 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: CancellationException) {
                 withContext(Dispatchers.Main) {
-                    removeAssistantPlaceholder(thinkingMessage)
+                    val wasRpRegen = pendingRpSwipeAppend
+                    val discardPartial = discardableRpAssistantInFlight
+                    pendingRpSwipeAppend = false
+                    discardableRpAssistantInFlight = false
+                    if (wasRpRegen) {
+                        restoreRpSwipeAltIfMissingAssistant()
+                    } else if (discardPartial) {
+                        discardIncompleteRpAssistantAfterLastUser()
+                    } else {
+                        removeAssistantPlaceholder(thinkingMessage)
+                    }
                 }
                 throw e
             } catch (e: Throwable) {
                 handleError(e, thinkingMessage)
             } finally {
-                _isAwaitingResponse.postValue(false)
-                if (_userScrolledDuringStream.value != true) {
-                    _scrollToBottomEvent.postValue(Event(Unit))
+                // Only the active network turn may clear awaiting (Stop→Send must not be killed by a stale finally).
+                if (networkJob === coroutineContext[Job]) {
+                    discardableRpAssistantInFlight = false
+                    _isAwaitingResponse.postValue(false)
+                    if (_userScrolledDuringStream.value != true) {
+                        _scrollToBottomEvent.postValue(Event(Unit))
+                    }
                 }
             }
         }
+    }
+
+    /** Cap API history; in character RP keep the opening greeting when budget allows. */
+    private fun trimMessagesForApiMemory(messagesForApiRequest: MutableList<FlexibleMessage>) {
+        val memoryCount = sharedPreferencesHelper.getChatMemoryCount()
+        if (messagesForApiRequest.size <= memoryCount) return
+        val systemMessages = messagesForApiRequest.filter { it.role == "system" }
+        val nonSystem = messagesForApiRequest.filter { it.role != "system" }
+        val budget = (memoryCount - systemMessages.size).coerceAtLeast(1)
+        val recentMessages = RpApiMemory.trimNonSystem(
+            nonSystem = nonSystem,
+            budget = budget,
+            pinCharacterGreeting = isRpMode() && !sharedPreferencesHelper.isRpLlmMode(),
+            isAssistant = { it.role == "assistant" }
+        )
+        messagesForApiRequest.clear()
+        messagesForApiRequest.addAll(systemMessages)
+        messagesForApiRequest.addAll(recentMessages)
     }
     private fun buildTools(): List<Tool> {
         val allTools = listOf(
@@ -3175,12 +3574,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Consume OpenAI-compatible SSE (and NDJSON fallback) from a chat stream.
      * Invokes [onPayload] for each JSON event body. Skips comments/heartbeats.
-     * Does not stop early on [DONE] (some providers send trailing chunks after it).
+     * Stops on `[DONE]` or when [shouldStop] becomes true.
      */
     private suspend fun forEachSseJsonPayload(
         channel: ByteReadChannel,
+        shouldStop: (() -> Boolean)? = null,
         onPayload: suspend (String) -> Unit
-    ) = SseJsonReader.forEachJsonPayload(channel, onPayload)
+    ) = SseJsonReader.forEachJsonPayload(channel, onPayload, shouldStop)
 
     private fun parseStreamChunk(jsonString: String): StreamedChatResponse? {
         return try {
@@ -3227,8 +3627,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 } else null,
                 // NEW: Add the llama.cpp specific logic
                 chatTemplateKwargs = llamaCppKwargs,
-                tools = if (_isToolsEnabled.value == true) buildTools() else null,
-                toolChoice = if (_isToolsEnabled.value == true) "auto" else null,
+                tools = if (!isRpMode() && _isToolsEnabled.value == true) buildTools() else null,
+                toolChoice = if (!isRpMode() && _isToolsEnabled.value == true) "auto" else null,
                 // === INFERENCE PARAMETERS ===
                 temperature = if (sharedPreferencesHelper.getInferenceTempEnabled()) sharedPreferencesHelper.getInferenceTempValue().toDoubleOrNull() else null,
                 topP = if (sharedPreferencesHelper.getInferenceTopPEnabled()) sharedPreferencesHelper.getInferenceTopPValue().toDoubleOrNull() else null,
@@ -3269,7 +3669,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val accumulatedImages = mutableListOf<String>()
                     var streamAborted = false
 
-                    forEachSseJsonPayload(channel) { jsonString ->
+                    forEachSseJsonPayload(
+                        channel,
+                        shouldStop = { streamAborted }
+                    ) { jsonString ->
                         if (streamAborted) return@forEachSseJsonPayload
                         val chunk = parseStreamChunk(jsonString) ?: return@forEachSseJsonPayload
 
@@ -3285,6 +3688,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         val choice = chunk.choices.firstOrNull()
                         finish_reason = choice?.finish_reason ?: finish_reason
                         lastChoice = choice
+                        choice?.error?.let { apiError ->
+                            withContext(Dispatchers.Main) {
+                                handleErrorResponse(apiError, thinkingMessage)
+                            }
+                            streamAborted = true
+                            return@forEachSseJsonPayload
+                        }
                         val delta = choice?.delta ?: return@forEachSseJsonPayload
                         delta.annotations?.forEach { accumulatedAnnotations.add(it) }
 
@@ -3394,7 +3804,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             return@execute
                         }
                         "content_filter" -> {
-                            val errorMsg = "**Error:** The response was filtered due to content policies. Please rephrase your query."
+                            val errorMsg = getApplication<Application>().getString(R.string.error_provider_content_filter)
                             withContext(Dispatchers.Main) {
                                 handleError(Exception(errorMsg), thinkingMessage)
                             }
@@ -3404,7 +3814,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             withContext(Dispatchers.Main) {
                                 AppToast.makeText(
                                     getApplication<Application>().applicationContext,
-                                    "Response was truncated due to max_tokens limit.",
+                                    getApplication<Application>().getString(R.string.toast_response_truncated_max_tokens),
                                     AppToast.LENGTH_SHORT
                                 ).show()
                             }
@@ -3423,6 +3833,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val citationsMarkdown = if (sharedPreferencesHelper.getShowCitations()) {
                         formatCitations(accumulatedAnnotations)
                     } else ""
+                    var streamFinalContent: String? = null
 
                     if (hadToolCalls && !toolCallsHandledForTurn) {
                         val assistantMessage = FlexibleMessage(
@@ -3440,11 +3851,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         handleToolCalls(toolCallBuffer, thinkingMessage)
                     } else {
                         withContext(Dispatchers.Main) {
+                            val rawContent = (accumulatedResponse + citationsMarkdown).takeIf { it.isNotBlank() } ?: "No response received."
+                            val finalContent = finalizeAssistantContent(rawContent)
+                            streamFinalContent = finalContent
                             updateMessages { list ->
                                 if (list.isNotEmpty()) {
                                     val last = list.last()
-                                    val finalContent = (accumulatedResponse + citationsMarkdown).takeIf { it.isNotBlank() } ?: "No response received."
-
                                     list[list.size - 1] = last.copy(
                                         content = JsonPrimitive(finalContent),
                                         reasoning = accumulatedReasoning.ifBlank { null },
@@ -3458,10 +3870,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     if (sharedPreferencesHelper.getNotiPreference()) {
                         val apiIdentifier = activeChatModel.value ?: "Unknown Model"
                         val displayName = getModelDisplayName(apiIdentifier)
-                        val truncatedResponse = if (accumulatedResponse.length > 3900) {
-                            accumulatedResponse.take(3900) + "..."
+                        val notiBody = streamFinalContent
+                            ?: accumulatedResponse.ifBlank { "No response received." }
+                        val truncatedResponse = if (notiBody.length > 3900) {
+                            notiBody.take(3900) + "..."
                         } else {
-                            accumulatedResponse
+                            notiBody
                         }
                         sharedPreferencesHelper.saveLastAiResponseForChannel(2, truncatedResponse)
                         ForegroundService.updateNotificationStatus(getApplication(), displayName, "Your answer is ready.")
@@ -3494,7 +3908,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val isLyria = modelForRequest.contains("google/lyria", ignoreCase = true)
 
             // --- Existing config ---
-            val webSearchOpts = if (sharedPreferencesHelper.getWebSearchBoolean() && !activeModelIsLan()) {
+            val webSearchOpts = if (!isRpMode() && sharedPreferencesHelper.getWebSearchBoolean() && !activeModelIsLan()) {
                 WebSearchOptions(
                     searchContextSize = sharedPreferencesHelper.getWebSearchContextSize()
                 )
@@ -3516,10 +3930,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 else null,
                 stream = true,
                 max_tokens = maxTokens,
-                tools = if (_isToolsEnabled.value == true) buildTools() else null,
+                tools = if (!isRpMode() && _isToolsEnabled.value == true) buildTools() else null,
                 plugins = buildWebSearchPlugin(),
                 webSearchOptions = webSearchOpts,
-                toolChoice = if (_isToolsEnabled.value == true) "auto" else null,
+                toolChoice = if (!isRpMode() && _isToolsEnabled.value == true) "auto" else null,
                 // === INFERENCE PARAMETERS ===
                 temperature = if (sharedPreferencesHelper.getInferenceTempEnabled()) sharedPreferencesHelper.getInferenceTempValue().toDoubleOrNull() else null,
                 topP = if (sharedPreferencesHelper.getInferenceTopPEnabled()) sharedPreferencesHelper.getInferenceTopPValue().toDoubleOrNull() else null,
@@ -3601,7 +4015,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val audioBuffer = StringBuilder()
                     var streamAborted = false
 
-                    forEachSseJsonPayload(channel) { jsonString ->
+                    forEachSseJsonPayload(
+                        channel,
+                        shouldStop = { streamAborted }
+                    ) { jsonString ->
                         if (streamAborted) return@forEachSseJsonPayload
                         val chunk = parseStreamChunk(jsonString) ?: return@forEachSseJsonPayload
 
@@ -3618,6 +4035,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                         val choice = chunk.choices.firstOrNull()
                         finish_reason = choice?.finish_reason ?: finish_reason
+                        choice?.error?.let { apiError ->
+                            withContext(Dispatchers.Main) {
+                                handleErrorResponse(apiError, thinkingMessage)
+                            }
+                            streamAborted = true
+                            return@forEachSseJsonPayload
+                        }
                         val delta = choice?.delta ?: return@forEachSseJsonPayload
 
                         // === AUDIO ACCUMULATION ===
@@ -3725,6 +4149,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     // ============================================================
 
                     // --- 1. Finish reason handling ---
+                    if (streamAborted) return@execute
+
                     when (finish_reason) {
                         "error" -> {
                             val errorMsg = "**Error:** The model encountered an error while generating the response. Please try again."
@@ -3735,7 +4161,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }
 
                         "content_filter" -> {
-                            val errorMsg = "**Error:** The response was filtered due to content policies. Please rephrase your query."
+                            val errorMsg = getApplication<Application>().getString(R.string.error_provider_content_filter)
                             withContext(Dispatchers.Main) {
                                 handleError(Exception(errorMsg), thinkingMessage)
                             }
@@ -3746,7 +4172,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             withContext(Dispatchers.Main) {
                                 AppToast.makeText(
                                     getApplication<Application>().applicationContext,
-                                    "Response was truncated due to max_tokens limit.",
+                                    getApplication<Application>().getString(R.string.toast_response_truncated_max_tokens),
                                     AppToast.LENGTH_SHORT
                                 ).show()
                             }
@@ -3789,6 +4215,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                     // --- 6. Final UI Update ---
                     val hadToolCalls = toolCallBuffer.isNotEmpty()
+                    var streamFinalContent: String? = null
                     if (hadToolCalls && !toolCallsHandledForTurn) {
                         val assistantMessage = FlexibleMessage(
                             role = "assistant",
@@ -3804,10 +4231,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         handleToolCalls(toolCallBuffer, thinkingMessage)
                     } else {
-                        val finalContent = (accumulatedResponse + citationsMarkdown)
-                            .takeIf { it.isNotBlank() } ?: "No response received."
-
+                        // Finalize on Main so Stop/cancel cannot race swipe state mutations on IO.
                         withContext(Dispatchers.Main) {
+                            val rawContent = (accumulatedResponse + citationsMarkdown)
+                                .takeIf { it.isNotBlank() } ?: "No response received."
+                            val finalContent = finalizeAssistantContent(rawContent)
+                            streamFinalContent = finalContent
                             updateMessages { list ->
                                 if (list.isNotEmpty()) {
                                     val last = list.last()
@@ -3825,10 +4254,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     if (sharedPreferencesHelper.getNotiPreference()) {
                         val apiIdentifier = activeChatModel.value ?: "Unknown Model"
                         val displayName = getModelDisplayName(apiIdentifier)
-                        val truncatedResponse = if (accumulatedResponse.length > 3900) {
-                            accumulatedResponse.take(3900) + "..."
+                        val notiBody = streamFinalContent
+                            ?: accumulatedResponse.ifBlank { "No response received." }
+                        val truncatedResponse = if (notiBody.length > 3900) {
+                            notiBody.take(3900) + "..."
                         } else {
-                            accumulatedResponse
+                            notiBody
                         }
                         sharedPreferencesHelper.saveLastAiResponseForChannel(2, truncatedResponse)
                         ForegroundService.updateNotificationStatus(getApplication(), displayName, "Your answer is ready.")
@@ -3892,8 +4323,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     } else null,
                     chatTemplateKwargs = llamaCppKwargs,
                     max_tokens = maxTokens,
-                    tools = if (_isToolsEnabled.value == true) buildTools() else null,
-                    toolChoice = if (_isToolsEnabled.value == true) "auto" else null,
+                    tools = if (!isRpMode() && _isToolsEnabled.value == true) buildTools() else null,
+                    toolChoice = if (!isRpMode() && _isToolsEnabled.value == true) "auto" else null,
                             // === INFERENCE PARAMETERS ===
                             temperature = if (sharedPreferencesHelper.getInferenceTempEnabled()) sharedPreferencesHelper.getInferenceTempValue().toDoubleOrNull() else null,
                     topP = if (sharedPreferencesHelper.getInferenceTopPEnabled()) sharedPreferencesHelper.getInferenceTopPValue().toDoubleOrNull() else null,
@@ -3943,8 +4374,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     handleErrorResponse(error, thinkingMessage)
                     errorHandled = true
                 }
-                if (!errorHandled) {
-                    when (finishReason) {
+                if (errorHandled) {
+                    return@withContext
+                }
+                when (finishReason) {
                         "error" -> {
                             val errorMsg =
                                 "**Error:** The model encountered an error while generating the response. Please try again."
@@ -3954,8 +4387,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }
 
                         "content_filter" -> {
-                            val errorMsg =
-                                "**Error:** The response was filtered due to content policies. Please rephrase your query."
+                            val errorMsg = getApplication<Application>().getString(R.string.error_provider_content_filter)
                             handleError(Exception(errorMsg), thinkingMessage)
                           //  return@let
                             return@withContext
@@ -3965,7 +4397,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                                 AppToast.makeText(
                                     getApplication<Application>().applicationContext,
-                                    "Response was truncated due to max_tokens limit.",
+                                    getApplication<Application>().getString(R.string.toast_response_truncated_max_tokens),
                                     AppToast.LENGTH_LONG
                                 ).show()
 
@@ -3978,9 +4410,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                         }
                     }
-                }
 
-                if (choice?.message?.toolCalls?.isNotEmpty() == true && !toolCallsHandledForTurn && _isToolsEnabled.value == true) {
+                if (choice?.message?.toolCalls?.isNotEmpty() == true && !toolCallsHandledForTurn && !isRpMode() && _isToolsEnabled.value == true) {
                     val toolCalls = choice.message.toolCalls
 
                     val citationsMarkdown = if (sharedPreferencesHelper.getShowCitations()) {
@@ -4030,7 +4461,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val sharedPreferencesHelper =
                     SharedPreferencesHelper(getApplication<Application>().applicationContext)
                 val webSearchOpts =
-                    if (sharedPreferencesHelper.getWebSearchBoolean() && !activeModelIsLan()) {
+                    if (!isRpMode() && sharedPreferencesHelper.getWebSearchBoolean() && !activeModelIsLan()) {
                         WebSearchOptions(
                             searchContextSize = sharedPreferencesHelper.getWebSearchContextSize()
                         )
@@ -4075,8 +4506,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         null
                     },
-                    tools = if (_isToolsEnabled.value == true) buildTools() else null,
-                    toolChoice = if (_isToolsEnabled.value == true) "auto" else null,
+                    tools = if (!isRpMode() && _isToolsEnabled.value == true) buildTools() else null,
+                    toolChoice = if (!isRpMode() && _isToolsEnabled.value == true) "auto" else null,
                     plugins = buildWebSearchPlugin(),
                     webSearchOptions = webSearchOpts,
                     // === INFERENCE PARAMETERS ===
@@ -4145,8 +4576,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     handleErrorResponse(error, thinkingMessage)
                     errorHandled = true  // Flag to skip when block
                 }
-                if (!errorHandled) {
-                    when (finishReason) {
+                if (errorHandled) {
+                    return@withContext
+                }
+                when (finishReason) {
                         "error" -> {
                             val errorMsg =
                                 "**Error:** The model encountered an error while generating the response. Please try again."
@@ -4156,8 +4589,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }
 
                         "content_filter" -> {
-                            val errorMsg =
-                                "**Error:** The response was filtered due to content policies. Please rephrase your query."
+                            val errorMsg = getApplication<Application>().getString(R.string.error_provider_content_filter)
                             handleError(Exception(errorMsg), thinkingMessage)
                           //  return@let  // or return@execute for streamed
                             return@withContext
@@ -4168,7 +4600,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                                 AppToast.makeText(
                                     getApplication<Application>().applicationContext,
-                                    "Response was truncated due to max_tokens limit.",
+                                    getApplication<Application>().getString(R.string.toast_response_truncated_max_tokens),
                                     AppToast.LENGTH_LONG
                                 ).show()
 
@@ -4184,10 +4616,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             //   Log.w("ChatViewModel", "Unknown finish_reason: $finishReason (native: ${choice.native_finish_reason})")
                         }
                     }
-                }
 
                 // Trust the presence of tool calls over the finish_reason for robustness.
-                if (choice?.message?.toolCalls?.isNotEmpty() == true && !toolCallsHandledForTurn && _isToolsEnabled.value == true) {
+                if (choice?.message?.toolCalls?.isNotEmpty() == true && !toolCallsHandledForTurn && !isRpMode() && _isToolsEnabled.value == true) {
                     val toolCalls = choice.message.toolCalls
                     // Create the complete assistant message from the response
                     val citationsMarkdown = if (sharedPreferencesHelper.getShowCitations()) {
@@ -4260,7 +4691,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             ""
         }
 
-        val finalContent = responseText + citationsMarkdown
+        val finalContent = finalizeAssistantContent(responseText + citationsMarkdown)
 
         var finalAiMessage = FlexibleMessage(
             role = "assistant",
@@ -4295,6 +4726,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     // New function for detailed error handling
     private fun handleErrorResponse(error: ErrorResponse, thinkingMessage: FlexibleMessage?) {
+        val wasRpRegen = pendingRpSwipeAppend
+        pendingRpSwipeAppend = false
+        // Terminal error is no longer an in-flight stream — Stop must not discard the Error bubble.
+        discardableRpAssistantInFlight = false
+        if (wasRpRegen) {
+            // Same as handleError: restore stashed alt instead of leaving an Error bubble as the reply.
+            removeAssistantPlaceholder(thinkingMessage)
+            restoreRpSwipeAltIfMissingAssistant()
+            val shortMsg = error.message.takeIf { it.isNotBlank() }
+                ?: getApplication<Application>().getString(R.string.rp_regen_failed)
+            _toastUiEvent.postValue(Event(shortMsg))
+            return
+        }
         val detailedMsg = "**Error:**\n---\n(Code: ${error.code}): ${error.message}"
         // Optionally, include metadata if present
         error.metadata?.let { meta ->
@@ -4315,8 +4759,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleError(e: Throwable, thinkingMessage: FlexibleMessage?) {
+        val wasRpRegen = pendingRpSwipeAppend
+        pendingRpSwipeAppend = false
         if (e is CancellationException && e !is TimeoutCancellationException) {
             removeAssistantPlaceholder(thinkingMessage)
+            if (wasRpRegen) restoreRpSwipeAltIfMissingAssistant()
+            else if (discardableRpAssistantInFlight) {
+                discardableRpAssistantInFlight = false
+                discardIncompleteRpAssistantAfterLastUser()
+            }
+            return
+        }
+        // Terminal error path — keep the Error bubble; Stop must not treat it as mid-stream.
+        discardableRpAssistantInFlight = false
+        if (wasRpRegen) {
+            removeAssistantPlaceholder(thinkingMessage)
+            restoreRpSwipeAltIfMissingAssistant()
+            val shortMsg = when (e) {
+                is TimeoutCancellationException, is SocketTimeoutException ->
+                    getApplication<Application>().getString(R.string.rp_regen_timeout)
+                is IOException ->
+                    getApplication<Application>().getString(R.string.rp_regen_network)
+                else ->
+                    e.localizedMessage?.takeIf { it.isNotBlank() }
+                        ?: getApplication<Application>().getString(R.string.rp_regen_failed)
+            }
+            _toastUiEvent.postValue(Event(shortMsg))
             return
         }
         val errorMsg = when (e) {
@@ -4383,11 +4851,50 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startNewChat() {
-        _isChatLoading.value = true
-        _chatMessages.value = emptyList()
-        pendingUserImageUri = null
-        currentSessionId = null
-        clearForkMemory()
+        // Abort in-flight load/restore so it cannot resurrect a cleared transcript.
+        sessionTransitionJob?.cancel()
+        sessionTransitionJob = null
+        sessionEpoch++
+        clearOpenTranscript()
+    }
+
+    /** Ask: empty thread. RP: reinject active character greeting when applicable. */
+    fun startFreshChatForCurrentMode() {
+        if (isRpMode()) {
+            startNewRpChatKeepingCharacter()
+        } else {
+            startNewChat()
+        }
+    }
+
+    private fun clearRpSwipeMemory() {
+        pendingRpSwipeAppend = false
+        discardableRpAssistantInFlight = false
+        rpRegenRestoreFallback = null
+        rpSwipeState = RpSwipeState()
+        _rpSwipeNav.value = null
+    }
+
+    /** True when the open RP transcript already has a user turn (activating a character would wipe it). */
+    fun rpChatHasUserTurn(): Boolean =
+        isRpMode() && (_chatMessages.value?.any { it.role == "user" } == true)
+
+    /** True when RP has any real content (greeting or user) that activating another character would replace. */
+    fun rpChatHasContent(): Boolean =
+        isRpMode() && (_chatMessages.value?.any {
+            it.role == "user" || (it.role == "assistant" && !isAssistantPlaceholder(it))
+        } == true)
+
+    /**
+     * Whether Start chat should confirm before replacing an existing RP thread.
+     * Covers open RP content and a parked RP draft (Ask or empty RP after LLM wipe).
+     */
+    fun rpStartChatNeedsConfirm(): Boolean {
+        if (rpChatHasContent()) return true
+        val draftId = sharedPreferencesHelper.getRpDraftSessionId(ChatMode.RP) ?: return false
+        // Empty open RP that already is the draft pointer — nothing valuable to replace.
+        if (isRpMode() && draftId == currentSessionId) return false
+        return true
     }
 
     /**
@@ -4427,10 +4934,47 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (index < 0 || index >= current.size) return
         current.subList(index, current.size).clear()
         _chatMessages.value = current
+        syncRpSwipeAfterTranscriptChange()
         autoSaveChat()
     }
 
+    /** Truncate for RP user-edit without creating an Ask-mode fork or leaving stale swipe state. */
+    fun truncateForRpEdit(startIndex: Int) {
+        truncateWithoutFork(startIndex)
+        clearForkMemory()
+        clearRpSwipeMemory()
+        currentSessionId?.let { rpSwipeStore.clear(it) }
+        autoSaveChat()
+    }
+
+    private fun syncRpSwipeAfterTranscriptChange() {
+        if (!isRpMode()) return
+        val messages = _chatMessages.value.orEmpty()
+        val swipeable = RpSwipeRules.isSwipeableMessages(
+            messages,
+            isUser = { it.role == "user" },
+            isAssistant = { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        )
+        if (!swipeable) {
+            clearRpSwipeMemory()
+            currentSessionId?.let { rpSwipeStore.clear(it) }
+            return
+        }
+        val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val lastText = getMessageText(messages[lastAssistantIndex].content)
+        if (lastText.isBlank() || isNonSwipeableRpAssistantText(lastText)) {
+            clearRpSwipeMemory()
+            currentSessionId?.let { rpSwipeStore.clear(it) }
+            return
+        }
+        val (alts, index) = RpSwipeRules.reconcileAltsAfterTruncate(rpSwipeState.alts, lastText)
+        rpSwipeState = RpSwipeState(alts = alts, index = index)
+        persistRpSwipeState()
+        updateRpSwipeNav()
+    }
+
     fun getForkNavForMessage(position: Int): ForkNavState? {
+        if (isRpMode()) return null
         if (_hasChatFork.value != true || forkAnchorAssistantIndex < 0) return null
         if (position != forkAnchorAssistantIndex) return null
         return ForkNavState(
@@ -4632,8 +5176,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _sharedText.value = text
     }
     fun consumeSharedTextautosend(text: String) {
-        _sharedText.value = text
-        _autosendEvent.value = Event(Unit)
+        // Carry the text on the autosend event so Send isn't clicked before the composer updates.
+        _autosendEvent.value = Event(text)
     }
     fun textConsumed() {
         _sharedText.value = null
@@ -6061,7 +6605,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun getLanEndpoint(): String? = sharedPreferencesHelper.getLanEndpoint()
 
     private fun buildWebSearchPlugin(): List<Plugin>? {
-        if (!sharedPreferencesHelper.getWebSearchBoolean() || activeModelIsLan()) return null
+        if (isRpMode() || !sharedPreferencesHelper.getWebSearchBoolean() || activeModelIsLan()) return null
 
         val engine = getWebSearchEngine()
         val maxResults = sharedPreferencesHelper.getWebSearchMaxResults()
@@ -6795,5 +7339,554 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // --- GradatiON RP ---
+
+    fun isRpMode(): Boolean = _chatMode.value == ChatMode.RP
+
+    private fun sessionModeValue(): String = (_chatMode.value ?: ChatMode.ASK).storageValue
+
+    private fun sessionCharacterId(): Long? {
+        if (!isRpMode() || sharedPreferencesHelper.isRpLlmMode()) return null
+        return sharedPreferencesHelper.getRpActiveCharacterId() ?: preservedSessionCharacterId
+    }
+
+    private fun sessionIsLlm(): Boolean = isRpMode() && sharedPreferencesHelper.isRpLlmMode()
+
+    private fun finalizeAssistantContent(text: String): String {
+        if (!isRpMode()) return text
+        // Reply is complete — Stop must not treat the finished bubble as a mid-stream partial.
+        discardableRpAssistantInFlight = false
+        val cleaned = rpDelegate.cleanReply(text)
+        rpRegenRestoreFallback = null
+        if (cleaned.isBlank() || isNonSwipeableRpAssistantText(cleaned)) {
+            pendingRpSwipeAppend = false
+            return cleaned
+        }
+        if (pendingRpSwipeAppend) {
+            pendingRpSwipeAppend = false
+            appendRpSwipeAlt(cleaned)
+        } else if (rpSwipeState.alts.isEmpty()) {
+            // Seed first alt so the swipe bar (and ›) is available after a normal reply.
+            rpSwipeState = RpSwipeState(alts = listOf(cleaned), index = 0)
+            persistRpSwipeState()
+            updateRpSwipeNav()
+        }
+        return cleaned
+    }
+
+    suspend fun refreshActiveRpCharacter() {
+        val character = rpDelegate.getActiveCharacter()
+        // Prefer setValue on main so canSendRpMessage() sees the character immediately
+        // (postValue can leave .value null for a beat after Start chat / session load).
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            _activeRpCharacter.value = character
+            _rpChromeRefreshEvent.value = Event(Unit)
+        } else {
+            _activeRpCharacter.postValue(character)
+            _rpChromeRefreshEvent.postValue(Event(Unit))
+        }
+    }
+
+    /**
+     * If the open RP thread is still greeting-only (or empty) for the active character, refresh
+     * that bubble after an edit / rematch so name/greeting changes show without restarting the chat.
+     */
+    suspend fun syncActiveCharacterGreetingIfIdle() {
+        if (!isRpMode() || sharedPreferencesHelper.isRpLlmMode()) return
+        val epoch = sessionEpoch
+        val character = rpDelegate.getActiveCharacter() ?: return
+        if (epoch != sessionEpoch) return
+        val messages = _chatMessages.value.orEmpty()
+        if (messages.any { it.role == "user" }) return
+        val onlyGreeting = messages.size == 1 &&
+            messages[0].role == "assistant" &&
+            !isAssistantPlaceholder(messages[0])
+        if (!onlyGreeting && messages.isNotEmpty()) return
+        val greeting = rpDelegate.greetingMessage(character)
+        if (epoch != sessionEpoch) return
+        _chatMessages.value = listOf(
+            FlexibleMessage(role = "assistant", content = JsonPrimitive(greeting))
+        )
+        // Don't mint a session while a parked keepDraftId owns the RP draft pointer
+        // (LLM-mismatch ephemeral greeting). Rematch with draft cleared still autosaves.
+        val parkedDraft = sharedPreferencesHelper.getRpDraftSessionId(ChatMode.RP)
+        if (currentSessionId != null || parkedDraft == null) {
+            autoSaveChat()
+        }
+    }
+
+    fun setChatMode(mode: ChatMode) {
+        if (_chatMode.value == mode) return
+        val previous = _chatMode.value ?: ChatMode.ASK
+        // Only park a real open session. Writing null would wipe a keepDraftId left by
+        // LLM-mismatch ephemeral greeting (currentSessionId == null).
+        if (currentSessionId != null) {
+            sharedPreferencesHelper.saveRpDraftSessionId(previous, currentSessionId)
+        }
+        // Flip mode inside the transition so cancel+regen-restore still sees the previous mode.
+        beginSessionTransition {
+            _chatMode.value = mode
+            sharedPreferencesHelper.saveChatMode(mode)
+            if (mode == ChatMode.RP) {
+                _isToolsEnabled.value = false
+                _isWebSearchEnabled.value = false
+                refreshActiveRpCharacter()
+                restoreDraftOrNewChat(ChatMode.RP)
+            } else {
+                _isToolsEnabled.value = sharedPreferencesHelper.getToolsPreference()
+                _isWebSearchEnabled.value = sharedPreferencesHelper.getWebSearchBoolean()
+                restoreDraftOrNewChat(ChatMode.ASK)
+            }
+        }
+    }
+
+    private suspend fun restoreDraftOrNewChat(mode: ChatMode) {
+        // Drop stale work if Ask↔RP flipped again while we were suspended.
+        if (_chatMode.value != mode) return
+        if (networkJob?.isActive == true) return
+        val draftId = sharedPreferencesHelper.getRpDraftSessionId(mode)
+        val draftSession = draftId?.let { repository.getSessionById(it) }
+        if (draftSession != null) {
+            if (_chatMode.value != mode) return
+            // Ask-side LLM toggle updates the global flag without rewriting the RP draft.
+            // Prefer that preference over a mismatched draft when returning to RP, but keep the
+            // draft id so Ask↔RP can resume the thread once isLlm matches again.
+            if (mode == ChatMode.RP &&
+                draftSession.isLlm != sharedPreferencesHelper.isRpLlmMode()
+            ) {
+                val keepDraftId = draftSession.id
+                if (sharedPreferencesHelper.isRpLlmMode()) {
+                    clearOpenTranscript(clearDraft = false)
+                } else {
+                    // Don't autosave a greeting row — that would overwrite keepDraftId.
+                    startNewRpChatKeepingCharacterInternal(persist = false)
+                }
+                sharedPreferencesHelper.saveRpDraftSessionId(ChatMode.RP, keepDraftId)
+                return
+            }
+            // Use internal load so we don't cancel this transition job.
+            loadChatInternal(draftSession.id)
+        } else {
+            if (_chatMode.value != mode) return
+            if (draftId != null) sharedPreferencesHelper.saveRpDraftSessionId(mode, null)
+            if (mode == ChatMode.RP) {
+                startNewRpChatKeepingCharacterInternal()
+            } else {
+                clearOpenTranscript()
+            }
+        }
+    }
+
+    fun toggleChatMode() {
+        val next = if (isRpMode()) ChatMode.ASK else ChatMode.RP
+        setChatMode(next)
+    }
+
+    fun startRpChatWithCharacter(character: RpCharacter) {
+        beginSessionTransition {
+            val previous = _chatMode.value ?: ChatMode.ASK
+            if (currentSessionId != null) {
+                sharedPreferencesHelper.saveRpDraftSessionId(previous, currentSessionId)
+            }
+            rpDelegate.activateCharacter(character)
+            preservedSessionCharacterId = null
+            sharedPreferencesHelper.saveRpLlmMode(false)
+            // Synchronous so Send is gated correctly before observers run.
+            _activeRpCharacter.value = character
+            _rpChromeRefreshEvent.value = Event(Unit)
+            _chatMode.value = ChatMode.RP
+            sharedPreferencesHelper.saveChatMode(ChatMode.RP)
+            _isToolsEnabled.value = false
+            _isWebSearchEnabled.value = false
+            // Intentional Start chat replaces any parked keepDraftId with this greeting thread.
+            clearOpenTranscript(clearDraft = true)
+            val greeting = rpDelegate.greetingMessage(character)
+            _chatMessages.value = listOf(
+                FlexibleMessage(role = "assistant", content = JsonPrimitive(greeting))
+            )
+            autoSaveChat()
+            // Drop leftover composer text from the previous thread.
+            _composerRestoreEvent.value = Event("")
+        }
+    }
+
+    fun startRpLlmChat() {
+        beginSessionTransition {
+            val previous = _chatMode.value ?: ChatMode.ASK
+            if (currentSessionId != null) {
+                sharedPreferencesHelper.saveRpDraftSessionId(previous, currentSessionId)
+            }
+            sharedPreferencesHelper.saveRpLlmMode(true)
+            // Keep the selected character id so LLM-off can restore greeting/chrome.
+            // getActiveCharacter() already returns null while LLM mode is on.
+            preservedSessionCharacterId = null
+            refreshActiveRpCharacter()
+            _chatMode.value = ChatMode.RP
+            sharedPreferencesHelper.saveChatMode(ChatMode.RP)
+            _isToolsEnabled.value = false
+            _isWebSearchEnabled.value = false
+            val parkedId = sharedPreferencesHelper.getRpDraftSessionId(ChatMode.RP)
+            val parked = parkedId?.let { repository.getSessionById(it) }
+            if (parked != null && parked.isLlm) {
+                // Re-enable LLM after mismatch — resume the parked LLM thread.
+                loadChatInternal(parked.id)
+            } else {
+                // Preserve character draft pointer until this LLM thread autosaves.
+                clearOpenTranscript(clearDraft = false)
+            }
+            _composerRestoreEvent.value = Event("")
+        }
+    }
+
+    fun sendRpUserMessage(rawText: String, messageInstruct: String? = null): Boolean {
+        val parsed = rpDelegate.parseSendText(rawText)
+        val app = getApplication<Application>()
+        // Reminder-only sends still need a visible user beat so the model has a turn to answer.
+        val userText = when {
+            parsed.userText.isNotBlank() -> parsed.userText
+            !parsed.reminder.isNullOrBlank() -> app.getString(R.string.rp_reminder_continue)
+            else -> {
+                _toastUiEvent.postValue(Event(app.getString(R.string.rp_message_empty)))
+                return false
+            }
+        }
+        // Block Ask↔RP before the async prompt build (awaiting flips later inside sendUserMessage).
+        if (_isAwaitingResponse.value == true) {
+            _toastUiEvent.postValue(Event(app.getString(R.string.rp_wait_for_reply)))
+            return false
+        }
+        _isAwaitingResponse.value = true
+        val epoch = sessionEpoch
+        val draftToRestore = rawText
+        // Defer swipe wipe until send actually starts — prep failure must not erase alts.
+        rpPrepJob?.cancel()
+        rpPrepJob = viewModelScope.launch {
+            var sendStarted = false
+            try {
+                sessionTransitionJob?.join()
+                if (epoch != sessionEpoch || !isRpMode()) {
+                    _isAwaitingResponse.value = false
+                    _composerRestoreEvent.postValue(Event(draftToRestore))
+                    return@launch
+                }
+                if (!messageInstruct.isNullOrBlank()) {
+                    sharedPreferencesHelper.saveRpPendingInstruct(messageInstruct)
+                }
+                val systemPrompt = rpDelegate.buildSystemPrompt(
+                    character = rpDelegate.getActiveCharacter(),
+                    extraInstruction = parsed.reminder
+                )
+                if (epoch != sessionEpoch || !isRpMode()) {
+                    _isAwaitingResponse.value = false
+                    _composerRestoreEvent.postValue(Event(draftToRestore))
+                    return@launch
+                }
+                if (!sendUserMessage(
+                        JsonPrimitive(userText),
+                        systemPrompt,
+                        clearRpSwipeOnStart = true
+                    )
+                ) {
+                    _composerRestoreEvent.postValue(Event(draftToRestore))
+                } else {
+                    sendStarted = true
+                }
+            } catch (e: CancellationException) {
+                _isAwaitingResponse.value = false
+                // Stop during prep — composer was already cleared; put the draft back.
+                if (!sendStarted) {
+                    _composerRestoreEvent.postValue(Event(draftToRestore))
+                }
+                throw e
+            } catch (_: Exception) {
+                _isAwaitingResponse.value = false
+                if (!sendStarted) {
+                    _composerRestoreEvent.postValue(Event(draftToRestore))
+                }
+            } finally {
+                // Only the active prep may clear instruct — a cancelled job must not wipe a newer Instruct.
+                if (rpPrepJob === coroutineContext[Job]) {
+                    sharedPreferencesHelper.saveRpPendingInstruct(null)
+                    rpPrepJob = null
+                }
+            }
+        }
+        return true
+    }
+
+    fun canSendRpMessage(): Boolean {
+        if (sharedPreferencesHelper.isRpLlmMode()) return true
+        if (_activeRpCharacter.value != null) return true
+        // Prefs may already have the id while LiveData refresh is still in flight.
+        return sharedPreferencesHelper.getRpActiveCharacterId() != null
+    }
+
+    /**
+     * Regenerate the last RP assistant reply without duplicating the user turn or creating an Ask fork.
+     * Existing assistant text is stashed into swipe alts; the new reply is appended when it completes.
+     * @return false if soft-failed (toast already shown); true if prep started.
+     */
+    fun regenerateLastRpReply(instruction: String? = null): Boolean {
+        if (_isAwaitingResponse.value == true) {
+            _toastUiEvent.postValue(
+                Event(getApplication<Application>().getString(R.string.rp_wait_for_reply))
+            )
+            return false
+        }
+        if (!canSendRpMessage()) {
+            _toastUiEvent.postValue(
+                Event(getApplication<Application>().getString(R.string.rp_select_character))
+            )
+            return false
+        }
+        val messages = _chatMessages.value ?: return false
+        val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val lastUserIndex = messages.indexOfLast { it.role == "user" }
+        if (lastUserIndex < 0) {
+            _toastUiEvent.postValue(
+                Event(getApplication<Application>().getString(R.string.rp_need_user_turn))
+            )
+            return false
+        }
+        _toastUiEvent.postValue(
+            Event(getApplication<Application>().getString(R.string.rp_regen_started))
+        )
+        // Block Ask↔RP before truncate + async prompt build.
+        _isAwaitingResponse.value = true
+        val epoch = sessionEpoch
+        // Only truncate an assistant reply that follows the last user turn (not the greeting).
+        if (lastAssistantIndex > lastUserIndex) {
+            stashRpSwipeFromLastAssistant()
+            truncateWithoutFork(lastAssistantIndex)
+            // So Stop mid-prep restores the stashed alt (pending was previously set only at resend).
+            pendingRpSwipeAppend = true
+        }
+        clearForkMemory()
+        rpPrepJob?.cancel()
+        rpPrepJob = viewModelScope.launch {
+            try {
+                sessionTransitionJob?.join()
+                if (epoch != sessionEpoch || !isRpMode()) {
+                    _isAwaitingResponse.value = false
+                    return@launch
+                }
+                if (!instruction.isNullOrBlank()) {
+                    sharedPreferencesHelper.saveRpPendingInstruct(instruction)
+                }
+                val systemPrompt = rpDelegate.buildSystemPrompt(
+                    character = rpDelegate.getActiveCharacter(),
+                    extraInstruction = null
+                )
+                if (epoch != sessionEpoch || !isRpMode()) {
+                    _isAwaitingResponse.value = false
+                    return@launch
+                }
+                pendingRpSwipeAppend = true
+                resendExistingPrompt(lastUserIndex, systemPrompt)
+            } catch (e: CancellationException) {
+                _isAwaitingResponse.value = false
+                throw e
+            } catch (_: Exception) {
+                pendingRpSwipeAppend = false
+                restoreRpSwipeAltIfMissingAssistant()
+                _isAwaitingResponse.value = false
+            } finally {
+                // Only the active prep may clear instruct — a cancelled job must not wipe a newer Instruct.
+                if (rpPrepJob === coroutineContext[Job]) {
+                    sharedPreferencesHelper.saveRpPendingInstruct(null)
+                    rpPrepJob = null
+                }
+            }
+        }
+        return true
+    }
+
+    fun instructLastRpReply(instruction: String): Boolean = regenerateLastRpReply(instruction)
+
+    /** Drop messages from [startIndex] onward without stashing an Ask-mode fork. */
+    private fun truncateWithoutFork(startIndex: Int) {
+        val current = _chatMessages.value?.toMutableList() ?: return
+        if (startIndex < 0 || startIndex >= current.size) return
+        current.subList(startIndex, current.size).clear()
+        _chatMessages.value = current
+    }
+
+    private fun stashRpSwipeFromLastAssistant() {
+        val messages = _chatMessages.value ?: return
+        val lastUserIndex = messages.indexOfLast { it.role == "user" }
+        val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        if (lastAssistantIndex < 0 || lastAssistantIndex < lastUserIndex) return
+        val currentText = getMessageText(messages[lastAssistantIndex].content)
+        if (currentText.isBlank()) return
+        if (isNonSwipeableRpAssistantText(currentText)) {
+            // Provider/network Error bubbles stay out of swipe alts; Stop mid-regen still needs a restore seed.
+            rpRegenRestoreFallback = currentText
+            return
+        }
+        rpRegenRestoreFallback = null
+        // Don't duplicate the already-selected seed on first regen; keep that index so
+        // Stop/error restore brings back the variant the user was viewing.
+        val (alts, index) = RpSwipeRules.stashCurrentAlt(
+            rpSwipeState.alts,
+            rpSwipeState.index,
+            currentText
+        )
+        rpSwipeState = RpSwipeState(alts = alts, index = index)
+        persistRpSwipeState()
+        updateRpSwipeNav()
+    }
+
+    private fun isNonSwipeableRpAssistantText(text: String): Boolean =
+        text.startsWith("**Error:**")
+
+    private fun appendRpSwipeAlt(text: String) {
+        if (text.isBlank()) return
+        val alts = rpSwipeState.alts + text
+        rpSwipeState = RpSwipeState(alts = alts, index = alts.lastIndex)
+        persistRpSwipeState()
+        updateRpSwipeNav()
+    }
+
+    fun swipeRpPrev() {
+        if (!canInteractWithRpSwipe()) return
+        if (rpSwipeState.alts.isEmpty()) return
+        val newIndex = (rpSwipeState.index - 1).coerceAtLeast(0)
+        applyRpSwipeIndex(newIndex)
+    }
+
+    fun swipeRpNext() {
+        if (!canInteractWithRpSwipe()) return
+        if (rpSwipeState.alts.isEmpty()) {
+            regenerateLastRpReply()
+            return
+        }
+        if (rpSwipeState.index < rpSwipeState.alts.lastIndex) {
+            applyRpSwipeIndex(rpSwipeState.index + 1)
+        } else {
+            regenerateLastRpReply()
+        }
+    }
+
+    /** Swipe must not run while a reply/regen is in flight (would append beside thinking). */
+    private fun canInteractWithRpSwipe(): Boolean =
+        isRpMode() && _isAwaitingResponse.value != true
+
+    private fun persistRpSwipeState() {
+        val id = currentSessionId ?: return
+        if (rpSwipeState.alts.isEmpty()) return
+        rpSwipeStore.save(id, rpSwipeState)
+    }
+
+    private fun applyRpSwipeIndex(index: Int, persistChat: Boolean = true) {
+        if (!canInteractWithRpSwipe()) return
+        val alt = rpSwipeState.alts.getOrNull(index) ?: return
+        rpSwipeState = rpSwipeState.copy(index = index)
+        persistRpSwipeState()
+        updateRpSwipeNav()
+        val messages = _chatMessages.value?.toMutableList() ?: return
+        val lastUserIndex = messages.indexOfLast { it.role == "user" }
+        val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        // Never rewrite the greeting when there is no user turn yet.
+        if (lastUserIndex < 0) return
+        // Mid-regen/stream: thinking placeholder after the user — do not append a stale alt beside it.
+        val thinkingAfterUser = messages.withIndex().any { (i, m) ->
+            i > lastUserIndex && isAssistantPlaceholder(m)
+        }
+        if (thinkingAfterUser) return
+        when {
+            lastAssistantIndex > lastUserIndex -> {
+                messages[lastAssistantIndex] = messages[lastAssistantIndex].copy(
+                    content = JsonPrimitive(alt),
+                    reasoning = null,
+                    thinking = null
+                )
+            }
+            else -> {
+                // Missing reply after user — append rather than overwrite greeting.
+                messages.add(FlexibleMessage(role = "assistant", content = JsonPrimitive(alt)))
+            }
+        }
+        _chatMessages.value = messages
+        if (persistChat) autoSaveChat()
+    }
+
+    private fun updateRpSwipeNav() {
+        if (rpSwipeState.alts.isEmpty()) {
+            _rpSwipeNav.postValue(null)
+            return
+        }
+        _rpSwipeNav.postValue(
+            RpSwipeNav(
+                index = rpSwipeState.index + 1,
+                total = rpSwipeState.alts.size,
+                canPrev = rpSwipeState.index > 0,
+                canNext = true
+            )
+        )
+    }
+
+    fun loadRpSwipeForSession(sessionId: Long) {
+        pendingRpSwipeAppend = false
+        rpSwipeState = rpSwipeStore.load(sessionId) ?: RpSwipeState()
+        val messages = _chatMessages.value.orEmpty()
+        val swipeable = RpSwipeRules.isSwipeableMessages(
+            messages,
+            isUser = { it.role == "user" },
+            isAssistant = { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        )
+        if (!swipeable || rpSwipeState.alts.isEmpty()) {
+            if (!swipeable) {
+                clearRpSwipeMemory()
+                rpSwipeStore.clear(sessionId)
+            }
+            updateRpSwipeNav()
+            return
+        }
+        updateRpSwipeNav()
+        applyRpSwipeIndex(rpSwipeState.index, persistChat = false)
+    }
+
+    /** New chat in RP: clear transcript and reinject the active character greeting when applicable. */
+    fun startNewRpChatKeepingCharacter() {
+        beginSessionTransition {
+            startNewRpChatKeepingCharacterInternal(persist = true)
+        }
+    }
+
+    private suspend fun startNewRpChatKeepingCharacterInternal(persist: Boolean = true) {
+        val llm = sharedPreferencesHelper.isRpLlmMode()
+        val charId = sharedPreferencesHelper.getRpActiveCharacterId()
+        // Only ephemeral mismatch (persist=false) keeps keepDraftId; intentional New chat / LLM-off replaces it.
+        val preserveParked = !persist &&
+            currentSessionId == null &&
+            sharedPreferencesHelper.getRpDraftSessionId(ChatMode.RP) != null
+        clearOpenTranscript(clearDraft = !preserveParked)
+        _composerRestoreEvent.value = Event("")
+        if (llm || charId == null) return
+        val character = rpRepository.getCharacterById(charId) ?: return
+        _activeRpCharacter.value = character
+        val greeting = rpDelegate.greetingMessage(character)
+        _chatMessages.value = listOf(
+            FlexibleMessage(role = "assistant", content = JsonPrimitive(greeting))
+        )
+        if (persist && !preserveParked) autoSaveChat()
+    }
+
+    suspend fun remappingCharacterSessions(oldId: Long, newId: Long) {
+        if (oldId == newId) return
+        repository.remapSessionCharacterId(oldId, newId)
+        if (preservedSessionCharacterId == oldId) {
+            preservedSessionCharacterId = null
+        }
+        val active = sharedPreferencesHelper.getRpActiveCharacterId()
+        if (active == null || active == oldId) {
+            sharedPreferencesHelper.saveRpActiveCharacterId(newId)
+            refreshActiveRpCharacter()
+            // Delete left an empty transcript; reinject greeting now that the id is restored.
+            syncActiveCharacterGreetingIfIdle()
+        }
+    }
+
+    fun getRpRepository(): RpRepository = rpRepository
 
 }

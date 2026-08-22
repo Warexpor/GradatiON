@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true"
+    android:background="@color/xai_canvas">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/xai_canvas"
+        app:navigationIcon="@drawable/is_backarrow"
+        app:navigationContentDescription="@string/cd_navigate_up"
+        app:navigationIconTint="@color/xai_ink"
+        app:title="@string/rp_characters_title"
+        app:titleTextColor="@color/xai_ink" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rpCharacterRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <FrameLayout
+        android:id="@+id/rpCharacterEmpty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="220dp"
+            android:layout_height="220dp"
+            android:layout_gravity="center"
+            android:alpha="0.12"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_gradation_mark"
+            app:tint="@color/xai_ink" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:padding="24dp"
+            android:text="@string/rp_characters_empty"
+            android:textColor="@color/xai_mute"
+            android:textSize="15sp" />
+    </FrameLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/addRpCharacterButton"
+        style="@style/Widget.Grokion.Button.SettingsRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/rp_add_character"
+        app:icon="@drawable/ic_plus" />
+</LinearLayout>

@@ -1,5 +1,132 @@
 # Changelog
 
+## 2.1.134-rp — 2026-08-22
+
+### Fixed
+- History shows Ask vs RP under the wordmark and uses the GradatiON mark on empty lists; share subjects say GradatiON.
+- Ask fork navigator stays hidden in RP (swipe bar owns alternates); RP stream toggle tints gold when on.
+- Spell-check restores the attach + icon (not the old overflow dots); Instruct/persona-name dialogs keep OK above the keyboard.
+- Prompt/preset/OpenRouter library copy and a11y live in string resources; Help documents Ask overflow as long-press Send.
+- Returning from the RP hub no longer overwrites the RP composer hint with Ask copy; empty RP hints you to pick a character; LLM replies show a GradatiON speaker header.
+- Last-reply copy / instruct / regen stay above the composer (extra list padding); Instruct dialog uses app OK/Cancel and toasts like regenerate.
+- Removed leftover client-side RP content filter (ported from another project; not needed here). Provider `finish_reason: content_filter` is still shown as an error bubble.
+- Character / lore / persona-preset deletes use the same centered confirm dialog as the rest of RP.
+- Persona and lorebook editors confirm before discarding unsaved edits.
+- Regenerate / swipe › shows a short “Generating another reply…” toast.
+- SSE streaming finalizes on OpenAI-style `[DONE]` (keep-alive LAN servers no longer leave Stop stuck).
+- Instruct action uses `ic_editnote` so it no longer looks identical to Edit.
+- Character library shows an Active badge; LLM mode dims Third-person / Show thoughts (prompt no-ops).
+- Character editor confirms before discarding unsaved edits.
+- Help no longer documents dead per-message PDF/MD/HTML/PNG export icons.
+- Autosend no longer races the composer (shared text is applied before Send is clicked).
+- Ask↔RP parks/restores composer text per mode; entering RP toasts when staged attachments are dropped; character/lore Save failures toast; first lorebook create/import reminds when “Use active lorebook” is off.
+- Leaving RP re-applies Ask attach/gen chrome from the active model’s capabilities (no stale enabled attach on non-vision models).
+- Character RP memory trim always keeps the latest turn at tiny Chat-memory budgets.
+- Regen Stop after an error reply restores that placeholder (restore-only seed, not swipe alts).
+- New chat / LLM-off replace parked drafts (only ephemeral mismatch preserves keepDraftId); error RP replies still allow regen/instruct; LLM memory trim no longer pins the first reply as a greeting; non-stream finalize includes citations in swipe seed; persona commits only via Save (preset browse no longer silently overwrites on Back).
+- Start chat always replaces a parked RP draft (and confirms even from empty RP); third-person prompt gated out of LLM mode; LLM composer hint; stream notifications reuse the finalized bubble.
+- LLM-off confirms before wiping an open RP thread; Start chat confirms from Ask when a parked RP draft exists.
+- Character/LLM RP history titles upgrade from the bare greeting name to include the first user snippet once a user turn exists (without overwriting a renamed title).
+- Character RP history titles include a first-user snippet so threads don’t all share one name; Instruct OK keeps the dialog open on soft-fail; avatar pick failure toasts and stays on the editor instead of exporting without an avatar.
+- RP first autosave skips the unused title LLM call; LLM history titles use the first user snippet when present; async PDF/audio/file staging re-checks RP before attach; persona preset save toasts when the oldest of 12 is dropped.
+- Lore import only auto-activates when the library was empty (won’t undo intentional “no active”); clear-avatar deletes the file only after a successful DB save; late Ask picker results are discarded in RP instead of re-staging attachments.
+- Deleting the active lorebook no longer silently activates another (toast prompts Set active); character Save rejects unparseable example text instead of wiping stored examples; Help notes Attach is disabled in RP.
+- New chat / LLM-off no longer autosaves over a parked keepDraftId and clears the composer; RP file-attach is disabled like image attach (picker blocked + chrome dimmed).
+- Regen Stop restores the swipe variant you were viewing (stash keeps mid-list index); Start chat skips greeting autosave when a parked draft must be preserved and clears leftover composer text.
+- clearOpenTranscript can preserve parked drafts; startRp* no longer wipe keepDraftId (LLM re-enable reloads a parked LLM draft); New chat on ephemeral mismatch keeps the pointer; first regen no longer duplicates the seeded swipe alt.
+- Parked LLM-mismatch draft survives Ask↔RP (null session no longer wipes the pointer) and idle greeting sync; share/clear_chat uses RP-aware fresh chat so character greeting is reinjected.
+- Mismatched LLM draft keep-id is no longer overwritten by a greeting autosave; delete→re-import rematch awaits remap then reinjects greeting into an empty RP transcript.
+- Start chat / character refresh sets active character synchronously so Send is not blocked; orphan rematch id is not clobbered by unrelated (or LLM-parked) deletes; mismatched LLM drafts keep their resume pointer across Ask↔RP.
+- LLM draft/history load keeps the parked character id; Ask→RP respects an Ask-side LLM toggle over a mismatched draft; deleting a parked character in LLM mode no longer wipes the open LLM thread.
+- LLM mode no longer clears the selected character id (LLM-off restores greeting/chrome); chrome refreshes on LLM toggle even when character LiveData is unchanged; regen/instruct respect the same character-or-LLM gate as Send.
+- RP swipe state no longer leaks into new chats; selected swipe alt is reapplied on load and autosaved.
+- Activating a character from the Hub pops back to chat (not Hub); confirms before wiping an active RP thread.
+- Draft session IDs and swipe prefs cleared when a chat is deleted; stale drafts skipped on mode switch.
+- Tools / web search / attach affordances forced off in RP; model chip opens Characters (long-press = models).
+- Character avatar export embeds Base64 JPEG (portable); import writes avatar files; decode downsamples.
+- RP regenerate/instruct no longer duplicates the user turn or creates Ask forks; swipe alts survive and append.
+- › starts the first alternate when alts are empty; regenerate only on the last assistant in RP.
+- New chat in RP reinjects the active character greeting; turning LLM mode off keeps the character.
+- Delete→re-import remaps session `characterId` via exportKey; lore import upserts by name; first lorebook auto-activates.
+- Cold start restores the draft session for the saved Ask/RP mode; Ask→RP without a draft reinjects greeting.
+- Orphan character loads preserve session `characterId` across autosave (remap still works).
+- RP user-edit truncates without Ask forks; regen keeps greeting in API memory; cancel clears pending swipe append.
+- Provider `content_filter` finish reasons render as error bubbles (not character speech); client-side RP filter removed.
+- RP API builders ignore web-search prefs; Ask←RP restores tools/web LiveData from prefs.
+- Instruct/regen require an assistant reply after the last user turn (cancel no longer wipes greeting).
+- Deleting the open history chat no longer resurrects it; character delete preserves id for rematch.
+- Assistant edits sync swipe alts; Coil avatar cache busts on rewrite; LLM-off restarts with greeting.
+- RP chrome force-disables tools/web LiveData without writing Ask prefs; tools hard-gated in API builders.
+- Cancel mid-regen restores the stashed swipe alt (does not overwrite greeting); swipe appends if reply missing.
+- Deleting the open chat clears the ghost transcript; multi-line example dialogs parse correctly; persona auto-saves on back.
+- RP composer keeps draft on filter/character failures; assistant edits autosave; regen errors restore prior alt.
+- Character switch confirms on greeting-only threads; one-sided examples reach the prompt; LLM-off with no character clears the transcript.
+- Example parse/format moved to `RpPromptEngine` with unit coverage; dead `rp_lang_system` / `blockMessage` removed; Help/DESIGN/a11y synced.
+- Lorebook rows expose Set active / Delete (tap row to edit); hot chat/LAN/TTS toasts stringified.
+- UTF-8 mojibake fixed in RP swipe/composer strings; character rows expose Delete; reminder-only sends use a continue beat; persona preset blank name toasts.
+- Empty RP no longer opens Ask attach via long-press Send; pending files/audio rejected in RP; deleting the active character clears the open thread.
+- LLM mode confirms on greeting-only threads; RP model-chip a11y; blocked/filtered replies styled like errors; Help synced.
+- RP model-chip long-press opens the picker (not OpenRouter); model observer no longer clobbers character/LLM label.
+- Swipe alts cleared/ignored on greeting-only threads; greeting bubble refreshes after editing the active character.
+- Character library: row tap edits; Start chat is explicit (parity with lore Activate).
+- Mode switch / load / new chat cancel in-flight streams; Ask↔RP blocked while awaiting.
+- History New chat reinjects RP greeting; deleting the open RP session no longer autosaves a resurrected greeting.
+- Character import refreshes active chrome/greeting; library rows drop redundant Edit buttons; swipe eligibility unit-tested.
+- Long-press back/backcopy uses RP-aware new chat; delayed swipe restore invalidated on load/mode switch; Ask↔RP restore job serialized.
+- Session load / mode switch / character start share one cancellable transition job; autosave snapshots mode+messages to avoid cross-mode history corruption.
+- Assistant edit no longer bakes reasoning into content/swipe alts; Help clarifies RP user vs assistant edit.
+- Public new chat cancels in-flight load/restore; nested clears use clearOpenTranscript; save aborts instead of minting after delete; swipe clears reasoning.
+- RP send/regen set awaiting early (blocks Ask↔RP race); autosave persists emptied saved chats; thinking labels stringified.
+- Stop cancels RP prep job and clears stale pending-instruct; regen marks swipe-append before prep so Stop mid-build restores.
+- Regen prep failures restore swipe alts; Stop restores synchronously (no autosave hole race); swipe wipe deferred until send; ChatSaveGate unit-tested.
+- LAN early-return clears awaiting; Stop always clears awaiting; session transitions restore mid-regen before epoch bump.
+- clearOpenTranscript skips awaiting-clear (no mid-wipe autosave); network finally only clears awaiting for the active job.
+- New conversation / long-press Home clear the composer draft (not only the transcript).
+- Reminder button focuses an existing `_(Reminder: …)_` instead of nesting another.
+- Gate RP swipe while awaiting (no mid-regen append); flush swipe alts when first autosave mints a session id.
+- Regen `choice.error` restores swipe alt (same as network errors); delete/truncate reseeds swipe when last reply no longer matches alts.
+- Mid-stream Stop/error on regen replaces partial with stashed alt; cancelled rpPrepJob finally must not clear a newer pending Instruct.
+- Ask↔RP flips mode after cancel so mid-regen restore runs; Stop on a normal RP stream discards the partial; swipe wipe + composer restore only after send actually starts.
+- Stop during RP prep restores the composer draft; streamed `choice.error` aborts via handleErrorResponse; OpenRouter stream finalizes swipe state on Main.
+- Non-streamed `choice.error` returns before success/finalize; terminal errors clear discardable so Stop won’t wipe the Error bubble.
+- Clear discardable on successful finalize so Stop cannot delete an already-finished RP reply.
+- Hub export/import toast honestly on null streams; lore activate warns if “Use active lorebook” is off; character/lore libraries use viewLifecycleOwner scope.
+- Stringify AI message action a11y; RP toolbars label Navigate up; character/lore edit + settings use viewLifecycleOwner and fail closed if the row was deleted.
+- Start chat from Settings→Hub pops settings too; gone-on-save dismisses editor; empty character/lore export blocked before file picker.
+- Settings entry points share the `"settings"` back-stack name so Start chat can reliably return to chat.
+- Model-chip Start chat pops the library; Start chat closes history drawer; LLM mode ignores leftover character for chrome/prompt/save.
+
+### Changed
+- RP hub sections (Library / Backup); lorebook list rows with Active badge; character Start chat affordance; empty states.
+- Persona presets: Delete button on selected preset. Language spinner uses display names. LLM mode warns before wipe.
+- Help / a11y copy for Ask↔RP chip and GradatiON RP hub.
+- Assistant bubbles in RP show character name + avatar header.
+- Character `exportKey` (DB v3) rematches RP chats after character re-import.
+- Character/lore edit Save gated until load finishes (no empty overwrite race).
+- Dead citation/sources layout stubs removed; Help settings map corrected.
+- RP also hides plus/gen/presets; orphan deleted-character sessions toast on load.
+- Mode draft IDs update on history open / save / new chat (Ask↔RP no longer restores the wrong thread).
+- Provider content-filter errors use string resources; thinking header uses string resource.
+- Settings detail labels + common chat/adapter toasts moved to string resources.
+- RP Reminder insert button; compact swipe ‹ ›; reply cleaner no longer strips emoji.
+- Chat overwrite always persists RP mode/character/isLlm (removed dead title-only branch).
+- Deleting the active lorebook clears active state (toast prompts Set active on another book).
+- Chat chrome contentDescriptions stringified.
+## 2.1.133-rp — 2026-07-28
+
+### Added
+- **GradatiON RP mode** — Ask ↔ RP toggle in the chat shell (local SillyTavern-lite).
+- Character library (CRUD, avatar, greeting, pro prompt), persona, flat lorebooks, RP settings.
+- Ported content_bot prompt engine (`RpPromptEngine`), Reminder syntax, swipe/regenerate/instruct UI wired end-to-end.
+- Room v2: `mode` / `characterId` / `isLlm` on sessions; `rp_characters` and `rp_lorebooks` tables.
+- Settings → Advanced → GradatiON RP hub; Help/README/DESIGN updated.
+
+### Fixed
+- RP regenerate/instruct now use RP prompt path (not Ask resend); instruct applied before prompt build.
+- Streaming responses run through RP reply cleaner (no client-side content filter).
+- Swipe alternate-replies bar, persona presets, example-dialog editor, lorebook import/export.
+- Stale `characterId` on chat import; active character cleared when deleted; draft session saved on character activate.
+
 ## 2.1.132-gradation — 2026-07-28
 
 ### Added

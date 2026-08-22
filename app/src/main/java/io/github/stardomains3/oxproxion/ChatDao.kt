@@ -29,13 +29,16 @@ interface ChatDao {
 
     @Query("SELECT * FROM chat_sessions ORDER BY timestamp DESC")
     fun getAllSessions(): LiveData<List<ChatSession>>
+
+    @Query("SELECT * FROM chat_sessions WHERE mode = :mode ORDER BY timestamp DESC")
+    fun getSessionsByMode(mode: String): LiveData<List<ChatSession>>
     @Query("""
     SELECT DISTINCT s.id 
     FROM chat_sessions s 
     LEFT JOIN chat_messages m ON s.id = m.sessionId 
-    WHERE s.title LIKE :query OR m.content LIKE :query
+    WHERE (s.title LIKE :query OR m.content LIKE :query) AND s.mode = :mode
 """)
-    suspend fun searchSessionIds(query: String): List<Long>
+    suspend fun searchSessionIds(query: String, mode: String): List<Long>
 
     @Transaction
     @Query("SELECT * FROM chat_sessions")
@@ -49,6 +52,9 @@ interface ChatDao {
 
     @Query("UPDATE chat_sessions SET title = :newTitle WHERE id = :sessionId")
     suspend fun updateSessionTitle(sessionId: Long, newTitle: String)
+
+    @Query("UPDATE chat_sessions SET characterId = :newId WHERE characterId = :oldId")
+    suspend fun remapSessionCharacterId(oldId: Long, newId: Long)
 
     @Query("DELETE FROM chat_sessions WHERE id = :sessionId")
     suspend fun deleteSession(sessionId: Long)

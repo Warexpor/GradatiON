@@ -16,7 +16,7 @@
         android:background="@color/xai_canvas"
         app:navigationIcon="@drawable/is_backarrow"
         app:navigationIconTint="@color/xai_ink"
-        app:title="Settings"
+        app:title="@string/settings_title"
         app:titleTextColor="@color/xai_ink" />
 
     <ScrollView
@@ -90,7 +90,7 @@
                     android:layout_marginStart="4dp"
                     android:layout_marginTop="20dp"
                     android:layout_marginBottom="8dp"
-                    android:text="Theme"
+                    android:text="@string/settings_theme"
                     android:textColor="@color/xai_mute"
                     android:textSize="13sp" />
 
@@ -116,7 +116,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Theme mode"
+                            android:text="@string/settings_theme_mode"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -132,7 +132,7 @@
                                 style="?attr/materialButtonOutlinedStyle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="System"
+                                android:text="@string/settings_theme_system"
                                 app:backgroundTint="@color/toggle_background_selector"
                                 app:strokeColor="@color/xai_hairline" />
 
@@ -141,7 +141,7 @@
                                 style="?attr/materialButtonOutlinedStyle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Light"
+                                android:text="@string/settings_theme_light"
                                 app:backgroundTint="@color/toggle_background_selector"
                                 app:strokeColor="@color/xai_hairline" />
 
@@ -150,7 +150,7 @@
                                 style="?attr/materialButtonOutlinedStyle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Dark"
+                                android:text="@string/settings_theme_dark"
                                 app:backgroundTint="@color/toggle_background_selector"
                                 app:strokeColor="@color/xai_hairline" />
                         </com.google.android.material.button.MaterialButtonToggleGroup>
@@ -257,7 +257,7 @@
                         android:minHeight="56dp"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
-                        android:text="LAN"
+                        android:text="@string/settings_lan"
                         android:textColor="@color/xai_ink"
                         android:textSize="16sp"
                         app:backgroundTint="@android:color/transparent"
@@ -287,7 +287,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Trust self-signed LAN TLS"
+                            android:text="@string/settings_trust_lan_tls"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -313,7 +313,7 @@
                         android:minHeight="56dp"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
-                        android:text="OpenRouter API key"
+                        android:text="@string/settings_openrouter_key"
                         android:textColor="@color/xai_ink"
                         android:textSize="16sp"
                         app:backgroundTint="@android:color/transparent"
@@ -339,7 +339,7 @@
                         android:minHeight="56dp"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
-                        android:text="Brave Search API key"
+                        android:text="@string/settings_brave_key"
                         android:textColor="@color/xai_ink"
                         android:textSize="16sp"
                         app:backgroundTint="@android:color/transparent"
@@ -365,7 +365,7 @@
                         android:minHeight="56dp"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
-                        android:text="Remaining credits"
+                        android:text="@string/settings_remaining_credits"
                         android:textColor="@color/xai_ink"
                         android:textSize="16sp"
                         app:backgroundTint="@android:color/transparent"
@@ -392,7 +392,7 @@
                     android:layout_marginStart="4dp"
                     android:layout_marginTop="8dp"
                     android:layout_marginBottom="8dp"
-                    android:text="Libraries"
+                    android:text="@string/settings_libraries"
                     android:textColor="@color/xai_mute"
                     android:textSize="13sp" />
 
@@ -439,7 +439,7 @@
                         android:minHeight="56dp"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
-                        android:text="Prompt Library"
+                        android:text="@string/settings_prompt_library"
                         android:textColor="@color/xai_ink"
                         android:textSize="16sp"
                         app:backgroundTint="@android:color/transparent"
@@ -501,6 +501,32 @@
                         app:iconSize="22dp"
                         app:iconTint="@color/xai_ink"
                         app:rippleColor="@color/press_ripple_none" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginStart="54dp"
+                        android:background="@color/xai_hairline" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/rpGradationButton"
+                        style="@style/Widget.Grokion.Button.Text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="start|center_vertical"
+                        android:minHeight="56dp"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:text="@string/settings_gradation_rp"
+                        android:textColor="@color/xai_ink"
+                        android:textSize="16sp"
+                        app:backgroundTint="@android:color/transparent"
+                        app:icon="@drawable/ic_gradation_mark"
+                        app:iconGravity="start"
+                        app:iconPadding="16dp"
+                        app:iconSize="22dp"
+                        app:iconTint="@color/gradation_gold"
+                        app:rippleColor="@color/press_ripple_none" />
                 </LinearLayout>
 
                 <TextView
@@ -509,7 +535,7 @@
                     android:layout_marginStart="4dp"
                     android:layout_marginTop="20dp"
                     android:layout_marginBottom="8dp"
-                    android:text="Generation"
+                    android:text="@string/settings_generation"
                     android:textColor="@color/xai_mute"
                     android:textSize="13sp" />
 
@@ -530,7 +556,7 @@
                         android:minHeight="56dp"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
-                        android:text="Max tokens"
+                        android:text="@string/settings_max_tokens"
                         android:textColor="@color/xai_ink"
                         android:textSize="16sp"
                         app:backgroundTint="@android:color/transparent"
@@ -556,7 +582,7 @@
                         android:minHeight="56dp"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
-                        android:text="Timeout"
+                        android:text="@string/settings_timeout"
                         android:textColor="@color/xai_ink"
                         android:textSize="16sp"
                         app:backgroundTint="@android:color/transparent"
@@ -582,7 +608,7 @@
                         android:minHeight="56dp"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
-                        android:text="Inference"
+                        android:text="@string/settings_inference"
                         android:textColor="@color/xai_ink"
                         android:textSize="16sp"
                         app:backgroundTint="@android:color/transparent"
@@ -613,7 +639,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Chat memory"
+                            android:text="@string/settings_chat_memory"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -623,7 +649,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:minHeight="48dp"
-                            android:text="8 messages"
+                            android:text="@string/settings_chat_memory_hint"
                             android:textColor="@color/xai_ink"
                             app:backgroundTint="@android:color/transparent"
                             app:rippleColor="@color/press_ripple_none" />
@@ -662,7 +688,7 @@
                     android:layout_marginStart="4dp"
                     android:layout_marginTop="20dp"
                     android:layout_marginBottom="8dp"
-                    android:text="Chat chrome"
+                    android:text="@string/settings_chat_chrome"
                     android:textColor="@color/xai_mute"
                     android:textSize="13sp" />
 
@@ -687,7 +713,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Show power tools bar"
+                            android:text="@string/settings_power_tools_bar"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -717,7 +743,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Expandable input"
+                            android:text="@string/settings_expandable_input"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -747,7 +773,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Scroll buttons"
+                            android:text="@string/settings_scroll_buttons"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -777,7 +803,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Scroll progress"
+                            android:text="@string/settings_scroll_progress"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -808,7 +834,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Volume scroll"
+                            android:text="@string/settings_volume_scroll"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -838,7 +864,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Presets on chat"
+                            android:text="@string/settings_presets_on_chat"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -868,7 +894,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Animate border"
+                            android:text="@string/settings_animate_border"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -899,7 +925,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Citations"
+                            android:text="@string/settings_citations"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -929,7 +955,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="OpenRouter transform"
+                            android:text="@string/settings_openrouter_transform"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -959,7 +985,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Auto-disable web search"
+                            android:text="@string/settings_auto_disable_web"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -1003,7 +1029,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Biometrics"
+                            android:text="@string/settings_biometrics"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -1033,7 +1059,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Notifications"
+                            android:text="@string/settings_notifications"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -1064,7 +1090,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Copy instead of dismiss"
+                            android:text="@string/settings_copy_instead_dismiss"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -1094,7 +1120,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Copy instead of open"
+                            android:text="@string/settings_copy_instead_open"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -1124,7 +1150,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Keep screen on"
+                            android:text="@string/settings_keep_screen_on"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -1154,7 +1180,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Destructive file tools"
+                            android:text="@string/settings_destructive_file_tools"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
@@ -1232,7 +1258,7 @@
                         android:minHeight="56dp"
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
-                        android:text="Help"
+                        android:text="@string/settings_help"
                         android:textColor="@color/xai_ink"
                         android:textSize="16sp"
                         app:backgroundTint="@android:color/transparent"

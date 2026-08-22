@@ -49,7 +49,7 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
                 val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 requireContext().contentResolver.takePersistableUriPermission(uri, takeFlags)
                 SharedPreferencesHelper(requireContext()).saveSafFolderUri(uri.toString())
-                AppToast.makeText(requireContext(), "Folder updated! Tools should now work.", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_folder_updated), AppToast.LENGTH_SHORT).show()
             }
         }
     }
@@ -183,17 +183,33 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
 
             ### Top bar
             *   **History** {{ic_schats}} — conversations, search, pin, rename, delete, import/export.
-            *   **Model chip** {{ic_tune}} — switch models, browse OpenRouter/LAN catalogs.
+            *   **Ask / RP chip** — toggle between Ask and **GradatiON RP** (local SillyTavern-style roleplay). Long-press to open the **GradatiON RP hub** (characters, persona, lorebooks, settings, import/export).
+            *   **Model chip** {{ic_tune}} — Ask: switch models. RP: shows active character / LLM / Characters; tap opens the character library, long-press opens models.
             *   **New chat** {{ic_new_chat}} — starts a fresh thread (current chat stays in History).
-            *   **Menu** {{ic_menudot}} — overflow tools (copy/export chat, reasoning, web search, stream, tools, presets, settings).
+            *   **Overflow** — long-press Send on an empty Ask chat (copy/export, reasoning, web search, stream, tools, presets, settings). Hidden in RP; the extended top bar still has those controls.
 
             ### Composer
             *   **Send** {{ic_send}} / **Stop** {{ic_stop}}
-            *   **Attach** {{ic_attachdoc}} — text files. **Image** {{ic_imgup}} — vision models (camera long-press).
-            *   **+** — attach sheet (camera, gallery, files, tools manager).
+            *   **Attach** {{ic_attachdoc}} — text files (Ask only). **Image** {{ic_imgup}} — vision models (camera long-press). Disabled in RP.
+            *   **+** — attach sheet (camera, gallery, files, tools manager). In RP the control stays visible but dimmed (attachments off); long-press still spell-checks.
 
             ### Message actions
-            Tap icons under a message to copy, share, speak, export (PDF/Markdown/HTML/PNG), edit, or resend. **Edit/resend** can fork the thread — use the `< n/m >` navigator to switch branches.
+            Tap icons under a message to copy, share, speak, or edit. In **Ask**, edit/resend can fork the thread — use the `< n/m >` navigator to switch branches. In **RP**, editing a **user** message truncates without Ask forks; editing an **assistant** reply updates that bubble in place (and the active swipe alt). Use regenerate / instruct / swipe for new variants. Chat-level export (PDF/Markdown/copy) lives in the overflow menu (Ask) or Extended top bar.
+
+            ---
+
+            ## GradatiON RP
+
+            Local roleplay mode (no account). **Settings → Advanced → GradatiON RP**, or long-press the **Ask/RP** chip.
+
+            *   **Characters** — name, greeting, personality, speech style, scenario, persistent instruction, example dialogs, pro prompt override, avatar. Tap a row to edit; **Start chat** begins a thread (confirms if you already have an RP thread). In RP, tap the top chip (character name) to open the library; long-press the chip to change models.
+            *   **Persona** — who *you* are in scenes; **Save** commits the active persona; presets load into the editor for preview until you Save.
+            *   **Lorebooks** — flat world text appended to the system prompt when **RP settings → Use active lorebook** is on; tap a row to edit; **Set active** chooses which book is used (toasts a reminder if the toggle is off).
+            *   **RP settings** — language, third-person, inner thoughts, **Use active lorebook**, LLM mode (in an open RP chat, confirms before wiping when turning LLM on or off if a greeting or messages are present). LLM replies show a **GradatiON** header like character names.
+            *   **Export / Import** — characters include avatar bytes; lorebooks as JSON. Import confirms before updating cards that already exist. Character / lore / persona editors confirm before discarding unsaved edits (toolbar **and** system Back).
+            *   Send `_(Reminder: …)_` in a message for a one-shot scene note, or tap **Reminder** above the composer (reminder-only is fine).
+            *   **Regenerate** {{ic_redo}} / **Instruct** on the last assistant reply after a user turn (scroll to the end of a long reply to reach the action row); **swipe** ‹ › for alternate replies.
+            *   Tools, web search, and attachments stay off in RP (composer **+** is dimmed). History lists Ask and RP separately. Stream can be toggled from the Reminder row.
 
             ---
 
@@ -210,15 +226,15 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
 
             ## Settings
 
-            Open from History (gear) or the overflow menu.
+            Open from History (gear), the extended top-bar settings control, or Ask-mode overflow. In RP, use **Settings → Advanced → GradatiON RP** or long-press the Ask/RP chip.
 
             | Section | What’s inside |
             |---------|----------------|
-            | **App → Appearance** | Theme, fonts, extended toolbar, scroll helpers |
+            | **App → Appearance** | Theme, fonts |
             | **App → Haptics** | Button and response haptics |
-            | **App → Advanced** | Biometrics, notifications, presets on chat, LAN, tokens, API keys, **Help** (this guide) |
+            | **App → Advanced** | Chat chrome (extended toolbar, scroll helpers, presets on chat), biometrics, notifications, tokens, **GradatiON RP** |
             | **AI → Models & API** | OpenRouter key, LAN endpoints, trust self-signed TLS |
-            | **AI → Data & Privacy** | Import/export, destructive file tools, workspace |
+            | **AI → Data & Privacy** | Import/export, destructive file tools, workspace, **Help** (this guide) |
 
             ---
 

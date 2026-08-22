@@ -10,29 +10,35 @@ import io.ktor.utils.io.readLine
 object SseJsonReader {
     /**
      * Reads SSE (`data:` lines, blank-line delimited) with NDJSON fallback.
-     * Does not stop early on [DONE] (some providers send trailing chunks after it).
+     * Stops after OpenAI-style `[DONE]`, or when [shouldStop] returns true, so keep-alive
+     * connections do not leave the UI stuck on Stop.
      */
     suspend fun forEachJsonPayload(
         channel: ByteReadChannel,
-        onPayload: suspend (String) -> Unit
+        onPayload: suspend (String) -> Unit,
+        shouldStop: (() -> Boolean)? = null
     ) {
         val dataLines = mutableListOf<String>()
-        suspend fun flushData() {
-            if (dataLines.isEmpty()) return
+        var sawDone = false
+        suspend fun flushData(): Boolean {
+            if (dataLines.isEmpty()) return false
             val payload = dataLines.joinToString("\n").trim()
             dataLines.clear()
-            if (payload.isNotEmpty() &&
-                payload != "[DONE]" &&
-                !payload.equals("DONE", ignoreCase = true)
-            ) {
-                onPayload(payload)
+            if (payload.isEmpty()) return false
+            if (payload == "[DONE]" || payload.equals("DONE", ignoreCase = true)) {
+                sawDone = true
+                return true
             }
+            onPayload(payload)
+            return shouldStop?.invoke() == true
         }
         try {
-            while (!channel.isClosedForRead) {
+            while (!channel.isClosedForRead && !sawDone && shouldStop?.invoke() != true) {
                 val line = channel.readLine() ?: break
                 when {
-                    line.isEmpty() -> flushData()
+                    line.isEmpty() -> {
+                        if (flushData()) break
+                    }
                     line.startsWith(":") -> Unit // comment / keepalive
                     line.startsWith("data:") -> {
                         val value = when {
@@ -44,8 +50,9 @@ object SseJsonReader {
                     }
                     line.startsWith("event:") || line.startsWith("id:") || line.startsWith("retry:") -> Unit
                     line.trimStart().startsWith("{") -> {
-                        flushData()
+                        if (flushData()) break
                         onPayload(line.trim())
+                        if (shouldStop?.invoke() == true) break
                     }
                     dataLines.isNotEmpty() -> dataLines.add(line)
                 }

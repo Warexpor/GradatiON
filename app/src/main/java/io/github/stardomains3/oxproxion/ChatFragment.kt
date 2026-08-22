@@ -187,6 +187,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var toolsButton: MaterialButton
     private val viewModel: ChatViewModel by activityViewModels()
     private lateinit var modelNameTextView: TextView
+    private lateinit var chatModeChip: TextView
     private lateinit var chatRecyclerView: RecyclerView
     private lateinit var chatEditText: EditText
     private lateinit var extBG: LinearLayout
@@ -204,6 +205,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var copyChatButton: MaterialButton
     private lateinit var buttonsRow2: LinearLayout
     private lateinit var chatInputContainer: LinearLayout
+    private lateinit var rpComposerExtras: LinearLayout
+    private lateinit var rpReminderButton: MaterialButton
+    private lateinit var rpStreamButton: MaterialButton
+    private lateinit var rpSwipeBar: LinearLayout
+    private lateinit var rpSwipePrevButton: MaterialButton
+    private lateinit var rpSwipeNextButton: MaterialButton
+    private lateinit var rpSwipeCounter: TextView
     private lateinit var expandedButtonContainer: LinearLayout
     private lateinit var leftButtonContainer: LinearLayout
     private lateinit var rightButtonContainer: LinearLayout
@@ -290,7 +298,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (isGranted) {
                 startSpeechRecognition()
             } else {
-                AppToast.makeText(requireContext(), "Microphone permission needed for voice input", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_mic_permission), AppToast.LENGTH_SHORT).show()
             }
             */
         }
@@ -298,17 +306,17 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (isGranted) {
                 launchCamera()
             } else {
-                AppToast.makeText(requireContext(), "Camera permission needed to take photo", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_camera_permission), AppToast.LENGTH_SHORT).show()
             }
         }
         localNetworkPermissionLauncher = registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
             if (isGranted) {
-                AppToast.makeText(requireContext(), "Local Network access granted", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_lan_granted), AppToast.LENGTH_SHORT).show()
                 // Optional: Auto-trigger send or model connection if you interrupted it
             } else {
-                AppToast.makeText(requireContext(), "Local Network permission is required to talk to local LLMs", AppToast.LENGTH_LONG).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_lan_permission), AppToast.LENGTH_LONG).show()
                 // Optional: Revert model selection to a cloud model
             }
         }
@@ -316,7 +324,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
             if (!isGranted) {
-                AppToast.makeText(requireContext(), "Location permission is required for this tool", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_location_permission), AppToast.LENGTH_SHORT).show()
             }
         }
 
@@ -339,17 +347,18 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             } ?: result.data?.data  // Fallbacks
 
             if (result.resultCode == Activity.RESULT_OK && imageUri != null) {
+                if (discardAttachmentIfRp()) return@registerForActivityResult
                 try {
                     // Read raw bytes first (fresh stream, one-time read)
                     val rawBytes = requireContext().contentResolver.openInputStream(imageUri)?.use { stream ->
                         stream.readBytes()
                     } ?: run {
-                        AppToast.makeText(requireContext(), "Failed to read image", AppToast.LENGTH_SHORT).show()
+                        AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_image), AppToast.LENGTH_SHORT).show()
                         return@registerForActivityResult
                     }
 
                     if (rawBytes.size > 12_000_000) {
-                        AppToast.makeText(requireContext(), "Image too large (max 12MB)", AppToast.LENGTH_SHORT).show()
+                        AppToast.makeText(requireContext(), getString(R.string.toast_image_too_large), AppToast.LENGTH_SHORT).show()
                         requireContext().contentResolver.delete(imageUri, null, null)
                         return@registerForActivityResult
                     }
@@ -358,7 +367,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     selectedImageMime = "image/jpeg"
                     previewImageView.setImageURI(imageUri)  // Use Uri for preview (EXIF auto)
                     attachmentPreviewContainer.visibility = View.VISIBLE
-                    AppToast.makeText(requireContext(), "Photo saved to gallery", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_photo_saved), AppToast.LENGTH_SHORT).show()
 
                     // NEW: Set pending as string for FlexibleMessage (MediaStore Uri already persistent)
                     viewModel.setPendingUserImageUri(imageUri.toString())
@@ -366,12 +375,22 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     // Notify for gallery refresh
                     requireContext().contentResolver.notifyChange(imageUri, null)
                 } catch (e: Exception) {
-                    AppToast.makeText(requireContext(), "Failed to process photo", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_failed_process_photo), AppToast.LENGTH_SHORT).show()
                     requireContext().contentResolver.delete(imageUri, null, null)
                 }
             } else {
                 // Cancel or error
-                AppToast.makeText(requireContext(), if (result.resultCode == Activity.RESULT_CANCELED) "Capture canceled" else "Capture failed", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(
+                        requireContext(),
+                        getString(
+                            if (result.resultCode == Activity.RESULT_CANCELED) {
+                                R.string.toast_capture_canceled
+                            } else {
+                                R.string.toast_capture_failed
+                            }
+                        ),
+                        AppToast.LENGTH_SHORT
+                    ).show()
                 imageUri?.let { uri ->
                     requireContext().contentResolver.delete(uri, null, null)  // Clean up placeholder
                 }
@@ -390,7 +409,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 // Save via your helper
                 sharedPreferencesHelper.saveSafFolderUri(uri.toString())
 
-                AppToast.makeText(requireContext(), "Folder access granted! You can now use file tools.", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_folder_granted), AppToast.LENGTH_SHORT).show()
             }
         }
         audioPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -452,6 +471,17 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         printButton =   view.findViewById(R.id.printButton)
         buttonsRow2 = view.findViewById(R.id.buttonsRow2)
         chatInputContainer = view.findViewById(R.id.chatInputContainer)
+        rpComposerExtras = view.findViewById(R.id.rpComposerExtras)
+        rpReminderButton = view.findViewById(R.id.rpReminderButton)
+        rpStreamButton = view.findViewById(R.id.rpStreamButton)
+        rpSwipeBar = view.findViewById(R.id.rpSwipeBar)
+        rpSwipePrevButton = view.findViewById(R.id.rpSwipePrevButton)
+        rpSwipeNextButton = view.findViewById(R.id.rpSwipeNextButton)
+        rpSwipeCounter = view.findViewById(R.id.rpSwipeCounter)
+        rpSwipePrevButton.setOnClickListener { viewModel.swipeRpPrev() }
+        rpSwipeNextButton.setOnClickListener { viewModel.swipeRpNext() }
+        rpReminderButton.setOnClickListener { insertRpReminderTemplate() }
+        rpStreamButton.setOnClickListener { streamButton.performClick() }
         viewModel.hasChatFork.observe(viewLifecycleOwner) {
             if (::chatAdapter.isInitialized) {
                 chatAdapter.notifyDataSetChanged()
@@ -479,6 +509,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         attachmentButton = view.findViewById(R.id.attachmentButton)
         buttonsContainer = view.findViewById(R.id.buttonsContainer)
         modelNameTextView = view.findViewById(R.id.modelNameTextView)
+        chatModeChip = view.findViewById(R.id.chatModeChip)
         attachmentPreviewContainer = view.findViewById(R.id.attachmentPreviewContainer)
         previewImageView = view.findViewById(R.id.previewImageView)
         centerWatermarkIcon = view.findViewById(R.id.centerWatermarkIcon)
@@ -566,13 +597,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     @Deprecated("Deprecated in Java")
                     override fun onError(utteranceId: String?) {
                         if (utteranceId?.startsWith("TTS_SAVE_") == true) {
-                            AppToast.makeText(requireContext(), "❌ TTS synthesis error", AppToast.LENGTH_SHORT).show()
+                            AppToast.makeText(requireContext(), getString(R.string.toast_tts_synthesis_error), AppToast.LENGTH_SHORT).show()
                         }
                         else {
                             requireActivity().runOnUiThread {
                                 AppToast.makeText(
                                     requireContext(),
-                                    "TTS error: Check TTS settings or engine",
+                                    getString(R.string.toast_tts_engine_error),
                                     AppToast.LENGTH_SHORT
                                 ).show()
                                 onSpeechFinished()
@@ -582,7 +613,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 })
                 ttsAvailable = true
             } else {
-                AppToast.makeText(requireContext(), "TTS failed", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_tts_failed), AppToast.LENGTH_SHORT).show()
                 ttsAvailable = false
             }
         }
@@ -725,31 +756,20 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         setupHistorySwipeGestures(view)
         viewModel.activeChatModel.observe(viewLifecycleOwner) { model ->
             if (model != null) {
-                modelNameTextView.text = viewModel.getModelDisplayName(model)
+                if (!viewModel.isRpMode()) {
+                    modelNameTextView.text = viewModel.getModelDisplayName(model)
+                }
                 if (model.contains("google/lyria", ignoreCase = true)) {
                     // Only toggle if it's currently OFF to avoid redundant toasts
                     if (viewModel.isStreamingEnabled.value == false) {
                         viewModel.toggleStreaming()
-                        AppToast.makeText(requireContext(), "Streaming enabled: Required for music generation", AppToast.LENGTH_SHORT).show()
+                        AppToast.makeText(requireContext(), getString(R.string.toast_streaming_music), AppToast.LENGTH_SHORT).show()
                     }
                 }
 
 
                 // Handle attachment button (plusButton) based on model capabilities
-                if (viewModel.isTranscriptionModel(model)) {
-                    plusButton.icon.alpha = 255
-                    plusButton.isEnabled = true
-                    plusButton.setIconResource(R.drawable.ic_uprec)
-                } else if (viewModel.isVisionModel(model)) {
-                    plusButton.icon.alpha = 255
-                    plusButton.isEnabled = true
-                    plusButton.setIconResource(R.drawable.ic_imgup)  // original plus icon
-                } else {
-                    plusButton.icon.alpha = 102
-                    plusButton.isEnabled = false
-                    plusButton.setIconResource(R.drawable.ic_imgup)
-                }
-                genButton.visibility = if (viewModel.isImageGenerationModel(model)) View.VISIBLE else View.GONE
+                applyModelCapabilityChrome(model)
 
                 // Auto-disable web search if switching to LAN model
                 if (viewModel.activeModelIsLan() && viewModel.isWebSearchEnabled.value == true) {
@@ -761,14 +781,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     selectedImageBytes = null
                     selectedImageMime = null
                     attachmentPreviewContainer.visibility = View.GONE
-                    AppToast.makeText(requireContext(), "Image removed: selected model doesn't support images.", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_image_removed_no_vision), AppToast.LENGTH_SHORT).show()
                 }
                 // Clear staged audio if model doesn't support transcription
                 if (selectedAudioBytes != null && !viewModel.isTranscriptionModel(model)) {
                     selectedAudioBytes = null
                     selectedAudioFormat = null
                     attachmentPreviewContainer.visibility = View.GONE
-                    AppToast.makeText(requireContext(), "Audio removed: selected model doesn't support transcription.", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_audio_removed_no_transcription), AppToast.LENGTH_SHORT).show()
                 }
             }
 
@@ -776,6 +796,45 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             updateExtendedTopBarVisibility(sharedPreferencesHelper.getExtendedTopBarEnabled())
             updateModelSourceIndicator()
         }
+
+        var appliedComposerMode: ChatMode? = null
+        viewModel.chatMode.observe(viewLifecycleOwner) { mode ->
+            updateRpChrome()
+            val next = mode ?: ChatMode.ASK
+            // Only swap composer text on an actual Ask↔RP change. Re-emitting the same mode
+            // (draft restore) must not wipe autosend / in-progress typing.
+            if (appliedComposerMode != next) {
+                appliedComposerMode = next
+                val draft = sharedPreferencesHelper.getComposerDraft(next)
+                chatEditText.setText(draft)
+                if (draft.isNotEmpty()) chatEditText.setSelection(draft.length)
+            }
+        }
+        viewModel.activeRpCharacter.observe(viewLifecycleOwner) { updateRpChrome() }
+        viewModel.rpChromeRefreshEvent.observe(viewLifecycleOwner) { event ->
+            event.getContentIfNotHandled()?.let { updateRpChrome() }
+        }
+        viewModel.rpSwipeNav.observe(viewLifecycleOwner) { nav ->
+            applyRpSwipeChrome(nav)
+        }
+        chatModeChip.setOnClickListener {
+            if (viewModel.isAwaitingResponse.value == true) {
+                AppToast.makeText(requireContext(), getString(R.string.rp_wait_for_reply), AppToast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val leaving = if (viewModel.isRpMode()) ChatMode.RP else ChatMode.ASK
+            sharedPreferencesHelper.saveComposerDraft(leaving, chatEditText.text?.toString().orEmpty())
+            viewModel.toggleChatMode()
+        }
+        chatModeChip.setOnLongClickListener {
+            parentFragmentManager.beginTransaction()
+                .withGrokStackAnimations()
+                .add(R.id.fragment_container, RpHubFragment.newInstance())
+                .addToBackStack(RpHubFragment.BACK_STACK_TAG)
+                .commit()
+            true
+        }
+        chatModeChip.contentDescription = getString(R.string.rp_mode_chip_a11y)
 
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -792,6 +851,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
 
         viewModel.isPresetsExtendedEnabled.observe(viewLifecycleOwner) { isPresetsOnChatScreen ->
+            if (viewModel.isRpMode()) {
+                presetsButton2.isVisible = false
+                presetsButton.isVisible = false
+                return@observe
+            }
             val isTopBarEnabled = sharedPreferencesHelper.getExtendedTopBarEnabled()
 
             // 1. The button near the Send Button (presetsButton2)
@@ -890,6 +954,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 // Autosave always on: persist with LLM title when streaming completes
                 viewModel.autoSaveChat()
             }
+            applyRpSwipeChrome(viewModel.rpSwipeNav.value)
             sendChatButton.isEnabled = true
             val materialButton = sendChatButton
             val morphMs = resources.getInteger(R.integer.motion_send_morph).toLong()
@@ -909,7 +974,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 if (sharedPreferencesHelper.getHapticResponding()) {
                     sendChatButton.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
                 }
-                sendChatButton.contentDescription = "Stop generation"
+                sendChatButton.contentDescription = getString(R.string.cd_stop)
                 if (!morphAnim) {
                     applyAwaitingChrome()
                 } else {
@@ -920,7 +985,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     }.start()
                 }
             } else {
-                sendChatButton.contentDescription = "Send message"
+                sendChatButton.contentDescription = getString(R.string.cd_send)
                 if (!morphAnim) {
                     applyIdleChrome()
                 } else {
@@ -968,7 +1033,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 viewModel.resetWebSearchAutoOff()
                 if (viewModel.isWebSearchEnabled.value == true) {
                     viewModel.toggleWebSearch()  // Turn it off
-                    AppToast.makeText(requireContext(), "Web search auto-disabled (one-time use)", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_web_search_auto_off), AppToast.LENGTH_SHORT).show()
                 }
             }*/
             if (!isAwaiting //&& viewModel.shouldAutoOffWebSearch()
@@ -979,7 +1044,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 sharedPreferencesHelper.saveWebSearchEnabled(false)
                 //   viewModel.resetWebSearchAutoOff()
                 // viewModel.toggleWebSearch() // Turn it off
-                AppToast.makeText(requireContext(), "Web search auto-disabled (one-time use)", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_web_search_auto_off), AppToast.LENGTH_SHORT).show()
             }
            /* if (isAwaiting) {
                 if (areAnimationsEnabled(requireContext())) {
@@ -1009,8 +1074,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
         }
         viewModel.autosendEvent.observe(viewLifecycleOwner) { event ->
-            event.getContentIfNotHandled()?.let {
-                // Perform autosend: Simulate send button click
+            event.getContentIfNotHandled()?.let { text ->
+                chatEditText.setText(text)
+                chatEditText.setSelection(text.length)
+                // setText may leave Send disabled until the next TextWatcher pass — force enable.
+                sendChatButton.isEnabled = text.isNotBlank()
                 sendChatButton.performClick()
                 homeButton.visibility = View.GONE
                 backButton.visibility = View.VISIBLE
@@ -1031,6 +1099,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.isStreamingEnabled.observe(viewLifecycleOwner) { isEnabled ->
             streamButton.isSelected = isEnabled
             topStreamButton.isSelected = isEnabled
+            if (::rpStreamButton.isInitialized) rpStreamButton.isSelected = isEnabled
+            updateStreamToggleAppearance(isEnabled)
         }
 
         viewModel.isWebSearchEnabled.observe(viewLifecycleOwner) { isEnabled ->
@@ -1116,6 +1186,21 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.toastUiEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { message ->
                 AppToast.makeText(requireContext(), message, AppToast.LENGTH_LONG).show()
+            }
+        }
+        viewModel.composerRestoreEvent.observe(viewLifecycleOwner) { event ->
+            event.getContentIfNotHandled()?.let { draft ->
+                // Empty draft forces clear (Start chat / new character). Non-empty restores
+                // only when the field is still blank so we don't clobber newer typing.
+                if (draft.isEmpty() || chatEditText.text.isNullOrBlank()) {
+                    chatEditText.setText(draft)
+                    if (draft.isEmpty()) {
+                        val mode = if (viewModel.isRpMode()) ChatMode.RP else ChatMode.ASK
+                        sharedPreferencesHelper.saveComposerDraft(mode, "")
+                    } else {
+                        chatEditText.setSelection(draft.length)
+                    }
+                }
             }
         }
         viewModel.toolUiEvent.observe(viewLifecycleOwner) { event ->
@@ -1312,6 +1397,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     }
 
     private fun updateChatEditTextHint() {
+        if (viewModel.isRpMode()) {
+            applyRpComposerHint()
+            return
+        }
         val selectedMessage = sharedPreferencesHelper.getSelectedSystemMessage()
         val isDefault = selectedMessage.isDefault
         val title = selectedMessage.title.trim()
@@ -1319,6 +1408,16 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             getString(R.string.grok_composer_hint)
         } else {
             getString(R.string.grok_composer_hint_with_system, title)
+        }
+    }
+
+    private fun applyRpComposerHint() {
+        val llm = sharedPreferencesHelper.isRpLlmMode()
+        val activeChar = viewModel.activeRpCharacter.value
+        chatEditText.hint = when {
+            llm -> getString(R.string.rp_composer_hint_llm)
+            activeChar != null -> getString(R.string.rp_composer_hint)
+            else -> getString(R.string.rp_composer_hint_empty)
         }
     }
 
@@ -1449,6 +1548,21 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
     }
 
+    /** Keep the last bubble's action row (copy / instruct / regen) above the composer. */
+    private fun scrollChatToLatestEnd() {
+        chatRecyclerView.post {
+            val last = chatAdapter.itemCount - 1
+            if (last < 0) return@post
+            layoutManager.scrollToPosition(last)
+            chatRecyclerView.post {
+                val child = layoutManager.findViewByPosition(last) ?: return@post
+                val target = chatRecyclerView.height - chatRecyclerView.paddingBottom
+                val extra = child.bottom - target
+                if (extra > 0) chatRecyclerView.scrollBy(0, extra)
+            }
+        }
+    }
+
     private fun setupRecyclerView() {
         layoutManager = NonScrollingOnFocusLayoutManager(requireContext()).apply {
             stackFromEnd = false
@@ -1465,7 +1579,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 selectedImageMime = null
                 attachmentPreviewContainer.visibility = View.GONE
                 viewModel.setPendingUserImageUri(null)
-                viewModel.stashAndTruncateFrom(position, anchorAssistantIndex = -1)
+                if (viewModel.isRpMode()) {
+                    viewModel.truncateForRpEdit(position)
+                } else {
+                    viewModel.stashAndTruncateFrom(position, anchorAssistantIndex = -1)
+                }
                 chatEditText.setText(text)
                 chatEditText.setSelection(text.length)
                 hideMenu()
@@ -1473,14 +1591,53 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 viewModel.autoSaveChat()
             },
             onRedoMessage = { position, _ ->
-                val systemMessage = sharedPreferencesHelper.getSelectedSystemMessage().prompt
-                viewModel.resendExistingPrompt(position, systemMessage)
+                if (viewModel.isRpMode()) {
+                    viewModel.regenerateLastRpReply()
+                } else {
+                    val systemMessage = sharedPreferencesHelper.getSelectedSystemMessage().prompt
+                    viewModel.resendExistingPrompt(position, systemMessage)
+                }
                 hideMenu()
-                chatRecyclerView.post {
-                    if (chatAdapter.itemCount > 0) {
-                        layoutManager.scrollToPosition(chatAdapter.itemCount - 1)
+                scrollChatToLatestEnd()
+            },
+            onInstructMessage = { _ ->
+                val input = com.google.android.material.textfield.TextInputEditText(requireContext())
+                input.hint = getString(R.string.rp_instruct_hint)
+                input.minLines = 2
+                val wrapper = com.google.android.material.textfield.TextInputLayout(requireContext()).apply {
+                    hint = getString(R.string.rp_instruct)
+                    addView(input)
+                    setPadding(48, 24, 48, 8)
+                }
+                val dialog = MaterialAlertDialogBuilder(
+                    requireContext(),
+                    com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
+                )
+                    .setTitle(R.string.rp_instruct)
+                    .setView(wrapper)
+                    .setPositiveButton(R.string.action_ok, null)
+                    .setNegativeButton(R.string.action_cancel, null)
+                    .create()
+                dialog.setOnShowListener {
+                    dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        hideKeyboardFrom(input)
+                        val text = input.text?.toString()?.trim().orEmpty()
+                        if (text.isBlank()) {
+                            dialog.dismiss()
+                            return@setOnClickListener
+                        }
+                        // Keep dialog open on soft-fail so the typed instruct isn't lost.
+                        if (!viewModel.instructLastRpReply(text)) return@setOnClickListener
+                        dialog.dismiss()
+                        scrollChatToLatestEnd()
                     }
                 }
+                dialog.show()
+                dialog.window?.setSoftInputMode(
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or
+                        WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                )
+                input.requestFocus()
             },
             onDeleteMessage = { position ->
                 hideMenu()
@@ -1624,7 +1781,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     }
     private fun performNewChat() {
         if (viewModel.chatMessages.value.isNullOrEmpty()) return
-        viewModel.startNewChat()
+        viewModel.startFreshChatForCurrentMode()
+        chatEditText.setText("")
+        chatEditText.text.clear()
         currentTempImageFile?.delete()
         currentTempImageFile = null
         selectedAudioBytes = null
@@ -1647,7 +1806,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             previewImageView.setImageBitmap(null)
             currentTempImageFile?.delete()
             currentTempImageFile = null
-            AppToast.makeText(requireContext(), "Attachment removed", AppToast.LENGTH_SHORT).show()
+            AppToast.makeText(requireContext(), getString(R.string.toast_attachment_removed), AppToast.LENGTH_SHORT).show()
         }
         webSearchButton.setOnClickListener {
             //  hideMenu()
@@ -1663,7 +1822,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (!hasFolderPermission()) {
                 val folderPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "oxproxion")
                 if (!folderPath.exists()) folderPath.mkdirs()
-                AppToast.makeText(requireContext(), "Please select the Download/gradation folder first.", AppToast.LENGTH_LONG).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_gradation_folder), AppToast.LENGTH_LONG).show()
                 folderPickerLauncher.launch(null)
             } else {
                 val folderPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "oxproxion")
@@ -1692,7 +1851,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         toolsButton.setOnClickListener {
             if (!hasFolderPermission()) {
                 WorkspacePaths.ensureWorkspaceExists()
-                AppToast.makeText(requireContext(), "Please select the Download/gradation folder first.", AppToast.LENGTH_LONG).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_gradation_folder), AppToast.LENGTH_LONG).show()
                 folderPickerLauncher.launch(null)
             } else {
                 WorkspacePaths.ensureWorkspaceExists()
@@ -1713,19 +1872,23 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     // LAN model: Check endpoint instead of API key
                     val lanEndpoint = viewModel.getLanEndpoint()
                     if (lanEndpoint.isNullOrBlank()) {
-                        AppToast.makeText(requireContext(), "LAN endpoint is not configured.", AppToast.LENGTH_SHORT)
+                        AppToast.makeText(requireContext(), getString(R.string.toast_lan_endpoint_missing), AppToast.LENGTH_SHORT)
                             .show()
                         return@setOnClickListener
                     }
                 } else {
                     // Non-LAN model: Check API key
                     if (viewModel.activeChatApiKey.isBlank()) {
-                        AppToast.makeText(requireContext(), "API Key is not set.", AppToast.LENGTH_SHORT)
+                        AppToast.makeText(requireContext(), getString(R.string.toast_api_key_missing), AppToast.LENGTH_SHORT)
                             .show()
                         return@setOnClickListener
                     }
                 }
                 if (viewModel.isTranscriptionModel(viewModel.activeChatModel.value) && selectedAudioBytes != null) {
+                    if (viewModel.isRpMode()) {
+                        AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
                     hideKeyboard()
 
                     val audioBytes = selectedAudioBytes!!
@@ -1746,6 +1909,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
                 hideKeyboard()
                 var prompt = chatEditText.text.toString().trim()
+                // RP forbids attachments; reject before file prepend so drafts stay clean.
+                if (viewModel.isRpMode() &&
+                    (selectedImageBytes != null || selectedAudioBytes != null || pendingFiles.isNotEmpty())
+                ) {
+                    AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 if (pendingFiles.isNotEmpty()) {
                     val fileSections = pendingFiles.mapIndexed { index, file ->  // Explicit -> String
                         val cleanContent = file.content.trim()
@@ -1784,6 +1954,24 @@ $cleanContent
                         val displayName = viewModel.getModelDisplayName(apiIdentifier)
                         ForegroundService.updateNotificationStatusSilently(displayName, "Prompt sent. Awaiting Response.")
                     }*/
+
+                    // RP: validate before clearing the composer so character-gate failures keep the draft.
+                    if (viewModel.isRpMode()) {
+                        if (!viewModel.canSendRpMessage()) {
+                            AppToast.makeText(requireContext(), getString(R.string.rp_select_character), AppToast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        if (viewModel.isAwaitingResponse.value == true) {
+                            AppToast.makeText(requireContext(), getString(R.string.rp_wait_for_reply), AppToast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        if (!viewModel.sendRpUserMessage(substitutedPrompt)) {
+                            return@setOnClickListener
+                        }
+                        chatEditText.setText("")
+                        chatEditText.text.clear()
+                        return@setOnClickListener
+                    }
 
                     chatEditText.setText("")
                     chatEditText.text.clear()
@@ -1855,58 +2043,28 @@ $cleanContent
             val selectedIndex = aspectRatios.indexOf(currentRatio)
 
             MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Select Aspect Ratio")
+                .setTitle(R.string.image_gen_aspect_title)
                 .setSingleChoiceItems(aspectRatios, selectedIndex) { _, which ->
                     val selectedRatio = aspectRatios[which]
                     sharedPreferencesHelper.saveGeminiAspectRatio(selectedRatio)
-                  //  AppToast.makeText(requireContext(), "Aspect ratio set to $selectedRatio", AppToast.LENGTH_SHORT).show()
                 }
-                .setPositiveButton("OK") { _, _ -> /* Dialog dismisses */ }
-                .setNegativeButton("Cancel", null)
+                .setPositiveButton(android.R.string.ok) { _, _ -> /* Dialog dismisses */ }
+                .setNegativeButton(android.R.string.cancel, null)
                 .show()
         }
 
         modelNameTextView.setOnClickListener {
             hideKeyboard()
-            val picker = BotModelPickerFragment().apply {
-                onModelSelected = { modelString ->
-                    val newModelSupportsWebp = viewModel.supportsWebp(modelString)
-                    val isStagedImageWebp = selectedImageMime == "image/webp"
-                    val historyHasWebp = viewModel.hasWebpInHistory()
-                    val hasImagesInCurrentChat =  viewModel.hasImagesInChat()
-                    if (!newModelSupportsWebp && (isStagedImageWebp || historyHasWebp)) {
-                        AppToast.makeText(
-                            requireContext(),
-                            "Cannot switch: Model does not support WebP image in chat.",
-                            AppToast.LENGTH_LONG
-                        ).show()
-                    } else if (hasImagesInCurrentChat && !viewModel.isVisionModel(modelString)) {
-                        AppToast.makeText(
-                            requireContext(),
-                            "Cannot switch: Model does not support images and current chat has images.",
-                            AppToast.LENGTH_LONG
-                        ).show()
-                    }
-                    else
-                    {
-                        viewModel.setModel(modelString)
-                        if (viewModel.activeModelIsLan()) {
-                            checkLocalNetworkPermission()
-                        }
-                        /*if (ForegroundService.isRunningForeground && sharedPreferencesHelper.getNotiPreference()) {
-                            val apiIdentifier = viewModel.activeChatModel.value ?: "Unknown Model"
-                            val displayName = viewModel.getModelDisplayName(apiIdentifier)
-                            ForegroundService.updateNotificationStatusSilently(displayName, "Model Changed")
-                        }*/
-                    }
-                }
+            if (viewModel.isRpMode()) {
+                parentFragmentManager.beginTransaction()
+                    .withGrokStackAnimations()
+                    .hide(this)
+                    .add(R.id.fragment_container, RpCharacterLibraryFragment.newInstance())
+                    .addToBackStack(RpCharacterLibraryFragment.BACK_STACK_TAG)
+                    .commit()
+                return@setOnClickListener
             }
-            parentFragmentManager.beginTransaction()
-                .withGrokStackAnimations()
-                .hide(this)
-                .add(R.id.fragment_container, picker)
-                .addToBackStack(null)
-                .commit()
+            openBotModelPicker()
         }
 
         systemMessageButton.setOnClickListener {
@@ -2028,7 +2186,7 @@ $cleanContent
             val messages = viewModel.chatMessages.value ?: emptyList()
 
             if (messages.isEmpty()) {
-                AppToast.makeText(requireContext(), "No chat history to export", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_no_chat_export), AppToast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
@@ -2099,7 +2257,7 @@ $cleanContent
                             }
                             .show()
                     } else {
-                        AppToast.makeText(requireContext(), "PDF Failed", AppToast.LENGTH_SHORT).show()
+                        AppToast.makeText(requireContext(), getString(R.string.toast_pdf_failed), AppToast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -2123,10 +2281,10 @@ $cleanContent
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Chat History (Markdown)", chatText)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(requireContext(), "Chat copied as Markdown!", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_chat_copied_md), AppToast.LENGTH_SHORT).show()
                 true  // Consume the long press
             } else {
-                AppToast.makeText(requireContext(), "Nothing to Copy", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_copy), AppToast.LENGTH_SHORT).show()
                 true
             }
         }
@@ -2137,16 +2295,18 @@ $cleanContent
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Chat History", chatText)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(requireContext(), "Chat Copied!", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_chat_copied), AppToast.LENGTH_SHORT).show()
             } else {
-                AppToast.makeText(requireContext(), "Nothing to Copy", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_copy), AppToast.LENGTH_SHORT).show()
             }
         }
         backButton.setOnLongClickListener {
             backButton.visibility = View.GONE
             backcopyButton.visibility = View.GONE
             updateHomeButtonVisibility()
-            viewModel.startNewChat()
+            viewModel.startFreshChatForCurrentMode()
+            chatEditText.setText("")
+            chatEditText.text.clear()
             currentTempImageFile?.delete()
             currentTempImageFile = null
             previewImageView.setImageBitmap(null)
@@ -2163,7 +2323,9 @@ $cleanContent
             backButton.visibility = View.GONE
             backcopyButton.visibility = View.GONE
             updateHomeButtonVisibility()
-            viewModel.startNewChat()
+            viewModel.startFreshChatForCurrentMode()
+            chatEditText.setText("")
+            chatEditText.text.clear()
             currentTempImageFile?.delete()
             currentTempImageFile = null
             previewImageView.setImageBitmap(null)
@@ -2195,7 +2357,7 @@ $cleanContent
                 if (chatHtml.isNotBlank()) {
                     printChatHtml(chatHtml)
                 } else {
-                    AppToast.makeText(requireContext(), "Nothing to print", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_print), AppToast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -2214,7 +2376,7 @@ $cleanContent
                 viewModel.saveMarkdownToDownloads(chatText)
                 // No need for local Toast - ViewModel handles UI event via _toolUiEvent
             } else {
-                AppToast.makeText(requireContext(), "Nothing to save", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
             }
         }
         saveEpubButton.setOnClickListener {
@@ -2227,7 +2389,7 @@ $cleanContent
                     // Call the new ViewModel function
                     viewModel.saveEpubToDownloads(innerHtml)
                 } else {
-                    AppToast.makeText(requireContext(), "Nothing to save", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -2237,7 +2399,7 @@ $cleanContent
             if (chatText.isNotBlank()) {
                 viewModel.saveTxtToDownloads(chatText)
             } else {
-                AppToast.makeText(requireContext(), "Nothing to save", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
             }
             true  // Required for onLongClickListener
         }
@@ -2249,7 +2411,7 @@ $cleanContent
                     viewModel.saveHtmlToDownloads(innerHtml)
                     // VM handles success Toast via _toolUiEvent
                 } else {
-                    AppToast.makeText(requireContext(), "Nothing to save", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -2257,14 +2419,18 @@ $cleanContent
 
         menuButton.setOnClickListener {
             hideKeyboard()
+            if (viewModel.isRpMode()) {
+                AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             showAttachSheet()
         }
         menuButton.setOnLongClickListener {
             val inputText = chatEditText.text.toString().trim()
             if (inputText.isBlank()) {
-                AppToast.makeText(requireContext(), "No text to correct", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_no_text_to_correct), AppToast.LENGTH_SHORT).show()
             } else if (viewModel.activeChatApiKey.isBlank()) {
-                AppToast.makeText(requireContext(), "API Key is not set.", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_api_key_missing), AppToast.LENGTH_SHORT).show()
             } else {
                 menuButton.isSelected = true
                 menuButton.setIconResource(R.drawable.ic_magic)
@@ -2278,12 +2444,11 @@ $cleanContent
                         AppToast.makeText(
 
                             requireContext(),
-                            "Correction failed",
+                            getString(R.string.toast_correction_failed),
                             AppToast.LENGTH_SHORT
                         ).show()
                     }
-                    menuButton.setIconResource(R.drawable.ic_menudot)
-                    menuButton.isSelected = false
+                    restoreAttachPlusIcon()
                 }
             }
             true
@@ -2295,7 +2460,7 @@ $cleanContent
                 .withGrokStackAnimations()
                 .hide(this)
                 .add(R.id.fragment_container, SettingsFragment())
-                .addToBackStack(null)
+                .addToBackStack("settings")
                 .commit()
         }
         presetsButton.setOnClickListener {
@@ -2353,14 +2518,18 @@ $cleanContent
         }
 
         modelNameTextView.setOnLongClickListener {
+            if (viewModel.isRpMode()) {
+                hideKeyboard()
+                openBotModelPicker()
+                return@setOnLongClickListener true
+            }
             try {
                 val intent = Intent(Intent.ACTION_VIEW, "https://openrouter.ai/models".toUri())
                 startActivity(intent)
             } catch (e: Exception) {
-                // Handle case where a web browser is not available
-                AppToast.makeText(requireContext(), "Could not open browser.", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_open_browser_failed), AppToast.LENGTH_SHORT).show()
             }
-            true // Consume the long click
+            true
         }
 
         streamButton.setOnClickListener {
@@ -2370,7 +2539,7 @@ $cleanContent
 
             if (isLyria && isStreamEnabled) {
                 // Prevent turning off streaming for Lyria
-                AppToast.makeText(requireContext(), "Streaming is required for Lyria music models.", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_streaming_required_lyria), AppToast.LENGTH_SHORT).show()
             } else {
                 // Normal toggle for other models or if turning it ON for Lyria
                 viewModel.toggleStreaming()
@@ -2400,8 +2569,8 @@ $cleanContent
             }
 
             val dialog = MaterialAlertDialogBuilder(requireContext(), com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered)
-                .setTitle("Select Font")
-                .setNegativeButton("Cancel", null)
+                .setTitle(R.string.select_font_title)
+                .setNegativeButton(R.string.action_cancel, null)
                 .create()
 
             val adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -2482,8 +2651,7 @@ $cleanContent
             val lastPos = chatAdapter.itemCount - 1
             if (lastPos >= 0) {
                 layoutManager.scrollToPositionWithOffset(lastPos, -12)
-            }
-            else{
+            } else if (!viewModel.isRpMode()) {
                 showMenu()
             }
             true
@@ -2531,10 +2699,10 @@ $cleanContent
                     chatEditText.text.replace(start, end, text.toString())
                 } else {
                     // Clipboard item is not text (e.g., image, URI, etc.)
-                    AppToast.makeText(requireContext(), "Clipboard does not contain text", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_clipboard_no_text), AppToast.LENGTH_SHORT).show()
                 }
             } else {
-                AppToast.makeText(requireContext(), "Nothing to paste", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_paste), AppToast.LENGTH_SHORT).show()
             }
         }
 
@@ -2552,10 +2720,10 @@ $cleanContent
                     sendChatButton.performClick()
                 } else {
                     // Clipboard item is not text (e.g., image, URI, etc.)
-                    AppToast.makeText(requireContext(), "Clipboard does not contain text", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_clipboard_no_text), AppToast.LENGTH_SHORT).show()
                 }
             } else {
-                AppToast.makeText(requireContext(), "Nothing to paste", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_paste), AppToast.LENGTH_SHORT).show()
             }
             true
         }
@@ -2608,6 +2776,17 @@ $cleanContent
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         imm?.hideSoftInputFromWindow(view.windowToken, 0)
     }
+
+    private fun hideKeyboardFrom(target: View) {
+        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(target.windowToken, 0)
+    }
+
+    private fun restoreAttachPlusIcon() {
+        menuButton.setIconResource(R.drawable.ic_attach_plus)
+        menuButton.isSelected = false
+        menuButton.icon?.alpha = if (viewModel.isRpMode()) 102 else 255
+    }
     private fun isTouchOutsideHeader(x: Float, y: Float): Boolean {
         val location = IntArray(2)
         headerContainer.getLocationOnScreen(location)
@@ -2631,7 +2810,7 @@ $cleanContent
     }
     private fun updateInitialUI() {
         val isExtended = sharedPreferencesHelper.getExtPreference()
-        if (sharedPreferencesHelper.getExtPreference2()){
+        if (sharedPreferencesHelper.getExtPreference2() && !viewModel.isRpMode()){
            // extBG.visibility = View.VISIBLE
             presetsButton2.visibility = View.VISIBLE
             presetsButton.visibility = View.GONE
@@ -2656,6 +2835,7 @@ $cleanContent
         updateComposerAccessoryVisibility()
     }
     private fun processAudioUri(uri: Uri) {
+        if (discardAttachmentIfRp()) return
         lifecycleScope.launch {
             try {
                 val mimeType = requireContext().contentResolver.getType(uri)
@@ -2677,7 +2857,7 @@ $cleanContent
 
 
                 if (formatFromMime !in supportedFormats && extension !in supportedFormats) {
-                    AppToast.makeText(requireContext(), "Unsupported audio format", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_audio_unsupported), AppToast.LENGTH_SHORT).show()
                     return@launch
                 }
 
@@ -2688,9 +2868,10 @@ $cleanContent
                 }
 
                 if (bytes == null || bytes.size > 25_000_000) {
-                    AppToast.makeText(requireContext(), "Audio too large (max 25MB)", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_audio_too_large), AppToast.LENGTH_SHORT).show()
                     return@launch
                 }
+                if (discardAttachmentIfRp()) return@launch
 
                 selectedAudioBytes = bytes
                 selectedAudioFormat = audioFormat
@@ -2698,9 +2879,9 @@ $cleanContent
                 // Show audio attachment indicator
                 previewImageView.setImageResource(android.R.drawable.ic_media_play) // or use a custom ic_audio
                 attachmentPreviewContainer.visibility = View.VISIBLE
-                AppToast.makeText(requireContext(), "Audio attached", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_audio_attached), AppToast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                AppToast.makeText(requireContext(), "Failed to read audio: ${e.message}", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_audio_read_failed, e.message ?: ""), AppToast.LENGTH_SHORT).show()
             }
         }
     }
@@ -2710,7 +2891,7 @@ $cleanContent
         val context = requireContext()
 
         if (safeText.length < text.length) {
-            AppToast.makeText(context, "Text truncated for TTS (too long)", AppToast.LENGTH_SHORT).show()
+            AppToast.makeText(context, context.getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
         }
 
         try {
@@ -2732,15 +2913,15 @@ $cleanContent
 
             when (result) {
                 TextToSpeech.SUCCESS -> {
-                    AppToast.makeText(context, "Audio generating...", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(context, context.getString(R.string.toast_tts_audio_generating), AppToast.LENGTH_SHORT).show()
                 }
                 else -> {
-                    AppToast.makeText(context, "❌ TTS wav failed (code: $result)", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(context, context.getString(R.string.toast_tts_wav_failed, result), AppToast.LENGTH_SHORT).show()
                 }
             }
 
         } catch (e: Exception) {
-            AppToast.makeText(context, "Error queuing TTS: ${e.message}", AppToast.LENGTH_SHORT).show()
+            AppToast.makeText(context, context.getString(R.string.toast_tts_queue_error, e.message ?: ""), AppToast.LENGTH_SHORT).show()
         }
     }
 
@@ -2762,7 +2943,7 @@ $cleanContent
                 updateIconDirectlyOrNotify(position, R.drawable.ic_stop_circle)
                 val safeText = text.take(3900)
                 if (safeText.length < text.length) {
-                    AppToast.makeText(requireContext(), "Text truncated for TTS (too long)", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
                 }
                 textToSpeech.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, "tts_utterance")
             }
@@ -2773,7 +2954,7 @@ $cleanContent
             updateIconDirectlyOrNotify(position, R.drawable.ic_stop_circle)
             val safeText = text.take(3900)
             if (safeText.length < text.length) {
-                AppToast.makeText(requireContext(), "Text truncated for TTS (too long)", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
             }
             textToSpeech.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, "tts_utterance")
         }
@@ -2831,19 +3012,19 @@ $cleanContent
         val dialog = MaterialAlertDialogBuilder(requireContext(),
             com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
         )
-            .setTitle("Save As File")
+            .setTitle(R.string.save_as_file_title)
             .setView(dialogView)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.action_save) { _, _ ->
                 val fileName = fileNameInput.text?.toString()?.trim() ?: ""
                 val extension = fileExtensionInput.text?.toString()?.trim() ?: ""
 
                 if (fileName.isNotEmpty() && extension.isNotEmpty()) {
                     viewModel.saveFileWithName(fileName, extension, content)
                 } else {
-                    AppToast.makeText(context, "Please enter both file name and extension", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_filename_extension_required), AppToast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .show()
 
         // Apply dim amount like your other dialog
@@ -2967,6 +3148,10 @@ $cleanContent
     private var attachPlusOpen = false
 
     private fun showAttachSheet() {
+        if (viewModel.isRpMode()) {
+            AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+            return
+        }
         if (attachPopup?.isShowing == true) {
             dismissAttachPopup()
             return
@@ -3047,26 +3232,34 @@ $cleanContent
         }
     }
 
+    /** Late Ask picker results must not stage media after a flip to RP. */
+    private fun discardAttachmentIfRp(): Boolean {
+        if (!viewModel.isRpMode()) return false
+        AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+        return true
+    }
+
     private fun processPickedImageUri(uri: Uri) {
+        if (discardAttachmentIfRp()) return
         val model = viewModel.activeChatModel.value
         if (model != null && !viewModel.isVisionModel(model)) {
             AppToast.makeText(
                 requireContext(),
-                "Image attached — switch to a vision-capable model to send it.",
+                getString(R.string.toast_image_need_vision),
                 AppToast.LENGTH_SHORT
             ).show()
         }
         requireContext().contentResolver.openInputStream(uri)?.use { stream ->
             val bytes = stream.readBytes()
             if (bytes.size > 12_000_000) {
-                AppToast.makeText(requireContext(), "Image too large (max 12MB)", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_image_too_large), AppToast.LENGTH_SHORT).show()
                 return
             }
             val mime = requireContext().contentResolver.getType(uri)
             when (mime) {
                 "image/jpeg", "image/png", "image/webp" -> Unit
                 else -> {
-                    AppToast.makeText(requireContext(), "Unsupported image format", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_unsupported_image_format), AppToast.LENGTH_SHORT).show()
                     return
                 }
             }
@@ -3081,7 +3274,7 @@ $cleanContent
             } catch (_: SecurityException) {
                 viewModel.setPendingUserImageUri(uri.toString())
             }
-        } ?: AppToast.makeText(requireContext(), "Failed to read image", AppToast.LENGTH_SHORT).show()
+        } ?: AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_image), AppToast.LENGTH_SHORT).show()
     }
 
     private fun setAttachPlusOpen(open: Boolean) {
@@ -3151,12 +3344,20 @@ $cleanContent
     }
     private fun setupTextFilePicker() {
         attachmentButton.setOnClickListener {
+            if (viewModel.isRpMode()) {
+                AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             // Launch multi-picker with primary MIME (broadens to text-like; client-side filters the rest)
             val mimeType = "*/*"  // Or "text/plain" for stricter start; fallback handles .kt etc.
             textFilePicker.launch(mimeType)
         }
 
         attachmentButton.setOnLongClickListener {
+            if (viewModel.isRpMode()) {
+                AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+                return@setOnLongClickListener true
+            }
             showAttachedFiles()
             true
         }
@@ -3171,7 +3372,7 @@ $cleanContent
                 return@setOnClickListener
             }
             if (model == null || !viewModel.isVisionModel(model)) {
-                AppToast.makeText(requireContext(), "Image/PDF selection not supported for the current model.", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_image_pdf_not_supported), AppToast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
@@ -3199,7 +3400,7 @@ $cleanContent
 
                     }
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(R.string.action_cancel, null)
                 .show()
         }
         // In setupPlusButtonListener(), after the existing setOnClickListener block
@@ -3210,7 +3411,7 @@ $cleanContent
                 return@setOnLongClickListener true
             }
             if (model == null || !viewModel.isVisionModel(model)) {
-                AppToast.makeText(requireContext(), "Image selection not supported for the current model.", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_image_not_supported), AppToast.LENGTH_SHORT).show()
                 return@setOnLongClickListener false
             }
 
@@ -3236,7 +3437,7 @@ $cleanContent
         try {
             speechLauncher.launch(intent)
         } catch (e: Exception) {
-            AppToast.makeText(requireContext(), "Speech recognition not supported", AppToast.LENGTH_SHORT).show()
+            AppToast.makeText(requireContext(), getString(R.string.toast_speech_not_supported), AppToast.LENGTH_SHORT).show()
         }
         */
     }
@@ -3258,8 +3459,12 @@ $cleanContent
         }
     }
     private fun updateModelSourceIndicator() {
+        if (viewModel.isRpMode()) {
+            // RP chrome owns the chip label + a11y (character / LLM / Characters).
+            return
+        }
         val isLan = viewModel.activeModelIsLan()
-        val description = if (isLan) "LAN Model" else "Cloud Model"
+        val description = if (isLan) getString(R.string.a11y_lan_model) else getString(R.string.a11y_cloud_model)
         val chevronColor = ContextCompat.getColor(requireContext(), R.color.xai_body)
         modelNameTextView.compoundDrawableTintList = ColorStateList.valueOf(chevronColor)
         // No leading source glyph — Grok chip is text + chevron only
@@ -3285,6 +3490,17 @@ $cleanContent
         }
         // If permission is already granted, or Android < 17, do nothing (let it proceed)
     }
+    private fun updateStreamToggleAppearance(isEnabled: Boolean) {
+        val onTint = ContextCompat.getColor(requireContext(), R.color.gradation_gold)
+        val menuTint = ContextCompat.getColor(requireContext(), R.color.xai_body)
+        val topTint = ContextCompat.getColor(requireContext(), R.color.xai_mute)
+        streamButton.iconTint = ColorStateList.valueOf(if (isEnabled) onTint else menuTint)
+        topStreamButton.iconTint = ColorStateList.valueOf(if (isEnabled) onTint else topTint)
+        if (::rpStreamButton.isInitialized) {
+            rpStreamButton.iconTint = ColorStateList.valueOf(if (isEnabled) onTint else menuTint)
+        }
+    }
+
     private fun updateReasoningButtonAppearance() {
         // Use .value to get the current state from LiveData
         val isReasoningOn = viewModel.isReasoningEnabled.value ?: false
@@ -3325,6 +3541,7 @@ $cleanContent
     override fun onResume() {
         super.onResume()
         updateSystemMessageButtonState()
+        viewModel.isStreamingEnabled.value?.let { updateStreamToggleAppearance(it) }
        // chatEditText.requestFocus()
         viewModel.checkAdvancedReasoningStatus()
        // val notificationManager = requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -3456,6 +3673,8 @@ $cleanContent
         val hasMessages = !viewModel.chatMessages.value.isNullOrEmpty()
         if (hasMessages) {
             resetChatButton.performClick()
+        } else if (viewModel.isRpMode()) {
+            viewModel.startFreshChatForCurrentMode()
         } else {
             viewModel.startNewChat()
         }
@@ -3553,12 +3772,12 @@ $cleanContent
             if (cameraIntent.resolveActivity(requireContext().packageManager) != null) {
                 cameraLauncher.launch(cameraIntent)
             } else {
-                AppToast.makeText(requireContext(), "No camera app available", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_no_camera_app), AppToast.LENGTH_SHORT).show()
                 requireContext().contentResolver.delete(imageUri, null, null)
                 currentCameraUri = null  // NEW: Clean up
             }
         } ?: run {
-            AppToast.makeText(requireContext(), "Could not create image entry", AppToast.LENGTH_SHORT).show()
+            AppToast.makeText(requireContext(), getString(R.string.toast_could_not_create_image), AppToast.LENGTH_SHORT).show()
         }
     }
     fun startSpeechRecognitionSafely() {
@@ -3573,6 +3792,7 @@ $cleanContent
         */
     }
     private fun processPdfUri(pdfUri: Uri) {
+        if (discardAttachmentIfRp()) return
         lifecycleScope.launch {
             var parcelFd: ParcelFileDescriptor? = null
             var tempPdfFile: File? = null
@@ -3585,7 +3805,7 @@ $cleanContent
                     // Direct access fallback (rare)
                     val inputStream = requireContext().contentResolver.openInputStream(pdfUri)
                         ?: run {
-                            AppToast.makeText(requireContext(), "No read access to PDF.", AppToast.LENGTH_SHORT).show()
+                            AppToast.makeText(requireContext(), getString(R.string.toast_pdf_no_read_access), AppToast.LENGTH_SHORT).show()
                             return@launch
                         }
 
@@ -3604,7 +3824,7 @@ $cleanContent
                 }
 
                 if (parcelFd == null) {
-                    AppToast.makeText(requireContext(), "Failed to access PDF.", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_pdf_access_failed), AppToast.LENGTH_SHORT).show()
                     return@launch
                 }
 
@@ -3614,7 +3834,7 @@ $cleanContent
 
                 when {
                     pageCount == 0 -> {
-                        AppToast.makeText(requireContext(), "PDF has no pages.", AppToast.LENGTH_SHORT).show()
+                        AppToast.makeText(requireContext(), getString(R.string.toast_pdf_no_pages), AppToast.LENGTH_SHORT).show()
                         pdfRenderer.close()  // Close if no pages
                         return@launch
                     }
@@ -3660,12 +3880,16 @@ $cleanContent
 
 
     private suspend fun processPdfBitmap(bitmap: Bitmap, description: String) {
+        if (discardAttachmentIfRp()) {
+            bitmap.recycle()
+            return
+        }
         val byteArrayOutputStream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
         val bytes = byteArrayOutputStream.toByteArray()
 
         if (bytes.size > 12_000_000) {
-            AppToast.makeText(requireContext(), "PDF page too large (max 12MB). Try a different page.", AppToast.LENGTH_SHORT).show()
+            AppToast.makeText(requireContext(), getString(R.string.toast_pdf_page_too_large), AppToast.LENGTH_SHORT).show()
             bitmap.recycle()
             return
         }
@@ -3696,7 +3920,7 @@ $cleanContent
         previewImageView.setImageBitmap(previewBmp)
         attachmentPreviewContainer.visibility = View.VISIBLE
 
-        AppToast.makeText(requireContext(), "$description converted to image", AppToast.LENGTH_SHORT).show()
+        AppToast.makeText(requireContext(), getString(R.string.toast_converted_to_image, description), AppToast.LENGTH_SHORT).show()
 
         // Recycle originals
         bitmap.recycle()
@@ -3725,7 +3949,7 @@ $cleanContent
                     }
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .setOnCancelListener {
                 // Close if canceled (no render happened)
                 pdfRenderer.close()
@@ -3733,6 +3957,7 @@ $cleanContent
             .show()
     }
     private fun processTextFile(uri: Uri) {
+        if (discardAttachmentIfRp()) return
         lifecycleScope.launch {
             try {
                 // Get file info (your existing query for filename)
@@ -3772,7 +3997,7 @@ $cleanContent
                 }
 
                 if (!isAllowed) {
-                    AppToast.makeText(requireContext(), "Unsupported file: $fileName ($mimeType). Please select text/code files.", AppToast.LENGTH_LONG).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_unsupported_file, fileName, mimeType), AppToast.LENGTH_LONG).show()
                     return@launch
                 }
 
@@ -3796,24 +4021,25 @@ $cleanContent
 
                 // Size validation (your existing checks)
                 if (fileSize > MAX_SINGLE_FILE_SIZE) {
-                    AppToast.makeText(requireContext(), "File too large: $fileName (max ${MAX_SINGLE_FILE_SIZE / 1024 / 1024}MB per file)", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_file_too_large, fileName, MAX_SINGLE_FILE_SIZE / 1024 / 1024), AppToast.LENGTH_SHORT).show()
                     return@launch
                 }
 
                 if (currentTotalSize + fileSize > MAX_FILE_SIZE) {
-                    AppToast.makeText(requireContext(), "Total attachments exceed limit: $fileName would make ${(currentTotalSize + fileSize) / 1024 / 1024}MB (max ${MAX_FILE_SIZE / 1024 / 1024}MB total)", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_attachments_total_limit, fileName, (currentTotalSize + fileSize) / 1024 / 1024, MAX_FILE_SIZE / 1024 / 1024), AppToast.LENGTH_SHORT).show()
                     return@launch
                 }
+                if (discardAttachmentIfRp()) return@launch
 
                 // Add to pending files (your existing AttachedFile)
                 pendingFiles.add(AttachedFile(fileName, content, fileSize))
 
                 // Update UI (your existing)
                 updateAttachmentButton()
-                AppToast.makeText(requireContext(), "File attached: $fileName", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_file_attached, fileName), AppToast.LENGTH_SHORT).show()
 
             } catch (e: Exception) {
-                AppToast.makeText(requireContext(), "Failed to read file: ${e.message}", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_file, e.message ?: ""), AppToast.LENGTH_SHORT).show()
             }
         }
     }
@@ -3908,8 +4134,8 @@ $cleanContent
             com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
         )
             .setTitle("Enable / Disable Tools")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Save") { _, _ ->
+            .setNegativeButton(R.string.action_cancel, null)
+            .setPositiveButton(R.string.action_save) { _, _ ->
                 // Note: We map from the mutableItems which is already filtered
                 val newEnabledSet = mutableItems
                     .filter { it.isEnabled }
@@ -4027,11 +4253,11 @@ $cleanContent
             ) { _, which ->
                 selectedEngine = engines[which].first
             }
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.action_save) { _, _ ->
                 sharedPreferencesHelper.saveWebSearchEngine(selectedEngine)
                 showWebSearchContextSizeDialog()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .show()
     }
 
@@ -4056,11 +4282,11 @@ $cleanContent
             ) { _, which ->
                 selectedSize = sizes[which].first
             }
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.action_save) { _, _ ->
                 sharedPreferencesHelper.saveWebSearchContextSize(selectedSize)
                 showWebSearchMaxResultsDialog()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .show()
     }
     private fun showWebSearchMaxResultsDialog() {
@@ -4082,11 +4308,11 @@ $cleanContent
             ) { _, which ->
                 selectedMax = options[which]
             }
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.action_save) { _, _ ->
                 // Final save step
                 sharedPreferencesHelper.saveWebSearchMaxResults(selectedMax)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .show()
     }
 
@@ -4131,11 +4357,11 @@ $cleanContent
                 model != null && viewModel.isReasoningModel(model)
             },
             Triple(webSearchButton, topWebSearchButton) {
-                !isLan // Hide web search for local models
+                !isLan && !viewModel.isRpMode()
             },
             Triple(streamButton, topStreamButton) { true },
             //Triple(convoButton, topConvoButton) { true },
-            Triple(toolsButton, topToolsButton) { true },
+            Triple(toolsButton, topToolsButton) { !viewModel.isRpMode() },
            // Triple(presetsButton, topPresetsButton) { true },
             Triple(settingsButton, topSettingsButton) { true }
         )
@@ -4153,12 +4379,16 @@ $cleanContent
         }
         homeButton.visibility = if (extendedEnabled) View.VISIBLE else View.GONE
         val isPresetsOnChatScreen = viewModel.isPresetsExtendedEnabled.value ?: false
+        val rp = viewModel.isRpMode()
 
-        if (extendedEnabled) {
+        if (rp) {
+            presetsButton.visibility = View.GONE
+            topPresetsButton.visibility = View.GONE
+            presetsButton2.visibility = View.GONE
+        } else if (extendedEnabled) {
             // TOP BAR ON: Menu preset is ALWAYS gone. Top preset is ALWAYS visible.
             presetsButton.visibility = View.GONE
             topPresetsButton.visibility = View.VISIBLE
-
         } else {
             // TOP BAR OFF: Hide the top bar versions
             topPresetsButton.visibility = View.GONE
@@ -4179,10 +4409,10 @@ $cleanContent
             if (bitmap != null) {
                 viewModel.saveBitmapToDownloads(bitmap, format)
             } else {
-                AppToast.makeText(requireContext(), "Failed to capture view", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_failed_capture_view), AppToast.LENGTH_SHORT).show()
             }
         } else {
-            AppToast.makeText(requireContext(), "Item not visible; cannot capture", AppToast.LENGTH_SHORT).show()
+            AppToast.makeText(requireContext(), getString(R.string.toast_item_not_visible), AppToast.LENGTH_SHORT).show()
         }
     }
     fun copyLatestMessage() {
@@ -4190,7 +4420,7 @@ $cleanContent
             if (text.isNotBlank()) {
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Copied", text))
-                AppToast.makeText(requireContext(), "Copied", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_copied), AppToast.LENGTH_SHORT).show()
             }
         }
     }
@@ -4341,9 +4571,9 @@ $cleanContent
             isRecording = true
             speechButton.setIconResource(R.drawable.ic_stop_circle) // Red mic or recording indicator
             speechButton.isSelected = true
-            AppToast.makeText(requireContext(), "Recording...", AppToast.LENGTH_SHORT).show()
+            AppToast.makeText(requireContext(), getString(R.string.toast_recording), AppToast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            AppToast.makeText(requireContext(), "Recording failed: ${e.message}", AppToast.LENGTH_SHORT).show()
+            AppToast.makeText(requireContext(), getString(R.string.toast_recording_failed, e.message ?: ""), AppToast.LENGTH_SHORT).show()
             voiceRecordFile?.delete()
             voiceRecordFile = null
         }
@@ -4368,7 +4598,7 @@ $cleanContent
                 if (file.exists() && file.length() > 0) {
                     processVoiceRecording(file)
                 } else {
-                    AppToast.makeText(requireContext(), "Recording was empty", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_recording_empty), AppToast.LENGTH_SHORT).show()
                     file.delete()
                 }
             }
@@ -4392,7 +4622,7 @@ $cleanContent
                 }
 
                 if(!fromWater) {
-                    AppToast.makeText(requireContext(), "Transcribing...", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_transcribing), AppToast.LENGTH_SHORT).show()
                 }
                 val transcribedText = viewModel.transcribeAudioForInput(
                     audioBytes = audioBytes,
@@ -4409,10 +4639,10 @@ $cleanContent
                     chatEditText.setSelection(transcribedText.length)
                     // AppToast.makeText(requireContext(), "Transcription complete", AppToast.LENGTH_SHORT).show()
                 } else {
-                    AppToast.makeText(requireContext(), "Transcription failed", AppToast.LENGTH_SHORT).show()
+                    AppToast.makeText(requireContext(), getString(R.string.toast_transcription_failed), AppToast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                AppToast.makeText(requireContext(), "Error: ${e.message}", AppToast.LENGTH_SHORT).show()
+                AppToast.makeText(requireContext(), getString(R.string.toast_error_generic, e.message ?: ""), AppToast.LENGTH_SHORT).show()
             } finally {
                 file.delete()
                 voiceRecordFile = null
@@ -4421,6 +4651,203 @@ $cleanContent
         }
         */
     }
+    private fun insertRpReminderTemplate() {
+        val prefix = "_(Reminder: "
+        val template = "_(Reminder: )_"
+        val editable = chatEditText.text ?: return
+        val existing = editable.indexOf(prefix)
+        if (existing >= 0) {
+            // Already present — focus inside it instead of nesting another wrapper.
+            val cursor = (existing + prefix.length).coerceAtMost(editable.length)
+            chatEditText.setSelection(cursor)
+            chatEditText.requestFocus()
+            chatEditText.showKeyboard()
+            return
+        }
+        val start = chatEditText.selectionStart.coerceAtLeast(0)
+        val end = chatEditText.selectionEnd.coerceAtLeast(0)
+        editable.replace(minOf(start, end), maxOf(start, end), template)
+        val cursor = minOf(start, end) + prefix.length
+        chatEditText.setSelection(cursor.coerceAtMost(editable.length))
+        chatEditText.requestFocus()
+        chatEditText.showKeyboard()
+    }
+
+    private fun openBotModelPicker() {
+        val picker = BotModelPickerFragment().apply {
+            onModelSelected = { modelString ->
+                val newModelSupportsWebp = viewModel.supportsWebp(modelString)
+                val isStagedImageWebp = selectedImageMime == "image/webp"
+                val historyHasWebp = viewModel.hasWebpInHistory()
+                val hasImagesInCurrentChat = viewModel.hasImagesInChat()
+                if (!newModelSupportsWebp && (isStagedImageWebp || historyHasWebp)) {
+                    AppToast.makeText(
+                        requireContext(),
+                        getString(R.string.model_switch_no_webp),
+                        AppToast.LENGTH_LONG
+                    ).show()
+                } else if (hasImagesInCurrentChat && !viewModel.isVisionModel(modelString)) {
+                    AppToast.makeText(
+                        requireContext(),
+                        getString(R.string.model_switch_no_vision),
+                        AppToast.LENGTH_LONG
+                    ).show()
+                } else {
+                    viewModel.setModel(modelString)
+                    if (viewModel.activeModelIsLan()) {
+                        checkLocalNetworkPermission()
+                    }
+                }
+            }
+        }
+        parentFragmentManager.beginTransaction()
+            .withGrokStackAnimations()
+            .hide(this)
+            .add(R.id.fragment_container, picker)
+            .addToBackStack(null)
+            .commit()
+    }
+
+    private fun applyRpSwipeChrome(nav: ChatViewModel.RpSwipeNav?) {
+        if (!::rpSwipeBar.isInitialized) return
+        if (nav == null || !viewModel.isRpMode()) {
+            rpSwipeBar.visibility = View.GONE
+            return
+        }
+        val awaiting = viewModel.isAwaitingResponse.value == true
+        rpSwipeBar.visibility = View.VISIBLE
+        rpSwipeCounter.text = "${nav.index}/${nav.total}"
+        // Keep bar visible during regen so the index stays readable, but block interaction.
+        rpSwipePrevButton.isEnabled = nav.canPrev && !awaiting
+        rpSwipeNextButton.isEnabled = nav.canNext && !awaiting
+    }
+
+    private fun updateRpChrome() {
+        val rp = viewModel.isRpMode()
+        chatAdapter.isRpMode = rp
+        chatModeChip.text = if (rp) getString(R.string.rp_mode_rp) else getString(R.string.rp_mode_ask)
+        systemMessageButton.visibility = if (rp) View.GONE else View.VISIBLE
+        menuButton.visibility = View.VISIBLE
+        restoreAttachPlusIcon()
+        menuButton.contentDescription = getString(
+            if (rp) R.string.rp_attach_disabled_a11y else R.string.attach_content_description
+        )
+        rpComposerExtras.visibility = if (rp) View.VISIBLE else View.GONE
+        if (!rp) {
+            rpSwipeBar.visibility = View.GONE
+        }
+        val activeChar = viewModel.activeRpCharacter.value
+        val llm = sharedPreferencesHelper.isRpLlmMode()
+        if (rp && activeChar != null && !llm) {
+            chatAdapter.rpSpeakerName = activeChar.name
+            chatAdapter.rpSpeakerAvatarUri = activeChar.photoUri
+            chatAdapter.rpSpeakerAvatarFile = RpAvatarStorage.avatarFile(requireContext(), activeChar.id)
+            chatAdapter.refreshRpSpeakerAvatars()
+        } else if (rp && llm) {
+            chatAdapter.rpSpeakerName = getString(R.string.rp_llm_speaker)
+            chatAdapter.rpSpeakerAvatarUri = null
+            chatAdapter.rpSpeakerAvatarFile = null
+            chatAdapter.refreshRpSpeakerAvatars()
+        } else {
+            chatAdapter.rpSpeakerName = null
+            chatAdapter.rpSpeakerAvatarUri = null
+            chatAdapter.rpSpeakerAvatarFile = null
+        }
+        if (rp) {
+            viewModel.forceDisableToolsAndWebForRp()
+            val hadAttachments = selectedImageBytes != null ||
+                selectedAudioBytes != null ||
+                pendingFiles.isNotEmpty()
+            selectedImageBytes = null
+            selectedImageMime = null
+            selectedAudioBytes = null
+            selectedAudioFormat = null
+            attachmentPreviewContainer.visibility = View.GONE
+            pendingFiles.clear()
+            updateAttachmentButton()
+            if (hadAttachments) {
+                AppToast.makeText(
+                    requireContext(),
+                    getString(R.string.rp_attachments_disabled),
+                    AppToast.LENGTH_SHORT
+                ).show()
+            }
+            applyModelCapabilityChrome(viewModel.activeChatModel.value)
+            presetsButton.visibility = View.GONE
+            topPresetsButton.visibility = View.GONE
+            presetsButton2.visibility = View.GONE
+            val charName = activeChar?.name
+            modelNameTextView.text = when {
+                llm -> getString(R.string.rp_llm_chip)
+                !charName.isNullOrBlank() -> charName
+                else -> getString(R.string.rp_characters_title)
+            }
+            modelNameTextView.contentDescription = when {
+                llm -> getString(R.string.rp_model_chip_a11y_llm)
+                !charName.isNullOrBlank() -> getString(R.string.rp_model_chip_a11y_character, charName)
+                else -> getString(R.string.rp_model_chip_a11y_empty)
+            }
+            applyRpComposerHint()
+        } else {
+            viewModel.activeChatModel.value?.let { modelNameTextView.text = viewModel.getModelDisplayName(it) }
+            chatEditText.hint = getString(R.string.grok_composer_hint)
+            applyModelCapabilityChrome(viewModel.activeChatModel.value)
+            updateModelSourceIndicator()
+        }
+        updateExtendedTopBarVisibility(sharedPreferencesHelper.getExtendedTopBarEnabled())
+        updateComposerAccessoryVisibility()
+    }
+
+    /** Vision / transcription / image-gen chrome for attach + gen; forced off in RP. */
+    private fun applyModelCapabilityChrome(model: String?) {
+        if (viewModel.isRpMode()) {
+            plusButton.setIconResource(R.drawable.ic_imgup)
+            plusButton.icon?.alpha = 102
+            plusButton.isEnabled = false
+            plusButton.contentDescription = getString(R.string.rp_attach_disabled_a11y)
+            attachmentButton.isEnabled = false
+            attachmentButton.icon?.alpha = 102
+            attachmentButton.contentDescription = getString(R.string.rp_attach_disabled_a11y)
+            genButton.visibility = View.GONE
+            return
+        }
+        if (model == null) {
+            plusButton.setIconResource(R.drawable.ic_imgup)
+            plusButton.icon?.alpha = 102
+            plusButton.isEnabled = false
+            plusButton.contentDescription = getString(R.string.cd_attach_media)
+            attachmentButton.isEnabled = true
+            attachmentButton.icon?.alpha = 255
+            attachmentButton.contentDescription = getString(R.string.cd_attach_file)
+            genButton.visibility = View.GONE
+            return
+        }
+        when {
+            viewModel.isTranscriptionModel(model) -> {
+                plusButton.setIconResource(R.drawable.ic_uprec)
+                plusButton.icon?.alpha = 255
+                plusButton.isEnabled = true
+                plusButton.contentDescription = getString(R.string.cd_attach_media)
+            }
+            viewModel.isVisionModel(model) -> {
+                plusButton.setIconResource(R.drawable.ic_imgup)
+                plusButton.icon?.alpha = 255
+                plusButton.isEnabled = true
+                plusButton.contentDescription = getString(R.string.cd_attach_media)
+            }
+            else -> {
+                plusButton.setIconResource(R.drawable.ic_imgup)
+                plusButton.icon?.alpha = 102
+                plusButton.isEnabled = false
+                plusButton.contentDescription = getString(R.string.cd_attach_media)
+            }
+        }
+        attachmentButton.isEnabled = true
+        attachmentButton.icon?.alpha = 255
+        attachmentButton.contentDescription = getString(R.string.cd_attach_file)
+        genButton.visibility = if (viewModel.isImageGenerationModel(model)) View.VISIBLE else View.GONE
+    }
+
     private fun substituteVariables(input: String): String {
         if (!input.contains("{{ox")) return input  // 🔥 EARLY EXIT: Instant if no vars (99% cases)
 

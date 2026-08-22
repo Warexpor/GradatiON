@@ -13,26 +13,45 @@
     <LinearLayout
         android:id="@+id/historyHeader"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
+        android:layout_height="wrap_content"
         android:gravity="center_vertical"
+        android:minHeight="52dp"
         android:orientation="horizontal"
         android:paddingStart="16dp"
-        android:paddingEnd="12dp">
+        android:paddingEnd="12dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
 
-        <TextView
-            android:id="@+id/historyTitle"
-            style="@style/GrokionBrandWordmark"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:text="@string/grokion_wordmark"
-            android:textAllCaps="false"
-            android:textColor="@color/xai_ink"
-            android:textSize="28sp"
-            android:letterSpacing="0.12" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/historyTitle"
+                style="@style/GrokionBrandWordmark"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="@string/grokion_wordmark"
+                android:textAllCaps="false"
+                android:textColor="@color/xai_ink"
+                android:textSize="28sp"
+                android:letterSpacing="0.12" />
+
+            <TextView
+                android:id="@+id/historyModeLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:includeFontPadding="false"
+                android:textColor="@color/xai_mute"
+                android:textSize="12sp"
+                android:letterSpacing="0.04" />
+        </LinearLayout>
 
         <ImageButton
             android:id="@+id/historyCloseButton"
@@ -46,18 +65,34 @@
             app:tint="@color/xai_ink" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/historyEmptyView"
+    <FrameLayout
+        android:id="@+id/historyEmptyContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:gravity="center"
-        android:lineSpacingMultiplier="1.35"
-        android:padding="32dp"
-        android:textColor="@color/xai_mute"
-        android:textSize="15sp"
-        android:visibility="gone"
-        tools:text="@string/grok_history_empty_text" />
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="220dp"
+            android:layout_height="220dp"
+            android:layout_gravity="center"
+            android:alpha="0.12"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_gradation_mark"
+            app:tint="@color/xai_ink" />
+
+        <TextView
+            android:id="@+id/historyEmptyView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.35"
+            android:padding="32dp"
+            android:textColor="@color/xai_mute"
+            android:textSize="15sp"
+            tools:text="@string/grok_history_empty_text" />
+    </FrameLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/savedChatsRecyclerView"

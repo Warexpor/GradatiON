@@ -33,8 +33,8 @@ Do **not** treat x.ai marketing-site tokens (Universal Sans, sunset `#FF7A17`, o
 │  Transcript (empty → glyph + suggestions)   │
 │  · user: right bubble                       │
 │  · assistant: full-width plain text         │
-│  · sources strip + citation cards (opt)     │
-│  · action row after stream                  │
+│  · sources / citations as markdown when enabled │
+│  · action row after stream                      │
 │                                             │
 ├─────────────────────────────────────────────┤
 │ Composer pill (pinned): + | Ask anything |↗ │
@@ -42,7 +42,9 @@ Do **not** treat x.ai marketing-site tokens (Universal Sans, sunset `#FF7A17`, o
          ▲ history slide-over from left
 ```
 
-**Official Android Grok also has bottom tabs** Ask | Imagine. GradatiON ships **Ask-only**. Voice settings are disabled; file transcription models remain.
+**Official Android Grok also has bottom tabs** Ask | Imagine. GradatiON ships **Ask + RP mode** (toggle in top bar). Voice settings are disabled; file transcription models remain.
+
+**RP mode** reuses the same chat shell: character library (greeting / style / instruction / examples / avatar), persona presets, flat lorebooks (gated by **Use active lorebook** in RP settings), GradatiON uncensored prompt stack, Reminder syntax, swipe/regenerate/instruct, LLM mode. History filters by `ask` vs `rp`. Tools, web search, and attachments are forced off in RP.
 
 **History** = left slide-over (~84% width): **GradatiON** wordmark, Search, Conversations, settings gear.  
 **Settings** = pushed stack (Appearance, Haptics, Models & API, Advanced, Data & Privacy).
@@ -256,21 +258,15 @@ Overlays: scrim `#000000` @ ~60%; history leading shadow only if needed for sepa
 | Leading mark | Optional 24dp Grok glyph above first assistant turn only |
 | Markdown | bold weight 700; links `#1D9BF0`; code on `surfaceNeutral` + border |
 | Reasoning | Collapsible "Thinking" header, secondary text 13sp (Grokion already close) |
-| After stream | Action row: copy · regenerate · share · thumb-up · thumb-down — 18dp glyphs, 44dp hit, 20dp gap, idle = secondary, press = primary, copy success = `#00BA7C` ~1.2s |
+| After stream | Action row: copy · share · TTS · regenerate · edit (+ RP Instruct) — 18dp glyphs, 44dp hit; idle = secondary, press = primary |
 
-### 7.5 Sources / citations (parity target; may stub data)
+### 7.5 Sources / citations
 
-| Spec | Value |
-|------|-------|
-| Label | `Sources` (`grok_attribution_posts_header`) — 11sp / 700 / secondary / +0.6 tracking |
-| Card | `surfaceBright` or `#1E2126`-class, 16dp radius, 1dp border, 14dp pad |
-| Header | avatar 28dp · name 14/700 · verified `#1D9BF0` · `@handle · time` 13/400 secondary |
-| Body | 14sp, 4-line clamp |
-| Pressed | border → link blue, fill → brighter surface |
+Citations append as markdown in the assistant message when the Citations preference is on. There is no separate sources strip / citation card UI.
 
 ### 7.6 Empty state
 
-Centered **GradatiON arc mark** (`ic_gradation_mark`), low-alpha watermark, optional suggestion chips (`surfaceNeutral` + border). No Grok eye / xAI wordmarks.
+Centered **GradatiON arc mark** (`ic_gradation_mark`), low-alpha watermark. Suggestion chips are not shipped (strings may remain unused). No Grok eye / xAI wordmarks.
 
 ### 7.7 Composer
 
@@ -406,7 +402,7 @@ See also [`SHELL.md`](SHELL.md) for remap/omit/gates.
 5. **Streaming cursor**.
 6. **Empty state chips**.
 7. **History panel** polish (search, pinned section chrome).
-8. **Sources/citation layouts** (UI shells even if data stubs).
+8. ~~Sources/citation card layouts~~ — removed; citations are markdown only.
 9. **Appearance** screen preview (optional).
 10. Side-by-side device check vs installed `ai.x.grok`.
 

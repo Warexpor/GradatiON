@@ -19,9 +19,10 @@ import androidx.core.content.edit
 
 class SharedPreferencesHelper(context: Context) {
 
+    private val appContext = context.applicationContext
     private val apiKeysPrefs: SharedPreferences =
-        context.getSharedPreferences(API_KEYS_PREFS_STORE, Context.MODE_PRIVATE)
-    val mainPrefs: SharedPreferences = context.getSharedPreferences(MAIN_PREFS, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(API_KEYS_PREFS_STORE, Context.MODE_PRIVATE)
+    val mainPrefs: SharedPreferences = appContext.getSharedPreferences(MAIN_PREFS, Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
     private val gson = Gson() // Kept temporarily for migration only
     interface OnTimeoutChangedListener {
@@ -128,6 +129,24 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_MAX_TOKENS = "max_tokens"
         private const val KEY_DEFAULT_SYSTEM_MESSAGE = "default_system_message"
         private const val KEY_MIGRATION_COMPLETE = "has_migrated_to_kotlin_serialization"
+
+        // GradatiON RP
+        private const val KEY_CHAT_MODE = "chat_mode"
+        private const val KEY_RP_ACTIVE_CHARACTER_ID = "rp_active_character_id"
+        private const val KEY_RP_PERSONA = "rp_persona"
+        private const val KEY_RP_PERSONA_PRESETS = "rp_persona_presets"
+        private const val KEY_RP_LORE_ENABLED = "rp_lore_enabled"
+        private const val KEY_RP_THIRD_PERSON = "rp_third_person"
+        private const val KEY_RP_SHOW_THOUGHTS = "rp_show_thoughts"
+        private const val KEY_RP_LANG = "rp_lang"
+        private const val KEY_RP_LLM_MODE = "rp_llm_mode"
+        private const val KEY_RP_DRAFT_SESSION_ASK = "rp_draft_session_ask"
+        private const val KEY_RP_DRAFT_SESSION_RP = "rp_draft_session_rp"
+        private const val KEY_COMPOSER_DRAFT_ASK = "composer_draft_ask"
+        private const val KEY_COMPOSER_DRAFT_RP = "composer_draft_rp"
+        private const val KEY_RP_SWIPE_PREFIX = "rp_swipe_"
+        private const val KEY_RP_PENDING_INSTRUCT = "rp_pending_instruct"
+        private const val KEY_RP_DELETED_CHAR_REMAP = "rp_deleted_char_remap"
     }
 
     init {
@@ -1010,5 +1029,122 @@ class SharedPreferencesHelper(context: Context) {
         return mainPrefs.getBoolean(KEY_CLEAR_CHAT_DEFAULT2, false)  // Default to unchecked (false)
     }
 
+    // --- GradatiON RP ---
+
+    fun getChatMode(): ChatMode = ChatMode.fromStorage(mainPrefs.getString(KEY_CHAT_MODE, ChatMode.ASK.storageValue))
+    fun saveChatMode(mode: ChatMode) = mainPrefs.edit { putString(KEY_CHAT_MODE, mode.storageValue) }
+
+    fun getRpActiveCharacterId(): Long? {
+        val id = mainPrefs.getLong(KEY_RP_ACTIVE_CHARACTER_ID, -1L)
+        return if (id < 0) null else id
+    }
+
+    fun saveRpActiveCharacterId(id: Long?) {
+        mainPrefs.edit {
+            if (id == null) remove(KEY_RP_ACTIVE_CHARACTER_ID)
+            else putLong(KEY_RP_ACTIVE_CHARACTER_ID, id)
+        }
+    }
+
+    fun getRpPersona(): String = mainPrefs.getString(KEY_RP_PERSONA, "") ?: ""
+    fun saveRpPersona(persona: String) = mainPrefs.edit { putString(KEY_RP_PERSONA, persona) }
+
+    fun getRpPersonaPresets(): List<RpPersonaPreset> {
+        val raw = mainPrefs.getString(KEY_RP_PERSONA_PRESETS, null) ?: return emptyList()
+        return try {
+            json.decodeFromString(raw)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveRpPersonaPresets(presets: List<RpPersonaPreset>) {
+        mainPrefs.edit { putString(KEY_RP_PERSONA_PRESETS, json.encodeToString(presets)) }
+    }
+
+    fun isRpLoreEnabled(): Boolean = mainPrefs.getBoolean(KEY_RP_LORE_ENABLED, true)
+    fun saveRpLoreEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_LORE_ENABLED, enabled) }
+
+    fun isRpThirdPerson(): Boolean = mainPrefs.getBoolean(KEY_RP_THIRD_PERSON, false)
+    fun saveRpThirdPerson(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_THIRD_PERSON, enabled) }
+
+    fun isRpShowThoughts(): Boolean = mainPrefs.getBoolean(KEY_RP_SHOW_THOUGHTS, false)
+    fun saveRpShowThoughts(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_SHOW_THOUGHTS, enabled) }
+
+    fun getRpLang(): String = mainPrefs.getString(KEY_RP_LANG, "en") ?: "en"
+    fun saveRpLang(lang: String) = mainPrefs.edit { putString(KEY_RP_LANG, lang) }
+
+    fun isRpLlmMode(): Boolean = mainPrefs.getBoolean(KEY_RP_LLM_MODE, false)
+    fun saveRpLlmMode(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_LLM_MODE, enabled) }
+
+    fun getRpDraftSessionId(mode: ChatMode): Long? {
+        val key = if (mode == ChatMode.ASK) KEY_RP_DRAFT_SESSION_ASK else KEY_RP_DRAFT_SESSION_RP
+        val id = mainPrefs.getLong(key, -1L)
+        return if (id < 0) null else id
+    }
+
+    fun saveRpDraftSessionId(mode: ChatMode, sessionId: Long?) {
+        val key = if (mode == ChatMode.ASK) KEY_RP_DRAFT_SESSION_ASK else KEY_RP_DRAFT_SESSION_RP
+        mainPrefs.edit {
+            if (sessionId == null) remove(key) else putLong(key, sessionId)
+        }
+    }
+
+    fun getComposerDraft(mode: ChatMode): String {
+        val key = if (mode == ChatMode.ASK) KEY_COMPOSER_DRAFT_ASK else KEY_COMPOSER_DRAFT_RP
+        return mainPrefs.getString(key, "") ?: ""
+    }
+
+    fun saveComposerDraft(mode: ChatMode, text: String) {
+        val key = if (mode == ChatMode.ASK) KEY_COMPOSER_DRAFT_ASK else KEY_COMPOSER_DRAFT_RP
+        mainPrefs.edit { putString(key, text) }
+    }
+
+    fun getRpSwipeJson(sessionId: Long): String? =
+        mainPrefs.getString("$KEY_RP_SWIPE_PREFIX$sessionId", null)
+
+    fun saveRpSwipeJson(sessionId: Long, jsonText: String) {
+        mainPrefs.edit { putString("$KEY_RP_SWIPE_PREFIX$sessionId", jsonText) }
+    }
+
+    fun clearRpSwipeJson(sessionId: Long) {
+        mainPrefs.edit { remove("$KEY_RP_SWIPE_PREFIX$sessionId") }
+    }
+
+    fun getRpPendingInstruct(): String? = mainPrefs.getString(KEY_RP_PENDING_INSTRUCT, null)
+    fun saveRpPendingInstruct(text: String?) {
+        mainPrefs.edit {
+            if (text.isNullOrBlank()) remove(KEY_RP_PENDING_INSTRUCT) else putString(KEY_RP_PENDING_INSTRUCT, text)
+        }
+    }
+
+    /** Remember a deleted character's exportKey → old Room id so re-import can rematch sessions. */
+    fun rememberDeletedRpCharacter(exportKey: String, oldId: Long) {
+        if (exportKey.isBlank() || oldId <= 0L) return
+        val map = getDeletedRpCharacterRemap().toMutableMap()
+        map[exportKey] = oldId
+        mainPrefs.edit { putString(KEY_RP_DELETED_CHAR_REMAP, json.encodeToString(map)) }
+    }
+
+    fun takeDeletedRpCharacterId(exportKey: String): Long? {
+        if (exportKey.isBlank()) return null
+        val map = getDeletedRpCharacterRemap().toMutableMap()
+        val oldId = map.remove(exportKey) ?: return null
+        mainPrefs.edit { putString(KEY_RP_DELETED_CHAR_REMAP, json.encodeToString(map)) }
+        return oldId
+    }
+
+    private fun getDeletedRpCharacterRemap(): Map<String, Long> {
+        val raw = mainPrefs.getString(KEY_RP_DELETED_CHAR_REMAP, null) ?: return emptyMap()
+        return try {
+            json.decodeFromString<Map<String, Long>>(raw)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun string(@androidx.annotation.StringRes resId: Int): String = appContext.getString(resId)
+    fun string(@androidx.annotation.StringRes resId: Int, vararg args: Any): String =
+        appContext.getString(resId, *args)
 }
 

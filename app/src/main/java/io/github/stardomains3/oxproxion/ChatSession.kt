@@ -9,5 +9,10 @@ data class ChatSession(
     val id: Long = 0,
     val title: String,
     val modelUsed: String,
-    val timestamp: Long = System.currentTimeMillis()
-)
+    val timestamp: Long = System.currentTimeMillis(),
+    val mode: String = ChatMode.ASK.storageValue,
+    val characterId: Long? = null,
+    val isLlm: Boolean = false
+) {
+    fun chatMode(): ChatMode = ChatMode.fromStorage(mode)
+}

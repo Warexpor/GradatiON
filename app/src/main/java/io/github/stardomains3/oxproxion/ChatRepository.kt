@@ -6,6 +6,9 @@ class ChatRepository(private val chatDao: ChatDao) {
 
     val allSessions: LiveData<List<ChatSession>> = chatDao.getAllSessions()
 
+    fun sessionsByMode(mode: ChatMode): LiveData<List<ChatSession>> =
+        chatDao.getSessionsByMode(mode.storageValue)
+
     suspend fun getMessagesForSession(sessionId: Long): List<ChatMessage> {
         return chatDao.getMessagesForSession(sessionId)
     }
@@ -22,6 +25,10 @@ class ChatRepository(private val chatDao: ChatDao) {
         chatDao.updateSessionTitle(sessionId, newTitle)
     }
 
+    suspend fun remapSessionCharacterId(oldId: Long, newId: Long) {
+        chatDao.remapSessionCharacterId(oldId, newId)
+    }
+
     suspend fun deleteSession(sessionId: Long) {
         chatDao.deleteSession(sessionId)
     }
@@ -35,8 +42,8 @@ class ChatRepository(private val chatDao: ChatDao) {
     suspend fun getAllSessionsWithMessages(): List<SessionWithMessages> {
         return chatDao.getAllSessionsWithMessages()
     }
-    suspend fun searchSessions(query: String): List<ChatSession> {
-        val sessionIds = chatDao.searchSessionIds("%$query%")
+    suspend fun searchSessions(query: String, mode: ChatMode = ChatMode.ASK): List<ChatSession> {
+        val sessionIds = chatDao.searchSessionIds("%$query%", mode.storageValue)
         return sessionIds.mapNotNull { chatDao.getSessionById(it) }
     }
 }

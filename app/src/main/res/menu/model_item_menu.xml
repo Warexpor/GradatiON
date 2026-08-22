@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@+id/edit_model"
-        android:title="Edit"
+        android:title="@string/rp_menu_edit"
         android:icon="@drawable/ic_edit" />
     <item android:id="@+id/delete_model"
-        android:title="Delete"
+        android:title="@string/rp_menu_delete"
         android:icon="@drawable/ic_trash" />
 </menu>

@@ -45,8 +45,15 @@ class SavedChatsFragment : Fragment() {
     private lateinit var savedChatsAdapter: SavedChatsAdapter
     private lateinit var searchView: SearchView
     private lateinit var historyEmptyView: TextView
+    private lateinit var historyEmptyContainer: View
+    private lateinit var historyModeLabel: TextView
     private lateinit var prefs: SharedPreferencesHelper
     private var allSessions: List<ChatSession> = emptyList()
+    private var sessionsLiveData: androidx.lifecycle.LiveData<List<ChatSession>>? = null
+    private val sessionsObserver = androidx.lifecycle.Observer<List<ChatSession>> { sessions ->
+        allSessions = sessions ?: emptyList()
+        filterSessions(searchView.query?.toString().orEmpty())
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -59,6 +66,8 @@ class SavedChatsFragment : Fragment() {
 
         val recyclerView = view.findViewById<RecyclerView>(R.id.savedChatsRecyclerView)
         historyEmptyView = view.findViewById(R.id.historyEmptyView)
+        historyEmptyContainer = view.findViewById(R.id.historyEmptyContainer)
+        historyModeLabel = view.findViewById(R.id.historyModeLabel)
         searchView = view.findViewById(R.id.historySearchView)
 
         val closeButton = view.findViewById<ImageButton>(R.id.historyCloseButton)
@@ -79,7 +88,11 @@ class SavedChatsFragment : Fragment() {
             if (isEmbedded) {
                 (parentFragment as? HistoryPanelHost)?.startNewChatFromHistory()
             } else {
-                viewModel.startNewChat()
+                if (viewModel.isRpMode()) {
+                    viewModel.startFreshChatForCurrentMode()
+                } else {
+                    viewModel.startNewChat()
+                }
                 parentFragmentManager.popBackStack()
             }
         }
@@ -136,9 +149,13 @@ class SavedChatsFragment : Fragment() {
             })
         }
 
-        savedChatsViewModel.allSessions.observe(viewLifecycleOwner) { sessions ->
-            allSessions = sessions ?: emptyList()
-            filterSessions(searchView.query?.toString().orEmpty())
+        viewModel.chatMode.observe(viewLifecycleOwner) { mode ->
+            historyModeLabel.text = getString(
+                if (mode == ChatMode.RP) R.string.history_mode_rp else R.string.history_mode_ask
+            )
+            sessionsLiveData?.removeObserver(sessionsObserver)
+            sessionsLiveData = savedChatsViewModel.sessionsForMode(mode)
+            sessionsLiveData?.observe(viewLifecycleOwner, sessionsObserver)
         }
     }
 
@@ -150,17 +167,18 @@ class SavedChatsFragment : Fragment() {
                 .withGrokFadeAnimations()
                 .hide(this)
                 .add(R.id.fragment_container, SettingsFragment())
-                .addToBackStack(null)
+                .addToBackStack("settings")
                 .commit()
         }
     }
 
     private fun filterSessions(query: String) {
         viewLifecycleOwner.lifecycleScope.launch {
+            val mode = viewModel.chatMode.value ?: ChatMode.ASK
             val filtered = if (query.isEmpty()) {
                 allSessions
             } else {
-                savedChatsViewModel.searchSessions(query)
+                savedChatsViewModel.searchSessions(query, mode)
             }
             val pinnedIds = prefs.getPinnedSessionIds()
             val pinned = filtered.filter { it.id in pinnedIds }
@@ -182,10 +200,14 @@ class SavedChatsFragment : Fragment() {
             savedChatsAdapter.submitList(items)
 
             val empty = filtered.isEmpty()
-            historyEmptyView.isVisible = empty
+            historyEmptyContainer.isVisible = empty
             view?.findViewById<RecyclerView>(R.id.savedChatsRecyclerView)?.isVisible = !empty
             historyEmptyView.text = if (query.isBlank()) {
-                "${getString(R.string.grok_history_empty_title)}\n\n${getString(R.string.grok_history_empty_text)}"
+                if (mode == ChatMode.RP) {
+                    "${getString(R.string.rp_history_empty)}\n\n${getString(R.string.rp_history_empty_text)}"
+                } else {
+                    "${getString(R.string.grok_history_empty_title)}\n\n${getString(R.string.grok_history_empty_text)}"
+                }
             } else {
                 "${getString(R.string.grok_history_search_empty_title)}\n\n${getString(R.string.grok_history_search_empty_text)}"
             }
@@ -241,6 +263,7 @@ class SavedChatsFragment : Fragment() {
             confirmText = getString(R.string.grok_history_delete),
             onConfirm = {
                 prefs.setSessionPinned(session.id, false)
+                viewModel.notifySessionDeleted(session.id)
                 savedChatsViewModel.deleteSession(session.id)
             }
         )

@@ -323,6 +323,14 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                 .addToBackStack(null)
                 .commit()
         }
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.rpGradationButton).setOnClickListener {
+            parentFragmentManager.beginTransaction()
+                .withGrokStackAnimations()
+                .hide(this)
+                .add(R.id.fragment_container, RpHubFragment.newInstance())
+                .addToBackStack(RpHubFragment.BACK_STACK_TAG)
+                .commit()
+        }
         advancedReasoningButton.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .withGrokStackAnimations()

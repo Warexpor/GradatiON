@@ -103,13 +103,13 @@ class MainActivity : AppCompatActivity() {
         if (intent.getBooleanExtra("autosend", false)) {
             intent.getStringExtra("shared_text")?.let { text ->
                 val clearChat = intent.getBooleanExtra("clear_chat", false)
-                if (clearChat) vm.startNewChat()
+                if (clearChat) vm.startFreshChatForCurrentMode()
                 vm.consumeSharedTextautosend(text)
             }
         } else if (intent.getBooleanExtra("input_only", false)) {
             intent.getStringExtra("shared_text")?.let { text ->
                 val clearChat = intent.getBooleanExtra("clear_chat", false)
-                if (clearChat) vm.startNewChat()
+                if (clearChat) vm.startFreshChatForCurrentMode()
                 vm.consumeSharedText(text)
                 val sharedPreferencesHelper = SharedPreferencesHelper(this)
                 val systemMessageTitle = sharedPreferencesHelper.getSelectedSystemMessage().title
@@ -244,13 +244,13 @@ class MainActivity : AppCompatActivity() {
         if (intent.getBooleanExtra("autosend", false)) {
             intent.getStringExtra("shared_text")?.let { text ->
                 val clearChat = intent.getBooleanExtra("clear_chat", false)
-                if (clearChat) vm.startNewChat()
+                if (clearChat) vm.startFreshChatForCurrentMode()
                 vm.consumeSharedTextautosend(text)
             }
         } else if (intent.getBooleanExtra("input_only", false)) {
             intent.getStringExtra("shared_text")?.let { text ->
                 val clearChat = intent.getBooleanExtra("clear_chat", false)
-                if (clearChat) vm.startNewChat()
+                if (clearChat) vm.startFreshChatForCurrentMode()
                 vm.consumeSharedText(text)
                 val sharedPreferencesHelper = SharedPreferencesHelper(this)
                 val systemMessageTitle = sharedPreferencesHelper.getSelectedSystemMessage().title
@@ -315,7 +315,7 @@ class MainActivity : AppCompatActivity() {
             val sharedText = intent.getStringExtra("shared_text")
             if (sharedText != null) {
                 if (intent.getBooleanExtra("clear_chat", false)) {
-                    vm.startNewChat()
+                    vm.startFreshChatForCurrentMode()
                 }
 
                 if (intent.getBooleanExtra("autosend_preset", false)) {

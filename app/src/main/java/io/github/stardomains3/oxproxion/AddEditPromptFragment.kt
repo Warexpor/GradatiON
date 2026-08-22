@@ -43,14 +43,14 @@ class AddEditPromptFragment : Fragment() {
 
         if (originalTitle != null && originalPrompt != null) {
             // ✅ FIXED: Populate fields for EDIT mode (matches SystemMessage exactly)
-            toolbar.title = "Edit Prompt"
+            toolbar.title = getString(R.string.edit_prompt_title)
             titleEditText.setText(originalTitle)
             promptEditText.setText(originalPrompt)
             // Position cursor at end
             titleEditText.setSelection(titleEditText.text.length)
             promptEditText.setSelection(promptEditText.text.length)
         } else {
-            toolbar.title = "Add Prompt"
+            toolbar.title = getString(R.string.add_prompt_title)
         }
 
         //toolbar.inflateMenu(R.menu.add_edit_prompt_menu)  // ✅ Explicit inflate (safe, matches XML app:menu)

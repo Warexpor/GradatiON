@@ -47,7 +47,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
-                android:contentDescription="Expand/collapse"
+                android:contentDescription="@string/cd_toggle_expand"
                 app:tint="@color/xai_mute" />
 
             <ImageView
@@ -59,7 +59,7 @@
                 android:src="@drawable/ic_editnote"
                 android:padding="8dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Edit"
+                android:contentDescription="@string/rp_menu_edit"
                 app:tint="@color/xai_mute" />
         </RelativeLayout>
 

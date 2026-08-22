@@ -84,7 +84,7 @@
         android:layout_height="24dp"
         android:layout_marginStart="4dp"
         android:layout_marginEnd="8dp"
-        android:contentDescription="Added to your models"
+        android:contentDescription="@string/cd_model_added"
         android:src="@drawable/ic_check"
         android:visibility="gone"
         app:tint="@color/xai_ink" />
