@@ -37,6 +37,12 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Screenshot/unit tests: swap in an in-memory DB (no SQLCipher native lib on the JVM). */
+        @androidx.annotation.VisibleForTesting
+        fun setInstanceForTesting(db: AppDatabase?) {
+            INSTANCE = db
+        }
+
         private fun ensureNativeLoaded() {
             if (!nativeLoaded) {
                 System.loadLibrary("sqlcipher")

@@ -19,7 +19,6 @@ configurations.all {
 }
 android {
     namespace = "io.github.stardomains3.oxproxion"
-    // 36 installed locally; 37 package not available via current repo mirror
     compileSdk = 37
 
     defaultConfig {
@@ -76,6 +75,9 @@ android {
     }
     buildFeatures {
         viewBinding = true
+    }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
     packaging {
         resources {
@@ -140,6 +142,9 @@ dependencies {
     implementation(libs.oss.licenses.parser)
     implementation(libs.androidx.constraintlayout)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
