@@ -9,19 +9,16 @@ import android.text.style.MetricAffectingSpan
 import androidx.core.content.res.ResourcesCompat
 
 /**
- * The GradatiON wordmark: "Gradati" in Instrument Serif italic, "ON" in Plus Jakarta Sans
- * ExtraBold, set a touch smaller and tracked out, like an editorial masthead.
+ * The GradatiON wordmark: the whole name in Michroma, a wide machined sans, tracked out
+ * slightly so it reads like an instrument-panel label.
  */
 object Wordmark {
 
     fun build(context: Context): CharSequence {
         val text = context.getString(R.string.grokion_wordmark)
-        val split = text.indexOf("ON").takeIf { it > 0 } ?: return text
-        val serif = ResourcesCompat.getFont(context, R.font.instrumentserif_italic) ?: return text
-        val heavy = ResourcesCompat.getFont(context, R.font.jakarta_extrabold) ?: return text
+        val face = ResourcesCompat.getFont(context, R.font.michroma_regular) ?: return text
         return SpannableString(text).apply {
-            setSpan(Face(serif, 1f, 0f), 0, split, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            setSpan(Face(heavy, 0.62f, 0.06f), split, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(Face(face, 1f, 0.04f), 0, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
 

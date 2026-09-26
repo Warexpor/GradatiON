@@ -76,7 +76,12 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:visibility="gone"
-            android:layout_marginTop="2dp"
+            android:background="@drawable/bg_chat_actions"
+            android:paddingStart="3dp"
+            android:paddingEnd="3dp"
+            android:paddingTop="1dp"
+            android:paddingBottom="1dp"
+            android:layout_marginTop="4dp"
             android:layout_marginBottom="2dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/messageContainer">
@@ -85,44 +90,44 @@
                 android:id="@+id/editButton"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_edit_message"
                 android:padding="9dp"
                 android:src="@drawable/ic_edit"
                 android:visibility="visible"
-                app:tint="@color/xai_mute" />
+                app:tint="@color/xai_body" />
 
             <ImageButton
                 android:id="@+id/copyButtonuser"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_copy_text"
                 android:padding="9dp"
                 android:src="@drawable/ic_copi"
-                app:tint="@color/xai_mute" />
+                app:tint="@color/xai_body" />
 
             <ImageButton
                 android:id="@+id/deleteButton"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_delete_message"
                 android:padding="9dp"
                 android:src="@drawable/ic_trash"
                 android:visibility="visible"
-                app:tint="@color/xai_mute" />
+                app:tint="@color/xai_body" />
 
             <ImageButton
                 android:id="@+id/collapseToggleButton"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_toggle_expand"
                 android:padding="9dp"
                 android:src="@drawable/ic_expand_more"
                 android:visibility="gone"
-                app:tint="@color/xai_mute" />
+                app:tint="@color/xai_body" />
 
             <!-- Kept for ID stability; regenerate lives under AI responses now -->
             <ImageButton

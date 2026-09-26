@@ -2,8 +2,12 @@ package io.github.stardomains3.oxproxion
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Shader
 import android.text.Layout
 import android.text.Spanned
 import android.util.AttributeSet
@@ -47,6 +51,23 @@ class ChatTextView @JvmOverloads constructor(
         textAlign = Paint.Align.RIGHT
     }
     private val copyLabel = context.getString(R.string.action_copy)
+    private val sheenColor = ContextCompat.getColor(context, R.color.glass_sheen)
+    private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density.coerceAtLeast(1f)
+    }
+    private val copyPillFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.glass_chat_action_tint)
+    }
+    private val copyPillRim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density.coerceAtLeast(1f)
+        color = ContextCompat.getColor(context, R.color.xai_hairline)
+    }
+    private val capBounds = Rect()
+    private var shaderTop = Float.NaN
+    private var shaderWidth = -1f
 
     override fun onDraw(canvas: Canvas) {
         val spanned = text as? Spanned
@@ -82,12 +103,33 @@ class ChatTextView @JvmOverloads constructor(
         val width = layout.width.toFloat()
         rect.set(0f, top, width, bottom)
         canvas.drawRoundRect(rect, cardRadius, cardRadius, cardFill)
+        // Glass: a soft sheen across the top and a rim lit from above.
+        if (shaderTop != top || shaderWidth != width) {
+            shaderTop = top
+            shaderWidth = width
+            sheenPaint.shader = LinearGradient(0f, top, 0f, top + 34f * density,
+                sheenColor, Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            rimPaint.shader = LinearGradient(0f, top, width * 0.35f, top + 60f * density,
+                Color.argb(Color.alpha(sheenColor) * 3 / 2, 255, 255, 255), cardStroke.color, Shader.TileMode.CLAMP)
+        }
+        canvas.drawRoundRect(rect, cardRadius, cardRadius, sheenPaint)
         val inset = cardStroke.strokeWidth / 2f
         rect.inset(inset, inset)
-        canvas.drawRoundRect(rect, cardRadius, cardRadius, cardStroke)
+        canvas.drawRoundRect(rect, cardRadius, cardRadius, rimPaint)
 
-        // Copy hint on the language line.
-        canvas.drawText(copyLabel, width - 14f * density, layout.getLineBaseline(first).toFloat(), copyPaint)
+        // Copy chip on the language line: a small glass capsule with the label optically centered.
+        val lineTop = layout.getLineTop(first).toFloat()
+        val lineBottom = lineTop + (layout.getLineBottom(first) - lineTop) / lineSpacingMultiplier.coerceAtLeast(1f)
+        val cy = (lineTop + lineBottom) / 2f
+        copyPaint.getTextBounds("H", 0, 1, capBounds)
+        val textW = copyPaint.measureText(copyLabel)
+        val padX = 9f * density
+        val h = 22f * density
+        val right = width - 8f * density
+        rect.set(right - textW - 2 * padX, cy - h / 2f, right, cy + h / 2f)
+        canvas.drawRoundRect(rect, h / 2f, h / 2f, copyPillFill)
+        canvas.drawRoundRect(rect, h / 2f, h / 2f, copyPillRim)
+        canvas.drawText(copyLabel, right - padX, cy + capBounds.height() / 2f, copyPaint)
     }
 
     private fun drawPill(canvas: Canvas, layout: Layout, text: Spanned, marker: Any) {

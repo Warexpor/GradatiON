@@ -508,7 +508,7 @@ class ScreenshotTest {
 
     @Test fun chatRoleplayCharacterDark() = withChat { a, _ ->
         a.findViewById<View>(R.id.tabRoleplay).performClick(); idle()
-        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.emptyAction).visibility)
+        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.emptyAction).visibility)
         snap(root(a), "chat_rp_empty_dark")
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
@@ -539,6 +539,48 @@ class ScreenshotTest {
         panel.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_UP, panel.height * 0.45f, 400))
         idle()
         org.junit.Assert.assertEquals(View.GONE, panel.visibility)
+    }
+
+    private fun swipe(v: View, fromX: Float, toX: Float, y: Float) {
+        val t0 = android.os.SystemClock.uptimeMillis()
+        fun ev(action: Int, x: Float, dt: Long) = android.view.MotionEvent.obtain(t0, t0 + dt, action, x, y, 0)
+        v.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_DOWN, fromX, 0))
+        for (k in 1..8) v.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_MOVE, fromX + (toX - fromX) * k / 8f, 20L * k))
+        v.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_UP, toX, 200))
+        idle()
+    }
+
+    /** Regression: wide swipes page History | Chat | Roleplay, and swipe the history closed. */
+    @Test fun wideSwipesNavigateDark() = withChat { a, _ ->
+        val root = a.findViewById<View>(R.id.fragment_container).let { it as? SwipeNavLayout ?: (it.parent as View) }
+        val w = root.width.toFloat()
+        val y = root.height * 0.45f
+        swipe(root, w * 0.85f, w * 0.15f, y)
+        org.junit.Assert.assertTrue("left swipe → Roleplay", a.findViewById<View>(R.id.tabRoleplay).isSelected)
+        swipe(root, w * 0.15f, w * 0.85f, y)
+        org.junit.Assert.assertTrue("right swipe → Chat", a.findViewById<View>(R.id.tabChat).isSelected)
+        // A short nudge must not navigate.
+        swipe(root, w * 0.5f, w * 0.62f, y)
+        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.historyDrawerContainer).visibility)
+        swipe(root, w * 0.15f, w * 0.85f, y)
+        val drawer = a.findViewById<View>(R.id.historyDrawerContainer)
+        org.junit.Assert.assertEquals("right swipe in Chat → history", View.VISIBLE, drawer.visibility)
+        swipe(drawer, w * 0.85f, w * 0.15f, y)
+        org.junit.Assert.assertEquals("left swipe closes history", View.GONE, drawer.visibility)
+    }
+
+    /** Regression: the tab underline sits centred under the active word. */
+    @Test fun modeTabUnderlineCentredDark() = withChat { a, _ ->
+        for (id in listOf(R.id.tabRoleplay, R.id.tabChat)) {
+            a.findViewById<View>(id).performClick(); idle()
+            val tab = a.findViewById<android.widget.TextView>(id)
+            val ind = a.findViewById<View>(R.id.modeTabIndicator)
+            val tl = IntArray(2).also { tab.getLocationInWindow(it) }
+            val il = IntArray(2).also { ind.getLocationInWindow(it) }
+            val textCenter = tl[0] + tab.width / 2f
+            val indCenter = il[0] + ind.width / 2f
+            org.junit.Assert.assertEquals(textCenter, indCenter, 2f)
+        }
     }
 
     private fun snapDialogCentered(a: MainActivity, name: String) {

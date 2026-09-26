@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icon button inside a glass capsule: a soft disc lights while pressed -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:enterFadeDuration="60"
+    android:exitFadeDuration="220">
+    <item android:state_pressed="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/popover_row_pressed" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/popover_row_selected" />
+        </shape>
+    </item>
+    <item>
+        <color android:color="@android:color/transparent" />
+    </item>
+</selector>

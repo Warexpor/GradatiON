@@ -484,4 +484,13 @@
     <string name="attach_gallery_sub">Pick an image from your library</string>
     <string name="attach_files_sub">Documents, code, text and audio</string>
     <string name="attach_tools_sub">Choose what the model can use</string>
+    <string name="rp_plus_title_empty">No character yet. Files are off in roleplay.</string>
+    <string name="rp_plus_choose_sub">Pick who you are talking to</string>
+    <string name="rp_plus_reminder">Scene reminder</string>
+    <string name="rp_plus_reminder_sub">A note the character keeps in mind</string>
+    <string name="rp_plus_stream">Streaming</string>
+    <string name="rp_plus_stream_on">On. Replies appear as they are written</string>
+    <string name="rp_plus_stream_off">Off. Replies arrive whole</string>
+    <string name="rp_plus_home_sub">Characters, persona, lorebooks</string>
+    <string name="rp_plus_a11y">Scene tools: reminder, streaming, characters</string>
 </resources>

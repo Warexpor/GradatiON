@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Grok-like chat shell: sparse top bar, quiet canvas, bottom pill composer.
      All original view IDs preserved for ChatFragment compatibility. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<io.github.stardomains3.oxproxion.SwipeNavLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/fragment_container"
@@ -90,14 +90,14 @@
 
                     <ImageView
                         android:id="@+id/centerWatermarkIcon"
-                        android:layout_width="64dp"
-                        android:layout_height="64dp"
+                        android:layout_width="148dp"
+                        android:layout_height="148dp"
                         android:src="@drawable/ic_gradation_mark"
                         android:contentDescription="@string/app_name"
                         android:clickable="false"
                         android:focusable="false"
                         android:scaleType="fitCenter"
-                        app:tint="@color/xai_ink" />
+                        app:tint="@color/empty_mark" />
 
                     <TextView
                         android:id="@+id/emptyGreeting"
@@ -1260,7 +1260,7 @@
         android:alpha="0" />
 
     <!-- History full-screen overlay (SavedChats) — matches Grok ref coverage -->
-    <FrameLayout
+    <io.github.stardomains3.oxproxion.SwipeNavLayout
         android:id="@+id/historyDrawerContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -1270,4 +1270,4 @@
         android:clickable="true"
         android:focusable="true"
         android:background="@color/xai_canvas" />
-</FrameLayout>
+</io.github.stardomains3.oxproxion.SwipeNavLayout>

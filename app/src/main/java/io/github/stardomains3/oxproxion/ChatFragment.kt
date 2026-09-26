@@ -769,6 +769,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         historyDrawerScrim = view.findViewById(R.id.historyDrawerScrim)
         historyDrawerScrim?.setOnClickListener { closeHistoryPanel() }
         setupHistorySwipeGestures(view)
+        setupWideSwipes(view)
         viewModel.activeChatModel.observe(viewLifecycleOwner) { model ->
             if (model != null) {
                 if (!viewModel.isRpMode()) {
@@ -851,7 +852,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             true
         }
         tabRoleplay.contentDescription = getString(R.string.mode_tab_roleplay_a11y)
-        tabChat.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> placeModeTabIndicator(animate = false) }
+        val retab = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            modeTabIndicator.post { placeModeTabIndicator(animate = false) }
+        }
+        listOf(tabChat, tabRoleplay, modeTabIndicator, view.findViewById<View>(R.id.modeTabs)).forEach { it.addOnLayoutChangeListener(retab) }
 
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -897,7 +901,18 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             */
             if(hasMessages){
                 resetChatButton.icon.alpha = 255
-                emptyStateContainer.visibility = View.GONE
+                if (emptyStateContainer.isVisible && emptyStateContainer.alpha > 0f && Motion.areAnimationsEnabled(requireContext())) {
+                    // The mark dissolves into the background as the conversation starts.
+                    emptyStateContainer.animate().cancel()
+                    emptyStateContainer.animate().alpha(0f).scaleX(1.06f).scaleY(1.06f)
+                        .setDuration(420).setInterpolator(Motion.easeOut).withEndAction {
+                            emptyStateContainer.visibility = View.GONE
+                            emptyStateContainer.scaleX = 1f
+                            emptyStateContainer.scaleY = 1f
+                        }.start()
+                } else {
+                    emptyStateContainer.visibility = View.GONE
+                }
                 resetChatButton.isVisible = true
                 val lastMessage = messages.last()
                 if (lastMessage.role == "assistant" && lastMessage.content is JsonPrimitive) {
@@ -923,6 +938,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             else
             {
                 resetChatButton.icon.alpha = 102
+                emptyStateContainer.animate().cancel()
+                emptyStateContainer.scaleX = 1f
+                emptyStateContainer.scaleY = 1f
                 emptyStateContainer.visibility = View.VISIBLE
                 bindEmptyState(viewModel.isRpMode())
                 emptyStateContainer.alpha = 1f
@@ -2558,10 +2576,6 @@ $cleanContent
         }
         menuButton.setOnClickListener {
             hideKeyboard()
-            if (viewModel.isRpMode()) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
             showAttachSheet()
         }
         menuButton.setOnLongClickListener {
@@ -2925,7 +2939,7 @@ $cleanContent
     private fun restoreAttachPlusIcon() {
         menuButton.setIconResource(R.drawable.ic_attach_plus)
         menuButton.isSelected = false
-        menuButton.icon?.alpha = if (viewModel.isRpMode()) 102 else 255
+        menuButton.icon?.alpha = 255
     }
     private fun isTouchOutsideHeader(x: Float, y: Float): Boolean {
         val location = IntArray(2)
@@ -3341,7 +3355,7 @@ $cleanContent
 
     private fun showAttachSheet() {
         if (viewModel.isRpMode()) {
-            AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+            showRpPlusPopover()
             return
         }
         if (pickerPopover?.isShowing == true) {
@@ -3380,6 +3394,38 @@ $cleanContent
         )
         setAttachPlusOpen(true)
         newPopover(menuButton) { open -> if (!open) setAttachPlusOpen(false) }?.show(null, rows, footer)
+    }
+
+    /** Roleplay "+": scene tools instead of attachments (files are off in RP by design). */
+    private fun showRpPlusPopover() {
+        if (pickerPopover?.isShowing == true) {
+            pickerPopover?.dismiss()
+            return
+        }
+        val rows = ArrayList<PickerPopover.Row>()
+        val noCharacter = viewModel.activeRpCharacter.value == null && !sharedPreferencesHelper.isRpLlmMode()
+        if (noCharacter) {
+            rows += PickerPopover.Row(getString(R.string.rp_empty_choose), getString(R.string.rp_plus_choose_sub), R.drawable.ic_nav_characters) {
+                menuButton.post { showCharacterPopover() }
+            }
+        }
+        rows += PickerPopover.Row(getString(R.string.rp_plus_reminder), getString(R.string.rp_plus_reminder_sub), R.drawable.ic_nav_prompts) {
+            insertRpReminderTemplate()
+        }
+        val streaming = streamButton.isSelected
+        rows += PickerPopover.Row(
+            getString(R.string.rp_plus_stream),
+            getString(if (streaming) R.string.rp_plus_stream_on else R.string.rp_plus_stream_off),
+            R.drawable.ic_stream,
+            selected = streaming
+        ) { streamButton.performClick() }
+        val footer = listOf(
+            PickerPopover.Row(getString(R.string.drawer_nav_roleplay), getString(R.string.rp_plus_home_sub), R.drawable.ic_nav_characters) { openRpHub() }
+        )
+        setAttachPlusOpen(true)
+        newPopover(menuButton) { open -> if (!open) setAttachPlusOpen(false) }?.show(
+            if (noCharacter) getString(R.string.rp_plus_title_empty) else null, rows, footer
+        )
     }
 
     private fun dismissAttachPopup() {
@@ -3759,6 +3805,82 @@ $cleanContent
     private fun cancelDrawerAnimation() {
         historyDrawerContainer?.animate()?.cancel()
         historyDrawerScrim?.animate()?.cancel()
+    }
+
+    /**
+     * Wide, deliberate swipes across the whole chat, read as pages
+     * History | Chat | Roleplay | Models: finger right goes one page left, finger left one page
+     * right. Inside the open history, a leftward swipe drags it closed.
+     */
+    private fun setupWideSwipes(root: View) {
+        val d = resources.displayMetrics.density
+        val content = root.findViewById<View>(R.id.rootLayout)
+        val topBar = root.findViewById<View>(R.id.topBarGlass)
+        val dock = chatInputContainer
+        val rootLoc = IntArray(2)
+        val vLoc = IntArray(2)
+        fun inside(v: View?, x: Float, y: Float): Boolean {
+            if (v == null || !v.isShown) return false
+            root.getLocationInWindow(rootLoc)
+            v.getLocationInWindow(vLoc)
+            val left = vLoc[0] - rootLoc[0]
+            val top = vLoc[1] - rootLoc[1]
+            return x >= left && x <= left + v.width && y >= top && y <= top + v.height
+        }
+        (root as? SwipeNavLayout)?.listener = object : SwipeNavLayout.Listener {
+            override fun canStart(x: Float, y: Float): Boolean =
+                historyDrawerContainer?.visibility != View.VISIBLE &&
+                    pickerPopover?.isShowing != true &&
+                    !headerContainer.isVisible &&
+                    !inside(topBar, x, y) && !inside(dock, x, y) &&
+                    parentFragmentManager.backStackEntryCount == 0
+
+            override fun onDrag(dx: Float) {
+                // Resist: the page only leans toward where it will go.
+                val max = 36f * d
+                content.translationX = max * (dx / (abs(dx) + 5 * max)) * 3f
+            }
+
+            override fun onCommit(direction: Int) {
+                content.animate().translationX(0f).setDuration(260).setInterpolator(Motion.iosOut).start()
+                content.performHapticFeedback(android.view.HapticFeedbackConstants.GESTURE_END)
+                val rp = viewModel.isRpMode()
+                when {
+                    direction > 0 && rp -> tabChat.performClick()
+                    direction > 0 -> { hideKeyboard(); openHistoryPanel() }
+                    !rp -> tabRoleplay.performClick()
+                    else -> { hideKeyboard(); openBotModelPicker() }
+                }
+            }
+
+            override fun onCancel() {
+                content.animate().translationX(0f).setDuration(420).setInterpolator(Motion.spring).start()
+            }
+        }
+
+        val drawer = historyDrawerContainer as? SwipeNavLayout ?: return
+        drawer.commitFraction = 0.28f
+        drawer.listener = object : SwipeNavLayout.Listener {
+            override fun onDrag(dx: Float) {
+                cancelDrawerAnimation()
+                val w = drawer.width.coerceAtLeast(1).toFloat()
+                val t = dx.coerceAtMost(0f)
+                drawer.translationX = t
+                content.translationX = w * 0.25f * (1f + t / w)
+                historyDrawerScrim?.alpha = 0.35f * (1f + t / w)
+            }
+
+            override fun onCommit(direction: Int) {
+                if (direction < 0) closeHistoryPanel() else onCancel()
+            }
+
+            override fun onCancel() {
+                val w = drawer.width.coerceAtLeast(1).toFloat()
+                drawer.animate().translationX(0f).setDuration(380).setInterpolator(Motion.spring).start()
+                content.animate().translationX(w * 0.25f).setDuration(380).setInterpolator(Motion.spring).start()
+                historyDrawerScrim?.animate()?.alpha(0.35f)?.setDuration(200)?.start()
+            }
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -5064,56 +5186,13 @@ $cleanContent
             .commit()
     }
 
-    /** Empty chat: the mark and greeting in Chat; a character hero (Character.AI-style) in Roleplay. */
-    private fun bindEmptyState(rp: Boolean) {
+    /** Empty chat (Chat and Roleplay alike): only the large gray mark, Grok-style. No copy. */
+    private fun bindEmptyState(@Suppress("UNUSED_PARAMETER") rp: Boolean) {
         val root = view ?: return
-        val greeting = root.findViewById<TextView>(R.id.emptyGreeting)
-        val subtitle = root.findViewById<TextView>(R.id.emptySubtitle)
-        val action = root.findViewById<TextView>(R.id.emptyAction)
-        val hero = root.findViewById<View>(R.id.rpHero)
-        val heroAvatar = root.findViewById<ImageView>(R.id.rpHeroAvatar)
-        val heroMono = root.findViewById<TextView>(R.id.rpHeroMonogram)
-        val character = viewModel.activeRpCharacter.value
-        val llm = sharedPreferencesHelper.isRpLlmMode()
-        if (!rp) {
-            greeting.setText(R.string.empty_greeting)
-            subtitle.isVisible = false
-            action.isVisible = false
-            hero.isVisible = false
-            centerWatermarkIcon.isVisible = true
-            return
+        listOf(R.id.emptyGreeting, R.id.emptySubtitle, R.id.emptyAction, R.id.rpHero).forEach {
+            root.findViewById<View>(it)?.visibility = View.GONE
         }
-        action.setOnClickListener { showCharacterPopover() }
-        when {
-            llm -> {
-                hero.isVisible = false
-                centerWatermarkIcon.isVisible = true
-                greeting.setText(R.string.rp_empty_llm_title)
-                subtitle.setText(R.string.rp_empty_llm_subtitle)
-                action.isVisible = false
-            }
-            character != null -> {
-                centerWatermarkIcon.isVisible = false
-                hero.isVisible = true
-                val file = RpAvatarStorage.avatarFile(requireContext(), character.id)
-                heroMono.text = character.name.trim().take(1).uppercase()
-                heroAvatar.isVisible = file.exists()
-                if (file.exists()) heroAvatar.load(file) { crossfade(true) }
-                greeting.text = character.name
-                subtitle.text = character.personality.ifBlank { character.scenario }.lineSequence().firstOrNull().orEmpty()
-                action.setText(R.string.rp_empty_switch)
-                action.isVisible = true
-            }
-            else -> {
-                hero.isVisible = false
-                centerWatermarkIcon.isVisible = true
-                greeting.setText(R.string.rp_empty_title)
-                subtitle.setText(R.string.rp_empty_subtitle)
-                action.setText(R.string.rp_empty_choose)
-                action.isVisible = true
-            }
-        }
-        subtitle.isVisible = !subtitle.text.isNullOrBlank()
+        centerWatermarkIcon.visibility = View.VISIBLE
     }
 
     fun openRpHub() {
@@ -5125,20 +5204,33 @@ $cleanContent
             .commit()
     }
 
-    /** Slides the short underline beneath the active mode tab (Grok-style), springing between tabs. */
+    private var indicatorPlaced = false
+    private var indicatorTargetX = Float.NaN
+
+    /**
+     * Slides the short underline beneath the active mode tab (Grok-style), springing between
+     * tabs. Position is derived from the tab's text bounds, and re-derived on every layout pass of
+     * the tab row (rotation, font changes), so it can never drift off the word.
+     */
     private fun placeModeTabIndicator(animate: Boolean) {
         if (!::modeTabIndicator.isInitialized) return
         val tab = if (tabRoleplay.isSelected) tabRoleplay else tabChat
-        if (tab.width == 0) return
-        val parentLeft = (tab.parent as View).left
-        val x = parentLeft + tab.left + (tab.width - modeTabIndicator.width) / 2f
+        if (tab.width == 0 || modeTabIndicator.width == 0) return
+        val row = tab.parent as View
+        val textW = tab.paint.measureText(tab.text.toString())
+        val contentLeft = tab.totalPaddingLeft + (tab.width - tab.totalPaddingLeft - tab.totalPaddingRight - textW) / 2f
+        val x = row.left + tab.left + contentLeft + (textW - modeTabIndicator.width) / 2f
+        // A layout pass mid-spring toward the same spot must not cut the animation short.
+        if (!animate && kotlin.math.abs(x - indicatorTargetX) < 0.5f) return
+        indicatorTargetX = x
         modeTabIndicator.animate().cancel()
-        if (animate && modeTabIndicator.isLaidOut && modeTabIndicator.translationX != 0f) {
+        if (animate && indicatorPlaced && Motion.areAnimationsEnabled(requireContext())) {
             modeTabIndicator.animate().translationX(x)
                 .setDuration(420).setInterpolator(Motion.spring).start()
         } else {
             modeTabIndicator.translationX = x
         }
+        indicatorPlaced = true
     }
 
     private fun applyRpSwipeChrome(nav: ChatViewModel.RpSwipeNav?) {
@@ -5166,9 +5258,10 @@ $cleanContent
         menuButton.visibility = View.VISIBLE
         restoreAttachPlusIcon()
         menuButton.contentDescription = getString(
-            if (rp) R.string.rp_attach_disabled_a11y else R.string.attach_content_description
+            if (rp) R.string.rp_plus_a11y else R.string.attach_content_description
         )
-        rpComposerExtras.visibility = if (rp) View.VISIBLE else View.GONE
+        // Reminder / streaming live in the + menu now; the loose chip row is gone.
+        rpComposerExtras.visibility = View.GONE
         if (!rp) {
             rpSwipeBar.visibility = View.GONE
         }

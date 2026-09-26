@@ -100,4 +100,6 @@
     <color name="popover_row_selected">#14FFFFFF</color>
     <color name="popover_row_pressed">#1FFFFFFF</color>
     <color name="popover_scrim">#33000000</color>
+    <color name="empty_mark">#FF333333</color>
+    <color name="glass_chat_action_tint">#8C222222</color>
 </resources>
