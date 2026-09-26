@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — upstream sync (oxproxion v2.1.103 to v2.2.5)
+
+### Added
+- Nativ LAN server type (OpenAI-compatible `/v1/models`, Mac-only inference server).
+- Brave News tool (`brave_news`, `/res/v1/news/search`); Brave Web Search now uses the LLM Context API (pre-extracted page content, up to 50 results, token budget, relevance threshold).
+
+### Changed
+- Syntax highlighting grammars are vendored (`io.noties.prism4j.languages`), so kapt and `prism4j-bundler` are gone from the build.
+- OkHttp clients: HTTP/2 ping every 56s, retry on connection failure, and a bounded LAN connection pool (fewer "unexpected end of stream" drops on keep-alive LAN servers).
+- Dependency bumps: OkHttp 5.5.0, Room 2.8.5, Ktor 3.6.0, org.json 20260814, ConstraintLayout 2.2.2.
+
+### Fixed
+- Multi-page PDF attach: the page picker no longer renders from an already-closed file descriptor; Cancel/back release the renderer.
+- PDF pages render on a background chosen from the ink (dark-themed PDFs no longer come out blank) at 2x scale.
+
 ## 2.1.134-rp — 2026-08-22
 
 ### Fixed

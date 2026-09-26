@@ -4,7 +4,6 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.oss.licenses)
-    kotlin("kapt")
 }
 configurations.all {
     exclude(group = "org.jetbrains", module = "annotations-java5")
@@ -102,7 +101,6 @@ dependencies {
     implementation(libs.markwon.syntax.highlight)
     implementation(libs.prism4j.core)
     implementation(libs.androidx.documentfile)
-    kapt(libs.prism4j.bundler)
     implementation(libs.biometric)
     implementation(libs.coil.kt)
     implementation(libs.commonmark.task.list)

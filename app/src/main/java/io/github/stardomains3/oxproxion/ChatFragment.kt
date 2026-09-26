@@ -3828,25 +3828,22 @@ $cleanContent
                     return@launch
                 }
 
-                // Create renderer once, pass to branches (branches will close it)
-                val pdfRenderer = PdfRenderer(parcelFd)  // Local var for safety
-                val pageCount = pdfRenderer.pageCount
-
-                when {
-                    pageCount == 0 -> {
+                val pdfRenderer = PdfRenderer(parcelFd)
+                when (val pageCount = pdfRenderer.pageCount) {
+                    0 -> {
                         AppToast.makeText(requireContext(), getString(R.string.toast_pdf_no_pages), AppToast.LENGTH_SHORT).show()
-                        pdfRenderer.close()  // Close if no pages
-                        return@launch
+                        pdfRenderer.close()
                     }
-                    pageCount == 1 -> {
-                        // Single page: Render and close immediately
+                    1 -> {
                         val bitmap = renderPdfPageToBitmap(pdfRenderer, 0)
                         processPdfBitmap(bitmap, "Page 1 of 1")
-                        pdfRenderer.close()  // Close here
+                        pdfRenderer.close()
                     }
                     else -> {
-                        // Multi-page: Pass renderer to dialog (dialog closes after selection)
-                        showPageSelectionDialog(pdfRenderer, pageCount)  // No pdfUri needed now
+                        // Ownership transfers to the dialog: it closes renderer + fd + temp file.
+                        showPageSelectionDialog(pdfRenderer, parcelFd, pageCount, tempPdfFile)
+                        parcelFd = null
+                        tempPdfFile = null
                     }
                 }
             } catch (e: Exception) {
@@ -3856,24 +3853,45 @@ $cleanContent
                 try {
                     parcelFd?.close()
                     tempPdfFile?.delete()
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                 }
             }
         }
     }
 
-
-
-
     private suspend fun renderPdfPageToBitmap(renderer: PdfRenderer, pageIndex: Int): Bitmap {
         return withContext(Dispatchers.IO) {
             val page = renderer.openPage(pageIndex)
-            val width = (page.width * 1.5f).toInt() // Scale for quality (adjust if too big)
-            val height = (page.height * 1.5f).toInt()
-            val bitmap = createBitmap(width, height)
+            val scale = 2f
+            val width = (page.width * scale).toInt()
+            val height = (page.height * scale).toInt()
             val bounds = Rect(0, 0, width, height)
-            page.render(bitmap, bounds, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            page.close()  // Close page immediately
+
+            // Probe render to pick a background: PdfRenderer draws on transparent, so pages with
+            // light ink (dark-theme exports) would vanish on white and dark ink would vanish on black.
+            val probeW = 64
+            val probeH = (64f * height / width).toInt().coerceAtLeast(1)
+            val probe = createBitmap(probeW, probeH)
+            page.render(probe, Rect(0, 0, probeW, probeH), null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+            var darkPixels = 0
+            var totalOpaque = 0
+            val pixels = IntArray(probeW * probeH)
+            probe.getPixels(pixels, 0, probeW, 0, 0, probeW, probeH)
+            for (px in pixels) {
+                val alpha = (px ushr 24) and 0xFF
+                if (alpha > 32) {
+                    totalOpaque++
+                    val lum = 0.299f * ((px shr 16) and 0xFF) + 0.587f * ((px shr 8) and 0xFF) + 0.114f * (px and 0xFF)
+                    if (lum < 128) darkPixels++
+                }
+            }
+            probe.recycle()
+            val bgColor = if (totalOpaque == 0 || darkPixels > totalOpaque / 2) Color.WHITE else Color.BLACK
+
+            val bitmap = createBitmap(width, height)
+            bitmap.eraseColor(bgColor)
+            page.render(bitmap, bounds, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+            page.close()
             bitmap
         }
     }
@@ -3930,30 +3948,40 @@ $cleanContent
 
 
 
-    private fun showPageSelectionDialog(pdfRenderer: PdfRenderer, pageCount: Int) {
+    private fun showPageSelectionDialog(
+        pdfRenderer: PdfRenderer,
+        parcelFd: ParcelFileDescriptor,
+        pageCount: Int,
+        tempPdfFile: File?
+    ) {
         val pageTitles = (1..pageCount).map { "Page $it" }.toTypedArray()
         var selectedPage = 0
+        var converting = false
+        val release = {
+            try { pdfRenderer.close() } catch (_: Exception) {}
+            try { parcelFd.close() } catch (_: Exception) {}
+            tempPdfFile?.delete()
+        }
 
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Select PDF Page")
             .setSingleChoiceItems(pageTitles, 0) { _, which -> selectedPage = which }
             .setPositiveButton("Convert") { _, _ ->
-                // Launch coroutine: Render, process, then close
+                converting = true
                 lifecycleScope.launch {
                     try {
                         val bitmap = renderPdfPageToBitmap(pdfRenderer, selectedPage)
                         processPdfBitmap(bitmap, "Page ${selectedPage + 1} of $pageCount")
+                    } catch (e: Exception) {
+                        AppToast.makeText(requireContext(), "Render failed: ${e.message}", AppToast.LENGTH_SHORT).show()
                     } finally {
-                        // Close renderer here (after use)—safe, no double-close
-                        pdfRenderer.close()
+                        release()
                     }
                 }
             }
             .setNegativeButton(R.string.action_cancel, null)
-            .setOnCancelListener {
-                // Close if canceled (no render happened)
-                pdfRenderer.close()
-            }
+            // Cancel button, back and outside-tap all dismiss; only Convert keeps the renderer open.
+            .setOnDismissListener { if (!converting) release() }
             .show()
     }
     private fun processTextFile(uri: Uri) {
@@ -4118,7 +4146,7 @@ $cleanContent
 
         // 5️⃣ Filter the list: Keep everything UNLESS it's brave_search and we don't have a key
         val filteredItems = allItems.filter { item ->
-            if (item.name == "brave_search" || item.name == "find_nearby_places") {
+            if (item.name == "brave_search" || item.name == "brave_news" || item.name == "find_nearby_places") {
                 hasBraveKey // Only keep Brave tools if key exists
             } else {
                 true // Keep all other tools

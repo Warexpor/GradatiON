@@ -22,7 +22,7 @@ Not affiliated with xAI, Grok, or OpenRouter.
 | Backend | Transport | Notes |
 |---------|-----------|--------|
 | [OpenRouter](https://openrouter.ai/) | HTTPS | API key + credits |
-| Ollama, LM Studio, llama.cpp, MLX LM, Hermes Agent | LAN HTTP(S) | You host the server |
+| Ollama, LM Studio, llama.cpp, MLX LM, oMLX, Nativ, Hermes Agent | LAN HTTP(S) | You host the server |
 
 HTTP LAN URLs are limited to private, loopback, link-local, or `.local` hosts. HTTPS can target any host. Self-signed LAN TLS: **Settings → AI → Models & API → Trust self-signed LAN TLS** (off by default).
 
