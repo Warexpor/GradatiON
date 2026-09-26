@@ -114,6 +114,46 @@ class SessionUpdatePumpTest {
     }
 
     @Test
+    fun pumpCapsBatchAndSkipsDelayWhileBacklogRemains() = runBlocking {
+        val drained = mutableListOf<List<SessionUpdate>>()
+        val delays = mutableListOf<Long>()
+        val gate = Channel<Unit>(Channel.UNLIMITED)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val pump = SessionUpdatePump(
+            scope = scope,
+            onDrain = { drained.add(it) },
+            maxBatch = 2,
+            delayMs = {
+                delays.add(it)
+                gate.receive()
+            },
+            dispatcher = Dispatchers.Unconfined,
+        )
+        try {
+            pump.offer(SessionUpdate("s1", CodeUpdate.TextChunk("k", "a")))
+            yield()
+            assertEquals(1, drained.size)
+            assertEquals(1, delays.size) // channel empty → paced
+            // Five offers while parked: next release should drain 2+2+1 without mid-backlog delays.
+            repeat(5) { i ->
+                pump.offer(SessionUpdate("s1", CodeUpdate.TextChunk("k", "$i")))
+            }
+            gate.send(Unit)
+            assertEquals(listOf(1, 2, 2, 1), drained.map { it.size })
+            assertEquals(2, delays.size) // only after catch-up (channel empty again)
+            // Order preserved across capped drains.
+            assertEquals(
+                listOf("0", "1", "2", "3", "4"),
+                drained.drop(1).flatten().map { (it.update as CodeUpdate.TextChunk).chunk },
+            )
+            gate.send(Unit)
+        } finally {
+            pump.cancel()
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun mergeLegacyFillsMissingAndPrefersNewerLastSeq() {
         val room = listOf(
             CodeSessionEntity.from(summary("keep", lastSeq = 10L).copy(title = "Room")),

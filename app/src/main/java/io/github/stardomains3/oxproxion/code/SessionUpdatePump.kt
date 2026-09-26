@@ -10,18 +10,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 
 /**
- * Coalesces [SessionUpdate]s into at most one Main-thread drain per frame without dropping any.
+ * Coalesces [SessionUpdate]s into bounded Main-thread drains without dropping any.
  *
  * Unlike chat's [io.github.stardomains3.oxproxion.StreamUiPump] (CONFLATED latest message),
  * Code mode must apply every update in order — TextChunks, TurnDone, approvals, etc. A single
- * consumer receives the first pending update, then [Channel.tryReceive]s the rest of the queue,
- * hands the whole batch to [onDrain], and yields [FRAME_MS] so UI collectors see one map write
- * per frame even when the backend emits hundreds of chunks a second.
+ * consumer receives the first pending update, then [Channel.tryReceive]s up to [maxBatch] more,
+ * hands the batch to [onDrain], and only yields [FRAME_MS] when the channel is empty afterward.
+ * While a backlog remains, the next drain runs immediately so Main stays responsive and the
+ * transport's DROP_OLDEST window is not stretched by one huge fold.
  */
 internal class SessionUpdatePump(
     scope: CoroutineScope,
     private val onDrain: (List<SessionUpdate>) -> Unit,
     private val frameMs: Long = FRAME_MS,
+    private val maxBatch: Int = MAX_BATCH,
     private val delayMs: suspend (Long) -> Unit = { delay(it) },
     dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) {
@@ -31,14 +33,15 @@ internal class SessionUpdatePump(
             val first = channel.receiveCatching().getOrNull() ?: break
             // Let same-dispatcher producers finish a burst of offers before draining.
             yield()
-            val batch = ArrayList<SessionUpdate>(8)
+            val batch = ArrayList<SessionUpdate>(minOf(8, maxBatch).coerceAtLeast(1))
             batch.add(first)
-            while (true) {
+            while (batch.size < maxBatch) {
                 val next = channel.tryReceive().getOrNull() ?: break
                 batch.add(next)
             }
             onDrain(batch)
-            delayMs(frameMs)
+            // Pace UI only when caught up; keep draining backlog without a frame delay.
+            if (channel.isEmpty) delayMs(frameMs)
         }
     }
 
@@ -54,6 +57,8 @@ internal class SessionUpdatePump(
 
     companion object {
         const val FRAME_MS = 16L
+        /** Cap per drain so a huge backlog cannot monopolize Main for one fold. */
+        const val MAX_BATCH = 48
     }
 }
 

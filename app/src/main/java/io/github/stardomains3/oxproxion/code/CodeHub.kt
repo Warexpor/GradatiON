@@ -264,7 +264,11 @@ class CodeHub private constructor(context: Context) {
 
     fun answer(sessionId: String, requestId: String, option: ApprovalOption?) = withBackend(sessionId) { it.answer(sessionId, requestId, option) }
 
-    fun cancel(sessionId: String) = withBackend(sessionId) { it.cancel(sessionId) }
+    fun cancel(sessionId: String) {
+        // Eager clear so Stop→Send is not rejected while pump still holds TurnDone.
+        update(sessionId) { it.copy(running = false) }
+        withBackend(sessionId) { it.cancel(sessionId) }
+    }
 
     fun setPermissionMode(sessionId: String, mode: PermissionMode) {
         update(sessionId) { it.copy(summary = it.summary.copy(permissionMode = mode)) }
