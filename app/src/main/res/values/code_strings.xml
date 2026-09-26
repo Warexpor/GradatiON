@@ -28,6 +28,17 @@
     <string name="code_host_remove">Remove</string>
     <string name="code_host_bad_url">Use a ws:// or wss:// address</string>
     <string name="code_host_plain_ws_warning">Unencrypted address. Only use ws:// on your own network or through a tunnel.</string>
+    <string name="code_host_fingerprint_hint">TLS fingerprint (from QR)</string>
+    <string name="code_host_fingerprint_helper">Optional. Filled by Scan QR / deep link. Pins the bridge certificate.</string>
+    <string name="code_pair_scan_qr">Scan QR</string>
+    <string name="code_pair_or_manual">Or enter manually</string>
+    <string name="code_pair_scan_prompt">Scan the GradatiON bridge pairing QR</string>
+    <string name="code_pair_camera_denied">Camera permission needed to scan. Enter the address and token manually.</string>
+    <string name="code_pair_bad_qr">Not a GradatiON pairing QR</string>
+    <string name="code_pair_missing_url">Pairing QR is missing the bridge address</string>
+    <string name="code_pair_missing_token">Pairing QR is missing the token</string>
+    <string name="code_pair_bad_fingerprint">Pairing QR has an invalid TLS fingerprint</string>
+    <string name="code_pair_saved">Machine added</string>
     <string name="code_host_remove_confirm">Remove %1$s? Sessions keep running on the machine; they just disappear from this phone.</string>
 
     <!-- Home -->

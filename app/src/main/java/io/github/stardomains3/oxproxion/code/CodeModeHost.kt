@@ -5,6 +5,10 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassFrameLayout
 import io.github.stardomains3.oxproxion.GlassIconButton
@@ -51,6 +55,34 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
             if (bottom - top != oldBottom - oldTop) home()?.topInset = topBar.height
         }
         refresh(restore = true)
+        // Deep link / QR scan: enable Code, switch tab, open prefilled host dialog.
+        // Observes here so ChatFragment stays untouched.
+        fragment.lifecycleScope.launch {
+            fragment.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                CodePairPending.pending.collect { pairing ->
+                    if (pairing == null) return@collect
+                    onPairingArrived()
+                }
+            }
+        }
+    }
+
+    /** Enable the Code tab, activate it, and show [CodeHostDialog] if a pending pair remains. */
+    private fun onPairingArrived() {
+        hub.store.enabled = true
+        hub.store.lastTabWasCode = true
+        if (!tab.isVisible) refresh(restore = false)
+        tab.isVisible = true
+        if (!isActive) activate(animate = true)
+        container.post {
+            val homeFrag = home()
+            val taken = CodePairPending.consume() ?: return@post
+            if (homeFrag != null && homeFrag.isAdded) {
+                CodeHostDialog.show(homeFrag, null, taken)
+            } else {
+                CodePairPending.offer(taken)
+            }
+        }
     }
 
     /** Re-reads the setting (e.g. back from Settings). Hides the tab and leaves Code if it was turned off. */

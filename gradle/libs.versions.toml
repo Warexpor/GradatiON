@@ -35,6 +35,7 @@ prism4j = "2.0.0"
 biometric = "1.1.0"
 commonmark = "0.29.0"
 documentfile = "1.1.0"
+zxingEmbedded = "4.3.0"
 [libraries]
 openlocationcode = { group = "com.google.openlocationcode", name = "openlocationcode", version.ref = "openlocationcode" }
 markwon-simple = { module = "io.noties.markwon:simple-ext", version.ref = "markwon"}
@@ -91,6 +92,7 @@ commonmark-footnotes = { group = "org.commonmark", name = "commonmark-ext-footno
 commonmark-heading-anchor = { group = "org.commonmark", name = "commonmark-ext-heading-anchor", version.ref = "commonmark" }
 commonmark-ext-ins = { group = "org.commonmark", name = "commonmark-ext-ins", version.ref = "commonmark" }
 androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
+zxing-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxingEmbedded" }
 
 
 [plugins]

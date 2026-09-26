@@ -117,6 +117,7 @@ dependencies {
     implementation(libs.markwon.syntax.highlight)
     implementation(libs.prism4j.core)
     implementation(libs.androidx.documentfile)
+    implementation(libs.zxing.embedded)
     implementation(libs.biometric)
     implementation(libs.coil.kt)
     implementation(libs.commonmark.task.list)

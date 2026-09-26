@@ -15,10 +15,14 @@ import io.github.stardomains3.oxproxion.GrokConfirmDialog
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.launch
 
-/** Glass card to add or edit a machine (bridge address, pairing token, default agent). */
+/** Glass card to add or edit a machine (bridge address, pairing token, fingerprint, default agent). */
 object CodeHostDialog {
 
-    fun show(fragment: Fragment, existing: CodeHost?) {
+    fun show(
+        fragment: Fragment,
+        existing: CodeHost?,
+        prefill: CodePairing.Result? = null,
+    ) {
         val context = fragment.requireContext()
         val hub = CodeHub.get(context)
         val dialog = GlassAlertDialogBuilder(context, R.style.CustomMaterialAlertDialogTheme).create()
@@ -30,12 +34,38 @@ object CodeHostDialog {
         val url = sheet.findViewById<TextInputEditText>(R.id.codeHostUrl)
         val urlLayout = sheet.findViewById<TextInputLayout>(R.id.codeHostUrlLayout)
         val token = sheet.findViewById<TextInputEditText>(R.id.codeHostToken)
-        name.setText(existing?.name.orEmpty())
-        url.setText(existing?.url.orEmpty())
-        token.setText(existing?.token.orEmpty())
+        val fingerprint = sheet.findViewById<TextInputEditText>(R.id.codeHostFingerprint)
+        val fingerprintLayout = sheet.findViewById<TextInputLayout>(R.id.codeHostFingerprintLayout)
+
+        val initialName = when {
+            existing != null -> existing.name
+            prefill != null -> prefill.nameHint
+            else -> ""
+        }
+        val initialUrl = prefill?.url ?: existing?.url.orEmpty()
+        val initialToken = prefill?.token ?: existing?.token.orEmpty()
+        val initialFp = prefill?.fingerprint
+            ?: existing?.fingerprint.orEmpty()
+
+        name.setText(initialName)
+        url.setText(initialUrl)
+        token.setText(initialToken)
+        fingerprint.setText(initialFp)
+
         val isDemo = existing?.isDemo == true
         sheet.findViewById<TextInputLayout>(R.id.codeHostTokenLayout).isVisible = !isDemo
         urlLayout.isVisible = !isDemo
+        fingerprintLayout.isVisible = !isDemo
+
+        val isAdd = existing == null
+        sheet.findViewById<MaterialButton>(R.id.codeHostScanQr).apply {
+            isVisible = isAdd && !isDemo
+            setOnClickListener {
+                dialog.dismiss()
+                fragment.startActivity(CodePairScanActivity.intent(context))
+            }
+        }
+        sheet.findViewById<TextView>(R.id.codeHostManualLabel).isVisible = isAdd && !isDemo
 
         var agent = existing?.defaultHarness ?: HarnessKind.CLAUDE_CODE
         val agents = sheet.findViewById<LinearLayout>(R.id.codeHostAgents)
@@ -79,10 +109,24 @@ object CodeHostDialog {
                 urlLayout.error = context.getString(R.string.code_host_bad_url)
                 return@setOnClickListener
             }
+            val fpTyped = fingerprint.text?.toString()?.trim().orEmpty()
+            val fpStored = when {
+                isDemo -> ""
+                fpTyped.isEmpty() -> ""
+                else -> BridgeTls.normalizePin(fpTyped) ?: fpTyped
+            }
+            if (fpTyped.isNotEmpty() && BridgeTls.normalizePin(fpTyped) == null) {
+                fingerprintLayout.error = context.getString(R.string.code_pair_bad_fingerprint)
+                return@setOnClickListener
+            }
+            fingerprintLayout.error = null
             val host = (existing ?: CodeHost(id = hub.newHostId(), name = "")).copy(
-                name = name.text?.toString()?.trim().orEmpty().ifEmpty { u.substringAfter("://").substringBefore(':').substringBefore('/') },
+                name = name.text?.toString()?.trim().orEmpty().ifEmpty {
+                    u.substringAfter("://").substringBefore(':').substringBefore('/')
+                },
                 url = u,
                 token = token.text?.toString()?.trim().orEmpty(),
+                fingerprint = fpStored,
                 defaultHarness = agent
             )
             hub.saveHost(host)
@@ -107,6 +151,6 @@ object CodeHostDialog {
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.window?.let { GlassDialogs.frost(it) }
         dialog.show()
-        if (existing == null) name.requestFocus()
+        if (existing == null && prefill == null) name.requestFocus()
     }
 }

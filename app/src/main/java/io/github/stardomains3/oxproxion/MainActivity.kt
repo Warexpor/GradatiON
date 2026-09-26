@@ -13,6 +13,9 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
+import io.github.stardomains3.oxproxion.code.CodeHub
+import io.github.stardomains3.oxproxion.code.CodePairPending
+import io.github.stardomains3.oxproxion.code.CodePairing
 
 class MainActivity : AppCompatActivity() {
 
@@ -49,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     private fun continueOnCreate() {
         setContentView(R.layout.activity_main)
         askNotificationPermission()
+        handleCodePairIntent(intent)
         val sharedPreferencesHelper = SharedPreferencesHelper(this)
         sharedPreferencesHelper.seedDefaultModelsIfNeeded()
         sharedPreferencesHelper.seedDefaultSystemMessagesIfNeeded()
@@ -207,6 +211,7 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleCodePairIntent(intent)
         if (intent.getBooleanExtra("from_notification", false)) {
             (supportFragmentManager.findFragmentById(R.id.fragment_container) as? ChatFragment)
                 ?.onOpenedFromNotification()
@@ -270,6 +275,36 @@ class MainActivity : AppCompatActivity() {
             val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container) as? ChatFragment
             // STT disabled
             // fragment?.startSpeechRecognitionSafely()
+        }
+    }
+
+    /**
+     * `gradation://pair?...` deep link: queue pairing for [io.github.stardomains3.oxproxion.code.CodeModeHost]
+     * (enables Code tab + opens host dialog). Does not touch ChatFragment.
+     */
+    private fun handleCodePairIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (!CodePairing.isPairUri(data.scheme, data.host)) return
+        when (val parsed = CodePairing.parse(data.toString())) {
+            is CodePairing.ParseResult.Ok -> {
+                val hub = CodeHub.get(this)
+                hub.store.enabled = true
+                hub.store.lastTabWasCode = true
+                CodePairPending.offer(parsed.pairing)
+                // Prevent re-handling on recreate / second onNewIntent with same Intent.
+                intent.data = null
+            }
+            is CodePairing.ParseResult.Err -> {
+                val msg = when (parsed.reason) {
+                    CodePairing.Reason.NOT_PAIR_URI -> R.string.code_pair_bad_qr
+                    CodePairing.Reason.MISSING_URL -> R.string.code_pair_missing_url
+                    CodePairing.Reason.MISSING_TOKEN -> R.string.code_pair_missing_token
+                    CodePairing.Reason.BAD_URL -> R.string.code_host_bad_url
+                    CodePairing.Reason.BAD_FINGERPRINT -> R.string.code_pair_bad_fingerprint
+                }
+                AppToast.makeText(this, getString(msg), AppToast.LENGTH_LONG).show()
+                intent.data = null
+            }
         }
     }
 
