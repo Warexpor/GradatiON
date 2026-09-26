@@ -20,7 +20,7 @@ configurations.all {
 android {
     namespace = "io.github.stardomains3.oxproxion"
     // 36 installed locally; 37 package not available via current repo mirror
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         // Own id so Grokion is not treated as oxproxion (no false "update" prompts)
