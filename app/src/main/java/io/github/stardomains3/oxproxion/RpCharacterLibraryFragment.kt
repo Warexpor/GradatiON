@@ -106,7 +106,7 @@ class RpCharacterLibraryFragment : Fragment() {
                 .commit()
         }
         chatViewModel.getRpRepository().allCharacters.observe(viewLifecycleOwner) { chars ->
-            val list = chars ?: emptyList()
+            val list = chars.orEmpty()
             adapter.submit(list, prefs.getRpActiveCharacterId())
             hint.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
         }

@@ -556,9 +556,11 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">match_parent</item>
         <item name="android:gravity">center</item>
-        <item name="android:paddingStart">11dp</item>
-        <item name="android:paddingEnd">11dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
         <item name="android:paddingBottom">4dp</item>
+        <item name="android:maxWidth">108dp</item>
+        <item name="android:ellipsize">end</item>
         <item name="android:textSize">17sp</item>
         <item name="android:textFontWeight">600</item>
         <item name="android:fontFamily">@font/app_sans</item>

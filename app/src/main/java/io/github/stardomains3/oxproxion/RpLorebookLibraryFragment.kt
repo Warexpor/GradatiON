@@ -80,7 +80,7 @@ class RpLorebookLibraryFragment : Fragment() {
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
         chatViewModel.getRpRepository().allLorebooks.observe(viewLifecycleOwner) { books ->
-            val list = books ?: emptyList()
+            val list = books.orEmpty()
             adapter.submit(list)
             emptyView.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
             recycler.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE

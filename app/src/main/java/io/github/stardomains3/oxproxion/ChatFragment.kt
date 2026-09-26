@@ -1559,7 +1559,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val density = resources.displayMetrics.density
         val size = (38 * density).toInt()
         val params = LinearLayout.LayoutParams(size, size)
-        val gap = if (btn === controlsButton || btn === sendChatButton) (8 * density).toInt() else 0
+        val gap = when {
+            btn === controlsButton -> (8 * density).toInt()
+            btn === sendChatButton -> (4 * density).toInt()
+            else -> 0
+        }
         params.setMargins(gap, 0, 0, 0)
         btn.layoutParams = params
     }
