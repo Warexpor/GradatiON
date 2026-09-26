@@ -50,6 +50,8 @@
         <item name="android:minHeight">48dp</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:drawablePadding">14dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">2</item>
         <item name="android:textColor">@color/xai_ink</item>
         <item name="android:textSize">15sp</item>
         <item name="android:fontFamily">@font/app_sans</item>

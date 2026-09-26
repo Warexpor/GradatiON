@@ -100,6 +100,7 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
                 s.setSpan(android.text.style.RelativeSizeSpan(0.82f), start, s.length, 0)
                 text = s
                 maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
                 setPadding(0, (8 * resources.displayMetrics.density).toInt(), 0, (8 * resources.displayMetrics.density).toInt())
             }
         }

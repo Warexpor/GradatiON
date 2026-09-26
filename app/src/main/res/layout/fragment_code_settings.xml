@@ -60,6 +60,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
+                    android:maxLines="2"
+                    android:ellipsize="end"
                     android:text="@string/code_settings_show_tab"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />

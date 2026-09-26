@@ -36,6 +36,8 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginStart="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp"
                 android:textFontWeight="600" />
@@ -46,6 +48,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:maxLines="4"
             android:textColor="@color/xai_body"
             android:textSize="15sp" />
 
