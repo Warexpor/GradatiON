@@ -134,13 +134,14 @@
 
         <LinearLayout
             android:id="@+id/rpSpeakerHeader"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:visibility="gone"
             android:layout_marginBottom="6dp"
             app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/thinkingRow">
 
             <ImageView
@@ -155,9 +156,12 @@
 
             <TextView
                 android:id="@+id/rpSpeakerName"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:textColor="@color/xai_ink"
                 android:textSize="13sp"
                 android:textFontWeight="600" />

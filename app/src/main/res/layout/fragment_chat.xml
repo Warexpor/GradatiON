@@ -985,6 +985,9 @@
                 android:layout_height="36dp"
                 android:minHeight="36dp"
                 android:minWidth="0dp"
+                android:maxWidth="140dp"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:paddingStart="14dp"
@@ -1183,28 +1186,37 @@
                         android:padding="0dp" />
 
                     <!-- Model / character pill (Grok's "Fast ⌄"): opens the anchored picker overlay -->
-                    <TextView
-                        android:id="@+id/modelNameTextView"
-                        android:layout_width="wrap_content"
+                    <!-- Weighted shell so the pill can shrink+ellipsize when the left strip is tight,
+                         without stretching the pill chrome when space is plentiful. -->
+                    <FrameLayout
+                        android:layout_width="0dp"
                         android:layout_height="38dp"
                         android:layout_marginStart="8dp"
-                        android:maxWidth="168dp"
-                        android:background="@drawable/bg_model_pill"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:contentDescription="@string/cd_active_model"
-                        android:ellipsize="end"
-                        android:singleLine="true"
-                        android:gravity="center_vertical"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="10dp"
-                        android:textColor="@color/xai_ink"
-                        android:textSize="15sp"
-                        android:textFontWeight="600"
-                        android:drawablePadding="4dp"
-                        android:drawableTint="@color/xai_body"
-                        app:drawableEndCompat="@drawable/ic_expand_more"
-                        tools:text="Qwen 3 32B" />
+                        android:layout_weight="1">
+
+                        <TextView
+                            android:id="@+id/modelNameTextView"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:layout_gravity="start|center_vertical"
+                            android:maxWidth="168dp"
+                            android:background="@drawable/bg_model_pill"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:contentDescription="@string/cd_active_model"
+                            android:ellipsize="end"
+                            android:singleLine="true"
+                            android:gravity="center_vertical"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="10dp"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="15sp"
+                            android:textFontWeight="600"
+                            android:drawablePadding="4dp"
+                            android:drawableTint="@color/xai_body"
+                            app:drawableEndCompat="@drawable/ic_expand_more"
+                            tools:text="Qwen 3 32B" />
+                    </FrameLayout>
                 </LinearLayout>
 
                 <View
