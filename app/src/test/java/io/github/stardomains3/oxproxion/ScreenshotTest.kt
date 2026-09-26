@@ -555,6 +555,8 @@ class ScreenshotTest {
         val root = a.findViewById<View>(R.id.fragment_container).let { it as? SwipeNavLayout ?: (it.parent as View) }
         val w = root.width.toFloat()
         val y = root.height * 0.45f
+        // Mode persists across tests; start from Chat.
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
         swipe(root, w * 0.85f, w * 0.15f, y)
         org.junit.Assert.assertTrue("left swipe → Roleplay", a.findViewById<View>(R.id.tabRoleplay).isSelected)
         swipe(root, w * 0.15f, w * 0.85f, y)
