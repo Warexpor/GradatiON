@@ -143,6 +143,16 @@
                 android:orientation="horizontal" />
         </HorizontalScrollView>
 
+        <TextView
+            android:id="@+id/codeHostStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:textAppearance="@style/TextAppearance.Gradation.Footnote"
+            android:textColor="@color/xai_mute"
+            android:visibility="gone" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

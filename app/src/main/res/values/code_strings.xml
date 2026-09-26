@@ -39,6 +39,8 @@
     <string name="code_pair_missing_token">Pairing QR is missing the token</string>
     <string name="code_pair_bad_fingerprint">Pairing QR has an invalid TLS fingerprint</string>
     <string name="code_pair_saved">Machine added</string>
+    <string name="code_host_test_wrong_token">Wrong pairing token</string>
+    <string name="code_host_test_unreachable">Can\'t reach the bridge. Check Tailscale, Wi-Fi, or your SSH tunnel.</string>
     <string name="code_host_remove_confirm">Remove %1$s? Sessions keep running on the machine; they just disappear from this phone.</string>
 
     <!-- Home -->

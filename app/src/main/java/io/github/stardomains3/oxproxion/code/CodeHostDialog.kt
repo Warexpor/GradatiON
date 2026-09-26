@@ -1,8 +1,11 @@
 package io.github.stardomains3.oxproxion.code
 
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -13,10 +16,19 @@ import io.github.stardomains3.oxproxion.GlassAlertDialogBuilder
 import io.github.stardomains3.oxproxion.GlassDialogs
 import io.github.stardomains3.oxproxion.GrokConfirmDialog
 import io.github.stardomains3.oxproxion.R
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Glass card to add or edit a machine (bridge address, pairing token, fingerprint, default agent). */
 object CodeHostDialog {
+
+    /** How long to wait for CONNECTED / FAILED after save before treating as unreachable. */
+    private const val TEST_TIMEOUT_MS = 10_000L
+    /** Brief pause on success so the user sees "Connected" before dismiss. */
+    private const val SUCCESS_DISMISS_MS = 900L
 
     fun show(
         fragment: Fragment,
@@ -36,6 +48,8 @@ object CodeHostDialog {
         val token = sheet.findViewById<TextInputEditText>(R.id.codeHostToken)
         val fingerprint = sheet.findViewById<TextInputEditText>(R.id.codeHostFingerprint)
         val fingerprintLayout = sheet.findViewById<TextInputLayout>(R.id.codeHostFingerprintLayout)
+        val status = sheet.findViewById<TextView>(R.id.codeHostStatus)
+        val saveBtn = sheet.findViewById<MaterialButton>(R.id.codeHostSave)
 
         val initialName = when {
             existing != null -> existing.name
@@ -102,10 +116,60 @@ object CodeHostDialog {
             }
         }
 
-        sheet.findViewById<MaterialButton>(R.id.codeHostCancel).setOnClickListener { dialog.dismiss() }
-        sheet.findViewById<MaterialButton>(R.id.codeHostSave).setOnClickListener {
+        var testJob: Job? = null
+        var awaitingDone = false
+
+        fun setStatus(text: CharSequence, connected: Boolean) {
+            status.isVisible = true
+            status.text = text
+            status.setTextColor(
+                ContextCompat.getColor(
+                    context,
+                    if (connected) R.color.code_status_on else R.color.xai_mute,
+                ),
+            )
+        }
+
+        fun armSave() {
+            awaitingDone = false
+            saveBtn.setText(R.string.code_host_save)
+            saveBtn.isEnabled = true
+        }
+
+        fun armDone() {
+            awaitingDone = true
+            saveBtn.setText(R.string.cd_done)
+            saveBtn.isEnabled = true
+        }
+
+        // Editing after a failed test restores Save so the user can retry.
+        val editWatcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                if (!awaitingDone) return
+                armSave()
+                status.isVisible = false
+            }
+        }
+        name.addTextChangedListener(editWatcher)
+        url.addTextChangedListener(editWatcher)
+        token.addTextChangedListener(editWatcher)
+        fingerprint.addTextChangedListener(editWatcher)
+
+        sheet.findViewById<MaterialButton>(R.id.codeHostCancel).setOnClickListener {
+            testJob?.cancel()
+            dialog.dismiss()
+        }
+
+        saveBtn.setOnClickListener {
+            if (awaitingDone) {
+                testJob?.cancel()
+                dialog.dismiss()
+                return@setOnClickListener
+            }
             val u = url.text?.toString()?.trim().orEmpty()
-            if (!isDemo && !(u.startsWith("ws://") || u.startsWith("wss://"))) {
+            if (!isDemo && !(u.startsWith("ws://", ignoreCase = true) || u.startsWith("wss://", ignoreCase = true))) {
                 urlLayout.error = context.getString(R.string.code_host_bad_url)
                 return@setOnClickListener
             }
@@ -130,16 +194,66 @@ object CodeHostDialog {
                 defaultHarness = agent
             )
             hub.saveHost(host)
-            dialog.dismiss()
+
+            // Demo hosts: skip the live connect test.
+            if (isDemo || host.isDemo) {
+                dialog.dismiss()
+                return@setOnClickListener
+            }
+
+            // Post-save pairing test: set active, connect, show inline result.
+            hub.selectHost(host.id)
+            saveBtn.isEnabled = false
+            setStatus(context.getString(R.string.code_status_connecting), connected = false)
+
+            testJob?.cancel()
+            testJob = fragment.lifecycleScope.launch {
+                val terminal = withTimeoutOrNull(TEST_TIMEOUT_MS) {
+                    hub.connection.first {
+                        it == ConnectionState.CONNECTED || it == ConnectionState.FAILED
+                    }
+                }
+                if (!dialog.isShowing) return@launch
+
+                val timedOut = terminal == null
+                val outcome = CodePairConnect.outcome(
+                    state = terminal,
+                    lastError = hub.lastError(),
+                    timedOut = timedOut,
+                )
+                when (outcome) {
+                    CodePairConnect.Outcome.CONNECTED -> {
+                        setStatus(context.getString(R.string.code_status_connected), connected = true)
+                        delay(SUCCESS_DISMISS_MS)
+                        if (dialog.isShowing) dialog.dismiss()
+                    }
+                    CodePairConnect.Outcome.WRONG_TOKEN -> {
+                        setStatus(context.getString(R.string.code_host_test_wrong_token), connected = false)
+                        armDone()
+                    }
+                    CodePairConnect.Outcome.UNREACHABLE, CodePairConnect.Outcome.CONNECTING -> {
+                        setStatus(
+                            context.getString(R.string.code_host_test_unreachable),
+                            connected = false,
+                        )
+                        armDone()
+                    }
+                }
+            }
         }
+
         url.setOnFocusChangeListener { _, has ->
             if (has) return@setOnFocusChangeListener
             val u = url.text?.toString()?.trim().orEmpty()
-            urlLayout.helperText = if (u.startsWith("ws://")) context.getString(R.string.code_host_plain_ws_warning) else null
+            urlLayout.helperText = if (u.startsWith("ws://", ignoreCase = true)) {
+                context.getString(R.string.code_host_plain_ws_warning)
+            } else null
         }
+
         sheet.findViewById<MaterialButton>(R.id.codeHostRemove).apply {
             isVisible = existing != null
             setOnClickListener {
+                testJob?.cancel()
                 dialog.dismiss()
                 GrokConfirmDialog.show(fragment, context.getString(R.string.code_host_remove),
                     context.getString(R.string.code_host_remove_confirm, existing!!.name),
@@ -147,6 +261,7 @@ object CodeHostDialog {
             }
         }
 
+        dialog.setOnDismissListener { testJob?.cancel() }
         dialog.setView(sheet)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.window?.let { GlassDialogs.frost(it) }
