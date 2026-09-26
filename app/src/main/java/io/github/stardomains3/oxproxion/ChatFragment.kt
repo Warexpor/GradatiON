@@ -1554,8 +1554,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     private fun setupGlassChrome(root: View) {
         val backdrop = root.findViewById<GlassBackdropLayout>(R.id.chatBackdrop)
-        val topGlass = root.findViewById<GlassFrameLayout>(R.id.topBarGlass)
-        topGlass.glass.source = backdrop
+        val topGlass = root.findViewById<View>(R.id.topBarGlass)
+        topGlass.background?.mutate()?.alpha = 0
         (chatInputContainer as? GlassLinearLayout)?.glass?.source = backdrop
         (headerContainer as? GlassLinearLayout)?.glass?.source = backdrop
         val relayout = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyChromeInsets() }
@@ -1568,11 +1568,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         })
     }
 
-    /** iOS nav-bar behaviour: the bar's hairline appears only once content is beneath it. */
+    /** iOS scroll-edge effect: the fade under the floating controls appears once content is beneath them. */
     private fun updateTopBarEdge() {
-        val topGlass = view?.findViewById<GlassFrameLayout>(R.id.topBarGlass) ?: return
+        val fade = view?.findViewById<View>(R.id.topBarGlass)?.background ?: return
         val under = chatRecyclerView.computeVerticalScrollOffset().toFloat()
-        topGlass.glass.edgeAlpha = (under / (12f * resources.displayMetrics.density)).coerceIn(0f, 1f)
+        val a = (255 * (under / (24f * resources.displayMetrics.density)).coerceIn(0f, 1f)).toInt()
+        if (fade.alpha != a) fade.alpha = a
     }
 
     private fun applyChromeInsets() {

@@ -3,6 +3,7 @@
 ## Unreleased — monochrome redesign
 
 ### Changed
+- Liquid glass: top bar controls are now floating glass buttons and chips over a soft scroll-edge fade, and glass bends content at its rim with a specular edge (Android 13+). Touching glass springs it up, leans it toward your finger and lights it from the touch point. Battery saver and low-RAM devices get a solid frosted fill instead of live blur.
 - Glass: the transcript scrolls beneath a live-blurred top bar and a floating glass composer; the Controls panel is the same material, and dialogs and sheets frost the screen behind them.
 - Palette moves off pure black to a charcoal base (and a soft paper base in light) with a finer stepped gray ramp and lower overall contrast.
 - Streaming reveals text with a soft per-word fade at the live edge, a breathing dot marks it, and the view follows the reply unless you scroll away. "Thinking" is a shimmering label.

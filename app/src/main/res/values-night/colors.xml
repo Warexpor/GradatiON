@@ -84,6 +84,11 @@
     <color name="glass_bar_tint">#C7161616</color>
     <color name="glass_panel_tint">#D1262626</color>
     <color name="glass_edge">#26FFFFFF</color>
-    <color name="glass_highlight">#1AFFFFFF</color>
+    <color name="glass_highlight">#33FFFFFF</color>
+    <color name="glass_glow">#33FFFFFF</color>
+    <color name="glass_shadow_ambient">#40000000</color>
+    <color name="glass_shadow_spot">#66000000</color>
+    <color name="glass_control_tint">#94242424</color>
+    <color name="grad_top_edge">#EB161616</color>
     <color name="composer_fade_mid">#B3161616</color>
 </resources>

@@ -96,6 +96,8 @@
             <io.github.stardomains3.oxproxion.GlassLinearLayout
                 android:id="@+id/headerContainer"
                 app:glassCornerRadius="28dp"
+                app:glassElevation="12dp"
+                app:glassLens="false"
                 app:glassTint="@color/glass_panel_tint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -424,7 +426,9 @@
 
             <LinearLayout
                 android:id="@+id/extBG"
-                android:layout_width="44dp"
+                android:layout_width="52dp"
+                android:clipChildren="false"
+                android:clipToPadding="false"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|end"
                 android:layout_marginEnd="10dp"
@@ -432,43 +436,73 @@
                 android:orientation="vertical"
                 android:padding="2dp">
 
-                <com.google.android.material.button.MaterialButton
+                <io.github.stardomains3.oxproxion.GlassIconButton
                     android:id="@+id/scrollToTopButton"
+                    android:insetBottom="0dp"
+                    android:insetRight="0dp"
+                    android:insetTop="0dp"
+                    android:insetLeft="0dp"
+                    app:iconPadding="0dp"
+                    app:iconGravity="textStart"
+                    android:padding="0dp"
                     style="@style/Widget.Grokion.IconButton"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
                     android:layout_marginBottom="8dp"
                     android:layout_gravity="center_horizontal"
                     android:visibility="gone"
                     app:icon="@drawable/ic_top"
                     app:iconSize="18dp"
                     app:iconTint="@color/xai_ink"
-                    app:backgroundTint="@color/xai_canvas_mid" />
+                    app:backgroundTint="@android:color/transparent"
+                    app:glassInteractive="true"
+                    app:glassElevation="4dp"
+                    app:glassTint="@color/glass_control_tint" />
 
-                <com.google.android.material.button.MaterialButton
+                <io.github.stardomains3.oxproxion.GlassIconButton
                     android:id="@+id/scrollToBottomButton"
+                    android:insetBottom="0dp"
+                    android:insetRight="0dp"
+                    android:insetTop="0dp"
+                    android:insetLeft="0dp"
+                    app:iconPadding="0dp"
+                    app:iconGravity="textStart"
+                    android:padding="0dp"
                     style="@style/Widget.Grokion.IconButton"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
                     android:layout_marginBottom="8dp"
                     android:layout_gravity="center_horizontal"
                     android:visibility="gone"
                     app:icon="@drawable/ic_bottom"
                     app:iconSize="18dp"
                     app:iconTint="@color/xai_ink"
-                    app:backgroundTint="@color/xai_canvas_mid" />
+                    app:backgroundTint="@android:color/transparent"
+                    app:glassInteractive="true"
+                    app:glassElevation="4dp"
+                    app:glassTint="@color/glass_control_tint" />
 
-                <com.google.android.material.button.MaterialButton
+                <io.github.stardomains3.oxproxion.GlassIconButton
                     android:id="@+id/presetsButton2"
+                    android:insetBottom="0dp"
+                    android:insetRight="0dp"
+                    android:insetTop="0dp"
+                    android:insetLeft="0dp"
+                    app:iconPadding="0dp"
+                    app:iconGravity="textStart"
+                    android:padding="0dp"
                     style="@style/Widget.Grokion.IconButton"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
                     android:layout_gravity="center_horizontal"
                     android:visibility="gone"
                     app:icon="@drawable/ic_presets"
                     app:iconSize="18dp"
                     app:iconTint="@color/xai_ink"
-                    app:backgroundTint="@color/xai_canvas_mid" />
+                    app:backgroundTint="@android:color/transparent"
+                    app:glassInteractive="true"
+                    app:glassElevation="4dp"
+                    app:glassTint="@color/glass_control_tint" />
             </LinearLayout>
 
             <LinearLayout
@@ -537,53 +571,77 @@
                 android:focusableInTouchMode="false" />
         </FrameLayout>
 
-        <!-- ── Top bar: history | mode · model | new chat. Glass bar; the transcript scrolls
-             beneath it and its hairline fades in once content is under it. ── -->
-        <io.github.stardomains3.oxproxion.GlassFrameLayout
+        <!-- ── Top bar: history | mode · model | new chat, as floating liquid-glass controls
+             (iOS 26). No bar: the transcript dissolves under a scroll-edge fade that appears
+             once content is beneath it. ── -->
+        <FrameLayout
             android:id="@+id/topBarGlass"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="top"
-            app:glassTint="@color/glass_bar_tint"
-            app:glassBottomEdgeOnly="true"
-            app:glassEdgeAlpha="0">
+            android:paddingBottom="14dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:background="@drawable/bg_top_edge">
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/topBarLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:minHeight="56dp"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp">
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="2dp"
+            android:clipChildren="false"
+            android:clipToPadding="false">
 
-            <com.google.android.material.button.MaterialButton
+            <io.github.stardomains3.oxproxion.GlassIconButton
                 android:id="@+id/openSavedChatsButton"
-                style="@style/Widget.Grokion.IconButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:contentDescription="@string/cd_history"
-                app:icon="@drawable/ic_grok_menu"
-                app:iconSize="24dp"
-                app:iconTint="@color/xai_ink"
-                app:backgroundTint="@android:color/transparent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/backcopyButton"
+                android:insetBottom="0dp"
+                android:insetRight="0dp"
+                android:insetTop="0dp"
+                android:insetLeft="0dp"
+                app:iconPadding="0dp"
+                app:iconGravity="textStart"
+                android:padding="0dp"
                 style="@style/Widget.Grokion.IconButton"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
+                android:contentDescription="@string/cd_history"
+                app:icon="@drawable/ic_grok_menu"
+                app:iconSize="21dp"
+                app:iconTint="@color/xai_ink"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:backgroundTint="@android:color/transparent"
+                app:glassInteractive="true"
+                app:glassElevation="4dp"
+                app:glassTint="@color/glass_control_tint" />
+
+            <io.github.stardomains3.oxproxion.GlassIconButton
+                android:id="@+id/backcopyButton"
+                android:insetBottom="0dp"
+                android:insetRight="0dp"
+                android:insetTop="0dp"
+                android:insetLeft="0dp"
+                app:iconPadding="0dp"
+                app:iconGravity="textStart"
+                android:padding="0dp"
+                style="@style/Widget.Grokion.IconButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:visibility="gone"
                 android:contentDescription="@string/cd_copy_and_return"
-                app:backgroundTint="@android:color/transparent"
                 app:icon="@drawable/backcopy"
                 app:iconSize="22dp"
                 app:iconTint="@color/xai_ink"
                 app:layout_constraintStart_toStartOf="@id/openSavedChatsButton"
-                app:layout_constraintTop_toBottomOf="@id/openSavedChatsButton" />
+                app:layout_constraintTop_toBottomOf="@id/openSavedChatsButton"
+                app:backgroundTint="@android:color/transparent"
+                app:glassInteractive="true"
+                app:glassElevation="4dp"
+                app:glassTint="@color/glass_control_tint" />
 
             <androidx.constraintlayout.widget.Barrier
                 android:id="@+id/topBarStartBarrier"
@@ -600,12 +658,12 @@
                 app:constraint_referenced_ids="newChatButton" />
 
             <!-- Ask / RP mode switch -->
-            <TextView
+            <io.github.stardomains3.oxproxion.GlassTextView
                 android:id="@+id/chatModeChip"
                 android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:layout_marginStart="2dp"
-                android:background="@drawable/bg_model_chip"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:background="@null"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
@@ -617,23 +675,26 @@
                 android:textFontWeight="600"
                 app:layout_constraintStart_toEndOf="@id/topBarStartBarrier"
                 app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent" />
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:glassInteractive="true"
+                app:glassElevation="4dp"
+                app:glassTint="@color/glass_control_tint" />
 
             <!-- Model chip, centered -->
-            <TextView
+            <io.github.stardomains3.oxproxion.GlassTextView
                 android:id="@+id/modelNameTextView"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="40dp"
                 android:maxWidth="210dp"
-                android:background="@drawable/bg_model_chip"
+                android:background="@null"
                 android:clickable="true"
                 android:focusable="true"
                 android:contentDescription="@string/cd_active_model"
                 android:ellipsize="end"
                 android:singleLine="true"
                 android:gravity="center_vertical"
-                android:paddingStart="14dp"
-                android:paddingEnd="8dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="10dp"
                 android:textColor="@color/xai_ink"
                 android:textSize="14sp"
                 android:textFontWeight="500"
@@ -644,7 +705,10 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent"
-                tools:text="Qwen 3 32B" />
+                tools:text="Qwen 3 32B"
+                app:glassInteractive="true"
+                app:glassElevation="4dp"
+                app:glassTint="@color/glass_control_tint" />
 
             <!-- Kept gone for ChatFragment ID wiring -->
             <TextView
@@ -664,47 +728,77 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <com.google.android.material.button.MaterialButton
+            <io.github.stardomains3.oxproxion.GlassIconButton
                 android:id="@+id/newChatButton"
-                style="@style/Widget.Grokion.IconButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:contentDescription="@string/grok_new_conversation"
-                app:icon="@drawable/ic_new_chat"
-                app:iconSize="23dp"
-                app:iconTint="@color/xai_ink"
-                app:backgroundTint="@android:color/transparent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/backButton"
+                android:insetBottom="0dp"
+                android:insetRight="0dp"
+                android:insetTop="0dp"
+                android:insetLeft="0dp"
+                app:iconPadding="0dp"
+                app:iconGravity="textStart"
+                android:padding="0dp"
                 style="@style/Widget.Grokion.IconButton"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
+                android:contentDescription="@string/grok_new_conversation"
+                app:icon="@drawable/ic_new_chat"
+                app:iconSize="20dp"
+                app:iconTint="@color/xai_ink"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:backgroundTint="@android:color/transparent"
+                app:glassInteractive="true"
+                app:glassElevation="4dp"
+                app:glassTint="@color/glass_control_tint" />
+
+            <io.github.stardomains3.oxproxion.GlassIconButton
+                android:id="@+id/backButton"
+                android:insetBottom="0dp"
+                android:insetRight="0dp"
+                android:insetTop="0dp"
+                android:insetLeft="0dp"
+                app:iconPadding="0dp"
+                app:iconGravity="textStart"
+                android:padding="0dp"
+                style="@style/Widget.Grokion.IconButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:visibility="gone"
                 android:contentDescription="@string/cd_back_to_app"
-                app:backgroundTint="@android:color/transparent"
                 app:icon="@drawable/backtoapp"
                 app:iconSize="22dp"
                 app:iconTint="@color/xai_ink"
                 app:layout_constraintEnd_toEndOf="@id/newChatButton"
-                app:layout_constraintTop_toBottomOf="@id/newChatButton" />
+                app:layout_constraintTop_toBottomOf="@id/newChatButton"
+                app:backgroundTint="@android:color/transparent"
+                app:glassInteractive="true"
+                app:glassElevation="4dp"
+                app:glassTint="@color/glass_control_tint" />
 
-            <com.google.android.material.button.MaterialButton
+            <io.github.stardomains3.oxproxion.GlassIconButton
                 android:id="@+id/homeButton"
+                android:insetBottom="0dp"
+                android:insetRight="0dp"
+                android:insetTop="0dp"
+                android:insetLeft="0dp"
+                app:iconPadding="0dp"
+                app:iconGravity="textStart"
+                android:padding="0dp"
                 style="@style/Widget.Grokion.IconButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:visibility="gone"
                 android:contentDescription="@string/cd_home"
-                app:backgroundTint="@android:color/transparent"
                 app:icon="@drawable/ic_home"
                 app:iconSize="22dp"
                 app:iconTint="@color/xai_ink"
                 app:layout_constraintEnd_toEndOf="@id/newChatButton"
-                app:layout_constraintTop_toBottomOf="@id/newChatButton" />
+                app:layout_constraintTop_toBottomOf="@id/newChatButton"
+                app:backgroundTint="@android:color/transparent"
+                app:glassInteractive="true"
+                app:glassElevation="4dp"
+                app:glassTint="@color/glass_control_tint" />
 
             <!-- Power-tools row (Settings > Appearance). Toggles show state: muted off, ink on a disc when on. -->
             <HorizontalScrollView
@@ -781,7 +875,7 @@
                 </LinearLayout>
             </HorizontalScrollView>
         </androidx.constraintlayout.widget.ConstraintLayout>
-        </io.github.stardomains3.oxproxion.GlassFrameLayout>
+        </FrameLayout>
 
         <!-- Soft fade so the transcript dissolves around the floating composer -->
         <View
@@ -900,6 +994,7 @@
         <io.github.stardomains3.oxproxion.GlassLinearLayout
             android:id="@+id/chatInputContainer"
             app:glassCornerRadius="26dp"
+            app:glassElevation="6dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"

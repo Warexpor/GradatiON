@@ -4,6 +4,11 @@ import android.app.Application
 import android.app.Dialog
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.HardwareRenderer
+import android.graphics.PixelFormat
+import android.graphics.RenderNode
+import android.hardware.HardwareBuffer
+import android.media.ImageReader
 import android.os.Looper
 import android.provider.Settings
 import android.view.View
@@ -47,10 +52,46 @@ class ScreenshotTest {
     }
 
     private fun snap(view: View, name: String) {
-        val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        view.draw(Canvas(bmp))
+        val bmp = runCatching { renderHardware(view) }.getOrNull() ?: Bitmap.createBitmap(
+            view.width, view.height, Bitmap.Config.ARGB_8888
+        ).also { view.draw(Canvas(it)) }
         val out = File("build/screenshots").apply { mkdirs() }
         File(out, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    /**
+     * Draws through the real hardware pipeline (RenderNode, RenderEffect, AGSL), so glass
+     * renders exactly as on a device instead of via the software fallback.
+     */
+    private fun renderHardware(view: View): Bitmap {
+        val w = view.width
+        val h = view.height
+        val root = RenderNode("snap").apply {
+            setPosition(0, 0, w, h)
+            val c = beginRecording()
+            view.draw(c)
+            endRecording()
+        }
+        val reader = ImageReader.newInstance(
+            w, h, PixelFormat.RGBA_8888, 1,
+            HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or HardwareBuffer.USAGE_GPU_COLOR_OUTPUT
+        )
+        val renderer = HardwareRenderer().apply {
+            setContentRoot(root)
+            setSurface(reader.surface)
+        }
+        try {
+            renderer.createRenderRequest().setWaitForPresent(true).syncAndDraw()
+            val image = reader.acquireNextImage()
+            val plane = image.planes[0]
+            val full = Bitmap.createBitmap(plane.rowStride / plane.pixelStride, h, Bitmap.Config.ARGB_8888)
+            full.copyPixelsFromBuffer(plane.buffer)
+            image.close()
+            return Bitmap.createBitmap(full, 0, 0, w, h)
+        } finally {
+            renderer.destroy()
+            reader.close()
+        }
     }
 
     private fun idle() {
@@ -140,6 +181,37 @@ class ScreenshotTest {
     fun chatConversationLight() = withChat { a, _ ->
         seedConversation(a); idle(); snap(root(a), "chat_conversation_light")
     }
+
+    /** Transcript scrolled so messages pass under the floating glass controls. */
+    private fun scrolledUnderGlass(a: MainActivity, name: String) {
+        seedConversation(a)
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        val f = ChatViewModel::class.java.getDeclaredField("_chatMessages").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val live = f.get(vm) as MutableLiveData<List<FlexibleMessage>>
+        live.value = live.value!! + FlexibleMessage(
+            "assistant",
+            JsonPrimitive(
+                """
+                Because dot products grow with dimension. With **d** = 512, raw scores get large, softmax saturates, and gradients all but vanish.
+
+                Scaling by **√d** keeps the variance near 1, so attention stays soft and learnable.
+
+                - Small *d*: barely matters
+                - Large *d*: training stalls without it
+                """.trimIndent()
+            )
+        )
+        idle()
+        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        rv.scrollToPosition(0); idle()
+        rv.scrollBy(0, (110 * a.resources.displayMetrics.density).toInt()); idle()
+        snap(root(a), name)
+    }
+
+    @Test fun chatGlassDark() = withChat { a, _ -> scrolledUnderGlass(a, "chat_glass_dark") }
+    @Test @Config(qualifiers = LIGHT)
+    fun chatGlassLight() = withChat { a, _ -> scrolledUnderGlass(a, "chat_glass_light") }
 
     /** Mid-stream frame: the newest words are still fading in at the edge. */
     private fun streamInto(a: MainActivity, name: String) {

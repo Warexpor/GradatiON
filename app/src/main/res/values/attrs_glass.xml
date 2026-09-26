@@ -6,5 +6,11 @@
         <attr name="glassBlurRadius" format="dimension" />
         <attr name="glassBottomEdgeOnly" format="boolean" />
         <attr name="glassEdgeAlpha" format="float" />
+        <!-- Bend content at the rim (liquid glass lens, API 33+) -->
+        <attr name="glassLens" format="boolean" />
+        <!-- Spring up, lean and glow under the finger -->
+        <attr name="glassInteractive" format="boolean" />
+        <!-- Soft floating shadow -->
+        <attr name="glassElevation" format="dimension" />
     </declare-styleable>
 </resources>

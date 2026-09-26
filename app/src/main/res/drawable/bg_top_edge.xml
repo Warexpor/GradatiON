@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- iOS scroll-edge effect: the transcript dissolves into the canvas under the floating top controls -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="@color/grad_top_edge"
+        android:centerColor="@color/composer_fade_mid"
+        android:centerY="0.6"
+        android:endColor="@color/grad_fade_clear" />
+</shape>
