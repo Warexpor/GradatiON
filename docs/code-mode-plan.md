@@ -11,7 +11,7 @@ and exactly what to build, in order, to ship Code mode for real.
 A third top tab (Chat · Roleplay · **Code**), off by default, turned on in
 Settings > Code mode. It makes GradatiON a universal mobile client for coding agents
 ("harnesses") that run on the user's own computer or server: Claude Code, Codex CLI,
-OpenCode, Gemini CLI, and anything else that speaks the Agent Client Protocol (ACP).
+OpenCode, Grok Build, Cursor CLI, Pi, and anything else that speaks the Agent Client Protocol (ACP).
 
 The phone never runs an agent or touches code. It:
 
@@ -31,7 +31,7 @@ agents and relays everything to the phone over one authenticated WebSocket.
  │ CodeHub              │ JSON-RPC │  ├─ auth, sessions, replay log      │
  │ BridgeBackend        │  (ACP +  │  ├─ ACP client ──stdio──▶ agent     │
  │ AcpAdapter           │  bridge  │  │    claude-code-acp / codex-acp /  │
- │ WebSocketTransport   │  ext.)   │  │    opencode acp / gemini --acp   │
+ │ WebSocketTransport   │  ext.)   │  │    opencode acp / grok / agent / pi │
  └──────────────────────┘          │  └─ fs + terminal for the agent    │
                                    └────────────────────────────────────┘
       reach: LAN, Tailscale/WireGuard, SSH tunnel, or an optional relay
@@ -120,7 +120,9 @@ Keep it in its own repository (or `bridge/` in this repo if the user prefers; as
    | Claude Code | `npx @zed-industries/claude-code-acp` (wraps the Claude Agent SDK) |
    | Codex CLI | `npx @zed-industries/codex-acp` (or `codex` app-server if its ACP mode matures) |
    | OpenCode | `opencode acp` |
-   | Gemini CLI | `gemini --experimental-acp` |
+   | Grok Build | `npx @xai-official/grok agent stdio` (or `grok agent stdio`) |
+   | Cursor CLI | `agent acp` |
+   | Pi | `npx pi-acp` |
    | Custom | any command line the user configures |
 
    Config file `~/.config/gradation-bridge/config.json`: harness commands, env, allowed

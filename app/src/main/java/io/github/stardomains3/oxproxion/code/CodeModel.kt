@@ -3,9 +3,9 @@ package io.github.stardomains3.oxproxion.code
 import kotlinx.serialization.Serializable
 
 /*
- * Code mode core model. Harness-agnostic: every harness (Claude Code, Codex, OpenCode, Gemini
- * CLI, anything speaking ACP) is mapped onto these few concepts by a [HarnessAdapter], and the UI
- * only ever renders these. See docs/code-mode-plan.md for the full design.
+ * Code mode core model. Harness-agnostic: every harness (Claude Code, Codex, OpenCode, Grok Build,
+ * Cursor CLI, Pi, anything speaking ACP) is mapped onto these few concepts by a [HarnessAdapter],
+ * and the UI only ever renders these. See docs/code-mode-plan.md for the full design.
  *
  *   CodeHost     a machine the user controls, reached through a bridge (or directly)
  *   Harness      a coding agent installed on that machine
@@ -20,7 +20,9 @@ enum class HarnessKind(val id: String, val displayName: String, val shortName: S
     CLAUDE_CODE("claude-code", "Claude Code", "Claude"),
     CODEX("codex", "Codex CLI", "Codex"),
     OPENCODE("opencode", "OpenCode", "OpenCode"),
-    GEMINI_CLI("gemini-cli", "Gemini CLI", "Gemini"),
+    GROK_BUILD("grok-build", "Grok Build", "Grok"),
+    CURSOR_CLI("cursor-cli", "Cursor CLI", "Cursor"),
+    PI("pi", "Pi", "Pi"),
     CUSTOM("custom", "Custom agent", "Agent");
 
     companion object {

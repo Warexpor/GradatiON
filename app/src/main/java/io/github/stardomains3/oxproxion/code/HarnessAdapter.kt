@@ -32,7 +32,8 @@ sealed class CodeUpdate {
 
 /** What an adapter decodes one inbound frame into. */
 sealed class AdapterOutput {
-    data class Update(val sessionId: String, val update: CodeUpdate) : AdapterOutput()
+    /** [seq] is the bridge `_meta.seq` when present (resume / idempotent replay). */
+    data class Update(val sessionId: String, val update: CodeUpdate, val seq: Long? = null) : AdapterOutput()
     /** Reply to a request we sent (matched by JSON-RPC id). */
     data class Result(val id: Long, val result: JsonElement?, val error: String?) : AdapterOutput()
     /** Something the phone can't use (yet). Logged, never shown. */
@@ -42,8 +43,9 @@ sealed class AdapterOutput {
 /**
  * Translates between one wire protocol and the core model. Pluggable per harness family:
  *
- * - [AcpAdapter]: Agent Client Protocol (JSON-RPC). The bridge speaks it natively for Gemini CLI
- *   and OpenCode, and through the published ACP wrappers for Claude Code and Codex. This is the
+ * - [AcpAdapter]: Agent Client Protocol (JSON-RPC). The bridge speaks it for OpenCode (`opencode acp`),
+ *   Grok Build (`grok agent stdio`), Cursor CLI (`agent acp`), Pi (`pi-acp`), and the published ACP
+ *   wrappers for Claude Code and Codex. This is the
  *   default and the only one the phone strictly needs when a bridge is in the middle.
  * - Direct adapters (planned, optional): OpenCode's HTTP/SSE server, Codex app-server, Claude
  *   Agent SDK stream-json. Only for setups without the bridge.
@@ -57,7 +59,8 @@ interface HarnessAdapter {
 
     fun initialize(id: Long): String
     fun newSession(id: Long, request: NewSessionRequest): String
-    fun loadSession(id: Long, sessionId: String, workspace: String): String
+    /** [afterSeq]: bridge replays only notifications with seq greater than this (null = full history). */
+    fun loadSession(id: Long, sessionId: String, workspace: String, afterSeq: Long? = null): String
     fun prompt(id: Long, sessionId: String, text: String): String
     fun cancel(sessionId: String): String
     fun setMode(id: Long, sessionId: String, mode: PermissionMode): String
