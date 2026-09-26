@@ -188,6 +188,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var toolsButton: MaterialButton
     private val viewModel: ChatViewModel by activityViewModels()
     private lateinit var modelNameTextView: TextView
+    private lateinit var modelNameShell: FrameLayout
     private lateinit var tabChat: TextView
     private lateinit var tabRoleplay: TextView
     private lateinit var modeTabIndicator: View
@@ -516,6 +517,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         attachmentButton = view.findViewById(R.id.attachmentButton)
         buttonsContainer = view.findViewById(R.id.buttonsContainer)
         modelNameTextView = view.findViewById(R.id.modelNameTextView)
+        modelNameShell = view.findViewById(R.id.modelNameShell)
         tabChat = view.findViewById(R.id.tabChat)
         tabRoleplay = view.findViewById(R.id.tabRoleplay)
         modeTabIndicator = view.findViewById(R.id.modeTabIndicator)
@@ -1537,8 +1539,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 moveView(btn, leftButtonContainer)
                 applyCollapsedParams(btn)
             }
-            // The model pill trails the round actions (Grok: + · mode pill).
-            moveView(modelNameTextView, leftButtonContainer)
+            // Keep the model pill inside its weighted shell (ellipsize contract from
+            // 70ea7f8). Collapse must not orphan the weight=1 FrameLayout.
+            moveView(modelNameShell, leftButtonContainer)
+            moveView(modelNameTextView, modelNameShell)
 
             // Restore Right side in order (Send will be added first, so it sits at the top)
             rightCollapsed.forEach { btn ->

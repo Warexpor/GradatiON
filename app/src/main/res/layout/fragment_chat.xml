@@ -1189,6 +1189,7 @@
                     <!-- Weighted shell so the pill can shrink+ellipsize when the left strip is tight,
                          without stretching the pill chrome when space is plentiful. -->
                     <FrameLayout
+                        android:id="@+id/modelNameShell"
                         android:layout_width="0dp"
                         android:layout_height="38dp"
                         android:layout_marginStart="8dp"
