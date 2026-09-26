@@ -1,13 +1,19 @@
 package io.github.stardomains3.oxproxion.code
 
 import android.content.Context
+import android.os.SystemClock
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.text.method.LinkMovementMethod
+import android.view.Choreographer
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -18,6 +24,8 @@ import io.github.stardomains3.oxproxion.ChatMarkdown
 import io.github.stardomains3.oxproxion.IncrementalMarkdown
 import io.github.stardomains3.oxproxion.R
 import io.github.stardomains3.oxproxion.ShimmerText
+import io.github.stardomains3.oxproxion.StreamCursorSpan
+import io.github.stardomains3.oxproxion.StreamFadeSpan
 import io.noties.markwon.Markwon
 import io.noties.markwon.SoftBreakAddsNewLinePlugin
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
@@ -45,7 +53,14 @@ class CodeTranscriptAdapter(
         .usePlugin(SoftBreakAddsNewLinePlugin.create())
         .usePlugin(ChatMarkdown.plugin(context))
         .build()
-    private val streams = HashMap<String, IncrementalMarkdown>()
+    /** Per-message incremental markdown + fade clocks for the streaming agent-text cell. */
+    private class StreamState(val markdown: IncrementalMarkdown) {
+        val fadeStarts = ArrayList<Int>()
+        val fadeTimes = ArrayList<Long>()
+        var lastRenderedLen = 0
+    }
+
+    private val streams = HashMap<String, StreamState>()
     private val expanded = HashSet<String>()
 
     init {
@@ -74,8 +89,8 @@ class CodeTranscriptAdapter(
         fun v(res: Int) = inf.inflate(res, parent, false)
         return when (viewType) {
             T_USER -> Simple(v(R.layout.item_code_user))
-            T_TEXT -> Simple(v(R.layout.item_code_text)).also {
-                (it.itemView as TextView).movementMethod = LinkMovementMethod.getInstance()
+            T_TEXT -> TextHolder(v(R.layout.item_code_text) as TextView).also {
+                it.textView.movementMethod = LinkMovementMethod.getInstance()
             }
             T_THOUGHT -> Simple(v(R.layout.item_code_thought))
             T_TOOL -> Simple(v(R.layout.item_code_tool))
@@ -94,7 +109,7 @@ class CodeTranscriptAdapter(
             TranscriptRow.Working -> (v as TextView).let { ShimmerText.start(it, ShimmerText.highlightFor(it)) }
             is TranscriptRow.Event -> when (val e = row.event) {
                 is CodeEvent.UserPrompt -> v.findViewById<TextView>(R.id.codeUserText).text = e.text
-                is CodeEvent.AgentText -> bindText(v as TextView, e)
+                is CodeEvent.AgentText -> bindText(holder as TextHolder, e)
                 is CodeEvent.Thought -> bindThought(v, e)
                 is CodeEvent.ToolCall -> bindTool(v, e)
                 is CodeEvent.FileDiff -> bindDiff(v, e)
@@ -111,16 +126,76 @@ class CodeTranscriptAdapter(
     }
 
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
-        (holder.itemView as? TextView)?.let { if (holder.itemViewType == T_WORKING) ShimmerText.stop(it) }
+        when (holder) {
+            is TextHolder -> holder.stopFadeTicker()
+            else -> (holder.itemView as? TextView)?.let {
+                if (holder.itemViewType == T_WORKING) ShimmerText.stop(it)
+            }
+        }
     }
 
-    private fun bindText(tv: TextView, e: CodeEvent.AgentText) {
+    /**
+     * Streaming agent text: same soft per-word fade + live cursor as [io.github.stardomains3.oxproxion.ChatAdapter].
+     * Thoughts/tools stay plain — chat only fades the assistant reply body.
+     */
+    private fun bindText(holder: TextHolder, e: CodeEvent.AgentText) {
+        val tv = holder.textView
         if (e.streaming) {
-            val inc = streams.getOrPut(e.key) { IncrementalMarkdown(markwon) }
-            tv.text = inc.render(e.text)
+            val state = streams.getOrPut(e.key) { StreamState(IncrementalMarkdown(markwon)) }
+            try {
+                val spanned = state.markdown.render(e.text)
+                ChatMarkdown.polish(spanned)
+                applyStreamFades(state, spanned, SystemClock.uptimeMillis())
+                val cursorColor = ContextCompat.getColor(tv.context, R.color.xai_mute)
+                val cursorStart = spanned.length
+                spanned.append(StreamCursorSpan.GLYPH)
+                spanned.setSpan(
+                    StreamCursorSpan(cursorColor),
+                    cursorStart,
+                    spanned.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                tv.setText(spanned, TextView.BufferType.SPANNABLE)
+                holder.ensureFadeTicker()
+            } catch (_: Exception) {
+                holder.stopFadeTicker()
+                tv.text = e.text
+            }
         } else {
             streams.remove(e.key)
+            holder.stopFadeTicker()
             tv.text = ChatMarkdown.polished(markwon.toMarkdown(e.text))
+        }
+    }
+
+    /** Track newly appended rendered ranges and attach a [StreamFadeSpan] per run (chat pattern). */
+    private fun applyStreamFades(state: StreamState, text: SpannableStringBuilder, now: Long) {
+        val len = text.length
+        if (len < state.lastRenderedLen) {
+            while (state.fadeStarts.isNotEmpty() && state.fadeStarts.last() >= len) {
+                state.fadeStarts.removeAt(state.fadeStarts.lastIndex)
+                state.fadeTimes.removeAt(state.fadeTimes.lastIndex)
+            }
+        } else if (len > state.lastRenderedLen) {
+            state.fadeStarts.add(state.lastRenderedLen)
+            state.fadeTimes.add(now)
+        }
+        state.lastRenderedLen = len
+        while (state.fadeTimes.isNotEmpty() && now - state.fadeTimes[0] >= StreamFadeSpan.DURATION_MS) {
+            state.fadeStarts.removeAt(0)
+            state.fadeTimes.removeAt(0)
+        }
+        for (i in state.fadeStarts.indices) {
+            val start = state.fadeStarts[i].coerceAtMost(len)
+            val end = (if (i + 1 < state.fadeStarts.size) state.fadeStarts[i + 1] else len).coerceAtMost(len)
+            if (end > start) {
+                text.setSpan(
+                    StreamFadeSpan(state.fadeTimes[i]),
+                    start,
+                    end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
         }
     }
 
@@ -277,6 +352,49 @@ class CodeTranscriptAdapter(
                 setPadding(0, (6 * d).toInt(), 0, (6 * d).toInt())
             }
             box.addView(row)
+        }
+    }
+
+    private class TextHolder(val textView: TextView) : RecyclerView.ViewHolder(textView) {
+        private var fadeTicker: Choreographer.FrameCallback? = null
+
+        fun ensureFadeTicker() {
+            if (fadeTicker != null) return
+            val ticker = object : Choreographer.FrameCallback {
+                override fun doFrame(frameTimeNs: Long) {
+                    if (!textView.isAttachedToWindow) {
+                        fadeTicker = null
+                        return
+                    }
+                    val text = textView.text
+                    val fades = if (text is Spanned) {
+                        text.getSpans(0, text.length, StreamFadeSpan::class.java)
+                    } else emptyArray()
+                    val cursors = if (text is Spanned) {
+                        text.getSpans(0, text.length, StreamCursorSpan::class.java)
+                    } else emptyArray()
+                    val fadesDone = fades.isEmpty() || fades.all { it.isDone() }
+                    if (fadesDone && cursors.isEmpty()) {
+                        fadeTicker = null
+                        if (text is Spannable) {
+                            fades.forEach { text.removeSpan(it) }
+                        }
+                        return
+                    }
+                    if (fadesDone && text is Spannable) {
+                        fades.forEach { text.removeSpan(it) }
+                    }
+                    textView.invalidate()
+                    Choreographer.getInstance().postFrameCallback(this)
+                }
+            }
+            fadeTicker = ticker
+            Choreographer.getInstance().postFrameCallback(ticker)
+        }
+
+        fun stopFadeTicker() {
+            fadeTicker?.let { Choreographer.getInstance().removeFrameCallback(it) }
+            fadeTicker = null
         }
     }
 
