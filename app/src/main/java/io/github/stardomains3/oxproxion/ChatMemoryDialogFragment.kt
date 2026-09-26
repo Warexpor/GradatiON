@@ -46,7 +46,7 @@ class ChatMemoryDialogFragment : DialogFragment() {
             }
         }
 
-        return MaterialAlertDialogBuilder(requireContext(), R.style.CustomMaterialAlertDialogTheme)
+        return GlassAlertDialogBuilder(requireContext(), R.style.CustomMaterialAlertDialogTheme)
             .setTitle("Chat Memory")
             .setSingleChoiceItems(adapter, checkedItem) { dialog, which ->
                 val selectedText = options[which]

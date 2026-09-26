@@ -75,6 +75,7 @@ class PresetsListFragment : Fragment() {
 
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
+        EmptyState.bind(recycler, view.findViewById(R.id.presetsEmptyView))
 
         // Add drag and drop functionality
         val callback = object : ItemTouchHelper.SimpleCallback(

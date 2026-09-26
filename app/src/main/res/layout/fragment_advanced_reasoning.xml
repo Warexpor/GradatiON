@@ -56,7 +56,7 @@
                     android:id="@+id/effortGroup"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
+                    android:orientation="horizontal"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintTop_toTopOf="parent"
@@ -64,36 +64,40 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/buttonMinimal"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        app:backgroundTint="@color/toggle_background_selector"
                         android:text="Minimal"
                         app:strokeColor="@color/xai_hairline"
                         style="?attr/materialButtonOutlinedStyle" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/buttonLow"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        app:backgroundTint="@color/toggle_background_selector"
                         android:text="Low"
                         app:strokeColor="@color/xai_hairline"
                         style="?attr/materialButtonOutlinedStyle" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/buttonMedium"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        app:backgroundTint="@color/toggle_background_selector"
                         android:text="Medium"
                         app:strokeColor="@color/xai_hairline"
                         style="?attr/materialButtonOutlinedStyle" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/buttonHigh"
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        app:backgroundTint="@color/toggle_background_selector"
                         android:text="High"
                         app:strokeColor="@color/xai_hairline"
                         style="?attr/materialButtonOutlinedStyle" />

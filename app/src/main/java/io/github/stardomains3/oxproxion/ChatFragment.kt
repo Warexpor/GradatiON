@@ -1728,7 +1728,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     addView(input)
                     setPadding(48, 24, 48, 8)
                 }
-                val dialog = MaterialAlertDialogBuilder(
+                val dialog = GlassAlertDialogBuilder(
                     requireContext(),
                     R.style.CustomMaterialAlertDialogTheme
                 )
@@ -2170,7 +2170,7 @@ $cleanContent
             val currentRatio = sharedPreferencesHelper.getGeminiAspectRatio() ?: "1:1"  // Default 1:1
             val selectedIndex = aspectRatios.indexOf(currentRatio)
 
-            MaterialAlertDialogBuilder(requireContext())
+            GlassAlertDialogBuilder(requireContext())
                 .setTitle(R.string.image_gen_aspect_title)
                 .setSingleChoiceItems(aspectRatios, selectedIndex) { _, which ->
                     val selectedRatio = aspectRatios[which]
@@ -2701,7 +2701,7 @@ $cleanContent
                 else -> AppFonts.INTER
             }
 
-            val dialog = MaterialAlertDialogBuilder(requireContext(), R.style.CustomMaterialAlertDialogTheme)
+            val dialog = GlassAlertDialogBuilder(requireContext(), R.style.CustomMaterialAlertDialogTheme)
                 .setTitle(R.string.select_font_title)
                 .setNegativeButton(R.string.action_cancel, null)
                 .create()
@@ -3142,7 +3142,7 @@ $cleanContent
         }
         fileExtensionInput.setText(detectedExt)
 
-        val dialog = MaterialAlertDialogBuilder(requireContext(),
+        val dialog = GlassAlertDialogBuilder(requireContext(),
             R.style.CustomMaterialAlertDialogTheme
         )
             .setTitle(R.string.save_as_file_title)
@@ -3343,9 +3343,11 @@ $cleanContent
             return
         }
         val popupView = layoutInflater.inflate(R.layout.popup_attach, null)
+        // Fixed width: match_parent rows inside a wrap_content popup can measure past the screen.
+        val popupWidth = (240 * resources.displayMetrics.density).toInt()
         val popup = PopupWindow(
             popupView,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            popupWidth,
             ViewGroup.LayoutParams.WRAP_CONTENT,
             true
         ).apply {
@@ -3398,7 +3400,7 @@ $cleanContent
         }
 
         popupView.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         )
         val yOff = -(popupView.measuredHeight + menuButton.height + (8 * resources.displayMetrics.density).toInt())
@@ -3602,7 +3604,7 @@ $cleanContent
             val items = mutableListOf("Take a Photo", "Choose from Gallery")
             if (supportsPdf) items.add("Choose PDF") // NEW: Add PDF option
 
-            MaterialAlertDialogBuilder(requireContext())
+            GlassAlertDialogBuilder(requireContext())
                 .setTitle("Load Image or PDF")
                 .setItems(items.toTypedArray()) { _, which ->
                     when (which) {
@@ -4187,7 +4189,7 @@ $cleanContent
             tempPdfFile?.delete()
         }
 
-        MaterialAlertDialogBuilder(requireContext())
+        GlassAlertDialogBuilder(requireContext())
             .setTitle("Select PDF Page")
             .setSingleChoiceItems(pageTitles, 0) { _, which -> selectedPage = which }
             .setPositiveButton("Convert") { _, _ ->
@@ -4346,7 +4348,7 @@ $cleanContent
             "${file.fileName} (${formatFileSize(file.size)})"
         }
 
-        val builder = MaterialAlertDialogBuilder(requireContext())
+        val builder = GlassAlertDialogBuilder(requireContext())
             .setTitle("Attached Files (${pendingFiles.size})")
             .setMessage(filesList)
             .setPositiveButton("Remove All") { _, _ ->
@@ -4394,7 +4396,7 @@ $cleanContent
         val mutableItems = filteredItems.toMutableList()
 
         // 7️⃣ Create the dialog
-        val dialog = MaterialAlertDialogBuilder(requireContext(),
+        val dialog = GlassAlertDialogBuilder(requireContext(),
             R.style.CustomMaterialAlertDialogTheme
         )
             .setTitle("Enable / Disable Tools")
@@ -4507,7 +4509,7 @@ $cleanContent
         val currentEngine = sharedPreferencesHelper.getWebSearchEngine()
         var selectedEngine = currentEngine
 
-        MaterialAlertDialogBuilder(requireContext(),
+        GlassAlertDialogBuilder(requireContext(),
             R.style.CustomMaterialAlertDialogTheme
         )
             .setTitle("Web Search Engine")
@@ -4536,7 +4538,7 @@ $cleanContent
         val currentSize = sharedPreferencesHelper.getWebSearchContextSize()
         var selectedSize = currentSize
 
-        MaterialAlertDialogBuilder(requireContext(),
+        GlassAlertDialogBuilder(requireContext(),
             R.style.CustomMaterialAlertDialogTheme
         )
             .setTitle("Search Context Size")
@@ -4561,7 +4563,7 @@ $cleanContent
         val currentMax = sharedPreferencesHelper.getWebSearchMaxResults()
         var selectedMax = currentMax
 
-        MaterialAlertDialogBuilder(requireContext(),
+        GlassAlertDialogBuilder(requireContext(),
             R.style.CustomMaterialAlertDialogTheme
         )
             // Combine the title and the message here

@@ -238,6 +238,7 @@ class SavedChatsFragment : Fragment() {
         }
 
         dialog.show()
+        GlassChrome.glassDialog(dialog)
     }
 
     private fun showRenameDialog(session: ChatSession) {

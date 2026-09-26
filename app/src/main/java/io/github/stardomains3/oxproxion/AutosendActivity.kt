@@ -40,7 +40,7 @@ class AutosendActivity : AppCompatActivity() {
         val preview = sharedText.take(200).let { text ->
             if (sharedText.length > 200) "$text…" else text
         }
-        MaterialAlertDialogBuilder(this)
+        GlassAlertDialogBuilder(this)
             .setTitle("Auto Send")
             .setMessage("Send this text to GradatiON now?\n\n$preview")
             .setPositiveButton("Send") { _, _ -> forwardToMain(sharedText) }

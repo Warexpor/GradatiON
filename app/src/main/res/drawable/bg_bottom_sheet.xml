@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="@color/xai_canvas_card" />
-    <corners
-        android:topLeftRadius="28dp"
-        android:topRightRadius="28dp"
-        android:bottomLeftRadius="0dp"
-        android:bottomRightRadius="0dp" />
-</shape>
+<!-- Bottom sheet: liquid glass, top corners rounded -->
+<drawable xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    class="io.github.stardomains3.oxproxion.GlassDrawable"
+    app:glassTint="@color/glass_sheet_tint"
+    app:glassCornerRadius="28dp"
+    app:glassTopOnly="true" />

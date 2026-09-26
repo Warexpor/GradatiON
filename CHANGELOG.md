@@ -3,6 +3,8 @@
 ## Unreleased — monochrome redesign
 
 ### Changed
+- Glass everywhere: every dialog, bottom sheet, context menu, dropdown and settings subpage now uses the liquid-glass style; toolbar back and action buttons are glass capsules that spring under the finger.
+- Palette one step dimmer and darker (dark base #111111, light #F1F1F1), still strictly neutral.
 - Liquid glass: top bar controls are now floating glass buttons and chips over a soft scroll-edge fade, and glass bends content at its rim with a specular edge (Android 13+). Touching glass springs it up, leans it toward your finger and lights it from the touch point. Battery saver and low-RAM devices get a solid frosted fill instead of live blur.
 - Glass: the transcript scrolls beneath a live-blurred top bar and a floating glass composer; the Controls panel is the same material, and dialogs and sheets frost the screen behind them.
 - Palette moves off pure black to a charcoal base (and a soft paper base in light) with a finer stepped gray ramp and lower overall contrast.
@@ -16,6 +18,12 @@
 - Chat empty state is a small mark with a greeting instead of the big watermark.
 
 ### Fixed
+- Chats with code blocks crashed on Android 12 and 13 (an Android 14-only text call).
+- Toolbar action icons were invisible in light mode (import, export, search, save).
+- Attach menu could measure wider than the screen.
+- Timezone tool output used locale digits (e.g. Arabic numerals) instead of ASCII.
+- Presets and Prompt Library now show an empty state; "Clear chat?" reads "Clear chat when applying".
+- Reasoning effort is a proper segmented control; Help and README link the current repo.
 - Streaming no longer hops to the UI thread once per token (janky on fast local models); updates are coalesced to one per frame and long replies no longer re-parse all markdown every frame.
 - A partial reply could reappear after Stop or an error; tool calls and images arriving with the first text chunk were dropped; LAN citations were listed twice.
 - Reasoning, web search, stream, tools, presets, system message, fonts and chat export could only be reached by long-pressing Send on an empty chat. A Controls button next to + now opens them any time.

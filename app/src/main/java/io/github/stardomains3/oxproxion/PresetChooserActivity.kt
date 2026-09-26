@@ -43,7 +43,7 @@ class PresetChooserActivity : AppCompatActivity() {
 
         if (allPresets.isEmpty()) {
             // No presets available
-            androidx.appcompat.app.AlertDialog.Builder(this)
+            GlassAlertDialogBuilder(this)
                 .setTitle("No Presets Available")
                 .setMessage("You don't have any presets yet. Create some in the app first.")
                 .setPositiveButton("OK") { _, _ -> finish() }
@@ -86,7 +86,7 @@ class PresetChooserActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(24, 16, 24, 16)
         }
-        val dialog = MaterialAlertDialogBuilder(this)
+        val dialog = GlassAlertDialogBuilder(this)
             .setCustomTitle(titleTextView)
             .setView(dialogView)
             .setPositiveButton("Send") { dialogInterface, _ ->

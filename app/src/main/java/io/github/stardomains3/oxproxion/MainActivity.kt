@@ -28,6 +28,8 @@ class MainActivity : AppCompatActivity() {
         }
         AppCompatDelegate.setDefaultNightMode(mode)
         super.onCreate(savedInstanceState)
+        GlassQuality.init(this)
+        GlassChrome.install(supportFragmentManager)
 
         /* ------------------------------------------------------ */
         /* 1.  Cold-start gate:  finish() if auth fails / none    */

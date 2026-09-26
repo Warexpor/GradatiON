@@ -456,6 +456,7 @@ class GlassMaterial(
         )
         if (!liquid) return blur
         // A driver that can't compile the lens keeps plain blur rather than crashing.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return blur
         val lens = runCatching { lensEffect(w, h) }.getOrNull() ?: return blur
         return RenderEffect.createChainEffect(lens, blur)
     }

@@ -19,7 +19,7 @@ object GrokInputDialog {
         onConfirm: (String) -> Unit
     ) {
         val context = fragment.requireContext()
-        val dialog = MaterialAlertDialogBuilder(
+        val dialog = GlassAlertDialogBuilder(
             context,
             R.style.CustomMaterialAlertDialogTheme
         ).create()

@@ -65,7 +65,7 @@ class RpPersonaFragment : Fragment() {
                 addView(nameInput)
                 setPadding(48, 16, 48, 0)
             }
-            val dialog = MaterialAlertDialogBuilder(
+            val dialog = GlassAlertDialogBuilder(
                 requireContext(),
                 R.style.CustomMaterialAlertDialogTheme
             )

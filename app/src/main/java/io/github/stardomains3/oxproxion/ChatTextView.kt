@@ -72,7 +72,13 @@ class ChatTextView @JvmOverloads constructor(
         val first = layout.getLineForOffset(start)
         val last = layout.getLineForOffset((end - 1).coerceAtLeast(start))
         val top = layout.getLineTop(first).toFloat()
-        val bottom = layout.getLineBottom(last, false).toFloat()
+        val bottom = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            layout.getLineBottom(last, false).toFloat()
+        } else {
+            // getLineBottom(line, false) is API 34; strip the line-spacing extra by hand.
+            val lineTop = layout.getLineTop(last).toFloat()
+            lineTop + (layout.getLineBottom(last) - lineTop) / lineSpacingMultiplier.coerceAtLeast(1f)
+        }
         val width = layout.width.toFloat()
         rect.set(0f, top, width, bottom)
         canvas.drawRoundRect(rect, cardRadius, cardRadius, cardFill)

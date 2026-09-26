@@ -190,6 +190,7 @@ class PromptLibraryFragment : Fragment() {
         recyclerView.apply {
             layoutManager = LinearLayoutManager(context)
             adapter = promptAdapter
+            EmptyState.bind(this, view.findViewById(R.id.promptsEmptyView))
 
             // Drag-and-drop reordering (all items)
             val callback = object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0) {

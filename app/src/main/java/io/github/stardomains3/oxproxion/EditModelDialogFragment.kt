@@ -21,7 +21,7 @@ class EditModelDialogFragment : DialogFragment() {
     private var existingModel: LlmModel? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val builder = MaterialAlertDialogBuilder(requireActivity())
+        val builder = GlassAlertDialogBuilder(requireActivity())
         val view = layoutInflater.inflate(R.layout.dialog_add_model, null)
 
         val editName      = view.findViewById<EditText>(R.id.editModelName)

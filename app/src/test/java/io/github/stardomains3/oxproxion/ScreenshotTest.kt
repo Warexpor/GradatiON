@@ -182,6 +182,12 @@ class ScreenshotTest {
         seedConversation(a); idle(); snap(root(a), "chat_conversation_light")
     }
 
+    /** Android 12: code cards must not call API 34-only text layout methods. */
+    @Test @Config(sdk = [31])
+    fun chatConversationApi31() = withChat { a, _ ->
+        seedConversation(a); idle(); snap(root(a), "chat_conversation_api31")
+    }
+
     /** Transcript scrolled so messages pass under the floating glass controls. */
     private fun scrolledUnderGlass(a: MainActivity, name: String) {
         seedConversation(a)
@@ -314,13 +320,25 @@ class ScreenshotTest {
         return null
     }
 
+    /** The frosted screen a dialog window sits on: cross-window blur plus the light dim. */
+    private fun frostedBackdrop(a: MainActivity): Bitmap {
+        val r = root(a)
+        val scale = 0.25f
+        val small = Bitmap.createBitmap((r.width * scale).toInt(), (r.height * scale).toInt(), Bitmap.Config.ARGB_8888)
+        val sc = Canvas(small)
+        sc.scale(scale, scale)
+        r.draw(sc)
+        GlassMaterial.boxBlur(small, (22 * a.resources.displayMetrics.density * scale / 2f).toInt().coerceAtLeast(1))
+        val bg = Bitmap.createScaledBitmap(small, r.width, r.height, true).copy(Bitmap.Config.ARGB_8888, true)
+        Canvas(bg).drawColor(0x47000000)
+        return bg
+    }
+
     private fun snapDialog(a: MainActivity, name: String) {
         val d: Dialog? = ShadowDialog.getLatestDialog()
         if (d == null) { snap(root(a), name); return }
-        val bg = Bitmap.createBitmap(root(a).width, root(a).height, Bitmap.Config.ARGB_8888)
+        val bg = frostedBackdrop(a)
         val c = Canvas(bg)
-        root(a).draw(c)
-        c.drawColor(0x99000000.toInt())
         val dv = d.window!!.decorView
         c.save(); c.translate(0f, (bg.height - dv.height).toFloat().coerceAtLeast(0f))
         dv.draw(c); c.restore()
@@ -355,6 +373,25 @@ class ScreenshotTest {
     @Test fun rpHubDark() = withChat { a, _ -> pushFragment(a, RpHubFragment()); snap(root(a), "rp_hub_dark") }
     @Test @Config(qualifiers = LIGHT)
     fun rpHubLight() = withChat { a, _ -> pushFragment(a, RpHubFragment()); snap(root(a), "rp_hub_light") }
+    @Test fun rpCharactersDark() = withChat { a, _ -> pushFragment(a, RpCharacterLibraryFragment.newInstance()); snap(root(a), "rp_characters_dark") }
+    @Test fun rpLorebooksDark() = withChat { a, _ -> pushFragment(a, RpLorebookLibraryFragment.newInstance()); snap(root(a), "rp_lorebooks_dark") }
+    @Test fun rpPersonaDark() = withChat { a, _ -> pushFragment(a, RpPersonaFragment.newInstance()); snap(root(a), "rp_persona_dark") }
+    @Test fun rpCharacterEditDark() = withChat { a, _ -> pushFragment(a, RpCharacterEditFragment.newInstance(0L)); snap(root(a), "rp_character_edit_dark") }
+    @Test fun rpLorebookEditDark() = withChat { a, _ -> pushFragment(a, RpLorebookEditFragment.newInstance(0L)); snap(root(a), "rp_lorebook_edit_dark") }
+    @Test fun helpDark() = withChat { a, _ -> pushFragment(a, HelpFragment()); snap(root(a), "help_dark") }
+    @Test fun licensesDark() = withChat { a, _ -> pushFragment(a, LicenseListFragment()); snap(root(a), "licenses_dark") }
+    @Test fun advancedReasoningDark() = withChat { a, _ -> pushFragment(a, AdvancedReasoningFragment()); snap(root(a), "advanced_reasoning_dark") }
+    @Test fun lanModelsDark() = withChat { a, _ -> pushFragment(a, LanModelsFragment()); snap(root(a), "lan_models_dark") }
+    @Test fun openRouterModelsDark() = withChat { a, _ -> pushFragment(a, OpenRouterModelsFragment()); snap(root(a), "openrouter_models_dark") }
+    @Test fun addPromptDark() = withChat { a, _ -> pushFragment(a, AddEditPromptFragment()); snap(root(a), "add_prompt_dark") }
+    @Test fun addSystemMessageDark() = withChat { a, _ -> pushFragment(a, AddEditSystemMessageFragment()); snap(root(a), "add_system_message_dark") }
+    @Test fun presetEditDark() = withChat { a, _ -> pushFragment(a, PresetEditFragment.newInstance(null)); snap(root(a), "preset_edit_dark") }
+    @Test fun editMessageDark() = withChat { a, _ -> pushFragment(a, EditMessageFragment.newInstance(0, "Can you explain how attention works?")); snap(root(a), "edit_message_dark") }
+    @Test fun markdownViewerDark() = withChat { a, _ -> pushFragment(a, MarkdownViewerFragment.newInstance("# Notes\n\nSome **bold** text and `code`.\n\n- one\n- two", "Inter", "Qwen 3")); snap(root(a), "markdown_viewer_dark") }
+    @Test @Config(qualifiers = LIGHT)
+    fun presetsLight() = withChat { a, _ -> pushFragment(a, PresetsListFragment()); snap(root(a), "presets_light") }
+    @Test @Config(qualifiers = LIGHT)
+    fun promptsLight() = withChat { a, _ -> pushFragment(a, PromptLibraryFragment()); snap(root(a), "prompts_light") }
     @Test fun presetsDark() = withChat { a, _ -> pushFragment(a, PresetsListFragment()); snap(root(a), "presets_dark") }
     @Test fun systemMessagesDark() = withChat { a, _ -> pushFragment(a, SystemMessageLibraryFragment()); snap(root(a), "system_messages_dark") }
     @Test @Config(qualifiers = LIGHT)
@@ -404,10 +441,8 @@ class ScreenshotTest {
 
     private fun snapDialogCentered(a: MainActivity, name: String) {
         val d: Dialog = ShadowDialog.getLatestDialog() ?: return snap(root(a), name)
-        val bg = Bitmap.createBitmap(root(a).width, root(a).height, Bitmap.Config.ARGB_8888)
+        val bg = frostedBackdrop(a)
         val c = Canvas(bg)
-        root(a).draw(c)
-        c.drawColor(0x8C000000.toInt())
         val dv = d.window!!.decorView
         c.save(); c.translate(((bg.width - dv.width) / 2f), ((bg.height - dv.height) / 2f))
         dv.draw(c); c.restore()

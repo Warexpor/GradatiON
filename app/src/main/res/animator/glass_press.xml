@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Liquid glass press: springs up under the finger, settles back with a soft overshoot -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <set>
+            <objectAnimator
+                android:duration="180"
+                android:interpolator="@interpolator/ios_ease_out"
+                android:propertyName="scaleX"
+                android:valueTo="1.08"
+                android:valueType="floatType" />
+            <objectAnimator
+                android:duration="180"
+                android:interpolator="@interpolator/ios_ease_out"
+                android:propertyName="scaleY"
+                android:valueTo="1.08"
+                android:valueType="floatType" />
+        </set>
+    </item>
+    <item>
+        <set>
+            <objectAnimator
+                android:duration="420"
+                android:interpolator="@interpolator/soft_overshoot"
+                android:propertyName="scaleX"
+                android:valueTo="1"
+                android:valueType="floatType" />
+            <objectAnimator
+                android:duration="420"
+                android:interpolator="@interpolator/soft_overshoot"
+                android:propertyName="scaleY"
+                android:valueTo="1"
+                android:valueType="floatType" />
+        </set>
+    </item>
+</selector>

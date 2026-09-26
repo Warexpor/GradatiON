@@ -41,14 +41,33 @@
             app:useMaterialThemeColors="true" />
     </LinearLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerViewPresets"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="@color/xai_canvas"
-        android:scrollbars="vertical"
-        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerViewPresets"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/xai_canvas"
+            android:scrollbars="vertical"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
+        <TextView
+            android:id="@+id/presetsEmptyView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginStart="32dp"
+            android:layout_marginEnd="32dp"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.3"
+            android:text="@string/presets_empty"
+            android:textColor="@color/xai_mute"
+            android:textSize="15sp"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/fabAddPreset"

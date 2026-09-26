@@ -64,6 +64,10 @@
         <item name="toolbarStyle">@style/Widget.Gradation.Toolbar</item>
         <item name="popupMenuStyle">@style/Widget.Gradation.PopupMenu</item>
         <item name="android:popupMenuStyle">@style/Widget.Gradation.PopupMenu</item>
+        <item name="spinnerStyle">@style/Widget.Gradation.Spinner</item>
+        <item name="android:spinnerStyle">@style/Widget.Gradation.Spinner</item>
+        <item name="listPopupWindowStyle">@style/Widget.Gradation.ListPopup</item>
+        <item name="android:listPopupWindowStyle">@style/Widget.Gradation.ListPopup</item>
         <item name="textAppearanceLargePopupMenu">@style/TextAppearance.Gradation.Body</item>
         <item name="textAppearanceSmallPopupMenu">@style/TextAppearance.Gradation.Body</item>
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Gradation.Small</item>
@@ -329,6 +333,17 @@
         <item name="thumbIconTint">@android:color/transparent</item>
     </style>
 
+    <!-- Dropdowns (spinners, exposed menus): the same glass as context menus -->
+    <style name="Widget.Gradation.Spinner" parent="Widget.AppCompat.Spinner">
+        <item name="android:popupBackground">@drawable/bg_attach_popup</item>
+        <item name="android:popupElevation">12dp</item>
+    </style>
+
+    <style name="Widget.Gradation.ListPopup" parent="Widget.Material3.PopupMenu.ListPopupWindow">
+        <item name="android:popupBackground">@drawable/bg_attach_popup</item>
+        <item name="android:popupElevation">12dp</item>
+    </style>
+
     <style name="Widget.Gradation.PopupMenu" parent="Widget.Material3.PopupMenu">
         <item name="android:popupBackground">@drawable/bg_attach_popup</item>
         <item name="android:popupElevation">12dp</item>
@@ -468,7 +483,7 @@
 
     <style name="Widget.Grokion.BottomSheet" parent="Widget.Material3.BottomSheet">
         <item name="shapeAppearance">@style/ShapeAppearance.Grokion.BottomSheet</item>
-        <item name="backgroundTint">@color/xai_canvas_card</item>
+        <item name="backgroundTint">@android:color/transparent</item>
         <item name="android:elevation">0dp</item>
     </style>
 

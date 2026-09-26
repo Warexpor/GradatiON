@@ -175,7 +175,7 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
             2. Tap the **model name** on the chat screen to pick or add models.
             3. Chats **autosave** to **History** {{ic_schats}} as you talk.
 
-            **Repo:** [github.com/Warexpor/Grokion-personal-preference-fork](https://github.com/Warexpor/Grokion-personal-preference-fork) · **Upstream:** [stardomains3/oxproxion](https://github.com/stardomains3/oxproxion)
+            **Repo:** [github.com/Warexpor/GradatiON](https://github.com/Warexpor/GradatiON) · **Upstream:** [stardomains3/oxproxion](https://github.com/stardomains3/oxproxion)
 
             ---
 

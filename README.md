@@ -5,7 +5,7 @@ Personal Android LLM chat client — dark monochrome UI, OpenRouter + LAN backen
 | | |
 |--|--|
 | **Package** | `io.github.warexpor.grokion` (unchanged for installs) |
-| **Repo** | [Warexpor/Grokion-personal-preference-fork](https://github.com/Warexpor/Grokion-personal-preference-fork) |
+| **Repo** | [Warexpor/GradatiON](https://github.com/Warexpor/GradatiON) |
 | **License** | Apache 2.0 |
 | **SDK** | min 31 / target 36 |
 
@@ -46,8 +46,8 @@ GradatiON shell: sparse top bar, composer pill, history drawer, grouped settings
 ## Build
 
 ```bash
-git clone https://github.com/Warexpor/Grokion-personal-preference-fork.git
-cd Grokion-personal-preference-fork
+git clone https://github.com/Warexpor/GradatiON.git
+cd GradatiON
 ./gradlew :app:assembleDebug
 ```
 

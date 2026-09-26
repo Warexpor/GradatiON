@@ -61,7 +61,7 @@ class ChooserActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(24, 16, 24, 16)
         }
-        MaterialAlertDialogBuilder(this)
+        GlassAlertDialogBuilder(this)
             .setCustomTitle(titleTextView)
             .setView(dialogView)
             .setPositiveButton("Send") { dialog, _ ->

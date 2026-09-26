@@ -2484,7 +2484,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         val utcOffsetHours = utcOffset / 60
                         val utcOffsetMinutes = Math.abs(utcOffset) % 60
                         val utcOffsetSign = if (utcOffset >= 0) "+" else "-"
-                        val utcOffsetString = String.format("%s%02d:%02d", utcOffsetSign, Math.abs(utcOffsetHours), utcOffsetMinutes)
+                        val utcOffsetString = String.format(java.util.Locale.US, "%s%02d:%02d", utcOffsetSign, Math.abs(utcOffsetHours), utcOffsetMinutes)
 
                         // Build structured response
                         val resultJson = buildJsonObject {

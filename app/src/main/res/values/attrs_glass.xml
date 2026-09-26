@@ -13,4 +13,13 @@
         <!-- Soft floating shadow -->
         <attr name="glassElevation" format="dimension" />
     </declare-styleable>
+    <declare-styleable name="GlassDrawable">
+        <attr name="glassTint" />
+        <attr name="glassCornerRadius" />
+        <attr name="glassInteractive" />
+        <!-- Round only the top corners (bottom sheets) -->
+        <attr name="glassTopOnly" format="boolean" />
+        <!-- Centered capsule of this height instead of filling the bounds -->
+        <attr name="glassDiameter" format="dimension" />
+    </declare-styleable>
 </resources>
