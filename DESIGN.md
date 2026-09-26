@@ -46,7 +46,7 @@ Sections 1–13 below are the historical Grok token extraction the shell grew fr
 
 ### 0.x Glass, palette and motion (current)
 
-- **Palette.** Dark base `#161618` (not pure black); surfaces step up `#1B1B1E` / `#202023` / `#2A2A2E`, separators `#38383C`, ink `#EDEDF0`, body `#DADADF`, mute `#909096`. Light base `#F7F7F8`, ink `#1A1A1C`. Keep new tones on this ramp.
+- **Palette.** Strictly neutral grays (R=G=B, no blue cast). Dark base `#161616` (not pure black); surfaces step up `#1C1C1C` / `#212121` / `#2B2B2B`, ink `#EEEEEE`, body `#DCDCDC`, mute `#929292`. Light base `#F7F7F7`, ink `#1B1B1B`, body `#272727`, mute `#888888`. Keep new tones on this ramp and keep them neutral.
 - **Glass.** `GlassBackdropLayout` wraps what glass blurs (the transcript). `GlassFrameLayout` / `GlassLinearLayout` draw a live blur (RenderEffect, saturation 1.6) + `glass_*` tint + hairline. Top bar: `glass_bar_tint`, bottom hairline fades in when content is under it. Composer: 26dp capsule. Controls panel: `glass_panel_tint`, 28dp. Dialogs/sheets: `GlassDialogs.frost()` or the dialog themes (cross-window blur + light dim).
 - **Streaming.** `StreamUiPump` coalesces SSE deltas per frame; `IncrementalMarkdown` caches closed blocks; `StreamFadeSpan` (340ms ease-out cubic) per revealed chunk; `StreamCursorSpan` breathing dot; `ChatFragment.followStreamingEdge()` keeps the edge above the composer until the user drags away.
 - **Markdown.** `ChatMarkdown` plugin + `ChatTextView` paint code cards (14dp, language header, tap to copy) and inline code pills.
