@@ -16,11 +16,15 @@ import kotlinx.serialization.json.Json
  * Pairing tokens live in [CodeHostSecrets] (Keystore AES-GCM); plaintext tokens are migrated
  * out of the hosts JSON on first read.
  */
-class CodeStore(context: Context) {
+class CodeStore @androidx.annotation.VisibleForTesting constructor(
+    context: Context,
+    private val secrets: CodeHostSecrets
+) {
+    constructor(context: Context) : this(context, CodeHostSecrets(context.applicationContext))
+
     private val appContext = context.applicationContext
     private val prefs: SharedPreferences =
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val secrets = CodeHostSecrets(appContext)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     var enabled: Boolean
