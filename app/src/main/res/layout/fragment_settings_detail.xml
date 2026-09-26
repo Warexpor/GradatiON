@@ -132,7 +132,7 @@
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
-                        <com.google.android.material.button.MaterialButtonToggleGroup
+                        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
                             android:id="@+id/themeToggleGroup"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -165,7 +165,7 @@
                                 android:text="@string/settings_theme_dark"
                                 app:backgroundTint="@color/toggle_background_selector"
                                 app:strokeColor="@color/xai_hairline" />
-                        </com.google.android.material.button.MaterialButtonToggleGroup>
+                        </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
                     </LinearLayout>
                 </LinearLayout>
 

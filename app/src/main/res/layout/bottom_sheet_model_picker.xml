@@ -156,7 +156,7 @@
                 android:textColor="@color/xai_mute"
                 android:textSize="13sp" />
 
-            <com.google.android.material.button.MaterialButtonToggleGroup
+            <io.github.stardomains3.oxproxion.GlassSegmentedGroup
                 android:id="@+id/sortBar"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -178,7 +178,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/model_picker_sort_newest"
                     app:checkedIconVisible="false" />
-            </com.google.android.material.button.MaterialButtonToggleGroup>
+            </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
         </LinearLayout>
 
         <HorizontalScrollView
@@ -197,7 +197,7 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButtonToggleGroup
+                <io.github.stardomains3.oxproxion.GlassSegmentedGroup
                     android:id="@+id/filterBar"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -235,7 +235,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/model_picker_filter_transcribe"
                         app:checkedIconVisible="false" />
-                </com.google.android.material.button.MaterialButtonToggleGroup>
+                </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
 
                 <View
                     android:layout_width="1dp"
@@ -244,7 +244,7 @@
                     android:layout_marginEnd="8dp"
                     android:background="@color/xai_hairline" />
 
-                <com.google.android.material.button.MaterialButtonToggleGroup
+                <io.github.stardomains3.oxproxion.GlassSegmentedGroup
                     android:id="@+id/costFilterBar"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -274,7 +274,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/model_picker_filter_paid"
                         app:checkedIconVisible="false" />
-                </com.google.android.material.button.MaterialButtonToggleGroup>
+                </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
             </LinearLayout>
         </HorizontalScrollView>
 

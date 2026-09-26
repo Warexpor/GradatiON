@@ -105,6 +105,10 @@
     <color name="glass_btn_tint">#17FFFFFF</color>
     <color name="glass_btn_primary_tint">#29FFFFFF</color>
     <color name="glass_btn_selected_tint">#47FFFFFF</color>
+    <!-- Glass segmented control (GlassSegmentedGroup): translucent glass thumb, never a solid slab -->
+    <color name="segment_thumb">#2BFFFFFF</color>
+    <color name="segment_thumb_rim">#40FFFFFF</color>
+    <color name="segment_thumb_shadow">#66000000</color>
     <color name="switch_track_off">#24FFFFFF</color>
     <color name="switch_track_on">#FF6E6E6E</color>
     <color name="switch_track_rim">#1AFFFFFF</color>

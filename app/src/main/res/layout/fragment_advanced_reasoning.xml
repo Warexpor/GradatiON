@@ -52,7 +52,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <com.google.android.material.button.MaterialButtonToggleGroup
+                <io.github.stardomains3.oxproxion.GlassSegmentedGroup
                     android:id="@+id/effortGroup"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -102,7 +102,7 @@
                         app:strokeColor="@color/xai_hairline"
                         style="?attr/materialButtonOutlinedStyle" />
 
-                </com.google.android.material.button.MaterialButtonToggleGroup>
+                </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <LinearLayout

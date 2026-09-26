@@ -59,7 +59,7 @@
         android:paddingStart="8dp"
         android:paddingEnd="8dp">
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
+        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
             android:id="@+id/sortBar"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -87,9 +87,9 @@
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+        </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
+        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
             android:id="@+id/filterBar"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -138,9 +138,9 @@
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+        </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
+        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
             android:id="@+id/costFilterBar"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -179,7 +179,7 @@
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+        </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
