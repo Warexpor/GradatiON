@@ -5,6 +5,8 @@ import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -50,6 +52,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     private var boundHostId: String? = null
     private var starting = false
     private var searchQuery: String = ""
+    /** Bound search EditText (RV row); cleared on host switch / IME hide. */
+    private var searchField: EditText? = null
     private var lastHost: CodeHost? = null
     private var lastConn: ConnectionState = ConnectionState.DISCONNECTED
 
@@ -71,6 +75,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         list.layoutManager = LinearLayoutManager(requireContext())
         list.adapter = adapter
         list.itemAnimator?.changeDuration = 0
+        list.itemAnimator?.removeDuration = 0
         ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
             override fun onMove(
                 recyclerView: RecyclerView,
@@ -98,7 +103,13 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     if (pos != RecyclerView.NO_POSITION) adapter.notifyItemChanged(pos)
                     return
                 }
-                hub.forget(item.s.summary.id)
+                val id = item.s.summary.id
+                // Sync drop the row so ItemTouchHelper sees it gone before DiffUtil commits.
+                val next = adapter.currentList.filterNot {
+                    it is HomeItem.Session && it.s.summary.id == id
+                }
+                adapter.submitList(next)
+                hub.forget(id)
                 AppToast.makeText(
                     requireContext(),
                     getString(R.string.code_home_removed),
@@ -150,6 +161,17 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         // Pairing dialog is owned solely by CodeModeHost (see onPairingArrived).
     }
 
+    override fun onPause() {
+        hideSearchKeyboard()
+        super.onPause()
+    }
+
+    override fun onDestroyView() {
+        hideSearchKeyboard()
+        searchField = null
+        super.onDestroyView()
+    }
+
     private fun syncPermissionFromStore() {
         if (!::composer.isInitialized || !::hub.isInitialized) return
         val stored = hub.store.defaultPermissionMode
@@ -172,11 +194,41 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
     private fun bindHost(host: CodeHost?) {
         composer.root.isVisible = host != null
-        if (host == null || host.id == boundHostId) return
+        if (host == null) {
+            if (boundHostId != null) {
+                boundHostId = null
+                clearSearchQuery()
+            }
+            return
+        }
+        if (host.id == boundHostId) return
         boundHostId = host.id
+        // U3: do not carry machine A's filter onto machine B.
+        clearSearchQuery()
         harness = host.defaultHarness
         workspace = host.recentWorkspaces.firstOrNull() ?: host.defaultWorkspace
         refreshPills()
+    }
+
+    /** Drop the in-memory filter and sync/clear the bound search field. */
+    private fun clearSearchQuery() {
+        searchQuery = ""
+        val et = searchField
+        if (et != null && et.text?.toString()?.isNotEmpty() == true) {
+            et.setText("")
+        }
+    }
+
+    /** Clear search focus and hide the soft keyboard (U2). */
+    private fun hideSearchKeyboard() {
+        val et = searchField
+        et?.clearFocus()
+        val token = et?.windowToken
+            ?: (if (::list.isInitialized) list.windowToken else null)
+            ?: view?.windowToken
+            ?: return
+        val imm = context?.getSystemService(InputMethodManager::class.java) ?: return
+        imm.hideSoftInputFromWindow(token, 0)
     }
 
     private fun refreshPills() {
@@ -419,6 +471,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     }
 
     private fun openSession(id: String) {
+        hideSearchKeyboard()
         // The session is a full screen above the chat screen, like the RP hub.
         requireParentFragment().parentFragmentManager.beginTransaction()
             .withGrokStackAnimations()
@@ -516,6 +569,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
         private fun bindSearch(v: View) {
             val et = v.findViewById<EditText>(R.id.codeHomeSearch)
+            searchField = et
             if (et.getTag(R.id.codeHomeSearch) != true) {
                 et.setTag(R.id.codeHomeSearch, true)
                 et.doAfterTextChanged { editable ->
@@ -523,6 +577,14 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     if (q == searchQuery) return@doAfterTextChanged
                     searchQuery = q
                     render(lastHost, lastConn)
+                }
+                et.setOnEditorActionListener { _, actionId, _ ->
+                    if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                        hideSearchKeyboard()
+                        true
+                    } else {
+                        false
+                    }
                 }
             }
             if (et.text?.toString() != searchQuery) {
