@@ -196,7 +196,18 @@ class CodeHub private constructor(context: Context) {
     /** Harnesses the active host's bridge reports (`bridge/listHarnesses`). Empty if offline. */
     suspend fun harnesses(): List<HarnessInfo> {
         val host = _activeHost.value ?: return emptyList()
-        return runCatching { backendFor(host).listHarnesses() }.getOrDefault(emptyList())
+        return harnessesFor(host)
+    }
+
+    /**
+     * Live harness list for [host] when a backend is already available and connected
+     * (or the host is the in-process demo). Empty when offline / unpaired so callers can
+     * fall back to the static [HarnessKind] catalog.
+     */
+    suspend fun harnessesFor(host: CodeHost): List<HarnessInfo> {
+        val backend = backends[host.id] ?: if (host.isDemo) backendFor(host) else return emptyList()
+        if (!host.isDemo && backend.connection.value != ConnectionState.CONNECTED) return emptyList()
+        return runCatching { backend.listHarnesses() }.getOrDefault(emptyList())
     }
 
     /** Folder listing for the picker (`bridge/browse`). Empty if offline or path denied. */

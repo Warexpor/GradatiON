@@ -5,6 +5,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -12,6 +13,7 @@ import io.github.stardomains3.oxproxion.GlassAlertDialogBuilder
 import io.github.stardomains3.oxproxion.GlassDialogs
 import io.github.stardomains3.oxproxion.GrokConfirmDialog
 import io.github.stardomains3.oxproxion.R
+import kotlinx.coroutines.launch
 
 /** Glass card to add or edit a machine (bridge address, pairing token, default agent). */
 object CodeHostDialog {
@@ -38,19 +40,35 @@ object CodeHostDialog {
         var agent = existing?.defaultHarness ?: HarnessKind.CLAUDE_CODE
         val agents = sheet.findViewById<LinearLayout>(R.id.codeHostAgents)
         val d = context.resources.displayMetrics.density
-        val pills = HarnessKind.entries.filter { it != HarnessKind.CUSTOM }.map { k ->
-            (LayoutInflater.from(context).inflate(R.layout.item_code_pill, agents, false) as TextView).apply {
-                text = k.displayName
-                isSelected = k == agent
-                agents.addView(this, (layoutParams as LinearLayout.LayoutParams).apply {
-                    if (agents.childCount > 0) marginStart = (6 * d).toInt()
-                })
-            } to k
+
+        fun bindPills(options: List<Pair<String, HarnessKind>>) {
+            agents.removeAllViews()
+            val pills = options.map { (label, k) ->
+                (LayoutInflater.from(context).inflate(R.layout.item_code_pill, agents, false) as TextView).apply {
+                    text = label
+                    isSelected = k == agent
+                    agents.addView(this, (layoutParams as LinearLayout.LayoutParams).apply {
+                        if (agents.childCount > 0) marginStart = (6 * d).toInt()
+                    })
+                } to k
+            }
+            pills.forEach { (pill, k) ->
+                pill.setOnClickListener {
+                    agent = k
+                    pills.forEach { (p, pk) -> p.isSelected = pk == k }
+                }
+            }
         }
-        pills.forEach { (pill, k) ->
-            pill.setOnClickListener {
-                agent = k
-                pills.forEach { (p, pk) -> p.isSelected = pk == k }
+
+        // Static catalog first so the dialog paints immediately when offline/unpaired.
+        bindPills(AgentPillOptions.resolve(emptyList(), agent))
+
+        // Prefer live bridge/listHarnesses when this host already has a connected backend.
+        if (existing != null) {
+            fragment.lifecycleScope.launch {
+                val live = hub.harnessesFor(existing)
+                if (!dialog.isShowing || live.isEmpty()) return@launch
+                bindPills(AgentPillOptions.resolve(live, agent))
             }
         }
 

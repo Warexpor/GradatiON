@@ -195,33 +195,108 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
     private fun pickFolder() {
         val host = hub.activeHost.value ?: return
-        viewLifecycleOwner.lifecycleScope.launch {
-            val folders = hub.workspaces(harness).ifEmpty { listOfNotNull(host.defaultWorkspace.ifBlank { null }) }
-            // When a path is already chosen, offer its subdirectories from bridge/browse so the
-            // existing popover can drill one level without a dedicated folder-browser sheet.
-            val browseRoot = workspace.ifBlank { host.defaultWorkspace }
-            val children = if (browseRoot.isNotBlank()) {
-                hub.browse(browseRoot).filter { it.dir }.map { entry ->
-                    val child = browseRoot.trimEnd('/') + "/" + entry.name
-                    child
+        viewLifecycleOwner.lifecycleScope.launch { showFolderRecents(host) }
+    }
+
+    /** Recent / known workspaces; footer opens multi-level browse or a typed path. */
+    private suspend fun showFolderRecents(host: CodeHost) {
+        val folders = hub.workspaces(harness).ifEmpty { listOfNotNull(host.defaultWorkspace.ifBlank { null }) }
+        composer.pick(
+            composer.folderPill,
+            getString(R.string.code_home_folder_prompt, host.name),
+            folders.map { path ->
+                PickerPopover.Row(
+                    CodeComposer.folderName(path),
+                    subtitle = path,
+                    iconRes = R.drawable.ic_code_folder,
+                    selected = path == workspace
+                ) {
+                    workspace = path
+                    refreshPills()
                 }
-            } else emptyList()
-            val paths = (folders + children).distinct()
-            composer.pick(
-                composer.folderPill,
-                getString(R.string.code_home_folder_prompt, host.name),
-                paths.map { path ->
-                    PickerPopover.Row(CodeComposer.folderName(path), subtitle = path, iconRes = R.drawable.ic_code_folder, selected = path == workspace) {
-                        workspace = path
-                        refreshPills()
-                    }
+            },
+            footer = listOf(
+                PickerPopover.Row(getString(R.string.code_home_browse_folders), iconRes = R.drawable.ic_code_folder) {
+                    val start = BrowsePaths.normalize(
+                        workspace.ifBlank { host.defaultWorkspace }.ifBlank { "~" }
+                    )
+                    viewLifecycleOwner.lifecycleScope.launch { showFolderBrowse(host, start) }
                 },
-                footer = listOf(PickerPopover.Row(getString(R.string.code_home_new_folder), iconRes = R.drawable.ic_code_plus) {
-                    GrokInputDialog.show(this@CodeHomeFragment, getString(R.string.code_home_pick_workspace), "~/code/project", workspace, getString(R.string.code_host_save)) {
-                        if (it.isNotBlank()) { workspace = it.trim(); refreshPills() }
-                    }
-                })
+                typePathRow()
             )
+        )
+    }
+
+    /**
+     * Multi-level folder browser on the existing popover: path title as breadcrumbs, Up/parent,
+     * drill into dirs via [hub.browse], and an explicit "Use this folder" footer.
+     */
+    private suspend fun showFolderBrowse(host: CodeHost, path: String) {
+        val current = BrowsePaths.normalize(path)
+        val parent = BrowsePaths.parentOf(current)
+        val children = hub.browse(current).filter { it.dir }
+        val rows = ArrayList<PickerPopover.Row>()
+        if (parent != null) {
+            rows += PickerPopover.Row(
+                getString(R.string.code_home_folder_up),
+                subtitle = parent,
+                iconRes = R.drawable.ic_chevron_left
+            ) {
+                viewLifecycleOwner.lifecycleScope.launch { showFolderBrowse(host, parent) }
+            }
+        } else {
+            rows += PickerPopover.Row(
+                getString(R.string.code_home_folder_recents),
+                iconRes = R.drawable.ic_chevron_left
+            ) {
+                viewLifecycleOwner.lifecycleScope.launch { showFolderRecents(host) }
+            }
+        }
+        children.forEach { entry ->
+            val child = BrowsePaths.child(current, entry.name)
+            rows += PickerPopover.Row(
+                entry.name,
+                subtitle = child,
+                iconRes = R.drawable.ic_code_folder,
+                selected = child == workspace
+            ) {
+                viewLifecycleOwner.lifecycleScope.launch { showFolderBrowse(host, child) }
+            }
+        }
+        composer.pick(
+            composer.folderPill,
+            BrowsePaths.breadcrumbTitle(current),
+            rows,
+            footer = listOf(
+                PickerPopover.Row(
+                    getString(R.string.code_home_use_folder),
+                    subtitle = current,
+                    iconRes = R.drawable.ic_code_check,
+                    selected = current == workspace
+                ) {
+                    workspace = current
+                    refreshPills()
+                },
+                typePathRow()
+            )
+        )
+    }
+
+    private fun typePathRow() = PickerPopover.Row(
+        getString(R.string.code_home_new_folder),
+        iconRes = R.drawable.ic_code_plus
+    ) {
+        GrokInputDialog.show(
+            this@CodeHomeFragment,
+            getString(R.string.code_home_pick_workspace),
+            "~/code/project",
+            workspace,
+            getString(R.string.code_host_save)
+        ) {
+            if (it.isNotBlank()) {
+                workspace = it.trim()
+                refreshPills()
+            }
         }
     }
 
