@@ -92,18 +92,28 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                // Re-sync if Code settings changed the default while we were away.
-                val stored = hub.store.defaultPermissionMode
-                if (permission != stored) {
-                    permission = stored
-                    composer.setPermission(stored)
-                }
+                syncPermissionFromStore()
                 hub.connect()
                 combine(hub.activeHost, hub.connection, hub.sessions) { h, c, _ -> h to c }.collect { (host, conn) ->
                     bindHost(host)
                     render(host, conn)
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Code settings is added without hiding us, so we stay STARTED; re-read default here.
+        syncPermissionFromStore()
+    }
+
+    private fun syncPermissionFromStore() {
+        if (!::composer.isInitialized || !::hub.isInitialized) return
+        val stored = hub.store.defaultPermissionMode
+        if (permission != stored) {
+            permission = stored
+            composer.setPermission(stored)
         }
     }
 
@@ -321,6 +331,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         if (starting) return
         starting = true
         viewLifecycleOwner.lifecycleScope.launch {
+            syncPermissionFromStore()
             val result = hub.startSession(NewSessionRequest(host.id, harness, workspace, prompt, permission))
             starting = false
             result.onSuccess { id ->

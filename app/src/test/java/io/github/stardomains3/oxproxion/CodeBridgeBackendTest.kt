@@ -66,6 +66,8 @@ class CodeBridgeBackendTest {
         val sent = CopyOnWriteArrayList<String>()
         var backgrounded = false
         var keepAlive = false
+        /** When true, the next session/prompt send fails once (simulates deliver failure). */
+        var failPromptSendOnce = false
         private val open = AtomicBoolean(false)
 
         override fun connect() {
@@ -77,6 +79,11 @@ class CodeBridgeBackendTest {
 
         override fun send(frame: String): Boolean {
             if (!open.get() || _state.value != ConnectionState.CONNECTED) return false
+            if (failPromptSendOnce && frame.contains("session/prompt")) {
+                failPromptSendOnce = false
+                lastError = "Not connected"
+                return false
+            }
             sent += frame
             return true
         }
@@ -336,6 +343,104 @@ class CodeBridgeBackendTest {
             val browseFrame = transport.sent.last { it.contains("bridge/browse") }
             val path = json.parseToJsonElement(browseFrame).jsonObject["params"]!!.jsonObject["path"]!!.jsonPrimitive.content
             assertEquals("/home/me/code", path)
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun cancelClearsQueuedOutboxAndEmitsTurnDone() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            transport.drop()
+            withTimeout(3_000) { backend.connection.first { it == ConnectionState.DISCONNECTED } }
+            delay(20)
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            backend.prompt("s1", "should not flush after cancel")
+            assertTrue(transport.keepAlive)
+            assertEquals(0, transport.sent.count { it.contains("session/prompt") })
+
+            backend.cancel("s1")
+            withTimeout(3_000) {
+                while (collected.none { it.update is CodeUpdate.TurnDone }) delay(5)
+            }
+            val done = collected.map { it.update }.filterIsInstance<CodeUpdate.TurnDone>().last()
+            assertEquals("cancelled", done.stopReason)
+            assertFalse("keepAlive should clear when outbox+running empty", transport.keepAlive)
+
+            val promptsBefore = transport.sent.count { it.contains("session/prompt") }
+            transport.restore()
+            withTimeout(3_000) {
+                while (transport.sent.count { it.contains("session/load") } < 2) delay(10)
+                delay(120)
+            }
+            assertEquals(
+                "cancelled outbox prompt must not be delivered on reconnect",
+                promptsBefore,
+                transport.sent.count { it.contains("session/prompt") }
+            )
+            assertFalse(transport.sent.any { it.contains("should not flush after cancel") })
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun flushOutboxRequeuesWhenPromptSendFails() = runBlocking {
+        val transport = FakeTransport()
+        transport.failPromptSendOnce = true
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            transport.drop()
+            withTimeout(3_000) { backend.connection.first { it == ConnectionState.DISCONNECTED } }
+            delay(20)
+            backend.prompt("s1", "retry me")
+
+            // First reconnect: prompt send fails once (item stays queued), keepAlive stays true.
+            transport.restore()
+            withTimeout(5_000) {
+                while (transport.failPromptSendOnce) delay(10)
+                delay(60)
+            }
+            assertEquals(
+                "failed deliver must not consume the outbox item",
+                0,
+                transport.sent.count { it.contains("session/prompt") }
+            )
+            assertTrue(transport.keepAlive)
+
+            // Second reconnect (or continued ready): send succeeds and flushes.
+            // ready may still be true; force another flush via drop+restore.
+            transport.drop()
+            delay(20)
+            transport.restore()
+            withTimeout(5_000) {
+                while (transport.sent.count { it.contains("session/prompt") } < 1) delay(10)
+            }
+            assertTrue(transport.sent.any { it.contains("session/prompt") && it.contains("retry me") })
         } finally {
             answers.cancel()
             backend.close()

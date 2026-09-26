@@ -312,21 +312,39 @@ class BridgeBackend(
             }
             return
         }
-        deliverPrompt(sessionId, text)
+        if (!deliverPrompt(sessionId, text)) {
+            // Send failed before the bridge accepted — queue for reconnect flush.
+            synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text)) }
+            runningSessions.add(sessionId)
+            refreshKeepAlive()
+            if (connection.value != ConnectionState.CONNECTING &&
+                connection.value != ConnectionState.CONNECTED
+            ) {
+                connect()
+            }
+        }
     }
 
     private suspend fun flushOutbox() {
         while (true) {
             val next = synchronized(outboxLock) {
-                if (outbox.isEmpty()) null else outbox.removeFirst()
+                if (outbox.isEmpty()) null else outbox.first()
             } ?: break
             refreshKeepAlive()
-            runCatching { deliverPrompt(next.sessionId, next.text) }
+            val delivered = runCatching { deliverPrompt(next.sessionId, next.text) }.getOrDefault(false)
+            if (!delivered) break
+            synchronized(outboxLock) {
+                if (outbox.isNotEmpty() && outbox.first() == next) outbox.removeFirst()
+            }
         }
         refreshKeepAlive()
     }
 
-    private suspend fun deliverPrompt(sessionId: String, text: String) {
+    /**
+     * @return true if the prompt was accepted (turn finished, terminal error, or in-flight after
+     * send); false if deliver failed before accept and the caller should keep/requeue it.
+     */
+    private suspend fun deliverPrompt(sessionId: String, text: String): Boolean {
         runningSessions.add(sessionId)
         refreshKeepAlive()
         try {
@@ -337,10 +355,22 @@ class BridgeBackend(
             _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone(stop)))
             runningSessions.remove(sessionId)
             refreshKeepAlive()
+            return true
         } catch (e: CancellationException) {
             // Socket dropped mid-turn; keep running so reconnect stays alive. session/load resumes.
+            // Treat as accepted for outbox: the frame was already on the wire.
             refreshKeepAlive()
+            return true
         } catch (e: Exception) {
+            val notAccepted = connection.value != ConnectionState.CONNECTED ||
+                (e is IllegalStateException && (
+                    e.message == "Not connected" ||
+                        e.message?.startsWith("Can't reach") == true
+                    ))
+            if (notAccepted) {
+                refreshKeepAlive()
+                return false
+            }
             _updates.emit(
                 SessionUpdate(
                     sessionId,
@@ -357,6 +387,7 @@ class BridgeBackend(
             _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("error")))
             runningSessions.remove(sessionId)
             refreshKeepAlive()
+            return true
         }
     }
 
@@ -371,7 +402,26 @@ class BridgeBackend(
     }
 
     override suspend fun cancel(sessionId: String) {
-        transport.send(adapter.cancel(sessionId))
+        // Drop any queued (not-yet-delivered) prompts for this session so Stop while offline
+        // does not flush them on reconnect — matches DemoBackend ending the turn locally.
+        synchronized(outboxLock) { outbox.removeAll { it.sessionId == sessionId } }
+        runningSessions.remove(sessionId)
+        refreshKeepAlive()
+        runCatching { transport.send(adapter.cancel(sessionId)) }
+        _updates.emit(
+            SessionUpdate(
+                sessionId,
+                CodeUpdate.Upsert(
+                    CodeEvent.Notice(
+                        "cancel:${System.currentTimeMillis()}",
+                        System.currentTimeMillis(),
+                        "Stopped",
+                        NoticeLevel.WARNING
+                    )
+                )
+            )
+        )
+        _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("cancelled")))
     }
 
     override suspend fun setPermissionMode(sessionId: String, mode: PermissionMode) {
