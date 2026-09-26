@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -84,8 +86,33 @@ class BridgeBackend(
     private var lifecycle: Job? = null
     private var initialized = false
     private var socketGeneration = 0
+    /** Bumped on cancel so in-flight deliverPrompt/flush abort and do not dequeue. */
+    private val deliverGeneration = ConcurrentHashMap<String, AtomicLong>()
+    /** RPC id of the in-flight session/prompt, so cancel can complete it. */
+    private val inFlightPromptId = ConcurrentHashMap<String, Long>()
+    /** After Stop, drop late agent chunks/TurnDone until the next intentional deliver. */
+    private val suppressAgent = ConcurrentHashMap.newKeySet<String>()
+    /** Serialize prompt + flush deliver per session so turns never overlap. */
+    private val promptMutexes = ConcurrentHashMap<String, Mutex>()
 
     private data class OutboxPrompt(val sessionId: String, val text: String)
+
+    private fun promptMutex(sessionId: String): Mutex =
+        promptMutexes.getOrPut(sessionId) { Mutex() }
+
+    private fun deliverGen(sessionId: String): Long =
+        deliverGeneration.getOrPut(sessionId) { AtomicLong(0L) }.get()
+
+    private fun bumpDeliverGen(sessionId: String): Long =
+        deliverGeneration.getOrPut(sessionId) { AtomicLong(0L) }.incrementAndGet()
+
+    private fun isDeliverStale(sessionId: String, gen: Long): Boolean =
+        deliverGen(sessionId) != gen
+
+    private fun isAgentActivity(update: CodeUpdate): Boolean = when (update) {
+        is CodeUpdate.TextChunk, is CodeUpdate.ToolPatch, is CodeUpdate.TurnDone -> true
+        else -> false
+    }
 
     override fun setAppBackgrounded(backgrounded: Boolean) {
         transport.setAppBackgrounded(backgrounded)
@@ -103,6 +130,10 @@ class BridgeBackend(
             transport.incoming.collect { frame ->
                 for (out in adapter.decode(frame)) when (out) {
                     is AdapterOutput.Update -> {
+                        if (out.sessionId in suppressAgent && isAgentActivity(out.update)) {
+                            // Stop already ended the turn locally; ignore late bridge activity.
+                            continue
+                        }
                         if (out.seq != null) noteRunningFromUpdate(out)
                         _updates.emit(SessionUpdate(out.sessionId, out.update))
                     }
@@ -301,26 +332,28 @@ class BridgeBackend(
     override suspend fun prompt(sessionId: String, text: String) {
         val now = System.currentTimeMillis()
         _updates.emit(SessionUpdate(sessionId, CodeUpdate.Upsert(CodeEvent.UserPrompt("user:$now", now, text))))
-        if (!ready.value || connection.value != ConnectionState.CONNECTED) {
-            synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text)) }
-            runningSessions.add(sessionId)
-            refreshKeepAlive()
-            if (connection.value != ConnectionState.CONNECTING &&
-                connection.value != ConnectionState.CONNECTED
-            ) {
-                connect()
+        promptMutex(sessionId).withLock {
+            if (!ready.value || connection.value != ConnectionState.CONNECTED) {
+                synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text)) }
+                runningSessions.add(sessionId)
+                refreshKeepAlive()
+                if (connection.value != ConnectionState.CONNECTING &&
+                    connection.value != ConnectionState.CONNECTED
+                ) {
+                    connect()
+                }
+                return
             }
-            return
-        }
-        if (!deliverPrompt(sessionId, text)) {
-            // Send failed before the bridge accepted — queue for reconnect flush.
-            synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text)) }
-            runningSessions.add(sessionId)
-            refreshKeepAlive()
-            if (connection.value != ConnectionState.CONNECTING &&
-                connection.value != ConnectionState.CONNECTED
-            ) {
-                connect()
+            if (!deliverPrompt(sessionId, text)) {
+                // Send failed before the bridge accepted — queue for reconnect flush.
+                synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text)) }
+                runningSessions.add(sessionId)
+                refreshKeepAlive()
+                if (connection.value != ConnectionState.CONNECTING &&
+                    connection.value != ConnectionState.CONNECTED
+                ) {
+                    connect()
+                }
             }
         }
     }
@@ -331,7 +364,11 @@ class BridgeBackend(
                 if (outbox.isEmpty()) null else outbox.first()
             } ?: break
             refreshKeepAlive()
-            val delivered = runCatching { deliverPrompt(next.sessionId, next.text) }.getOrDefault(false)
+            val delivered = runCatching {
+                promptMutex(next.sessionId).withLock {
+                    deliverPrompt(next.sessionId, next.text)
+                }
+            }.getOrDefault(false)
             if (!delivered) break
             synchronized(outboxLock) {
                 if (outbox.isNotEmpty() && outbox.first() == next) outbox.removeFirst()
@@ -343,13 +380,38 @@ class BridgeBackend(
     /**
      * @return true if the prompt was accepted (turn finished, terminal error, or in-flight after
      * send); false if deliver failed before accept and the caller should keep/requeue it.
+     * User [cancel] bumps the deliver generation and completes the pending prompt deferred so
+     * this returns false without treating a never-sent prompt as delivered.
      */
     private suspend fun deliverPrompt(sessionId: String, text: String): Boolean {
+        val gen = deliverGen(sessionId)
+        suppressAgent.remove(sessionId)
         runningSessions.add(sessionId)
         refreshKeepAlive()
+        if (isDeliverStale(sessionId, gen)) {
+            runningSessions.remove(sessionId)
+            refreshKeepAlive()
+            return false
+        }
+        val id = nextId.getAndIncrement()
+        val deferred = CompletableDeferred<JsonElement?>()
+        pending[id] = deferred
+        inFlightPromptId[sessionId] = id
+        var sendCompleted = false
         try {
+            if (isDeliverStale(sessionId, gen)) return false
+            val frame = adapter.prompt(id, sessionId, text)
+            if (!transport.send(frame)) {
+                throw IllegalStateException(transport.lastError ?: "Not connected")
+            }
+            sendCompleted = true
             // Prompt has no timeout: the turn can run for a long time.
-            val result = rawCall({ adapter.prompt(it, sessionId, text) }, timeoutMs = 0L) as? JsonObject
+            val result = deferred.await() as? JsonObject
+            if (isDeliverStale(sessionId, gen)) {
+                // Stop won the race after send; cancel already emitted TurnDone.
+                refreshKeepAlive()
+                return false
+            }
             val stop = (result?.get("stopReason") as? JsonPrimitive)?.contentOrNull ?: "end_turn"
             (adapter as? AcpAdapter)?.endTurn(sessionId)
             _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone(stop)))
@@ -357,17 +419,22 @@ class BridgeBackend(
             refreshKeepAlive()
             return true
         } catch (e: CancellationException) {
+            // User Stop: never dequeue as delivered (especially if send never completed).
+            if (isDeliverStale(sessionId, gen) || e.message == "Cancelled") {
+                refreshKeepAlive()
+                return false
+            }
             // Socket dropped mid-turn; keep running so reconnect stays alive. session/load resumes.
-            // Treat as accepted for outbox: the frame was already on the wire.
+            // Treat as accepted for outbox only when the frame was already on the wire.
             refreshKeepAlive()
-            return true
+            return sendCompleted
         } catch (e: Exception) {
-            val notAccepted = connection.value != ConnectionState.CONNECTED ||
+            val notAccepted = !sendCompleted || connection.value != ConnectionState.CONNECTED ||
                 (e is IllegalStateException && (
                     e.message == "Not connected" ||
                         e.message?.startsWith("Can't reach") == true
                     ))
-            if (notAccepted) {
+            if (notAccepted || isDeliverStale(sessionId, gen)) {
                 refreshKeepAlive()
                 return false
             }
@@ -388,6 +455,9 @@ class BridgeBackend(
             runningSessions.remove(sessionId)
             refreshKeepAlive()
             return true
+        } finally {
+            pending.remove(id)
+            inFlightPromptId.remove(sessionId, id)
         }
     }
 
@@ -402,8 +472,12 @@ class BridgeBackend(
     }
 
     override suspend fun cancel(sessionId: String) {
-        // Drop any queued (not-yet-delivered) prompts for this session so Stop while offline
-        // does not flush them on reconnect — matches DemoBackend ending the turn locally.
+        // Abort in-flight deliverPrompt (flush or live turn) and drop queued prompts.
+        bumpDeliverGen(sessionId)
+        suppressAgent.add(sessionId)
+        inFlightPromptId.remove(sessionId)?.let { rpcId ->
+            pending.remove(rpcId)?.completeExceptionally(CancellationException("Cancelled"))
+        }
         synchronized(outboxLock) { outbox.removeAll { it.sessionId == sessionId } }
         runningSessions.remove(sessionId)
         refreshKeepAlive()
@@ -437,6 +511,10 @@ class BridgeBackend(
         initialized = false
         attached.clear()
         runningSessions.clear()
+        deliverGeneration.clear()
+        inFlightPromptId.clear()
+        suppressAgent.clear()
+        promptMutexes.clear()
         synchronized(outboxLock) { outbox.clear() }
         failPending("Closed")
         transport.close()

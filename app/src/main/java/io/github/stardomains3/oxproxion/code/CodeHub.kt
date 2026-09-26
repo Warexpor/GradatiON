@@ -242,9 +242,19 @@ class CodeHub private constructor(context: Context) {
         scope.launch { runCatching { backendFor(host).attach(s.summary) } }
     }
 
-    fun prompt(sessionId: String, text: String) = withBackend(sessionId) { b ->
-        update(sessionId) { it.copy(running = true) }
-        b.prompt(sessionId, text)
+    fun prompt(sessionId: String, text: String) {
+        // Reject a second overlapping prompt for the same session; BridgeBackend also
+        // serializes deliver via a per-session mutex (queue-or-reject: we reject here).
+        var accepted = false
+        update(sessionId) { cur ->
+            if (cur.running) cur
+            else {
+                accepted = true
+                cur.copy(running = true)
+            }
+        }
+        if (!accepted) return
+        withBackend(sessionId) { b -> b.prompt(sessionId, text) }
     }
 
     fun answer(sessionId: String, requestId: String, option: ApprovalOption?) = withBackend(sessionId) { it.answer(sessionId, requestId, option) }

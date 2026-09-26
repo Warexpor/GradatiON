@@ -446,4 +446,146 @@ class CodeBridgeBackendTest {
             backend.close()
         }
     }
+
+    @Test fun cancelAbortsInFlightDeliverAndDoesNotTreatAsDelivered() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            // Live turn: prompt stays pending (autoAnswer skips session/prompt).
+            val promptJob = scope.launch { backend.prompt("s1", "in flight stop me") }
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("session/prompt") && it.contains("in flight stop me") }) {
+                    delay(5)
+                }
+            }
+            assertTrue(transport.keepAlive)
+
+            backend.cancel("s1")
+            withTimeout(3_000) {
+                while (collected.none {
+                    val u = it.update
+                    u is CodeUpdate.TurnDone && u.stopReason == "cancelled"
+                }) delay(5)
+            }
+            promptJob.join()
+
+            // cancel must have completed the pending prompt deferred (Cancelled).
+            assertTrue(
+                "session/cancel should be sent",
+                transport.sent.any { it.contains("session/cancel") }
+            )
+            assertFalse(
+                "keepAlive clears after cancel aborts in-flight deliver",
+                transport.keepAlive
+            )
+
+            // Late agent chunk after Stop must not revive keepAlive / running.
+            transport.deliver(
+                """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":99},
+                "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"late"}}}}"""
+            )
+            delay(40)
+            assertFalse(
+                "late agent chunk after Stop must stay suppressed",
+                transport.keepAlive
+            )
+            assertFalse(
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TextChunk && u.chunk.contains("late")
+                }
+            )
+
+            // Reconnect must not flush a phantom delivered/dequeued item from the aborted turn.
+            val promptsBefore = transport.sent.count { it.contains("session/prompt") }
+            transport.drop()
+            delay(20)
+            transport.restore()
+            withTimeout(3_000) {
+                while (transport.sent.count { it.contains("session/load") } < 2) delay(10)
+                delay(120)
+            }
+            assertEquals(
+                "aborted in-flight prompt must not re-deliver on reconnect",
+                promptsBefore,
+                transport.sent.count { it.contains("session/prompt") }
+            )
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun cancelDuringFlushBeforeSendDoesNotDequeueAsDelivered() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            transport.drop()
+            withTimeout(3_000) { backend.connection.first { it == ConnectionState.DISCONNECTED } }
+            delay(20)
+            backend.prompt("s1", "flush then cancel")
+            assertEquals(0, transport.sent.count { it.contains("session/prompt") })
+
+            // Block the first prompt send so flush is mid-deliver before accept.
+            transport.failPromptSendOnce = true
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            transport.restore()
+            withTimeout(5_000) {
+                while (transport.failPromptSendOnce) delay(5)
+                delay(30)
+            }
+            // Send failed → item still queued. Cancel should clear it without marking delivered.
+            backend.cancel("s1")
+            withTimeout(3_000) {
+                while (collected.none {
+                    val u = it.update
+                    u is CodeUpdate.TurnDone && u.stopReason == "cancelled"
+                }) delay(5)
+            }
+
+            val promptsBefore = transport.sent.count { it.contains("session/prompt") }
+            transport.drop()
+            delay(20)
+            transport.restore()
+            withTimeout(3_000) {
+                while (transport.sent.count { it.contains("session/load") } < 3) delay(10)
+                delay(150)
+            }
+            assertEquals(
+                "cancel during failed flush must not deliver the prompt later",
+                promptsBefore,
+                transport.sent.count { it.contains("session/prompt") }
+            )
+            assertFalse(transport.sent.any { it.contains("flush then cancel") })
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
 }

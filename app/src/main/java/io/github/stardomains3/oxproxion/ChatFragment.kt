@@ -5254,8 +5254,9 @@ $cleanContent
         }
         if (tab.width == 0 || modeTabIndicator.width == 0) return
         val row = tab.parent as View
-        val textW = tab.paint.measureText(tab.text.toString())
-        val contentLeft = tab.totalPaddingLeft + (tab.width - tab.totalPaddingLeft - tab.totalPaddingRight - textW) / 2f
+        val visibleTextW = (tab.width - tab.totalPaddingLeft - tab.totalPaddingRight).toFloat().coerceAtLeast(0f)
+        val textW = minOf(tab.paint.measureText(tab.text.toString()), visibleTextW)
+        val contentLeft = tab.totalPaddingLeft + (visibleTextW - textW) / 2f
         val x = row.left + tab.left + contentLeft + (textW - modeTabIndicator.width) / 2f
         // A layout pass mid-spring toward the same spot must not cut the animation short.
         if (!animate && kotlin.math.abs(x - indicatorTargetX) < 0.5f) return

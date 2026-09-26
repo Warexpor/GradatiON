@@ -53,7 +53,9 @@ class CodeComposer(
             override fun afterTextChanged(s: Editable?) = refreshSend()
         })
         send.setOnClickListener {
-            if (running && input.text.isNullOrBlank()) {
+            // While the agent is running, keep Stop reachable even if the draft has text
+            // (do not hide Stop behind Send).
+            if (running) {
                 it.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
                 onStop?.invoke()
                 return@setOnClickListener
@@ -67,7 +69,7 @@ class CodeComposer(
     }
 
     private fun refreshSend() {
-        val stop = running && input.text.isNullOrBlank()
+        val stop = running
         send.setIconResource(if (stop) R.drawable.ic_stop else R.drawable.ic_send)
         send.contentDescription = context.getString(if (stop) R.string.cd_code_stop else R.string.cd_code_send)
         send.isEnabled = stop || !input.text.isNullOrBlank()
