@@ -3,6 +3,7 @@
 ## Unreleased — monochrome redesign
 
 ### Changed
+- Typography: Plus Jakarta Sans across the app, a serif-italic GradatiON wordmark in History, and larger semibold labels on big buttons and dialog actions. Back, chevron and close icons are redrawn as rounded iOS-style strokes.
 - Glass everywhere: every dialog, bottom sheet, context menu, dropdown and settings subpage now uses the liquid-glass style; toolbar back and action buttons are glass capsules that spring under the finger.
 - Palette one step dimmer and darker (dark base #111111, light #F1F1F1), still strictly neutral.
 - Liquid glass: top bar controls are now floating glass buttons and chips over a soft scroll-edge fade, and glass bends content at its rim with a specular edge (Android 13+). Touching glass springs it up, leans it toward your finger and lights it from the touch point. Battery saver and low-RAM devices get a solid frosted fill instead of live blur.

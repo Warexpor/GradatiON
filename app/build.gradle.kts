@@ -38,10 +38,24 @@ android {
         includeInApk = false
         includeInBundle = false
     }
+    // Release signing comes from Gradle properties (never committed):
+    // -Pgradation.storeFile=... -Pgradation.storePassword=... -Pgradation.keyAlias=... -Pgradation.keyPassword=...
+    val releaseStoreFile = providers.gradleProperty("gradation.storeFile").orNull
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = providers.gradleProperty("gradation.storePassword").orNull
+                keyAlias = providers.gradleProperty("gradation.keyAlias").orNull
+                keyPassword = providers.gradleProperty("gradation.keyPassword").orNull
+            }
+        }
+    }
     buildTypes {
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
+            if (releaseStoreFile != null) signingConfig = signingConfigs.getByName("release")
 
 
             proguardFiles(

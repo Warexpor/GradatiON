@@ -72,8 +72,8 @@
         <item name="textAppearanceSmallPopupMenu">@style/TextAppearance.Gradation.Body</item>
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Gradation.Small</item>
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Gradation.Medium</item>
-        <item name="android:fontFamily">@font/inter</item>
-        <item name="fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
+        <item name="fontFamily">@font/app_sans</item>
     </style>
 
     <style name="Theme.Grokion" parent="Base.Theme.Grokion">
@@ -85,7 +85,7 @@
     <style name="TextAppearance.Gradation.LargeTitle" parent="TextAppearance.Material3.HeadlineMedium">
         <item name="android:textSize">32sp</item>
         <item name="android:textColor">@color/xai_ink</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">-0.025</item>
     </style>
@@ -93,7 +93,7 @@
     <style name="TextAppearance.Gradation.Title" parent="TextAppearance.Material3.TitleLarge">
         <item name="android:textSize">20sp</item>
         <item name="android:textColor">@color/xai_ink</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
         <item name="android:textFontWeight">600</item>
         <item name="android:letterSpacing">-0.015</item>
     </style>
@@ -101,7 +101,7 @@
     <style name="TextAppearance.Gradation.Headline" parent="TextAppearance.Material3.TitleMedium">
         <item name="android:textSize">17sp</item>
         <item name="android:textColor">@color/xai_ink</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
         <item name="android:textFontWeight">600</item>
         <item name="android:letterSpacing">-0.01</item>
     </style>
@@ -109,23 +109,33 @@
     <style name="TextAppearance.Gradation.Body" parent="TextAppearance.Material3.BodyLarge">
         <item name="android:textSize">16sp</item>
         <item name="android:textColor">@color/xai_body</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
         <item name="android:letterSpacing">-0.005</item>
     </style>
 
     <style name="TextAppearance.Gradation.Label" parent="TextAppearance.Material3.LabelLarge">
         <item name="android:textSize">15sp</item>
         <item name="android:textColor">@color/xai_ink</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
         <item name="android:textFontWeight">500</item>
         <item name="android:letterSpacing">0</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <!-- Big button labels: iOS body-size semibold, not a tiny caption on a big pill -->
+    <style name="TextAppearance.Gradation.Button" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textSize">17sp</item>
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:fontFamily">@font/app_sans</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:letterSpacing">-0.01</item>
         <item name="android:textAllCaps">false</item>
     </style>
 
     <style name="TextAppearance.Gradation.Footnote" parent="TextAppearance.Material3.BodySmall">
         <item name="android:textSize">13sp</item>
         <item name="android:textColor">@color/xai_mute</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
         <item name="android:letterSpacing">0</item>
     </style>
 
@@ -177,7 +187,7 @@
         <item name="android:stateListAnimator">@animator/press_scale</item>
         <item name="android:foreground">@drawable/bg_press_svg</item>
         <item name="android:minHeight">48dp</item>
-        <item name="android:textAppearance">@style/TextAppearance.Gradation.Label</item>
+        <item name="android:textAppearance">@style/TextAppearance.Gradation.Button</item>
         <item name="android:textColor">@color/xai_canvas</item>
         <item name="backgroundTint">@color/xai_ink</item>
         <item name="shapeAppearance">@style/XaiShapePill</item>
@@ -257,7 +267,7 @@
         <item name="android:textAllCaps">false</item>
         <item name="android:letterSpacing">0</item>
         <item name="android:textColor">@color/tile_fg</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
         <item name="iconGravity">top</item>
         <item name="iconPadding">6dp</item>
         <item name="iconSize">22dp</item>
@@ -367,12 +377,12 @@
         <item name="buttonBarPositiveButtonStyle">@style/XaiDialogButton.Primary</item>
         <item name="buttonBarNegativeButtonStyle">@style/XaiDialogButton</item>
         <item name="buttonBarNeutralButtonStyle">@style/XaiDialogButton</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
     </style>
 
     <style name="XaiDialogButton" parent="Widget.Material3.Button.TextButton.Dialog">
         <item name="android:textColor">@color/xai_mute</item>
-        <item name="android:textAppearance">@style/TextAppearance.Gradation.Label</item>
+        <item name="android:textAppearance">@style/TextAppearance.Gradation.Button</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:letterSpacing">0</item>
         <item name="rippleColor">@color/press_ripple_none</item>
@@ -403,14 +413,14 @@
     <style name="CustomDialogBodyText" parent="TextAppearance.Material3.BodyMedium">
         <item name="android:textSize">15sp</item>
         <item name="android:textColor">@color/xai_mute</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
         <item name="android:lineSpacingMultiplier">1.15</item>
     </style>
 
     <style name="CustomDialogTitleText" parent="MaterialAlertDialog.Material3.Title.Text">
         <item name="android:textSize">18sp</item>
         <item name="android:textColor">@color/xai_ink</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
         <item name="android:textFontWeight">600</item>
         <item name="android:letterSpacing">-0.015</item>
     </style>
@@ -428,7 +438,7 @@
         <item name="colorAccent">@color/xai_ink</item>
         <item name="colorPrimary">@color/xai_ink</item>
         <item name="colorSurface">@color/xai_canvas_card</item>
-        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/app_sans</item>
     </style>
 
     <style name="MyEditTextTheme" parent="ThemeOverlay.AppCompat.DayNight">
@@ -451,12 +461,13 @@
     </style>
 
     <!-- Brand wordmark (history header) -->
+    <!-- Masthead wordmark: Instrument Serif italic (see Wordmark.kt for the "ON" treatment) -->
     <style name="GrokionBrandWordmark" parent="@android:style/TextAppearance">
-        <item name="android:fontFamily">@font/inter</item>
-        <item name="fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/instrumentserif_italic</item>
+        <item name="fontFamily">@font/instrumentserif_italic</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:letterSpacing">-0.025</item>
-        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">-0.01</item>
+        <item name="android:textStyle">normal</item>
     </style>
 
     <style name="Theme.Grokion.AIFix" parent="Theme.Grokion">

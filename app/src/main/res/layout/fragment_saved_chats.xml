@@ -39,7 +39,7 @@
                 android:text="@string/grokion_wordmark"
                 android:textAllCaps="false"
                 android:textColor="@color/xai_ink"
-                android:textSize="32sp" />
+                android:textSize="40sp" />
 
             <TextView
                 android:id="@+id/historyModeLabel"

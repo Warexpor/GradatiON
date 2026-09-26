@@ -2691,14 +2691,15 @@ $cleanContent
             hideMenu()
 
             val fontOptions = listOf(
-                Pair("System Default", null as Int?),
+                Pair("Plus Jakarta Sans", R.font.jakarta_regular as Int?),
                 Pair("Inter", R.font.inter_regular),
+                Pair("System Default", null),
             )
 
             fun fontNameFromRes(fontResId: Int?): String = when (fontResId) {
                 null -> AppFonts.SYSTEM_DEFAULT
                 R.font.inter_regular -> AppFonts.INTER
-                else -> AppFonts.INTER
+                else -> AppFonts.JAKARTA
             }
 
             val dialog = GlassAlertDialogBuilder(requireContext(), R.style.CustomMaterialAlertDialogTheme)
@@ -2727,7 +2728,7 @@ $cleanContent
                     textView.text = displayName
                     textView.typeface = if (fontResId != null) {
                         ResourcesCompat.getFont(textView.context, fontResId)
-                            ?: AppFonts.resolveSelectable(textView.context, AppFonts.INTER)
+                            ?: AppFonts.resolveSelectable(textView.context, AppFonts.JAKARTA)
                     } else {
                         Typeface.DEFAULT
                     }

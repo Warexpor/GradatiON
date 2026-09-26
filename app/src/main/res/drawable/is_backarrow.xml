@@ -1,9 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- iOS back: tall rounded chevron -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="960"
-    android:viewportHeight="960">
-  <path
-      android:pathData="m313,520 l224,224 -57,56 -320,-320 320,-320 57,56 -224,224h487v80L313,520Z"
-      android:fillColor="#F3F3F3"/>
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M15,4.5L7.5,12L15,19.5"
+        android:strokeColor="@color/xai_ink"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
 </vector>

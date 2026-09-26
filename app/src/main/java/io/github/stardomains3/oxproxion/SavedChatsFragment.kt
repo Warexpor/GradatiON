@@ -62,6 +62,7 @@ class SavedChatsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        view.findViewById<TextView>(R.id.historyTitle)?.text = Wordmark.build(requireContext())
         prefs = SharedPreferencesHelper(requireContext())
 
         val recyclerView = view.findViewById<RecyclerView>(R.id.savedChatsRecyclerView)

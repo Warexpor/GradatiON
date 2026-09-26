@@ -961,7 +961,11 @@
                     android:minWidth="0dp"
                     android:minHeight="0dp"
                     android:padding="0dp"
-                    android:text="@string/rp_swipe_chevron_prev" />
+                    app:icon="@drawable/ic_chevron_left"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp"
+                    app:iconSize="18dp"
+                    app:iconTint="@color/xai_ink" />
 
                 <TextView
                     android:id="@+id/rpSwipeCounter"
@@ -986,7 +990,11 @@
                     android:minWidth="0dp"
                     android:minHeight="0dp"
                     android:padding="0dp"
-                    android:text="@string/rp_swipe_chevron_next" />
+                    app:icon="@drawable/ic_chevron_right"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp"
+                    app:iconSize="18dp"
+                    app:iconTint="@color/xai_ink" />
             </LinearLayout>
         </LinearLayout>
 

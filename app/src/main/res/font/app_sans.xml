@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App UI face: Plus Jakarta Sans (SIL OFL 1.1). 400 body, 500 labels, 600 titles,
+     700 large titles, 800 display. textStyle="bold" resolves to 700; use
+     android:textFontWeight for the others. -->
+<font-family xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <font android:font="@font/jakarta_regular" android:fontStyle="normal" android:fontWeight="400"
+        app:font="@font/jakarta_regular" app:fontStyle="normal" app:fontWeight="400" />
+    <font android:font="@font/jakarta_medium" android:fontStyle="normal" android:fontWeight="500"
+        app:font="@font/jakarta_medium" app:fontStyle="normal" app:fontWeight="500" />
+    <font android:font="@font/jakarta_semibold" android:fontStyle="normal" android:fontWeight="600"
+        app:font="@font/jakarta_semibold" app:fontStyle="normal" app:fontWeight="600" />
+    <font android:font="@font/jakarta_bold" android:fontStyle="normal" android:fontWeight="700"
+        app:font="@font/jakarta_bold" app:fontStyle="normal" app:fontWeight="700" />
+    <font android:font="@font/jakarta_extrabold" android:fontStyle="normal" android:fontWeight="800"
+        app:font="@font/jakarta_extrabold" app:fontStyle="normal" app:fontWeight="800" />
+</font-family>

@@ -43,7 +43,7 @@ class ChatTextView @JvmOverloads constructor(
     private val copyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = ContextCompat.getColor(context, R.color.xai_mute)
         textSize = 12.5f * resources.displayMetrics.scaledDensity
-        typeface = runCatching { ResourcesCompat.getFont(context, R.font.inter_medium) }.getOrNull()
+        typeface = runCatching { ResourcesCompat.getFont(context, R.font.jakarta_medium) }.getOrNull()
         textAlign = Paint.Align.RIGHT
     }
     private val copyLabel = context.getString(R.string.action_copy)

@@ -109,10 +109,10 @@ object ChatMarkdown {
             ResourcesCompat.getFont(context, R.font.atkinsonhyperlegiblemono_regular)
         }.getOrNull() ?: Typeface.MONOSPACE
         private val semibold: Typeface = runCatching {
-            Typeface.create(ResourcesCompat.getFont(context, R.font.inter), 600, false)
+            Typeface.create(ResourcesCompat.getFont(context, R.font.app_sans), 600, false)
         }.getOrNull() ?: Typeface.DEFAULT_BOLD
         private val medium: Typeface = runCatching {
-            Typeface.create(ResourcesCompat.getFont(context, R.font.inter), 500, false)
+            Typeface.create(ResourcesCompat.getFont(context, R.font.app_sans), 500, false)
         }.getOrNull() ?: Typeface.DEFAULT
 
         private fun dp(v: Float) = (v * density).toInt()

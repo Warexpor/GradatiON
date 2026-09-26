@@ -100,6 +100,7 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_LAN_ENDPOINT = "lan_endpoint"
         private const val KEY_PRESETS = "user_presets"
         private const val KEY_SELECTED_FONT = "selected_font"
+        private const val KEY_FONT_FACE_MIGRATED = "font_face_migrated_jakarta"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
         private const val KEY_TRUST_SELF_SIGNED_LAN = "trust_self_signed_lan"
         private const val KEY_ALLOW_DESTRUCTIVE_TOOLS = "allow_destructive_tools"
@@ -627,7 +628,15 @@ class SharedPreferencesHelper(context: Context) {
         return mainPrefs.getBoolean(KEY_EXTENDED_TOP_BAR, false)
     }
     fun getSelectedFont(): String {
-        val stored = mainPrefs.getString(KEY_SELECTED_FONT, AppFonts.INTER) ?: AppFonts.INTER
+        var stored = mainPrefs.getString(KEY_SELECTED_FONT, AppFonts.JAKARTA) ?: AppFonts.JAKARTA
+        // One-time move to the new app face: Inter was the old default, not a choice.
+        if (!mainPrefs.getBoolean(KEY_FONT_FACE_MIGRATED, false)) {
+            if (stored == AppFonts.INTER) stored = AppFonts.JAKARTA
+            mainPrefs.edit {
+                putString(KEY_SELECTED_FONT, stored)
+                putBoolean(KEY_FONT_FACE_MIGRATED, true)
+            }
+        }
         return AppFonts.normalizeSelectable(stored)
     }
     fun saveFontSizeCh(size: Int) {

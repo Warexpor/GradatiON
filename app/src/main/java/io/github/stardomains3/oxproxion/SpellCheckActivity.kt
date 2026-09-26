@@ -72,7 +72,7 @@ class SpellCheckActivity : AppCompatActivity() {
             setTextColor(token(R.color.xai_ink))
             setPadding(0, 0, 0, 24)
             typeface = android.graphics.Typeface.create(
-                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter), 600, false
+                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.app_sans), 600, false
             )
         }
         layout.addView(titleView)
