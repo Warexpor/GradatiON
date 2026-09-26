@@ -22,19 +22,25 @@
 
             <TextView
                 android:id="@+id/text_tool_title"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textSize="16sp"
                 android:textFontWeight="600"
-                android:textColor="@color/xai_ink" />
+                android:textColor="@color/xai_ink" 
+                android:maxLines="2"
+                android:ellipsize="end"
+                />
 
             <TextView
                 android:id="@+id/text_tool_desc"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textSize="14sp"
                 android:textColor="@color/xai_mute"
-                android:layout_marginTop="2dp"/>
+                android:layout_marginTop="2dp"
+                android:maxLines="4"
+                android:ellipsize="end"
+                />
         </LinearLayout>
 
         <!-- MaterialSwitch: Uses theme colors automatically -->
