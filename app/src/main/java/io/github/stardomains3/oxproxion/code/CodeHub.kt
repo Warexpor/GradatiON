@@ -305,6 +305,16 @@ class CodeHub private constructor(context: Context) {
         persistSessions()
     }
 
+    /** Phone-local title edit; persists via the session index in Room. */
+    fun rename(sessionId: String, title: String) {
+        val t = title.trim()
+        if (t.isEmpty()) return
+        update(sessionId) {
+            it.copy(summary = it.summary.copy(title = t, updatedAt = System.currentTimeMillis()))
+        }
+        persistSessions()
+    }
+
     private fun withBackend(sessionId: String, block: suspend (CodeBackend) -> Unit) {
         val s = _sessions.value[sessionId] ?: return
         val host = _hosts.value.find { it.id == s.summary.hostId } ?: return

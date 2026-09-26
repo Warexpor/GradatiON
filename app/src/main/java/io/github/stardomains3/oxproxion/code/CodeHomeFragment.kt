@@ -5,15 +5,18 @@ import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -46,6 +49,9 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     private var permission: PermissionMode = PermissionMode.ASK
     private var boundHostId: String? = null
     private var starting = false
+    private var searchQuery: String = ""
+    private var lastHost: CodeHost? = null
+    private var lastConn: ConnectionState = ConnectionState.DISCONNECTED
 
     /** Space the chat screen's floating top bar takes; set by [CodeModeHost]. */
     var topInset: Int = 0
@@ -65,6 +71,41 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         list.layoutManager = LinearLayoutManager(requireContext())
         list.adapter = adapter
         list.itemAnimator?.changeDuration = 0
+        ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean = false
+
+            override fun getMovementFlags(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder
+            ): Int {
+                val pos = viewHolder.bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return 0
+                return if (adapter.currentList.getOrNull(pos) is HomeItem.Session) {
+                    makeMovementFlags(0, ItemTouchHelper.LEFT)
+                } else {
+                    0
+                }
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val pos = viewHolder.bindingAdapterPosition
+                val item = adapter.currentList.getOrNull(pos) as? HomeItem.Session
+                if (item == null) {
+                    if (pos != RecyclerView.NO_POSITION) adapter.notifyItemChanged(pos)
+                    return
+                }
+                hub.forget(item.s.summary.id)
+                AppToast.makeText(
+                    requireContext(),
+                    getString(R.string.code_home_removed),
+                    AppToast.LENGTH_SHORT
+                ).show()
+            }
+        }).attachToRecyclerView(list)
         list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
                 val under = rv.computeVerticalScrollOffset().toFloat()
@@ -145,6 +186,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     }
 
     private fun render(host: CodeHost?, conn: ConnectionState) {
+        lastHost = host
+        lastConn = conn
         val items = ArrayList<HomeItem>()
         if (host == null) {
             items += HomeItem.Onboard
@@ -152,20 +195,39 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
             items += HomeItem.Header(host, conn)
             val sessions = hub.sessionsFor(host.id)
             if (sessions.isEmpty()) {
+                searchQuery = ""
                 items += HomeItem.Hero(host, harness, workspace)
             } else {
-                val (active, recent) = sessions.partition { it.running || it.status == SessionStatus.NEEDS_APPROVAL }
-                if (active.isNotEmpty()) {
-                    items += HomeItem.Section(getString(R.string.code_home_section_active))
-                    active.sortedByDescending { it.status == SessionStatus.NEEDS_APPROVAL }.forEach { items += HomeItem.Session(it) }
-                }
-                if (recent.isNotEmpty()) {
-                    items += HomeItem.Section(getString(R.string.code_home_section_recent))
-                    recent.forEach { items += HomeItem.Session(it) }
+                items += HomeItem.Search
+                val filtered = CodeSessionFilter.filterSessions(searchQuery, sessions)
+                if (filtered.isEmpty()) {
+                    items += HomeItem.FilterEmpty
+                } else {
+                    val (active, recent) = filtered.partition { it.running || it.status == SessionStatus.NEEDS_APPROVAL }
+                    if (active.isNotEmpty()) {
+                        items += HomeItem.Section(getString(R.string.code_home_section_active))
+                        active.sortedByDescending { it.status == SessionStatus.NEEDS_APPROVAL }.forEach { items += HomeItem.Session(it) }
+                    }
+                    if (recent.isNotEmpty()) {
+                        items += HomeItem.Section(getString(R.string.code_home_section_recent))
+                        recent.forEach { items += HomeItem.Session(it) }
+                    }
                 }
             }
         }
         adapter.submitList(items)
+    }
+
+    private fun promptRename(session: CodeSessionState) {
+        GrokInputDialog.show(
+            this,
+            getString(R.string.code_home_rename),
+            getString(R.string.code_home_rename),
+            session.summary.title,
+            getString(R.string.code_host_save)
+        ) { newTitle ->
+            if (newTitle.isNotBlank()) hub.rename(session.summary.id, newTitle)
+        }
     }
 
     // ── pickers ───────────────────────────────────────────────────────────────────────────
@@ -379,6 +441,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         data class Header(val host: CodeHost, val conn: ConnectionState) : HomeItem("header")
         data class Hero(val host: CodeHost, val harness: HarnessKind, val workspace: String) : HomeItem("hero")
         object Onboard : HomeItem("onboard")
+        object Search : HomeItem("search")
+        object FilterEmpty : HomeItem("filter_empty")
         data class Section(val title: String) : HomeItem("section:$title")
         data class Session(val s: CodeSessionState) : HomeItem("s:${s.summary.id}") {
             // Only what the row shows, so streaming tokens don't rebind the whole list.
@@ -398,6 +462,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
             HomeItem.Onboard -> 2
             is HomeItem.Section -> 3
             is HomeItem.Session -> 4
+            HomeItem.Search -> 5
+            HomeItem.FilterEmpty -> 6
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -406,6 +472,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 1 -> R.layout.item_code_home_hero
                 2 -> R.layout.item_code_home_onboard
                 3 -> R.layout.item_code_section
+                5 -> R.layout.item_code_home_search
+                6 -> R.layout.item_code_home_filter_empty
                 else -> R.layout.item_code_session
             }
             return object : RecyclerView.ViewHolder(LayoutInflater.from(parent.context).inflate(res, parent, false)) {}
@@ -441,6 +509,25 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 }
                 is HomeItem.Section -> (v as TextView).text = item.title
                 is HomeItem.Session -> bindSession(v, item.s)
+                HomeItem.Search -> bindSearch(v)
+                HomeItem.FilterEmpty -> Unit
+            }
+        }
+
+        private fun bindSearch(v: View) {
+            val et = v.findViewById<EditText>(R.id.codeHomeSearch)
+            if (et.getTag(R.id.codeHomeSearch) != true) {
+                et.setTag(R.id.codeHomeSearch, true)
+                et.doAfterTextChanged { editable ->
+                    val q = editable?.toString().orEmpty()
+                    if (q == searchQuery) return@doAfterTextChanged
+                    searchQuery = q
+                    render(lastHost, lastConn)
+                }
+            }
+            if (et.text?.toString() != searchQuery) {
+                et.setText(searchQuery)
+                et.setSelection(searchQuery.length)
             }
         }
 
@@ -473,7 +560,12 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 }
                 else -> badge.isVisible = false
             }
-            v.findViewById<View>(R.id.codeSessionCard).setOnClickListener { openSession(sum.id) }
+            val card = v.findViewById<View>(R.id.codeSessionCard)
+            card.setOnClickListener { openSession(sum.id) }
+            card.setOnLongClickListener {
+                promptRename(s)
+                true
+            }
         }
     }
 }

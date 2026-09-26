@@ -71,6 +71,10 @@
     <string name="code_home_folder_prompt">Folder on %1$s</string>
     <string name="code_home_need_folder">Pick a folder first</string>
     <string name="code_home_start_failed">Couldn\'t start: %1$s</string>
+    <string name="code_home_search_hint">Search sessions</string>
+    <string name="code_home_search_empty">No sessions match.</string>
+    <string name="code_home_rename">Rename</string>
+    <string name="code_home_removed">Removed from this phone</string>
     <string name="code_status_connected">Connected</string>
     <string name="code_status_connecting">Connecting…</string>
     <string name="code_status_offline">Offline</string>
