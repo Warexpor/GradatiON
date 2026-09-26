@@ -204,8 +204,9 @@ class CodeHub private constructor(context: Context) {
                 cur.copy(running = true)
             }
         }
-        if (!accepted) return
+        if (!accepted) return false
         withBackend(sessionId) { b -> b.prompt(sessionId, text) }
+        return true
     }
 
     fun answer(sessionId: String, requestId: String, option: ApprovalOption?) = withBackend(sessionId) { it.answer(sessionId, requestId, option) }

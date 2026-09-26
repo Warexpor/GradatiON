@@ -60,7 +60,7 @@ data class CodeHost(
     val name: String,
     /** ws:// or wss:// URL of the bridge, e.g. wss://laptop.tailnet.ts.net:7878/v1 */
     val url: String = "",
-    /** Pairing token. Plan: move to Android Keystore-backed storage before shipping. */
+    /** Pairing token. Persisted in Keystore-backed [io.github.stardomains3.oxproxion.code.store.CodeHostSecrets], not in plain prefs. */
     val token: String = "",
     val transport: TransportKind = TransportKind.BRIDGE,
     val defaultHarness: HarnessKind = HarnessKind.CLAUDE_CODE,
