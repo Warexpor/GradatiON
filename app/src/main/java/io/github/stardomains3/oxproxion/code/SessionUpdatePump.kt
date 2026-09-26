@@ -76,11 +76,13 @@ internal object CodeSessionFolder {
         update: CodeUpdate,
         now: Long = System.currentTimeMillis(),
         liveSeq: Long? = null,
+        suppressRunningFromChunks: Boolean = false,
     ): CodeSessionState {
         val events = TranscriptReducer.apply(state.events, update, now)
         val running = when (update) {
             is CodeUpdate.TurnDone -> false
-            is CodeUpdate.TextChunk, is CodeUpdate.ToolPatch -> true
+            is CodeUpdate.TextChunk, is CodeUpdate.ToolPatch ->
+                if (suppressRunningFromChunks) state.running else true
             is CodeUpdate.Upsert -> if (update.event is CodeEvent.UserPrompt) true else state.running
             is CodeUpdate.SessionInfo -> when (update.status) {
                 SessionStatus.RUNNING, SessionStatus.NEEDS_APPROVAL -> true
@@ -132,6 +134,7 @@ internal fun foldSessionUpdates(
     batch: List<SessionUpdate>,
     now: Long = System.currentTimeMillis(),
     liveSeqOf: (CodeSessionState, String) -> Long? = { _, _ -> null },
+    suppressRunningFromChunks: Set<String> = emptySet(),
 ): SessionFoldResult {
     if (batch.isEmpty()) return SessionFoldResult(null, false)
     val touched = HashMap<String, CodeSessionState>()
@@ -139,7 +142,11 @@ internal fun foldSessionUpdates(
     for (u in batch) {
         val cur = touched[u.sessionId] ?: sessions[u.sessionId] ?: continue
         touched[u.sessionId] = CodeSessionFolder.apply(
-            cur, u.update, now, liveSeqOf(cur, u.sessionId)
+            cur,
+            u.update,
+            now,
+            liveSeqOf(cur, u.sessionId),
+            suppressRunningFromChunks = u.sessionId in suppressRunningFromChunks,
         )
         if (CodeSessionFolder.needsPersist(u.update)) needsPersist = true
     }

@@ -57,6 +57,25 @@ class SessionUpdatePumpTest {
     }
 
     @Test
+    fun cancelledTextChunksDoNotReviveRunningBeforeTurnDone() {
+        val sessions = mapOf("s1" to CodeSessionState(summary(), running = false))
+        val result = foldSessionUpdates(
+            sessions,
+            listOf(SessionUpdate("s1", CodeUpdate.TextChunk("k", "late"))),
+            now = 99L,
+            suppressRunningFromChunks = setOf("s1"),
+        )
+        assertFalse(result.sessions!!["s1"]!!.running)
+
+        val done = foldSessionUpdates(
+            result.sessions,
+            listOf(SessionUpdate("s1", CodeUpdate.TurnDone("cancelled"))),
+            now = 100L,
+        )
+        assertFalse(done.sessions!!["s1"]!!.running)
+    }
+
+    @Test
     fun foldBatchSingleMapWriteCoversMultiSession() {
         val sessions = mapOf(
             "a" to CodeSessionState(summary("a"), running = true),

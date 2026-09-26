@@ -39,6 +39,8 @@ class CodeHub private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backends = HashMap<String, CodeBackend>()
+    /** Sessions cancelled locally until their queued TurnDone is folded. */
+    private val suppressRunningFromChunks = HashSet<String>()
     private val sessionDao: CodeSessionDao = AppDatabase.getDatabase(appContext).codeSessionDao()
     /** Latest session-index snapshot waiting for Room; null when idle. */
     private val pendingPersist = AtomicReference<List<CodeSessionEntity>?>(null)
@@ -284,6 +286,8 @@ class CodeHub private constructor(context: Context) {
 
     fun cancel(sessionId: String) {
         // Eager clear so Stop→Send is not rejected while pump still holds TurnDone.
+        // Keep stale queued chunks from reviving running until that turn's done arrives.
+        if (_sessions.value.containsKey(sessionId)) suppressRunningFromChunks += sessionId
         update(sessionId) { it.copy(running = false) }
         withBackend(sessionId) { it.cancel(sessionId) }
     }
@@ -311,10 +315,15 @@ class CodeHub private constructor(context: Context) {
      * TurnDone/SessionInfo landed in the batch.
      */
     private fun drainSessionUpdates(batch: List<SessionUpdate>) {
-        val result = foldSessionUpdates(_sessions.value, batch) { state, sid ->
-            backends[state.summary.hostId]?.peekLastSeq(sid)
-        }
+        val result = foldSessionUpdates(
+            _sessions.value,
+            batch,
+            liveSeqOf = { state, sid -> backends[state.summary.hostId]?.peekLastSeq(sid) },
+            suppressRunningFromChunks = suppressRunningFromChunks,
+        )
         if (result.sessions != null) _sessions.value = result.sessions
+        // The guard is only for the cancelled turn; a later prompt starts normally.
+        batch.forEach { if (it.update is CodeUpdate.TurnDone) suppressRunningFromChunks.remove(it.sessionId) }
         if (result.needsPersist) persistSessions()
     }
 
