@@ -107,3 +107,6 @@ tools/
 .env.*
 *.pem
 secrets/
+
+# Kotlin daemon / incremental compiler local state
+.kotlin/
