@@ -22,7 +22,7 @@ class GlassSegmentedGroupTest {
         val ctx = ContextThemeWrapper(ApplicationProvider.getApplicationContext(), R.style.Theme_Grokion)
         val group = GlassSegmentedGroup(ctx).apply { isSingleSelection = true }
         val buttons = List(3) { i ->
-            MaterialButton(ctx).apply { id = View.generateViewId(); text = "S$i" }.also { group.addView(it) }
+            MaterialButton(ctx, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply { id = View.generateViewId(); text = "S$i" }.also { group.addView(it) }
         }
         for (b in buttons) {
             assertEquals(Color.TRANSPARENT, b.backgroundTintList?.defaultColor)
