@@ -1187,6 +1187,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="38dp"
                         android:layout_marginStart="8dp"
+                        android:maxWidth="168dp"
                         android:background="@drawable/bg_model_pill"
                         android:clickable="true"
                         android:focusable="true"
