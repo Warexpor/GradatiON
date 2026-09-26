@@ -126,6 +126,7 @@ dependencies {
     implementation(libs.commonmark.ext.ins)
     implementation(libs.linkify)
     implementation(libs.gson)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
