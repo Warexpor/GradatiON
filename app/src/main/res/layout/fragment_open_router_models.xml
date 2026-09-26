@@ -73,7 +73,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Alphabetical"
+                android:text="@string/model_picker_sort_az"
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
@@ -83,7 +83,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Newest"
+                android:text="@string/model_picker_sort_newest"
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
@@ -104,7 +104,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="All"
+                android:text="@string/model_picker_filter_all"
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
@@ -114,7 +114,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Vision"
+                android:text="@string/model_picker_filter_vision"
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
@@ -124,7 +124,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Image Gen"
+                android:text="@string/model_picker_filter_image"
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
@@ -134,7 +134,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Transc."
+                android:text="@string/model_picker_filter_transcribe"
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
@@ -155,7 +155,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="All"
+                android:text="@string/model_picker_filter_all"
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
@@ -165,7 +165,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Free"
+                android:text="@string/model_picker_filter_free"
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />
@@ -175,7 +175,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Paid"
+                android:text="@string/model_picker_filter_paid"
                 app:backgroundTint="@color/toggle_background_selector"
                 app:strokeColor="@color/xai_hairline"
                 style="?attr/materialButtonOutlinedStyle" />

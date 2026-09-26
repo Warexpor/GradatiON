@@ -205,7 +205,7 @@
             android:background="@drawable/bg_circle_tonal"
             android:stateListAnimator="@animator/glass_press"
             android:contentDescription="@string/grok_new_conversation"
-            android:padding="9dp"
+            android:padding="10dp"
             android:src="@drawable/ic_new_chat"
             app:tint="@color/xai_ink" />
     </LinearLayout>
