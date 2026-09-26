@@ -3,6 +3,7 @@ package io.github.stardomains3.oxproxion
 import android.animation.TimeInterpolator
 import android.content.Context
 import android.provider.Settings
+import android.view.View
 import android.view.animation.PathInterpolator
 import androidx.fragment.app.FragmentTransaction
 
@@ -10,6 +11,8 @@ object Motion {
     val easeOut = PathInterpolator(0.2f, 0f, 0f, 1f)
     /** iOS-like decelerate for things arriving on screen. */
     val iosOut = PathInterpolator(0.2f, 0.9f, 0.1f, 1f)
+    /** UINavigationController-like push/pop curve. */
+    val iosPush = PathInterpolator(0.32f, 0.72f, 0f, 1f)
     /** Quick accelerate for things leaving. */
     val iosIn = PathInterpolator(0.4f, 0f, 1f, 1f)
     /** Critically-damped-ish spring: arrives fast, settles with a whisper of overshoot. */
@@ -64,5 +67,40 @@ object Motion {
             R.anim.fade_in,
             R.anim.fade_out
         )
+    }
+
+    /**
+     * Show/hide a small floating control (scroll buttons, chips) with a springy pop instead
+     * of blinking. Repeated calls toward the same state are no-ops, so it is safe from scroll
+     * callbacks.
+     */
+    fun View.setShownAnimated(show: Boolean, hiddenVisibility: Int = View.INVISIBLE) {
+        val target = if (show) View.VISIBLE else hiddenVisibility
+        val pending = getTag(R.id.tag_visibility_animator) as? Boolean
+        if (pending == show) return
+        if (pending == null && visibility == target) return
+        animate().cancel()
+        if (!areAnimationsEnabled(context)) {
+            setTag(R.id.tag_visibility_animator, null)
+            visibility = target
+            alpha = 1f; scaleX = 1f; scaleY = 1f
+            return
+        }
+        setTag(R.id.tag_visibility_animator, show)
+        if (show) {
+            if (visibility != View.VISIBLE) {
+                alpha = 0f; scaleX = 0.8f; scaleY = 0.8f
+                visibility = View.VISIBLE
+            }
+            animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(360).setInterpolator(springBouncy)
+                .withEndAction { setTag(R.id.tag_visibility_animator, null) }.start()
+        } else {
+            animate().alpha(0f).scaleX(0.8f).scaleY(0.8f).setDuration(160).setInterpolator(iosIn)
+                .withEndAction {
+                    visibility = hiddenVisibility
+                    alpha = 1f; scaleX = 1f; scaleY = 1f
+                    setTag(R.id.tag_visibility_animator, null)
+                }.start()
+        }
     }
 }

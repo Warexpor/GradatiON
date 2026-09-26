@@ -522,6 +522,51 @@ class ChatAdapter(
         }
     }
 
+    /** Disclosure (reasoning, long replies): height eases open/closed with a fade, iOS-style. */
+    private fun animateDisclosure(target: View, expand: Boolean) {
+        (target.getTag(R.id.tag_visibility_animator) as? android.animation.Animator)?.cancel()
+        if (!Motion.areAnimationsEnabled(target.context)) {
+            target.visibility = if (expand) View.VISIBLE else View.GONE
+            return
+        }
+        val parentWidth = (target.parent as? View)?.width ?: 0
+        val widthSpec = View.MeasureSpec.makeMeasureSpec(
+            (parentWidth - target.marginStartCompat() - target.marginEndCompat()).coerceAtLeast(0),
+            View.MeasureSpec.EXACTLY
+        )
+        target.measure(widthSpec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val full = target.measuredHeight
+        val from = if (expand) 0 else target.height
+        val to = if (expand) full else 0
+        target.visibility = View.VISIBLE
+        target.layoutParams.height = from
+        target.alpha = if (expand) 0f else 1f
+        target.requestLayout()
+        val animator = android.animation.ValueAnimator.ofInt(from, to).apply {
+            duration = if (expand) 380L else 260L
+            interpolator = if (expand) Motion.iosOut else Motion.iosIn
+            addUpdateListener {
+                target.layoutParams.height = it.animatedValue as Int
+                target.alpha = if (expand) it.animatedFraction else 1f - it.animatedFraction
+                target.requestLayout()
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    target.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    target.alpha = 1f
+                    target.visibility = if (expand) View.VISIBLE else View.GONE
+                    target.setTag(R.id.tag_visibility_animator, null)
+                    target.requestLayout()
+                }
+            })
+        }
+        target.setTag(R.id.tag_visibility_animator, animator)
+        animator.start()
+    }
+
+    private fun View.marginStartCompat() = (layoutParams as? ViewGroup.MarginLayoutParams)?.marginStart ?: 0
+    private fun View.marginEndCompat() = (layoutParams as? ViewGroup.MarginLayoutParams)?.marginEnd ?: 0
+
     // --- VIEW HOLDERS ---
 
     inner class UserViewHolder(itemView: View, private val markwon: Markwon) : RecyclerView.ViewHolder(itemView) {
@@ -853,6 +898,9 @@ class ChatAdapter(
         }
 
         private fun bindReasoning(message: FlexibleMessage, streaming: Boolean) {
+            (reasoningTextView.getTag(R.id.tag_visibility_animator) as? android.animation.Animator)?.cancel()
+            reasoningTextView.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+            reasoningTextView.alpha = 1f
             val reasoning = reasoningSource(message)
             if (reasoning.isBlank()) {
                 ShimmerText.stop(reasoningTitle)
@@ -888,7 +936,7 @@ class ChatAdapter(
             reasoningHeader.setOnClickListener {
                 val next = !collapsedStates.getOrDefault(key, defaultCollapsed)
                 collapsedStates[key] = next
-                reasoningTextView.visibility = if (next) View.GONE else View.VISIBLE
+                animateDisclosure(reasoningTextView, expand = !next)
                 reasoningChevron.setImageResource(
                     if (next) R.drawable.ic_expand_more else R.drawable.ic_expand_less2
                 )
@@ -902,6 +950,10 @@ class ChatAdapter(
             if (fadeTicker != null) return
             val ticker = object : android.view.Choreographer.FrameCallback {
                 override fun doFrame(frameTimeNs: Long) {
+                    if (!messageTextView.isAttachedToWindow) {
+                        fadeTicker = null
+                        return
+                    }
                     val text = messageTextView.text
                     val fades = if (text is android.text.Spanned) {
                         text.getSpans(0, text.length, StreamFadeSpan::class.java)

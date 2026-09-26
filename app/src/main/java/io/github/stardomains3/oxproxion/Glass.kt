@@ -121,7 +121,12 @@ class GlassMaterial(private val host: View, attrs: AttributeSet?) {
             src.getLocationInWindow(srcLoc)
             val dx = hostLoc[0] - srcLoc[0]
             val dy = hostLoc[1] - srcLoc[1]
-            if (dx != lastDx || dy != lastDy) host.invalidate()
+            if (dx != lastDx || dy != lastDy) {
+                // Record now so a frame that never reaches draw() can't re-trigger forever.
+                lastDx = dx
+                lastDy = dy
+                host.invalidate()
+            }
         }
         true
     }

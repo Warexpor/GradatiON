@@ -141,6 +141,43 @@ class ScreenshotTest {
         seedConversation(a); idle(); snap(root(a), "chat_conversation_light")
     }
 
+    /** Mid-stream frame: the newest words are still fading in at the edge. */
+    private fun streamInto(a: MainActivity, name: String) {
+        seedConversation(a); idle()
+        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        val holder = rv.findViewHolderForAdapterPosition(1) as ChatAdapter.AssistantViewHolder
+        val full = """
+            Dividing by **√d** keeps the dot products from growing with the key size.
+
+            Without it, large scores push softmax into regions where one weight is ~1 and the rest ~0, so gradients vanish and training stalls.
+
+            - With scaling, scores stay near unit variance
+            - Softmax stays soft, so every token still gets
+        """.trimIndent()
+        // Drive frames by hand: advance the clock without running the looper, so the fade
+        // ticker (which reposts every frame while the cursor breathes) can't spin the test.
+        var n = 0
+        while (n < full.length) {
+            n = minOf(full.length, n + 7)
+            holder.renderStreamFrame(full.substring(0, n))
+            org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(22))
+        }
+        val r = root(a)
+        r.measure(
+            View.MeasureSpec.makeMeasureSpec(r.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(r.height, View.MeasureSpec.EXACTLY)
+        )
+        r.layout(0, 0, r.width, r.height)
+        snap(r, name)
+        // End the stream so the ticker stops before the activity is torn down.
+        holder.itemView.findViewById<android.widget.TextView>(R.id.messageTextView).text = ""
+    }
+
+    @Test fun chatStreamingDark() = withChat { a, _ -> streamInto(a, "chat_streaming_dark") }
+
+    @Test @Config(qualifiers = LIGHT)
+    fun chatStreamingLight() = withChat { a, _ -> streamInto(a, "chat_streaming_light") }
+
     @Test @Config(qualifiers = LIGHT)
     fun controlsPanelConversationLight() = withChat { a, _ ->
         seedConversation(a); idle()

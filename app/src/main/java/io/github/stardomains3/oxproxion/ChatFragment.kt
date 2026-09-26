@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import io.github.stardomains3.oxproxion.Motion.withGrokFadeAnimations
+import io.github.stardomains3.oxproxion.Motion.setShownAnimated
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 
 import android.Manifest
@@ -918,8 +919,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 chatRecyclerView.post {
                     val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                     val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                    scrollToTopButton.visibility = if (canScrollUp) View.VISIBLE else View.INVISIBLE
-                    scrollToBottomButton.visibility = if (canScrollDown) View.VISIBLE else View.INVISIBLE
+                    scrollToTopButton.setShownAnimated(canScrollUp)
+                    scrollToBottomButton.setShownAnimated(canScrollDown)
                 }
             }
             resetChatButton.isEnabled = hasMessages
@@ -1130,8 +1131,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 chatRecyclerView.post {
                     val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                     val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                    scrollToTopButton.visibility = if (canScrollUp) View.VISIBLE else View.INVISIBLE
-                    scrollToBottomButton.visibility = if (canScrollDown) View.VISIBLE else View.INVISIBLE
+                    scrollToTopButton.setShownAnimated(canScrollUp)
+                    scrollToBottomButton.setShownAnimated(canScrollDown)
                 }
             } else {
                 scrollToTopButton.visibility = View.INVISIBLE
@@ -1143,8 +1144,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 chatRecyclerView.post {
                     val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                     val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                    scrollToTopButton.visibility = if (canScrollUp) View.VISIBLE else View.INVISIBLE
-                    scrollToBottomButton.visibility = if (canScrollDown) View.VISIBLE else View.INVISIBLE
+                    scrollToTopButton.setShownAnimated(canScrollUp)
+                    scrollToBottomButton.setShownAnimated(canScrollDown)
                 }
             }
             else{
@@ -1311,10 +1312,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     if (sharedPreferencesHelper.getScrollersPreference()) {
                         val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                         val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                        scrollToTopButton.visibility =
-                            if (canScrollUp) View.VISIBLE else View.INVISIBLE
-                        scrollToBottomButton.visibility =
-                            if (canScrollDown) View.VISIBLE else View.INVISIBLE
+                        scrollToTopButton.setShownAnimated(canScrollUp)
+                        scrollToBottomButton.setShownAnimated(canScrollDown)
                     }
                 }
             }
@@ -1817,8 +1816,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     chatRecyclerView.post {  // Keep post for layout safety
                         val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                         val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                        scrollToTopButton.visibility = if (canScrollUp) View.VISIBLE else View.INVISIBLE
-                        scrollToBottomButton.visibility = if (canScrollDown) View.VISIBLE else View.INVISIBLE
+                        scrollToTopButton.setShownAnimated(canScrollUp)
+                        scrollToBottomButton.setShownAnimated(canScrollDown)
                     }
             },
             onSaveAsFile = { content ->
@@ -1865,8 +1864,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     chatRecyclerView.post {  // Keep post for layout safety
                         val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                         val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                        scrollToTopButton.visibility = if (canScrollUp) View.VISIBLE else View.INVISIBLE
-                        scrollToBottomButton.visibility = if (canScrollDown) View.VISIBLE else View.INVISIBLE
+                        scrollToTopButton.setShownAnimated(canScrollUp)
+                        scrollToBottomButton.setShownAnimated(canScrollDown)
                     }
             }
         })
@@ -3552,8 +3551,8 @@ $cleanContent
         chatRecyclerView.post {
             val canScrollUp = chatRecyclerView.canScrollVertically(-1)
             val canScrollDown = chatRecyclerView.canScrollVertically(1)
-            scrollToTopButton.visibility = if (canScrollUp) View.VISIBLE else View.INVISIBLE
-            scrollToBottomButton.visibility = if (canScrollDown) View.VISIBLE else View.INVISIBLE
+            scrollToTopButton.setShownAnimated(canScrollUp)
+            scrollToBottomButton.setShownAnimated(canScrollDown)
         }
     }
 
@@ -3860,6 +3859,7 @@ $cleanContent
         val finishClose = {
             panel.visibility = View.GONE
             panel.translationX = -panel.width.toFloat().coerceAtLeast(0f)
+            view?.findViewById<View>(R.id.rootLayout)?.let { it.animate().cancel(); it.translationX = 0f }
             scrim.visibility = View.GONE
             scrim.alpha = 0f
             panel.setLayerType(View.LAYER_TYPE_NONE, null)
@@ -3873,10 +3873,13 @@ $cleanContent
         panel.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         panel.animate()
             .translationX(-panel.width.toFloat().coerceAtLeast(1f))
-            .setDuration(drawerMs)
-            .setInterpolator(Motion.easeOut)
+            .setDuration(drawerMs * 4 / 5)
+            .setInterpolator(Motion.iosPush)
             .withEndAction { finishClose() }
             .start()
+        // Chat slides back from its parallax offset as the panel leaves.
+        view?.findViewById<View>(R.id.rootLayout)?.animate()
+            ?.translationX(0f)?.setDuration(drawerMs * 4 / 5)?.setInterpolator(Motion.iosPush)?.start()
         scrim.animate()
             .alpha(0f)
             .setDuration(resources.getInteger(R.integer.motion_scrim).toLong())
@@ -3948,9 +3951,12 @@ $cleanContent
             panel.animate()
                 .translationX(0f)
                 .setDuration(drawerMs)
-                .setInterpolator(Motion.easeOut)
+                .setInterpolator(Motion.iosPush)
                 .withEndAction { panel.setLayerType(View.LAYER_TYPE_NONE, null) }
                 .start()
+            // Parallax: the chat drifts a little the same way, like an iOS push.
+            view?.findViewById<View>(R.id.rootLayout)?.animate()
+                ?.translationX(w * 0.25f)?.setDuration(drawerMs)?.setInterpolator(Motion.iosPush)?.start()
         }
     }
 
@@ -4291,6 +4297,8 @@ $cleanContent
 
 
 
+    private var sendButtonActive = false
+
     private fun updateSendButtonChrome() {
         if (!::sendChatButton.isInitialized) return
         val awaiting = viewModel.isAwaitingResponse.value == true
@@ -4302,7 +4310,17 @@ $cleanContent
             pendingFiles.isNotEmpty() ||
             currentTempImageFile != null ||
             selectedAudioBytes != null
+        val becameActive = hasContent && !sendButtonActive
+        sendButtonActive = hasContent
         sendChatButton.isEnabled = hasContent
+        if (becameActive && Motion.areAnimationsEnabled(requireContext())) {
+            // Send wakes up with a small springy pop as soon as there is something to send.
+            sendChatButton.animate().cancel()
+            sendChatButton.scaleX = 0.78f
+            sendChatButton.scaleY = 0.78f
+            sendChatButton.animate().scaleX(1f).scaleY(1f).setDuration(420)
+                .setInterpolator(Motion.springBouncy).start()
+        }
         sendChatButton.setBackgroundResource(
             if (hasContent) R.drawable.bg_send_enabled else R.drawable.bg_send_disabled
         )

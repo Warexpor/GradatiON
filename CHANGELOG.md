@@ -3,13 +3,20 @@
 ## Unreleased — monochrome redesign
 
 ### Changed
-- Whole UI reworked to a minimal, iOS-style monochrome look: true black / white canvas, system grays, soft gradients on the composer, bubbles and chips, no gold accent and no glow. Light and dark now share one theme definition.
+- Glass: the transcript scrolls beneath a live-blurred top bar and a floating glass composer; the Controls panel is the same material, and dialogs and sheets frost the screen behind them.
+- Palette moves off pure black to a charcoal base (and a soft paper base in light) with a finer stepped gray ramp and lower overall contrast.
+- Streaming reveals text with a soft per-word fade at the live edge, a breathing dot marks it, and the view follows the reply unless you scroll away. "Thinking" is a shimmering label.
+- Markdown: code blocks are rounded cards with a language header (tap to copy), inline code is a pill, headings are calmer and paragraph spacing tighter.
+- Motion: the Controls panel rises on a spring with its rows cascading in, sent messages rise from the composer, presses sink and settle, dialogs enter like iOS alerts, and screens push in from the edge over a parallaxed, dimmed previous screen. Reasoning expands and collapses smoothly.
+- Whole UI reworked to a minimal, iOS-style monochrome look: system grays, soft gradients on the composer, bubbles and chips, no gold accent and no glow. Light and dark now share one theme definition.
 - Inter 4 in four weights with a proper type scale; titles use semibold, the History wordmark is a large title.
 - Pressing things shows a soft gray wash instead of the burst animation.
 - Settings, RP hub and forms use grouped inset cards with section headers; dialogs are rounded cards with pill buttons; text fields are filled; nav bars are flush.
 - Chat empty state is a small mark with a greeting instead of the big watermark.
 
 ### Fixed
+- Streaming no longer hops to the UI thread once per token (janky on fast local models); updates are coalesced to one per frame and long replies no longer re-parse all markdown every frame.
+- A partial reply could reappear after Stop or an error; tool calls and images arriving with the first text chunk were dropped; LAN citations were listed twice.
 - Reasoning, web search, stream, tools, presets, system message, fonts and chat export could only be reached by long-pressing Send on an empty chat. A Controls button next to + now opens them any time.
 - Those toggles showed no on/off state; tiles now fill when a feature is on.
 - Opening the full-screen composer stranded New chat, System, Paste and Clear outside the Controls panel until restart.

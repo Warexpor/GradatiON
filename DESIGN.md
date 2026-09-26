@@ -44,6 +44,14 @@ Sections 1–13 below are the historical Grok token extraction the shell grew fr
 
 ---
 
+### 0.x Glass, palette and motion (current)
+
+- **Palette.** Dark base `#161618` (not pure black); surfaces step up `#1B1B1E` / `#202023` / `#2A2A2E`, separators `#38383C`, ink `#EDEDF0`, body `#DADADF`, mute `#909096`. Light base `#F7F7F8`, ink `#1A1A1C`. Keep new tones on this ramp.
+- **Glass.** `GlassBackdropLayout` wraps what glass blurs (the transcript). `GlassFrameLayout` / `GlassLinearLayout` draw a live blur (RenderEffect, saturation 1.6) + `glass_*` tint + hairline. Top bar: `glass_bar_tint`, bottom hairline fades in when content is under it. Composer: 26dp capsule. Controls panel: `glass_panel_tint`, 28dp. Dialogs/sheets: `GlassDialogs.frost()` or the dialog themes (cross-window blur + light dim).
+- **Streaming.** `StreamUiPump` coalesces SSE deltas per frame; `IncrementalMarkdown` caches closed blocks; `StreamFadeSpan` (340ms ease-out cubic) per revealed chunk; `StreamCursorSpan` breathing dot; `ChatFragment.followStreamingEdge()` keeps the edge above the composer until the user drags away.
+- **Markdown.** `ChatMarkdown` plugin + `ChatTextView` paint code cards (14dp, language header, tap to copy) and inline code pills.
+- **Motion.** `Motion.spring` / `springBouncy` (damped spring interpolators), `iosOut`, `iosIn`, `iosPush`. Press: `@animator/press_scale` (sink 0.95, overshoot settle). Messages: `ChatItemAnimator`. Dialogs: `Animation.Gradation.Dialog`. Screen push: 400ms `ios_push`, previous screen −30% and dimmed.
+
 ## 1. Sources (priority order)
 
 | Priority | Artifact | What it unlocks |
