@@ -29,10 +29,12 @@
 
     <TextView
         android:id="@+id/backgroundStyleLabel"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:duplicateParentState="true"
+        android:ellipsize="end"
+        android:gravity="center_horizontal"
         android:maxLines="1"
         android:textColor="@color/toggle_icon_top"
         android:textFontWeight="500"
