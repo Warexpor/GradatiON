@@ -52,7 +52,7 @@
                 android:maxLines="1"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp"
-                android:textStyle="bold"
+                android:textFontWeight="600"
                 tools:text="Grok 3 Mini" />
 
             <TextView

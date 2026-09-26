@@ -28,7 +28,7 @@ class MaxTokensDialogFragment : DialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         dialog?.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
-        dialog?.window?.setDimAmount(0.8f)
+        dialog?.window?.setDimAmount(0.55f)
         val sharedPreferencesHelper = SharedPreferencesHelper(requireContext())
         val editTextMaxTokens = view.findViewById<TextInputEditText>(R.id.edit_text_maxtokens)
         val buttonSave = view.findViewById<MaterialButton>(R.id.button_savemaxtokens)

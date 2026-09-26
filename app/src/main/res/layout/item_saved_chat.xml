@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Grok history row: title + timestamp + overflow -->
+<!-- History row: title + timestamp + overflow, rounded press highlight -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?android:attr/selectableItemBackground"
     android:gravity="center_vertical"
-    android:minHeight="56dp"
+    android:minHeight="58dp"
     android:orientation="horizontal"
-    android:paddingStart="16dp"
+    android:paddingStart="12dp"
     android:paddingTop="10dp"
-    android:paddingEnd="8dp"
+    android:paddingEnd="2dp"
     android:paddingBottom="10dp">
 
     <LinearLayout
@@ -28,14 +28,14 @@
             android:includeFontPadding="false"
             android:maxLines="1"
             android:textColor="@color/xai_ink"
-            android:textSize="17sp"
-            android:textStyle="bold" />
+            android:textSize="16sp"
+            android:textFontWeight="500" />
 
         <TextView
             android:id="@+id/savedChatTimestamp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
+            android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:includeFontPadding="false"
             android:maxLines="1"

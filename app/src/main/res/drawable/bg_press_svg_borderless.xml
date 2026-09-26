@@ -1,17 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Borderless variant for icon buttons / list row actions -->
-<animated-selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:id="@+id/pressed"
-        android:drawable="@drawable/avd_tap_burst"
-        android:state_pressed="true" />
-    <item android:id="@+id/default_state">
+<!-- Borderless variant for icon buttons: circular wash on press -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:enterFadeDuration="60"
+    android:exitFadeDuration="220">
+    <item android:state_pressed="true">
         <shape android:shape="oval">
-            <solid android:color="@android:color/transparent" />
+            <solid android:color="@color/xai_press_wash" />
         </shape>
     </item>
-    <transition
-        android:drawable="@drawable/avd_tap_burst"
-        android:fromId="@id/default_state"
-        android:toId="@id/pressed" />
-</animated-selector>
+    <item android:drawable="@android:color/transparent" />
+</selector>

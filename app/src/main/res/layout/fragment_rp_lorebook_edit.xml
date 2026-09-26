@@ -4,14 +4,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/xai_canvas"
+    android:background="@color/xai_grouped"
     android:fitsSystemWindows="true">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="@color/xai_canvas"
+        android:background="@color/xai_grouped"
         app:navigationIcon="@drawable/is_backarrow"
         app:navigationContentDescription="@string/cd_navigate_up"
         app:navigationIconTint="@color/xai_ink"

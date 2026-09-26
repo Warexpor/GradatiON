@@ -36,7 +36,7 @@
                 android:layout_height="wrap_content"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp"
-                android:textStyle="bold"
+                android:textFontWeight="600"
                 android:maxLines="1"
                 android:ellipsize="end" />
 

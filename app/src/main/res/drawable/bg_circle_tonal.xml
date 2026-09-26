@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Round tonal icon button with press wash -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/xai_canvas_mid" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/bg_press_svg_borderless" />
+</layer-list>

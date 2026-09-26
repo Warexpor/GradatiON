@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Composer round actions (+, controls): tonal disc, inverts to ink while its panel is open -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:enterFadeDuration="120"
+    android:exitFadeDuration="160">
+    <item android:state_selected="true">
+        <shape android:shape="oval">
+            <solid android:color="@color/xai_ink" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/xai_send_disabled" />
+        </shape>
+    </item>
+</selector>

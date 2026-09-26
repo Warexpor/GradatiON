@@ -32,9 +32,15 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/fab_add_prompt"
-        style="@style/Widget.Grokion.Button.Text"
+        style="@style/Widget.Grokion.Button"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="52dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="12dp"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
         android:layout_gravity="center"
         android:text="@string/action_add"
         android:contentDescription="@string/cd_add_prompt" />

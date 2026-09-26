@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/xai_canvas"
+    android:background="@color/xai_grouped"
     android:fitsSystemWindows="true"
     tools:context=".AdvancedReasoningFragment">
 
@@ -15,7 +15,7 @@
         android:layout_height="?attr/actionBarSize"
         app:title="Advanced Reasoning"
         app:titleTextColor="@color/xai_ink"
-        android:background="@color/xai_canvas"
+        android:background="@color/xai_grouped"
         app:navigationIcon="@drawable/is_backarrow"
         app:navigationIconTint="@color/xai_ink" />
 

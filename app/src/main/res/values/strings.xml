@@ -38,7 +38,7 @@
     <string name="grok_save_chat">Save chat</string>
     <string name="grok_settings">Settings</string>
     <string name="grok_attach_camera">Camera</string>
-    <string name="grok_attach_gallery">Gallery</string>
+    <string name="grok_attach_gallery">Photos</string>
     <string name="grok_attach_files">Files</string>
     <string name="grok_model_search_hint">Search models…</string>
     <string name="model_picker_title">Your Models</string>
@@ -421,4 +421,32 @@
     <string name="toast_capture_canceled">Capture canceled</string>
     <string name="toast_capture_failed">Capture failed</string>
     <string name="toast_folder_updated">Folder updated — tools should work now</string>
+
+    <!-- Controls panel (chat) -->
+    <string name="controls_title">Controls</string>
+    <string name="controls_export">Export conversation</string>
+    <string name="cd_controls">Chat controls</string>
+    <string name="control_reasoning">Reasoning</string>
+    <string name="control_web">Web</string>
+    <string name="control_stream">Stream</string>
+    <string name="control_read_aloud">Read aloud</string>
+    <string name="control_tools">Tools</string>
+    <string name="control_presets">Presets</string>
+    <string name="control_system">System</string>
+    <string name="control_settings">Settings</string>
+    <string name="control_files">Files</string>
+    <string name="control_image">Image</string>
+    <string name="control_generate">Generate</string>
+    <string name="control_new_chat">New chat</string>
+    <string name="control_font">Font</string>
+    <string name="control_text_size">Text size</string>
+    <string name="control_paste">Paste</string>
+    <string name="control_clear">Clear</string>
+    <string name="empty_greeting">What can I help with?</string>
+    <string name="empty_greeting_rp">Say something to begin.</string>
+    <string name="attach_more_controls">More controls</string>
+    <plurals name="attach_review_files">
+        <item quantity="one">%d file attached</item>
+        <item quantity="other">%d files attached</item>
+    </plurals>
 </resources>

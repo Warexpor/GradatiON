@@ -31,7 +31,7 @@ class TimeoutDialogFragment : DialogFragment() {
 
         // dim + rounded background like MaxTokensDialogFragment
         dialog?.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
-        dialog?.window?.setDimAmount(0.8f)
+        dialog?.window?.setDimAmount(0.55f)
 
         val prefs = SharedPreferencesHelper(requireContext())
         val editText = view.findViewById<TextInputEditText>(R.id.edit_text_timeout)

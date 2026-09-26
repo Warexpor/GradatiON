@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- xAI: dark-canvas only (no light mode) -->
-    <style name="Theme.Grokion" parent="Theme.Material3.Light.NoActionBar">
+    <!--
+        GradatiON design system.
+        Monochrome, iOS-flavoured: true black / white canvas, system grays, hairlines,
+        soft vertical gradients on raised surfaces, no glow, no accent hue.
+        Colors live in values/colors.xml (light) and values-night/colors.xml (dark);
+        everything below is shared so both themes stay in lockstep.
+    -->
+    <style name="Base.Theme.Grokion" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:windowBackground">@color/xai_canvas</item>
         <item name="colorSurface">@color/xai_canvas</item>
         <item name="colorOnSurface">@color/xai_body</item>
@@ -20,11 +26,12 @@
         <item name="colorOnTertiaryContainer">@color/xai_ink</item>
         <item name="android:textColorPrimary">@color/xai_ink</item>
         <item name="android:textColorSecondary">@color/xai_mute</item>
+        <item name="android:textColorHint">@color/xai_mute</item>
         <item name="android:textColorHighlight">@color/xai_text_highlight</item>
         <item name="colorControlActivated">@color/xai_ink</item>
         <item name="colorControlNormal">@color/xai_mute</item>
         <item name="android:colorControlNormal">@color/xai_mute</item>
-        <!-- Kill Material ripple; SVG burst via selectable backgrounds -->
+        <!-- No Material ripple; pressed feedback is a soft scale + wash -->
         <item name="colorControlHighlight">@android:color/transparent</item>
         <item name="android:colorControlHighlight">@android:color/transparent</item>
         <item name="android:selectableItemBackground">@drawable/bg_press_svg</item>
@@ -34,49 +41,175 @@
         <item name="materialButtonStyle">@style/Widget.Grokion.Button</item>
         <item name="materialIconButtonStyle">@style/Widget.Grokion.IconButton</item>
         <item name="borderlessButtonStyle">@style/Widget.Grokion.Button.Text</item>
+        <item name="materialSwitchStyle">@style/Widget.Gradation.Switch</item>
         <item name="colorOutline">@color/xai_canvas_mid</item>
         <item name="colorOutlineVariant">@color/xai_hairline</item>
         <item name="colorSurfaceVariant">@color/xai_canvas_soft</item>
         <item name="colorOnSurfaceVariant">@color/xai_mute</item>
-        <item name="colorSurfaceContainer">@color/xai_canvas_soft</item>
+        <item name="colorSurfaceContainer">@color/xai_canvas_card</item>
         <item name="colorSurfaceContainerHigh">@color/xai_canvas_card</item>
         <item name="colorSurfaceContainerHighest">@color/xai_canvas_mid</item>
-        <item name="colorSurfaceContainerLow">@color/xai_canvas</item>
+        <item name="colorSurfaceContainerLow">@color/xai_canvas_soft</item>
         <item name="colorSurfaceContainerLowest">@color/xai_canvas</item>
         <item name="colorError">@color/xai_error</item>
         <item name="colorOnError">@color/white</item>
         <item name="android:colorBackground">@color/xai_canvas</item>
         <item name="android:statusBarColor">@color/xai_canvas</item>
         <item name="android:navigationBarColor">@color/xai_canvas</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:colorAccent">@color/xai_ink</item>
         <item name="colorAccent">@color/xai_ink</item>
         <item name="materialAlertDialogTheme">@style/CustomMaterialAlertDialogTheme</item>
-        <item name="android:fontFamily">@font/inter_regular</item>
-        <item name="fontFamily">@font/inter_regular</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Grokion.BottomSheet</item>
+        <item name="toolbarStyle">@style/Widget.Gradation.Toolbar</item>
+        <item name="popupMenuStyle">@style/Widget.Gradation.PopupMenu</item>
+        <item name="android:popupMenuStyle">@style/Widget.Gradation.PopupMenu</item>
+        <item name="textAppearanceLargePopupMenu">@style/TextAppearance.Gradation.Body</item>
+        <item name="textAppearanceSmallPopupMenu">@style/TextAppearance.Gradation.Body</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Gradation.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Gradation.Medium</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="fontFamily">@font/inter</item>
     </style>
 
+    <style name="Theme.Grokion" parent="Base.Theme.Grokion">
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <!-- ── Type scale (iOS-like, Inter) ── -->
+    <style name="TextAppearance.Gradation.LargeTitle" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:textSize">32sp</item>
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">-0.025</item>
+    </style>
+
+    <style name="TextAppearance.Gradation.Title" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textSize">20sp</item>
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:letterSpacing">-0.015</item>
+    </style>
+
+    <style name="TextAppearance.Gradation.Headline" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textSize">17sp</item>
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+
+    <style name="TextAppearance.Gradation.Body" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/xai_body</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:letterSpacing">-0.005</item>
+    </style>
+
+    <style name="TextAppearance.Gradation.Label" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:textFontWeight">500</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="TextAppearance.Gradation.Footnote" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/xai_mute</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <!-- Grouped-list section header: small caps-ish, muted -->
+    <style name="TextAppearance.Gradation.SectionHeader" parent="TextAppearance.Gradation.Footnote">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textFontWeight">500</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.06</item>
+    </style>
+
+    <!-- Navigation bar: flush with the page, semibold title, no elevation -->
+    <style name="Widget.Gradation.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="titleCentered">false</item>
+        <item name="titleTextAppearance">@style/TextAppearance.Gradation.Title</item>
+        <item name="subtitleTextAppearance">@style/TextAppearance.Gradation.Footnote</item>
+        <item name="navigationIconTint">@color/xai_ink</item>
+        <item name="android:elevation">0dp</item>
+        <item name="contentInsetStartWithNavigation">0dp</item>
+    </style>
+
+    <!-- ── Shapes ── -->
+    <style name="ShapeAppearance.Gradation.Small" parent="ShapeAppearance.Material3.SmallComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">12dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Gradation.Medium" parent="ShapeAppearance.Material3.MediumComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">16dp</item>
+    </style>
+
+    <style name="XaiShapeCard" parent="ShapeAppearance.MaterialComponents.MediumComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">22dp</item>
+    </style>
+
+    <style name="XaiShapePill" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
+    <style name="ff" parent="XaiShapeCard" />
+
+    <!-- ── Buttons ── -->
+    <!-- Primary: solid ink pill (white on dark, black on light) -->
     <style name="Widget.Grokion.Button" parent="Widget.Material3.Button">
         <item name="rippleColor">@color/press_ripple_none</item>
         <item name="android:stateListAnimator">@animator/press_scale</item>
         <item name="android:foreground">@drawable/bg_press_svg</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:textAppearance">@style/TextAppearance.Gradation.Label</item>
+        <item name="android:textColor">@color/xai_canvas</item>
+        <item name="backgroundTint">@color/xai_ink</item>
+        <item name="shapeAppearance">@style/XaiShapePill</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
     </style>
 
     <style name="Widget.Grokion.Button.Text" parent="Widget.Material3.Button.TextButton">
         <item name="rippleColor">@color/press_ripple_none</item>
         <item name="android:stateListAnimator">@animator/press_scale</item>
         <item name="android:foreground">@drawable/bg_press_svg</item>
+        <item name="android:textAppearance">@style/TextAppearance.Gradation.Label</item>
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="iconTint">@color/xai_ink</item>
+        <item name="shapeAppearance">@style/XaiShapePill</item>
     </style>
 
+    <!-- Secondary: tonal gray pill -->
+    <style name="Widget.Gradation.Button.Tonal" parent="Widget.Grokion.Button">
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="backgroundTint">@color/xai_canvas_mid</item>
+        <item name="iconTint">@color/xai_ink</item>
+    </style>
+
+    <!-- Row inside a grouped card: icon + label, full-width tap target -->
     <style name="Widget.Grokion.Button.SettingsRow" parent="Widget.Grokion.Button.Text">
         <item name="android:gravity">start|center_vertical</item>
-        <item name="android:minHeight">56dp</item>
+        <item name="android:minHeight">52dp</item>
         <item name="android:paddingStart">16dp</item>
         <item name="android:paddingEnd">16dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
         <item name="android:textColor">@color/xai_ink</item>
         <item name="android:textSize">16sp</item>
+        <item name="android:textFontWeight">400</item>
         <item name="backgroundTint">@android:color/transparent</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Gradation.Small</item>
         <item name="iconGravity">start</item>
         <item name="iconPadding">16dp</item>
         <item name="iconSize">22dp</item>
@@ -96,11 +229,56 @@
         <item name="android:foreground">@drawable/bg_press_svg_borderless</item>
     </style>
 
-    <!-- Model-picker toggle chips — checked tick must follow ink (not Material black) -->
+    <!-- Controls-panel tile: icon over label, Control Center style; inverts when selected -->
+    <style name="Widget.Gradation.ControlTile" parent="Widget.Material3.Button">
+        <item name="android:layout_width">76dp</item>
+        <item name="android:layout_height">72dp</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:layout_marginEnd">4dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:paddingStart">2dp</item>
+        <item name="android:paddingEnd">2dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textFontWeight">500</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textColor">@color/tile_fg</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="iconGravity">top</item>
+        <item name="iconPadding">6dp</item>
+        <item name="iconSize">22dp</item>
+        <item name="iconTint">@color/tile_fg</item>
+        <item name="backgroundTint">@color/tile_bg</item>
+        <item name="cornerRadius">20dp</item>
+        <item name="rippleColor">@color/press_ripple_none</item>
+        <item name="android:stateListAnimator">@animator/press_scale</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <!-- Top-bar toggle icon: muted when off, ink on a soft disc when on -->
+    <style name="Widget.Gradation.TopToggle" parent="Widget.Grokion.IconButton">
+        <item name="android:layout_width">40dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="iconSize">20dp</item>
+        <item name="iconTint">@color/toggle_icon_top</item>
+        <item name="backgroundTint">@color/tile_bg_top</item>
+    </style>
+
+    <!-- Segmented / toggle chips: gray track, filled selection -->
     <style name="Widget.Grokion.Button.OutlinedToggle" parent="Widget.Material3.Button.OutlinedButton">
         <item name="checkedIconTint">@color/xai_ink</item>
         <item name="iconTint">@color/xai_ink</item>
         <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:textAppearance">@style/TextAppearance.Gradation.Label</item>
         <item name="strokeColor">@color/xai_hairline</item>
         <item name="backgroundTint">@color/toggle_background_selector</item>
         <item name="rippleColor">@color/press_ripple_none</item>
@@ -108,25 +286,25 @@
         <item name="materialThemeOverlay">@style/ThemeOverlay.Grokion.ToggleButton</item>
     </style>
 
-    <!-- Model picker filter chips — compact horizontal pills -->
     <style name="Widget.Grokion.Button.FilterChip" parent="Widget.Grokion.Button.OutlinedToggle">
         <item name="android:textSize">13sp</item>
-        <item name="android:minHeight">36dp</item>
+        <item name="android:minHeight">34dp</item>
         <item name="android:paddingStart">14dp</item>
         <item name="android:paddingEnd">14dp</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
-        <item name="cornerRadius">18dp</item>
+        <item name="cornerRadius">17dp</item>
     </style>
 
     <style name="Widget.Grokion.ModelCapabilityBadge" parent="Widget.AppCompat.TextView">
         <item name="android:background">@drawable/bg_capability_badge</item>
         <item name="android:paddingStart">8dp</item>
-        <item name="android:paddingTop">3dp</item>
+        <item name="android:paddingTop">2dp</item>
         <item name="android:paddingEnd">8dp</item>
-        <item name="android:paddingBottom">3dp</item>
+        <item name="android:paddingBottom">2dp</item>
         <item name="android:textColor">@color/xai_mute</item>
         <item name="android:textSize">11sp</item>
+        <item name="android:textFontWeight">500</item>
     </style>
 
     <style name="ThemeOverlay.Grokion.ToggleButton" parent="">
@@ -143,47 +321,57 @@
         <item name="buttonIconTint">@color/button_icon_tint</item>
     </style>
 
+    <style name="Widget.Gradation.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="thumbTint">@color/switch_thumb_tint</item>
+        <item name="trackTint">@color/switch_track_tint</item>
+        <item name="trackDecorationTint">@android:color/transparent</item>
+        <item name="thumbIconTint">@android:color/transparent</item>
+    </style>
+
+    <style name="Widget.Gradation.PopupMenu" parent="Widget.Material3.PopupMenu">
+        <item name="android:popupBackground">@drawable/bg_attach_popup</item>
+        <item name="android:popupElevation">12dp</item>
+    </style>
+
+    <!-- ── Dialogs: iOS-style centered card, 22dp radius ── -->
     <style name="CustomMaterialAlertDialogTheme" parent="ThemeOverlay.Material3.MaterialAlertDialog.Centered">
-        <item name="android:backgroundDimAmount">0.72</item>
+        <item name="android:backgroundDimAmount">0.55</item>
         <item name="shapeAppearanceMediumComponent">@style/XaiShapeCard</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/XaiShapeCard</item>
         <item name="android:textColorPrimary">@color/xai_body</item>
         <item name="colorPrimary">@color/xai_ink</item>
         <item name="colorSurface">@color/xai_canvas_card</item>
-        <item name="android:background">@color/xai_canvas_card</item>
+        <item name="colorSurfaceContainerHigh">@color/xai_canvas_card</item>
         <item name="materialAlertDialogTitleTextStyle">@style/CustomDialogTitleText</item>
         <item name="materialAlertDialogBodyTextStyle">@style/CustomDialogBodyText</item>
         <item name="android:colorAccent">@color/xai_ink</item>
-        <item name="buttonBarPositiveButtonStyle">@style/XaiDialogButton</item>
+        <item name="buttonBarPositiveButtonStyle">@style/XaiDialogButton.Primary</item>
         <item name="buttonBarNegativeButtonStyle">@style/XaiDialogButton</item>
         <item name="buttonBarNeutralButtonStyle">@style/XaiDialogButton</item>
+        <item name="android:fontFamily">@font/inter</item>
     </style>
-
-    <style name="XaiShapeCard" parent="ShapeAppearance.MaterialComponents.MediumComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">8dp</item>
-    </style>
-
-    <style name="XaiShapePill" parent="ShapeAppearance.MaterialComponents.SmallComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">999dp</item>
-    </style>
-
-    <style name="ff" parent="XaiShapeCard" />
 
     <style name="XaiDialogButton" parent="Widget.Material3.Button.TextButton.Dialog">
-        <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:textColor">@color/xai_mute</item>
+        <item name="android:textAppearance">@style/TextAppearance.Gradation.Label</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:letterSpacing">0</item>
+        <item name="rippleColor">@color/press_ripple_none</item>
+    </style>
+
+    <style name="XaiDialogButton.Primary" parent="XaiDialogButton">
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:textFontWeight">600</item>
     </style>
 
     <style name="XaiDialogButton.Destructive" parent="XaiDialogButton">
         <item name="android:textColor">@color/xai_error</item>
+        <item name="android:textFontWeight">600</item>
     </style>
 
     <style name="CustomDialogTheme" parent="ThemeOverlay.Material3.Dialog.Alert">
         <item name="colorSurface">@color/xai_canvas_card</item>
-        <item name="android:background">@color/xai_canvas_card</item>
-        <item name="android:backgroundDimAmount">0.6</item>
+        <item name="android:backgroundDimAmount">0.55</item>
         <item name="android:textColorPrimary">@color/xai_body</item>
         <item name="colorPrimary">@color/xai_ink</item>
         <item name="materialAlertDialogTitleTextStyle">@style/CustomDialogTitleText</item>
@@ -191,21 +379,22 @@
     </style>
 
     <style name="CustomDialogBodyText" parent="TextAppearance.Material3.BodyMedium">
-        <item name="android:textSize">16sp</item>
-        <item name="android:textColor">@color/xai_body</item>
-        <item name="android:fontFamily">@font/inter_regular</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/xai_mute</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:lineSpacingMultiplier">1.15</item>
     </style>
 
     <style name="CustomDialogTitleText" parent="MaterialAlertDialog.Material3.Title.Text">
-        <item name="android:textSize">20sp</item>
+        <item name="android:textSize">18sp</item>
         <item name="android:textColor">@color/xai_ink</item>
-        <item name="android:textStyle">normal</item>
-        <item name="android:fontFamily">@font/inter_regular</item>
-        <item name="android:letterSpacing">-0.02</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:letterSpacing">-0.015</item>
     </style>
 
     <style name="RoundedCornersDialog" parent="Theme.MaterialComponents.DayNight.Dialog">
-        <item name="android:backgroundDimAmount">0.6</item>
+        <item name="android:backgroundDimAmount">0.55</item>
         <item name="android:windowBackground">@drawable/rounded_dialog_background</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsFloating">true</item>
@@ -214,31 +403,35 @@
         <item name="colorAccent">@color/xai_ink</item>
         <item name="colorPrimary">@color/xai_ink</item>
         <item name="colorSurface">@color/xai_canvas_card</item>
+        <item name="android:fontFamily">@font/inter</item>
     </style>
 
-    <style name="MyEditTextTheme" parent="ThemeOverlay.AppCompat.Dark">
+    <style name="MyEditTextTheme" parent="ThemeOverlay.AppCompat.DayNight">
         <item name="colorControlActivated">@color/xai_ink</item>
         <item name="colorControlNormal">@color/xai_hairline</item>
         <item name="android:textColorHint">@color/xai_mute</item>
     </style>
 
+    <!-- Text fields: filled gray, no outline until focus -->
     <style name="Xai.TextInputLayout" parent="Widget.Material3.TextInputLayout.OutlinedBox">
         <item name="boxStrokeColor">@color/text_input_box_stroke_selector</item>
+        <item name="boxStrokeWidth">0dp</item>
+        <item name="boxStrokeWidthFocused">1dp</item>
         <item name="hintTextColor">@color/xai_mute</item>
-        <item name="boxCornerRadiusTopStart">8dp</item>
-        <item name="boxCornerRadiusTopEnd">8dp</item>
-        <item name="boxCornerRadiusBottomStart">8dp</item>
-        <item name="boxCornerRadiusBottomEnd">8dp</item>
+        <item name="boxCornerRadiusTopStart">14dp</item>
+        <item name="boxCornerRadiusTopEnd">14dp</item>
+        <item name="boxCornerRadiusBottomStart">14dp</item>
+        <item name="boxCornerRadiusBottomEnd">14dp</item>
         <item name="boxBackgroundColor">@color/xai_canvas_soft</item>
     </style>
 
-    <!-- Brand wordmark for history header — Iceland (display) -->
+    <!-- Brand wordmark (history header) -->
     <style name="GrokionBrandWordmark" parent="@android:style/TextAppearance">
-        <item name="android:fontFamily">@font/iceland_regular</item>
-        <item name="fontFamily">@font/iceland_regular</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="fontFamily">@font/inter</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:letterSpacing">0.14</item>
-        <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">-0.025</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="Theme.Grokion.AIFix" parent="Theme.Grokion">
@@ -248,14 +441,15 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsFloating">true</item>
         <item name="android:backgroundDimEnabled">true</item>
-        <item name="android:backgroundDimAmount">0.6</item>
+        <item name="android:backgroundDimAmount">0.55</item>
         <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
     </style>
 
+    <!-- ── Bottom sheets: 28dp top radius + grabber ── -->
     <style name="ShapeAppearance.Grokion.BottomSheet" parent="ShapeAppearance.Material3.LargeComponent">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSizeTopLeft">16dp</item>
-        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeTopLeft">28dp</item>
+        <item name="cornerSizeTopRight">28dp</item>
         <item name="cornerSizeBottomLeft">0dp</item>
         <item name="cornerSizeBottomRight">0dp</item>
     </style>
@@ -263,11 +457,13 @@
     <style name="Widget.Grokion.BottomSheet" parent="Widget.Material3.BottomSheet">
         <item name="shapeAppearance">@style/ShapeAppearance.Grokion.BottomSheet</item>
         <item name="backgroundTint">@color/xai_canvas_card</item>
+        <item name="android:elevation">0dp</item>
     </style>
 
     <style name="ThemeOverlay.Grokion.BottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/Widget.Grokion.BottomSheet</item>
-        <item name="android:backgroundDimAmount">0.6</item>
+        <item name="android:backgroundDimAmount">0.5</item>
         <item name="android:colorBackground">@color/xai_canvas_card</item>
+        <item name="android:navigationBarColor">@color/xai_canvas_card</item>
     </style>
 </resources>

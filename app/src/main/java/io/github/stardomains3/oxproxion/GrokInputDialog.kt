@@ -2,7 +2,6 @@ package io.github.stardomains3.oxproxion
 
 import android.view.LayoutInflater
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -22,7 +21,7 @@ object GrokInputDialog {
         val context = fragment.requireContext()
         val dialog = MaterialAlertDialogBuilder(
             context,
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
+            R.style.CustomMaterialAlertDialogTheme
         ).create()
 
         val sheet = LayoutInflater.from(context).inflate(R.layout.dialog_confirm_input, null)
@@ -35,7 +34,6 @@ object GrokInputDialog {
 
         val confirmButton = sheet.findViewById<MaterialButton>(R.id.inputConfirm)
         confirmButton.text = confirmText
-        confirmButton.setTextColor(ContextCompat.getColor(context, R.color.xai_ink))
 
         sheet.findViewById<MaterialButton>(R.id.inputCancel).setOnClickListener {
             dialog.dismiss()
@@ -46,7 +44,8 @@ object GrokInputDialog {
         }
 
         dialog.setView(sheet)
-        dialog.window?.setDimAmount(0.72f)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setDimAmount(0.55f)
         dialog.show()
         inputField.requestFocus()
     }

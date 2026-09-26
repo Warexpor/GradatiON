@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/xai_canvas"
+    android:background="@color/xai_grouped"
     android:fitsSystemWindows="true"
     tools:context=".SettingsDetailFragment">
 
@@ -13,7 +13,7 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="@color/xai_canvas"
+        android:background="@color/xai_grouped"
         app:navigationIcon="@drawable/is_backarrow"
         app:navigationIconTint="@color/xai_ink"
         app:title="@string/settings_title"
@@ -45,12 +45,11 @@
                     android:id="@+id/appearanceSectionLabel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="16dp"
                     android:layout_marginTop="8dp"
                     android:layout_marginBottom="8dp"
                     android:text="@string/grok_appearance"
-                    android:textColor="@color/xai_mute"
-                    android:textSize="13sp" />
+                    android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
                 <LinearLayout
                     android:id="@+id/appearancePreviewCard"
@@ -87,12 +86,11 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="16dp"
                     android:layout_marginTop="20dp"
                     android:layout_marginBottom="8dp"
                     android:text="@string/settings_theme"
-                    android:textColor="@color/xai_mute"
-                    android:textSize="13sp" />
+                    android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -389,12 +387,11 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="16dp"
                     android:layout_marginTop="8dp"
                     android:layout_marginBottom="8dp"
                     android:text="@string/settings_libraries"
-                    android:textColor="@color/xai_mute"
-                    android:textSize="13sp" />
+                    android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -532,12 +529,11 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="16dp"
                     android:layout_marginTop="20dp"
                     android:layout_marginBottom="8dp"
                     android:text="@string/settings_generation"
-                    android:textColor="@color/xai_mute"
-                    android:textSize="13sp" />
+                    android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -685,12 +681,11 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
+                    android:layout_marginStart="16dp"
                     android:layout_marginTop="20dp"
                     android:layout_marginBottom="8dp"
                     android:text="@string/settings_chat_chrome"
-                    android:textColor="@color/xai_mute"
-                    android:textSize="13sp" />
+                    android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
                 <LinearLayout
                     android:layout_width="match_parent"

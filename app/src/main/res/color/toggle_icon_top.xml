@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Top-bar toggles: muted when off, full ink when on -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true" android:color="@color/xai_ink" />
+    <item android:color="@color/xai_mute" />
+</selector>

@@ -151,7 +151,7 @@ class BotModelAdapter(
         val rootView = (context as android.app.Activity).window.decorView
             .findViewById<ViewGroup>(android.R.id.content)
         val dimView = View(context).apply {
-            setBackgroundColor(Color.argb(204, 0, 0, 0))
+            setBackgroundColor(Color.argb(140, 0, 0, 0))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT

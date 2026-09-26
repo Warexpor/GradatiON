@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Grok-style model chip: text + chevron only (no leading source glyph) -->
+<!-- Top-bar chips (model, mode): gradient capsule with hairline -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@color/xai_canvas_soft" />
-    <stroke android:width="1dp" android:color="@color/xai_border_outline" />
+    <gradient
+        android:angle="270"
+        android:startColor="@color/grad_chip_top"
+        android:endColor="@color/grad_chip_bottom" />
+    <stroke android:width="1dp" android:color="@color/xai_hairline" />
     <corners android:radius="999dp" />
     <padding
         android:left="4dp"

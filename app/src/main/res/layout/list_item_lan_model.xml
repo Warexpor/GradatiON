@@ -32,7 +32,7 @@
             android:layout_height="wrap_content"
             android:text="Model ID"
             android:textSize="16sp"
-            android:textStyle="bold"
+            android:textFontWeight="600"
             android:textColor="@color/xai_ink"
             android:maxLines="1"
             android:ellipsize="end"

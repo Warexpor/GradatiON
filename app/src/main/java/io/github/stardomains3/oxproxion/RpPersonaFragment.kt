@@ -67,7 +67,7 @@ class RpPersonaFragment : Fragment() {
             }
             val dialog = MaterialAlertDialogBuilder(
                 requireContext(),
-                com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
+                R.style.CustomMaterialAlertDialogTheme
             )
                 .setTitle(R.string.rp_save_persona_preset)
                 .setView(wrapper)

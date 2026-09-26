@@ -5,13 +5,13 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:fitsSystemWindows="true"
-    android:background="@color/xai_canvas">
+    android:background="@color/xai_grouped">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="@color/xai_canvas"
+        android:background="@color/xai_grouped"
         app:navigationIcon="@drawable/is_backarrow"
         app:navigationContentDescription="@string/cd_navigate_up"
         app:navigationIconTint="@color/xai_ink"
@@ -64,14 +64,13 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="16dp"
                 android:layout_marginTop="20dp"
                 android:layout_marginBottom="8dp"
                 android:letterSpacing="0.06"
                 android:text="@string/rp_persona_presets"
                 android:textAllCaps="true"
-                android:textColor="@color/xai_mute"
-                android:textSize="13sp" />
+                android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
             <LinearLayout
                 android:layout_width="match_parent"

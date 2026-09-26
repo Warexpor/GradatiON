@@ -20,7 +20,7 @@ object GrokConfirmDialog {
         val context = fragment.requireContext()
         val dialog = MaterialAlertDialogBuilder(
             context,
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
+            R.style.CustomMaterialAlertDialogTheme
         ).create()
 
         val sheet = LayoutInflater.from(context).inflate(R.layout.dialog_confirm_action, null)
@@ -30,9 +30,9 @@ object GrokConfirmDialog {
         val actionButton = sheet.findViewById<MaterialButton>(R.id.confirmAction)
         actionButton.text = confirmText
         if (destructive) {
+            // Destructive: red label on a tonal pill (iOS-style), never a red fill
             actionButton.setTextColor(ContextCompat.getColor(context, R.color.xai_error))
-        } else {
-            actionButton.setTextColor(ContextCompat.getColor(context, R.color.xai_ink))
+            actionButton.backgroundTintList = ContextCompat.getColorStateList(context, R.color.xai_canvas_mid)
         }
 
         sheet.findViewById<MaterialButton>(R.id.confirmCancel).setOnClickListener {
@@ -44,7 +44,8 @@ object GrokConfirmDialog {
         }
 
         dialog.setView(sheet)
-        dialog.window?.setDimAmount(0.72f)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setDimAmount(0.55f)
         dialog.show()
     }
 }

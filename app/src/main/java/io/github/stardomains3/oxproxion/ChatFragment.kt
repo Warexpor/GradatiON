@@ -4,7 +4,6 @@ import io.github.stardomains3.oxproxion.Motion.withGrokFadeAnimations
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 
 import android.Manifest
-import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -82,7 +81,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.createBitmap
-import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -216,6 +214,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var leftButtonContainer: LinearLayout
     private lateinit var rightButtonContainer: LinearLayout
     private lateinit var menuButton: MaterialButton
+    private lateinit var controlsButton: MaterialButton
+    private var modelChipColorAnimator: ValueAnimator? = null
     private lateinit var backcopyButton: MaterialButton
     private lateinit var backButton: MaterialButton
     private lateinit var progressBar: View
@@ -500,6 +500,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         topPresetsButton = view.findViewById(R.id.topPresetsButton)
         topSettingsButton = view.findViewById(R.id.topSettingsButton)
         menuButton = view.findViewById(R.id.menuButton)
+        controlsButton = view.findViewById(R.id.controlsButton)
         backcopyButton = view.findViewById(R.id.backcopyButton)
         homeButton = view.findViewById(R.id.homeButton)
         backButton = view.findViewById(R.id.backButton)
@@ -922,6 +923,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
            // pdfChatButton.isVisible = hasMessages
             //copyChatButton.isVisible = hasMessages
             buttonsRow2.isVisible = hasMessages
+            view?.findViewById<View>(R.id.exportLabel)?.isVisible = hasMessages
         }
 
         fun areAnimationsEnabled(context: Context): Boolean {
@@ -999,30 +1001,29 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 if (messages?.isNotEmpty() == true) {
                     val lastMessage = messages.last()
                     if (lastMessage.role == "assistant") {
-                        val originalColor = modelNameTextView.currentTextColor
+                        val baseColor = ContextCompat.getColor(requireContext(), R.color.xai_ink)
                         val isError = lastMessage.content
                             .let { it as? JsonPrimitive }?.content?.startsWith("**Error:**") == true
-                        val targetColor = if (isError) {
-                            ContextCompat.getColor(requireContext(), R.color.xai_error)
-                        } else {
-                            ContextCompat.getColor(requireContext(), R.color.xai_ink)
+                        modelChipColorAnimator?.cancel()
+                        modelNameTextView.setTextColor(baseColor)
+                        if (isError) {
+                            val errorColor = ContextCompat.getColor(requireContext(), R.color.xai_error)
+                            modelChipColorAnimator = ValueAnimator.ofArgb(baseColor, errorColor, errorColor, baseColor).apply {
+                                duration = 3200
+                                addUpdateListener { modelNameTextView.setTextColor(it.animatedValue as Int) }
+                                start()
+                            }
                         }
-                        modelNameTextView.animateColor(originalColor, targetColor,   1000)
-                        modelNameTextView.animateColor(targetColor,   originalColor, 3000)
                         if ( sharedPreferencesHelper.getAnimateBarOnError()) {
                             val borderOverlayView = view.findViewById<View>(R.id.borderOverlayView)
                             val accentColor = ContextCompat.getColor(requireContext(), R.color.xai_mute)
                             val errorColor = ContextCompat.getColor(requireContext(), R.color.xai_error)
                             borderOverlayView.animateOutlineFlash(
-                                targetColorStr = if (isError) {
-                                    String.format("#%06X", 0xFFFFFF and errorColor)
-                                } else {
-                                    String.format("#%06X", 0xFFFFFF and accentColor)
-                                },
-                                glowDuration = 600,
-                                stayDuration = 1600,
-                                fadeDuration = 600,
-                                maxStrokeWidth = 12
+                                targetColor = if (isError) errorColor else accentColor,
+                                glowDuration = 300,
+                                stayDuration = 900,
+                                fadeDuration = 500,
+                                maxStrokeWidth = (1.5f * resources.displayMetrics.density).toInt().coerceAtLeast(2)
                             )
                         }
                     }
@@ -1440,15 +1441,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val containerParams = chatInputContainer.layoutParams
         val editParams = chatEditText.layoutParams as LinearLayout.LayoutParams
 
-        // 1. Define the order for EXPANDED (Left-to-Right)
+        // 1. Define the order for EXPANDED (Left-to-Right). Only composer-native buttons move;
+        //    panel tiles (new chat, system, paste, clear) stay in the Controls panel so they
+        //    are never stranded in the hidden expanded row after collapsing.
         // Send button is last to make it rightmost
-        val expandedOrder = listOf(
-            menuButton, resetChatButton, speechButton, clearButton,
-            utilityButton, systemMessageButton, sendChatButton
-        )
+        val expandedOrder = listOf(menuButton, controlsButton, speechButton, sendChatButton)
 
-        // 2. Define the order for COLLAPSED (Top-to-Bottom)
-        val leftCollapsed = listOf(menuButton)
+        // 2. Define the order for COLLAPSED
+        val leftCollapsed = listOf(menuButton, controlsButton)
         val rightCollapsed = listOf(speechButton, sendChatButton)
 
         if (expanded) {
@@ -1499,9 +1499,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     // Helper to keep the code clean
     private fun applyCollapsedParams(btn: View) {
-        val size = (48 * resources.displayMetrics.density).toInt()
+        val density = resources.displayMetrics.density
+        val size = (38 * density).toInt()
         val params = LinearLayout.LayoutParams(size, size)
-        params.setMargins(0, 0, 0, 0)
+        val gap = if (btn === controlsButton || btn === sendChatButton) (8 * density).toInt() else 0
+        params.setMargins(gap, 0, 0, 0)
         btn.layoutParams = params
     }
 
@@ -1611,7 +1613,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
                 val dialog = MaterialAlertDialogBuilder(
                     requireContext(),
-                    com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
+                    R.style.CustomMaterialAlertDialogTheme
                 )
                     .setTitle(R.string.rp_instruct)
                     .setView(wrapper)
@@ -2417,6 +2419,11 @@ $cleanContent
         }
 
 
+        controlsButton.setOnClickListener {
+            hideKeyboard()
+            dismissAttachPopup()
+            if (headerContainer.isVisible) hideMenu() else showMenu()
+        }
         menuButton.setOnClickListener {
             hideKeyboard()
             if (viewModel.isRpMode()) {
@@ -2568,7 +2575,7 @@ $cleanContent
                 else -> AppFonts.INTER
             }
 
-            val dialog = MaterialAlertDialogBuilder(requireContext(), com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered)
+            val dialog = MaterialAlertDialogBuilder(requireContext(), R.style.CustomMaterialAlertDialogTheme)
                 .setTitle(R.string.select_font_title)
                 .setNegativeButton(R.string.action_cancel, null)
                 .create()
@@ -2624,7 +2631,7 @@ $cleanContent
                 layoutManager = LinearLayoutManager(requireContext())
                 this.adapter = adapter
             }
-            dialog.window?.setDimAmount(0.8f)
+            dialog.window?.setDimAmount(0.55f)
 
             dialog.setView(recyclerView)
             dialog.show()
@@ -3010,7 +3017,7 @@ $cleanContent
         fileExtensionInput.setText(detectedExt)
 
         val dialog = MaterialAlertDialogBuilder(requireContext(),
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
+            R.style.CustomMaterialAlertDialogTheme
         )
             .setTitle(R.string.save_as_file_title)
             .setView(dialogView)
@@ -3028,7 +3035,7 @@ $cleanContent
             .show()
 
         // Apply dim amount like your other dialog
-        dialog.window?.setDimAmount(0.8f)
+        dialog.window?.setDimAmount(0.55f)
 
         // Optional: Make the Save button disabled until text is entered
         val saveButton = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
@@ -3124,12 +3131,14 @@ $cleanContent
     }
     private fun showMenu() {
         val menuMs = resources.getInteger(R.integer.motion_menu).toLong()
+        controlsButton.isSelected = true
         overlayView?.visibility = View.VISIBLE
         headerContainer.animate().cancel()
         headerContainer.apply {
             alpha = 0f
+            translationY = 24f * resources.displayMetrics.density
             visibility = View.VISIBLE
-            animate().alpha(1f).setDuration(menuMs).setInterpolator(Motion.easeOut).start()
+            animate().alpha(1f).translationY(0f).setDuration(menuMs).setInterpolator(Motion.easeOut).start()
         }
         (chatFrameView as ViewGroup).bringChildToFront(headerContainer)
         dimOverlay?.apply {
@@ -3194,6 +3203,11 @@ $cleanContent
         }
         popupView.findViewById<View>(R.id.attachFiles).setOnClickListener {
             dismissThen { textFilePicker.launch("*/*") }
+        }
+        popupView.findViewById<MaterialButton>(R.id.attachReviewFiles).apply {
+            isVisible = pendingFiles.isNotEmpty()
+            text = resources.getQuantityString(R.plurals.attach_review_files, pendingFiles.size, pendingFiles.size)
+            setOnClickListener { dismissThen { showAttachedFiles() } }
         }
         popupView.findViewById<View>(R.id.attachTools).setOnClickListener {
             dismissThen {
@@ -3290,6 +3304,7 @@ $cleanContent
 
     private fun hideMenu() {
         val menuMs = resources.getInteger(R.integer.motion_menu).toLong()
+        controlsButton.isSelected = false
         dimOverlay?.animate()?.cancel()
         headerContainer.animate().cancel()
         dimOverlay?.animate()?.alpha(0f)?.setDuration(menuMs)?.setInterpolator(Motion.easeOut)?.withEndAction {
@@ -3491,13 +3506,10 @@ $cleanContent
         // If permission is already granted, or Android < 17, do nothing (let it proceed)
     }
     private fun updateStreamToggleAppearance(isEnabled: Boolean) {
-        val onTint = ContextCompat.getColor(requireContext(), R.color.gradation_gold)
-        val menuTint = ContextCompat.getColor(requireContext(), R.color.xai_body)
-        val topTint = ContextCompat.getColor(requireContext(), R.color.xai_mute)
-        streamButton.iconTint = ColorStateList.valueOf(if (isEnabled) onTint else menuTint)
-        topStreamButton.iconTint = ColorStateList.valueOf(if (isEnabled) onTint else topTint)
+        streamButton.isSelected = isEnabled
+        topStreamButton.isSelected = isEnabled
         if (::rpStreamButton.isInitialized) {
-            rpStreamButton.iconTint = ColorStateList.valueOf(if (isEnabled) onTint else menuTint)
+            rpStreamButton.isSelected = isEnabled
         }
     }
 
@@ -4122,7 +4134,7 @@ $cleanContent
         val dialog = builder.show()
 
         // Apply dim amount of 0.8f
-        dialog.window?.setDimAmount(0.8f)
+        dialog.window?.setDimAmount(0.55f)
     }
     private fun showToolsSelectionDialog() {
         // 1️⃣ Load current state from SharedPreferences
@@ -4159,7 +4171,7 @@ $cleanContent
 
         // 7️⃣ Create the dialog
         val dialog = MaterialAlertDialogBuilder(requireContext(),
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
+            R.style.CustomMaterialAlertDialogTheme
         )
             .setTitle("Enable / Disable Tools")
             .setNegativeButton(R.string.action_cancel, null)
@@ -4251,7 +4263,7 @@ $cleanContent
 
         scrollView.addView(container)
         dialog.setView(scrollView)
-        dialog.window?.setDimAmount(0.8f)
+        dialog.window?.setDimAmount(0.55f)
         dialog.show()
 
         val titleView = dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)
@@ -4272,7 +4284,7 @@ $cleanContent
         var selectedEngine = currentEngine
 
         MaterialAlertDialogBuilder(requireContext(),
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
+            R.style.CustomMaterialAlertDialogTheme
         )
             .setTitle("Web Search Engine")
             .setSingleChoiceItems(
@@ -4301,7 +4313,7 @@ $cleanContent
         var selectedSize = currentSize
 
         MaterialAlertDialogBuilder(requireContext(),
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
+            R.style.CustomMaterialAlertDialogTheme
         )
             .setTitle("Search Context Size")
             .setSingleChoiceItems(
@@ -4326,7 +4338,7 @@ $cleanContent
         var selectedMax = currentMax
 
         MaterialAlertDialogBuilder(requireContext(),
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog_Centered
+            R.style.CustomMaterialAlertDialogTheme
         )
             // Combine the title and the message here
             .setTitle("Max Search Results\n(Higher values increase costs)")
@@ -4453,7 +4465,7 @@ $cleanContent
         }
     }
     fun View.animateOutlineFlash(
-        targetColorStr: String,
+        targetColor: Int,
         glowDuration: Long = 1000,
         stayDuration: Long = 500,  // <--- NEW: How long it stays fully lit
         fadeDuration: Long = 1000,
@@ -4465,12 +4477,11 @@ $cleanContent
             shape = GradientDrawable.RECTANGLE
             setColor(bgColor)
             setStroke(maxStrokeWidth, bgColor)
-            cornerRadius = 60f
+            cornerRadius = 24f * resources.displayMetrics.density
         }
 
         this.background = outlineDrawable
 
-        val targetColor = targetColorStr.toColorInt()
 
         // 1. Fade IN (Transparent -> Target Color)
         val glowAnimator = ValueAnimator.ofArgb(bgColor, targetColor).apply {
@@ -4497,33 +4508,6 @@ $cleanContent
         glowAnimator.start()
         fadeAnimator.start()
     }
-    private fun animateBarBackground(view: View, targetColor: Int) {
-        // 1. Get the background and .mutate() it
-        val bgDrawable = view.background?.mutate() as? android.graphics.drawable.GradientDrawable
-
-        if (bgDrawable != null) {
-            val defaultBgColor = "#18191a".toColorInt() // The "normal" state color
-
-            // Fade to Target Color (e.g., Red if error, Blue if not)
-            ValueAnimator.ofObject(ArgbEvaluator(), defaultBgColor, targetColor).apply {
-                duration = 1000
-                addUpdateListener { animator ->
-                    bgDrawable.color = android.content.res.ColorStateList.valueOf(animator.animatedValue as Int)
-                }
-                start()
-            }
-
-            // Fade back to Default Gray
-            ValueAnimator.ofObject(ArgbEvaluator(), targetColor, defaultBgColor).apply {
-                duration = 1000
-                startDelay = 1000
-                addUpdateListener { animator ->
-                    bgDrawable.color = android.content.res.ColorStateList.valueOf(animator.animatedValue as Int)
-                }
-                start()
-            }
-        }
-    }
     fun onOpenedFromNotification() {
         homeButton.visibility = View.GONE
         backButton.visibility = View.VISIBLE
@@ -4534,6 +4518,7 @@ $cleanContent
         val rows = listOf(
             view?.findViewById<LinearLayout>(R.id.buttonsRow1),
             view?.findViewById<LinearLayout>(R.id.buttonsRow3),
+            view?.findViewById<LinearLayout>(R.id.buttonsRowComposer),
             view?.findViewById<LinearLayout>(R.id.buttonsRowAux)
         )
 
@@ -4555,7 +4540,7 @@ $cleanContent
 
                     // Dynamically fix the margins!
                     val params = row.layoutParams as LinearLayout.LayoutParams
-                    val marginDp = if (isFirstVisibleRow) 0 else 12 // 0 for the top row, 12 for the rest
+                    val marginDp = if (isFirstVisibleRow) 0 else 8 // 0 for the top row, 8 for the rest
                     val marginPx = (marginDp * resources.displayMetrics.density).toInt()
 
                     if (params.topMargin != marginPx) {
@@ -4754,6 +4739,9 @@ $cleanContent
         val rp = viewModel.isRpMode()
         chatAdapter.isRpMode = rp
         chatModeChip.text = if (rp) getString(R.string.rp_mode_rp) else getString(R.string.rp_mode_ask)
+        view?.findViewById<TextView>(R.id.emptyGreeting)?.setText(
+            if (rp) R.string.empty_greeting_rp else R.string.empty_greeting
+        )
         systemMessageButton.visibility = if (rp) View.GONE else View.VISIBLE
         menuButton.visibility = View.VISIBLE
         restoreAttachPlusIcon()

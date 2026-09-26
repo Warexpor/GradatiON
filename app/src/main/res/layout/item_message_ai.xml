@@ -63,7 +63,7 @@
                     android:text="@string/thinking_label"
                     android:textColor="@color/xai_mute"
                     android:textSize="13sp"
-                    android:textStyle="bold" />
+                    android:textFontWeight="600" />
             </LinearLayout>
 
             <TextView
@@ -160,7 +160,7 @@
                 android:layout_marginStart="8dp"
                 android:textColor="@color/gradation_gold"
                 android:textSize="13sp"
-                android:textStyle="bold" />
+                android:textFontWeight="600" />
         </LinearLayout>
 
         <androidx.constraintlayout.widget.ConstraintLayout

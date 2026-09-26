@@ -1,17 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Soft SVG burst on press - replaces Material ripple -->
-<animated-selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:id="@+id/pressed"
-        android:drawable="@drawable/avd_tap_burst"
-        android:state_pressed="true" />
-    <item android:id="@+id/default_state">
+<!-- iOS-style press highlight: a soft gray wash that fades in and out. No ripple, no glow. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:enterFadeDuration="60"
+    android:exitFadeDuration="220">
+    <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="@android:color/transparent" />
+            <solid android:color="@color/xai_press_wash" />
+            <corners android:radius="12dp" />
         </shape>
     </item>
-    <transition
-        android:drawable="@drawable/avd_tap_burst"
-        android:fromId="@id/default_state"
-        android:toId="@id/pressed" />
-</animated-selector>
+    <item android:drawable="@android:color/transparent" />
+</selector>

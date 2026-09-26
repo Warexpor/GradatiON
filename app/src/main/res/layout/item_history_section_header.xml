@@ -5,10 +5,10 @@
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingStart="16dp"
-    android:paddingTop="16dp"
+    android:paddingStart="12dp"
+    android:paddingTop="18dp"
     android:paddingEnd="12dp"
-    android:paddingBottom="6dp">
+    android:paddingBottom="4dp">
 
     <TextView
         android:id="@+id/historySectionHeader"
@@ -16,14 +16,11 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:includeFontPadding="false"
-        android:letterSpacing="-0.01"
-        android:textColor="@color/xai_ink"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
     <ImageView
-        android:layout_width="20dp"
-        android:layout_height="20dp"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
         android:contentDescription="@null"
         android:src="@drawable/ic_expand_less2"
         app:tint="@color/xai_mute" />

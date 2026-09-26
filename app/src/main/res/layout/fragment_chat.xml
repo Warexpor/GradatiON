@@ -17,14 +17,14 @@
         android:fitsSystemWindows="true"
         tools:context=".ChatFragment">
 
-        <!-- ── Top bar: history | model chip | new chat ── -->
+        <!-- ── Top bar: history | mode · model | new chat. Flush with canvas; transcript fades beneath. ── -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/topBarLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:minHeight="56dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
             android:paddingTop="4dp"
             android:paddingBottom="4dp"
             android:background="@drawable/bg_top_bar_grok">
@@ -39,7 +39,6 @@
                 app:iconSize="24dp"
                 app:iconTint="@color/xai_ink"
                 app:backgroundTint="@android:color/transparent"
-                app:rippleColor="@color/xai_canvas_mid"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent" />
@@ -72,10 +71,12 @@
                 app:barrierDirection="start"
                 app:constraint_referenced_ids="newChatButton" />
 
+            <!-- Ask / RP mode switch -->
             <TextView
                 android:id="@+id/chatModeChip"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
+                android:layout_height="30dp"
+                android:layout_marginStart="2dp"
                 android:background="@drawable/bg_model_chip"
                 android:clickable="true"
                 android:focusable="true"
@@ -83,19 +84,19 @@
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp"
                 android:text="@string/rp_mode_ask"
-                android:textColor="@color/gradation_gold"
+                android:textColor="@color/xai_ink"
                 android:textSize="12sp"
-                android:textStyle="bold"
+                android:textFontWeight="600"
                 app:layout_constraintStart_toEndOf="@id/topBarStartBarrier"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent" />
 
-            <!-- Model chip — centered in top bar (Grok parity) -->
+            <!-- Model chip, centered -->
             <TextView
                 android:id="@+id/modelNameTextView"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
-                android:maxWidth="220dp"
+                android:maxWidth="210dp"
                 android:background="@drawable/bg_model_chip"
                 android:clickable="true"
                 android:focusable="true"
@@ -105,18 +106,19 @@
                 android:gravity="center_vertical"
                 android:paddingStart="14dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/xai_body"
-                android:textSize="13sp"
+                android:textColor="@color/xai_ink"
+                android:textSize="14sp"
+                android:textFontWeight="500"
                 android:drawablePadding="2dp"
-                android:drawableTint="@color/xai_body"
+                android:drawableTint="@color/xai_mute"
                 app:drawableEndCompat="@drawable/ic_expand_more"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent"
-                tools:text="Grok" />
+                tools:text="Qwen 3 32B" />
 
-            <!-- Kept gone for ChatFragment ID wiring; Ask tab removed -->
+            <!-- Kept gone for ChatFragment ID wiring -->
             <TextView
                 android:id="@+id/askTitleTextView"
                 android:layout_width="0dp"
@@ -134,19 +136,16 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <!-- New chat — Grok square+pencil -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/newChatButton"
                 style="@style/Widget.Grokion.IconButton"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:visibility="visible"
                 android:contentDescription="@string/grok_new_conversation"
                 app:icon="@drawable/ic_new_chat"
-                app:iconSize="24dp"
+                app:iconSize="23dp"
                 app:iconTint="@color/xai_ink"
                 app:backgroundTint="@android:color/transparent"
-                app:rippleColor="@color/press_ripple_none"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintBottom_toBottomOf="parent" />
@@ -179,7 +178,7 @@
                 app:layout_constraintEnd_toEndOf="@id/newChatButton"
                 app:layout_constraintTop_toBottomOf="@id/newChatButton" />
 
-            <!-- Extended tools row (preference-driven; visibility owned by container) -->
+            <!-- Power-tools row (Settings > Appearance). Toggles show state: muted off, ink on a disc when on. -->
             <HorizontalScrollView
                 android:id="@+id/extendedTopBarScroll"
                 android:layout_width="0dp"
@@ -196,82 +195,61 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center"
-                    android:paddingTop="4dp"
-                    android:paddingBottom="4dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
                     android:paddingStart="8dp"
                     android:paddingEnd="8dp">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/topReasoningButton"
-                        style="@style/Widget.Grokion.IconButton"
+                        style="@style/Widget.Gradation.TopToggle"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        app:icon="@drawable/ic_reasoning"
-                        app:iconSize="20dp"
-                        app:iconTint="@color/xai_mute"
-                        app:backgroundTint="@android:color/transparent" />
-
+                        android:contentDescription="@string/control_reasoning"
+                        app:icon="@drawable/ic_reasoning" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/topWebSearchButton"
-                        style="@style/Widget.Grokion.IconButton"
+                        style="@style/Widget.Gradation.TopToggle"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        app:icon="@drawable/ic_websearch"
-                        app:iconSize="20dp"
-                        app:iconTint="@color/xai_mute"
-                        app:backgroundTint="@android:color/transparent" />
-
+                        android:contentDescription="@string/control_web"
+                        app:icon="@drawable/ic_websearch" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/topStreamButton"
-                        style="@style/Widget.Grokion.IconButton"
+                        style="@style/Widget.Gradation.TopToggle"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        app:icon="@drawable/ic_stream"
-                        app:iconSize="20dp"
-                        app:iconTint="@color/xai_mute"
-                        app:backgroundTint="@android:color/transparent" />
-
-                    <!-- kept for id stability; commented in original as topConvo -->
+                        android:contentDescription="@string/control_stream"
+                        app:icon="@drawable/ic_stream" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/topConvoButton"
-                        style="@style/Widget.Grokion.IconButton"
+                        style="@style/Widget.Gradation.TopToggle"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
                         android:visibility="gone"
-                        app:icon="@drawable/ic_convo"
-                        app:iconSize="20dp"
-                        app:iconTint="@color/xai_mute"
-                        app:backgroundTint="@android:color/transparent" />
-
+                        android:contentDescription="@string/control_read_aloud"
+                        app:icon="@drawable/ic_convo" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/topToolsButton"
-                        style="@style/Widget.Grokion.IconButton"
+                        style="@style/Widget.Gradation.TopToggle"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        app:icon="@drawable/ic_tools"
-                        app:iconSize="20dp"
-                        app:iconTint="@color/xai_mute"
-                        app:backgroundTint="@android:color/transparent" />
-
+                        android:contentDescription="@string/control_tools"
+                        app:icon="@drawable/ic_tools" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/topPresetsButton"
-                        style="@style/Widget.Grokion.IconButton"
+                        style="@style/Widget.Gradation.TopToggle"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        app:icon="@drawable/ic_presets"
-                        app:iconSize="20dp"
-                        app:iconTint="@color/xai_mute"
-                        app:backgroundTint="@android:color/transparent" />
-
+                        android:contentDescription="@string/control_presets"
+                        app:icon="@drawable/ic_presets" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/topSettingsButton"
-                        style="@style/Widget.Grokion.IconButton"
+                        style="@style/Widget.Gradation.TopToggle"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        app:icon="@drawable/ic_settings"
-                        app:iconSize="20dp"
-                        app:iconTint="@color/xai_mute"
-                        app:backgroundTint="@android:color/transparent" />
+                        android:contentDescription="@string/control_settings"
+                        app:icon="@drawable/ic_settings" />
                 </LinearLayout>
             </HorizontalScrollView>
         </androidx.constraintlayout.widget.ConstraintLayout>
@@ -291,13 +269,30 @@
                 android:layout_height="match_parent"
                 android:background="@color/xai_canvas"
                 android:clipToPadding="false"
-                android:paddingTop="12dp"
-                android:paddingBottom="56dp"
-                android:paddingStart="4dp"
-                android:paddingEnd="4dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="48dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
-            <!-- Empty state: large centered GradatiON mark -->
+            <!-- Transcript fades under the top bar and into the composer -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="20dp"
+                android:layout_gravity="top"
+                android:background="@drawable/bg_edge_fade_top"
+                android:clickable="false"
+                android:focusable="false" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="24dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/bg_edge_fade_bottom"
+                android:clickable="false"
+                android:focusable="false" />
+
+            <!-- Empty state: small mark + greeting -->
             <FrameLayout
                 android:id="@+id/emptyStateContainer"
                 android:layout_width="match_parent"
@@ -306,18 +301,33 @@
                 android:clickable="false"
                 android:focusable="false">
 
-                <ImageView
-                    android:id="@+id/centerWatermarkIcon"
-                    android:layout_width="280dp"
-                    android:layout_height="280dp"
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    android:src="@drawable/ic_gradation_mark"
-                    android:alpha="0.12"
-                    android:contentDescription="@string/app_name"
-                    android:clickable="false"
-                    android:focusable="false"
-                    android:scaleType="fitCenter"
-                    app:tint="@color/xai_ink" />
+                    android:layout_marginBottom="24dp"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/centerWatermarkIcon"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:src="@drawable/ic_gradation_mark"
+                        android:contentDescription="@string/app_name"
+                        android:clickable="false"
+                        android:focusable="false"
+                        android:scaleType="fitCenter"
+                        app:tint="@color/xai_ink" />
+
+                    <TextView
+                        android:id="@+id/emptyGreeting"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="18dp"
+                        android:text="@string/empty_greeting"
+                        android:textAppearance="@style/TextAppearance.Gradation.Title" />
+                </LinearLayout>
             </FrameLayout>
 
             <View
@@ -330,326 +340,291 @@
                 android:focusable="true"
                 android:alpha="0" />
 
-            <!-- Overflow tools panel (menu) — premium Grok-style spacing -->
+            <!-- Controls panel: Control Center-style tiles, anchored above the composer.
+                 Tiles invert (ink fill) when their feature is on. -->
             <LinearLayout
                 android:id="@+id/headerContainer"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
+                android:layout_gravity="bottom"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginBottom="8dp"
                 android:clickable="true"
                 android:focusable="true"
                 android:background="@drawable/bg_menu_panel"
                 android:visibility="gone"
                 android:orientation="vertical"
                 android:animateLayoutChanges="false"
-                android:padding="20dp"
-                android:elevation="8dp">
+                android:paddingTop="10dp"
+                android:paddingBottom="14dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:elevation="12dp">
+
+                <View
+                    android:layout_width="36dp"
+                    android:layout_height="5dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginBottom="12dp"
+                    android:background="@drawable/bg_sheet_grabber" />
 
                 <LinearLayout
                     android:id="@+id/buttonsContainer"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:layout_gravity="top|center_horizontal"
-                    android:visibility="visible"
-                    tools:visibility="visible">
+                    android:visibility="visible">
 
-                    <LinearLayout
-                        android:id="@+id/buttonsRow1"
+                <LinearLayout
+                    android:id="@+id/buttonsRow1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/reasoningButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:text="@string/control_reasoning"
+                        app:icon="@drawable/ic_reasoning" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/webSearchButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:text="@string/control_web"
+                        app:icon="@drawable/ic_websearch" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/streamButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:text="@string/control_stream"
+                        app:icon="@drawable/ic_stream" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/convoButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:text="@string/control_read_aloud"
+                        app:icon="@drawable/ic_convo" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/buttonsRow3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/toolsButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:text="@string/control_tools"
+                        app:icon="@drawable/ic_tools" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/presetsButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:text="@string/control_presets"
+                        app:icon="@drawable/ic_presets" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/systemMessageButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:contentDescription="@string/cd_system_message"
+                        android:text="@string/control_system"
+                        app:icon="@drawable/ic_tune" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settingsButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:text="@string/control_settings"
+                        app:icon="@drawable/ic_settings" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/buttonsRowComposer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/attachmentButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:contentDescription="@string/cd_attach_file"
+                        android:text="@string/control_files"
+                        app:icon="@drawable/ic_attachdoc" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/plusButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:contentDescription="@string/cd_attach_media"
+                        android:text="@string/control_image"
+                        app:icon="@drawable/ic_imgup" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/genButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:visibility="gone"
+                        android:contentDescription="@string/cd_image_gen"
+                        android:text="@string/control_generate"
+                        app:icon="@drawable/ic_palette" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/resetChatButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:contentDescription="@string/cd_new_chat"
+                        android:text="@string/control_new_chat"
+                        app:icon="@drawable/ic_rechat" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/buttonsRowAux"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/fontsButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:text="@string/control_font"
+                        app:icon="@drawable/ic_fonts" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/fontSizeButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:text="@string/control_text_size"
+                        app:icon="@drawable/ic_format" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/utilityButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:visibility="gone"
+                        android:contentDescription="@string/cd_paste"
+                        android:text="@string/control_paste"
+                        app:icon="@drawable/ic_paste" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/clearButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="76dp"
+                        android:layout_height="72dp"
+                        android:visibility="gone"
+                        android:contentDescription="@string/cd_clear_input"
+                        android:text="@string/control_clear"
+                        app:icon="@drawable/ic_clearchat" />
+                </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/exportLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center"
-                        android:layout_gravity="center_horizontal">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/reasoningButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            app:icon="@drawable/ic_reasoning"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/webSearchButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            app:icon="@drawable/ic_websearch"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/buttonsRow3"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginTop="14dp"
-                        android:gravity="center"
-                        android:layout_gravity="center_horizontal">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/toolsButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            app:icon="@drawable/ic_tools"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/streamButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            app:icon="@drawable/ic_stream"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/presetsButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            app:icon="@drawable/ic_presets"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/settingsButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            app:icon="@drawable/ic_settings"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/buttonsRowComposer"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginTop="14dp"
-                        android:gravity="center"
-                        android:layout_gravity="center_horizontal">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/attachmentButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            android:contentDescription="@string/cd_attach_file"
-                            app:icon="@drawable/ic_attachdoc"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/plusButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            android:contentDescription="@string/cd_attach_media"
-                            app:icon="@drawable/ic_imgup"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/genButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            android:visibility="gone"
-                            android:contentDescription="@string/cd_image_gen"
-                            app:icon="@drawable/ic_palette"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/resetChatButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            android:contentDescription="@string/cd_new_chat"
-                            app:icon="@drawable/ic_rechat"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/systemMessageButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            android:contentDescription="@string/cd_system_message"
-                            app:icon="@drawable/ic_tune"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/utilityButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            android:visibility="gone"
-                            android:contentDescription="@string/cd_paste"
-                            app:icon="@drawable/ic_paste"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/clearButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:visibility="gone"
-                            android:contentDescription="@string/cd_clear_input"
-                            app:icon="@drawable/ic_clearchat"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/buttonsRowAux"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginTop="14dp"
-                        android:gravity="center"
-                        android:layout_gravity="center_horizontal">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/convoButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            app:icon="@drawable/ic_convo"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/fontsButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            android:layout_marginEnd="12dp"
-                            app:icon="@drawable/ic_fonts"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/fontSizeButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="48dp"
-                            android:layout_height="48dp"
-                            app:icon="@drawable/ic_format"
-                            app:iconSize="24dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@color/xai_canvas_soft" />
-                    </LinearLayout>
+                        android:layout_marginStart="14dp"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/controls_export"
+                        android:textAppearance="@style/TextAppearance.Gradation.SectionHeader"
+                        android:visibility="gone" />
 
                     <LinearLayout
                         android:id="@+id/buttonsRow2"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginStart="6dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_marginTop="8dp"
                         android:orientation="horizontal"
-                        android:padding="8dp"
+                        android:padding="6dp"
                         android:background="@drawable/bg_charcoal_rounded"
-                        android:gravity="center"
-                        android:layout_gravity="center_horizontal">
+                        android:gravity="center">
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/copyChatButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            android:layout_marginEnd="6dp"
-                            app:icon="@drawable/ic_copi"
-                            app:iconSize="22dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@android:color/transparent" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/saveMarkdownFileButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            android:layout_marginEnd="6dp"
-                            app:icon="@drawable/ic_markdown"
-                            app:iconSize="22dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@android:color/transparent" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/saveHtmlButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            android:layout_marginEnd="6dp"
-                            app:icon="@drawable/ic_html"
-                            app:iconSize="22dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@android:color/transparent" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/saveEpubButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            android:layout_marginEnd="6dp"
-                            app:icon="@drawable/ic_epub"
-                            app:iconSize="22dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@android:color/transparent" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/printButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            android:layout_marginEnd="6dp"
-                            app:icon="@drawable/ic_print"
-                            app:iconSize="22dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@android:color/transparent" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/pdfChatButton"
-                            style="@style/Widget.Grokion.IconButton"
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            app:icon="@drawable/ic_pdfnew"
-                            app:iconSize="22dp"
-                            app:iconTint="@color/xai_body"
-                            app:backgroundTint="@android:color/transparent" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/copyChatButton"
+                        style="@style/Widget.Grokion.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="4dp"
+                        android:contentDescription="@string/cd_copy_text"
+                        app:icon="@drawable/ic_copi"
+                        app:iconSize="22dp"
+                        app:iconTint="@color/xai_ink"
+                        app:backgroundTint="@android:color/transparent" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/saveMarkdownFileButton"
+                        style="@style/Widget.Grokion.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="4dp"
+                        android:contentDescription="@string/cd_make_md"
+                        app:icon="@drawable/ic_markdown"
+                        app:iconSize="22dp"
+                        app:iconTint="@color/xai_ink"
+                        app:backgroundTint="@android:color/transparent" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/saveHtmlButton"
+                        style="@style/Widget.Grokion.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="4dp"
+                        android:contentDescription="@string/cd_view_html"
+                        app:icon="@drawable/ic_html"
+                        app:iconSize="22dp"
+                        app:iconTint="@color/xai_ink"
+                        app:backgroundTint="@android:color/transparent" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/saveEpubButton"
+                        style="@style/Widget.Grokion.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="4dp"
+                        android:contentDescription="@string/cd_save_file"
+                        app:icon="@drawable/ic_epub"
+                        app:iconSize="22dp"
+                        app:iconTint="@color/xai_ink"
+                        app:backgroundTint="@android:color/transparent" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/printButton"
+                        style="@style/Widget.Grokion.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="4dp"
+                        android:contentDescription="@string/cd_save_file"
+                        app:icon="@drawable/ic_print"
+                        app:iconSize="22dp"
+                        app:iconTint="@color/xai_ink"
+                        app:backgroundTint="@android:color/transparent" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/pdfChatButton"
+                        style="@style/Widget.Grokion.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:contentDescription="@string/cd_make_pdf"
+                        app:icon="@drawable/ic_pdfnew"
+                        app:iconSize="22dp"
+                        app:iconTint="@color/xai_ink"
+                        app:backgroundTint="@android:color/transparent" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
@@ -660,7 +635,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|center_horizontal"
                 android:layout_marginBottom="12dp"
-                app:cardCornerRadius="12dp"
+                app:cardCornerRadius="18dp"
                 app:cardBackgroundColor="@color/xai_canvas_card"
                 app:cardElevation="0dp"
                 android:visibility="gone"
@@ -671,15 +646,14 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:background="@color/xai_canvas_soft"
+                    android:background="@drawable/bg_menu_panel"
                     android:padding="8dp">
 
                     <ImageView
                         android:id="@+id/previewImageView"
-                        android:layout_width="220dp"
-                        android:layout_height="160dp"
+                        android:layout_width="200dp"
+                        android:layout_height="150dp"
                         android:scaleType="fitCenter"
-                        android:background="@color/xai_canvas_soft"
                         tools:src="@tools:sample/avatars" />
 
                     <ImageButton
@@ -687,9 +661,13 @@
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:layout_marginStart="8dp"
-                        android:src="@android:drawable/ic_menu_close_clear_cancel"
-                        android:background="@android:color/transparent"
-                        app:tint="@color/xai_icon" />
+                        android:layout_gravity="top"
+                        android:contentDescription="@string/cd_close"
+                        android:src="@drawable/ic_close_x"
+                        android:background="@drawable/bg_circle_soft"
+                        android:padding="7dp"
+                        android:scaleType="fitCenter"
+                        app:tint="@color/xai_ink" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -698,8 +676,8 @@
                 android:layout_width="44dp"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|end"
-                android:layout_marginEnd="6dp"
-                android:layout_marginBottom="4dp"
+                android:layout_marginEnd="10dp"
+                android:layout_marginBottom="8dp"
                 android:orientation="vertical"
                 android:padding="2dp">
 
@@ -710,12 +688,11 @@
                     android:layout_height="36dp"
                     android:layout_marginBottom="8dp"
                     android:layout_gravity="center_horizontal"
-                    android:alpha="0.55"
                     android:visibility="gone"
                     app:icon="@drawable/ic_top"
-                    app:iconSize="20dp"
-                    app:iconTint="@color/xai_mute"
-                    app:backgroundTint="@color/xai_canvas_card" />
+                    app:iconSize="18dp"
+                    app:iconTint="@color/xai_ink"
+                    app:backgroundTint="@color/xai_canvas_mid" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/scrollToBottomButton"
@@ -724,12 +701,11 @@
                     android:layout_height="36dp"
                     android:layout_marginBottom="8dp"
                     android:layout_gravity="center_horizontal"
-                    android:alpha="0.55"
                     android:visibility="gone"
                     app:icon="@drawable/ic_bottom"
-                    app:iconSize="20dp"
-                    app:iconTint="@color/xai_mute"
-                    app:backgroundTint="@color/xai_canvas_card" />
+                    app:iconSize="18dp"
+                    app:iconTint="@color/xai_ink"
+                    app:backgroundTint="@color/xai_canvas_mid" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/presetsButton2"
@@ -737,24 +713,25 @@
                     android:layout_width="36dp"
                     android:layout_height="36dp"
                     android:layout_gravity="center_horizontal"
-                    android:alpha="0.55"
                     android:visibility="gone"
                     app:icon="@drawable/ic_presets"
-                    app:iconSize="20dp"
-                    app:iconTint="@color/xai_mute"
-                    app:backgroundTint="@color/xai_canvas_card" />
+                    app:iconSize="18dp"
+                    app:iconTint="@color/xai_ink"
+                    app:backgroundTint="@color/xai_canvas_mid" />
             </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/fontSizeControlsContainer"
-                android:layout_width="48dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|start"
-                android:layout_marginStart="6dp"
-                android:layout_marginBottom="8dp"
+                android:layout_marginStart="10dp"
+                android:layout_marginBottom="10dp"
                 android:orientation="vertical"
                 android:visibility="gone"
-                android:padding="2dp">
+                android:background="@drawable/bg_menu_panel"
+                android:elevation="8dp"
+                android:padding="4dp">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnIncreaseFont"
@@ -763,8 +740,8 @@
                     android:layout_height="44dp"
                     app:icon="@drawable/ic_plus"
                     app:iconSize="20dp"
-                    app:iconTint="@color/xai_body"
-                    app:backgroundTint="@color/xai_canvas_card"
+                    app:iconTint="@color/xai_ink"
+                    app:backgroundTint="@android:color/transparent"
                     android:contentDescription="@string/cd_font_increase" />
 
                 <com.google.android.material.button.MaterialButton
@@ -774,8 +751,8 @@
                     android:layout_height="44dp"
                     app:icon="@drawable/ic_minus"
                     app:iconSize="20dp"
-                    app:iconTint="@color/xai_body"
-                    app:backgroundTint="@color/xai_canvas_card"
+                    app:iconTint="@color/xai_ink"
+                    app:backgroundTint="@android:color/transparent"
                     android:contentDescription="@string/cd_font_decrease" />
 
                 <com.google.android.material.button.MaterialButton
@@ -785,8 +762,8 @@
                     android:layout_height="44dp"
                     app:icon="@drawable/ic_check"
                     app:iconSize="20dp"
-                    app:iconTint="@color/xai_body"
-                    app:backgroundTint="@color/xai_canvas_card"
+                    app:iconTint="@color/xai_canvas"
+                    app:backgroundTint="@color/xai_ink"
                     android:contentDescription="@string/cd_done" />
             </LinearLayout>
 
@@ -816,32 +793,35 @@
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
             android:paddingTop="2dp"
             android:paddingBottom="2dp"
             android:visibility="gone">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/rpReminderButton"
-                style="@style/Widget.Grokion.Button.Text"
+                style="@style/Widget.Gradation.Button.Tonal"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="36dp"
+                android:minHeight="36dp"
                 android:minWidth="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textSize="13sp"
                 android:contentDescription="@string/rp_insert_reminder_a11y"
                 android:text="@string/rp_insert_reminder" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/rpStreamButton"
-                style="@style/Widget.Grokion.IconButton"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_marginStart="4dp"
+                style="@style/Widget.Gradation.TopToggle"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="6dp"
                 android:contentDescription="@string/toggle_streaming"
-                app:icon="@drawable/ic_stream"
-                app:iconSize="22dp"
-                app:iconTint="@color/xai_body"
-                app:backgroundTint="@color/xai_canvas_soft" />
+                app:icon="@drawable/ic_stream" />
 
             <View
                 android:layout_width="0dp"
@@ -854,19 +834,21 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
+                android:background="@drawable/bg_model_chip"
                 android:visibility="gone">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/rpSwipePrevButton"
                     style="@style/Widget.Grokion.Button.Text"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="36dp"
+                    android:layout_height="32dp"
                     android:contentDescription="@string/rp_swipe_prev"
                     android:insetLeft="0dp"
                     android:insetTop="0dp"
                     android:insetRight="0dp"
                     android:insetBottom="0dp"
                     android:minWidth="0dp"
+                    android:minHeight="0dp"
                     android:padding="0dp"
                     android:text="@string/rp_swipe_chevron_prev" />
 
@@ -874,44 +856,47 @@
                     android:id="@+id/rpSwipeCounter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
                     android:textColor="@color/xai_ink"
+                    android:textFontWeight="500"
                     android:textSize="13sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/rpSwipeNextButton"
                     style="@style/Widget.Grokion.Button.Text"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="36dp"
+                    android:layout_height="32dp"
                     android:contentDescription="@string/rp_swipe_next"
                     android:insetLeft="0dp"
                     android:insetTop="0dp"
                     android:insetRight="0dp"
                     android:insetBottom="0dp"
                     android:minWidth="0dp"
+                    android:minHeight="0dp"
                     android:padding="0dp"
                     android:text="@string/rp_swipe_chevron_next" />
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ── Bottom composer: tall panel, model chip inside ── -->
+        <!-- ── Composer: gradient panel; + attach and controls on the left, send on the right ── -->
         <LinearLayout
             android:id="@+id/chatInputContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:layout_marginStart="14dp"
-            android:layout_marginEnd="14dp"
-            android:layout_marginTop="4dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginTop="2dp"
             android:layout_marginBottom="10dp"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
-            android:paddingTop="10dp"
+            android:paddingTop="8dp"
             android:paddingBottom="8dp"
             android:background="@drawable/bg_composer_panel"
             android:gravity="center_vertical">
-<LinearLayout
+
+            <LinearLayout
                 android:id="@+id/centerInputWrapper"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -926,10 +911,10 @@
                     android:inputType="textMultiLine|textCapSentences"
                     android:maxLines="6"
                     android:minHeight="44dp"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:paddingTop="4dp"
-                    android:paddingBottom="8dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
                     android:textSize="16sp"
                     android:textColor="@color/xai_ink"
                     android:textColorHint="@color/xai_mute"
@@ -956,7 +941,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingTop="2dp">
+                android:paddingTop="4dp">
 
                 <LinearLayout
                     android:id="@+id/leftButtonContainer"
@@ -968,18 +953,40 @@
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/menuButton"
                         style="@style/Widget.Grokion.IconButton.Filled"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
                         android:contentDescription="@string/attach_content_description"
                         android:background="@drawable/bg_send_disabled"
                         app:backgroundTint="@null"
                         app:rippleColor="@color/press_ripple_none"
-                        app:cornerRadius="20dp"
+                        app:cornerRadius="19dp"
                         app:icon="@drawable/ic_attach_plus"
                         app:iconGravity="textStart"
                         app:iconPadding="0dp"
                         app:iconSize="22dp"
-                        app:iconTint="@color/xai_mute"
+                        app:iconTint="@color/xai_ink"
+                        android:insetLeft="0dp"
+                        android:insetTop="0dp"
+                        android:insetRight="0dp"
+                        android:insetBottom="0dp"
+                        android:padding="0dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/controlsButton"
+                        style="@style/Widget.Grokion.IconButton.Filled"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
+                        android:layout_marginStart="8dp"
+                        android:contentDescription="@string/cd_controls"
+                        android:background="@drawable/bg_composer_action"
+                        app:backgroundTint="@null"
+                        app:rippleColor="@color/press_ripple_none"
+                        app:cornerRadius="19dp"
+                        app:icon="@drawable/ic_sliders"
+                        app:iconGravity="textStart"
+                        app:iconPadding="0dp"
+                        app:iconSize="20dp"
+                        app:iconTint="@color/tile_fg"
                         android:insetLeft="0dp"
                         android:insetTop="0dp"
                         android:insetRight="0dp"
@@ -1002,36 +1009,35 @@
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/speechButton"
                         style="@style/Widget.Grokion.IconButton.Filled"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
                         android:visibility="gone"
                         android:contentDescription="@string/cd_voice_input"
                         app:icon="@drawable/ic_mic"
                         app:iconGravity="textStart"
                         app:iconSize="22dp"
-                        app:cornerRadius="22dp"
+                        app:cornerRadius="19dp"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:insetLeft="0dp"
                         android:insetRight="0dp"
                         app:iconTint="@color/xai_ink"
-                        app:backgroundTint="@android:color/transparent"
-                        app:rippleColor="@color/xai_canvas_mid" />
+                        app:backgroundTint="@android:color/transparent" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/sendChatButton"
                         style="@style/Widget.Grokion.IconButton.Filled"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
                         android:layout_marginStart="4dp"
                         android:contentDescription="@string/cd_send"
                         android:background="@drawable/bg_send_pill"
                         app:backgroundTint="@null"
-                        app:cornerRadius="20dp"
+                        app:cornerRadius="19dp"
                         app:icon="@drawable/ic_send"
                         app:iconGravity="textStart"
                         app:iconPadding="0dp"
-                        app:iconSize="22dp"
+                        app:iconSize="20dp"
                         app:iconTint="@color/send_icon_tint"
                         android:insetLeft="0dp"
                         android:insetTop="0dp"

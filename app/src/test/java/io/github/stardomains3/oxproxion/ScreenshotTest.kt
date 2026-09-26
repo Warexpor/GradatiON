@@ -1,30 +1,50 @@
 package io.github.stardomains3.oxproxion
 
 import android.app.Application
+import android.app.Dialog
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.os.Looper
+import android.provider.Settings
 import android.view.View
-import androidx.appcompat.app.AppCompatActivity
+import android.widget.PopupWindow
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModelProvider
+import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
+import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonPrimitive
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import android.os.Looper
+import org.robolectric.shadows.ShadowDialog
 import java.io.File
 
 class ScreenshotApp : Application()
 
 /**
- * Renders key screens to PNGs under build/screenshots for visual review.
+ * Renders key screens to PNGs under app/build/screenshots for visual review.
  * Run: ./gradlew :app:testDebugUnitTest --tests '*ScreenshotTest*'
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = ScreenshotApp::class, sdk = [35], qualifiers = "w411dp-h891dp-night-xxhdpi")
+@Config(application = ScreenshotApp::class, sdk = [35], qualifiers = DARK)
 class ScreenshotTest {
+
+    private lateinit var db: AppDatabase
+
+    @Before
+    fun setUp() {
+        val ctx = ApplicationProvider.getApplicationContext<Application>()
+        Settings.Global.putFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
+        db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java).allowMainThreadQueries().build()
+        AppDatabase.setInstanceForTesting(db)
+    }
 
     private fun snap(view: View, name: String) {
         val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
@@ -33,28 +53,224 @@ class ScreenshotTest {
         File(out, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    private fun idle() { repeat(5) { shadowOf(Looper.getMainLooper()).idle() } }
+    private fun idle() {
+        repeat(8) {
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(500))
+        }
+    }
 
-    @Test
-    fun chatDark() = chat("night", "chat_dark")
+    private fun withChat(block: (MainActivity, ChatFragment) -> Unit) {
+        val ctx = ApplicationProvider.getApplicationContext<Application>()
+        val night = ctx.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        SharedPreferencesHelper(ctx).saveThemeMode(
+            if (night) SharedPreferencesHelper.THEME_DARK else SharedPreferencesHelper.THEME_LIGHT
+        )
+        ActivityScenario.launch(MainActivity::class.java).use { sc ->
+            idle()
+            sc.onActivity { a ->
+                idle()
+                val chat = a.supportFragmentManager.findFragmentByTag("ChatFragment") as ChatFragment
+                block(a, chat)
+            }
+        }
+    }
 
-    @Test
-    @Config(qualifiers = "w411dp-h891dp-notnight-xxhdpi")
-    fun chatLight() = chat("notnight", "chat_light")
+    private fun root(a: MainActivity) = a.window.decorView
 
-    @org.junit.Before
-    fun setUp() {
-        val ctx = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
-        AppDatabase.setInstanceForTesting(
-            androidx.room.Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
-                .allowMainThreadQueries().build()
+    private fun seedConversation(a: MainActivity) {
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        val f = ChatViewModel::class.java.getDeclaredField("_chatMessages").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val live = f.get(vm) as MutableLiveData<List<FlexibleMessage>>
+        live.value = listOf(
+            FlexibleMessage("user", JsonPrimitive("Can you explain how attention works in transformers? Keep it short.")),
+            FlexibleMessage(
+                "assistant",
+                JsonPrimitive(
+                    """
+                    **Attention** lets each token look at every other token and decide what matters.
+
+                    ### The short version
+                    1. Each token becomes a *query*, a *key* and a *value*.
+                    2. Scores are `softmax(QKᵀ / √d)`.
+                    3. The output is a weighted mix of the values.
+
+                    ```python
+                    weights = softmax(q @ k.T / sqrt(d))
+                    out = weights @ v
+                    ```
+
+                    > Multi-head attention runs this several times in parallel.
+                    """.trimIndent()
+                )
+            ),
+            FlexibleMessage("user", JsonPrimitive("Nice. And why divide by √d?")),
         )
     }
 
-    private fun chat(q: String, name: String) {
-        ActivityScenario.launch(MainActivity::class.java).use { sc ->
-            idle()
-            sc.onActivity { a -> idle(); snap(a.window.decorView, name) }
+    private fun seedHistory() = runBlocking {
+        val dao = db.chatDao()
+        listOf(
+            "Transformer attention, explained",
+            "Grocery list for the week",
+            "Fix Gradle build on AGP 9",
+            "Llama 3 vs Qwen for coding",
+            "Birthday message for Sam",
+        ).forEachIndexed { i, t ->
+            dao.insertSessionAndMessages(
+                ChatSession(title = t, modelUsed = "openrouter/free", timestamp = System.currentTimeMillis() - i * 26L * 3600_000L),
+                emptyList()
+            )
         }
     }
+
+    // ---- Chat ----
+
+    @Test fun chatEmptyDark() = withChat { a, _ -> snap(root(a), "chat_empty_dark") }
+
+    @Test @Config(qualifiers = LIGHT)
+    fun chatEmptyLight() = withChat { a, _ -> snap(root(a), "chat_empty_light") }
+
+    @Test fun chatConversationDark() = withChat { a, _ ->
+        seedConversation(a); idle(); snap(root(a), "chat_conversation_dark")
+    }
+
+    @Test @Config(qualifiers = LIGHT)
+    fun chatConversationLight() = withChat { a, _ ->
+        seedConversation(a); idle(); snap(root(a), "chat_conversation_light")
+    }
+
+    @Test fun controlsPanelDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.controlsButton).performClick(); idle()
+        snap(root(a), "controls_panel_dark")
+    }
+
+    @Test fun attachMenuDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.menuButton).performClick(); idle()
+        snapWithPopup(a, "attach_menu_dark")
+    }
+
+    @Test fun historyDark() = withChat { a, _ ->
+        seedHistory()
+        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
+        snap(root(a), "history_dark")
+    }
+
+    @Test @Config(qualifiers = LIGHT)
+    fun historyLight() = withChat { a, _ ->
+        seedHistory()
+        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
+        snap(root(a), "history_light")
+    }
+
+    @Test fun modelPickerDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.modelNameTextView).performClick(); idle()
+        snapDialog(a, "model_picker_dark")
+    }
+
+    // ---- Settings ----
+
+    @Test fun settingsDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.settingsButton).performClick(); idle()
+        snap(root(a), "settings_dark")
+    }
+
+    @Test @Config(qualifiers = LIGHT)
+    fun settingsLight() = withChat { a, _ ->
+        a.findViewById<View>(R.id.settingsButton).performClick(); idle()
+        snap(root(a), "settings_light")
+    }
+
+    @Test fun settingsDetailDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.settingsButton).performClick(); idle()
+        val first = a.supportFragmentManager.fragments.filterIsInstance<SettingsFragment>().first()
+        first.view?.let { v -> firstClickableRow(v)?.performClick() }
+        idle()
+        snap(root(a), "settings_detail_dark")
+    }
+
+    private fun firstClickableRow(v: View): View? {
+        if (v.isClickable && v !is android.widget.ScrollView && v.id != View.NO_ID &&
+            v.resources.getResourceEntryName(v.id).contains("Row", ignoreCase = true)
+        ) return v
+        if (v is android.view.ViewGroup) for (i in 0 until v.childCount) firstClickableRow(v.getChildAt(i))?.let { return it }
+        return null
+    }
+
+    private fun snapDialog(a: MainActivity, name: String) {
+        val d: Dialog? = ShadowDialog.getLatestDialog()
+        if (d == null) { snap(root(a), name); return }
+        val bg = Bitmap.createBitmap(root(a).width, root(a).height, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bg)
+        root(a).draw(c)
+        c.drawColor(0x99000000.toInt())
+        val dv = d.window!!.decorView
+        c.save(); c.translate(0f, (bg.height - dv.height).toFloat().coerceAtLeast(0f))
+        dv.draw(c); c.restore()
+        val out = File("build/screenshots").apply { mkdirs() }
+        File(out, "$name.png").outputStream().use { bg.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    private fun snapWithPopup(a: MainActivity, name: String) {
+        val p: PopupWindow? = shadowOf(ApplicationProvider.getApplicationContext<Application>()).latestPopupWindow
+        val bg = Bitmap.createBitmap(root(a).width, root(a).height, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bg)
+        root(a).draw(c)
+        val pv = p?.contentView
+        if (pv != null) {
+            val anchor = a.findViewById<View>(R.id.menuButton)
+            val loc = IntArray(2); anchor.getLocationInWindow(loc)
+            val w = if (pv.width > 0) pv.width else { pv.measure(0, 0); pv.layout(0, 0, pv.measuredWidth, pv.measuredHeight); pv.measuredWidth }
+            c.save(); c.translate(loc[0].toFloat(), (loc[1] - pv.height - 8 * a.resources.displayMetrics.density))
+            pv.draw(c); c.restore()
+        }
+        val out = File("build/screenshots").apply { mkdirs() }
+        File(out, "$name.png").outputStream().use { bg.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    // ---- Secondary screens ----
+
+    private fun pushFragment(a: MainActivity, f: androidx.fragment.app.Fragment) {
+        a.supportFragmentManager.beginTransaction().add(R.id.fragment_container, f).commitNow()
+        idle()
+    }
+
+    @Test fun rpHubDark() = withChat { a, _ -> pushFragment(a, RpHubFragment()); snap(root(a), "rp_hub_dark") }
+    @Test @Config(qualifiers = LIGHT)
+    fun rpHubLight() = withChat { a, _ -> pushFragment(a, RpHubFragment()); snap(root(a), "rp_hub_light") }
+    @Test fun presetsDark() = withChat { a, _ -> pushFragment(a, PresetsListFragment()); snap(root(a), "presets_dark") }
+    @Test fun systemMessagesDark() = withChat { a, _ -> pushFragment(a, SystemMessageLibraryFragment()); snap(root(a), "system_messages_dark") }
+    @Test @Config(qualifiers = LIGHT)
+    fun systemMessagesLight() = withChat { a, _ -> pushFragment(a, SystemMessageLibraryFragment()); snap(root(a), "system_messages_light") }
+    @Test fun toolsDark() = withChat { a, _ -> pushFragment(a, ToolsFragment()); snap(root(a), "tools_dark") }
+    @Test fun promptsDark() = withChat { a, _ -> pushFragment(a, PromptLibraryFragment()); snap(root(a), "prompts_dark") }
+    @Test fun rpSettingsDark() = withChat { a, _ -> pushFragment(a, RpSettingsFragment()); snap(root(a), "rp_settings_dark") }
+    @Test fun inferenceDark() = withChat { a, _ -> pushFragment(a, InferenceParametersFragment()); snap(root(a), "inference_dark") }
+
+    @Test fun confirmDialogDark() = withChat { a, chat ->
+        GrokConfirmDialog.show(chat, "Delete conversation?", "This can't be undone.", "Delete", onConfirm = {})
+        idle(); snapDialogCentered(a, "dialog_confirm_dark")
+    }
+    @Test @Config(qualifiers = LIGHT)
+    fun inputDialogLight() = withChat { a, chat ->
+        GrokInputDialog.show(chat, "Rename conversation", "Title", "Transformer attention", "Save", onConfirm = {})
+        idle(); snapDialogCentered(a, "dialog_input_light")
+    }
+
+    private fun snapDialogCentered(a: MainActivity, name: String) {
+        val d: Dialog = ShadowDialog.getLatestDialog() ?: return snap(root(a), name)
+        val bg = Bitmap.createBitmap(root(a).width, root(a).height, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bg)
+        root(a).draw(c)
+        c.drawColor(0x8C000000.toInt())
+        val dv = d.window!!.decorView
+        c.save(); c.translate(((bg.width - dv.width) / 2f), ((bg.height - dv.height) / 2f))
+        dv.draw(c); c.restore()
+        val out = File("build/screenshots").apply { mkdirs() }
+        File(out, "$name.png").outputStream().use { bg.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
 }
+
+private const val DARK = "w411dp-h891dp-night-xxhdpi"
+private const val LIGHT = "w411dp-h891dp-notnight-xxhdpi"

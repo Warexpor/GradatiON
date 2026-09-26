@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two horizontal sliders: opens the chat controls panel -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M4,8H10M16,8H20M4,16H8M14,16H20" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.8"
+        android:pathData="M13,5.5a2.5,2.5 0,1 1,0 5a2.5,2.5 0,1 1,0 -5zM11,13.5a2.5,2.5 0,1 1,0 5a2.5,2.5 0,1 1,0 -5z" />
+</vector>

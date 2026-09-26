@@ -116,7 +116,7 @@ class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val on
         val context = anchorView.context
         val rootView = (context as android.app.Activity).window.decorView.findViewById<ViewGroup>(android.R.id.content)
         val dimView = View(context).apply {
-            setBackgroundColor(Color.argb(204, 0, 0, 0)) // ~60% opacity dim
+            setBackgroundColor(Color.argb(140, 0, 0, 0)) // ~60% opacity dim
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT

@@ -234,7 +234,7 @@ class PromptLibraryFragment : Fragment() {
         // Dim overlay (same as system)
         val rootView = requireActivity().window.decorView.findViewById<ViewGroup>(android.R.id.content)
         val dimView = View(requireContext()).apply {
-            setBackgroundColor(Color.argb(204, 0, 0, 0))
+            setBackgroundColor(Color.argb(140, 0, 0, 0))
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
         rootView.addView(dimView)
