@@ -129,8 +129,8 @@ class ChatAdapter(
     /** Invoked when the stream reveal paints a new frame. */
     var onStreamVisualUpdate: (() -> Unit)? = null
     private val streamReveal = StreamRevealAnimator(
-        onFrame = { displayed, fadeFrom ->
-            streamRevealBoundHolder?.renderStreamFrame(displayed, fadeFrom)
+        onFrame = { displayed, _ ->
+            streamRevealBoundHolder?.renderStreamFrame(displayed)
                 ?: run {
                     if (messages.isNotEmpty()) {
                         notifyItemChanged(messages.size - 1, "STREAMING")
@@ -144,10 +144,64 @@ class ChatAdapter(
             if (messages.isNotEmpty()) {
                 val lastIndex = messages.size - 1
                 getPreRenderedContent(messages[lastIndex])
-                notifyItemChanged(lastIndex)
+                // Let the last words finish fading in before swapping to the full render.
+                val token = ++finalizeToken
+                mainHandler.postDelayed({
+                    if (token == finalizeToken && messages.size - 1 == lastIndex) {
+                        notifyItemChanged(lastIndex)
+                        onStreamVisualUpdate?.invoke()
+                    }
+                }, StreamFadeSpan.DURATION_MS)
             }
         }
     )
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var finalizeToken = 0
+
+    // Streaming render state: cached closed blocks + per-chunk fade timestamps in rendered
+    // coordinates, so each newly revealed run of words eases in on its own clock.
+    private val streamMarkdown = IncrementalMarkdown(markwon, ::ensureTableSpacing)
+    private val fadeStarts = ArrayList<Int>()
+    private val fadeTimes = ArrayList<Long>()
+    private var lastRenderedLen = 0
+
+    private fun resetStreamRender() {
+        streamReveal.reset()
+        streamMarkdown.reset()
+        fadeStarts.clear()
+        fadeTimes.clear()
+        lastRenderedLen = 0
+    }
+
+    private fun applyStreamFades(text: android.text.SpannableStringBuilder, now: Long) {
+        val len = text.length
+        if (len < lastRenderedLen) {
+            while (fadeStarts.isNotEmpty() && fadeStarts.last() >= len) {
+                fadeStarts.removeAt(fadeStarts.lastIndex)
+                fadeTimes.removeAt(fadeTimes.lastIndex)
+            }
+        } else if (len > lastRenderedLen) {
+            fadeStarts.add(lastRenderedLen)
+            fadeTimes.add(now)
+        }
+        lastRenderedLen = len
+        while (fadeTimes.isNotEmpty() && now - fadeTimes[0] >= StreamFadeSpan.DURATION_MS) {
+            fadeStarts.removeAt(0)
+            fadeTimes.removeAt(0)
+        }
+        for (i in fadeStarts.indices) {
+            val start = fadeStarts[i].coerceAtMost(len)
+            val end = (if (i + 1 < fadeStarts.size) fadeStarts[i + 1] else len).coerceAtMost(len)
+            if (end > start) {
+                text.setSpan(
+                    StreamFadeSpan(fadeTimes[i]),
+                    start,
+                    end,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
+    }
     init {
         // Apply SSE updates at full speed (conflated = latest only; no artificial delay).
         scope.launch(Dispatchers.Main) {
@@ -173,7 +227,7 @@ class ChatAdapter(
     fun clearCache() {
         renderCache.clear()
         collapsedStates.clear()
-        streamReveal.reset()
+        resetStreamRender()
         streamRevealBoundHolder = null
     }
     fun getLatestPlainText(): String? {
@@ -194,7 +248,7 @@ class ChatAdapter(
         val text = getLatestPlainText().orEmpty()
         if (text.isBlank() || ThinkingPlaceholder.matches(text)) {
             pendingStreamFinalize = false
-            streamReveal.reset()
+            resetStreamRender()
             if (messages.isNotEmpty()) notifyItemChanged(messages.size - 1)
             return
         }
@@ -215,7 +269,7 @@ class ChatAdapter(
 
         if (newMessages.isEmpty()) {
             messages.clear()
-            streamReveal.reset()
+            resetStreamRender()
             streamRevealBoundHolder = null
             notifyDataSetChanged()
             return
@@ -338,7 +392,7 @@ class ChatAdapter(
 
         // 4. Render Markdown with Safety (Expensive)
         val renderedContent = try {
-            markwon.toMarkdown(fullText)
+            ChatMarkdown.polished(markwon.toMarkdown(fullText))
         } catch (e: RuntimeException) {
             // 5. Prism4j Crash Handler
             if (e.message?.contains("Prism4j") == true || e.message?.contains("entry nodes") == true) {
@@ -719,27 +773,18 @@ class ChatAdapter(
         // Configuration for "Long Message" detection
         private val CHAR_THRESHOLD = 350
 
+        private val thinkingLabel: TextView = itemView.findViewById(R.id.thinkingLabel)
+
+        // "Thinking" sheen replaces the old bar meter; bars stay in the layout for ID stability.
         private fun startThinkingBars() {
-            stopThinkingBars()
-            val bars = listOf(thinkingBar1, thinkingBar2, thinkingBar3)
-            bars.forEach { bar ->
-                bar.pivotY = bar.height.toFloat().takeIf { it > 0f } ?: 12f
-            }
-            thinkingBarAnimators = bars.mapIndexed { index, bar ->
-                ObjectAnimator.ofFloat(bar, View.SCALE_Y, 0.2f, 1f).apply {
-                    duration = 520
-                    repeatCount = ObjectAnimator.INFINITE
-                    repeatMode = ObjectAnimator.REVERSE
-                    startDelay = index * 130L
-                    start()
-                }
-            }
+            itemView.findViewById<View>(R.id.thinkingBars).visibility = View.GONE
+            thinkingLabel.post { ShimmerText.start(thinkingLabel, ShimmerText.highlightFor(thinkingLabel)) }
         }
 
         private fun stopThinkingBars() {
             thinkingBarAnimators?.forEach { it.cancel() }
             thinkingBarAnimators = null
-            listOf(thinkingBar1, thinkingBar2, thinkingBar3).forEach { it.scaleY = 1f }
+            ShimmerText.stop(thinkingLabel)
         }
 
         private fun bindThinkingState(isThinking: Boolean) {
@@ -810,15 +855,26 @@ class ChatAdapter(
         private fun bindReasoning(message: FlexibleMessage, streaming: Boolean) {
             val reasoning = reasoningSource(message)
             if (reasoning.isBlank()) {
+                ShimmerText.stop(reasoningTitle)
                 reasoningBlock.visibility = View.GONE
                 reasoningTextView.visibility = View.GONE
                 return
             }
             reasoningBlock.visibility = View.VISIBLE
-            reasoningTitle.text = if (streaming && getMessageText(message.content).isBlank()) {
+            val stillThinking = streaming && getMessageText(message.content).isBlank()
+            reasoningTitle.text = if (stillThinking) {
                 itemView.context.getString(R.string.thinking_label)
             } else {
                 itemView.context.getString(R.string.thinking_label_idle)
+            }
+            if (stillThinking) {
+                if (reasoningTitle.getTag(R.id.tag_shimmer_animator) == null) {
+                    reasoningTitle.post {
+                        ShimmerText.start(reasoningTitle, ShimmerText.highlightFor(reasoningTitle))
+                    }
+                }
+            } else {
+                ShimmerText.stop(reasoningTitle)
             }
             val key = "reasoning_${reasoning.hashCode()}"
             // Expanded while streaming so the user can watch thoughts; collapse default after.
@@ -872,25 +928,17 @@ class ChatAdapter(
             android.view.Choreographer.getInstance().postFrameCallback(ticker)
         }
 
-        fun renderStreamFrame(displayed: String, fadeFrom: Int = displayed.length) {
+        fun renderStreamFrame(displayed: String) {
             pulseAnimator?.cancel()
             pulseAnimator = null
             messageContainer.alpha = 1f
-            val fullText = ensureTableSpacing(displayed)
-            val cursorColor = ContextCompat.getColor(itemView.context, R.color.xai_ink)
+            val cursorColor = ContextCompat.getColor(itemView.context, R.color.xai_mute)
             try {
-                val spanned = android.text.SpannableStringBuilder(markwon.toMarkdown(fullText))
-                val start = fadeFrom.coerceIn(0, spanned.length)
-                if (start < spanned.length) {
-                    spanned.setSpan(
-                        StreamFadeSpan(),
-                        start,
-                        spanned.length,
-                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
-                }
+                val spanned = streamMarkdown.render(displayed)
+                ChatMarkdown.polish(spanned)
+                applyStreamFades(spanned, android.os.SystemClock.uptimeMillis())
                 val cursorStart = spanned.length
-                spanned.append('\u258C') // ▌
+                spanned.append(StreamCursorSpan.GLYPH)
                 spanned.setSpan(
                     StreamCursorSpan(cursorColor),
                     cursorStart,
@@ -900,7 +948,7 @@ class ChatAdapter(
                 messageTextView.setText(spanned, TextView.BufferType.SPANNABLE)
                 ensureFadeTicker()
             } catch (_: Exception) {
-                messageTextView.text = "$displayed\u258C"
+                messageTextView.text = displayed
             }
         }
 
@@ -911,7 +959,7 @@ class ChatAdapter(
             if (ThinkingPlaceholder.matches(text) || text.isBlank()) {
                 bindReasoning(message, streaming = true)
                 if (ThinkingPlaceholder.matches(text)) {
-                    streamReveal.reset()
+                    resetStreamRender()
                     messageTextView.text = ""
                     bindThinkingState(true)
                     pulseAnimator?.cancel()
@@ -928,8 +976,7 @@ class ChatAdapter(
             streamReveal.setTarget(text)
             if (streamReveal.displayed().isEmpty()) {
                 bindReasoning(message, streaming = true)
-                val seed = text.take(1.coerceAtMost(text.length))
-                renderStreamFrame(seed, fadeFrom = seed.length)
+                renderStreamFrame(text.take(1))
             }
         }
 
@@ -937,7 +984,7 @@ class ChatAdapter(
             if (streamRevealBoundHolder === this) {
                 streamRevealBoundHolder = null
             }
-            streamReveal.reset()
+            resetStreamRender()
             messageTextView.textSize = 16f * currentFontScale / 100f
             messageTextView.typeface = currentTypeface
 

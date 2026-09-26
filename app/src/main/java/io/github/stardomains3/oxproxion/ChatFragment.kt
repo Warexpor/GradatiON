@@ -628,8 +628,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val tableHeaderBg = ContextCompat.getColor(requireContext(), R.color.markwon_table_header_bg)
         val customTableTheme = TableTheme.buildWithDefaults(requireContext())
             .tableBorderColor(tableBorder)
-            .tableBorderWidth(2)
-            .tableCellPadding(8)
+            .tableBorderWidth(1)
+            .tableCellPadding((10 * resources.displayMetrics.density).toInt())
             .tableHeaderRowBackgroundColor(tableHeaderBg)
             .build()
 
@@ -689,6 +689,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         .isLinkUnderlined(true)
                 }
             })
+            // Chat look: code cards, inline code pills, calmer headings (painted by ChatTextView).
+            .usePlugin(ChatMarkdown.plugin(requireContext()))
             .build()
         // 🔥 Cache formatters (init once)
         dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -898,7 +900,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                             backcopyButton.visibility = View.VISIBLE
                             isShare = false
                         }
-                        // Stream text reveal is handled in ChatAdapter; viewport stays where the user left it.
+                        // Stream reveal is painted by ChatAdapter; followStreamingEdge keeps it in view.
                     } else {
                         lastContentLength = currentLen
                     }
@@ -1538,8 +1540,31 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         // 3. Remove Insets Listener (Stop listening to keyboard)
         ViewCompat.setOnApplyWindowInsetsListener(rootView, null)
     }
+    /**
+     * While a reply streams, keep its growing edge above the composer, unless the reader has
+     * dragged away to look at something else. Scrolling back to the bottom re-engages it.
+     */
+    private var followStream = true
+    private var listDragging = false
+    private var followPending = false
+
+    private fun followStreamingEdge() {
+        if (!followStream || listDragging || followPending) return
+        followPending = true
+        chatRecyclerView.doOnPreDraw {
+            followPending = false
+            if (!followStream || listDragging) return@doOnPreDraw
+            val last = chatAdapter.itemCount - 1
+            val child = layoutManager.findViewByPosition(last) ?: return@doOnPreDraw
+            val limit = chatRecyclerView.height - chatRecyclerView.paddingBottom
+            val overflow = child.bottom - limit
+            if (overflow > 0) chatRecyclerView.scrollBy(0, overflow)
+        }
+    }
+
     /** Pin the just-sent user row near the top so the reply has empty space below (Grok-style). */
     private fun pinUserMessageForReply() {
+        followStream = true
         chatRecyclerView.post {
             chatRecyclerView.post {
                 val userPos = chatAdapter.itemCount - 2
@@ -1724,7 +1749,21 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             adapter = chatAdapter
             layoutManager = this@ChatFragment.layoutManager
         }
+        chatAdapter.onStreamVisualUpdate = { followStreamingEdge() }
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                when (newState) {
+                    RecyclerView.SCROLL_STATE_DRAGGING -> {
+                        listDragging = true
+                        followStream = false
+                    }
+                    RecyclerView.SCROLL_STATE_IDLE -> {
+                        listDragging = false
+                        if (!recyclerView.canScrollVertically(1)) followStream = true
+                    }
+                }
+            }
+
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
                 if (isScrollProgressEnabled) {

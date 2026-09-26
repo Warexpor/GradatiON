@@ -449,4 +449,6 @@
         <item quantity="one">%d file attached</item>
         <item quantity="other">%d files attached</item>
     </plurals>
+    <string name="action_copy">Copy</string>
+    <string name="toast_code_copied">Code copied</string>
 </resources>

@@ -17,6 +17,7 @@
     <color name="xai_accent_twilight">#FF5A5A5F</color>
     <color name="xai_scrim">#B3000000</color>
     <color name="markwon_code_text">#FFE8E8ED</color>
+    <color name="markwon_inline_code_bg">#1AFFFFFF</color>
     <color name="markwon_code_bg">#FF161618</color>
     <color name="markwon_blockquote">#FF8E8E93</color>
     <color name="markwon_table_border">#1FFFFFFF</color>

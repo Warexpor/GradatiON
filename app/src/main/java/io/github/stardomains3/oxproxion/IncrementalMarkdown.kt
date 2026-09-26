@@ -10,7 +10,10 @@ import io.noties.markwon.Markwon
  * parsed per frame. The final bind still renders the whole message in one pass, so any
  * cross-block nuance (loose list spacing, reference links) settles when the stream ends.
  */
-internal class IncrementalMarkdown(private val markwon: Markwon) {
+internal class IncrementalMarkdown(
+    private val markwon: Markwon,
+    private val preprocess: (String) -> String = { it }
+) {
     private var stableSource = ""
     private val stableRendered = SpannableStringBuilder()
 
@@ -20,7 +23,7 @@ internal class IncrementalMarkdown(private val markwon: Markwon) {
         stableRendered.clearSpans()
     }
 
-    fun render(text: String): CharSequence {
+    fun render(text: String): SpannableStringBuilder {
         if (!text.startsWith(stableSource)) reset()
         val boundary = stableBoundary(text)
         if (boundary > stableSource.length) {
@@ -30,7 +33,7 @@ internal class IncrementalMarkdown(private val markwon: Markwon) {
         val tail = text.substring(stableSource.length)
         val out = SpannableStringBuilder(stableRendered)
         if (tail.isNotBlank()) {
-            val rendered = markwon.toMarkdown(tail)
+            val rendered = markwon.toMarkdown(preprocess(tail))
             if (rendered.isNotEmpty()) {
                 if (out.isNotEmpty()) out.append(BLOCK_GAP)
                 out.append(rendered)
@@ -41,7 +44,7 @@ internal class IncrementalMarkdown(private val markwon: Markwon) {
 
     private fun appendStable(chunk: String) {
         if (chunk.isBlank()) return
-        val rendered = markwon.toMarkdown(chunk)
+        val rendered = markwon.toMarkdown(preprocess(chunk))
         if (rendered.isEmpty()) return
         if (stableRendered.isNotEmpty()) stableRendered.append(BLOCK_GAP)
         stableRendered.append(rendered)

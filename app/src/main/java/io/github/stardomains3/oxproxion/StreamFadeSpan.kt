@@ -6,10 +6,14 @@ import android.text.TextPaint
 import android.text.style.CharacterStyle
 import android.text.style.UpdateAppearance
 
-/** Opacity 0→1 ease-out over [durationMs] — Streamdown/Grok-style word fade-in. */
+/**
+ * Soft reveal for freshly streamed text: each newly revealed run of words eases from
+ * transparent to its full color on its own clock, so the streaming edge reads as a gentle
+ * wash of ink rather than characters popping in.
+ */
 class StreamFadeSpan(
     private val startMs: Long = SystemClock.uptimeMillis(),
-    private val durationMs: Long = 160L
+    private val durationMs: Long = DURATION_MS
 ) : CharacterStyle(), UpdateAppearance {
 
     fun isDone(now: Long = SystemClock.uptimeMillis()): Boolean =
@@ -17,9 +21,14 @@ class StreamFadeSpan(
 
     override fun updateDrawState(tp: TextPaint) {
         val t = ((SystemClock.uptimeMillis() - startMs).toFloat() / durationMs).coerceIn(0f, 1f)
-        val eased = 1f - (1f - t) * (1f - t) // ease-out quad
+        val inv = 1f - t
+        val eased = 1f - inv * inv * inv // ease-out cubic
         val base = tp.color
-        val a = (eased * Color.alpha(base).coerceAtLeast(255)).toInt().coerceIn(0, 255)
+        val a = (Color.alpha(base) * eased).toInt().coerceIn(0, 255)
         tp.color = Color.argb(a, Color.red(base), Color.green(base), Color.blue(base))
+    }
+
+    companion object {
+        const val DURATION_MS = 340L
     }
 }
