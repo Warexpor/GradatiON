@@ -24,6 +24,10 @@ import kotlinx.serialization.json.put
  * - in: session/update (agent_message_chunk, agent_thought_chunk, user_message_chunk, tool_call,
  *   tool_call_update, plan), session/request_permission, and responses.
  *
+ * Event keys are stable across reconnects: text/thought/user derive from bridge `_meta.seq`,
+ * tool calls from ACP toolCallId, approvals from the JSON-RPC request id, plans from session id.
+ * `session/load` accepts `_meta.afterSeq` so TranscriptReducer upserts stay idempotent on replay.
+ *
  * Not yet: the terminal and fs client methods (the bridge answers those on the machine itself),
  * available_commands_update (slash commands), current_mode_update, images in prompts.
  */
@@ -35,7 +39,10 @@ class AcpAdapter : HarnessAdapter {
     /** Keys of the currently open agent message / thought per session, so chunks merge. */
     private val openText = HashMap<String, String>()
     private val openThought = HashMap<String, String>()
-    private var seq = 0L
+    /** Highest bridge `_meta.seq` seen per session (for session/load afterSeq resume). */
+    private val lastSeqBySession = HashMap<String, Long>()
+    /** Fallback key counter when a frame has no `_meta.seq` (non-bridge / tests). */
+    private var localKeyCounter = 0L
 
     // ── outbound ──────────────────────────────────────────────────────────────────────────
 
@@ -60,10 +67,12 @@ class AcpAdapter : HarnessAdapter {
         })
     })
 
-    override fun loadSession(id: Long, sessionId: String, workspace: String) = request(id, "session/load", buildJsonObject {
+    override fun loadSession(id: Long, sessionId: String, workspace: String, afterSeq: Long?) = request(id, "session/load", buildJsonObject {
         put("sessionId", sessionId)
         put("cwd", workspace)
         put("mcpServers", JsonArray(emptyList()))
+        // Bridge extension: replay only notifications with seq > afterSeq (idempotent with stable keys).
+        if (afterSeq != null) put("_meta", buildJsonObject { put("afterSeq", afterSeq) })
     })
 
     override fun prompt(id: Long, sessionId: String, text: String) = request(id, "session/prompt", buildJsonObject {
@@ -111,9 +120,14 @@ class AcpAdapter : HarnessAdapter {
         val method = obj.str("method")
         val idEl = obj["id"]
         return when {
-            method == "session/update" -> decodeUpdate(obj["params"]?.jsonObject ?: return ignored("no params"))
-            method == "session/request_permission" && idEl != null ->
-                decodePermission(idEl, obj["params"]?.jsonObject ?: return ignored("no params"))
+            method == "session/update" -> {
+                val params = obj["params"]?.jsonObject ?: return ignored("no params")
+                decodeUpdate(params, bridgeSeq(params, obj))
+            }
+            method == "session/request_permission" && idEl != null -> {
+                val params = obj["params"]?.jsonObject ?: return ignored("no params")
+                decodePermission(idEl, params, bridgeSeq(params, obj))
+            }
             method == null && idEl != null -> {
                 val id = (idEl as? JsonPrimitive)?.longOrNull ?: return ignored("non-numeric id")
                 val err = obj["error"]?.let { (it as? JsonObject)?.str("message") ?: it.toString() }
@@ -123,32 +137,34 @@ class AcpAdapter : HarnessAdapter {
         }
     }
 
-    private fun decodeUpdate(params: JsonObject): List<AdapterOutput> {
+    private fun decodeUpdate(params: JsonObject, seq: Long?): List<AdapterOutput> {
         val sid = params.str("sessionId") ?: return ignored("no sessionId")
         val u = params["update"]?.jsonObject ?: return ignored("no update")
+        noteSeq(sid, seq)
         val now = System.currentTimeMillis()
         val out: CodeUpdate? = when (u.str("sessionUpdate")) {
             "agent_message_chunk" -> {
                 openThought.remove(sid)
-                val key = openText.getOrPut(sid) { "text:${now}:${seq++}" }
+                // Key from the first chunk's bridge seq so session/load replay upserts, not duplicates.
+                val key = openText.getOrPut(sid) { stableKey("text", seq) }
                 u["content"]?.jsonObject?.str("text")?.let { CodeUpdate.TextChunk(key, it) }
             }
             "agent_thought_chunk" -> {
-                val key = openThought.getOrPut(sid) { "thought:${now}:${seq++}" }
+                val key = openThought.getOrPut(sid) { stableKey("thought", seq) }
                 u["content"]?.jsonObject?.str("text")?.let { CodeUpdate.TextChunk(key, it, thought = true) }
             }
             "user_message_chunk" -> {
                 // Replayed history (session/load) or a prompt sent from another device.
                 closeText(sid)
                 u["content"]?.jsonObject?.str("text")?.let {
-                    CodeUpdate.Upsert(CodeEvent.UserPrompt("user:${now}:${seq++}", now, it))
+                    CodeUpdate.Upsert(CodeEvent.UserPrompt(stableKey("user", seq), now, it))
                 }
             }
             "tool_call" -> {
                 closeText(sid)
-                return toolCall(sid, u, now)
+                return toolCall(sid, u, now, seq)
             }
-            "tool_call_update" -> return toolCallUpdate(sid, u, now)
+            "tool_call_update" -> return toolCallUpdate(sid, u, now, seq)
             "plan" -> {
                 val entries = u["entries"]?.jsonArray?.mapNotNull { e ->
                     val o = e as? JsonObject ?: return@mapNotNull null
@@ -163,10 +179,11 @@ class AcpAdapter : HarnessAdapter {
             }
             else -> null
         }
-        return if (out == null) ignored("update ${u.str("sessionUpdate")}") else listOf(AdapterOutput.Update(sid, out))
+        return if (out == null) ignored("update ${u.str("sessionUpdate")}")
+        else listOf(AdapterOutput.Update(sid, out, seq))
     }
 
-    private fun toolCall(sid: String, u: JsonObject, now: Long): List<AdapterOutput> {
+    private fun toolCall(sid: String, u: JsonObject, now: Long, seq: Long?): List<AdapterOutput> {
         val callId = u.str("toolCallId") ?: return ignored("tool_call without id")
         val kind = toolKind(u.str("kind"))
         val result = ArrayList<AdapterOutput>()
@@ -179,12 +196,14 @@ class AcpAdapter : HarnessAdapter {
             detail = detailOf(u),
             status = toolStatus(u.str("status")) ?: ToolStatus.PENDING,
             output = textContent(u["content"])
-        )))
-        diffs(callId, u["content"], now).forEach { result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it)) }
+        )), seq)
+        diffs(callId, u["content"], now).forEach {
+            result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it), seq)
+        }
         return result
     }
 
-    private fun toolCallUpdate(sid: String, u: JsonObject, now: Long): List<AdapterOutput> {
+    private fun toolCallUpdate(sid: String, u: JsonObject, now: Long, seq: Long?): List<AdapterOutput> {
         val callId = u.str("toolCallId") ?: return ignored("tool_call_update without id")
         val result = ArrayList<AdapterOutput>()
         result += AdapterOutput.Update(sid, CodeUpdate.ToolPatch(
@@ -193,13 +212,16 @@ class AcpAdapter : HarnessAdapter {
             title = u.str("title"),
             detail = detailOf(u),
             output = textContent(u["content"])
-        ))
-        diffs(callId, u["content"], now).forEach { result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it)) }
+        ), seq)
+        diffs(callId, u["content"], now).forEach {
+            result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it), seq)
+        }
         return result
     }
 
-    private fun decodePermission(idEl: JsonElement, params: JsonObject): List<AdapterOutput> {
+    private fun decodePermission(idEl: JsonElement, params: JsonObject, seq: Long?): List<AdapterOutput> {
         val sid = params.str("sessionId") ?: return ignored("permission without session")
+        noteSeq(sid, seq)
         val call = params["toolCall"]?.jsonObject
         val requestId = (idEl as JsonPrimitive).content
         val options = params["options"]?.jsonArray?.mapNotNull { e ->
@@ -223,7 +245,7 @@ class AcpAdapter : HarnessAdapter {
             detail = call?.let { detailOf(it) },
             kind = toolKind(call?.str("kind")),
             options = options
-        ))))
+        )), seq))
     }
 
     /** A tool call or prompt boundary ends the current agent message, so the next text starts a new one. */
@@ -234,6 +256,34 @@ class AcpAdapter : HarnessAdapter {
 
     /** Call when a prompt's response arrives, so the next turn starts fresh text. */
     fun endTurn(sessionId: String) = closeText(sessionId)
+
+    /** Highest bridge `_meta.seq` seen for [sessionId], or null if none yet. */
+    fun lastSeq(sessionId: String): Long? = lastSeqBySession[sessionId]
+
+    /**
+     * Stable event key: prefer bridge `_meta.seq` (reconnect/resume safe). Tool/approval/plan keys
+     * use ACP ids instead. Without seq (plain ACP / older fixtures), fall back to a local counter.
+     */
+    private fun stableKey(kind: String, bridgeSeq: Long?): String {
+        val n = bridgeSeq ?: localKeyCounter++
+        return "$kind:$n"
+    }
+
+    private fun noteSeq(sessionId: String, seq: Long?) {
+        if (seq == null) return
+        val prev = lastSeqBySession[sessionId]
+        if (prev == null || seq > prev) lastSeqBySession[sessionId] = seq
+    }
+
+    /** Bridge (or top-level) `_meta.seq` on a notification / permission request. */
+    private fun bridgeSeq(params: JsonObject, root: JsonObject): Long? =
+        metaSeq(params) ?: metaSeq(root)
+
+    private fun metaSeq(obj: JsonObject): Long? {
+        val meta = obj["_meta"] as? JsonObject ?: return null
+        val el = meta["seq"] as? JsonPrimitive ?: return null
+        return el.longOrNull ?: el.contentOrNull?.toLongOrNull()
+    }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────
 

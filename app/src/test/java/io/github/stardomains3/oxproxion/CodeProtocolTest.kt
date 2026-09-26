@@ -35,7 +35,10 @@ class CodeProtocolTest {
         return list
     }
 
-    private fun update(u: String) = """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","update":$u}}"""
+    private fun update(u: String, seq: Long? = null): String {
+        val meta = if (seq != null) ""","_meta":{"seq":$seq}""" else ""
+        return """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1"$meta,"update":$u}}"""
+    }
 
     @Test fun textChunksMergeIntoOneMessage() {
         val list = fold(listOf(
@@ -163,5 +166,90 @@ class CodeProtocolTest {
         """.trimIndent())
         assertEquals(listOf(DiffLine.Type.HUNK, DiffLine.Type.CONTEXT, DiffLine.Type.DELETE, DiffLine.Type.ADD, DiffLine.Type.CONTEXT), lines.map { it.type })
         assertEquals(2, lines[3].newNo)
+    }
+
+    @Test fun textAndUserKeysDeriveFromBridgeSeq() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"Hi"}}""", seq = 10),
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Hello"}}""", seq = 11),
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"!"}}""", seq = 12),
+            update("""{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"hmm"}}""", seq = 13)
+        )
+        val outs = frames.flatMap { acp.decode(it) }.filterIsInstance<AdapterOutput.Update>()
+        assertEquals("user:10", ((outs[0].update as CodeUpdate.Upsert).event as CodeEvent.UserPrompt).key)
+        assertEquals("text:11", (outs[1].update as CodeUpdate.TextChunk).key)
+        assertEquals("text:11", (outs[2].update as CodeUpdate.TextChunk).key) // same open message
+        assertEquals("thought:13", (outs[3].update as CodeUpdate.TextChunk).key)
+        assertEquals(10L, outs[0].seq)
+        assertEquals(13L, acp.lastSeq("s1"))
+    }
+
+    @Test fun afterSeqResumeContinuesWithoutDuplicating() {
+        // Live stream up to seq 2, then session/load with afterSeq=2 delivers only newer frames.
+        val a = AcpAdapter()
+        var list = emptyList<CodeEvent>()
+        fun apply(frames: List<String>) {
+            frames.flatMap { a.decode(it) }.forEach { out ->
+                if (out is AdapterOutput.Update) list = TranscriptReducer.apply(list, out.update, now = 1L)
+            }
+        }
+        apply(listOf(
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"A"}}""", seq = 1),
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"B"}}""", seq = 2)
+        ))
+        assertEquals(2L, a.lastSeq("s1"))
+        assertEquals("text:1", list.single().key)
+        assertEquals("AB", (list[0] as CodeEvent.AgentText).text)
+
+        // Reconnect resume: only seq > 2
+        apply(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Read","kind":"read","status":"completed"}""", seq = 3),
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"C"}}""", seq = 4)
+        ))
+        assertEquals(3, list.size)
+        assertEquals("AB", (list[0] as CodeEvent.AgentText).text)
+        assertEquals("tool:t1", list[1].key)
+        assertEquals("text:4", list[2].key)
+        assertEquals("C", (list[2] as CodeEvent.AgentText).text)
+        assertEquals(4L, a.lastSeq("s1"))
+    }
+
+    @Test fun upsertReplayDoesNotDuplicateToolsPlansApprovals() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"e1","title":"Edit","kind":"edit","status":"pending"}""", seq = 5),
+            update("""{"sessionUpdate":"plan","entries":[{"content":"A","status":"pending"}]}""", seq = 6)
+        )
+        val permission = """{"jsonrpc":"2.0","id":9,"method":"session/request_permission","params":{"sessionId":"s1","_meta":{"seq":7},
+            "toolCall":{"toolCallId":"e1","title":"Edit","kind":"edit"},
+            "options":[{"optionId":"a","name":"Allow","kind":"allow_once"}]}}"""
+        var list = emptyList<CodeEvent>()
+        val a = AcpAdapter()
+        repeat(2) {
+            (frames + permission).flatMap { a.decode(it) }.forEach { out ->
+                if (out is AdapterOutput.Update) list = TranscriptReducer.apply(list, out.update, now = 1L)
+            }
+        }
+        assertEquals(3, list.size)
+        assertEquals("tool:e1", list[0].key)
+        assertEquals("plan:s1", list[1].key)
+        assertEquals("approval:9", list[2].key)
+        assertEquals(7L, a.lastSeq("s1"))
+    }
+
+    @Test fun loadSessionCarriesAfterSeq() {
+        val with = Json.parseToJsonElement(acp.loadSession(2, "abc", "/w", afterSeq = 42)).jsonObject
+        assertEquals("session/load", with["method"]!!.jsonPrimitive.content)
+        val meta = with["params"]!!.jsonObject["_meta"]!!.jsonObject
+        assertEquals("42", meta["afterSeq"]!!.jsonPrimitive.content)
+        val without = Json.parseToJsonElement(acp.loadSession(3, "abc", "/w", null)).jsonObject
+        assertEquals(null, without["params"]!!.jsonObject["_meta"])
+    }
+
+    @Test fun twoAdaptersSameSeqProduceSameKeys() {
+        val frame = update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"x"}}""", seq = 99)
+        val k1 = ((AcpAdapter().decode(frame).single() as AdapterOutput.Update).update as CodeUpdate.TextChunk).key
+        val k2 = ((AcpAdapter().decode(frame).single() as AdapterOutput.Update).update as CodeUpdate.TextChunk).key
+        assertEquals("text:99", k1)
+        assertEquals(k1, k2)
     }
 }
