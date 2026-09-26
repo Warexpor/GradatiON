@@ -25,6 +25,19 @@
         android:textFontWeight="600"
         android:fontFamily="@font/app_sans" />
 
+    <TextView
+        android:id="@+id/popoverHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:textColor="@color/xai_body"
+        android:textSize="15sp"
+        android:fontFamily="@font/app_sans"
+        android:visibility="gone" />
+
     <androidx.core.widget.NestedScrollView
         android:id="@+id/popoverScroll"
         android:layout_width="match_parent"

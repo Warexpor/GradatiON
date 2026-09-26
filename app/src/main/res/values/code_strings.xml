@@ -53,6 +53,8 @@
     <string name="code_home_use_folder">Use this folder</string>
     <string name="code_home_folder_up">Up</string>
     <string name="code_home_folder_recents">Recent folders</string>
+    <string name="code_home_folder_empty">No folders found here.</string>
+    <string name="code_home_folder_browse_failed">Can\'t read this folder right now.</string>
     <string name="code_home_folder_prompt">Folder on %1$s</string>
     <string name="code_home_need_folder">Pick a folder first</string>
     <string name="code_home_start_failed">Couldn\'t start: %1$s</string>

@@ -239,12 +239,18 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
     /**
      * Multi-level folder browser on the existing popover: path title as breadcrumbs, Up/parent,
-     * drill into dirs via [hub.browse], and an explicit "Use this folder" footer.
+     * drill into dirs via [hub.browseResult], and an explicit "Use this folder" footer.
      */
     private suspend fun showFolderBrowse(host: CodeHost, path: String) {
         val current = BrowsePaths.normalize(path)
         val parent = BrowsePaths.parentOf(current)
-        val children = hub.browse(current).filter { it.dir }
+        val browseResult = hub.browseResult(current)
+        val children = browseResult.getOrNull().orEmpty().filter { it.dir }
+        val browseHint = when {
+            browseResult.isFailure -> getString(R.string.code_home_folder_browse_failed)
+            children.isEmpty() -> getString(R.string.code_home_folder_empty)
+            else -> null
+        }
         val rows = ArrayList<PickerPopover.Row>()
         if (parent != null) {
             rows += PickerPopover.Row(
@@ -288,7 +294,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     refreshPills()
                 },
                 typePathRow()
-            )
+            ),
+            hint = browseHint
         )
     }
 

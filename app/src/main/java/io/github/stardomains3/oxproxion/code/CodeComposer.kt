@@ -89,13 +89,19 @@ class CodeComposer(
     }
 
     /** Opens the anchored glass popover above [anchor] (Grok's model-pill popover). */
-    fun pick(anchor: View, title: CharSequence?, rows: List<PickerPopover.Row>, footer: List<PickerPopover.Row> = emptyList()) {
+    fun pick(
+        anchor: View,
+        title: CharSequence?,
+        rows: List<PickerPopover.Row>,
+        footer: List<PickerPopover.Row> = emptyList(),
+        hint: CharSequence? = null
+    ) {
         popover?.dismiss(animated = false)
         hideKeyboard()
         anchor.isSelected = true
         popover = PickerPopover(popoverHost, anchor, backdropRef, edge = root).apply {
             onDismiss = { anchor.isSelected = false }
-            show(title, rows, footer)
+            show(title, rows, footer, hint)
         }
     }
 

@@ -48,7 +48,12 @@ class PickerPopover(
     var onDismiss: (() -> Unit)? = null
     val isShowing get() = card != null
 
-    fun show(title: CharSequence?, rows: List<Row>, footer: List<Row> = emptyList()) {
+    fun show(
+        title: CharSequence?,
+        rows: List<Row>,
+        footer: List<Row> = emptyList(),
+        hint: CharSequence? = null
+    ) {
         if (isShowing) return
         val scrimView = View(context).apply {
             setBackgroundColor(ContextCompat.getColor(context, R.color.popover_scrim))
@@ -65,6 +70,10 @@ class PickerPopover(
         val titleView = cardView.findViewById<TextView>(R.id.popoverTitle)
         titleView.text = title
         titleView.isVisible = !title.isNullOrEmpty()
+        cardView.findViewById<TextView>(R.id.popoverHint).apply {
+            text = hint
+            isVisible = !hint.isNullOrEmpty()
+        }
         val rowsBox = cardView.findViewById<ViewGroup>(R.id.popoverRows)
         val footerBox = cardView.findViewById<ViewGroup>(R.id.popoverFooter)
         cardView.findViewById<View>(R.id.popoverDivider).isVisible = footer.isNotEmpty() && rows.isNotEmpty()

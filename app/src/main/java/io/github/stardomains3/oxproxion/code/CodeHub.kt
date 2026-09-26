@@ -210,10 +210,11 @@ class CodeHub private constructor(context: Context) {
         return runCatching { backend.listHarnesses() }.getOrDefault(emptyList())
     }
 
-    /** Folder listing for the picker (`bridge/browse`). Empty if offline or path denied. */
-    suspend fun browse(path: String): List<BrowseEntry> {
-        val host = _activeHost.value ?: return emptyList()
-        return runCatching { backendFor(host).browse(path) }.getOrDefault(emptyList())
+    /** Folder listing for the picker (`bridge/browse`), preserving failures for user feedback. */
+    suspend fun browseResult(path: String): Result<List<BrowseEntry>> {
+        val host = _activeHost.value
+            ?: return Result.failure(IllegalStateException("No machine selected"))
+        return runCatching { backendFor(host).browse(path) }
     }
 
     // ── sessions ──────────────────────────────────────────────────────────────────────────
