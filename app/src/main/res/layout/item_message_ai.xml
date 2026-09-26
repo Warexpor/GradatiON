@@ -227,7 +227,14 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/messageContainer">
 
-            <!-- Message actions sit in one small glass capsule -->
+            <!-- Message actions sit in one small glass capsule; scroll on narrow widths -->
+            <HorizontalScrollView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:scrollbars="none"
+                android:overScrollMode="never"
+                android:clipToPadding="true">
             <LinearLayout
                 android:id="@+id/aiActionButtons"
                 android:layout_width="wrap_content"
@@ -368,11 +375,11 @@
                 android:visibility="visible"
                 app:tint="@color/xai_body" />
             </LinearLayout>
+            </HorizontalScrollView>
 
             <View
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
+                android:layout_width="8dp"
+                android:layout_height="1dp" />
 
             <LinearLayout
                 android:id="@+id/forkNavigator"
@@ -383,8 +390,7 @@
                 android:visibility="gone"
                 android:background="@drawable/bg_chat_actions"
                 android:paddingStart="2dp"
-                android:paddingEnd="2dp"
-                android:layout_marginStart="8dp">
+                android:paddingEnd="2dp">
 
                 <ImageButton
                     android:id="@+id/forkPrev"
