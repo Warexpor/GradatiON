@@ -141,6 +141,13 @@ class ScreenshotTest {
         seedConversation(a); idle(); snap(root(a), "chat_conversation_light")
     }
 
+    @Test @Config(qualifiers = LIGHT)
+    fun controlsPanelConversationLight() = withChat { a, _ ->
+        seedConversation(a); idle()
+        a.findViewById<View>(R.id.controlsButton).performClick(); idle()
+        snap(root(a), "controls_panel_conversation_light")
+    }
+
     @Test fun controlsPanelDark() = withChat { a, _ ->
         a.findViewById<View>(R.id.controlsButton).performClick(); idle()
         snap(root(a), "controls_panel_dark")
@@ -256,6 +263,34 @@ class ScreenshotTest {
     fun inputDialogLight() = withChat { a, chat ->
         GrokInputDialog.show(chat, "Rename conversation", "Title", "Transformer attention", "Save", onConfirm = {})
         idle(); snapDialogCentered(a, "dialog_input_light")
+    }
+
+
+    @Test fun settingsModelsDark() = withChat { a, _ -> openSettingsRow(a, R.id.settingsRowModels); snap(root(a), "settings_models_dark") }
+    @Test fun settingsDataDark() = withChat { a, _ -> openSettingsRow(a, R.id.settingsRowData); snap(root(a), "settings_data_dark") }
+    @Test @Config(qualifiers = LIGHT)
+    fun settingsAdvancedLight() = withChat { a, _ -> openSettingsRow(a, R.id.settingsRowAdvanced); snap(root(a), "settings_advanced_light") }
+    @Test @Config(qualifiers = LIGHT)
+    fun modelPickerLight() = withChat { a, _ ->
+        a.findViewById<View>(R.id.modelNameTextView).performClick(); idle()
+        snap(root(a), "model_picker_light")
+    }
+
+    private fun openSettingsRow(a: MainActivity, rowId: Int) {
+        a.findViewById<View>(R.id.settingsButton).performClick(); idle()
+        val sf = a.supportFragmentManager.fragments.filterIsInstance<SettingsFragment>().first()
+        sf.requireView().findViewById<View>(rowId).performClick(); idle()
+    }
+
+    @Test fun lanDialogDark() = withChat { a, _ ->
+        SaveLANDialogFragment().show(a.supportFragmentManager, "lan"); idle(); snapDialogCentered(a, "dialog_lan_dark")
+    }
+    @Test @Config(qualifiers = LIGHT)
+    fun apiDialogLight() = withChat { a, _ ->
+        SaveApiDialogFragment().show(a.supportFragmentManager, "api"); idle(); snapDialogCentered(a, "dialog_api_light")
+    }
+    @Test fun timeoutDialogDark() = withChat { a, _ ->
+        TimeoutDialogFragment().show(a.supportFragmentManager, "t"); idle(); snapDialogCentered(a, "dialog_timeout_dark")
     }
 
     private fun snapDialogCentered(a: MainActivity, name: String) {

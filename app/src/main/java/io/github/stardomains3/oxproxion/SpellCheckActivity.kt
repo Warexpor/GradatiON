@@ -20,7 +20,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import androidx.core.graphics.toColorInt
 
 class SpellCheckActivity : AppCompatActivity() {
 
@@ -50,17 +49,19 @@ class SpellCheckActivity : AppCompatActivity() {
         }
     }
 
+    private fun token(id: Int): Int = ContextCompat.getColor(this, id)
+
     private fun buildUi() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(64, 48, 64, 48)
             gravity = Gravity.CENTER_HORIZONTAL
 
-            // Background: Rounded corners + Dark Brown (#191919) from your theme
+            // Dialog card from theme tokens (follows light/dark)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 48f
-                setColor("#191919".toColorInt())
+                cornerRadius = 22f * resources.displayMetrics.density
+                setColor(token(R.color.xai_canvas_card))
             }
         }
 
@@ -68,9 +69,11 @@ class SpellCheckActivity : AppCompatActivity() {
         val titleView = TextView(this).apply {
             text = "AI Grammar Fix"
             textSize = 18f
-            setTextColor("#DADBDF".toColorInt())
+            setTextColor(token(R.color.xai_ink))
             setPadding(0, 0, 0, 24)
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            typeface = android.graphics.Typeface.create(
+                androidx.core.content.res.ResourcesCompat.getFont(context, R.font.inter), 600, false
+            )
         }
         layout.addView(titleView)
 
@@ -85,7 +88,7 @@ class SpellCheckActivity : AppCompatActivity() {
         // Progress Bar (Material Style)
         progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             isIndeterminate = true
-            indeterminateTintList = android.content.res.ColorStateList.valueOf("#DADBDF".toColorInt())
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(token(R.color.xai_ink))
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
@@ -114,7 +117,7 @@ class SpellCheckActivity : AppCompatActivity() {
         statusText = TextView(this).apply {
             text = "Consulting AI..."
             textSize = 14f
-            setTextColor("#DADBDF".toColorInt())
+            setTextColor(token(R.color.xai_mute))
             setPadding(0, 16, 0, 0)
             gravity = Gravity.CENTER_HORIZONTAL
         }
@@ -127,7 +130,7 @@ class SpellCheckActivity : AppCompatActivity() {
         }.also { scroll ->
             resultText = TextView(this).apply {
                 textSize = 16f
-                setTextColor("#FFFFFF".toColorInt())
+                setTextColor(token(R.color.xai_body))
                 setLineSpacing(0f, 1.3f)
             }
             scroll.addView(resultText)
@@ -146,11 +149,12 @@ class SpellCheckActivity : AppCompatActivity() {
         cancelButton = AppCompatButton(this).apply {
             text = "Cancel"
             textSize = 14f
-            setTextColor("#DADBDF".toColorInt())
+            isAllCaps = false
+            setTextColor(token(R.color.xai_ink))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 24f
-                setColor("#2A2A2A".toColorInt())
+                cornerRadius = 999f
+                setColor(token(R.color.xai_canvas_mid))
             }
             setPadding(48, 24, 48, 24)
             setOnClickListener { onCancel() }
@@ -166,11 +170,12 @@ class SpellCheckActivity : AppCompatActivity() {
         acceptButton = AppCompatButton(this).apply {
             text = "Accept"
             textSize = 14f
-            setTextColor("#191919".toColorInt())
+            isAllCaps = false
+            setTextColor(token(R.color.xai_canvas))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 24f
-                setColor("#DADBDF".toColorInt())
+                cornerRadius = 999f
+                setColor(token(R.color.xai_ink))
             }
             setPadding(48, 24, 48, 24)
             setOnClickListener { onAccept() }
@@ -280,7 +285,7 @@ class SpellCheckActivity : AppCompatActivity() {
         progressBar.visibility = View.GONE
         statusText.apply {
             text = message
-            setTextColor("#FF6B6B".toColorInt()) // Red color for errors
+            setTextColor(token(R.color.xai_error))
         }
 
         // Show just a "Close" button (relabel Cancel)

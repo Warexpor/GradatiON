@@ -36,7 +36,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp"
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                style="@style/Xai.TextInputLayout"
                 android:hint="Title">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -52,7 +52,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp"
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                style="@style/Xai.TextInputLayout"
                 app:endIconMode="dropdown_menu"
                 android:hint="Model">
 
@@ -73,7 +73,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp"
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                style="@style/Xai.TextInputLayout"
                 app:endIconMode="dropdown_menu"
                 android:hint="System Message">
 
@@ -144,18 +144,24 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/buttonCancel"
-                    style="@style/Widget.Grokion.Button.Text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="12dp"
-                    android:text="Cancel" />
+                    style="@style/Widget.Gradation.Button.Tonal"
+                    android:layout_width="0dp"
+            android:layout_weight="1"
+                    android:layout_height="48dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+                    android:text="@string/action_cancel" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/buttonSave"
-                    style="@style/Widget.Grokion.Button.Text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Save" />
+                    style="@style/Widget.Grokion.Button"
+                    android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+                    android:layout_height="48dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+                    android:text="@string/action_save" />
 
             </LinearLayout>
 

@@ -35,7 +35,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:text="@string/rp_lore_active_badge"
-                android:textColor="@color/gradation_gold"
+                android:textColor="@color/xai_ink"
                 android:textSize="12sp"
                 android:visibility="gone" />
         </LinearLayout>

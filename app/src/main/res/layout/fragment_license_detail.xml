@@ -37,7 +37,7 @@
             android:textIsSelectable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:textColorHighlight="@color/xai_accent_sunset_soft"
+            android:textColorHighlight="@color/xai_text_highlight"
             tools:text="Full license text appears here... (Long-press to select/copy)" />
 
     </ScrollView>

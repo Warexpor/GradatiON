@@ -60,6 +60,7 @@
         <item name="colorAccent">@color/xai_ink</item>
         <item name="materialAlertDialogTheme">@style/CustomMaterialAlertDialogTheme</item>
         <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Grokion.BottomSheet</item>
+        <item name="textInputStyle">@style/Xai.TextInputLayout</item>
         <item name="toolbarStyle">@style/Widget.Gradation.Toolbar</item>
         <item name="popupMenuStyle">@style/Widget.Gradation.PopupMenu</item>
         <item name="android:popupMenuStyle">@style/Widget.Gradation.PopupMenu</item>

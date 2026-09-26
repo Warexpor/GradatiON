@@ -118,7 +118,8 @@ class MarkdownViewerFragment : Fragment() {
                 }
             }
 
-            setBackgroundColor(Color.BLACK)
+            // Rendered page is a light document; match it so there is no dark flash while loading
+            setBackgroundColor(Color.WHITE)
 
             val markdown = arguments?.getString(ARG_MARKDOWN, "") ?: return@apply
             val fontName = arguments?.getString(ARG_FONT_NAME, "system_default") ?: "system_default"

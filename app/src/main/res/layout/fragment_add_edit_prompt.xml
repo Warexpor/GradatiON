@@ -30,7 +30,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="Title"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+            style="@style/Xai.TextInputLayout">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/edit_text_prompt_title"
@@ -46,7 +46,7 @@
             android:layout_weight="1"
             android:layout_marginTop="8dp"
             android:hint="Prompt"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+            style="@style/Xai.TextInputLayout">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/edit_text_prompt_prompt"

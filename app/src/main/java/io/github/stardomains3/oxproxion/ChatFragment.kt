@@ -3263,32 +3263,54 @@ $cleanContent
                 AppToast.LENGTH_SHORT
             ).show()
         }
-        requireContext().contentResolver.openInputStream(uri)?.use { stream ->
-            val bytes = stream.readBytes()
-            if (bytes.size > 12_000_000) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_image_too_large), AppToast.LENGTH_SHORT).show()
-                return
-            }
-            val mime = requireContext().contentResolver.getType(uri)
-            when (mime) {
-                "image/jpeg", "image/png", "image/webp" -> Unit
-                else -> {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_unsupported_image_format), AppToast.LENGTH_SHORT).show()
-                    return
+        val resolver = requireContext().applicationContext.contentResolver
+        val mime = resolver.getType(uri)
+        if (mime !in setOf("image/jpeg", "image/png", "image/webp")) {
+            AppToast.makeText(requireContext(), getString(R.string.toast_unsupported_image_format), AppToast.LENGTH_SHORT).show()
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            // Read off the main thread, capped so a huge file can't balloon memory.
+            val maxBytes = 12_000_000
+            val bytes: ByteArray? = withContext(Dispatchers.IO) {
+                try {
+                    resolver.openInputStream(uri)?.use { stream ->
+                        val buf = java.io.ByteArrayOutputStream()
+                        val chunk = ByteArray(64 * 1024)
+                        while (true) {
+                            val n = stream.read(chunk)
+                            if (n < 0) break
+                            buf.write(chunk, 0, n)
+                            if (buf.size() > maxBytes) return@use ByteArray(maxBytes + 1)
+                        }
+                        buf.toByteArray()
+                    }
+                } catch (_: Exception) {
+                    null
                 }
             }
+            if (!isAdded) return@launch
+            if (bytes == null) {
+                AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_image), AppToast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (bytes.size > maxBytes) {
+                AppToast.makeText(requireContext(), getString(R.string.toast_image_too_large), AppToast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (discardAttachmentIfRp()) return@launch
             selectedImageBytes = bytes
             selectedImageMime = mime
             previewImageView.setImageURI(uri)
             attachmentPreviewContainer.visibility = View.VISIBLE
             try {
                 val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                requireContext().contentResolver.takePersistableUriPermission(uri, takeFlags)
+                resolver.takePersistableUriPermission(uri, takeFlags)
                 viewModel.setPendingUserImageUri(uri.toString())
             } catch (_: SecurityException) {
                 viewModel.setPendingUserImageUri(uri.toString())
             }
-        } ?: AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_image), AppToast.LENGTH_SHORT).show()
+        }
     }
 
     private fun setAttachPlusOpen(open: Boolean) {

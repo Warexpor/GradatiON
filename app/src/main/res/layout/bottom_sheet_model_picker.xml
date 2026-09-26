@@ -28,18 +28,12 @@
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/modelSearchLayout"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            style="@style/Xai.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
             android:layout_marginTop="4dp"
             android:layout_marginEnd="16dp"
-            app:boxBackgroundColor="@color/xai_canvas_soft"
-            app:boxCornerRadiusBottomEnd="16dp"
-            app:boxCornerRadiusBottomStart="16dp"
-            app:boxCornerRadiusTopEnd="16dp"
-            app:boxCornerRadiusTopStart="16dp"
-            app:boxStrokeColor="@color/xai_border_outline"
             app:hintEnabled="false"
             app:startIconDrawable="@drawable/ic_search"
             app:startIconTint="@color/xai_mute">

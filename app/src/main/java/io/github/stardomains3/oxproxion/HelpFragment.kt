@@ -4,7 +4,6 @@ import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
@@ -127,11 +126,12 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
             .usePlugin(TablePlugin.create(requireContext()))
             .usePlugin(object : AbstractMarkwonPlugin() {
                 override fun configureTheme(builder: MarkwonTheme.Builder) {
+                    val ctx = requireContext()
                     builder
-                        .codeTextColor(Color.LTGRAY)
-                        .codeBackgroundColor(Color.argb(128, 0, 0, 0))
-                        .codeBlockBackgroundColor(Color.argb(128, 0, 0, 0))
-                        .blockQuoteColor(Color.BLACK)
+                        .codeTextColor(ContextCompat.getColor(ctx, R.color.markwon_code_text))
+                        .codeBackgroundColor(ContextCompat.getColor(ctx, R.color.markwon_code_bg))
+                        .codeBlockBackgroundColor(ContextCompat.getColor(ctx, R.color.markwon_code_bg))
+                        .blockQuoteColor(ContextCompat.getColor(ctx, R.color.markwon_blockquote))
                         .isLinkUnderlined(true)
                 }
             })
@@ -186,15 +186,16 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
             *   **Ask / RP chip** — toggle between Ask and **GradatiON RP** (local SillyTavern-style roleplay). Long-press to open the **GradatiON RP hub** (characters, persona, lorebooks, settings, import/export).
             *   **Model chip** {{ic_tune}} — Ask: switch models. RP: shows active character / LLM / Characters; tap opens the character library, long-press opens models.
             *   **New chat** {{ic_new_chat}} — starts a fresh thread (current chat stays in History).
-            *   **Overflow** — long-press Send on an empty Ask chat (copy/export, reasoning, web search, stream, tools, presets, settings). Hidden in RP; the extended top bar still has those controls.
+            *   **Power tools row** (optional, Settings → Appearance) — reasoning, web search, stream, tools, presets and settings as icons under the top bar.
 
             ### Composer
             *   **Send** {{ic_send}} / **Stop** {{ic_stop}}
             *   **Attach** {{ic_attachdoc}} — text files (Ask only). **Image** {{ic_imgup}} — vision models (camera long-press). Disabled in RP.
-            *   **+** — attach sheet (camera, gallery, files, tools manager). In RP the control stays visible but dimmed (attachments off); long-press still spell-checks.
+            *   **+** — attach menu (camera, photos, files, tools manager, and a review row while files are attached). In RP the control stays visible but dimmed (attachments off); long-press still spell-checks.
+            *   **Controls** {{ic_tune}} — the sliders button next to **+**. Opens the Controls panel: reasoning, web search, stream, read aloud, tools, presets, system message, settings, files, image, new chat, font and text size, plus chat export (copy, Markdown, HTML, EPUB, print, PDF) once the chat has messages. A filled tile means that feature is on.
 
             ### Message actions
-            Tap icons under a message to copy, share, speak, or edit. In **Ask**, edit/resend can fork the thread — use the `< n/m >` navigator to switch branches. In **RP**, editing a **user** message truncates without Ask forks; editing an **assistant** reply updates that bubble in place (and the active swipe alt). Use regenerate / instruct / swipe for new variants. Chat-level export (PDF/Markdown/copy) lives in the overflow menu (Ask) or Extended top bar.
+            Tap icons under a message to copy, share, speak, or edit. In **Ask**, edit/resend can fork the thread — use the `< n/m >` navigator to switch branches. In **RP**, editing a **user** message truncates without Ask forks; editing an **assistant** reply updates that bubble in place (and the active swipe alt). Use regenerate / instruct / swipe for new variants. Chat-level export (PDF/Markdown/copy) lives at the bottom of the Controls panel.
 
             ---
 
@@ -226,7 +227,7 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
 
             ## Settings
 
-            Open from History (gear), the extended top-bar settings control, or Ask-mode overflow. In RP, use **Settings → Advanced → GradatiON RP** or long-press the Ask/RP chip.
+            Open from History (gear), the extended top-bar settings control, or the Controls panel. In RP, use **Settings → Advanced → GradatiON RP** or long-press the Ask/RP chip.
 
             | Section | What’s inside |
             |---------|----------------|
@@ -242,7 +243,7 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
 
             *   **Your Models** — tap model chip; add from OpenRouter or LAN catalogs; filters and sort at top.
             *   **History** — autosaved threads; overflow per row for pin/rename/delete; bottom bar for search, settings, new chat.
-            *   **System messages & prompts** — from overflow or long-press Presets; libraries support import/export.
+            *   **System messages & prompts** — from the Controls panel or long-press Presets; libraries support import/export.
             *   Generated images may not persist when reopening a saved chat.
 
             ---

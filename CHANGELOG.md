@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased — monochrome redesign
+
+### Changed
+- Whole UI reworked to a minimal, iOS-style monochrome look: true black / white canvas, system grays, soft gradients on the composer, bubbles and chips, no gold accent and no glow. Light and dark now share one theme definition.
+- Inter 4 in four weights with a proper type scale; titles use semibold, the History wordmark is a large title.
+- Pressing things shows a soft gray wash instead of the burst animation.
+- Settings, RP hub and forms use grouped inset cards with section headers; dialogs are rounded cards with pill buttons; text fields are filled; nav bars are flush.
+- Chat empty state is a small mark with a greeting instead of the big watermark.
+
+### Fixed
+- Reasoning, web search, stream, tools, presets, system message, fonts and chat export could only be reached by long-pressing Send on an empty chat. A Controls button next to + now opens them any time.
+- Those toggles showed no on/off state; tiles now fill when a feature is on.
+- Opening the full-screen composer stranded New chat, System, Paste and Clear outside the Controls panel until restart.
+- Attached text files had no visible indicator; the + menu now shows a "files attached" row to review or remove them.
+- The model name could stay stuck red or gray after two replies finished close together.
+- Picked images are read off the main thread with a size cap.
+- Spell-check popup, Help and the HTML viewer used hard-coded dark colors; they follow the theme now.
+
 ## Unreleased — upstream sync (oxproxion v2.1.103 to v2.2.5)
 
 ### Added

@@ -5,7 +5,6 @@
     <color name="xai_canvas_soft">#FF141415</color>
     <color name="xai_canvas_card">#FF1C1C1E</color>
     <color name="xai_canvas_mid">#FF2C2C2E</color>
-    <color name="gradation_gold">@color/xai_ink</color>
     <color name="xai_hairline">#1FFFFFFF</color>
     <color name="xai_ink">#FFF5F5F7</color>
     <color name="xai_ink_hover">#FFFFFFFF</color>

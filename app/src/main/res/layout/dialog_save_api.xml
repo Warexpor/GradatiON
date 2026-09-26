@@ -13,7 +13,7 @@
         android:layout_height="wrap_content"
         android:text="Save OpenRouter API Key"
         android:textColor="@color/xai_ink"
-        android:textAppearance="?attr/textAppearanceHeadline6"
+        android:textAppearance="@style/TextAppearance.Gradation.Headline"
 
         android:layout_marginBottom="16dp" />
 
@@ -21,12 +21,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="Enter Key"
-        app:boxStrokeColor="@color/xai_hairline"
         app:hintTextColor="@color/xai_mute"
-        android:id="@+id/edit_text_lay"
-
-
-        app:boxBackgroundMode="outline">
+        android:id="@+id/edit_text_lay">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/edit_text_title"
@@ -50,19 +46,23 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/button_cancelapi"
-            style="@style/Widget.Grokion.Button.Text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/xai_ink"
-            android:text="Cancel" />
+            style="@style/Widget.Gradation.Button.Tonal"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="48dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/action_cancel" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/button_saveapi"
-            style="@style/Widget.Grokion.Button.Text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/xai_ink"
-            android:layout_marginStart="8dp"
-            android:text="Save" />
+            style="@style/Widget.Grokion.Button"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:layout_height="48dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/action_save" />
     </LinearLayout>
 </LinearLayout>

@@ -64,7 +64,6 @@
     <color name="tx">@color/xai_body</color>
     <color name="threetwo">@color/xai_canvas_mid</color>
     <color name="ic_launcherrobot_background">#FF000000</color>
-    <color name="gradation_gold">@color/xai_ink</color>
     <color name="advanced_reasoning_color">@color/xai_mute</color>
     <color name="gray">@color/xai_mute</color>
     <color name="xai_grouped">#FFF2F2F7</color>

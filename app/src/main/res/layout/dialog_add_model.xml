@@ -16,9 +16,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="Model Name"
-            app:boxStrokeColor="@color/xai_hairline"
-            app:hintTextColor="@color/xai_mute"
-            app:boxBackgroundMode="outline">
+            app:hintTextColor="@color/xai_mute">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/editModelName"
@@ -33,9 +31,7 @@
             android:layout_height="wrap_content"
             android:hint="API Identifier"
             android:layout_marginTop="8dp"
-            app:boxStrokeColor="@color/xai_hairline"
-            app:hintTextColor="@color/xai_mute"
-            app:boxBackgroundMode="outline">
+            app:hintTextColor="@color/xai_mute">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/editApiIdentifier"

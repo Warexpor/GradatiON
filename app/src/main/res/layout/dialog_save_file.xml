@@ -11,10 +11,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="File Name"
-        app:boxStrokeColor="@color/xai_hairline"
         app:hintTextColor="@color/xai_mute"
-        app:endIconMode="clear_text"
-        app:boxBackgroundMode="outline">
+        app:endIconMode="clear_text">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/fileNameInput"
@@ -31,12 +29,10 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:hint="File Extension (No period)"
-        app:boxStrokeColor="@color/xai_hairline"
         app:hintTextColor="@color/xai_mute"
         app:endIconMode="clear_text"
         app:helperText="e.g., js, kt, html, py, txt"
-        app:helperTextEnabled="true"
-        app:boxBackgroundMode="outline">
+        app:helperTextEnabled="true">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/fileExtensionInput"

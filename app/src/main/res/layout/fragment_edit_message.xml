@@ -35,12 +35,6 @@
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="12dp"
         android:layout_weight="1"
-        app:boxBackgroundColor="@color/xai_canvas_soft"
-        app:boxCornerRadiusBottomEnd="16dp"
-        app:boxCornerRadiusBottomStart="16dp"
-        app:boxCornerRadiusTopEnd="16dp"
-        app:boxCornerRadiusTopStart="16dp"
-        app:boxStrokeColor="@color/xai_border_outline"
         app:hintEnabled="false">
 
         <com.google.android.material.textfield.TextInputEditText
@@ -74,22 +68,26 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCancelEdit"
-            style="@style/Widget.Grokion.Button.Text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
+            style="@style/Widget.Gradation.Button.Tonal"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="48dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:text="@string/edit_response_cancel"
-            android:textColor="@color/xai_mute"
             app:rippleColor="@color/press_ripple_none" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSaveEdit"
             style="@style/Widget.Grokion.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:layout_height="48dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:minHeight="44dp"
             android:text="@string/edit_response_save"
-            android:textColor="@color/xai_send_icon_enabled"
             app:backgroundTint="@color/xai_send_enabled"
             app:cornerRadius="22dp"
             app:rippleColor="@color/press_ripple_none" />

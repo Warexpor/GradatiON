@@ -1,12 +1,46 @@
 ﻿# GradatiON UI design contract
 
 **Status:** GradatiON product shell — implementation reference for contributors  
-**Lineage:** Ask-style layout forked from oxproxion; dark monochrome + gold accent (`#D4A54A`) after 2026 GradatiON rebrand  
+**Lineage:** Ask-style layout forked from oxproxion; monochrome iOS-style redesign in 2026 (see section 0)  
 **Historical reference:** Grok Android `ai.x.grok` 1.1.97 token extract (optional local `references/grok_decompiled`, gitignored)  
 **Scope:** Chat / History / Settings chrome — not cloud paywalls, Imagine feed, or voice pipeline  
-**Brand:** GradatiON wordmark in History (Iceland); empty-state `ic_gradation_mark`; launcher uses GradatiON arc vector
+**Brand:** GradatiON wordmark in History (Inter Bold); empty-state `ic_gradation_mark`; launcher uses GradatiON arc vector
 
 This document is the token/component contract for the inherited Ask shell. Product naming and user-facing copy are **GradatiON**, not Grokion/xAI.
+
+---
+
+## 0. 2026 monochrome redesign (current source of truth)
+
+Sections 1–13 below are the historical Grok token extraction the shell grew from. Where they disagree with this section, this section wins.
+
+**Direction:** classy, iOS-flavoured, minimal. True black / white canvas, Apple system grays, hairlines, soft vertical gradients on raised surfaces only. No accent hue (the old gold is retired), no glow, no ripple.
+
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `xai_canvas` | `#000000` | `#FFFFFF` | Screen canvas |
+| `xai_grouped` | `#000000` | `#F2F2F7` | Grouped-list pages (settings, RP hub, forms) |
+| `xai_cell` | `#1C1C1E` | `#FFFFFF` | Inset cards on grouped pages (`bg_settings_card`) |
+| `xai_canvas_card` | `#1C1C1E` | `#FFFFFF` | Dialogs, sheets, menus, Controls panel |
+| `xai_canvas_mid` | `#2C2C2E` | `#E5E5EA` | Tonal buttons, tiles, chips, selected rows |
+| `xai_ink` / `xai_body` | `#F5F5F7` / `#E8E8ED` | `#000000` / `#1C1C1E` | Primary text, icons |
+| `xai_mute` | `#8E8E93` | `#8A8A8E` | Secondary text |
+| `xai_hairline` | white 12% | black 9% | Strokes, separators |
+| `grad_*` | — | — | Gradient stops: composer panel, user bubble, send, chips |
+
+**Type:** Inter 4 family (`@font/inter`: 400/500/600/700). Styles `TextAppearance.Gradation.{LargeTitle, Title, Headline, Body, Label, Footnote, SectionHeader}`. Titles and emphasis use 600, not bold.
+
+**Shape:** tiles 20dp, dialogs 22dp, sheets 28dp (with grabber), cards 16dp, fields 14dp, buttons and chips are pills.
+
+**Components:**
+- Primary button `Widget.Grokion.Button` (ink pill), secondary `Widget.Gradation.Button.Tonal`, destructive = red label on a tonal pill.
+- Press feedback: `bg_press_svg*` gray wash + `press_scale`.
+- Chat composer: gradient panel; left `+` (attach menu) and sliders (Controls), right send (ink gradient disc).
+- Controls panel (`headerContainer`): `Widget.Gradation.ControlTile` tiles, icon over label; a tile is filled with ink when its feature is on (`isSelected`). Export tray at the bottom once the chat has messages.
+- Power-tools row toggles: `Widget.Gradation.TopToggle` (muted off, ink on a soft disc when on).
+- Nav bars: `Widget.Gradation.Toolbar` via theme `toolbarStyle`, flush with the page.
+
+**Verify visually:** `./gradlew :app:testDebugUnitTest --tests '*ScreenshotTest*'` writes PNGs of the main screens in light and dark to `app/build/screenshots/`.
 
 ---
 
@@ -137,7 +171,7 @@ XML also defines `appBackground` `#F8F7F5` (warm light splash/widget). Prefer se
 
 ### 4.4 Resource IDs (`xai_*` in code)
 
-Gradle/resources still use `xai_*` color names and `Theme.Grokion` style prefixes for compile stability. Map semantically to §4.1 tokens when editing UI. GradatiON adds `gradation_gold` for optional accent use.
+Gradle/resources still use `xai_*` color names and `Theme.Grokion` style prefixes for compile stability. Map semantically to §4.1 tokens when editing UI. The 2026 redesign retired `gradation_gold`; see section 0.
 
 ---
 

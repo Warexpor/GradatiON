@@ -14,7 +14,7 @@ Visual tokens and component specs: [`DESIGN.md`](DESIGN.md).
 | Screen | Host | Notes |
 |--------|------|-------|
 | Ask | `ChatFragment` | Top: history · model chip · new chat; composer pill; empty GradatiON mark |
-| History | `SavedChatsFragment` embedded | ~84% width; **GradatiON** wordmark (Iceland); Search; Conversations; settings gear |
+| History | `SavedChatsFragment` embedded | ~84% width; **GradatiON** wordmark (Inter Bold, large title); Search; Conversations; settings gear |
 | Settings root | `SettingsFragment` | App + AI section cards → push detail screens |
 | Appearance | `SettingsDetailFragment` | Theme + preview |
 | Haptics | detail section | Button + responding toggles |
