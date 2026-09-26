@@ -1204,13 +1204,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 scrollToBottomButton.visibility = View.INVISIBLE
             }
         }
-        viewModel.isExpandableInputEnabled.observe(viewLifecycleOwner) { isEnabled ->
-            if (isEnabled) {
-                attachExpandableInputListeners()
-            } else {
-                detachExpandableInputListeners()
-            }
-        }
         viewModel.isReasoningEnabled.observe(viewLifecycleOwner) { isEnabled ->
             reasoningButton.isSelected = isEnabled
             topReasoningButton.isSelected = isEnabled
