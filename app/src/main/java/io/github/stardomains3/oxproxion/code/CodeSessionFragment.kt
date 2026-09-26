@@ -143,12 +143,18 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                 launch {
                     combine(hub.connection, hub.activeHost) { c, h -> c to h }.collect { (c, h) ->
                         if (h == null || h.isDemo ||
-                            (c != ConnectionState.FAILED && c != ConnectionState.DISCONNECTED)
+                            (c != ConnectionState.FAILED &&
+                                c != ConnectionState.DISCONNECTED &&
+                                c != ConnectionState.CONNECTING)
                         ) {
                             banner.isVisible = false
                         } else {
                             banner.isVisible = true
-                            banner.text = getString(R.string.code_session_offline_banner, h.name)
+                            banner.text = if (c == ConnectionState.CONNECTING) {
+                                getString(R.string.code_status_connecting)
+                            } else {
+                                getString(R.string.code_session_offline_banner, h.name)
+                            }
                         }
                     }
                 }

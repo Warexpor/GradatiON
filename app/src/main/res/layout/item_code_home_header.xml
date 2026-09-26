@@ -13,8 +13,10 @@
 
     <LinearLayout
         android:id="@+id/codeMachinePill"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="38dp"
+        android:layout_weight="1"
+        android:layout_marginEnd="8dp"
         android:background="@drawable/bg_model_pill"
         android:clickable="true"
         android:focusable="true"
@@ -32,8 +34,9 @@
 
         <TextView
             android:id="@+id/codeMachineName"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:layout_marginStart="8dp"
             android:ellipsize="end"
             android:maxWidth="180dp"
@@ -51,9 +54,11 @@
 
         <TextView
             android:id="@+id/codeMachineStatus"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:layout_marginStart="6dp"
+            android:ellipsize="end"
             android:singleLine="true"
             android:textColor="@color/xai_mute"
             android:textSize="13sp" />
@@ -66,11 +71,6 @@
             android:src="@drawable/ic_expand_more"
             app:tint="@color/xai_body" />
     </LinearLayout>
-
-    <View
-        android:layout_width="0dp"
-        android:layout_height="1dp"
-        android:layout_weight="1" />
 
     <ImageButton
         android:id="@+id/codeHomeSettings"
