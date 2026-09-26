@@ -6,12 +6,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import coil.load
-import coil.transform.CircleCropTransformation
+import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
@@ -24,20 +24,18 @@ class RpCharacterEditFragment : Fragment() {
     private var pendingAvatarUri: Uri? = null
     private var clearAvatar = false
     private lateinit var avatarPreview: ImageView
+    private lateinit var avatarMonogram: TextView
+    private lateinit var pickAvatarButton: MaterialButton
+    private var currentName: String = ""
+    private var hasPhoto = false
+    private lateinit var avatarPlaceholder: View
     private lateinit var clearAvatarButton: MaterialButton
     private lateinit var rpDelegate: RpChatDelegate
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         pendingAvatarUri = uri
         clearAvatar = false
-        uri?.let {
-            avatarPreview.visibility = View.VISIBLE
-            clearAvatarButton.visibility = View.VISIBLE
-            avatarPreview.load(it) {
-                crossfade(true)
-                transformations(CircleCropTransformation())
-            }
-        }
+        uri?.let { showAvatar(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,6 +51,9 @@ class RpCharacterEditFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         rpDelegate = RpChatDelegate(chatViewModel.getRpRepository(), SharedPreferencesHelper(requireContext()))
         avatarPreview = view.findViewById(R.id.rpAvatarPreview)
+        avatarMonogram = view.findViewById(R.id.rpAvatarMonogram)
+        avatarPlaceholder = view.findViewById(R.id.rpAvatarPlaceholder)
+        pickAvatarButton = view.findViewById(R.id.pickAvatarButton)
         clearAvatarButton = view.findViewById(R.id.clearAvatarButton)
         val toolbar = view.findViewById<MaterialToolbar>(R.id.toolbar)
         toolbar.title = getString(
@@ -68,6 +69,12 @@ class RpCharacterEditFragment : Fragment() {
         val promptInput = view.findViewById<TextInputEditText>(R.id.rpPromptInput)
         val examplesInput = view.findViewById<TextInputEditText>(R.id.rpExamplesInput)
         val saveButton = view.findViewById<MaterialButton>(R.id.saveRpCharacterButton)
+        showAvatar(null)
+        nameInput.doAfterTextChanged { text ->
+            currentName = text?.toString().orEmpty()
+            avatarMonogram.text = RpAvatars.initial(currentName)
+            syncPlaceholder()
+        }
 
         var baseline = CharacterEditSnapshot()
         fun currentSnapshot() = CharacterEditSnapshot(
@@ -140,15 +147,12 @@ class RpCharacterEditFragment : Fragment() {
             baseline = currentSnapshot()
         }
 
-        view.findViewById<MaterialButton>(R.id.pickAvatarButton).setOnClickListener {
-            pickImage.launch(arrayOf("image/*"))
-        }
+        pickAvatarButton.setOnClickListener { pickImage.launch(arrayOf("image/*")) }
+        view.findViewById<View>(R.id.rpAvatarFrame).setOnClickListener { pickImage.launch(arrayOf("image/*")) }
         clearAvatarButton.setOnClickListener {
             pendingAvatarUri = null
             clearAvatar = true
-            avatarPreview.setImageResource(R.drawable.ic_gradation_mark)
-            avatarPreview.visibility = View.VISIBLE
-            clearAvatarButton.visibility = View.GONE
+            showAvatar(null)
         }
 
         saveButton.setOnClickListener {
@@ -248,13 +252,19 @@ class RpCharacterEditFragment : Fragment() {
         }
     }
 
-    private fun showAvatar(model: Any) {
-        avatarPreview.visibility = View.VISIBLE
-        clearAvatarButton.visibility = View.VISIBLE
-        avatarPreview.load(model) {
-            crossfade(true)
-            transformations(CircleCropTransformation())
-        }
+    /** Person glyph only while there is neither a photo nor a name to draw a monogram from. */
+    private fun syncPlaceholder() {
+        avatarPlaceholder.visibility =
+            if (!hasPhoto && RpAvatars.initial(currentName).isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    /** Photo when [model] is set, otherwise the name's monogram on neutral gray. */
+    private fun showAvatar(model: Any?) {
+        RpAvatars.bindModel(avatarPreview, avatarMonogram, model, currentName)
+        hasPhoto = model != null
+        syncPlaceholder()
+        clearAvatarButton.visibility = if (model != null) View.VISIBLE else View.GONE
+        pickAvatarButton.setText(if (model != null) R.string.rp_ui_change_photo else R.string.rp_ui_add_photo)
     }
 
     private data class CharacterEditSnapshot(

@@ -1,85 +1,114 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Character card for the 2-column library grid: portrait first, then name and tagline. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical">
+    android:padding="6dp">
 
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/rpCharacterCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="12dp"
-        android:gravity="center_vertical">
+        android:background="@drawable/rp_bg_card"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="@drawable/bg_press_svg"
+        android:padding="8dp"
+        android:stateListAnimator="@animator/press_scale">
 
-        <ImageView
+        <com.google.android.material.imageview.ShapeableImageView
             android:id="@+id/rpCharacterAvatar"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="@drawable/bg_model_icon_circle"
-            android:clipToOutline="true"
-            android:src="@drawable/ic_gradation_mark"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="@drawable/rp_bg_monogram"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
             android:scaleType="centerCrop"
-            android:contentDescription="@string/rp_character_avatar" />
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.Gradation.Medium" />
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/rpCharacterMonogram"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:fontFamily="@font/app_sans"
+            android:gravity="center"
+            android:importantForAccessibility="no"
+            android:textColor="@color/xai_mute"
+            android:textFontWeight="600"
+            android:textSize="56sp"
+            app:layout_constraintBottom_toBottomOf="@id/rpCharacterAvatar"
+            app:layout_constraintEnd_toEndOf="@id/rpCharacterAvatar"
+            app:layout_constraintStart_toStartOf="@id/rpCharacterAvatar"
+            app:layout_constraintTop_toTopOf="@id/rpCharacterAvatar" />
+
+        <TextView
+            android:id="@+id/rpCharacterActive"
+            android:layout_width="wrap_content"
+            android:layout_height="24dp"
+            android:layout_margin="8dp"
+            android:background="@drawable/rp_bg_pill"
+            android:drawablePadding="6dp"
+            android:fontFamily="@font/app_sans"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="10dp"
+            android:text="@string/rp_character_active_badge"
+            android:textColor="@color/xai_ink"
+            android:textFontWeight="600"
+            android:textSize="12sp"
+            android:visibility="gone"
+            app:drawableStartCompat="@drawable/rp_ic_dot"
+            app:layout_constraintStart_toStartOf="@id/rpCharacterAvatar"
+            app:layout_constraintTop_toTopOf="@id/rpCharacterAvatar" />
+
+        <ImageButton
+            android:id="@+id/rpCharacterMore"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/rp_bg_overflow_inset"
+            android:contentDescription="@string/rp_menu_edit"
+            android:padding="14dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_more_vert"
+            app:layout_constraintEnd_toEndOf="@id/rpCharacterAvatar"
+            app:layout_constraintTop_toTopOf="@id/rpCharacterAvatar"
+            app:tint="@color/white" />
+
+        <TextView
+            android:id="@+id/rpCharacterName"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="12dp"
-            android:orientation="vertical">
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginEnd="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textAppearance="@style/TextAppearance.Gradation.Headline"
+            android:textSize="16sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/rpCharacterAvatar" />
 
-            <TextView
-                android:id="@+id/rpCharacterName"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@color/xai_ink"
-                android:textSize="16sp"
-                android:textFontWeight="600"
-                android:maxLines="1"
-                android:ellipsize="end" />
-
-            <TextView
-                android:id="@+id/rpCharacterActive"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="@string/rp_character_active_badge"
-                android:textColor="@color/xai_ink"
-                android:textSize="12sp"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/rpCharacterSubtitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@color/xai_mute"
-                android:textSize="13sp"
-                android:maxLines="2"
-                android:ellipsize="end" />
-        </LinearLayout>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/rpCharacterActivateButton"
-            style="@style/Widget.Grokion.Button.Text"
-            android:layout_width="wrap_content"
+        <TextView
+            android:id="@+id/rpCharacterSubtitle"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="@string/rp_menu_start_chat" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/rpCharacterDeleteButton"
-            style="@style/Widget.Grokion.Button.Text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="@string/rp_menu_delete" />
-    </LinearLayout>
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginStart="76dp"
-        android:background="@color/xai_hairline" />
-</LinearLayout>
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="2dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="4dp"
+            android:ellipsize="end"
+            android:lines="2"
+            android:lineSpacingMultiplier="1.1"
+            android:textAppearance="@style/TextAppearance.Gradation.Footnote"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/rpCharacterName" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

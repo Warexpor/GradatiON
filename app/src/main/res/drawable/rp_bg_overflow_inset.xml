@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Overflow button on a card photo: 28dp neutral translucent disc inside a 44dp hit area -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:inset="8dp">
+    <shape android:shape="oval">
+        <solid android:color="#66000000" />
+    </shape>
+</inset>
