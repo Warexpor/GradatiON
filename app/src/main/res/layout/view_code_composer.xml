@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code composer: the chat capsule's shape. Pills on the left (agent / folder / approvals), send or stop on the right. -->
+<io.github.stardomains3.oxproxion.GlassLinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="12dp"
+    android:layout_marginTop="2dp"
+    android:layout_marginEnd="12dp"
+    android:layout_marginBottom="10dp"
+    android:orientation="vertical"
+    android:paddingStart="8dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="8dp"
+    android:paddingBottom="8dp"
+    app:glassCornerRadius="26dp"
+    app:glassElevation="6dp">
+
+    <EditText
+        android:id="@+id/codeComposerInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        android:gravity="top|start"
+        android:importantForAutofill="no"
+        android:inputType="textMultiLine|textCapSentences"
+        android:maxLines="6"
+        android:minHeight="44dp"
+        android:paddingStart="10dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="6dp"
+        android:textColor="@color/xai_ink"
+        android:textColorHighlight="@color/xai_text_highlight"
+        android:textColorHint="@color/xai_mute"
+        android:textCursorDrawable="@drawable/cursor_c"
+        android:textSize="16sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingTop="4dp">
+
+        <HorizontalScrollView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/codeComposerAgent"
+                    style="@style/Widget.Gradation.Code.Pill"
+                    android:contentDescription="@string/code_home_pick_agent"
+                    android:drawableEnd="@drawable/ic_expand_more" />
+
+                <TextView
+                    android:id="@+id/codeComposerFolder"
+                    style="@style/Widget.Gradation.Code.Pill"
+                    android:layout_marginStart="6dp"
+                    android:contentDescription="@string/code_home_pick_workspace"
+                    android:drawableStart="@drawable/ic_code_folder"
+                    android:drawableEnd="@drawable/ic_expand_more" />
+
+                <TextView
+                    android:id="@+id/codeComposerPermission"
+                    style="@style/Widget.Gradation.Code.Pill"
+                    android:layout_marginStart="6dp"
+                    android:contentDescription="@string/code_settings_permission"
+                    android:drawableStart="@drawable/ic_code_shield"
+                    android:drawableEnd="@drawable/ic_expand_more" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/codeComposerSend"
+            style="@style/Widget.Grokion.IconButton.Filled"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_send_pill"
+            android:contentDescription="@string/cd_code_send"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:padding="0dp"
+            app:backgroundTint="@null"
+            app:cornerRadius="19dp"
+            app:icon="@drawable/ic_send"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="20dp"
+            app:iconTint="@color/send_icon_tint" />
+    </LinearLayout>
+</io.github.stardomains3.oxproxion.GlassLinearLayout>

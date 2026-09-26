@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/codeWorkingText"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp"
+    android:text="@string/code_session_working"
+    android:textColor="@color/xai_mute"
+    android:textSize="15sp"
+    android:textFontWeight="500" />

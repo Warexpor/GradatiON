@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Selectable capsule (agent choice): tonal, darker when selected, check-free like iOS segmented pills -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Gradation.Code.Pill"
+    android:layout_width="wrap_content"
+    android:layout_height="36dp"
+    android:background="@drawable/bg_code_choice"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp" />

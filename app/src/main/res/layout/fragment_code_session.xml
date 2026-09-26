@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code session: transcript scrolls under floating liquid-glass chrome (same shape as the chat screen) -->
+<io.github.stardomains3.oxproxion.SwipeNavLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/codeSessionRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/xai_canvas"
+    android:clickable="true"
+    android:focusable="true">
+
+    <FrameLayout
+        android:id="@+id/codeSessionFrame"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fitsSystemWindows="true">
+
+        <io.github.stardomains3.oxproxion.GlassBackdropLayout
+            android:id="@+id/codeSessionBackdrop"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/codeTranscript"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:overScrollMode="never"
+                android:paddingBottom="120dp"
+                android:paddingTop="72dp"
+                android:scrollbars="none" />
+        </io.github.stardomains3.oxproxion.GlassBackdropLayout>
+
+        <!-- Top: back · title · options, floating over a scroll-edge fade -->
+        <FrameLayout
+            android:id="@+id/codeSessionTop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:background="@drawable/bg_code_top_edge"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:paddingBottom="14dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:gravity="center_vertical"
+                android:minHeight="56dp"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="12dp">
+
+                <io.github.stardomains3.oxproxion.GlassIconButton
+                    android:id="@+id/codeSessionBack"
+                    style="@style/Widget.Grokion.IconButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="@string/cd_code_back"
+                    android:insetLeft="0dp"
+                    android:insetTop="0dp"
+                    android:insetRight="0dp"
+                    android:insetBottom="0dp"
+                    android:padding="0dp"
+                    app:backgroundTint="@android:color/transparent"
+                    app:glassElevation="4dp"
+                    app:glassInteractive="true"
+                    app:glassTint="@color/glass_control_tint"
+                    app:icon="@drawable/is_backarrow"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp"
+                    app:iconSize="22dp"
+                    app:iconTint="@color/xai_ink" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:id="@+id/codeSessionTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:singleLine="true"
+                        android:textColor="@color/xai_ink"
+                        android:textSize="16sp"
+                        android:textFontWeight="600" />
+
+                    <TextView
+                        android:id="@+id/codeSessionSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:drawablePadding="6dp"
+                        android:ellipsize="middle"
+                        android:gravity="center_vertical"
+                        android:singleLine="true"
+                        android:textColor="@color/xai_mute"
+                        android:textSize="12.5sp" />
+                </LinearLayout>
+
+                <io.github.stardomains3.oxproxion.GlassIconButton
+                    android:id="@+id/codeSessionMore"
+                    style="@style/Widget.Grokion.IconButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="@string/code_session_more"
+                    android:insetLeft="0dp"
+                    android:insetTop="0dp"
+                    android:insetRight="0dp"
+                    android:insetBottom="0dp"
+                    android:padding="0dp"
+                    app:backgroundTint="@android:color/transparent"
+                    app:glassElevation="4dp"
+                    app:glassInteractive="true"
+                    app:glassTint="@color/glass_control_tint"
+                    app:icon="@drawable/ic_more_vert"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp"
+                    app:iconSize="20dp"
+                    app:iconTint="@color/xai_ink" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="110dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_composer_fade"
+            android:importantForAccessibility="no" />
+
+        <LinearLayout
+            android:id="@+id/codeSessionDock"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical">
+
+            <!-- Offline banner: glass capsule over the transcript -->
+            <io.github.stardomains3.oxproxion.GlassTextView
+                android:id="@+id/codeSessionBanner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:layout_marginBottom="8dp"
+                android:gravity="center"
+                android:paddingStart="16dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="8dp"
+                android:textColor="@color/xai_ink"
+                android:textSize="13sp"
+                android:visibility="gone"
+                app:glassCornerRadius="18dp"
+                app:glassTint="@color/glass_control_tint" />
+
+            <include
+                android:id="@+id/codeSessionComposer"
+                layout="@layout/view_code_composer" />
+        </LinearLayout>
+    </FrameLayout>
+</io.github.stardomains3.oxproxion.SwipeNavLayout>

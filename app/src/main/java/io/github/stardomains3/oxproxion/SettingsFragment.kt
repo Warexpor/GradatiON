@@ -37,5 +37,13 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
             .setOnClickListener { openSection(SettingsDetailFragment.SECTION_ADVANCED) }
         view.findViewById<View>(R.id.settingsRowData)
             .setOnClickListener { openSection(SettingsDetailFragment.SECTION_DATA) }
+        view.findViewById<View>(R.id.settingsRowCode).setOnClickListener {
+            parentFragmentManager.beginTransaction()
+                .withGrokStackAnimations()
+                .hide(this)
+                .add(R.id.fragment_container, io.github.stardomains3.oxproxion.code.CodeSettingsFragment())
+                .addToBackStack(null)
+                .commit()
+        }
     }
 }

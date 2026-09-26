@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code mode tokens (light). Neutral only (R=G=B): diffs read by fill depth and weight, not hue. -->
+<resources>
+    <color name="code_block_bg">#FFE9E9E9</color>
+    <color name="code_card_bg">#FFF9F9F9</color>
+    <color name="code_diff_add_bg">#17000000</color>
+    <color name="code_diff_del_bg">#B3FFFFFF</color>
+    <color name="code_diff_hunk_bg">#0A000000</color>
+    <color name="code_diff_gutter">#FFB2B2B2</color>
+    <color name="code_status_on">#FF1B1B1B</color>
+    <color name="code_status_off">#FFB2B2B2</color>
+    <color name="code_badge_bg">#FF1B1B1B</color>
+    <color name="code_badge_fg">#FFF1F1F1</color>
+</resources>

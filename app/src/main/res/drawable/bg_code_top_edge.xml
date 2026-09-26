@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Scroll edge under the session's two-line title: solid behind the text, dissolving below it -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="@color/xai_canvas"
+        android:centerColor="@color/xai_canvas"
+        android:centerY="0.62"
+        android:endColor="@color/grad_fade_clear" />
+</shape>

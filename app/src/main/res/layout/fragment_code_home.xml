@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code tab: machine, sessions, and a composer that starts a new session. Lives under the
+     chat screen's floating top bar (the Chat / Roleplay / Code tabs stay where they are). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/codeHomeRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/xai_canvas">
+
+    <io.github.stardomains3.oxproxion.GlassBackdropLayout
+        android:id="@+id/codeHomeBackdrop"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/codeHomeList"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:overScrollMode="never"
+            android:paddingBottom="150dp"
+            android:paddingTop="72dp"
+            android:scrollbars="none" />
+    </io.github.stardomains3.oxproxion.GlassBackdropLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="130dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_composer_fade"
+        android:importantForAccessibility="no" />
+
+    <include
+        android:id="@+id/codeHomeComposer"
+        layout="@layout/view_code_composer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="10dp" />
+</FrameLayout>

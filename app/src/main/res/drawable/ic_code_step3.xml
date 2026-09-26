@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Onboarding step marker 3: outlined disc, number drawn as strokes -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="26dp" android:height="26dp">
+        <shape android:shape="oval">
+            <solid android:color="@color/xai_canvas_mid" />
+        </shape>
+    </item>
+    <item android:width="26dp" android:height="26dp" android:drawable="@drawable/ic_code_num3" />
+</layer-list>

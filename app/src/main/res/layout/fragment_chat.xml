@@ -642,6 +642,13 @@
                 android:focusableInTouchMode="false" />
         </FrameLayout>
 
+        <!-- Code mode home (child fragment), shown instead of the chat when the Code tab is selected -->
+        <FrameLayout
+            android:id="@+id/codeModeContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
         <!-- ── Top bar: history | mode · model | new chat, as floating liquid-glass controls
              (iOS 26). No bar: the transcript dissolves under a scroll-edge fade that appears
              once content is beneath it. ── -->
@@ -752,6 +759,13 @@
                         android:id="@+id/tabRoleplay"
                         style="@style/Gradation.ModeTab"
                         android:text="@string/mode_tab_roleplay" />
+
+                    <!-- Third tab, only when Code mode is on in Settings (see code/CodeModeHost) -->
+                    <TextView
+                        android:id="@+id/tabCode"
+                        style="@style/Gradation.ModeTab"
+                        android:text="@string/mode_tab_code"
+                        android:visibility="gone" />
                 </LinearLayout>
 
                 <View

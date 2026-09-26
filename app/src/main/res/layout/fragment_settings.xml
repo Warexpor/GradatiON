@@ -120,6 +120,33 @@
                     app:iconSize="22dp"
                     app:iconTint="@color/xai_ink"
                     app:rippleColor="@color/press_ripple_none" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginStart="54dp"
+                    android:layout_marginEnd="0dp"
+                    android:background="@color/xai_hairline" />
+
+                <!-- Code mode: third tab for driving coding agents on your machines (code/CodeSettingsFragment) -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/settingsRowCode"
+                    style="@style/Widget.Grokion.Button.Text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="start|center_vertical"
+                    android:minHeight="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="@string/settings_section_code"
+                    android:textColor="@color/xai_ink"
+                    android:textSize="16sp"
+                    app:icon="@drawable/ic_code_terminal"
+                    app:iconGravity="start"
+                    app:iconPadding="16dp"
+                    app:iconSize="22dp"
+                    app:iconTint="@color/xai_ink"
+                    app:rippleColor="@color/press_ripple_none" />
             </LinearLayout>
 
             <TextView

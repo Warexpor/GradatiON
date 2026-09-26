@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code home, no sessions yet: a quiet prompt, like the chat start screen -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingStart="36dp"
+    android:paddingTop="96dp"
+    android:paddingEnd="36dp"
+    android:paddingBottom="24dp">
+
+    <ImageView
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_code_terminal"
+        app:tint="@color/xai_mute" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:text="@string/code_home_greeting"
+        android:textAppearance="@style/TextAppearance.Gradation.Title" />
+
+    <TextView
+        android:id="@+id/codeHeroSubtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.2"
+        android:textAppearance="@style/TextAppearance.Gradation.Footnote"
+        android:textSize="15sp" />
+</LinearLayout>

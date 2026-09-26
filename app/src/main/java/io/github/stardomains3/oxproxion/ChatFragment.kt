@@ -191,6 +191,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var tabChat: TextView
     private lateinit var tabRoleplay: TextView
     private lateinit var modeTabIndicator: View
+    private lateinit var codeMode: io.github.stardomains3.oxproxion.code.CodeModeHost
     private lateinit var chatRecyclerView: RecyclerView
     private lateinit var chatEditText: EditText
     private lateinit var extBG: LinearLayout
@@ -848,8 +849,23 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
         }
-        tabChat.setOnClickListener { switchMode(ChatMode.ASK) }
-        tabRoleplay.setOnClickListener { switchMode(ChatMode.RP) }
+        // Code mode (third tab, off unless enabled in Settings) lives in its own package; see CodeModeHost.
+        codeMode = io.github.stardomains3.oxproxion.code.CodeModeHost(this, view)
+        codeMode.onTabsChanged = {
+            val rp = viewModel.isRpMode()
+            tabChat.isSelected = !codeMode.isActive && !rp
+            tabRoleplay.isSelected = !codeMode.isActive && rp
+            placeModeTabIndicator(animate = true)
+        }
+        codeMode.tab.setOnClickListener {
+            if (!codeMode.isActive) {
+                it.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                hideKeyboard()
+                codeMode.activate()
+            }
+        }
+        tabChat.setOnClickListener { codeMode.deactivate(); switchMode(ChatMode.ASK) }
+        tabRoleplay.setOnClickListener { codeMode.deactivate(); switchMode(ChatMode.RP) }
         tabRoleplay.setOnLongClickListener {
             openRpHub()
             true
@@ -858,7 +874,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val retab = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             modeTabIndicator.post { placeModeTabIndicator(animate = false) }
         }
-        listOf(tabChat, tabRoleplay, modeTabIndicator, view.findViewById<View>(R.id.modeTabs)).forEach { it.addOnLayoutChangeListener(retab) }
+        listOf(tabChat, tabRoleplay, codeMode.tab, modeTabIndicator, view.findViewById<View>(R.id.modeTabs)).forEach { it.addOnLayoutChangeListener(retab) }
 
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -2313,6 +2329,7 @@ $cleanContent
             fontSizeControlsContainer.visibility = View.GONE
         }
         newChatButton.setOnClickListener {
+            if (codeMode.isActive) return@setOnClickListener codeMode.onNewPressed()
             resetChatButton.performClick()
         }
         newChatButton.setOnLongClickListener {
@@ -2337,6 +2354,7 @@ $cleanContent
 
         openSavedChatsButton.setOnClickListener {
             hideKeyboard()
+            if (codeMode.isActive) return@setOnClickListener codeMode.onMenuPressed()
             openHistoryPanel()
         }
 
@@ -3771,6 +3789,7 @@ $cleanContent
         super.onHiddenChanged(hidden)
         if (hidden) pickerPopover?.dismiss(animated = false)
         if (!hidden) {  // Fragment is now visible
+            if (::codeMode.isInitialized) codeMode.refresh()
             updateSystemMessageButtonState()
            // chatEditText.requestFocus()
             viewModel.checkAdvancedReasoningStatus()
@@ -3786,6 +3805,7 @@ $cleanContent
     }
     override fun onResume() {
         super.onResume()
+        if (::codeMode.isInitialized) codeMode.refresh()
         updateSystemMessageButtonState()
         viewModel.isStreamingEnabled.value?.let { updateStreamToggleAppearance(it) }
        // chatEditText.requestFocus()
@@ -3852,6 +3872,8 @@ $cleanContent
                 content.performHapticFeedback(android.view.HapticFeedbackConstants.GESTURE_END)
                 val rp = viewModel.isRpMode()
                 when {
+                    codeMode.isActive -> if (direction > 0) tabRoleplay.performClick()
+                    direction < 0 && rp && codeMode.tab.isVisible -> codeMode.tab.performClick()
                     direction > 0 && rp -> tabChat.performClick()
                     direction > 0 -> { hideKeyboard(); openHistoryPanel() }
                     !rp -> tabRoleplay.performClick()
@@ -4084,6 +4106,7 @@ $cleanContent
     }
 
     fun onBackPressed(): Boolean {
+        if (::codeMode.isInitialized && codeMode.onBackPressed()) return true
         if (historyDrawerContainer?.visibility == View.VISIBLE) {
             closeHistoryPanel()
             return true
@@ -5220,7 +5243,11 @@ $cleanContent
      */
     private fun placeModeTabIndicator(animate: Boolean) {
         if (!::modeTabIndicator.isInitialized) return
-        val tab = if (tabRoleplay.isSelected) tabRoleplay else tabChat
+        val tab = when {
+            ::codeMode.isInitialized && codeMode.isActive -> codeMode.tab
+            tabRoleplay.isSelected -> tabRoleplay
+            else -> tabChat
+        }
         if (tab.width == 0 || modeTabIndicator.width == 0) return
         val row = tab.parent as View
         val textW = tab.paint.measureText(tab.text.toString())
@@ -5258,6 +5285,7 @@ $cleanContent
         chatAdapter.isRpMode = rp
         tabChat.isSelected = !rp
         tabRoleplay.isSelected = rp
+        if (::codeMode.isInitialized) codeMode.selectTabs()
         placeModeTabIndicator(animate = true)
         bindEmptyState(rp)
         systemMessageButton.visibility = if (rp) View.GONE else View.VISIBLE

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code transcript: a file change. Path + counts, first lines of the diff, tap for the full viewer -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="6dp">
+
+    <LinearLayout
+        android:id="@+id/codeDiffCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_code_card"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="@drawable/bg_press_svg"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_code_file"
+                app:tint="@color/xai_mute" />
+
+            <TextView
+                android:id="@+id/codeDiffPath"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:ellipsize="start"
+                android:singleLine="true"
+                android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+                android:textColor="@color/xai_ink"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/codeDiffCounts"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+                android:textColor="@color/xai_ink"
+                android:textSize="12.5sp" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/xai_hairline" />
+
+        <io.github.stardomains3.oxproxion.code.DiffView
+            android:id="@+id/codeDiffLines"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/codeDiffMore"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:gravity="center"
+            android:textColor="@color/xai_mute"
+            android:textSize="13sp"
+            android:textFontWeight="600" />
+    </LinearLayout>
+</FrameLayout>

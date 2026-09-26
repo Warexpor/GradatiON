@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code transcript: the agent is waiting on you. Collapses to one line once answered. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="8dp">
+
+    <LinearLayout
+        android:id="@+id/codeApprovalCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_code_approval"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_code_shield"
+                app:tint="@color/xai_ink" />
+
+            <TextView
+                android:id="@+id/codeApprovalTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp"
+                android:textFontWeight="600" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/codeApprovalWhat"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="@color/xai_body"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/codeApprovalDetail"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_code_block"
+            android:maxLines="6"
+            android:ellipsize="end"
+            android:padding="12dp"
+            android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+            android:textColor="@color/xai_body" />
+
+        <LinearLayout
+            android:id="@+id/codeApprovalButtons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="end"
+            android:orientation="horizontal" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/codeApprovalDone"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/codeApprovalDoneIcon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:importantForAccessibility="no"
+            app:tint="@color/xai_mute" />
+
+        <TextView
+            android:id="@+id/codeApprovalDoneText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/xai_mute"
+            android:textSize="14sp" />
+    </LinearLayout>
+</FrameLayout>

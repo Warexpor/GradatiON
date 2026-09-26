@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code transcript: reasoning, one quiet line that opens to the full thought -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="18dp"
+    android:paddingEnd="18dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
+
+    <LinearLayout
+        android:id="@+id/codeThoughtHeader"
+        android:layout_width="wrap_content"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_press_svg"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_code_bulb"
+            app:tint="@color/xai_mute" />
+
+        <TextView
+            android:id="@+id/codeThoughtLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="@string/code_session_thinking"
+            android:textColor="@color/xai_mute"
+            android:textSize="14sp"
+            android:textFontWeight="500" />
+
+        <ImageView
+            android:id="@+id/codeThoughtChevron"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_marginStart="4dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_chevron_right"
+            app:tint="@color/xai_tertiary" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/codeThoughtText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
+        android:paddingBottom="4dp"
+        android:visibility="gone"
+        android:textColor="@color/xai_mute"
+        android:textSize="14sp"
+        android:lineSpacingMultiplier="1.3"
+        android:textIsSelectable="true" />
+</LinearLayout>

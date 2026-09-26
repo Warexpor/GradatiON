@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code mode tokens (dark). Neutral only (R=G=B). -->
+<resources>
+    <color name="code_block_bg">#FF0B0B0B</color>
+    <color name="code_card_bg">#FF181818</color>
+    <color name="code_diff_add_bg">#1CFFFFFF</color>
+    <color name="code_diff_del_bg">#73000000</color>
+    <color name="code_diff_hunk_bg">#0DFFFFFF</color>
+    <color name="code_diff_gutter">#FF575757</color>
+    <color name="code_status_on">#FFECECEC</color>
+    <color name="code_status_off">#FF575757</color>
+    <color name="code_badge_bg">#FFECECEC</color>
+    <color name="code_badge_fg">#FF111111</color>
+</resources>

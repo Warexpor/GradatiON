@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Choice capsule: quiet when off, ink rim when chosen -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:enterFadeDuration="90"
+    android:exitFadeDuration="160">
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/model_pill_pressed" />
+            <stroke android:width="1.5dp" android:color="@color/xai_ink" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/model_pill_pressed" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/xai_send_disabled" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+</selector>

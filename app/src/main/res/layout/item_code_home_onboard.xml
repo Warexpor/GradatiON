@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code home, no machine yet: what this is, three steps, add one or try the demo -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="40dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="16dp">
+
+    <ImageView
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center_horizontal"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_code_terminal"
+        app:tint="@color/xai_ink" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:gravity="center"
+        android:text="@string/code_home_onboard_title"
+        android:textAppearance="@style/TextAppearance.Gradation.Title" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.2"
+        android:text="@string/code_home_onboard_body"
+        android:textAppearance="@style/TextAppearance.Gradation.Footnote"
+        android:textSize="15sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:background="@drawable/bg_code_card"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            style="@style/Widget.Gradation.Code.Step"
+            android:text="@string/code_home_onboard_step1"
+            app:drawableStartCompat="@drawable/ic_code_step1" />
+
+        <TextView
+            style="@style/Widget.Gradation.Code.Step"
+            android:text="@string/code_home_onboard_step2"
+            app:drawableStartCompat="@drawable/ic_code_step2" />
+
+        <TextView
+            style="@style/Widget.Gradation.Code.Step"
+            android:text="@string/code_home_onboard_step3"
+            app:drawableStartCompat="@drawable/ic_code_step3" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/codeOnboardDemo"
+            style="@style/Widget.Gradation.Code.Button"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="@string/code_home_try_demo" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/codeOnboardAdd"
+            style="@style/Widget.Gradation.Code.Button.Lead"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:text="@string/code_home_add_machine" />
+    </LinearLayout>
+</LinearLayout>
