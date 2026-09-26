@@ -28,7 +28,7 @@
     <string name="grok_history_import">Import</string>
     <string name="grok_history_export">Export</string>
     <string name="grok_history_more">More</string>
-    <string name="grok_ask_tab">Ask</string>
+    <string name="grok_ask_tab">Chat</string>
     <string name="settings_group_app">App</string>
     <string name="settings_group_grok">AI</string>
     <string name="settings_group_voice">Voice</string>
@@ -108,7 +108,7 @@
     <string name="settings_advanced_reasoning">Advanced Reasoning</string>
     <string name="settings_licenses">Third-Party Licenses</string>
     <string name="settings_gradation_rp">GradatiON RP</string>
-    <string name="rp_mode_ask">Ask</string>
+    <string name="rp_mode_ask">Chat</string>
     <string name="rp_mode_rp">RP</string>
     <string name="rp_hub_title">GradatiON RP</string>
     <string name="rp_characters_title">Characters</string>
@@ -205,12 +205,12 @@
     <string name="rp_discard_edits_title">Discard edits?</string>
     <string name="rp_discard_edits_body">You have unsaved changes. Leave without saving?</string>
     <string name="rp_discard_edits_confirm">Discard</string>
-    <string name="rp_mode_chip_a11y">Ask or RP mode. Long-press for GradatiON RP hub</string>
+    <string name="rp_mode_chip_a11y">Chat or Roleplay mode. Long-press for the roleplay home</string>
     <string name="rp_llm_chip">LLM</string>
     <string name="rp_history_empty">No RP chats yet</string>
     <string name="rp_history_empty_text">Start a character chat to see it here.</string>
-    <string name="history_mode_ask">Ask conversations</string>
-    <string name="history_mode_rp">RP conversations</string>
+    <string name="history_mode_ask">Chat conversations</string>
+    <string name="history_mode_rp">Roleplay conversations</string>
     <string name="rp_attachments_disabled">Attachments are disabled in RP mode</string>
     <string name="rp_lang_en">English</string>
     <string name="rp_lang_ru">Russian</string>

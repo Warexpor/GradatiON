@@ -1175,7 +1175,7 @@
                         android:paddingStart="14dp"
                         android:paddingEnd="10dp"
                         android:textColor="@color/xai_ink"
-                        android:textSize="14sp"
+                        android:textSize="15sp"
                         android:textFontWeight="600"
                         android:drawablePadding="4dp"
                         android:drawableTint="@color/xai_body"

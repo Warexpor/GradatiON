@@ -75,7 +75,7 @@
             android:ellipsize="end"
             android:singleLine="true"
             android:textColor="@color/xai_mute"
-            android:textSize="13sp"
+            android:textSize="13.5sp"
             android:fontFamily="@font/app_sans" />
     </LinearLayout>
 
