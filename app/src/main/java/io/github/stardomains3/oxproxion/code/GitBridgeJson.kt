@@ -11,11 +11,15 @@ import kotlinx.serialization.json.longOrNull
 /**
  * Parses `bridge/gitStatus` / `bridge/diff` JSON results. Pure and unit-tested so the
  * [BridgeBackend] wire path stays thin.
+ *
+ * Null or non-object [result] throws so Hub `runCatching` surfaces a failed UI.
+ * `{}` and missing optional fields stay empty success.
  */
 object GitBridgeJson {
 
     fun parseStatus(result: JsonElement?): GitStatusResult {
-        val o = result as? JsonObject ?: return emptyStatus()
+        val o = result as? JsonObject
+            ?: throw IllegalStateException("bridge/gitStatus result is not an object")
         val files = (o["files"] as? JsonArray)?.mapNotNull { e ->
             val f = e as? JsonObject ?: return@mapNotNull null
             val path = (f["path"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
@@ -31,7 +35,8 @@ object GitBridgeJson {
     }
 
     fun parseDiff(result: JsonElement?): GitDiffResult {
-        val o = result as? JsonObject ?: return GitDiffResult("")
+        val o = result as? JsonObject
+            ?: throw IllegalStateException("bridge/diff result is not an object")
         return GitDiffResult((o["unified"] as? JsonPrimitive)?.contentOrNull.orEmpty())
     }
 
@@ -48,6 +53,4 @@ object GitBridgeJson {
         val p = o[key] as? JsonPrimitive ?: return 0
         return p.intOrNull ?: p.longOrNull?.toInt() ?: p.contentOrNull?.toIntOrNull() ?: 0
     }
-
-    private fun emptyStatus() = GitStatusResult("", 0, 0, emptyList())
 }

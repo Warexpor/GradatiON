@@ -11,11 +11,16 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import io.github.stardomains3.oxproxion.AppToast
 import io.github.stardomains3.oxproxion.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Full unified diff for one working-tree path (`bridge/diff`). Actions ask the agent
  * to commit or revert via [CodeHub.prompt], not raw git.
+ *
+ * Parse + counts run on [Dispatchers.Default]; bind on Main. Large diffs are capped
+ * at [MAX_LINES] with a truncated subtitle hint so measure/layout stay bounded.
  */
 class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
 
@@ -41,7 +46,8 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
             ask(getString(R.string.code_changes_prompt_revert, path))
         }
 
-        hint.isVisible = false
+        hint.text = getString(R.string.code_changes_diff_loading)
+        hint.isVisible = true
         actions.isVisible = false
         viewLifecycleOwner.lifecycleScope.launch {
             val result = hub.diffResult(sessionId, path)
@@ -57,12 +63,24 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
                 actions.isVisible = true
                 return@launch
             }
-            val lines = Diff.parseUnified(unified)
-            val (add, del) = Diff.counts(lines)
-            toolbar.subtitle = "${path.substringBeforeLast('/', "").ifBlank { "." }}  ·  " +
-                getString(R.string.code_diff_counts, add, del)
+            val parsed = withContext(Dispatchers.Default) {
+                val all = Diff.parseUnified(unified)
+                val (add, del) = Diff.counts(all)
+                val truncated = all.size > MAX_LINES
+                val shown = if (truncated) all.take(MAX_LINES) else all
+                ParsedDiff(shown, add, del, truncated)
+            }
+            val dir = path.substringBeforeLast('/', "").ifBlank { "." }
+            val counts = getString(R.string.code_diff_counts, parsed.add, parsed.del)
+            toolbar.subtitle = if (parsed.truncated) {
+                "$dir  ·  $counts  ·  " + getString(R.string.code_changes_diff_truncated, MAX_LINES)
+            } else {
+                "$dir  ·  $counts"
+            }
+            diffView.maxLines = MAX_LINES
             diffView.wrapWidth = false
-            diffView.lines = lines
+            diffView.lines = parsed.lines
+            hint.isVisible = false
             actions.isVisible = true
         }
     }
@@ -75,9 +93,18 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
         parentFragmentManager.popBackStack(CodeSessionFragment.BACK_STACK_TAG, 0)
     }
 
+    private data class ParsedDiff(
+        val lines: List<DiffLine>,
+        val add: Int,
+        val del: Int,
+        val truncated: Boolean
+    )
+
     companion object {
         private const val ARG_SESSION = "session"
         private const val ARG_PATH = "path"
+        /** Cap rendered lines so Main measure/layout stays bounded for huge working-tree patches. */
+        private const val MAX_LINES = 2000
 
         fun newInstance(sessionId: String, path: String) =
             CodeGitDiffFragment().apply {

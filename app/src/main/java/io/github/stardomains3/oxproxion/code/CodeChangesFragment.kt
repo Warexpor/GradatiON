@@ -52,7 +52,9 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
     }
 
     private fun reload() {
-        hint.isVisible = false
+        hint.text = getString(R.string.code_changes_loading)
+        hint.isVisible = true
+        toolbar.menu.findItem(R.id.action_ask_commit)?.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
             val result = hub.gitStatusResult(sessionId)
             val status = result.getOrNull()

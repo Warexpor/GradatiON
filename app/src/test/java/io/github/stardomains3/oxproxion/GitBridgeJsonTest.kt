@@ -5,6 +5,7 @@ import io.github.stardomains3.oxproxion.code.GitFileStatus
 import io.github.stardomains3.oxproxion.code.GitStatusResult
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -37,14 +38,36 @@ class GitBridgeJsonTest {
     @Test fun parseStatusToleratesMissingFields() {
         val s = GitBridgeJson.parseStatus(json.parseToJsonElement("{}"))
         assertEquals(GitStatusResult("", 0, 0, emptyList()), s)
-        assertEquals(GitStatusResult("", 0, 0, emptyList()), GitBridgeJson.parseStatus(null))
+    }
+
+    @Test fun parseStatusRejectsNullOrNonObject() {
+        assertThrows(IllegalStateException::class.java) {
+            GitBridgeJson.parseStatus(null)
+        }
+        assertThrows(IllegalStateException::class.java) {
+            GitBridgeJson.parseStatus(json.parseToJsonElement("\"ok\""))
+        }
+        assertThrows(IllegalStateException::class.java) {
+            GitBridgeJson.parseStatus(json.parseToJsonElement("[]"))
+        }
     }
 
     @Test fun parseDiffReadsUnified() {
         val el = json.parseToJsonElement("""{"unified":"@@ -1 +1 @@\n-a\n+b\n"}""")
         assertEquals("@@ -1 +1 @@\n-a\n+b\n", GitBridgeJson.parseDiff(el).unified)
-        assertEquals("", GitBridgeJson.parseDiff(null).unified)
         assertEquals("", GitBridgeJson.parseDiff(json.parseToJsonElement("{}")).unified)
+    }
+
+    @Test fun parseDiffRejectsNullOrNonObject() {
+        assertThrows(IllegalStateException::class.java) {
+            GitBridgeJson.parseDiff(null)
+        }
+        assertThrows(IllegalStateException::class.java) {
+            GitBridgeJson.parseDiff(json.parseToJsonElement("\"diff\""))
+        }
+        assertThrows(IllegalStateException::class.java) {
+            GitBridgeJson.parseDiff(json.parseToJsonElement("[1]"))
+        }
     }
 
     @Test fun statusLetterPrefersWorkTreeThenIndex() {
