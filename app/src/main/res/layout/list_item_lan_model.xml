@@ -28,7 +28,7 @@
 
         <TextView
             android:id="@+id/textModelName"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Model ID"
             android:textSize="16sp"
@@ -40,7 +40,7 @@
 
         <TextView
             android:id="@+id/textModelDisplayName"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:text="Model Name"
