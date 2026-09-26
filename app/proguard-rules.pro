@@ -23,3 +23,11 @@
 -dontwarn org.commonmark.ext.gfm.strikethrough.Strikethrough
 -keep class net.zetetic.** { *; }
 -keep class net.sqlcipher.** { *; }
+# Drawables inflated from XML via <drawable class="..."> are looked up by
+# reflection (Drawable.createFromXml -> Class.forName + no-arg ctor). R8 can't
+# see that, so keep every app Drawable subclass by name. Without this the
+# release build crashes opening any glass popup, sheet or dialog.
+-keep public class io.github.stardomains3.oxproxion.** extends android.graphics.drawable.Drawable {
+    public <init>();
+    public void inflate(...);
+}
