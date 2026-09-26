@@ -248,7 +248,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_haptic_buttons"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/hapticButtonsSwitch"
@@ -278,7 +280,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_haptic_responding"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/hapticRespondingSwitch"
@@ -347,7 +351,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_trust_lan_tls"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/trustSelfSignedLanSwitch"
@@ -697,7 +703,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_chat_memory"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/chatMemoryButton"
@@ -770,7 +778,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_power_tools_bar"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/powerToolsBarSwitch"
@@ -800,7 +810,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_expandable_input"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/expandableInputSwitch"
@@ -830,7 +842,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_scroll_buttons"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/scrollButtonsSwitch"
@@ -860,7 +874,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_scroll_progress"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/scrollProgressSwitch"
@@ -891,7 +907,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_volume_scroll"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/volumeScrollSwitch"
@@ -921,7 +939,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_presets_on_chat"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/presetsExtendedSwitch"
@@ -951,7 +971,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_animate_border"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/animateBarOnErrorSwitch"
@@ -982,7 +1004,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_citations"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/showCitationsSwitch"
@@ -1012,7 +1036,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_openrouter_transform"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/openRouterTransformsSwitch"
@@ -1042,7 +1068,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_auto_disable_web"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/autoDisableWebSearchSwitch"
@@ -1086,7 +1114,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_biometrics"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/biometricsSwitch"
@@ -1116,7 +1146,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_notifications"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/notificationsSwitch"
@@ -1147,7 +1179,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_copy_instead_dismiss"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/copyOrdismissSwitch"
@@ -1177,7 +1211,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_copy_instead_open"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/copyOropenSwitch"
@@ -1207,7 +1243,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_keep_screen_on"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/keepScreenOnSwitch"
@@ -1237,7 +1275,9 @@
                             android:layout_weight="1"
                             android:text="@string/settings_destructive_file_tools"
                             android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/allowDestructiveToolsSwitch"
