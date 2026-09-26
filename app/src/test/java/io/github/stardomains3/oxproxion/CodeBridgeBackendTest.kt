@@ -52,6 +52,7 @@ class CodeBridgeBackendTest {
     }
 
     private class FakeTransport : CodeTransport {
+        private val json = Json { ignoreUnknownKeys = true }
         private val _state = MutableStateFlow(ConnectionState.DISCONNECTED)
         override val state: StateFlow<ConnectionState> = _state
         private val _incoming = MutableSharedFlow<String>(
@@ -109,7 +110,7 @@ class CodeBridgeBackendTest {
         fun replyToPending(methodFilter: (String) -> Boolean, resultJson: String = "{}") {
             val frame = sent.lastOrNull { methodFilter(methodOf(it)) } ?: return
             val id = json.parseToJsonElement(frame).jsonObject["id"]!!.jsonPrimitive.longOrNull ?: return
-            runBlocking { deliver("""{"jsonrpc":"2.0","id":$id,"result":$resultJson}""") }
+            check(_incoming.tryEmit("""{"jsonrpc":"2.0","id":$id,"result":$resultJson}"""))
         }
 
         private fun methodOf(frame: String): String =
