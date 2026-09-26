@@ -458,8 +458,8 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|center_horizontal"
                 android:layout_marginBottom="12dp"
-                app:cardCornerRadius="18dp"
-                app:cardBackgroundColor="@color/xai_canvas_card"
+                app:cardCornerRadius="24dp"
+                app:cardBackgroundColor="@android:color/transparent"
                 app:cardElevation="0dp"
                 android:visibility="gone"
                 tools:visibility="gone">
