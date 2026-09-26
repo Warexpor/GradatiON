@@ -143,6 +143,7 @@ class RpPersonaFragment : Fragment() {
             setDropDownViewResource(R.layout.item_rp_spinner)
         }
         deletePresetButton.visibility = if (presets.isEmpty()) View.GONE else View.VISIBLE
+        view?.findViewById<View>(R.id.rpPersonaDeleteDivider)?.visibility = deletePresetButton.visibility
         presetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             private var ignoreNext = true
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, v: View?, position: Int, id: Long) {

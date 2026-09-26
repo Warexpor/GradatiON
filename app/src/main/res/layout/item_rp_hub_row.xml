@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Grouped row for the RP hub: icon, label, trailing value, chevron -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_press_svg"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:minHeight="52dp"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingEnd="14dp">
+
+    <ImageView
+        android:id="@+id/rpHubRowIcon"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        app:tint="@color/xai_ink" />
+
+    <TextView
+        android:id="@+id/rpHubRowTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAppearance="@style/TextAppearance.Gradation.Body"
+        android:textColor="@color/xai_ink" />
+
+    <TextView
+        android:id="@+id/rpHubRowValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:ellipsize="end"
+        android:maxWidth="140dp"
+        android:maxLines="1"
+        android:textAppearance="@style/TextAppearance.Gradation.Body"
+        android:textColor="@color/xai_mute"
+        android:textSize="15sp" />
+
+    <ImageView
+        android:id="@+id/rpHubRowChevron"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="6dp"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_chevron_right"
+        app:tint="@color/xai_tertiary" />
+</LinearLayout>

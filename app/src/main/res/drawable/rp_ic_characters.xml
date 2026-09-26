@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Two people: character library -->
+    <path
+        android:pathData="M9,11.5a3.5,3.5 0,1 0,0,-7a3.5,3.5 0,1 0,0,7z"
+        android:strokeColor="@color/xai_ink"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M2.8,19.5c0.6,-3 3.1,-5 6.2,-5s5.6,2 6.2,5"
+        android:strokeColor="@color/xai_ink"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M15.5,4.8a3.2,3.2 0,0 1,0,6.2"
+        android:strokeColor="@color/xai_ink"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M17.6,14.8c1.9,0.6 3.2,2.3 3.6,4.7"
+        android:strokeColor="@color/xai_ink"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>

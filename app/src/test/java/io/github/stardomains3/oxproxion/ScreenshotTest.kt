@@ -370,12 +370,69 @@ class ScreenshotTest {
         idle()
     }
 
-    @Test fun rpHubDark() = withChat { a, _ -> pushFragment(a, RpHubFragment()); snap(root(a), "rp_hub_dark") }
+    /** A small library so the RP screens show real cards; one character has a photo. */
+    private fun seedRp(withActive: Boolean = true) = runBlocking {
+        val ctx = ApplicationProvider.getApplicationContext<Application>()
+        val dao = db.rpDao()
+        val ids = listOf(
+            RpCharacter(name = "Mira Vance", personality = "A sharp-tongued starship mechanic who hides a soft heart behind grease and sarcasm.", greeting = "*wipes her hands* You again?"),
+            RpCharacter(name = "Professor Hale", personality = "Retired historian, endlessly curious, speaks in long digressions about forgotten empires."),
+            RpCharacter(name = "Kestrel", scenario = "A rain-soaked city where you hire a detective who owes you a favor."),
+            RpCharacter(name = "Ondine", personality = "Calm tide spirit. Answers in riddles, remembers every ship that sank."),
+            RpCharacter(name = "Theo", greeting = "Hey! You made it. Grab a seat, the coffee is terrible but free."),
+            RpCharacter(name = "Aurelia"),
+        ).map { dao.insertCharacter(it) }
+        // Grayscale portrait for the first character, saved where RpAvatarStorage keeps avatars.
+        val size = 256
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(0xFF3A3A3A.toInt())
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        paint.shader = android.graphics.LinearGradient(0f, 0f, 0f, size.toFloat(), 0xFF8C8C8C.toInt(), 0xFF2A2A2A.toInt(), android.graphics.Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, size.toFloat(), size.toFloat(), paint)
+        paint.shader = null
+        paint.color = 0xFFD6D6D6.toInt()
+        c.drawCircle(size / 2f, size * 0.42f, size * 0.2f, paint)
+        c.drawOval(size * 0.18f, size * 0.68f, size * 0.82f, size * 1.2f, paint)
+        val file = RpAvatarStorage.avatarFile(ctx, ids[0])
+        file.parentFile?.mkdirs()
+        file.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        dao.insertLorebook(RpLorebook(name = "Outer Rim", content = "Ports, pirates and old wars.", isActive = true))
+        val prefs = SharedPreferencesHelper(ctx)
+        prefs.saveRpActiveCharacterId(if (withActive) ids[0] else null)
+        prefs.saveRpPersona("Sam, a courier with a bad sense of direction.")
+    }
+
+    /** Room LiveData and Coil decode on real background threads; give them a moment. */
+    private fun settle() {
+        repeat(4) { Thread.sleep(250); idle() }
+    }
+
+    private fun rpScreen(name: String, seed: Boolean = true, f: () -> androidx.fragment.app.Fragment) = withChat { a, _ ->
+        if (seed) seedRp()
+        pushFragment(a, f()); settle(); snap(root(a), name)
+    }
+
+    @Test fun rpHubDark() = rpScreen("rp_hub_dark") { RpHubFragment() }
     @Test @Config(qualifiers = LIGHT)
-    fun rpHubLight() = withChat { a, _ -> pushFragment(a, RpHubFragment()); snap(root(a), "rp_hub_light") }
-    @Test fun rpCharactersDark() = withChat { a, _ -> pushFragment(a, RpCharacterLibraryFragment.newInstance()); snap(root(a), "rp_characters_dark") }
+    fun rpHubLight() = rpScreen("rp_hub_light") { RpHubFragment() }
+    @Test fun rpHubEmptyDark() = rpScreen("rp_hub_empty_dark", seed = false) { RpHubFragment() }
+    @Test fun rpCharactersDark() = rpScreen("rp_characters_dark") { RpCharacterLibraryFragment.newInstance() }
+    @Test @Config(qualifiers = LIGHT)
+    fun rpCharactersLight() = rpScreen("rp_characters_light") { RpCharacterLibraryFragment.newInstance() }
+    @Test fun rpCharactersEmptyDark() = rpScreen("rp_characters_empty_dark", seed = false) { RpCharacterLibraryFragment.newInstance() }
+    @Test @Config(qualifiers = LIGHT)
+    fun rpPersonaLight() = rpScreen("rp_persona_light") { RpPersonaFragment.newInstance() }
+    @Test fun rpCharacterEditExistingDark() = withChat { a, _ ->
+        seedRp()
+        val id = runBlocking { db.rpDao().getAllCharactersOnce().first { it.name == "Mira Vance" }.id }
+        pushFragment(a, RpCharacterEditFragment.newInstance(id)); settle()
+        snap(root(a), "rp_character_edit_existing_dark")
+    }
+    @Test @Config(qualifiers = LIGHT)
+    fun rpCharacterEditLight() = rpScreen("rp_character_edit_light", seed = false) { RpCharacterEditFragment.newInstance(0L) }
     @Test fun rpLorebooksDark() = withChat { a, _ -> pushFragment(a, RpLorebookLibraryFragment.newInstance()); snap(root(a), "rp_lorebooks_dark") }
-    @Test fun rpPersonaDark() = withChat { a, _ -> pushFragment(a, RpPersonaFragment.newInstance()); snap(root(a), "rp_persona_dark") }
+    @Test fun rpPersonaDark() = rpScreen("rp_persona_dark") { RpPersonaFragment.newInstance() }
     @Test fun rpCharacterEditDark() = withChat { a, _ -> pushFragment(a, RpCharacterEditFragment.newInstance(0L)); snap(root(a), "rp_character_edit_dark") }
     @Test fun rpLorebookEditDark() = withChat { a, _ -> pushFragment(a, RpLorebookEditFragment.newInstance(0L)); snap(root(a), "rp_lorebook_edit_dark") }
     @Test fun helpDark() = withChat { a, _ -> pushFragment(a, HelpFragment()); snap(root(a), "help_dark") }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Active character card: same fill, hairline ring in ink -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/xai_cell" />
+    <stroke android:width="1.5dp" android:color="@color/xai_mute" />
+    <corners android:radius="20dp" />
+</shape>

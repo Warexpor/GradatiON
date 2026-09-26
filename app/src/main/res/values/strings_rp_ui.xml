@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RP screens (hub, character library, editors). Kept apart from strings.xml on purpose. -->
+<resources>
+    <!-- Hub -->
+    <string name="rp_ui_hub_intro">Chat with characters you create. Everything stays on this device.</string>
+    <string name="rp_ui_hub_current">Current character</string>
+    <string name="rp_ui_hub_llm_title">LLM mode</string>
+    <string name="rp_ui_hub_llm_body">Roleplay without a character card. Turn it off in RP settings.</string>
+    <string name="rp_ui_hub_none_title">No character yet</string>
+    <string name="rp_ui_hub_none_body">Pick one from your library, or create your first.</string>
+    <string name="rp_ui_continue">Continue chat</string>
+    <string name="rp_ui_browse">Browse characters</string>
+    <string name="rp_ui_backup_title">Backup and restore</string>
+    <string name="rp_ui_backup_value">JSON</string>
+    <string name="rp_ui_persona_unset">Not set</string>
+    <string name="rp_ui_persona_set">Set</string>
+    <string name="rp_ui_lore_none">None active</string>
+    <string name="rp_ui_expand">Show backup options</string>
+    <string name="rp_ui_collapse">Hide backup options</string>
+
+    <!-- Character library -->
+    <string name="rp_ui_library_hint">Tap to chat. Press and hold for more.</string>
+    <string name="rp_ui_empty_title">Create your first character</string>
+    <string name="rp_ui_empty_body">Give them a name, a greeting and a personality. Then just start talking.</string>
+    <string name="rp_ui_more_options">More options for %1$s</string>
+    <string name="rp_ui_no_description">No description yet</string>
+    <string name="rp_ui_character_card_a11y">%1$s. Double tap to start chatting.</string>
+
+    <!-- Character editor -->
+    <string name="rp_ui_change_photo">Change photo</string>
+    <string name="rp_ui_add_photo">Add photo</string>
+    <string name="rp_ui_remove_photo">Remove</string>
+    <string name="rp_ui_section_identity">Identity</string>
+    <string name="rp_ui_section_character">Character</string>
+    <string name="rp_ui_section_advanced">Advanced</string>
+    <string name="rp_ui_identity_footer">The greeting is the first message of every new chat.</string>
+    <string name="rp_ui_advanced_footer">Optional. The prompt override replaces the whole generated prompt.</string>
+
+    <!-- Persona -->
+    <string name="rp_ui_persona_intro">How characters see you. Used in every RP chat.</string>
+    <string name="rp_ui_section_you">You</string>
+</resources>
