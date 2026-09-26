@@ -1,12 +1,19 @@
 package io.github.stardomains3.oxproxion.code
 
 import android.content.Context
+import android.net.Uri
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.lifecycle.LifecycleOwner
@@ -17,9 +24,10 @@ import io.github.stardomains3.oxproxion.PickerPopover
 import io.github.stardomains3.oxproxion.R
 
 /**
- * Binds `view_code_composer`: the glass capsule with the prompt field, the agent / folder /
- * approvals pills and the send button (which turns into stop while the agent works).
- * Home uses all three pills to start a session; a session shows only the approvals pill.
+ * Binds `view_code_composer`: the glass capsule with the prompt field, optional image attach
+ * chips, the agent / folder / approvals pills and the send button (which turns into stop while
+ * the agent works). Home uses all three pills to start a session; a session shows only the
+ * approvals pill.
  */
 class CodeComposer(
     val root: GlassLinearLayout,
@@ -33,11 +41,19 @@ class CodeComposer(
     val folderPill: TextView = root.findViewById(R.id.codeComposerFolder)
     val permissionPill: TextView = root.findViewById(R.id.codeComposerPermission)
     private val send: MaterialButton = root.findViewById(R.id.codeComposerSend)
+    private val attach: MaterialButton = root.findViewById(R.id.codeComposerAttach)
+    private val attachStrip: HorizontalScrollView = root.findViewById(R.id.codeComposerAttachStrip)
+    private val attachChips: LinearLayout = root.findViewById(R.id.codeComposerAttachChips)
     private var popover: PickerPopover? = null
     private val backdropRef = backdrop
 
-    var onSend: ((String) -> Unit)? = null
+    private val pendingAttachments = ArrayList<PromptAttachment>()
+
+    /** Text + image attachments. Cleared by the caller via [clear] after a successful send. */
+    var onSend: ((text: String, attachments: List<PromptAttachment>) -> Unit)? = null
     var onStop: (() -> Unit)? = null
+    /** Opens the image picker (registered on the hosting Fragment). */
+    var onAttachClick: (() -> Unit)? = null
 
     /** While true the button stops the agent instead of sending. */
     var running: Boolean = false
@@ -67,6 +83,10 @@ class CodeComposer(
                 refreshSlashPicker()
             }
         })
+        attach.setOnClickListener {
+            it.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+            onAttachClick?.invoke()
+        }
         send.setOnClickListener {
             // While the agent is running, keep Stop reachable even if the draft has text
             // (do not hide Stop behind Send).
@@ -76,23 +96,89 @@ class CodeComposer(
                 return@setOnClickListener
             }
             val text = input.text?.toString()?.trim().orEmpty()
-            if (text.isEmpty()) return@setOnClickListener
+            if (text.isEmpty() && pendingAttachments.isEmpty()) return@setOnClickListener
             dismissSlashPopover()
             it.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
-            onSend?.invoke(text)
+            onSend?.invoke(text, pendingAttachments.toList())
         }
         refreshSend()
+        refreshAttachStrip()
     }
 
     private fun refreshSend() {
         val stop = running
         send.setIconResource(if (stop) R.drawable.ic_stop else R.drawable.ic_send)
         send.contentDescription = context.getString(if (stop) R.string.cd_code_stop else R.string.cd_code_send)
-        send.isEnabled = stop || !input.text.isNullOrBlank()
+        send.isEnabled = stop || !input.text.isNullOrBlank() || pendingAttachments.isNotEmpty()
+        attach.isEnabled = !stop && pendingAttachments.size < CodePromptImages.MAX_COUNT
     }
+
+    /**
+     * Adds an encoded attachment for the next send. Returns false when the cap is reached.
+     */
+    fun addAttachment(attachment: PromptAttachment): Boolean {
+        if (pendingAttachments.size >= CodePromptImages.MAX_COUNT) return false
+        pendingAttachments += attachment
+        refreshAttachStrip()
+        refreshSend()
+        return true
+    }
+
+    val attachmentCount: Int get() = pendingAttachments.size
 
     fun clear() {
         input.setText("")
+        pendingAttachments.clear()
+        refreshAttachStrip()
+        refreshSend()
+    }
+
+    private fun refreshAttachStrip() {
+        attachChips.removeAllViews()
+        attachStrip.isVisible = pendingAttachments.isNotEmpty()
+        val d = context.resources.displayMetrics.density
+        val chip = (56 * d).toInt()
+        val gap = (6 * d).toInt()
+        pendingAttachments.forEachIndexed { index, att ->
+            val wrap = FrameLayout(context).apply {
+                layoutParams = LinearLayout.LayoutParams(chip, chip).also {
+                    if (index > 0) it.marginStart = gap
+                }
+            }
+            val img = ImageView(context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                )
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                contentDescription = context.getString(R.string.cd_code_attach)
+                val uri = att.previewUri?.let { Uri.parse(it) }
+                if (uri != null) setImageURI(uri)
+                else setImageResource(R.drawable.ic_attach_plus)
+                background = context.getDrawable(R.drawable.bg_circle_soft)
+                clipToOutline = true
+                outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+            }
+            val remove = ImageButton(context).apply {
+                val sz = (22 * d).toInt()
+                layoutParams = FrameLayout.LayoutParams(sz, sz, Gravity.TOP or Gravity.END).also {
+                    it.topMargin = (2 * d).toInt()
+                    it.marginEnd = (2 * d).toInt()
+                }
+                setImageResource(R.drawable.ic_close_x)
+                setBackgroundResource(R.drawable.bg_circle_soft)
+                contentDescription = context.getString(R.string.cd_code_remove_attachment)
+                setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
+                setOnClickListener {
+                    pendingAttachments.remove(att)
+                    refreshAttachStrip()
+                    refreshSend()
+                }
+            }
+            wrap.addView(img)
+            wrap.addView(remove)
+            attachChips.addView(wrap)
+        }
     }
 
     fun hideKeyboard() {

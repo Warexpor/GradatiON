@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code composer: the chat capsule's shape. Pills on the left (agent / folder / approvals), send or stop on the right. -->
+<!-- Code composer: the chat capsule's shape. Pills on the left (agent / folder / approvals), attach + send/stop on the right. -->
 <io.github.stardomains3.oxproxion.GlassLinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -15,6 +15,25 @@
     android:paddingBottom="8dp"
     app:glassCornerRadius="26dp"
     app:glassElevation="6dp">
+
+    <HorizontalScrollView
+        android:id="@+id/codeComposerAttachStrip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:overScrollMode="never"
+        android:scrollbars="none"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/codeComposerAttachChips"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp" />
+    </HorizontalScrollView>
 
     <EditText
         android:id="@+id/codeComposerInput"
@@ -85,11 +104,29 @@
         </HorizontalScrollView>
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/codeComposerAttach"
+            style="@style/Widget.Grokion.IconButton"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="4dp"
+            android:contentDescription="@string/cd_code_attach"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:padding="0dp"
+            app:icon="@drawable/ic_attach_plus"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="20dp"
+            app:iconTint="@color/xai_ink" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/codeComposerSend"
             style="@style/Widget.Grokion.IconButton.Filled"
             android:layout_width="38dp"
             android:layout_height="38dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="4dp"
             android:background="@drawable/bg_send_pill"
             android:contentDescription="@string/cd_code_send"
             android:insetLeft="0dp"

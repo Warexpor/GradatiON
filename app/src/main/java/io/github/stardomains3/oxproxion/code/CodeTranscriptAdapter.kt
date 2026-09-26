@@ -190,7 +190,14 @@ class CodeTranscriptAdapter(
         when (val row = getItem(position)) {
             TranscriptRow.Working -> (v as TextView).let { ShimmerText.start(it, ShimmerText.highlightFor(it)) }
             is TranscriptRow.Event -> when (val e = row.event) {
-                is CodeEvent.UserPrompt -> v.findViewById<TextView>(R.id.codeUserText).text = e.text
+                is CodeEvent.UserPrompt -> {
+                    val tv = v.findViewById<TextView>(R.id.codeUserText)
+                    tv.text = when {
+                        e.attachmentCount <= 0 -> e.text
+                        e.text.isBlank() -> v.context.getString(R.string.code_user_with_images, e.attachmentCount)
+                        else -> e.text + v.context.getString(R.string.code_user_images_suffix, e.attachmentCount)
+                    }
+                }
                 is CodeEvent.AgentText -> bindText(holder as TextHolder, e)
                 is CodeEvent.Thought -> bindThought(v, e)
                 is CodeEvent.ToolCall -> bindTool(v, e)

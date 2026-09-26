@@ -140,13 +140,25 @@ data class CodeSessionSummary(
     val lastSeq: Long? = null
 )
 
+/**
+ * One image (or future media) attachment for [session/prompt] / [NewSessionRequest].
+ * [data] is raw base64 (no data-URI prefix); [mimeType] is e.g. `image/jpeg`.
+ * [previewUri] is a local content Uri string for composer chips only — never sent on the wire.
+ */
+data class PromptAttachment(
+    val mimeType: String,
+    val data: String,
+    val previewUri: String? = null,
+)
+
 data class NewSessionRequest(
     val hostId: String,
     val harness: HarnessKind,
     val workspace: String,
     val prompt: String,
     val permissionMode: PermissionMode,
-    val model: String? = null
+    val model: String? = null,
+    val attachments: List<PromptAttachment> = emptyList(),
 )
 
 enum class ToolKind { READ, EDIT, EXECUTE, SEARCH, FETCH, THINK, DELETE, MOVE, OTHER }
@@ -179,7 +191,13 @@ sealed class CodeEvent {
     abstract val key: String
     abstract val at: Long
 
-    data class UserPrompt(override val key: String, override val at: Long, val text: String) : CodeEvent()
+    data class UserPrompt(
+        override val key: String,
+        override val at: Long,
+        val text: String,
+        /** Count of image attachments sent with this prompt (wire payload is not stored). */
+        val attachmentCount: Int = 0,
+    ) : CodeEvent()
 
     /** Agent prose (markdown). Chunks for the same message are merged by the controller. */
     data class AgentText(

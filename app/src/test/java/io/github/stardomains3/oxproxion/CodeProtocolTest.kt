@@ -12,6 +12,7 @@ import io.github.stardomains3.oxproxion.code.DiffLine
 import io.github.stardomains3.oxproxion.code.HarnessKind
 import io.github.stardomains3.oxproxion.code.NewSessionRequest
 import io.github.stardomains3.oxproxion.code.PermissionMode
+import io.github.stardomains3.oxproxion.code.PromptAttachment
 import io.github.stardomains3.oxproxion.code.ReconnectBackoff
 import io.github.stardomains3.oxproxion.code.PlanStatus
 import io.github.stardomains3.oxproxion.code.SessionStatus
@@ -19,6 +20,7 @@ import io.github.stardomains3.oxproxion.code.ToolKind
 import io.github.stardomains3.oxproxion.code.ToolStatus
 import io.github.stardomains3.oxproxion.code.TranscriptReducer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
@@ -378,4 +380,39 @@ class CodeProtocolTest {
         assertEquals(2000L, mid) // 0.5s * 8 * 0.5
         assertEquals(60_000L, ReconnectBackoff.RESET_AFTER_CONNECTED_MS)
     }
+
+    @Test fun promptFrameIncludesImageBlock() {
+        val att = PromptAttachment(mimeType = "image/png", data = "iVBORw0KGgo")
+        val frame = Json.parseToJsonElement(acp.prompt(5, "s1", "look at this", listOf(att))).jsonObject
+        assertEquals("session/prompt", frame["method"]!!.jsonPrimitive.content)
+        assertEquals(5L, frame["id"]!!.jsonPrimitive.content.toLong())
+        val params = frame["params"]!!.jsonObject
+        assertEquals("s1", params["sessionId"]!!.jsonPrimitive.content)
+        val prompt = params["prompt"]!!.jsonArray
+        assertEquals(2, prompt.size)
+        val text = prompt[0].jsonObject
+        assertEquals("text", text["type"]!!.jsonPrimitive.content)
+        assertEquals("look at this", text["text"]!!.jsonPrimitive.content)
+        val image = prompt[1].jsonObject
+        assertEquals("image", image["type"]!!.jsonPrimitive.content)
+        assertEquals("image/png", image["mimeType"]!!.jsonPrimitive.content)
+        assertEquals("iVBORw0KGgo", image["data"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun promptFrameImageOnlyOmitsEmptyText() {
+        val att = PromptAttachment(mimeType = "image/jpeg", data = "AAAA")
+        val prompt = Json.parseToJsonElement(acp.prompt(6, "s1", "  ", listOf(att)))
+            .jsonObject["params"]!!.jsonObject["prompt"]!!.jsonArray
+        assertEquals(1, prompt.size)
+        assertEquals("image", prompt[0].jsonObject["type"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun promptFrameTextOnlyUnchanged() {
+        val prompt = Json.parseToJsonElement(acp.prompt(7, "s1", "hello"))
+            .jsonObject["params"]!!.jsonObject["prompt"]!!.jsonArray
+        assertEquals(1, prompt.size)
+        assertEquals("text", prompt[0].jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("hello", prompt[0].jsonObject["text"]!!.jsonPrimitive.content)
+    }
+
 }

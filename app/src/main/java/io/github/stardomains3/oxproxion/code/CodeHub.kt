@@ -268,7 +268,11 @@ class CodeHub private constructor(context: Context) {
     }
 
     /** Starts a prompt when the session is idle; returns false for an overlapping prompt. */
-    fun prompt(sessionId: String, text: String): Boolean {
+    fun prompt(
+        sessionId: String,
+        text: String,
+        attachments: List<PromptAttachment> = emptyList(),
+    ): Boolean {
         // Reject a second overlapping prompt for the same session; BridgeBackend also
         // serializes deliver via a per-session mutex (queue-or-reject: we reject here).
         var accepted = false
@@ -280,7 +284,7 @@ class CodeHub private constructor(context: Context) {
             }
         }
         if (!accepted) return false
-        withBackend(sessionId) { b -> b.prompt(sessionId, text) }
+        withBackend(sessionId) { b -> b.prompt(sessionId, text, attachments) }
         return true
     }
 

@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion.code
 
+import android.net.Uri
 import android.os.Bundle
 import android.text.format.DateUtils
 import android.view.LayoutInflater
@@ -10,6 +11,8 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
@@ -29,7 +32,9 @@ import io.github.stardomains3.oxproxion.GrokInputDialog
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.PickerPopover
 import io.github.stardomains3.oxproxion.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 /**
@@ -45,6 +50,13 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     private lateinit var composer: CodeComposer
     private lateinit var list: RecyclerView
     private val adapter = HomeAdapter()
+
+    private val imagePicker = registerForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(CodePromptImages.MAX_COUNT)
+    ) { uris ->
+        if (uris.isNullOrEmpty()) return@registerForActivityResult
+        ingestImages(uris)
+    }
 
     private var harness: HarnessKind = HarnessKind.CLAUDE_CODE
     private var workspace: String = ""
@@ -140,7 +152,10 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 composer.setPermission(it)
             }
         }
-        composer.onSend = { start(it) }
+        composer.onSend = { text, attachments -> start(text, attachments) }
+        composer.onAttachClick = {
+            imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -443,7 +458,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
     // ── actions ───────────────────────────────────────────────────────────────────────────
 
-    private fun start(prompt: String) {
+    private fun start(prompt: String, attachments: List<PromptAttachment> = emptyList()) {
         val host = hub.activeHost.value ?: return
         if (workspace.isBlank()) {
             AppToast.makeText(requireContext(), getString(R.string.code_home_need_folder), AppToast.LENGTH_SHORT).show()
@@ -455,7 +470,9 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 syncPermissionFromStore()
-                val result = hub.startSession(NewSessionRequest(host.id, harness, workspace, prompt, permission))
+                val result = hub.startSession(
+                    NewSessionRequest(host.id, harness, workspace, prompt, permission, attachments = attachments)
+                )
                 result.onSuccess { id ->
                     composer.clear()
                     composer.hideKeyboard()
@@ -466,6 +483,41 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
             } finally {
                 // View teardown cancels this job; clear the guard so a later start isn't stuck.
                 starting = false
+            }
+        }
+    }
+
+    private fun ingestImages(uris: List<Uri>) {
+        if (!::composer.isInitialized) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            for (uri in uris) {
+                if (composer.attachmentCount >= CodePromptImages.MAX_COUNT) {
+                    AppToast.makeText(
+                        requireContext(),
+                        getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT),
+                        AppToast.LENGTH_SHORT
+                    ).show()
+                    break
+                }
+                val mime = requireContext().contentResolver.getType(uri)?.lowercase()
+                if (mime != null && mime !in setOf("image/jpeg", "image/png", "image/webp")) {
+                    AppToast.makeText(requireContext(), getString(R.string.code_attach_unsupported), AppToast.LENGTH_SHORT).show()
+                    continue
+                }
+                val att = withContext(Dispatchers.IO) { CodePromptImages.fromUri(requireContext(), uri) }
+                if (!isAdded) return@launch
+                if (att == null) {
+                    AppToast.makeText(requireContext(), getString(R.string.code_attach_failed), AppToast.LENGTH_SHORT).show()
+                    continue
+                }
+                if (!composer.addAttachment(att)) {
+                    AppToast.makeText(
+                        requireContext(),
+                        getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT),
+                        AppToast.LENGTH_SHORT
+                    ).show()
+                    break
+                }
             }
         }
     }

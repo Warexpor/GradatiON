@@ -30,8 +30,9 @@ import kotlinx.serialization.json.put
  * `session/load` accepts `_meta.afterSeq` so TranscriptReducer upserts stay idempotent on replay.
  *
  * Not yet: the terminal and fs client methods (the bridge answers those on the machine itself),
- * current_mode_update, images in prompts.
+ * current_mode_update, images in agent_message_chunk (render).
  * Slash commands: `available_commands_update` → [CodeUpdate.AvailableCommands].
+ * Prompt images: [prompt] accepts [PromptAttachment] → ACP `type: image` content blocks.
  */
 class AcpAdapter : HarnessAdapter {
 
@@ -77,9 +78,30 @@ class AcpAdapter : HarnessAdapter {
         if (afterSeq != null) put("_meta", buildJsonObject { put("afterSeq", afterSeq) })
     })
 
-    override fun prompt(id: Long, sessionId: String, text: String) = request(id, "session/prompt", buildJsonObject {
+    override fun prompt(
+        id: Long,
+        sessionId: String,
+        text: String,
+        attachments: List<PromptAttachment>,
+    ) = request(id, "session/prompt", buildJsonObject {
         put("sessionId", sessionId)
-        put("prompt", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", text) }) })
+        put("prompt", buildJsonArray {
+            val trimmed = text.trim()
+            if (trimmed.isNotEmpty()) {
+                add(buildJsonObject { put("type", "text"); put("text", trimmed) })
+            }
+            for (att in attachments) {
+                add(buildJsonObject {
+                    put("type", "image")
+                    put("mimeType", att.mimeType)
+                    put("data", att.data)
+                })
+            }
+            // ACP requires a non-empty prompt array; keep a blank text block if somehow empty.
+            if (trimmed.isEmpty() && attachments.isEmpty()) {
+                add(buildJsonObject { put("type", "text"); put("text", "") })
+            }
+        })
     })
 
     override fun cancel(sessionId: String) = notification("session/cancel", buildJsonObject { put("sessionId", sessionId) })

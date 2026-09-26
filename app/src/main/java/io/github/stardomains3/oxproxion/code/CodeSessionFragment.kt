@@ -1,6 +1,9 @@
 package io.github.stardomains3.oxproxion.code
 
 import android.content.ClipData
+import android.net.Uri
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.ClipboardManager
 import android.os.Bundle
 import android.text.format.DateUtils
@@ -25,7 +28,9 @@ import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.PickerPopover
 import io.github.stardomains3.oxproxion.R
 import io.github.stardomains3.oxproxion.SwipeNavLayout
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -43,6 +48,13 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
     private lateinit var composer: CodeComposer
     /** Follow the growing edge until the user drags away (same rule as chat). */
     private var follow = true
+
+    private val imagePicker = registerForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(CodePromptImages.MAX_COUNT)
+    ) { uris ->
+        if (uris.isNullOrEmpty()) return@registerForActivityResult
+        ingestImages(uris)
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         hub = CodeHub.get(requireContext())
@@ -76,11 +88,14 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             viewLifecycleOwner,
         )
         composer.showPills(agent = false, folder = false, permission = true)
-        composer.onSend = { text ->
+        composer.onSend = { text, attachments ->
             follow = true
-            if (hub.prompt(sessionId, text)) composer.clear()
+            if (hub.prompt(sessionId, text, attachments)) composer.clear()
         }
         composer.onStop = { hub.cancel(sessionId) }
+        composer.onAttachClick = {
+            imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
         // Keep the last event clear of the composer, whatever its height.
         val dock = view.findViewById<View>(R.id.codeSessionDock)
         dock.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
@@ -243,6 +258,42 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         composer.dismissPopover()
         composer.hideKeyboard()
         parentFragmentManager.popBackStack()
+    }
+
+
+    private fun ingestImages(uris: List<Uri>) {
+        if (!::composer.isInitialized) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            for (uri in uris) {
+                if (composer.attachmentCount >= CodePromptImages.MAX_COUNT) {
+                    AppToast.makeText(
+                        requireContext(),
+                        getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT),
+                        AppToast.LENGTH_SHORT
+                    ).show()
+                    break
+                }
+                val mime = requireContext().contentResolver.getType(uri)?.lowercase()
+                if (mime != null && mime !in setOf("image/jpeg", "image/png", "image/webp")) {
+                    AppToast.makeText(requireContext(), getString(R.string.code_attach_unsupported), AppToast.LENGTH_SHORT).show()
+                    continue
+                }
+                val att = withContext(Dispatchers.IO) { CodePromptImages.fromUri(requireContext(), uri) }
+                if (!isAdded) return@launch
+                if (att == null) {
+                    AppToast.makeText(requireContext(), getString(R.string.code_attach_failed), AppToast.LENGTH_SHORT).show()
+                    continue
+                }
+                if (!composer.addAttachment(att)) {
+                    AppToast.makeText(
+                        requireContext(),
+                        getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT),
+                        AppToast.LENGTH_SHORT
+                    ).show()
+                    break
+                }
+            }
+        }
     }
 
     companion object {

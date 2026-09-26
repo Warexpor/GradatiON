@@ -133,9 +133,9 @@ class DemoBackend(
         up(CodeUpdate.TurnDone("end_turn", "2 files changed · 41 s"))
     }
 
-    override suspend fun prompt(sessionId: String, text: String) {
+    override suspend fun prompt(sessionId: String, text: String, attachments: List<PromptAttachment>) {
         turns[sessionId]?.cancel()
-        turns[sessionId] = scope.launch { playTurn(sessionId, text) }
+        turns[sessionId] = scope.launch { playTurn(sessionId, text, attachments.size) }
     }
 
     override suspend fun answer(sessionId: String, requestId: String, option: ApprovalOption?) {
@@ -158,9 +158,9 @@ class DemoBackend(
 
     // ── the script ────────────────────────────────────────────────────────────────────────
 
-    private suspend fun playTurn(sid: String, text: String) {
+    private suspend fun playTurn(sid: String, text: String, attachmentCount: Int = 0) {
         emit(sid, CodeUpdate.AvailableCommands(DEMO_SLASH_COMMANDS))
-        emit(sid, CodeUpdate.Upsert(CodeEvent.UserPrompt(key(), now(), text)))
+        emit(sid, CodeUpdate.Upsert(CodeEvent.UserPrompt(key(), now(), text, attachmentCount = attachmentCount)))
         delay(500)
         val thought = key()
         stream(sid, thought, "The user wants a change in the settings flow. I should find where the theme preference lives before touching anything.", thought = true)

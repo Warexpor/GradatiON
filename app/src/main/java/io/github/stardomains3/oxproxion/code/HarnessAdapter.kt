@@ -72,7 +72,7 @@ interface HarnessAdapter {
     fun newSession(id: Long, request: NewSessionRequest): String
     /** [afterSeq]: bridge replays only notifications with seq greater than this (null = full history). */
     fun loadSession(id: Long, sessionId: String, workspace: String, afterSeq: Long? = null): String
-    fun prompt(id: Long, sessionId: String, text: String): String
+    fun prompt(id: Long, sessionId: String, text: String, attachments: List<PromptAttachment> = emptyList()): String
     fun cancel(sessionId: String): String
     fun setMode(id: Long, sessionId: String, mode: PermissionMode): String
     /** Answers an agent-initiated permission request ([CodeEvent.Approval.requestId]). */

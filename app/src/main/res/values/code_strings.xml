@@ -156,4 +156,12 @@
     <string name="cd_code_send">Send</string>
     <string name="cd_code_stop">Stop the agent</string>
     <string name="cd_code_settings">Code settings</string>
+    <string name="cd_code_attach">Attach image</string>
+    <string name="cd_code_remove_attachment">Remove image</string>
+    <string name="code_user_with_images">%1$d image(s)</string>
+    <string name="code_user_images_suffix"> · %1$d image(s)</string>
+    <string name="code_attach_limit">You can attach up to %1$d images</string>
+    <string name="code_attach_too_large">Image is too large</string>
+    <string name="code_attach_unsupported">Unsupported image format</string>
+    <string name="code_attach_failed">Couldn\'t read that image</string>
 </resources>

@@ -52,7 +52,7 @@ interface CodeBackend {
     suspend fun startSession(request: NewSessionRequest): CodeSessionSummary
     /** Re-attaches to an existing session; its history arrives as [updates] (ACP session/load replay). */
     suspend fun attach(session: CodeSessionSummary)
-    suspend fun prompt(sessionId: String, text: String)
+    suspend fun prompt(sessionId: String, text: String, attachments: List<PromptAttachment> = emptyList())
     suspend fun answer(sessionId: String, requestId: String, option: ApprovalOption?)
     suspend fun cancel(sessionId: String)
     suspend fun setPermissionMode(sessionId: String, mode: PermissionMode)
@@ -105,7 +105,11 @@ class BridgeBackend(
     /** Serialize prompt + flush deliver per session so turns never overlap. */
     private val promptMutexes = ConcurrentHashMap<String, Mutex>()
 
-    private data class OutboxPrompt(val sessionId: String, val text: String)
+    private data class OutboxPrompt(
+        val sessionId: String,
+        val text: String,
+        val attachments: List<PromptAttachment> = emptyList(),
+    )
 
     private fun promptMutex(sessionId: String): Mutex =
         promptMutexes.getOrPut(sessionId) { Mutex() }
@@ -352,7 +356,7 @@ class BridgeBackend(
             permissionMode = request.permissionMode, model = request.model
         )
         attached[sid] = summary
-        scope.launch { runCatching { prompt(sid, request.prompt) } }
+        scope.launch { runCatching { prompt(sid, request.prompt, request.attachments) } }
         return summary
     }
 
@@ -364,12 +368,20 @@ class BridgeBackend(
         rawCall({ adapter.loadSession(it, session.id, session.workspace, after) }, DEFAULT_TIMEOUT_MS)
     }
 
-    override suspend fun prompt(sessionId: String, text: String) {
+    override suspend fun prompt(sessionId: String, text: String, attachments: List<PromptAttachment>) {
         val now = System.currentTimeMillis()
-        _updates.emit(SessionUpdate(sessionId, CodeUpdate.Upsert(CodeEvent.UserPrompt("user:$now", now, text))))
+        val atts = attachments.take(CodePromptImages.MAX_COUNT)
+        _updates.emit(
+            SessionUpdate(
+                sessionId,
+                CodeUpdate.Upsert(
+                    CodeEvent.UserPrompt("user:$now", now, text, attachmentCount = atts.size)
+                )
+            )
+        )
         promptMutex(sessionId).withLock {
             if (!ready.value || connection.value != ConnectionState.CONNECTED) {
-                synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text)) }
+                synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text, atts)) }
                 runningSessions.add(sessionId)
                 refreshKeepAlive()
                 if (connection.value != ConnectionState.CONNECTING &&
@@ -379,9 +391,9 @@ class BridgeBackend(
                 }
                 return
             }
-            if (!deliverPrompt(sessionId, text)) {
+            if (!deliverPrompt(sessionId, text, atts)) {
                 // Send failed before the bridge accepted — queue for reconnect flush.
-                synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text)) }
+                synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text, atts)) }
                 runningSessions.add(sessionId)
                 refreshKeepAlive()
                 if (connection.value != ConnectionState.CONNECTING &&
@@ -401,7 +413,7 @@ class BridgeBackend(
             refreshKeepAlive()
             val delivered = runCatching {
                 promptMutex(next.sessionId).withLock {
-                    deliverPrompt(next.sessionId, next.text)
+                    deliverPrompt(next.sessionId, next.text, next.attachments)
                 }
             }.getOrDefault(false)
             if (!delivered) break
@@ -418,7 +430,11 @@ class BridgeBackend(
      * User [cancel] bumps the deliver generation and completes the pending prompt deferred so
      * this returns false without treating a never-sent prompt as delivered.
      */
-    private suspend fun deliverPrompt(sessionId: String, text: String): Boolean {
+    private suspend fun deliverPrompt(
+        sessionId: String,
+        text: String,
+        attachments: List<PromptAttachment> = emptyList(),
+    ): Boolean {
         val gen = deliverGen(sessionId)
         suppressAgent.remove(sessionId)
         runningSessions.add(sessionId)
@@ -435,7 +451,7 @@ class BridgeBackend(
         var sendCompleted = false
         try {
             if (isDeliverStale(sessionId, gen)) return false
-            val frame = adapter.prompt(id, sessionId, text)
+            val frame = adapter.prompt(id, sessionId, text, attachments)
             if (!transport.send(frame)) {
                 throw IllegalStateException(transport.lastError ?: "Not connected")
             }
