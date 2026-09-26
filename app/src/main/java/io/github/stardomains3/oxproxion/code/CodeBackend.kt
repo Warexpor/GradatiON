@@ -90,7 +90,7 @@ class BridgeBackend(
     private val deliverGeneration = ConcurrentHashMap<String, AtomicLong>()
     /** RPC id of the in-flight session/prompt, so cancel can complete it. */
     private val inFlightPromptId = ConcurrentHashMap<String, Long>()
-    /** After Stop, drop late agent chunks/TurnDone until the next intentional deliver. */
+    /** After Stop, drop late agent activity until the next intentional deliver. */
     private val suppressAgent = ConcurrentHashMap.newKeySet<String>()
     /** Serialize prompt + flush deliver per session so turns never overlap. */
     private val promptMutexes = ConcurrentHashMap<String, Mutex>()
@@ -109,8 +109,12 @@ class BridgeBackend(
     private fun isDeliverStale(sessionId: String, gen: Long): Boolean =
         deliverGen(sessionId) != gen
 
-    private fun isAgentActivity(update: CodeUpdate): Boolean = when (update) {
+    private fun isSuppressedAgentActivity(update: CodeUpdate): Boolean = when (update) {
         is CodeUpdate.TextChunk, is CodeUpdate.ToolPatch, is CodeUpdate.TurnDone -> true
+        is CodeUpdate.SessionInfo -> update.status == SessionStatus.RUNNING ||
+            update.status == SessionStatus.NEEDS_APPROVAL
+        is CodeUpdate.Upsert -> update.event is CodeEvent.Approval ||
+            update.event is CodeEvent.ToolCall
         else -> false
     }
 
@@ -130,7 +134,7 @@ class BridgeBackend(
             transport.incoming.collect { frame ->
                 for (out in adapter.decode(frame)) when (out) {
                     is AdapterOutput.Update -> {
-                        if (out.sessionId in suppressAgent && isAgentActivity(out.update)) {
+                        if (out.sessionId in suppressAgent && isSuppressedAgentActivity(out.update)) {
                             // Stop already ended the turn locally; ignore late bridge activity.
                             continue
                         }

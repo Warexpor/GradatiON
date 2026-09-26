@@ -76,8 +76,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         composer.showPills(agent = false, folder = false, permission = true)
         composer.onSend = { text ->
             follow = true
-            hub.prompt(sessionId, text)
-            composer.clear()
+            if (hub.prompt(sessionId, text)) composer.clear()
         }
         composer.onStop = { hub.cancel(sessionId) }
         // Keep the last event clear of the composer, whatever its height.

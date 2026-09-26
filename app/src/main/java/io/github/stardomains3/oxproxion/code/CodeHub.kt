@@ -1,64 +1,14 @@
 package io.github.stardomains3.oxproxion.code
 
 import android.content.Context
-import android.content.SharedPreferences
+import io.github.stardomains3.oxproxion.code.store.CodeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
 import java.util.UUID
-
-/**
- * Settings and saved hosts for Code mode. Plain SharedPreferences + JSON for the foundation;
- * the plan moves tokens to Keystore-encrypted storage and sessions/transcripts to Room.
- */
-class CodeStore(context: Context) {
-    private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences("code_mode", Context.MODE_PRIVATE)
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-
-    var enabled: Boolean
-        get() = prefs.getBoolean(KEY_ENABLED, false)
-        set(v) = prefs.edit().putBoolean(KEY_ENABLED, v).apply()
-
-    /** Whether the Code tab was the last one open, so the app comes back to it. */
-    var lastTabWasCode: Boolean
-        get() = prefs.getBoolean(KEY_LAST_TAB, false)
-        set(v) = prefs.edit().putBoolean(KEY_LAST_TAB, v).apply()
-
-    var activeHostId: String?
-        get() = prefs.getString(KEY_ACTIVE_HOST, null)
-        set(v) = prefs.edit().putString(KEY_ACTIVE_HOST, v).apply()
-
-    var defaultPermissionMode: PermissionMode
-        get() = PermissionMode.fromId(prefs.getString(KEY_PERMISSION, null))
-        set(v) = prefs.edit().putString(KEY_PERMISSION, v.id).apply()
-
-    var hosts: List<CodeHost>
-        get() = prefs.getString(KEY_HOSTS, null)?.let {
-            runCatching { json.decodeFromString(ListSerializer(CodeHost.serializer()), it) }.getOrNull()
-        } ?: emptyList()
-        set(v) = prefs.edit().putString(KEY_HOSTS, json.encodeToString(ListSerializer(CodeHost.serializer()), v)).apply()
-
-    var sessions: List<CodeSessionSummary>
-        get() = prefs.getString(KEY_SESSIONS, null)?.let {
-            runCatching { json.decodeFromString(ListSerializer(CodeSessionSummary.serializer()), it) }.getOrNull()
-        } ?: emptyList()
-        set(v) = prefs.edit().putString(KEY_SESSIONS, json.encodeToString(ListSerializer(CodeSessionSummary.serializer()), v.take(200))).apply()
-
-    private companion object {
-        const val KEY_ENABLED = "enabled"
-        const val KEY_LAST_TAB = "last_tab_code"
-        const val KEY_ACTIVE_HOST = "active_host"
-        const val KEY_PERMISSION = "permission_mode"
-        const val KEY_HOSTS = "hosts"
-        const val KEY_SESSIONS = "sessions"
-    }
-}
 
 /** Session as the UI sees it: summary plus live state. */
 data class CodeSessionState(
@@ -242,7 +192,8 @@ class CodeHub private constructor(context: Context) {
         scope.launch { runCatching { backendFor(host).attach(s.summary) } }
     }
 
-    fun prompt(sessionId: String, text: String) {
+    /** Starts a prompt when the session is idle; returns false for an overlapping prompt. */
+    fun prompt(sessionId: String, text: String): Boolean {
         // Reject a second overlapping prompt for the same session; BridgeBackend also
         // serializes deliver via a per-session mutex (queue-or-reject: we reject here).
         var accepted = false
