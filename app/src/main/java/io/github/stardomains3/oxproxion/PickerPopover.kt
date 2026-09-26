@@ -10,6 +10,8 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
 import coil.load
@@ -82,7 +84,7 @@ class PickerPopover(
         val width = minOf(host.width - 2 * gutter, (340 * density).toInt())
         val above = ey + edge.height / 2 > host.height / 2
         val gap = (8 * density).toInt()
-        val topInset = host.rootWindowInsets?.systemWindowInsetTop ?: 0
+        val topInset = ViewCompat.getRootWindowInsets(host)?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
         val room = if (above) ey - gap - topInset - gutter - (56 * density).toInt() else host.height - (ey + edge.height + gap) - gutter
         val maxHeight = room.coerceAtMost((560 * density).toInt()).coerceAtLeast((160 * density).toInt())
         val left = (if (edge !== anchor) ex else ax - (8 * density).toInt()).coerceIn(gutter, host.width - width - gutter)
