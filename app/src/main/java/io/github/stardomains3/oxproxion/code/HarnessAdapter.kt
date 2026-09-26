@@ -75,9 +75,11 @@ interface HarnessAdapter {
     /** Answers an agent-initiated permission request ([CodeEvent.Approval.requestId]). */
     fun answerApproval(requestId: String, optionId: String?): String
 
-    /** Bridge extensions (not part of ACP): list sessions / workspaces / installed harnesses. */
+    /** Bridge extensions (not part of ACP): list sessions / workspaces / installed harnesses / browse. */
     fun listSessions(id: Long): String
     fun listWorkspaces(id: Long, harness: HarnessKind): String
+    fun listHarnesses(id: Long): String
+    fun browse(id: Long, path: String): String
 
     fun decode(frame: String): List<AdapterOutput>
 }

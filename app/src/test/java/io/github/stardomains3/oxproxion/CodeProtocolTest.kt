@@ -130,6 +130,16 @@ class CodeProtocolTest {
         assertEquals("plan", params["_meta"]!!.jsonObject["permissionMode"]!!.jsonPrimitive.content)
     }
 
+    @Test fun listHarnessesAndBrowseFrames() {
+        val harnesses = Json.parseToJsonElement(acp.listHarnesses(9)).jsonObject
+        assertEquals("bridge/listHarnesses", harnesses["method"]!!.jsonPrimitive.content)
+        assertEquals(9L, harnesses["id"]!!.jsonPrimitive.content.toLong())
+
+        val browse = Json.parseToJsonElement(acp.browse(10, "/home/me/code")).jsonObject
+        assertEquals("bridge/browse", browse["method"]!!.jsonPrimitive.content)
+        assertEquals("/home/me/code", browse["params"]!!.jsonObject["path"]!!.jsonPrimitive.content)
+    }
+
     @Test fun turnDoneClosesStreamingText() {
         var list = TranscriptReducer.apply(emptyList(), CodeUpdate.TextChunk("k", "hi"))
         list = TranscriptReducer.apply(list, CodeUpdate.TurnDone("end_turn", "1 file"))

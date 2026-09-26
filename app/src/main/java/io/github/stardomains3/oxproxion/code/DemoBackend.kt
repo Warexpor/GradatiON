@@ -53,6 +53,37 @@ class DemoBackend(
     override suspend fun listWorkspaces(harness: HarnessKind) =
         listOf("~/code/GradatiON", "~/code/gradation-bridge", "~/code/site", "~/notes")
 
+    override suspend fun listHarnesses(): List<HarnessInfo> = listOf(
+        HarnessInfo("claude-code", "Claude Code", available = true),
+        HarnessInfo("codex", "Codex CLI", available = true),
+        HarnessInfo("opencode", "OpenCode", available = true),
+        HarnessInfo("grok-build", "Grok Build", available = true),
+        HarnessInfo("cursor-cli", "Cursor CLI", available = false),
+        HarnessInfo("pi", "Pi", available = false)
+    )
+
+    override suspend fun browse(path: String): List<BrowseEntry> {
+        // Scripted tree so the folder picker can be exercised without a bridge.
+        val normalized = path.trimEnd('/')
+        return when {
+            normalized.isEmpty() || normalized == "~" -> listOf(
+                BrowseEntry("code", true),
+                BrowseEntry("notes", true),
+                BrowseEntry(".bashrc", false)
+            )
+            normalized == "~/code" || normalized.endsWith("/code") -> listOf(
+                BrowseEntry("GradatiON", true),
+                BrowseEntry("gradation-bridge", true),
+                BrowseEntry("site", true),
+                BrowseEntry("README.md", false)
+            )
+            else -> listOf(
+                BrowseEntry("src", true),
+                BrowseEntry("README.md", false)
+            )
+        }
+    }
+
     override suspend fun startSession(request: NewSessionRequest): CodeSessionSummary {
         val now = System.currentTimeMillis()
         val id = "demo-${now}"

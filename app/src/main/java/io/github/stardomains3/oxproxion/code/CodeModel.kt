@@ -30,6 +30,22 @@ enum class HarnessKind(val id: String, val displayName: String, val shortName: S
     }
 }
 
+/**
+ * One harness reported by the bridge (`bridge/listHarnesses`). [kind] maps [id] onto the local
+ * [HarnessKind] enum (unknown ids become [HarnessKind.CUSTOM]).
+ */
+data class HarnessInfo(
+    val id: String,
+    val name: String,
+    val available: Boolean,
+    val models: List<String> = emptyList()
+) {
+    val kind: HarnessKind get() = HarnessKind.fromId(id)
+}
+
+/** One entry from `bridge/browse` (folder picker). */
+data class BrowseEntry(val name: String, val dir: Boolean)
+
 /** How the phone reaches a host. Only [BRIDGE] is designed in detail; [DEMO] is in-process. */
 @Serializable
 enum class TransportKind { BRIDGE, DEMO }

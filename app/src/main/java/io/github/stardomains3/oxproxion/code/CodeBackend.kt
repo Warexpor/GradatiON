@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 import java.util.ArrayDeque
@@ -37,6 +38,10 @@ interface CodeBackend {
     fun connect()
     suspend fun listSessions(): List<CodeSessionSummary>
     suspend fun listWorkspaces(harness: HarnessKind): List<String>
+    /** Installed / configured harnesses on this host (`bridge/listHarnesses`). */
+    suspend fun listHarnesses(): List<HarnessInfo>
+    /** Directory listing inside allowed roots (`bridge/browse`). */
+    suspend fun browse(path: String): List<BrowseEntry>
     /** Creates the session and sends its first prompt. Returns once the session exists. */
     suspend fun startSession(request: NewSessionRequest): CodeSessionSummary
     /** Re-attaches to an existing session; its history arrives as [updates] (ACP session/load replay). */
@@ -243,6 +248,32 @@ class BridgeBackend(
     override suspend fun listWorkspaces(harness: HarnessKind): List<String> {
         val result = call({ adapter.listWorkspaces(it, harness) }) as? JsonObject ?: return emptyList()
         return (result["workspaces"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
+    }
+
+    override suspend fun listHarnesses(): List<HarnessInfo> {
+        val result = call({ adapter.listHarnesses(it) }) as? JsonObject ?: return emptyList()
+        val arr = result["harnesses"] as? JsonArray ?: return emptyList()
+        return arr.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val id = (o["id"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            val name = (o["name"] as? JsonPrimitive)?.contentOrNull ?: id
+            val available = (o["available"] as? JsonPrimitive)?.booleanOrNull ?: false
+            val models = (o["models"] as? JsonArray)?.mapNotNull {
+                (it as? JsonPrimitive)?.contentOrNull
+            }.orEmpty()
+            HarnessInfo(id = id, name = name, available = available, models = models)
+        }
+    }
+
+    override suspend fun browse(path: String): List<BrowseEntry> {
+        val result = call({ adapter.browse(it, path) }) as? JsonObject ?: return emptyList()
+        val arr = result["entries"] as? JsonArray ?: return emptyList()
+        return arr.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val name = (o["name"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            val dir = (o["dir"] as? JsonPrimitive)?.booleanOrNull ?: false
+            BrowseEntry(name = name, dir = dir)
+        }
     }
 
     override suspend fun startSession(request: NewSessionRequest): CodeSessionSummary {

@@ -104,6 +104,11 @@ class AcpAdapter : HarnessAdapter {
     override fun listWorkspaces(id: Long, harness: HarnessKind) =
         request(id, "bridge/listWorkspaces", buildJsonObject { put("harness", harness.id) })
 
+    override fun listHarnesses(id: Long) = request(id, "bridge/listHarnesses", JsonObject(emptyMap()))
+
+    override fun browse(id: Long, path: String) =
+        request(id, "bridge/browse", buildJsonObject { put("path", path) })
+
     private fun request(id: Long, method: String, params: JsonObject) = buildJsonObject {
         put("jsonrpc", "2.0"); put("id", id); put("method", method); put("params", params)
     }.toString()

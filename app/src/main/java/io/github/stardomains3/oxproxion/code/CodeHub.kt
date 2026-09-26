@@ -193,6 +193,18 @@ class CodeHub private constructor(context: Context) {
         return (host.recentWorkspaces + remote).distinct()
     }
 
+    /** Harnesses the active host's bridge reports (`bridge/listHarnesses`). Empty if offline. */
+    suspend fun harnesses(): List<HarnessInfo> {
+        val host = _activeHost.value ?: return emptyList()
+        return runCatching { backendFor(host).listHarnesses() }.getOrDefault(emptyList())
+    }
+
+    /** Folder listing for the picker (`bridge/browse`). Empty if offline or path denied. */
+    suspend fun browse(path: String): List<BrowseEntry> {
+        val host = _activeHost.value ?: return emptyList()
+        return runCatching { backendFor(host).browse(path) }.getOrDefault(emptyList())
+    }
+
     // ── sessions ──────────────────────────────────────────────────────────────────────────
 
     fun sessionsFor(hostId: String?): List<CodeSessionState> =

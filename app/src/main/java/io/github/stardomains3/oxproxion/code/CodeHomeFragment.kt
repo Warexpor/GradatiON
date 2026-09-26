@@ -160,22 +160,57 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     // ── pickers ───────────────────────────────────────────────────────────────────────────
 
     private fun pickAgent() {
-        composer.pick(composer.agentPill, getString(R.string.code_home_pick_agent), HarnessKind.entries.filter { it != HarnessKind.CUSTOM }.map { k ->
-            PickerPopover.Row(k.displayName, iconRes = R.drawable.ic_code_terminal, selected = k == harness) {
-                harness = k
-                refreshPills()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val remote = hub.harnesses()
+            val rows = if (remote.isNotEmpty()) {
+                remote.map { info ->
+                    val subtitle = when {
+                        !info.available -> getString(R.string.code_home_harness_unavailable)
+                        info.models.isNotEmpty() -> info.models.take(3).joinToString(", ")
+                        else -> null
+                    }
+                    PickerPopover.Row(
+                        info.name,
+                        subtitle = subtitle,
+                        iconRes = R.drawable.ic_code_terminal,
+                        selected = info.kind == harness
+                    ) {
+                        // Still allow picking an unavailable harness so the user can set a default
+                        // before installing; the bridge will reject session/new if it can't launch.
+                        harness = info.kind
+                        refreshPills()
+                    }
+                }
+            } else {
+                HarnessKind.entries.filter { it != HarnessKind.CUSTOM }.map { k ->
+                    PickerPopover.Row(k.displayName, iconRes = R.drawable.ic_code_terminal, selected = k == harness) {
+                        harness = k
+                        refreshPills()
+                    }
+                }
             }
-        })
+            composer.pick(composer.agentPill, getString(R.string.code_home_pick_agent), rows)
+        }
     }
 
     private fun pickFolder() {
         val host = hub.activeHost.value ?: return
         viewLifecycleOwner.lifecycleScope.launch {
             val folders = hub.workspaces(harness).ifEmpty { listOfNotNull(host.defaultWorkspace.ifBlank { null }) }
+            // When a path is already chosen, offer its subdirectories from bridge/browse so the
+            // existing popover can drill one level without a dedicated folder-browser sheet.
+            val browseRoot = workspace.ifBlank { host.defaultWorkspace }
+            val children = if (browseRoot.isNotBlank()) {
+                hub.browse(browseRoot).filter { it.dir }.map { entry ->
+                    val child = browseRoot.trimEnd('/') + "/" + entry.name
+                    child
+                }
+            } else emptyList()
+            val paths = (folders + children).distinct()
             composer.pick(
                 composer.folderPill,
                 getString(R.string.code_home_folder_prompt, host.name),
-                folders.map { path ->
+                paths.map { path ->
                     PickerPopover.Row(CodeComposer.folderName(path), subtitle = path, iconRes = R.drawable.ic_code_folder, selected = path == workspace) {
                         workspace = path
                         refreshPills()

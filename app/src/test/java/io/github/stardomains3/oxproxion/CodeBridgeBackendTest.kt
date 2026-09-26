@@ -2,6 +2,8 @@ package io.github.stardomains3.oxproxion
 
 import io.github.stardomains3.oxproxion.code.AcpAdapter
 import io.github.stardomains3.oxproxion.code.BridgeBackend
+import io.github.stardomains3.oxproxion.code.BrowseEntry
+import io.github.stardomains3.oxproxion.code.HarnessInfo
 import io.github.stardomains3.oxproxion.code.CodeHost
 import io.github.stardomains3.oxproxion.code.CodeSessionSummary
 import io.github.stardomains3.oxproxion.code.CodeTransport
@@ -143,6 +145,8 @@ class CodeBridgeBackendTest {
                         "session/new" -> """{"sessionId":"s1"}"""
                         "bridge/listSessions" -> """{"sessions":[]}"""
                         "bridge/listWorkspaces" -> """{"workspaces":[]}"""
+                        "bridge/listHarnesses" -> """{"harnesses":[]}"""
+                        "bridge/browse" -> """{"entries":[]}"""
                         "session/set_mode" -> "{}"
                         "session/prompt" -> continue // left pending on purpose unless test answers
                         else -> "{}"
@@ -245,5 +249,96 @@ class CodeBridgeBackendTest {
         backend.setAppBackgrounded(false)
         assertFalse(transport.backgrounded)
         backend.close()
+    }
+
+    @Test fun listHarnessesParsesBridgeResult() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = scope.launch {
+            val answered = HashSet<Long>()
+            while (true) {
+                for (frame in transport.sent.toList()) {
+                    val obj = runCatching { json.parseToJsonElement(frame).jsonObject }.getOrNull() ?: continue
+                    val id = obj["id"]?.jsonPrimitive?.longOrNull ?: continue
+                    if (id in answered) continue
+                    val method = obj["method"]?.jsonPrimitive?.content ?: continue
+                    val result = when (method) {
+                        "initialize" -> """{"protocolVersion":1}"""
+                        "bridge/listHarnesses" -> """{"harnesses":[
+                            {"id":"opencode","name":"OpenCode","available":true,"models":["gpt-5"]},
+                            {"id":"cursor-cli","name":"Cursor CLI","available":false}
+                        ]}"""
+                        else -> "{}"
+                    }
+                    answered += id
+                    transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":$result}""")
+                }
+                delay(5)
+            }
+        }
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            val list = backend.listHarnesses()
+            assertEquals(2, list.size)
+            assertEquals(HarnessInfo("opencode", "OpenCode", true, listOf("gpt-5")), list[0])
+            assertEquals(HarnessKind.OPENCODE, list[0].kind)
+            assertEquals(HarnessInfo("cursor-cli", "Cursor CLI", false), list[1])
+            assertFalse(list[1].available)
+            assertTrue(transport.sent.any { it.contains("bridge/listHarnesses") })
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun browseParsesDirectoryEntries() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = scope.launch {
+            val answered = HashSet<Long>()
+            while (true) {
+                for (frame in transport.sent.toList()) {
+                    val obj = runCatching { json.parseToJsonElement(frame).jsonObject }.getOrNull() ?: continue
+                    val id = obj["id"]?.jsonPrimitive?.longOrNull ?: continue
+                    if (id in answered) continue
+                    val method = obj["method"]?.jsonPrimitive?.content ?: continue
+                    val result = when (method) {
+                        "initialize" -> """{"protocolVersion":1}"""
+                        "bridge/browse" -> """{"entries":[
+                            {"name":"src","dir":true},
+                            {"name":"README.md","dir":false}
+                        ]}"""
+                        else -> "{}"
+                    }
+                    answered += id
+                    transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":$result}""")
+                }
+                delay(5)
+            }
+        }
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            val entries = backend.browse("/home/me/code")
+            assertEquals(
+                listOf(BrowseEntry("src", true), BrowseEntry("README.md", false)),
+                entries
+            )
+            val browseFrame = transport.sent.last { it.contains("bridge/browse") }
+            val path = json.parseToJsonElement(browseFrame).jsonObject["params"]!!.jsonObject["path"]!!.jsonPrimitive.content
+            assertEquals("/home/me/code", path)
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
     }
 }
