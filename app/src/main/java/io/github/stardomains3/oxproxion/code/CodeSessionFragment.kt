@@ -56,6 +56,11 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
     private var haptickedApprovalId: String? = null
     /** Pending approval we are currently pinning, if any. */
     private var pinnedApprovalId: String? = null
+    /** Change-gates for [updateApprovalBar] — avoid per-frame text/visibility churn on scroll. */
+    private var barBoundVisible: Boolean = false
+    private var barBoundRequestId: String? = null
+    private var barBoundTitle: String? = null
+    private var barBoundHarness: String? = null
 
     private val imagePicker = registerForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(CodePromptImages.MAX_COUNT)
@@ -217,31 +222,53 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         if (!::approvalBar.isInitialized) return
         if (state == null) {
             pinnedApprovalId = null
-            approvalBar.isVisible = false
-            return
-        }
-        val pending = CodeApprovalBar.findPending(state.events)
-        pinnedApprovalId = pending?.requestId
-        if (pending == null) {
-            approvalBar.isVisible = false
+            applyApprovalBarVisibility(false)
+            clearApprovalBarTextGate()
             return
         }
         val rows = adapter.currentList
-        val index = CodeApprovalBar.indexOfApproval(rows, pending.requestId)
         val lm = list.layoutManager as? LinearLayoutManager
-        val first = lm?.findFirstVisibleItemPosition() ?: RecyclerView.NO_POSITION
-        val last = lm?.findLastVisibleItemPosition() ?: RecyclerView.NO_POSITION
-        // Pending known but not yet in the adapter list → treat as off-screen.
-        val show = index < 0 || CodeApprovalBar.shouldShowBar(index, first, last)
-        if (show) {
-            approvalBar.text = getString(
-                R.string.code_approval_bar,
-                state.summary.harness.shortName,
-                pending.title,
-            )
-            approvalBar.contentDescription = getString(R.string.cd_code_approval_bar)
+        val clearTop = list.paddingTop
+        val clearBottom = list.height - list.paddingBottom
+        fun isOffClearViewport(index: Int): Boolean {
+            if (lm == null) return CodeApprovalBar.shouldShowBar(index, null, null, clearTop, clearBottom)
+            val child = lm.findViewByPosition(index)
+            val top = child?.let { lm.getDecoratedTop(it) }
+            val bottom = child?.let { lm.getDecoratedBottom(it) }
+            return CodeApprovalBar.shouldShowBar(index, top, bottom, clearTop, clearBottom)
         }
+        // Pin first unanswered that is outside the clear viewport (X1/X3); null ⇒ hide.
+        val pinned = CodeApprovalBar.findPinnedPending(state.events, rows, ::isOffClearViewport)
+        pinnedApprovalId = pinned?.requestId
+        if (pinned == null) {
+            applyApprovalBarVisibility(false)
+            clearApprovalBarTextGate()
+            return
+        }
+        val harness = state.summary.harness.shortName
+        if (pinned.requestId != barBoundRequestId ||
+            pinned.title != barBoundTitle ||
+            harness != barBoundHarness
+        ) {
+            approvalBar.text = getString(R.string.code_approval_bar, harness, pinned.title)
+            approvalBar.contentDescription = getString(R.string.cd_code_approval_bar)
+            barBoundRequestId = pinned.requestId
+            barBoundTitle = pinned.title
+            barBoundHarness = harness
+        }
+        applyApprovalBarVisibility(true)
+    }
+
+    private fun applyApprovalBarVisibility(show: Boolean) {
+        if (barBoundVisible == show) return
+        barBoundVisible = show
         approvalBar.isVisible = show
+    }
+
+    private fun clearApprovalBarTextGate() {
+        barBoundRequestId = null
+        barBoundTitle = null
+        barBoundHarness = null
     }
 
     private fun maybeHapticApprovalArrival(pending: CodeEvent.Approval?) {
