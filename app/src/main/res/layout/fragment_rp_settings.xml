@@ -46,6 +46,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
+                    android:maxLines="2"
+                    android:ellipsize="end"
                     android:text="@string/rp_lore_enabled"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />
@@ -60,6 +62,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
+                    android:maxLines="2"
+                    android:ellipsize="end"
                     android:text="@string/rp_third_person"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />
@@ -74,6 +78,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
+                    android:maxLines="2"
+                    android:ellipsize="end"
                     android:text="@string/rp_show_thoughts"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />
@@ -88,6 +94,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
+                    android:maxLines="2"
+                    android:ellipsize="end"
                     android:text="@string/rp_llm_mode"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />

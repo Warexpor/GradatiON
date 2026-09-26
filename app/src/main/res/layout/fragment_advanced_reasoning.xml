@@ -48,25 +48,29 @@
                 android:textSize="18sp"
                 android:layout_marginBottom="16dp" />
 
-            <androidx.constraintlayout.widget.ConstraintLayout
+            <!-- HSV so Minimal/Low/Medium/High never hard-clip on narrow / large-font -->
+            <HorizontalScrollView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
+                android:layout_height="wrap_content"
+                android:fillViewport="true"
+                android:overScrollMode="never"
+                android:scrollbars="none">
 
                 <io.github.stardomains3.oxproxion.GlassSegmentedGroup
                     android:id="@+id/effortGroup"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
+                    android:minWidth="280dp"
                     app:singleSelection="true">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/buttonMinimal"
-                        android:layout_width="0dp"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:minWidth="0dp"
+                        android:maxLines="1"
+                        android:ellipsize="end"
                         app:backgroundTint="@color/toggle_background_selector"
                         android:text="Minimal"
                         app:strokeColor="@color/xai_hairline"
@@ -74,9 +78,11 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/buttonLow"
-                        android:layout_width="0dp"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:minWidth="0dp"
+                        android:maxLines="1"
+                        android:ellipsize="end"
                         app:backgroundTint="@color/toggle_background_selector"
                         android:text="Low"
                         app:strokeColor="@color/xai_hairline"
@@ -84,9 +90,11 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/buttonMedium"
-                        android:layout_width="0dp"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:minWidth="0dp"
+                        android:maxLines="1"
+                        android:ellipsize="end"
                         app:backgroundTint="@color/toggle_background_selector"
                         android:text="Medium"
                         app:strokeColor="@color/xai_hairline"
@@ -94,16 +102,18 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/buttonHigh"
-                        android:layout_width="0dp"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
+                        android:minWidth="0dp"
+                        android:maxLines="1"
+                        android:ellipsize="end"
                         app:backgroundTint="@color/toggle_background_selector"
                         android:text="High"
                         app:strokeColor="@color/xai_hairline"
                         style="?attr/materialButtonOutlinedStyle" />
 
                 </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
-            </androidx.constraintlayout.widget.ConstraintLayout>
+            </HorizontalScrollView>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -117,6 +127,8 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="2"
                     android:text="Include in Response:"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />

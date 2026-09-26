@@ -96,9 +96,12 @@
                     app:tint="@color/xai_ink" />
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="@string/model_picker_browse_lan"
                     android:textColor="@color/xai_ink"
                     android:textSize="14sp" />
@@ -130,9 +133,12 @@
                     app:tint="@color/xai_ink" />
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="@string/model_picker_browse_cloud"
                     android:textColor="@color/xai_ink"
                     android:textSize="14sp" />
@@ -152,33 +158,43 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:text="@string/model_picker_sort"
                 android:textColor="@color/xai_mute"
                 android:textSize="13sp" />
 
-            <io.github.stardomains3.oxproxion.GlassSegmentedGroup
-                android:id="@+id/sortBar"
-                android:layout_width="wrap_content"
+            <HorizontalScrollView
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                app:selectionRequired="true"
-                app:singleSelection="true">
+                android:layout_weight="1"
+                android:overScrollMode="never"
+                android:scrollbars="none">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/sortAlphabeticalButton"
-                    style="@style/Widget.Grokion.Button.FilterChip"
+                <io.github.stardomains3.oxproxion.GlassSegmentedGroup
+                    android:id="@+id/sortBar"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/model_picker_sort_az"
-                    app:checkedIconVisible="false" />
+                    app:selectionRequired="true"
+                    app:singleSelection="true">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/sortDateButton"
-                    style="@style/Widget.Grokion.Button.FilterChip"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/model_picker_sort_newest"
-                    app:checkedIconVisible="false" />
-            </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/sortAlphabeticalButton"
+                        style="@style/Widget.Grokion.Button.FilterChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/model_picker_sort_az"
+                        app:checkedIconVisible="false" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/sortDateButton"
+                        style="@style/Widget.Grokion.Button.FilterChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/model_picker_sort_newest"
+                        app:checkedIconVisible="false" />
+                </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
+            </HorizontalScrollView>
         </LinearLayout>
 
         <HorizontalScrollView
