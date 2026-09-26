@@ -338,15 +338,19 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         if (starting) return
         starting = true
         viewLifecycleOwner.lifecycleScope.launch {
-            syncPermissionFromStore()
-            val result = hub.startSession(NewSessionRequest(host.id, harness, workspace, prompt, permission))
-            starting = false
-            result.onSuccess { id ->
-                composer.clear()
-                composer.hideKeyboard()
-                openSession(id)
-            }.onFailure {
-                AppToast.makeText(requireContext(), getString(R.string.code_home_start_failed, it.message ?: "?"), AppToast.LENGTH_LONG).show()
+            try {
+                syncPermissionFromStore()
+                val result = hub.startSession(NewSessionRequest(host.id, harness, workspace, prompt, permission))
+                result.onSuccess { id ->
+                    composer.clear()
+                    composer.hideKeyboard()
+                    openSession(id)
+                }.onFailure {
+                    AppToast.makeText(requireContext(), getString(R.string.code_home_start_failed, it.message ?: "?"), AppToast.LENGTH_LONG).show()
+                }
+            } finally {
+                // View teardown cancels this job; clear the guard so a later start isn't stuck.
+                starting = false
             }
         }
     }

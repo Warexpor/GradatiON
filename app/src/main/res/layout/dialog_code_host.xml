@@ -112,6 +112,8 @@
                 android:layout_weight="1"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
+                android:maxLines="1"
+                android:ellipsize="end"
                 android:text="@string/edit_response_cancel" />
 
             <com.google.android.material.button.MaterialButton
@@ -121,6 +123,8 @@
                 android:layout_height="48dp"
                 android:layout_weight="1"
                 android:layout_marginStart="10dp"
+                android:maxLines="1"
+                android:ellipsize="end"
                 android:text="@string/code_host_save" />
         </LinearLayout>
 
@@ -130,6 +134,8 @@
             android:layout_width="match_parent"
             android:layout_height="44dp"
             android:layout_marginTop="6dp"
+            android:maxLines="1"
+            android:ellipsize="end"
             android:text="@string/code_host_remove"
             android:textColor="@color/xai_mute"
             android:visibility="gone" />

@@ -106,6 +106,9 @@
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:minWidth="0dp"
+                android:maxWidth="160dp"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:text="@string/rp_ui_add_photo" />
 
             <com.google.android.material.button.MaterialButton
@@ -116,6 +119,9 @@
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:minWidth="0dp"
+                android:maxWidth="120dp"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:text="@string/rp_ui_remove_photo"
                 android:textColor="@color/xai_mute"
                 android:visibility="gone" />

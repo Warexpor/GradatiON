@@ -43,7 +43,9 @@
                     android:text="Temperature"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
-                    android:textFontWeight="600" />
+                    android:textFontWeight="600"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/tempSwitch"
                     android:layout_width="wrap_content"
@@ -77,7 +79,9 @@
                     android:text="Top P"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
-                    android:textFontWeight="600" />
+                    android:textFontWeight="600"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/topPSwitch"
                     android:layout_width="wrap_content"
@@ -111,7 +115,9 @@
                     android:text="Top K"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
-                    android:textFontWeight="600" />
+                    android:textFontWeight="600"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/topKSwitch"
                     android:layout_width="wrap_content"
@@ -145,7 +151,9 @@
                     android:text="Min P"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
-                    android:textFontWeight="600" />
+                    android:textFontWeight="600"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/minPSwitch"
                     android:layout_width="wrap_content"
@@ -179,7 +187,9 @@
                     android:text="Repetition Penalty"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
-                    android:textFontWeight="600" />
+                    android:textFontWeight="600"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/repPenaltySwitch"
                     android:layout_width="wrap_content"
@@ -213,7 +223,9 @@
                     android:text="Presence Penalty"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
-                    android:textFontWeight="600" />
+                    android:textFontWeight="600"
+                    android:maxLines="2"
+                    android:ellipsize="end" />
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/presPenaltySwitch"
                     android:layout_width="wrap_content"
