@@ -86,9 +86,10 @@
 
                     <TextView
                         android:id="@+id/codeSessionTitle"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:ellipsize="end"
+                        android:gravity="center_horizontal"
                         android:singleLine="true"
                         android:textColor="@color/xai_ink"
                         android:textSize="16sp"
@@ -96,12 +97,12 @@
 
                     <TextView
                         android:id="@+id/codeSessionSubtitle"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="1dp"
                         android:drawablePadding="6dp"
                         android:ellipsize="middle"
-                        android:gravity="center_vertical"
+                        android:gravity="center"
                         android:singleLine="true"
                         android:textColor="@color/xai_mute"
                         android:textSize="12.5sp" />
