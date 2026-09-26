@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transcript dissolves into the canvas behind the floating composer -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="90"
+        android:startColor="@color/xai_canvas"
+        android:centerColor="@color/composer_fade_mid"
+        android:centerY="0.55"
+        android:endColor="@color/grad_fade_clear" />
+</shape>

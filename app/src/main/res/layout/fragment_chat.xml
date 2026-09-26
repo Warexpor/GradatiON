@@ -8,260 +8,27 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <LinearLayout
+    <FrameLayout
         android:id="@+id/rootLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
         android:background="@color/xai_canvas"
         android:fitsSystemWindows="true"
         tools:context=".ChatFragment">
-
-        <!-- ── Top bar: history | mode · model | new chat. Flush with canvas; transcript fades beneath. ── -->
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/topBarLayout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="56dp"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:background="@drawable/bg_top_bar_grok">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/openSavedChatsButton"
-                style="@style/Widget.Grokion.IconButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:contentDescription="@string/cd_history"
-                app:icon="@drawable/ic_grok_menu"
-                app:iconSize="24dp"
-                app:iconTint="@color/xai_ink"
-                app:backgroundTint="@android:color/transparent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/backcopyButton"
-                style="@style/Widget.Grokion.IconButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:visibility="gone"
-                android:contentDescription="@string/cd_copy_and_return"
-                app:backgroundTint="@android:color/transparent"
-                app:icon="@drawable/backcopy"
-                app:iconSize="22dp"
-                app:iconTint="@color/xai_ink"
-                app:layout_constraintStart_toStartOf="@id/openSavedChatsButton"
-                app:layout_constraintTop_toBottomOf="@id/openSavedChatsButton" />
-
-            <androidx.constraintlayout.widget.Barrier
-                android:id="@+id/topBarStartBarrier"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:barrierDirection="end"
-                app:constraint_referenced_ids="openSavedChatsButton" />
-
-            <androidx.constraintlayout.widget.Barrier
-                android:id="@+id/topBarEndBarrier"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:barrierDirection="start"
-                app:constraint_referenced_ids="newChatButton" />
-
-            <!-- Ask / RP mode switch -->
-            <TextView
-                android:id="@+id/chatModeChip"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:layout_marginStart="2dp"
-                android:background="@drawable/bg_model_chip"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:text="@string/rp_mode_ask"
-                android:textColor="@color/xai_ink"
-                android:textSize="12sp"
-                android:textFontWeight="600"
-                app:layout_constraintStart_toEndOf="@id/topBarStartBarrier"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent" />
-
-            <!-- Model chip, centered -->
-            <TextView
-                android:id="@+id/modelNameTextView"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:maxWidth="210dp"
-                android:background="@drawable/bg_model_chip"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="@string/cd_active_model"
-                android:ellipsize="end"
-                android:singleLine="true"
-                android:gravity="center_vertical"
-                android:paddingStart="14dp"
-                android:paddingEnd="8dp"
-                android:textColor="@color/xai_ink"
-                android:textSize="14sp"
-                android:textFontWeight="500"
-                android:drawablePadding="2dp"
-                android:drawableTint="@color/xai_mute"
-                app:drawableEndCompat="@drawable/ic_expand_more"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                tools:text="Qwen 3 32B" />
-
-            <!-- Kept gone for ChatFragment ID wiring -->
-            <TextView
-                android:id="@+id/askTitleTextView"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone"
-                android:text="@string/grok_ask_tab"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <View
-                android:id="@+id/askTabIndicator"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/newChatButton"
-                style="@style/Widget.Grokion.IconButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:contentDescription="@string/grok_new_conversation"
-                app:icon="@drawable/ic_new_chat"
-                app:iconSize="23dp"
-                app:iconTint="@color/xai_ink"
-                app:backgroundTint="@android:color/transparent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/backButton"
-                style="@style/Widget.Grokion.IconButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:visibility="gone"
-                android:contentDescription="@string/cd_back_to_app"
-                app:backgroundTint="@android:color/transparent"
-                app:icon="@drawable/backtoapp"
-                app:iconSize="22dp"
-                app:iconTint="@color/xai_ink"
-                app:layout_constraintEnd_toEndOf="@id/newChatButton"
-                app:layout_constraintTop_toBottomOf="@id/newChatButton" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/homeButton"
-                style="@style/Widget.Grokion.IconButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:visibility="gone"
-                android:contentDescription="@string/cd_home"
-                app:backgroundTint="@android:color/transparent"
-                app:icon="@drawable/ic_home"
-                app:iconSize="22dp"
-                app:iconTint="@color/xai_ink"
-                app:layout_constraintEnd_toEndOf="@id/newChatButton"
-                app:layout_constraintTop_toBottomOf="@id/newChatButton" />
-
-            <!-- Power-tools row (Settings > Appearance). Toggles show state: muted off, ink on a disc when on. -->
-            <HorizontalScrollView
-                android:id="@+id/extendedTopBarScroll"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:scrollbars="none"
-                android:visibility="gone"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/openSavedChatsButton">
-
-                <LinearLayout
-                    android:id="@+id/extendedTopBarContainer"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center"
-                    android:paddingTop="2dp"
-                    android:paddingBottom="2dp"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/topReasoningButton"
-                        style="@style/Widget.Gradation.TopToggle"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:contentDescription="@string/control_reasoning"
-                        app:icon="@drawable/ic_reasoning" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/topWebSearchButton"
-                        style="@style/Widget.Gradation.TopToggle"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:contentDescription="@string/control_web"
-                        app:icon="@drawable/ic_websearch" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/topStreamButton"
-                        style="@style/Widget.Gradation.TopToggle"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:contentDescription="@string/control_stream"
-                        app:icon="@drawable/ic_stream" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/topConvoButton"
-                        style="@style/Widget.Gradation.TopToggle"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:visibility="gone"
-                        android:contentDescription="@string/control_read_aloud"
-                        app:icon="@drawable/ic_convo" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/topToolsButton"
-                        style="@style/Widget.Gradation.TopToggle"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:contentDescription="@string/control_tools"
-                        app:icon="@drawable/ic_tools" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/topPresetsButton"
-                        style="@style/Widget.Gradation.TopToggle"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:contentDescription="@string/control_presets"
-                        app:icon="@drawable/ic_presets" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/topSettingsButton"
-                        style="@style/Widget.Gradation.TopToggle"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:contentDescription="@string/control_settings"
-                        app:icon="@drawable/ic_settings" />
-                </LinearLayout>
-            </HorizontalScrollView>
-        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- ── Chat canvas ── -->
         <FrameLayout
             android:id="@+id/chatFrameView"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="match_parent"
             android:animateLayoutChanges="false"
             android:background="@color/xai_canvas">
+
+            <!-- Everything glass blurs lives in here -->
+            <io.github.stardomains3.oxproxion.GlassBackdropLayout
+                android:id="@+id/chatBackdrop"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/chatRecyclerView"
@@ -269,28 +36,11 @@
                 android:layout_height="match_parent"
                 android:background="@color/xai_canvas"
                 android:clipToPadding="false"
-                android:paddingTop="16dp"
-                android:paddingBottom="48dp"
+                android:paddingTop="72dp"
+                android:paddingBottom="120dp"
                 android:paddingStart="6dp"
                 android:paddingEnd="6dp"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
-
-            <!-- Transcript fades under the top bar and into the composer -->
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="20dp"
-                android:layout_gravity="top"
-                android:background="@drawable/bg_edge_fade_top"
-                android:clickable="false"
-                android:focusable="false" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="24dp"
-                android:layout_gravity="bottom"
-                android:background="@drawable/bg_edge_fade_bottom"
-                android:clickable="false"
-                android:focusable="false" />
 
             <!-- Empty state: small mark + greeting -->
             <FrameLayout
@@ -329,6 +79,7 @@
                         android:textAppearance="@style/TextAppearance.Gradation.Title" />
                 </LinearLayout>
             </FrameLayout>
+            </io.github.stardomains3.oxproxion.GlassBackdropLayout>
 
             <View
                 android:id="@+id/dimOverlay"
@@ -342,8 +93,10 @@
 
             <!-- Controls panel: Control Center-style tiles, anchored above the composer.
                  Tiles invert (ink fill) when their feature is on. -->
-            <LinearLayout
+            <io.github.stardomains3.oxproxion.GlassLinearLayout
                 android:id="@+id/headerContainer"
+                app:glassCornerRadius="28dp"
+                app:glassTint="@color/glass_panel_tint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom"
@@ -352,15 +105,13 @@
                 android:layout_marginBottom="8dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:background="@drawable/bg_menu_panel"
                 android:visibility="gone"
                 android:orientation="vertical"
                 android:animateLayoutChanges="false"
                 android:paddingTop="10dp"
                 android:paddingBottom="14dp"
                 android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:elevation="12dp">
+                android:paddingEnd="8dp">
 
                 <View
                     android:layout_width="36dp"
@@ -627,7 +378,7 @@
                         app:backgroundTint="@android:color/transparent" />
                     </LinearLayout>
                 </LinearLayout>
-            </LinearLayout>
+            </io.github.stardomains3.oxproxion.GlassLinearLayout>
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/attachmentPreviewContainer"
@@ -786,6 +537,272 @@
                 android:focusableInTouchMode="false" />
         </FrameLayout>
 
+        <!-- ── Top bar: history | mode · model | new chat. Glass bar; the transcript scrolls
+             beneath it and its hairline fades in once content is under it. ── -->
+        <io.github.stardomains3.oxproxion.GlassFrameLayout
+            android:id="@+id/topBarGlass"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            app:glassTint="@color/glass_bar_tint"
+            app:glassBottomEdgeOnly="true"
+            app:glassEdgeAlpha="0">
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/topBarLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="56dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/openSavedChatsButton"
+                style="@style/Widget.Grokion.IconButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/cd_history"
+                app:icon="@drawable/ic_grok_menu"
+                app:iconSize="24dp"
+                app:iconTint="@color/xai_ink"
+                app:backgroundTint="@android:color/transparent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/backcopyButton"
+                style="@style/Widget.Grokion.IconButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:visibility="gone"
+                android:contentDescription="@string/cd_copy_and_return"
+                app:backgroundTint="@android:color/transparent"
+                app:icon="@drawable/backcopy"
+                app:iconSize="22dp"
+                app:iconTint="@color/xai_ink"
+                app:layout_constraintStart_toStartOf="@id/openSavedChatsButton"
+                app:layout_constraintTop_toBottomOf="@id/openSavedChatsButton" />
+
+            <androidx.constraintlayout.widget.Barrier
+                android:id="@+id/topBarStartBarrier"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:barrierDirection="end"
+                app:constraint_referenced_ids="openSavedChatsButton" />
+
+            <androidx.constraintlayout.widget.Barrier
+                android:id="@+id/topBarEndBarrier"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:barrierDirection="start"
+                app:constraint_referenced_ids="newChatButton" />
+
+            <!-- Ask / RP mode switch -->
+            <TextView
+                android:id="@+id/chatModeChip"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:layout_marginStart="2dp"
+                android:background="@drawable/bg_model_chip"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="@string/rp_mode_ask"
+                android:textColor="@color/xai_ink"
+                android:textSize="12sp"
+                android:textFontWeight="600"
+                app:layout_constraintStart_toEndOf="@id/topBarStartBarrier"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <!-- Model chip, centered -->
+            <TextView
+                android:id="@+id/modelNameTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:maxWidth="210dp"
+                android:background="@drawable/bg_model_chip"
+                android:clickable="true"
+                android:focusable="true"
+                android:contentDescription="@string/cd_active_model"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:gravity="center_vertical"
+                android:paddingStart="14dp"
+                android:paddingEnd="8dp"
+                android:textColor="@color/xai_ink"
+                android:textSize="14sp"
+                android:textFontWeight="500"
+                android:drawablePadding="2dp"
+                android:drawableTint="@color/xai_mute"
+                app:drawableEndCompat="@drawable/ic_expand_more"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                tools:text="Qwen 3 32B" />
+
+            <!-- Kept gone for ChatFragment ID wiring -->
+            <TextView
+                android:id="@+id/askTitleTextView"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone"
+                android:text="@string/grok_ask_tab"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <View
+                android:id="@+id/askTabIndicator"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/newChatButton"
+                style="@style/Widget.Grokion.IconButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/grok_new_conversation"
+                app:icon="@drawable/ic_new_chat"
+                app:iconSize="23dp"
+                app:iconTint="@color/xai_ink"
+                app:backgroundTint="@android:color/transparent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/backButton"
+                style="@style/Widget.Grokion.IconButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:visibility="gone"
+                android:contentDescription="@string/cd_back_to_app"
+                app:backgroundTint="@android:color/transparent"
+                app:icon="@drawable/backtoapp"
+                app:iconSize="22dp"
+                app:iconTint="@color/xai_ink"
+                app:layout_constraintEnd_toEndOf="@id/newChatButton"
+                app:layout_constraintTop_toBottomOf="@id/newChatButton" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/homeButton"
+                style="@style/Widget.Grokion.IconButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:visibility="gone"
+                android:contentDescription="@string/cd_home"
+                app:backgroundTint="@android:color/transparent"
+                app:icon="@drawable/ic_home"
+                app:iconSize="22dp"
+                app:iconTint="@color/xai_ink"
+                app:layout_constraintEnd_toEndOf="@id/newChatButton"
+                app:layout_constraintTop_toBottomOf="@id/newChatButton" />
+
+            <!-- Power-tools row (Settings > Appearance). Toggles show state: muted off, ink on a disc when on. -->
+            <HorizontalScrollView
+                android:id="@+id/extendedTopBarScroll"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/openSavedChatsButton">
+
+                <LinearLayout
+                    android:id="@+id/extendedTopBarContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/topReasoningButton"
+                        style="@style/Widget.Gradation.TopToggle"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:contentDescription="@string/control_reasoning"
+                        app:icon="@drawable/ic_reasoning" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/topWebSearchButton"
+                        style="@style/Widget.Gradation.TopToggle"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:contentDescription="@string/control_web"
+                        app:icon="@drawable/ic_websearch" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/topStreamButton"
+                        style="@style/Widget.Gradation.TopToggle"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:contentDescription="@string/control_stream"
+                        app:icon="@drawable/ic_stream" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/topConvoButton"
+                        style="@style/Widget.Gradation.TopToggle"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:visibility="gone"
+                        android:contentDescription="@string/control_read_aloud"
+                        app:icon="@drawable/ic_convo" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/topToolsButton"
+                        style="@style/Widget.Gradation.TopToggle"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:contentDescription="@string/control_tools"
+                        app:icon="@drawable/ic_tools" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/topPresetsButton"
+                        style="@style/Widget.Gradation.TopToggle"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:contentDescription="@string/control_presets"
+                        app:icon="@drawable/ic_presets" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/topSettingsButton"
+                        style="@style/Widget.Gradation.TopToggle"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:contentDescription="@string/control_settings"
+                        app:icon="@drawable/ic_settings" />
+                </LinearLayout>
+            </HorizontalScrollView>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+        </io.github.stardomains3.oxproxion.GlassFrameLayout>
+
+        <!-- Soft fade so the transcript dissolves around the floating composer -->
+        <View
+            android:id="@+id/composerFade"
+            android:layout_width="match_parent"
+            android:layout_height="96dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_composer_fade"
+            android:clickable="false"
+            android:focusable="false"
+            android:importantForAccessibility="no" />
+
+        <!-- Composer dock: fills the screen but only its children take touches; the
+             composer (and RP extras) sit at the bottom over the scrolling transcript. -->
+        <LinearLayout
+            android:id="@+id/composerDock"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="bottom">
+
         <!-- RP extras: Reminder insert + swipe alternate replies -->
         <LinearLayout
             android:id="@+id/rpComposerExtras"
@@ -879,9 +896,10 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ── Composer: gradient panel; + attach and controls on the left, send on the right ── -->
-        <LinearLayout
+        <!-- ── Composer: floating glass capsule; + attach and controls on the left, send on the right ── -->
+        <io.github.stardomains3.oxproxion.GlassLinearLayout
             android:id="@+id/chatInputContainer"
+            app:glassCornerRadius="26dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -893,7 +911,6 @@
             android:paddingEnd="8dp"
             android:paddingTop="8dp"
             android:paddingBottom="8dp"
-            android:background="@drawable/bg_composer_panel"
             android:gravity="center_vertical">
 
             <LinearLayout
@@ -1046,8 +1063,9 @@
                         android:padding="0dp" />
                 </LinearLayout>
             </LinearLayout>
+        </io.github.stardomains3.oxproxion.GlassLinearLayout>
         </LinearLayout>
-    </LinearLayout>
+    </FrameLayout>
 
     <!-- Left edge only, below top bar so History button stays clickable -->
     <View

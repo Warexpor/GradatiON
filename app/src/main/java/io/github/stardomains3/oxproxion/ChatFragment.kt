@@ -702,6 +702,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             timeZone = TimeZone.getDefault()
         }
         setupRecyclerView()
+        setupGlassChrome(view)
 
         // In onViewCreated(), after initializing chatEditText and before setupClickListeners()
         chatEditText.addTextChangedListener(object : android.text.TextWatcher {
@@ -1453,6 +1454,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val leftCollapsed = listOf(menuButton, controlsButton)
         val rightCollapsed = listOf(speechButton, sendChatButton)
 
+        view?.findViewById<View>(R.id.composerDock)?.let { dock ->
+            val topPad = if (expanded) view?.findViewById<View>(R.id.topBarGlass)?.height ?: 0 else 0
+            dock.setPadding(0, topPad, 0, 0)
+        }
         if (expanded) {
             containerParams.height = LinearLayout.LayoutParams.MATCH_PARENT
             editParams.height = 0
@@ -1540,6 +1545,93 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         // 3. Remove Insets Listener (Stop listening to keyboard)
         ViewCompat.setOnApplyWindowInsetsListener(rootView, null)
     }
+    // ── Glass chrome ────────────────────────────────────────────────────────────────
+    // The transcript fills the screen and scrolls beneath a glass top bar and a floating
+    // glass composer. Insets are measured from the live chrome so the first and last
+    // messages always clear it, whatever the top bar row or composer height is.
+    private var chromeTop = -1
+    private var chromeBottom = -1
+    private val chromeBaseMargins = HashMap<View, Int>()
+
+    private fun setupGlassChrome(root: View) {
+        val backdrop = root.findViewById<GlassBackdropLayout>(R.id.chatBackdrop)
+        val topGlass = root.findViewById<GlassFrameLayout>(R.id.topBarGlass)
+        topGlass.glass.source = backdrop
+        (chatInputContainer as? GlassLinearLayout)?.glass?.source = backdrop
+        (headerContainer as? GlassLinearLayout)?.glass?.source = backdrop
+        val relayout = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyChromeInsets() }
+        topGlass.addOnLayoutChangeListener(relayout)
+        root.findViewById<View>(R.id.composerDock).addOnLayoutChangeListener(relayout)
+        chatInputContainer.addOnLayoutChangeListener(relayout)
+        rpComposerExtras.addOnLayoutChangeListener(relayout)
+        chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) = updateTopBarEdge()
+        })
+    }
+
+    /** iOS nav-bar behaviour: the bar's hairline appears only once content is beneath it. */
+    private fun updateTopBarEdge() {
+        val topGlass = view?.findViewById<GlassFrameLayout>(R.id.topBarGlass) ?: return
+        val under = chatRecyclerView.computeVerticalScrollOffset().toFloat()
+        topGlass.glass.edgeAlpha = (under / (12f * resources.displayMetrics.density)).coerceIn(0f, 1f)
+    }
+
+    private fun applyChromeInsets() {
+        val root = view ?: return
+        val topGlass = root.findViewById<View>(R.id.topBarGlass) ?: return
+        val dock = root.findViewById<ViewGroup>(R.id.composerDock) ?: return
+        if (dock.height == 0) return
+        var contentTop = dock.height
+        for (i in 0 until dock.childCount) {
+            val c = dock.getChildAt(i)
+            if (c.visibility != View.VISIBLE) continue
+            val lp = c.layoutParams as ViewGroup.MarginLayoutParams
+            contentTop = minOf(contentTop, c.top - lp.topMargin)
+        }
+        val top = if (topGlass.isVisible) topGlass.height else 0
+        val bottom = (dock.height - contentTop).coerceAtLeast(0)
+        if (top == chromeTop && bottom == chromeBottom) return
+        val grew = if (chromeBottom >= 0) bottom - chromeBottom else 0
+        chromeTop = top
+        chromeBottom = bottom
+        // Post: we are inside a layout pass; padding/margin changes request another one.
+        root.post {
+            if (view == null) return@post
+            val d = resources.displayMetrics.density
+            val atBottom = !chatRecyclerView.canScrollVertically(1)
+            chatRecyclerView.setPadding(
+                chatRecyclerView.paddingLeft,
+                top + (8 * d).toInt(),
+                chatRecyclerView.paddingRight,
+                bottom + (14 * d).toInt()
+            )
+            if (atBottom && grew > 0) chatRecyclerView.post { chatRecyclerView.scrollBy(0, grew) }
+            listOf(headerContainer, attachmentPreviewContainer, extBG, fontSizeControlsContainer).forEach { v ->
+                val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
+                val base = chromeBaseMargins.getOrPut(v) { lp.bottomMargin }
+                if (lp.bottomMargin != base + bottom) {
+                    lp.bottomMargin = base + bottom
+                    v.layoutParams = lp
+                }
+            }
+            (progressBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                if (lp.topMargin != top) {
+                    lp.topMargin = top
+                    progressBar.layoutParams = lp
+                }
+            }
+            emptyStateContainer.setPadding(0, top, 0, bottom)
+            root.findViewById<View>(R.id.composerFade)?.let { fade ->
+                val h = bottom + (28 * d).toInt()
+                if (fade.layoutParams.height != h) {
+                    fade.layoutParams.height = h
+                    fade.requestLayout()
+                }
+            }
+            updateTopBarEdge()
+        }
+    }
+
     /**
      * While a reply streams, keep its growing edge above the composer, unless the reader has
      * dragged away to look at something else. Scrolling back to the bottom re-engages it.

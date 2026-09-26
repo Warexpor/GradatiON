@@ -80,4 +80,11 @@
     <color name="grad_chip_bottom">#FFF4F4F7</color>
     <color name="grad_fade_clear">#00FFFFFF</color>
     <color name="xai_press_wash">#0F000000</color>
+    <!-- Glass materials: translucent tint over live blur -->
+    <color name="glass_tint">#C2F9F9FB</color>
+    <color name="glass_bar_tint">#CCFFFFFF</color>
+    <color name="glass_panel_tint">#D6F4F4F6</color>
+    <color name="glass_edge">#16000000</color>
+    <color name="glass_highlight">#80FFFFFF</color>
+    <color name="composer_fade_mid">#B3FFFFFF</color>
 </resources>

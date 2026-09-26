@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="GlassMaterial">
+        <attr name="glassCornerRadius" format="dimension" />
+        <attr name="glassTint" format="color" />
+        <attr name="glassBlurRadius" format="dimension" />
+        <attr name="glassBottomEdgeOnly" format="boolean" />
+        <attr name="glassEdgeAlpha" format="float" />
+    </declare-styleable>
+</resources>
