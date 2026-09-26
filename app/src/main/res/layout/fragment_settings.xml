@@ -212,7 +212,7 @@
                     app:rippleColor="@color/press_ripple_none" />
             </LinearLayout>
 
-            <!-- STT disabled: Voice settings section
+            <!-- STT disabled: Voice settings section (id omitted here — live stub below keeps settingsRowVoice)
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -231,7 +231,6 @@
                 android:paddingBottom="4dp">
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/settingsRowVoice"
                     style="@style/Widget.Grokion.Button.Text"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
