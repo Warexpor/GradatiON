@@ -83,8 +83,9 @@ class CodeComposer(
     }
 
     fun setPermission(mode: PermissionMode) {
-        // Short label on the pill so agent+folder+permission fit; popover keeps the full name.
-        permissionPill.text = context.getString(permissionPillLabel(mode))
+        // Home (agent/folder visible) uses a short label so the row fits; session keeps the full name.
+        val short = agentPill.isVisible || folderPill.isVisible
+        permissionPill.text = context.getString(if (short) permissionPillLabel(mode) else permissionLabel(mode))
     }
 
     /** Opens the anchored glass popover above [anchor] (Grok's model-pill popover). */
