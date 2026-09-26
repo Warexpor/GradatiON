@@ -153,7 +153,7 @@ class CodeTranscriptAdapter(
         // Commands show their output live while they run; everything else opens on tap.
         val open = hasOutput && (e.key in expanded || (e.kind == ToolKind.EXECUTE && e.status == ToolStatus.RUNNING))
         v.findViewById<View>(R.id.codeToolOutputScroll).isVisible = open
-        if (open) v.findViewById<TextView>(R.id.codeToolOutput).text = e.output!!.lines().takeLast(OUTPUT_LINES).joinToString("\n")
+        if (open) v.findViewById<TextView>(R.id.codeToolOutput).text = e.output.orEmpty().lines().takeLast(OUTPUT_LINES).joinToString("\n")
         v.findViewById<View>(R.id.codeToolRow).apply {
             isClickable = hasOutput
             setOnClickListener {

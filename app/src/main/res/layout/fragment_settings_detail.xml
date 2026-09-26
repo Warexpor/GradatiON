@@ -57,42 +57,42 @@
                     android:background="@drawable/bg_appearance_preview"
                     android:clipToOutline="true">
 
-                <LinearLayout
-                    android:id="@+id/appearancePreviewCard"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="14dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="end"
-                        android:background="@drawable/bg_user_message"
-                        android:maxWidth="280dp"
-                        android:paddingStart="14dp"
-                        android:paddingTop="10dp"
-                        android:paddingEnd="14dp"
-                        android:paddingBottom="10dp"
-                        android:text="@string/grok_appearance_preview_user"
-                        android:textColor="@color/xai_ink"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:lineSpacingMultiplier="1.55"
-                        android:text="@string/grok_appearance_preview_grok"
-                        android:textColor="@color/xai_body"
-                        android:textSize="14sp" />
-                </LinearLayout>
-
-                    <!-- Live preview of the chosen background (follows the picker below) -->
+                    <!-- Behind the sample bubbles so ambient never covers the preview copy. -->
                     <io.github.stardomains3.oxproxion.AmbientBackgroundView
                         android:id="@+id/appearancePreviewBackground"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent" />
+
+                    <LinearLayout
+                        android:id="@+id/appearancePreviewCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="14dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end"
+                            android:background="@drawable/bg_user_message"
+                            android:maxWidth="280dp"
+                            android:paddingStart="14dp"
+                            android:paddingTop="10dp"
+                            android:paddingEnd="14dp"
+                            android:paddingBottom="10dp"
+                            android:text="@string/grok_appearance_preview_user"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:lineSpacingMultiplier="1.55"
+                            android:text="@string/grok_appearance_preview_grok"
+                            android:textColor="@color/xai_body"
+                            android:textSize="14sp" />
+                    </LinearLayout>
                 </FrameLayout>
 
                 <TextView
