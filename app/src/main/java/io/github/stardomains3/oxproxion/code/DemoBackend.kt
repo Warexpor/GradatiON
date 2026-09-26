@@ -84,6 +84,33 @@ class DemoBackend(
         }
     }
 
+    override suspend fun gitStatus(sessionId: String): GitStatusResult = GitStatusResult(
+        branch = "main",
+        ahead = 1,
+        behind = 0,
+        files = listOf(
+            GitFileStatus("src/server/ws.ts", " M"),
+            GitFileStatus("README.md", "M "),
+            GitFileStatus("docs/notes.md", "??")
+        )
+    )
+
+    override suspend fun diff(sessionId: String, path: String): GitDiffResult {
+        val name = path.substringAfterLast('/')
+        return GitDiffResult(
+            unified = """diff --git a/$path b/$path
+--- a/$path
++++ b/$path
+@@ -1,3 +1,4 @@
+ context line
+-old line in $name
++new line in $name
+ more context
++added line
+""".trimIndent()
+        )
+    }
+
     override suspend fun startSession(request: NewSessionRequest): CodeSessionSummary {
         val now = System.currentTimeMillis()
         val id = "demo-${now}"

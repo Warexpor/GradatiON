@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code Changes review: list of working-tree files from bridge/gitStatus -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/xai_canvas"
+    android:clickable="true"
+    android:focusable="true"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/xai_canvas"
+        app:navigationContentDescription="@string/cd_code_back"
+        app:navigationIcon="@drawable/is_backarrow"
+        app:navigationIconTint="@color/xai_ink"
+        app:title="@string/code_changes_title"
+        app:titleTextColor="@color/xai_ink"
+        app:subtitleTextColor="@color/xai_mute" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/codeChangesList"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:overScrollMode="never"
+            android:paddingTop="4dp"
+            android:paddingBottom="24dp"
+            android:scrollbars="none" />
+
+        <TextView
+            android:id="@+id/codeChangesHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginStart="32dp"
+            android:layout_marginEnd="32dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="4"
+            android:textColor="@color/xai_mute"
+            android:textSize="15sp"
+            android:visibility="gone" />
+    </FrameLayout>
+</LinearLayout>

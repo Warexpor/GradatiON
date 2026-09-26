@@ -109,6 +109,15 @@ class AcpAdapter : HarnessAdapter {
     override fun browse(id: Long, path: String) =
         request(id, "bridge/browse", buildJsonObject { put("path", path) })
 
+    override fun gitStatus(id: Long, sessionId: String) =
+        request(id, "bridge/gitStatus", buildJsonObject { put("sessionId", sessionId) })
+
+    override fun diff(id: Long, sessionId: String, path: String) =
+        request(id, "bridge/diff", buildJsonObject {
+            put("sessionId", sessionId)
+            put("path", path)
+        })
+
     private fun request(id: Long, method: String, params: JsonObject) = buildJsonObject {
         put("jsonrpc", "2.0"); put("id", id); put("method", method); put("params", params)
     }.toString()

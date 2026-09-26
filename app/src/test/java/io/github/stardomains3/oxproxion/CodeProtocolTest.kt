@@ -140,6 +140,18 @@ class CodeProtocolTest {
         assertEquals("/home/me/code", browse["params"]!!.jsonObject["path"]!!.jsonPrimitive.content)
     }
 
+    @Test fun gitStatusAndDiffFrames() {
+        val status = Json.parseToJsonElement(acp.gitStatus(11, "sess-1")).jsonObject
+        assertEquals("bridge/gitStatus", status["method"]!!.jsonPrimitive.content)
+        assertEquals("sess-1", status["params"]!!.jsonObject["sessionId"]!!.jsonPrimitive.content)
+
+        val diff = Json.parseToJsonElement(acp.diff(12, "sess-1", "src/a.kt")).jsonObject
+        assertEquals("bridge/diff", diff["method"]!!.jsonPrimitive.content)
+        val params = diff["params"]!!.jsonObject
+        assertEquals("sess-1", params["sessionId"]!!.jsonPrimitive.content)
+        assertEquals("src/a.kt", params["path"]!!.jsonPrimitive.content)
+    }
+
     @Test fun turnDoneClosesStreamingText() {
         var list = TranscriptReducer.apply(emptyList(), CodeUpdate.TextChunk("k", "hi"))
         list = TranscriptReducer.apply(list, CodeUpdate.TurnDone("end_turn", "1 file"))

@@ -194,6 +194,9 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         val s = hub.sessions.value[sessionId] ?: return
         val rows = ArrayList<PickerPopover.Row>()
         if (s.running) rows += PickerPopover.Row(getString(R.string.code_session_stop), iconRes = R.drawable.ic_stop) { hub.cancel(sessionId) }
+        rows += PickerPopover.Row(getString(R.string.code_session_changes), iconRes = R.drawable.ic_code_branch) {
+            openChanges()
+        }
         rows += PickerPopover.Row(getString(R.string.code_session_copy_id), subtitle = sessionId, iconRes = R.drawable.ic_copi) {
             requireContext().getSystemService(ClipboardManager::class.java)
                 ?.setPrimaryClip(ClipData.newPlainText("session", sessionId))
@@ -212,6 +215,14 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         parentFragmentManager.beginTransaction()
             .withGrokStackAnimations()
             .add(R.id.fragment_container, CodeDiffFragment.newInstance(sessionId, e.key))
+            .addToBackStack(null)
+            .commit()
+    }
+
+    private fun openChanges() {
+        parentFragmentManager.beginTransaction()
+            .withGrokStackAnimations()
+            .add(R.id.fragment_container, CodeChangesFragment.newInstance(sessionId))
             .addToBackStack(null)
             .commit()
     }

@@ -219,6 +219,24 @@ class CodeHub private constructor(context: Context) {
         return runCatching { backendFor(host).browse(path) }
     }
 
+    /** Working-tree changes for [sessionId] (`bridge/gitStatus`). */
+    suspend fun gitStatusResult(sessionId: String): Result<GitStatusResult> {
+        val s = _sessions.value[sessionId]
+            ?: return Result.failure(IllegalStateException("Unknown session"))
+        val host = _hosts.value.find { it.id == s.summary.hostId }
+            ?: return Result.failure(IllegalStateException("No machine for session"))
+        return runCatching { backendFor(host).gitStatus(sessionId) }
+    }
+
+    /** Unified diff for one path in [sessionId]'s workspace (`bridge/diff`). */
+    suspend fun diffResult(sessionId: String, path: String): Result<GitDiffResult> {
+        val s = _sessions.value[sessionId]
+            ?: return Result.failure(IllegalStateException("Unknown session"))
+        val host = _hosts.value.find { it.id == s.summary.hostId }
+            ?: return Result.failure(IllegalStateException("No machine for session"))
+        return runCatching { backendFor(host).diff(sessionId, path) }
+    }
+
     // ── sessions ──────────────────────────────────────────────────────────────────────────
 
     fun sessionsFor(hostId: String?): List<CodeSessionState> =

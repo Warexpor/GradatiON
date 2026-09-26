@@ -46,6 +46,20 @@ data class HarnessInfo(
 /** One entry from `bridge/browse` (folder picker). */
 data class BrowseEntry(val name: String, val dir: Boolean)
 
+/** One changed path from `bridge/gitStatus` (`status` is porcelain XY, e.g. " M", "??"). */
+data class GitFileStatus(val path: String, val status: String)
+
+/** Result of `bridge/gitStatus` for a session workspace. */
+data class GitStatusResult(
+    val branch: String,
+    val ahead: Int,
+    val behind: Int,
+    val files: List<GitFileStatus>
+)
+
+/** Result of `bridge/diff` for one path. */
+data class GitDiffResult(val unified: String)
+
 /** How the phone reaches a host. Only [BRIDGE] is designed in detail; [DEMO] is in-process. */
 @Serializable
 enum class TransportKind { BRIDGE, DEMO }

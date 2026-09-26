@@ -3,6 +3,8 @@ package io.github.stardomains3.oxproxion
 import io.github.stardomains3.oxproxion.code.AcpAdapter
 import io.github.stardomains3.oxproxion.code.BridgeBackend
 import io.github.stardomains3.oxproxion.code.BrowseEntry
+import io.github.stardomains3.oxproxion.code.GitFileStatus
+import io.github.stardomains3.oxproxion.code.GitStatusResult
 import io.github.stardomains3.oxproxion.code.HarnessInfo
 import io.github.stardomains3.oxproxion.code.CodeHost
 import io.github.stardomains3.oxproxion.code.CodeSessionSummary
@@ -343,6 +345,64 @@ class CodeBridgeBackendTest {
             val browseFrame = transport.sent.last { it.contains("bridge/browse") }
             val path = json.parseToJsonElement(browseFrame).jsonObject["params"]!!.jsonObject["path"]!!.jsonPrimitive.content
             assertEquals("/home/me/code", path)
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun gitStatusAndDiffParseBridgeResults() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = scope.launch {
+            val answered = HashSet<Long>()
+            while (true) {
+                for (frame in transport.sent.toList()) {
+                    val obj = runCatching { json.parseToJsonElement(frame).jsonObject }.getOrNull() ?: continue
+                    val id = obj["id"]?.jsonPrimitive?.longOrNull ?: continue
+                    if (id in answered) continue
+                    val method = obj["method"]?.jsonPrimitive?.content ?: continue
+                    val result = when (method) {
+                        "initialize" -> """{"protocolVersion":1}"""
+                        "bridge/gitStatus" -> """{"branch":"main","ahead":1,"behind":0,"files":[
+                            {"path":"a.kt","status":" M"},
+                            {"path":"b.md","status":"??"}
+                        ]}"""
+                        "bridge/diff" -> """{"unified":"@@ -1 +1 @@\n-old\n+new\n"}"""
+                        else -> "{}"
+                    }
+                    answered += id
+                    transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":$result}""")
+                }
+                delay(5)
+            }
+        }
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            val status = backend.gitStatus("sess-1")
+            assertEquals(
+                GitStatusResult(
+                    "main", 1, 0,
+                    listOf(GitFileStatus("a.kt", " M"), GitFileStatus("b.md", "??"))
+                ),
+                status
+            )
+            val statusFrame = transport.sent.last { it.contains("bridge/gitStatus") }
+            assertEquals(
+                "sess-1",
+                json.parseToJsonElement(statusFrame).jsonObject["params"]!!.jsonObject["sessionId"]!!.jsonPrimitive.content
+            )
+            val diff = backend.diff("sess-1", "a.kt")
+            assertEquals("@@ -1 +1 @@\n-old\n+new\n", diff.unified)
+            val diffFrame = transport.sent.last { it.contains("bridge/diff") }
+            val params = json.parseToJsonElement(diffFrame).jsonObject["params"]!!.jsonObject
+            assertEquals("sess-1", params["sessionId"]!!.jsonPrimitive.content)
+            assertEquals("a.kt", params["path"]!!.jsonPrimitive.content)
         } finally {
             answers.cancel()
             backend.close()

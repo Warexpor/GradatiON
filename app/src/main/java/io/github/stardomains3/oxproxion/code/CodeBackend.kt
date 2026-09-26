@@ -44,6 +44,10 @@ interface CodeBackend {
     suspend fun listHarnesses(): List<HarnessInfo>
     /** Directory listing inside allowed roots (`bridge/browse`). */
     suspend fun browse(path: String): List<BrowseEntry>
+    /** Working-tree status for a session workspace (`bridge/gitStatus`). */
+    suspend fun gitStatus(sessionId: String): GitStatusResult
+    /** Unified diff for one path in a session workspace (`bridge/diff`). */
+    suspend fun diff(sessionId: String, path: String): GitDiffResult
     /** Creates the session and sends its first prompt. Returns once the session exists. */
     suspend fun startSession(request: NewSessionRequest): CodeSessionSummary
     /** Re-attaches to an existing session; its history arrives as [updates] (ACP session/load replay). */
@@ -325,6 +329,16 @@ class BridgeBackend(
             val dir = (o["dir"] as? JsonPrimitive)?.booleanOrNull ?: false
             BrowseEntry(name = name, dir = dir)
         }
+    }
+
+    override suspend fun gitStatus(sessionId: String): GitStatusResult {
+        val result = call({ adapter.gitStatus(it, sessionId) })
+        return GitBridgeJson.parseStatus(result)
+    }
+
+    override suspend fun diff(sessionId: String, path: String): GitDiffResult {
+        val result = call({ adapter.diff(it, sessionId, path) })
+        return GitBridgeJson.parseDiff(result)
     }
 
     override suspend fun startSession(request: NewSessionRequest): CodeSessionSummary {

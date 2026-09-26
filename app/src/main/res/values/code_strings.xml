@@ -122,6 +122,21 @@
     <string name="code_perm_plan_pill">Plan</string>
     <string name="code_perm_full_pill">Full auto</string>
 
+    <!-- Changes review -->
+    <string name="code_session_changes">Changes</string>
+    <string name="code_changes_title">Changes</string>
+    <string name="code_changes_empty">No uncommitted changes.</string>
+    <string name="code_changes_failed">Can\'t load changes right now.</string>
+    <string name="code_changes_diff_failed">Can\'t load this diff right now.</string>
+    <string name="code_changes_diff_empty">No diff for this file.</string>
+    <string name="code_changes_ahead">↑%1$d</string>
+    <string name="code_changes_behind">↓%1$d</string>
+    <string name="code_changes_ask_commit">Ask to commit</string>
+    <string name="code_changes_ask_revert">Ask to revert this file</string>
+    <string name="code_changes_busy">Agent is busy. Try again when it finishes.</string>
+    <string name="code_changes_prompt_commit">Please review the current uncommitted changes and commit them with an appropriate commit message. Do not push.</string>
+    <string name="code_changes_prompt_revert">Please revert the uncommitted changes to %1$s (restore that file to HEAD). Do not commit or push.</string>
+
     <!-- Diff viewer -->
     <string name="code_diff_counts">+%1$d  −%2$d</string>
     <string name="cd_code_back">Back</string>
