@@ -82,12 +82,22 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         composer.agentPill.setOnClickListener { pickAgent() }
         composer.folderPill.setOnClickListener { pickFolder() }
         composer.permissionPill.setOnClickListener {
-            composer.pickPermission(permission) { permission = it; composer.setPermission(it) }
+            composer.pickPermission(permission) {
+                permission = it
+                hub.store.defaultPermissionMode = it
+                composer.setPermission(it)
+            }
         }
         composer.onSend = { start(it) }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Re-sync if Code settings changed the default while we were away.
+                val stored = hub.store.defaultPermissionMode
+                if (permission != stored) {
+                    permission = stored
+                    composer.setPermission(stored)
+                }
                 hub.connect()
                 combine(hub.activeHost, hub.connection, hub.sessions) { h, c, _ -> h to c }.collect { (host, conn) ->
                     bindHost(host)

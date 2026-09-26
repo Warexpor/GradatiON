@@ -94,6 +94,10 @@ class CodeHub private constructor(context: Context) {
     private val _connection = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connection: StateFlow<ConnectionState> = _connection
 
+    private val _connections = MutableStateFlow<Map<String, ConnectionState>>(emptyMap())
+    /** Connection state per host id (multiple hosts can be up at once). */
+    val connections: StateFlow<Map<String, ConnectionState>> = _connections
+
     private fun resolveActive(): CodeHost? {
         val all = store.hosts
         return all.find { it.id == store.activeHostId } ?: all.firstOrNull()
@@ -113,6 +117,7 @@ class CodeHub private constructor(context: Context) {
 
     fun removeHost(id: String) {
         backends.remove(id)?.close()
+        _connections.value = _connections.value - id
         val list = _hosts.value.filterNot { it.id == id }
         store.hosts = list
         _hosts.value = list
@@ -146,7 +151,12 @@ class CodeHub private constructor(context: Context) {
             TransportKind.BRIDGE -> BridgeBackend(host, WebSocketTransport(host.url, host.token), AcpAdapter(), scope)
         }
         scope.launch { b.updates.collect { apply(it) } }
-        scope.launch { b.connection.collect { if (_activeHost.value?.id == host.id) _connection.value = it } }
+        scope.launch {
+            b.connection.collect { st ->
+                _connections.value = _connections.value + (host.id to st)
+                if (_activeHost.value?.id == host.id) _connection.value = st
+            }
+        }
         b
     }
 
@@ -159,6 +169,11 @@ class CodeHub private constructor(context: Context) {
     }
 
     fun lastError(): String? = _activeHost.value?.let { backends[it.id]?.lastError }
+
+    /** Pause bridge reconnect while backgrounded unless a session turn is in flight. */
+    fun setAppBackgrounded(backgrounded: Boolean) {
+        backends.values.forEach { it.setAppBackgrounded(backgrounded) }
+    }
 
     fun refreshSessions() {
         val host = _activeHost.value ?: return
@@ -232,21 +247,38 @@ class CodeHub private constructor(context: Context) {
     private fun apply(u: SessionUpdate) {
         update(u.sessionId) { s ->
             val events = TranscriptReducer.apply(s.events, u.update)
-            val running = when (u.update) {
+            val running = when (val upd = u.update) {
                 is CodeUpdate.TurnDone -> false
                 is CodeUpdate.TextChunk, is CodeUpdate.ToolPatch -> true
-                is CodeUpdate.Upsert -> if (u.update.event is CodeEvent.UserPrompt) true else s.running
+                is CodeUpdate.Upsert -> if (upd.event is CodeEvent.UserPrompt) true else s.running
+                is CodeUpdate.SessionInfo -> when (upd.status) {
+                    SessionStatus.RUNNING, SessionStatus.NEEDS_APPROVAL -> true
+                    SessionStatus.IDLE, SessionStatus.ERROR -> false
+                    else -> s.running
+                }
                 else -> s.running
             }
-            val preview = (events.lastOrNull { it is CodeEvent.AgentText } as? CodeEvent.AgentText)
-                ?.text?.lineSequence()?.lastOrNull { it.isNotBlank() }?.replace(MARKDOWN_MARKS, "")?.trim()?.take(140) ?: s.summary.preview
-            s.copy(
-                events = events,
-                running = running,
-                summary = s.summary.copy(updatedAt = System.currentTimeMillis(), preview = preview)
-            )
+            val fromText = (events.lastOrNull { it is CodeEvent.AgentText } as? CodeEvent.AgentText)
+                ?.text?.lineSequence()?.lastOrNull { it.isNotBlank() }?.replace(MARKDOWN_MARKS, "")?.trim()?.take(140)
+            val summary = when (val upd = u.update) {
+                is CodeUpdate.SessionInfo -> s.summary.copy(
+                    updatedAt = System.currentTimeMillis(),
+                    title = upd.title ?: s.summary.title,
+                    preview = upd.preview ?: fromText ?: s.summary.preview,
+                    branch = upd.branch ?: s.summary.branch
+                )
+                is CodeUpdate.Title -> s.summary.copy(
+                    updatedAt = System.currentTimeMillis(),
+                    title = upd.title
+                )
+                else -> s.summary.copy(
+                    updatedAt = System.currentTimeMillis(),
+                    preview = fromText ?: s.summary.preview
+                )
+            }
+            s.copy(events = events, running = running, summary = summary)
         }
-        if (u.update is CodeUpdate.TurnDone) persistSessions()
+        if (u.update is CodeUpdate.TurnDone || u.update is CodeUpdate.SessionInfo) persistSessions()
     }
 
     private inline fun update(sessionId: String, f: (CodeSessionState) -> CodeSessionState) {

@@ -468,18 +468,5 @@ class SystemMessageLibraryFragment : Fragment() {
             loadSystemMessages()
         }
     }
-    private fun deleteSystemMessageBUGGYOLD(systemMessage: SystemMessage) {
-        val customMessages = sharedPreferencesHelper.getCustomSystemMessages().toMutableList()
-        if (customMessages.remove(systemMessage)) {
-            sharedPreferencesHelper.saveCustomSystemMessages(customMessages)
-            if (sharedPreferencesHelper.getSelectedSystemMessage() == systemMessage) {
-                // Use the saved default message instead of creating a new instance
-                val defaultMessage = sharedPreferencesHelper.getDefaultSystemMessage()
-                sharedPreferencesHelper.saveSelectedSystemMessage(defaultMessage)
-                systemMessageAdapter.selectedMessage = defaultMessage
-            }
-            loadSystemMessages()
-        }
-    }
 
 }

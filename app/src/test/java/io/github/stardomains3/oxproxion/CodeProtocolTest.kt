@@ -10,6 +10,7 @@ import io.github.stardomains3.oxproxion.code.DiffLine
 import io.github.stardomains3.oxproxion.code.HarnessKind
 import io.github.stardomains3.oxproxion.code.NewSessionRequest
 import io.github.stardomains3.oxproxion.code.PermissionMode
+import io.github.stardomains3.oxproxion.code.ReconnectBackoff
 import io.github.stardomains3.oxproxion.code.PlanStatus
 import io.github.stardomains3.oxproxion.code.SessionStatus
 import io.github.stardomains3.oxproxion.code.ToolKind
@@ -251,5 +252,47 @@ class CodeProtocolTest {
         val k2 = ((AcpAdapter().decode(frame).single() as AdapterOutput.Update).update as CodeUpdate.TextChunk).key
         assertEquals("text:99", k1)
         assertEquals(k1, k2)
+    }
+
+    @Test fun permissionResolvedMarksApprovalAnswered() {
+        val a = AcpAdapter()
+        val ask = a.decode("""{"jsonrpc":"2.0","id":7,"method":"session/request_permission","params":{"sessionId":"s1","_meta":{"seq":1},
+            "toolCall":{"toolCallId":"t1","title":"rm","kind":"execute"},
+            "options":[{"optionId":"a","name":"Allow","kind":"allow_once"}]}}""")
+        var list = emptyList<CodeEvent>()
+        (ask.single() as AdapterOutput.Update).let { list = TranscriptReducer.apply(list, it.update, now = 1L) }
+        assertEquals(null, (list.single() as CodeEvent.Approval).chosen)
+
+        val resolved = a.decode("""{"jsonrpc":"2.0","method":"bridge/permissionResolved","params":{"sessionId":"s1","requestId":"7","optionKind":"allow_once","_meta":{"seq":2}}}""")
+        val upd = (resolved.single() as AdapterOutput.Update).update as CodeUpdate.ApprovalAnswered
+        assertEquals("7", upd.requestId)
+        assertEquals(ApprovalOption.Kind.ALLOW_ONCE, upd.chosen)
+        list = TranscriptReducer.apply(list, upd, now = 2L)
+        assertEquals(ApprovalOption.Kind.ALLOW_ONCE, (list.single() as CodeEvent.Approval).chosen)
+        assertEquals(2L, a.lastSeq("s1"))
+    }
+
+    @Test fun sessionStatusProducesSessionInfo() {
+        val out = acp.decode("""{"jsonrpc":"2.0","method":"bridge/sessionStatus","params":{
+            "sessionId":"s1","status":"running","title":"Fix footer","preview":"editing","branch":"main","_meta":{"seq":9}}}""")
+        val upd = (out.single() as AdapterOutput.Update)
+        assertEquals(9L, upd.seq)
+        val info = upd.update as CodeUpdate.SessionInfo
+        assertEquals(SessionStatus.RUNNING, info.status)
+        assertEquals("Fix footer", info.title)
+        assertEquals("editing", info.preview)
+        assertEquals("main", info.branch)
+        assertEquals(9L, acp.lastSeq("s1"))
+    }
+
+    @Test fun reconnectBackoffCapsAndJitters() {
+        assertEquals(0L, ReconnectBackoff.delayMs(0, 0.0))
+        assertEquals(500L, ReconnectBackoff.delayMs(0, 1.0))
+        assertEquals(1000L, ReconnectBackoff.delayMs(1, 1.0))
+        assertEquals(30_000L, ReconnectBackoff.delayMs(10, 1.0))
+        assertEquals(30_000L, ReconnectBackoff.delayMs(20, 1.0))
+        val mid = ReconnectBackoff.delayMs(3, 0.5)
+        assertEquals(2000L, mid) // 0.5s * 8 * 0.5
+        assertEquals(60_000L, ReconnectBackoff.RESET_AFTER_CONNECTED_MS)
     }
 }

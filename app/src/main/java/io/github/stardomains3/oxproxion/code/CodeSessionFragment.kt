@@ -144,7 +144,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                     combine(hub.connection, hub.activeHost) { c, h -> c to h }.collect { (c, h) ->
                         val offline = h != null && !h.isDemo && (c == ConnectionState.FAILED || c == ConnectionState.DISCONNECTED)
                         banner.isVisible = offline
-                        if (offline) banner.text = getString(R.string.code_session_offline_banner, h!!.name)
+                        if (offline && h != null) banner.text = getString(R.string.code_session_offline_banner, h.name)
                     }
                 }
             }

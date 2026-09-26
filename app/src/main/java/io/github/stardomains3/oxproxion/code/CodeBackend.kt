@@ -1,9 +1,11 @@
 package io.github.stardomains3.oxproxion.code
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -15,6 +17,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
+import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -43,12 +46,15 @@ interface CodeBackend {
     suspend fun cancel(sessionId: String)
     suspend fun setPermissionMode(sessionId: String, mode: PermissionMode)
     fun close()
+
+    /** Pause transport reconnect while the app is backgrounded (no-op unless a bridge). */
+    fun setAppBackgrounded(backgrounded: Boolean) {}
 }
 
 /**
  * Talks to a GradatiON bridge through a [CodeTransport] and a [HarnessAdapter]: JSON-RPC ids,
- * request/response matching, and fan-out of session updates. Skeleton quality: the happy path is
- * wired; reconnect/resume, request timeouts per method and offline queueing are in the plan.
+ * request/response matching, fan-out of session updates, reconnect resume via `session/load`
+ * + `_meta.afterSeq`, per-method timeouts, and an outbox for prompts typed while offline.
  */
 class BridgeBackend(
     override val host: CodeHost,
@@ -64,28 +70,127 @@ class BridgeBackend(
 
     private val nextId = AtomicLong(1)
     private val pending = ConcurrentHashMap<Long, CompletableDeferred<JsonElement?>>()
+    private val attached = ConcurrentHashMap<String, CodeSessionSummary>()
+    private val runningSessions = ConcurrentHashMap.newKeySet<String>()
+    private val outbox = ArrayDeque<OutboxPrompt>()
+    private val outboxLock = Any()
+    private val ready = MutableStateFlow(false)
     private var reader: Job? = null
+    private var lifecycle: Job? = null
     private var initialized = false
+    private var socketGeneration = 0
+
+    private data class OutboxPrompt(val sessionId: String, val text: String)
+
+    override fun setAppBackgrounded(backgrounded: Boolean) {
+        transport.setAppBackgrounded(backgrounded)
+    }
 
     override fun connect() {
-        if (reader == null) {
-            reader = scope.launch {
-                transport.incoming.collect { frame ->
-                    for (out in adapter.decode(frame)) when (out) {
-                        is AdapterOutput.Update -> _updates.emit(SessionUpdate(out.sessionId, out.update))
-                        is AdapterOutput.Result -> pending.remove(out.id)?.let { d ->
-                            if (out.error != null) d.completeExceptionally(IllegalStateException(out.error))
-                            else d.complete(out.result)
-                        }
-                        is AdapterOutput.Ignored -> Unit
-                    }
-                }
-            }
-        }
+        ensureReader()
+        ensureLifecycle()
         transport.connect()
     }
 
-    private suspend fun call(build: (Long) -> String, timeoutMs: Long = 15_000): JsonElement? {
+    private fun ensureReader() {
+        if (reader != null) return
+        reader = scope.launch {
+            transport.incoming.collect { frame ->
+                for (out in adapter.decode(frame)) when (out) {
+                    is AdapterOutput.Update -> {
+                        if (out.seq != null) noteRunningFromUpdate(out)
+                        _updates.emit(SessionUpdate(out.sessionId, out.update))
+                    }
+                    is AdapterOutput.Result -> pending.remove(out.id)?.let { d ->
+                        if (out.error != null) d.completeExceptionally(IllegalStateException(out.error))
+                        else d.complete(out.result)
+                    }
+                    is AdapterOutput.Ignored -> Unit
+                }
+            }
+        }
+    }
+
+    private fun noteRunningFromUpdate(out: AdapterOutput.Update) {
+        when (val u = out.update) {
+            is CodeUpdate.TurnDone -> {
+                runningSessions.remove(out.sessionId)
+                refreshKeepAlive()
+            }
+            is CodeUpdate.SessionInfo -> when (u.status) {
+                SessionStatus.RUNNING, SessionStatus.NEEDS_APPROVAL -> {
+                    runningSessions.add(out.sessionId)
+                    refreshKeepAlive()
+                }
+                SessionStatus.IDLE, SessionStatus.ERROR -> {
+                    runningSessions.remove(out.sessionId)
+                    refreshKeepAlive()
+                }
+                else -> Unit
+            }
+            else -> Unit
+        }
+    }
+
+    private fun ensureLifecycle() {
+        if (lifecycle != null) return
+        lifecycle = scope.launch {
+            var wasUp = false
+            transport.state.collect { st ->
+                when (st) {
+                    ConnectionState.CONNECTED -> {
+                        if (!wasUp) {
+                            wasUp = true
+                            launch { runCatching { onSocketReady() } }
+                        }
+                    }
+                    ConnectionState.DISCONNECTED, ConnectionState.FAILED -> {
+                        if (wasUp) {
+                            wasUp = false
+                            ready.value = false
+                            initialized = false
+                            socketGeneration++
+                            failPending("Disconnected")
+                        }
+                    }
+                    ConnectionState.CONNECTING -> Unit
+                }
+            }
+        }
+    }
+
+    private suspend fun onSocketReady() {
+        val gen = socketGeneration
+        rawCall({ adapter.initialize(it) }, DEFAULT_TIMEOUT_MS)
+        if (gen != socketGeneration) return
+        initialized = true
+        for (session in attached.values.toList()) {
+            if (gen != socketGeneration) return
+            val after = (adapter as? AcpAdapter)?.lastSeq(session.id)
+            runCatching {
+                rawCall(
+                    { adapter.loadSession(it, session.id, session.workspace, after) },
+                    DEFAULT_TIMEOUT_MS
+                )
+            }
+        }
+        if (gen != socketGeneration) return
+        ready.value = true
+        flushOutbox()
+    }
+
+    private fun refreshKeepAlive() {
+        val pendingOutbox = synchronized(outboxLock) { outbox.isNotEmpty() }
+        transport.setKeepAliveForSession(runningSessions.isNotEmpty() || pendingOutbox)
+    }
+
+    private fun failPending(msg: String) {
+        val snap = pending.values.toList()
+        pending.clear()
+        snap.forEach { it.completeExceptionally(CancellationException(msg)) }
+    }
+
+    private suspend fun call(build: (Long) -> String, timeoutMs: Long = DEFAULT_TIMEOUT_MS): JsonElement? {
         ensureReady()
         return rawCall(build, timeoutMs)
     }
@@ -99,7 +204,8 @@ class BridgeBackend(
             throw IllegalStateException(transport.lastError ?: "Not connected")
         }
         return try {
-            withTimeout(timeoutMs) { d.await() }
+            if (timeoutMs <= 0L) d.await()
+            else withTimeout(timeoutMs) { d.await() }
         } finally {
             pending.remove(id)
         }
@@ -108,13 +214,9 @@ class BridgeBackend(
     private suspend fun ensureReady() {
         if (connection.value != ConnectionState.CONNECTED) {
             connect()
-            withTimeout(10_000) { transport.state.first { it == ConnectionState.CONNECTED || it == ConnectionState.FAILED } }
-            if (connection.value != ConnectionState.CONNECTED) throw IllegalStateException(lastError ?: "Can't reach ${host.name}")
         }
-        if (!initialized) {
-            rawCall({ adapter.initialize(it) }, 10_000)
-            initialized = true
-        }
+        withTimeout(30_000) { ready.first { it } }
+        if (!ready.value) throw IllegalStateException(lastError ?: "Can't reach ${host.name}")
     }
 
     override suspend fun listSessions(): List<CodeSessionSummary> {
@@ -153,34 +255,88 @@ class BridgeBackend(
             title = request.prompt.lineSequence().first().take(60), createdAt = now, updatedAt = now,
             permissionMode = request.permissionMode, model = request.model
         )
+        attached[sid] = summary
         scope.launch { runCatching { prompt(sid, request.prompt) } }
         return summary
     }
 
     override suspend fun attach(session: CodeSessionSummary) {
-        call({ adapter.loadSession(it, session.id, session.workspace) }, timeoutMs = 60_000)
+        attached[session.id] = session
+        ensureReady()
+        val after = (adapter as? AcpAdapter)?.lastSeq(session.id)
+        rawCall({ adapter.loadSession(it, session.id, session.workspace, after) }, DEFAULT_TIMEOUT_MS)
     }
 
     override suspend fun prompt(sessionId: String, text: String) {
         val now = System.currentTimeMillis()
         _updates.emit(SessionUpdate(sessionId, CodeUpdate.Upsert(CodeEvent.UserPrompt("user:$now", now, text))))
+        if (!ready.value || connection.value != ConnectionState.CONNECTED) {
+            synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text)) }
+            runningSessions.add(sessionId)
+            refreshKeepAlive()
+            if (connection.value != ConnectionState.CONNECTING &&
+                connection.value != ConnectionState.CONNECTED
+            ) {
+                connect()
+            }
+            return
+        }
+        deliverPrompt(sessionId, text)
+    }
+
+    private suspend fun flushOutbox() {
+        while (true) {
+            val next = synchronized(outboxLock) {
+                if (outbox.isEmpty()) null else outbox.removeFirst()
+            } ?: break
+            refreshKeepAlive()
+            runCatching { deliverPrompt(next.sessionId, next.text) }
+        }
+        refreshKeepAlive()
+    }
+
+    private suspend fun deliverPrompt(sessionId: String, text: String) {
+        runningSessions.add(sessionId)
+        refreshKeepAlive()
         try {
-            // A prompt's response arrives when the whole turn ends, which can take many minutes.
-            val result = call({ adapter.prompt(it, sessionId, text) }, timeoutMs = 6 * 60 * 60 * 1000L) as? JsonObject
+            // Prompt has no timeout: the turn can run for a long time.
+            val result = rawCall({ adapter.prompt(it, sessionId, text) }, timeoutMs = 0L) as? JsonObject
             val stop = (result?.get("stopReason") as? JsonPrimitive)?.contentOrNull ?: "end_turn"
             (adapter as? AcpAdapter)?.endTurn(sessionId)
             _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone(stop)))
+            runningSessions.remove(sessionId)
+            refreshKeepAlive()
+        } catch (e: CancellationException) {
+            // Socket dropped mid-turn; keep running so reconnect stays alive. session/load resumes.
+            refreshKeepAlive()
         } catch (e: Exception) {
-            _updates.emit(SessionUpdate(sessionId, CodeUpdate.Upsert(
-                CodeEvent.Notice("err:${System.currentTimeMillis()}", System.currentTimeMillis(), e.message ?: "Turn failed", NoticeLevel.ERROR)
-            )))
+            _updates.emit(
+                SessionUpdate(
+                    sessionId,
+                    CodeUpdate.Upsert(
+                        CodeEvent.Notice(
+                            "err:${System.currentTimeMillis()}",
+                            System.currentTimeMillis(),
+                            e.message ?: "Turn failed",
+                            NoticeLevel.ERROR
+                        )
+                    )
+                )
+            )
             _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("error")))
+            runningSessions.remove(sessionId)
+            refreshKeepAlive()
         }
     }
 
     override suspend fun answer(sessionId: String, requestId: String, option: ApprovalOption?) {
         transport.send(adapter.answerApproval(requestId, option?.id))
-        _updates.emit(SessionUpdate(sessionId, CodeUpdate.ApprovalAnswered(requestId, option?.kind ?: ApprovalOption.Kind.REJECT_ONCE)))
+        _updates.emit(
+            SessionUpdate(
+                sessionId,
+                CodeUpdate.ApprovalAnswered(requestId, option?.kind ?: ApprovalOption.Kind.REJECT_ONCE)
+            )
+        )
     }
 
     override suspend fun cancel(sessionId: String) {
@@ -192,11 +348,20 @@ class BridgeBackend(
     }
 
     override fun close() {
+        lifecycle?.cancel()
+        lifecycle = null
         reader?.cancel()
         reader = null
+        ready.value = false
         initialized = false
-        pending.values.forEach { it.cancel() }
-        pending.clear()
+        attached.clear()
+        runningSessions.clear()
+        synchronized(outboxLock) { outbox.clear() }
+        failPending("Closed")
         transport.close()
+    }
+
+    companion object {
+        const val DEFAULT_TIMEOUT_MS = 15_000L
     }
 }

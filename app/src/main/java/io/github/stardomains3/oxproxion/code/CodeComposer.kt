@@ -83,7 +83,8 @@ class CodeComposer(
     }
 
     fun setPermission(mode: PermissionMode) {
-        permissionPill.text = context.getString(permissionLabel(mode))
+        // Short label on the pill so agent+folder+permission fit; popover keeps the full name.
+        permissionPill.text = context.getString(permissionPillLabel(mode))
     }
 
     /** Opens the anchored glass popover above [anchor] (Grok's model-pill popover). */
@@ -120,7 +121,7 @@ class CodeComposer(
         folderPill.isVisible = folder
         permissionPill.isVisible = permission
         (permissionPill.layoutParams as? android.view.ViewGroup.MarginLayoutParams)?.marginStart =
-            if (agent || folder) (6 * context.resources.displayMetrics.density).toInt() else 0
+            if (agent || folder) (4 * context.resources.displayMetrics.density).toInt() else 0
     }
 
     companion object {
@@ -129,6 +130,13 @@ class CodeComposer(
             PermissionMode.AUTO_EDIT -> R.string.code_perm_auto_edit
             PermissionMode.PLAN -> R.string.code_perm_plan
             PermissionMode.FULL_AUTO -> R.string.code_perm_full
+        }
+
+        fun permissionPillLabel(m: PermissionMode) = when (m) {
+            PermissionMode.ASK -> R.string.code_perm_ask_pill
+            PermissionMode.AUTO_EDIT -> R.string.code_perm_auto_edit_pill
+            PermissionMode.PLAN -> R.string.code_perm_plan_pill
+            PermissionMode.FULL_AUTO -> R.string.code_perm_full_pill
         }
 
         fun permissionSub(m: PermissionMode) = when (m) {

@@ -28,6 +28,14 @@ sealed class CodeUpdate {
     data class TurnDone(val stopReason: String, val summary: String? = null) : CodeUpdate()
 
     data class Title(val title: String) : CodeUpdate()
+
+    /** Bridge `bridge/sessionStatus`: list preview / running flag without a transcript event. */
+    data class SessionInfo(
+        val status: SessionStatus? = null,
+        val title: String? = null,
+        val preview: String? = null,
+        val branch: String? = null
+    ) : CodeUpdate()
 }
 
 /** What an adapter decodes one inbound frame into. */
@@ -115,6 +123,7 @@ object TranscriptReducer {
                 if (it is CodeEvent.AgentText && it.streaming) it.copy(streaming = false) else it
             } + CodeEvent.TurnEnd("turn:$now", now, update.stopReason, update.summary)
             is CodeUpdate.Title -> list
+            is CodeUpdate.SessionInfo -> list
         }
 
     private fun upsert(list: List<CodeEvent>, e: CodeEvent): List<CodeEvent> {

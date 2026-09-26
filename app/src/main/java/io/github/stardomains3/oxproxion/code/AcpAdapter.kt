@@ -22,7 +22,8 @@ import kotlinx.serialization.json.put
  * - out: initialize, session/new, session/load, session/prompt, session/cancel, session/set_mode,
  *   permission responses, and the bridge's own `bridge.` extension methods.
  * - in: session/update (agent_message_chunk, agent_thought_chunk, user_message_chunk, tool_call,
- *   tool_call_update, plan), session/request_permission, and responses.
+ *   tool_call_update, plan), session/request_permission, bridge/permissionResolved,
+ *   bridge/sessionStatus, and responses.
  *
  * Event keys are stable across reconnects: text/thought/user derive from bridge `_meta.seq`,
  * tool calls from ACP toolCallId, approvals from the JSON-RPC request id, plans from session id.
@@ -128,6 +129,14 @@ class AcpAdapter : HarnessAdapter {
                 val params = obj["params"]?.jsonObject ?: return ignored("no params")
                 decodePermission(idEl, params, bridgeSeq(params, obj))
             }
+            method == "bridge/permissionResolved" -> {
+                val params = obj["params"]?.jsonObject ?: return ignored("no params")
+                decodePermissionResolved(params, bridgeSeq(params, obj))
+            }
+            method == "bridge/sessionStatus" -> {
+                val params = obj["params"]?.jsonObject ?: return ignored("no params")
+                decodeSessionStatus(params, bridgeSeq(params, obj))
+            }
             method == null && idEl != null -> {
                 val id = (idEl as? JsonPrimitive)?.longOrNull ?: return ignored("non-numeric id")
                 val err = obj["error"]?.let { (it as? JsonObject)?.str("message") ?: it.toString() }
@@ -135,6 +144,48 @@ class AcpAdapter : HarnessAdapter {
             }
             else -> ignored("method $method")
         }
+    }
+
+    private fun decodePermissionResolved(params: JsonObject, seq: Long?): List<AdapterOutput> {
+        val sid = params.str("sessionId") ?: return ignored("permissionResolved without session")
+        val requestId = params.str("requestId") ?: return ignored("permissionResolved without requestId")
+        noteSeq(sid, seq)
+        val kind = optionKind(params.str("optionKind"))
+        return listOf(AdapterOutput.Update(sid, CodeUpdate.ApprovalAnswered(requestId, kind), seq))
+    }
+
+    private fun decodeSessionStatus(params: JsonObject, seq: Long?): List<AdapterOutput> {
+        val sid = params.str("sessionId") ?: return ignored("sessionStatus without session")
+        noteSeq(sid, seq)
+        val status = when (params.str("status")?.lowercase()?.replace('-', '_')) {
+            "running" -> SessionStatus.RUNNING
+            "needs_approval" -> SessionStatus.NEEDS_APPROVAL
+            "error" -> SessionStatus.ERROR
+            "offline" -> SessionStatus.OFFLINE
+            "idle" -> SessionStatus.IDLE
+            null -> null
+            else -> null
+        }
+        return listOf(
+            AdapterOutput.Update(
+                sid,
+                CodeUpdate.SessionInfo(
+                    status = status,
+                    title = params.str("title"),
+                    preview = params.str("preview"),
+                    branch = params.str("branch")
+                ),
+                seq
+            )
+        )
+    }
+
+    private fun optionKind(s: String?): ApprovalOption.Kind = when (s) {
+        "allow_always" -> ApprovalOption.Kind.ALLOW_ALWAYS
+        "reject_once" -> ApprovalOption.Kind.REJECT_ONCE
+        "reject_always" -> ApprovalOption.Kind.REJECT_ALWAYS
+        "allow_once" -> ApprovalOption.Kind.ALLOW_ONCE
+        else -> ApprovalOption.Kind.ALLOW_ONCE
     }
 
     private fun decodeUpdate(params: JsonObject, seq: Long?): List<AdapterOutput> {

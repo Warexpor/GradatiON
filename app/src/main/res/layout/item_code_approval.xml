@@ -61,13 +61,24 @@
             android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
             android:textColor="@color/xai_body" />
 
-        <LinearLayout
-            android:id="@+id/codeApprovalButtons"
+        <!-- HSV so Deny / Always allow / Allow never hard-clip on narrow widths. -->
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:gravity="end"
-            android:orientation="horizontal" />
+            android:clipToPadding="true"
+            android:fillViewport="true"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/codeApprovalButtons"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:gravity="end"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
     </LinearLayout>
 
     <LinearLayout

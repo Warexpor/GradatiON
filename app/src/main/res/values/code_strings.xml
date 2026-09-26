@@ -96,6 +96,11 @@
     <string name="code_perm_plan_sub">Read and propose, change nothing</string>
     <string name="code_perm_full">Full auto</string>
     <string name="code_perm_full_sub">Nothing asks. Only for sandboxes</string>
+    <!-- Compact labels for the composer pill (full names stay in the popover / settings). -->
+    <string name="code_perm_ask_pill">Ask</string>
+    <string name="code_perm_auto_edit_pill">Auto-edit</string>
+    <string name="code_perm_plan_pill">Plan</string>
+    <string name="code_perm_full_pill">Full auto</string>
 
     <!-- Diff viewer -->
     <string name="code_diff_counts">+%1$d  −%2$d</string>
