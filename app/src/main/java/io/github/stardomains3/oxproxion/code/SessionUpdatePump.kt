@@ -78,6 +78,10 @@ internal object CodeSessionFolder {
         liveSeq: Long? = null,
         suppressRunningFromChunks: Boolean = false,
     ): CodeSessionState {
+        // Slash-command list is session UI state, not transcript; keep fold side-effect free.
+        if (update is CodeUpdate.AvailableCommands) {
+            return state.copy(availableCommands = update.commands)
+        }
         val events = TranscriptReducer.apply(state.events, update, now)
         val running = when (update) {
             is CodeUpdate.TurnDone -> false

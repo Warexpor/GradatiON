@@ -126,6 +126,7 @@ class DemoBackend(
         if (!session.id.startsWith("demo-seed")) return
         val t = session.updatedAt
         fun up(u: CodeUpdate) = _updates.tryEmit(SessionUpdate(session.id, u))
+        up(CodeUpdate.AvailableCommands(DEMO_SLASH_COMMANDS))
         up(CodeUpdate.Upsert(CodeEvent.UserPrompt("u0", t - 60_000, session.title)))
         up(CodeUpdate.Upsert(CodeEvent.ToolCall("tool:s1", t - 50_000, "s1", ToolKind.SEARCH, "Search", "rg -n \"reconnect\" src/", ToolStatus.COMPLETED, "src/ws.ts:41: // TODO reconnect\nsrc/ws.ts:88: function reconnect()")))
         up(CodeUpdate.Upsert(CodeEvent.AgentText("a0", t - 40_000, session.preview, streaming = false)))
@@ -158,6 +159,7 @@ class DemoBackend(
     // ── the script ────────────────────────────────────────────────────────────────────────
 
     private suspend fun playTurn(sid: String, text: String) {
+        emit(sid, CodeUpdate.AvailableCommands(DEMO_SLASH_COMMANDS))
         emit(sid, CodeUpdate.Upsert(CodeEvent.UserPrompt(key(), now(), text)))
         delay(500)
         val thought = key()
@@ -237,6 +239,21 @@ class DemoBackend(
     private fun now() = System.currentTimeMillis()
 
     private companion object {
+        val DEMO_SLASH_COMMANDS = listOf(
+            AvailableCommand("compact", "Compact conversation context"),
+            AvailableCommand("clear", "Clear session context for a fresh start"),
+            AvailableCommand(
+                "plan",
+                "Switch into plan mode and outline the approach",
+                inputHint = "what to plan",
+            ),
+            AvailableCommand(
+                "help",
+                "Show help for a topic",
+                inputHint = "topic",
+            ),
+        )
+
         const val HOUR = 3_600_000L
 
         val OLD_FILE = """

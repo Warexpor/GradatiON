@@ -45,12 +45,25 @@ class CodeComposer(
             refreshSend()
         }
 
+    /** Slash commands from the session's latest `available_commands_update`. */
+    var availableCommands: List<AvailableCommand> = emptyList()
+        set(value) {
+            if (field == value) return
+            field = value
+            refreshSlashPicker()
+        }
+
+    private var slashPopover: PickerPopover? = null
+
     init {
         root.glass.source = backdrop
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-            override fun afterTextChanged(s: Editable?) = refreshSend()
+            override fun afterTextChanged(s: Editable?) {
+                refreshSend()
+                refreshSlashPicker()
+            }
         })
         send.setOnClickListener {
             // While the agent is running, keep Stop reachable even if the draft has text
@@ -62,6 +75,7 @@ class CodeComposer(
             }
             val text = input.text?.toString()?.trim().orEmpty()
             if (text.isEmpty()) return@setOnClickListener
+            dismissSlashPopover()
             it.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
             onSend?.invoke(text)
         }
@@ -96,8 +110,9 @@ class CodeComposer(
         title: CharSequence?,
         rows: List<PickerPopover.Row>,
         footer: List<PickerPopover.Row> = emptyList(),
-        hint: CharSequence? = null
+        hint: CharSequence? = null,
     ) {
+        dismissSlashPopover()
         popover?.dismiss(animated = false)
         hideKeyboard()
         anchor.isSelected = true
@@ -108,9 +123,63 @@ class CodeComposer(
     }
 
     fun dismissPopover(): Boolean {
+        if (dismissSlashPopover()) return true
         val p = popover ?: return false
         if (!p.isShowing) return false
         p.dismiss()
+        return true
+    }
+
+    /**
+     * When the draft is a bare slash token (`/`, `/com`, …), show filtered [availableCommands]
+     * in a glass popover above the composer. Picking replaces the token with `/name `.
+     */
+    private fun refreshSlashPicker() {
+        val text = input.text?.toString().orEmpty()
+        if (!isSlashDraft(text) || availableCommands.isEmpty()) {
+            dismissSlashPopover()
+            return
+        }
+        val prefix = slashPrefix(text)
+        val matched = filterCommands(availableCommands, prefix)
+        if (matched.isEmpty()) {
+            dismissSlashPopover()
+            return
+        }
+        val rows = matched.map { cmd ->
+            val subtitle = when {
+                cmd.description.isNotBlank() -> cmd.description
+                !cmd.inputHint.isNullOrBlank() -> cmd.inputHint
+                else -> null
+            }
+            PickerPopover.Row(
+                title = "/${cmd.name}",
+                subtitle = subtitle,
+                onClick = { applySlashCommand(cmd) }
+            )
+        }
+        // Rebuild without animation so filtering while typing stays quiet.
+        slashPopover?.dismiss(animated = false)
+        popover?.dismiss(animated = false)
+        slashPopover = PickerPopover(popoverHost, input, backdropRef, edge = root).apply {
+            onDismiss = { slashPopover = null }
+            show(title = null, rows = rows)
+        }
+    }
+
+    private fun applySlashCommand(cmd: AvailableCommand) {
+        val (newText, caret) = insertSlashCommand(input.text?.toString().orEmpty(), cmd)
+        dismissSlashPopover()
+        input.setText(newText)
+        input.setSelection(caret.coerceIn(0, newText.length))
+        // Keep IME up so the user can type args after `/cmd `.
+        input.requestFocus()
+    }
+
+    private fun dismissSlashPopover(): Boolean {
+        val p = slashPopover ?: return false
+        slashPopover = null
+        if (p.isShowing) p.dismiss(animated = false)
         return true
     }
 
@@ -157,5 +226,23 @@ class CodeComposer(
 
         /** Last path segment, for pills: "~/code/GradatiON" -> "GradatiON". */
         fun folderName(path: String): String = path.trimEnd('/').substringAfterLast('/').ifEmpty { path }
+
+        /** Draft is only a slash token (`/` or `/name`) — no whitespace yet. */
+        fun isSlashDraft(text: String): Boolean =
+            text.startsWith('/') && text.none { it.isWhitespace() }
+
+        fun slashPrefix(text: String): String =
+            if (isSlashDraft(text)) text.drop(1) else ""
+
+        fun filterCommands(commands: List<AvailableCommand>, prefix: String): List<AvailableCommand> =
+            if (prefix.isEmpty()) commands
+            else commands.filter { it.name.startsWith(prefix, ignoreCase = true) }
+
+        /** Replace the leading slash token with `/name `; caret after the inserted command. */
+        fun insertSlashCommand(current: String, cmd: AvailableCommand): Pair<String, Int> {
+            val rest = current.replaceFirst(Regex("^/\\S*"), "").trimStart()
+            val insert = "/${cmd.name} "
+            return (insert + rest) to insert.length
+        }
     }
 }

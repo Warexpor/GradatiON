@@ -156,6 +156,16 @@ enum class NoticeLevel { INFO, WARNING, ERROR }
 
 data class PlanEntry(val content: String, val status: PlanStatus)
 
+/**
+ * One slash command from ACP `available_commands_update` ([name] without the leading `/`).
+ * [inputHint] is the unstructured input hint when the command takes arguments.
+ */
+data class AvailableCommand(
+    val name: String,
+    val description: String,
+    val inputHint: String? = null,
+)
+
 /** Option shown on an approval card. [kind] tells the UI which button is which. */
 data class ApprovalOption(val id: String, val label: String, val kind: Kind) {
     enum class Kind { ALLOW_ONCE, ALLOW_ALWAYS, REJECT_ONCE, REJECT_ALWAYS }

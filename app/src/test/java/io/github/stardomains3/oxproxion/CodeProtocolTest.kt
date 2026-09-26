@@ -1,6 +1,8 @@
 package io.github.stardomains3.oxproxion
 
 import io.github.stardomains3.oxproxion.code.AcpAdapter
+import io.github.stardomains3.oxproxion.code.AvailableCommand
+import io.github.stardomains3.oxproxion.code.CodeComposer
 import io.github.stardomains3.oxproxion.code.AdapterOutput
 import io.github.stardomains3.oxproxion.code.ApprovalOption
 import io.github.stardomains3.oxproxion.code.CodeEvent
@@ -20,6 +22,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -305,6 +308,45 @@ class CodeProtocolTest {
         assertEquals("editing", info.preview)
         assertEquals("main", info.branch)
         assertEquals(9L, acp.lastSeq("s1"))
+    }
+
+
+    @Test fun availableCommandsUpdateParsesNameDescriptionAndHint() {
+        val out = acp.decode(update("""{"sessionUpdate":"available_commands_update","availableCommands":[
+            {"name":"compact","description":"Compact context"},
+            {"name":"help","description":"Show help","input":{"hint":"topic"}},
+            {"name":"","description":"skip empty name"},
+            {"description":"no name either"}
+        ]}""", seq = 3))
+        val upd = (out.single() as AdapterOutput.Update)
+        assertEquals(3L, upd.seq)
+        val cmds = (upd.update as CodeUpdate.AvailableCommands).commands
+        assertEquals(2, cmds.size)
+        assertEquals(AvailableCommand("compact", "Compact context"), cmds[0])
+        assertEquals(AvailableCommand("help", "Show help", inputHint = "topic"), cmds[1])
+        // Does not touch the transcript.
+        assertTrue(TranscriptReducer.apply(emptyList(), upd.update, now = 1L).isEmpty())
+    }
+
+    @Test fun slashDraftFilterAndInsert() {
+        assertTrue(CodeComposer.isSlashDraft("/"))
+        assertTrue(CodeComposer.isSlashDraft("/com"))
+        assertFalse(CodeComposer.isSlashDraft("/com args"))
+        assertFalse(CodeComposer.isSlashDraft("hello"))
+        val cmds = listOf(
+            AvailableCommand("compact", "c"),
+            AvailableCommand("clear", "x"),
+            AvailableCommand("help", "h", inputHint = "topic"),
+        )
+        assertEquals(listOf("compact", "clear"), CodeComposer.filterCommands(cmds, "c").map { it.name })
+        assertEquals(cmds, CodeComposer.filterCommands(cmds, ""))
+        val (text, caret) = CodeComposer.insertSlashCommand("/he", cmds[2])
+        assertEquals("/help ", text)
+        assertEquals(6, caret)
+        val (text2, caret2) = CodeComposer.insertSlashCommand("/hel leftover", cmds[2])
+        // "/hel leftover" is not a bare draft for the picker, but insert still replaces the token.
+        assertEquals("/help leftover", text2)
+        assertEquals(6, caret2)
     }
 
     @Test fun reconnectBackoffCapsAndJitters() {

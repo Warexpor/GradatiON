@@ -20,7 +20,9 @@ data class CodeSessionState(
     val summary: CodeSessionSummary,
     val events: List<CodeEvent> = emptyList(),
     val running: Boolean = false,
-    val attached: Boolean = false
+    val attached: Boolean = false,
+    /** Slash commands from ACP `available_commands_update` (session-scoped, not persisted). */
+    val availableCommands: List<AvailableCommand> = emptyList(),
 ) {
     val status: SessionStatus get() = TranscriptReducer.statusOf(events, running)
 }

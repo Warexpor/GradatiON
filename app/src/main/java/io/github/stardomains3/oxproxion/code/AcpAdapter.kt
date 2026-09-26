@@ -30,7 +30,8 @@ import kotlinx.serialization.json.put
  * `session/load` accepts `_meta.afterSeq` so TranscriptReducer upserts stay idempotent on replay.
  *
  * Not yet: the terminal and fs client methods (the bridge answers those on the machine itself),
- * available_commands_update (slash commands), current_mode_update, images in prompts.
+ * current_mode_update, images in prompts.
+ * Slash commands: `available_commands_update` → [CodeUpdate.AvailableCommands].
  */
 class AcpAdapter : HarnessAdapter {
 
@@ -242,6 +243,7 @@ class AcpAdapter : HarnessAdapter {
                 // One live plan card per session: same key, so it updates in place.
                 CodeUpdate.Upsert(CodeEvent.Plan("plan:$sid", now, entries))
             }
+            "available_commands_update" -> CodeUpdate.AvailableCommands(parseAvailableCommands(u))
             else -> null
         }
         return if (out == null) ignored("update ${u.str("sessionUpdate")}")
@@ -411,6 +413,23 @@ class AcpAdapter : HarnessAdapter {
 
     private fun JsonObject.str(k: String): String? = (this[k] as? JsonPrimitive)?.contentOrNull
     private fun ignored(why: String) = listOf(AdapterOutput.Ignored(why))
+
+
+    /**
+     * ACP `available_commands_update.availableCommands[]`: name + description required;
+     * optional unstructured `input.hint` becomes [AvailableCommand.inputHint].
+     */
+    private fun parseAvailableCommands(u: JsonObject): List<AvailableCommand> {
+        val arr = u["availableCommands"] as? JsonArray ?: return emptyList()
+        return arr.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val name = o.str("name")?.trim().orEmpty()
+            if (name.isEmpty()) return@mapNotNull null
+            val description = o.str("description")?.trim().orEmpty()
+            val hint = (o["input"] as? JsonObject)?.str("hint")?.trim()?.ifEmpty { null }
+            AvailableCommand(name = name, description = description, inputHint = hint)
+        }
+    }
 
     companion object {
         /** Tool output kept per call (tail). No bridge full-log RPC yet; phone shows this only. */

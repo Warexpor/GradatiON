@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion
 
+import io.github.stardomains3.oxproxion.code.AvailableCommand
 import io.github.stardomains3.oxproxion.code.CodeEvent
 import io.github.stardomains3.oxproxion.code.CodeSessionEntity
 import io.github.stardomains3.oxproxion.code.CodeSessionFolder
@@ -40,6 +41,19 @@ class SessionUpdatePumpTest {
             permissionMode = PermissionMode.ASK,
             lastSeq = lastSeq,
         )
+
+
+    @Test
+    fun folderStoresAvailableCommandsWithoutTouchingTranscript() {
+        var state = CodeSessionState(summary(), running = false)
+        val cmds = listOf(AvailableCommand("compact", "Compact context"))
+        state = CodeSessionFolder.apply(state, CodeUpdate.AvailableCommands(cmds), now = 5L)
+        assertEquals(cmds, state.availableCommands)
+        assertTrue(state.events.isEmpty())
+        assertFalse(state.running)
+        assertEquals(2L, state.summary.updatedAt) // summary untouched
+        assertFalse(CodeSessionFolder.needsPersist(CodeUpdate.AvailableCommands(cmds)))
+    }
 
     @Test
     fun folderMergesTextChunksAndTurnDone() {

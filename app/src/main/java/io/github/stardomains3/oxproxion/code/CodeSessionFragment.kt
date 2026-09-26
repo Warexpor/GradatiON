@@ -136,6 +136,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                         ).joinToString("  ·  ")
                         composer.running = s.running
                         composer.setPermission(s.summary.permissionMode)
+                        composer.availableCommands = s.availableCommands
                         composer.input.hint = getString(R.string.code_session_reply_hint, s.summary.harness.shortName)
                         render(s)
                     }

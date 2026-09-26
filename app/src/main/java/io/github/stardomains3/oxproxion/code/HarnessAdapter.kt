@@ -36,6 +36,9 @@ sealed class CodeUpdate {
         val preview: String? = null,
         val branch: String? = null
     ) : CodeUpdate()
+
+    /** ACP `available_commands_update`: slash commands for the composer picker. */
+    data class AvailableCommands(val commands: List<AvailableCommand>) : CodeUpdate()
 }
 
 /** What an adapter decodes one inbound frame into. */
@@ -128,6 +131,7 @@ object TranscriptReducer {
             } + CodeEvent.TurnEnd("turn:$now", now, update.stopReason, update.summary)
             is CodeUpdate.Title -> list
             is CodeUpdate.SessionInfo -> list
+            is CodeUpdate.AvailableCommands -> list
         }
 
     private fun upsert(list: List<CodeEvent>, e: CodeEvent): List<CodeEvent> {
