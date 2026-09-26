@@ -22,11 +22,13 @@ import androidx.recyclerview.widget.RecyclerView
 import io.github.stardomains3.oxproxion.AppToast
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
+import io.github.stardomains3.oxproxion.GlassTextView
 import io.github.stardomains3.oxproxion.GrokConfirmDialog
 import io.github.stardomains3.oxproxion.Motion
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.PickerPopover
 import io.github.stardomains3.oxproxion.R
+import io.github.stardomains3.oxproxion.SharedPreferencesHelper
 import io.github.stardomains3.oxproxion.SwipeNavLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
@@ -48,6 +50,12 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
     private lateinit var composer: CodeComposer
     /** Follow the growing edge until the user drags away (same rule as chat). */
     private var follow = true
+    private lateinit var approvalBar: GlassTextView
+    private lateinit var prefs: SharedPreferencesHelper
+    /** Last pending approval requestId we hapticked for (arrival only once per request). */
+    private var haptickedApprovalId: String? = null
+    /** Pending approval we are currently pinning, if any. */
+    private var pinnedApprovalId: String? = null
 
     private val imagePicker = registerForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(CodePromptImages.MAX_COUNT)
@@ -80,8 +88,16 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE && !rv.canScrollVertically(1)) follow = true
             }
 
-            override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) = updateTopEdge()
+            override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
+                updateTopEdge()
+                updateApprovalBar()
+            }
         })
+
+        prefs = SharedPreferencesHelper(requireContext())
+        approvalBar = view.findViewById(R.id.codeSessionApprovalBar)
+        approvalBar.glass.source = backdrop
+        approvalBar.setOnClickListener { scrollToPinnedApproval() }
 
         composer = CodeComposer(
             view.findViewById<View>(R.id.codeSessionComposer) as GlassLinearLayout, frame, backdrop,
@@ -102,6 +118,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             if (bottom - top != oldBottom - oldTop) list.setPadding(list.paddingLeft, list.paddingTop, list.paddingRight,
                 bottom - top + (16 * resources.displayMetrics.density).toInt())
             if (follow && adapter.itemCount > 0) list.post { followEdge(adapter.itemCount - 1) }
+            list.post { updateApprovalBar() }
         }
         composer.permissionPill.setOnClickListener {
             val cur = hub.sessions.value[sessionId]?.summary?.permissionMode ?: PermissionMode.ASK
@@ -185,10 +202,90 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         val streamingText = s.events.lastOrNull() is CodeEvent.AgentText && (s.events.last() as CodeEvent.AgentText).streaming
         val waiting = s.status == SessionStatus.NEEDS_APPROVAL
         if (s.running && !streamingText && !waiting) rows += TranscriptRow.Working
+        val pending = CodeApprovalBar.findPending(s.events)
+        maybeHapticApprovalArrival(pending)
         adapter.submitList(rows) {
             if (follow && rows.isNotEmpty()) list.post { followEdge(rows.size - 1) }
-            list.post { updateTopEdge() }
+            list.post {
+                updateTopEdge()
+                updateApprovalBar(s)
+            }
         }
+    }
+
+    private fun updateApprovalBar(state: CodeSessionState? = hub.sessions.value[sessionId]) {
+        if (!::approvalBar.isInitialized) return
+        if (state == null) {
+            pinnedApprovalId = null
+            approvalBar.isVisible = false
+            return
+        }
+        val pending = CodeApprovalBar.findPending(state.events)
+        pinnedApprovalId = pending?.requestId
+        if (pending == null) {
+            approvalBar.isVisible = false
+            return
+        }
+        val rows = adapter.currentList
+        val index = CodeApprovalBar.indexOfApproval(rows, pending.requestId)
+        val lm = list.layoutManager as? LinearLayoutManager
+        val first = lm?.findFirstVisibleItemPosition() ?: RecyclerView.NO_POSITION
+        val last = lm?.findLastVisibleItemPosition() ?: RecyclerView.NO_POSITION
+        // Pending known but not yet in the adapter list → treat as off-screen.
+        val show = index < 0 || CodeApprovalBar.shouldShowBar(index, first, last)
+        if (show) {
+            approvalBar.text = getString(
+                R.string.code_approval_bar,
+                state.summary.harness.shortName,
+                pending.title,
+            )
+            approvalBar.contentDescription = getString(R.string.cd_code_approval_bar)
+        }
+        approvalBar.isVisible = show
+    }
+
+    private fun maybeHapticApprovalArrival(pending: CodeEvent.Approval?) {
+        val id = pending?.requestId
+        if (id == null) {
+            haptickedApprovalId = null
+            return
+        }
+        if (id == haptickedApprovalId) return
+        haptickedApprovalId = id
+        if (!prefs.getHapticResponding()) return
+        view?.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+    }
+
+    private fun scrollToPinnedApproval() {
+        val id = pinnedApprovalId ?: return
+        val index = CodeApprovalBar.indexOfApproval(adapter.currentList, id)
+        if (index < 0) return
+        follow = false
+        list.smoothScrollToPosition(index)
+        pulseApprovalRow(index)
+    }
+
+    private fun pulseApprovalRow(position: Int) {
+        list.postDelayed({
+            if (!isAdded) return@postDelayed
+            val card = list.findViewHolderForAdapterPosition(position)
+                ?.itemView?.findViewById<View>(R.id.codeApprovalCard)
+                ?: return@postDelayed
+            card.animate().cancel()
+            card.alpha = 1f
+            card.animate()
+                .alpha(0.4f)
+                .setDuration(140)
+                .setInterpolator(Motion.easeOut)
+                .withEndAction {
+                    card.animate()
+                        .alpha(1f)
+                        .setDuration(280)
+                        .setInterpolator(Motion.spring)
+                        .start()
+                }
+                .start()
+        }, 320)
     }
 
     private fun followEdge(last: Int) {

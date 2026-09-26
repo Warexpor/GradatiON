@@ -167,6 +167,32 @@
                 app:glassCornerRadius="18dp"
                 app:glassTint="@color/glass_control_tint" />
 
+            <!-- Pending approval pin: glass capsule above the composer when the card is off-screen -->
+            <io.github.stardomains3.oxproxion.GlassTextView
+                android:id="@+id/codeSessionApprovalBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginBottom="6dp"
+                android:clickable="true"
+                android:ellipsize="end"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:maxLines="2"
+                android:minHeight="40dp"
+                android:paddingStart="14dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/xai_ink"
+                android:textSize="13.5sp"
+                android:visibility="gone"
+                app:glassCornerRadius="18dp"
+                app:glassElevation="4dp"
+                app:glassInteractive="true"
+                app:glassTint="@color/glass_control_tint" />
+
             <include
                 android:id="@+id/codeSessionComposer"
                 layout="@layout/view_code_composer" />

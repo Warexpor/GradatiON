@@ -110,6 +110,8 @@
     <string name="code_approval_allowed">Allowed</string>
     <string name="code_approval_allowed_always">Always allowed</string>
     <string name="code_approval_denied">Denied</string>
+    <string name="code_approval_bar">%1$s wants to %2$s · Review</string>
+    <string name="cd_code_approval_bar">Review pending approval</string>
 
     <!-- Permission modes -->
     <string name="code_perm_ask">Ask first</string>
