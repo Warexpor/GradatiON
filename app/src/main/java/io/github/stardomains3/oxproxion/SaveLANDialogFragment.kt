@@ -33,7 +33,7 @@ class SaveLANDialogFragment : DialogFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         dialog?.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
-        dialog?.window?.setDimAmount(0.55f)
+        dialog?.window?.let { GlassDialogs.frost(it) }
 
         val prefs = SharedPreferencesHelper(requireContext())
         val editTextUrl = view.findViewById<TextInputEditText>(R.id.edit_text_lan_url)

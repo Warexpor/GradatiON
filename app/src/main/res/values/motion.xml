@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <integer name="motion_drawer">280</integer>
+    <integer name="motion_drawer">380</integer>
     <integer name="motion_scrim">250</integer>
-    <integer name="motion_fragment">300</integer>
-    <integer name="motion_fragment_close">280</integer>
+    <integer name="motion_fragment">400</integer>
+    <integer name="motion_fragment_close">360</integer>
     <integer name="motion_send_morph">200</integer>
     <integer name="motion_menu">200</integer>
 </resources>

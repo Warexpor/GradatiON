@@ -45,7 +45,7 @@ object GrokConfirmDialog {
 
         dialog.setView(sheet)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setDimAmount(0.55f)
+        dialog.window?.let { GlassDialogs.frost(it) }
         dialog.show()
     }
 }

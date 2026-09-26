@@ -1,28 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- iOS press: quick sink on touch, springy settle on release -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <set>
             <objectAnimator
-                android:duration="90"
+                android:duration="110"
+                android:interpolator="@interpolator/ios_ease_out"
                 android:propertyName="scaleX"
-                android:valueTo="0.94"
+                android:valueTo="0.95"
                 android:valueType="floatType" />
             <objectAnimator
-                android:duration="90"
+                android:duration="110"
+                android:interpolator="@interpolator/ios_ease_out"
                 android:propertyName="scaleY"
-                android:valueTo="0.94"
+                android:valueTo="0.95"
                 android:valueType="floatType" />
         </set>
     </item>
     <item>
         <set>
             <objectAnimator
-                android:duration="140"
+                android:duration="380"
+                android:interpolator="@interpolator/soft_overshoot"
                 android:propertyName="scaleX"
                 android:valueTo="1"
                 android:valueType="floatType" />
             <objectAnimator
-                android:duration="140"
+                android:duration="380"
+                android:interpolator="@interpolator/soft_overshoot"
                 android:propertyName="scaleY"
                 android:valueTo="1"
                 android:valueType="floatType" />

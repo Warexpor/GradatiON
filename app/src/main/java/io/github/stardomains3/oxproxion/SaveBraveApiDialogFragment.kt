@@ -30,7 +30,7 @@ class SaveBraveApiDialogFragment : DialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         dialog?.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
-        dialog?.window?.setDimAmount(0.55f)
+        dialog?.window?.let { GlassDialogs.frost(it) }
         val sharedPreferencesHelper = SharedPreferencesHelper(requireContext())
         val editTextApiKey = view.findViewById<TextInputEditText>(R.id.edit_text_brave_api)
         val buttonSave = view.findViewById<MaterialButton>(R.id.button_save_brave_api)

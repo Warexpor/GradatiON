@@ -1871,13 +1871,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
         })
 
-        // Smooth fade-in for new list items
-        (chatRecyclerView.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)?.apply {
-            supportsChangeAnimations = false
-            addDuration = 0L
-            moveDuration = 0L
-            removeDuration = 120L
-        }
+        // Sent bubbles rise from the composer on a spring; replies fade up.
+        chatRecyclerView.itemAnimator = ChatItemAnimator(ChatAdapter.VIEW_TYPE_USER)
     }
 
     fun View.showKeyboard() {
@@ -2762,7 +2757,7 @@ $cleanContent
                 layoutManager = LinearLayoutManager(requireContext())
                 this.adapter = adapter
             }
-            dialog.window?.setDimAmount(0.55f)
+            dialog.window?.let { GlassDialogs.frost(it) }
 
             dialog.setView(recyclerView)
             dialog.show()
@@ -3166,7 +3161,7 @@ $cleanContent
             .show()
 
         // Apply dim amount like your other dialog
-        dialog.window?.setDimAmount(0.55f)
+        dialog.window?.let { GlassDialogs.frost(it) }
 
         // Optional: Make the Save button disabled until text is entered
         val saveButton = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
@@ -3261,26 +3256,77 @@ $cleanContent
         return false // Event not handled by this fragment
     }
     private fun showMenu() {
-        val menuMs = resources.getInteger(R.integer.motion_menu).toLong()
+        val anim = Motion.areAnimationsEnabled(requireContext())
+        val d = resources.displayMetrics.density
         controlsButton.isSelected = true
+        controlsButton.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
         overlayView?.visibility = View.VISIBLE
         headerContainer.animate().cancel()
         headerContainer.apply {
-            alpha = 0f
-            translationY = 24f * resources.displayMetrics.density
             visibility = View.VISIBLE
-            animate().alpha(1f).translationY(0f).setDuration(menuMs).setInterpolator(Motion.easeOut).start()
+            if (anim) {
+                // Control Center: rises from the composer with a spring, rows settle in behind it.
+                pivotX = width.takeIf { it > 0 }?.div(2f) ?: (resources.displayMetrics.widthPixels / 2f)
+                pivotY = height.takeIf { it > 0 }?.toFloat() ?: (300f * d)
+                alpha = 0f
+                scaleX = 0.94f
+                scaleY = 0.94f
+                translationY = 28f * d
+                animate().alpha(1f).setDuration(160).setInterpolator(Motion.iosOut).start()
+                animate().scaleX(1f).scaleY(1f).translationY(0f)
+                    .setDuration(520).setInterpolator(Motion.spring).start()
+                staggerPanelRows(d)
+            } else {
+                alpha = 1f; scaleX = 1f; scaleY = 1f; translationY = 0f
+            }
         }
         (chatFrameView as ViewGroup).bringChildToFront(headerContainer)
         dimOverlay?.apply {
             animate().cancel()
             alpha = 0f
             visibility = View.VISIBLE
-            animate().alpha(0.6f).setDuration(menuMs).setInterpolator(Motion.easeOut).start()
+            animate().alpha(0.6f).setDuration(260).setInterpolator(Motion.iosOut).start()
         }
+        animateTopBarDim(0.6f, 260)
         // Fade empty-state (mark + prompt) while menu is open
         if (emptyStateContainer.isVisible) {
             emptyStateContainer.visibility = View.GONE
+        }
+    }
+
+    /** Rows of the Controls panel follow the panel in with a slight cascade. */
+    private fun staggerPanelRows(d: Float) {
+        val container = headerContainer.findViewById<ViewGroup>(R.id.buttonsContainer) ?: return
+        var index = 0
+        for (i in 0 until container.childCount) {
+            val row = container.getChildAt(i)
+            if (row.visibility != View.VISIBLE) continue
+            row.animate().cancel()
+            row.alpha = 0f
+            row.translationY = 14f * d
+            row.animate().alpha(1f).translationY(0f)
+                .setStartDelay(40L + index * 28L)
+                .setDuration(420).setInterpolator(Motion.spring).start()
+            index++
+        }
+    }
+
+    private var topBarDimAnimator: android.animation.ValueAnimator? = null
+
+    /** The dim that sits over the transcript also washes over the glass top bar. */
+    private fun animateTopBarDim(target: Float, durationMs: Long) {
+        val bar = view?.findViewById<View>(R.id.topBarGlass) ?: return
+        val scrim = (bar.foreground as? android.graphics.drawable.ColorDrawable)
+            ?: android.graphics.drawable.ColorDrawable(ContextCompat.getColor(requireContext(), R.color.xai_scrim))
+                .also { it.alpha = 0; bar.foreground = it }
+        topBarDimAnimator?.cancel()
+        val from = scrim.alpha / 255f
+        val to = target.coerceIn(0f, 1f) * Color.alpha(ContextCompat.getColor(requireContext(), R.color.xai_scrim)) / 255f
+        topBarDimAnimator = android.animation.ValueAnimator.ofFloat(from, to).apply {
+            duration = if (Motion.areAnimationsEnabled(requireContext())) durationMs else 0L
+            interpolator = Motion.iosOut
+            addUpdateListener { scrim.alpha = ((it.animatedValue as Float) * 255).toInt() }
+            start()
         }
     }
 
@@ -3457,16 +3503,22 @@ $cleanContent
 
     private fun hideMenu() {
         val menuMs = resources.getInteger(R.integer.motion_menu).toLong()
+        val d = resources.displayMetrics.density
         controlsButton.isSelected = false
         dimOverlay?.animate()?.cancel()
         headerContainer.animate().cancel()
-        dimOverlay?.animate()?.alpha(0f)?.setDuration(menuMs)?.setInterpolator(Motion.easeOut)?.withEndAction {
+        dimOverlay?.animate()?.alpha(0f)?.setDuration(menuMs)?.setInterpolator(Motion.iosIn)?.withEndAction {
             dimOverlay?.visibility = View.GONE
         }?.start()
-        headerContainer.animate().alpha(0f).setDuration(menuMs).setInterpolator(Motion.easeOut).withEndAction {
-            headerContainer.visibility = View.GONE
-            overlayView?.visibility = View.GONE
-        }.start()
+        if (headerContainer.visibility == View.VISIBLE) animateTopBarDim(0f, menuMs)
+        headerContainer.animate().alpha(0f).scaleX(0.97f).scaleY(0.97f).translationY(14f * d)
+            .setDuration(menuMs - 20).setInterpolator(Motion.iosIn).withEndAction {
+                headerContainer.visibility = View.GONE
+                headerContainer.scaleX = 1f
+                headerContainer.scaleY = 1f
+                headerContainer.translationY = 0f
+                overlayView?.visibility = View.GONE
+            }.start()
 
         // Only restore empty state if the chat is empty
         val hasMessages = !(viewModel.chatMessages.value.isNullOrEmpty())
@@ -4287,7 +4339,7 @@ $cleanContent
         val dialog = builder.show()
 
         // Apply dim amount of 0.8f
-        dialog.window?.setDimAmount(0.55f)
+        dialog.window?.let { GlassDialogs.frost(it) }
     }
     private fun showToolsSelectionDialog() {
         // 1️⃣ Load current state from SharedPreferences
@@ -4416,7 +4468,7 @@ $cleanContent
 
         scrollView.addView(container)
         dialog.setView(scrollView)
-        dialog.window?.setDimAmount(0.55f)
+        dialog.window?.let { GlassDialogs.frost(it) }
         dialog.show()
 
         val titleView = dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)
