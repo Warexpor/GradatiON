@@ -45,6 +45,9 @@ class CodeHub private constructor(context: Context) {
     /** Single-flight flag so only one replaceAll runs at a time. */
     private val persistRunning = AtomicBoolean(false)
 
+    /** Coalesce backend SessionUpdates to ~one _sessions write per frame (see SessionUpdatePump). */
+    private val updatePump = SessionUpdatePump(scope, ::drainSessionUpdates)
+
     private val _hosts = MutableStateFlow(store.hosts)
     val hosts: StateFlow<List<CodeHost>> = _hosts
 
@@ -67,19 +70,18 @@ class CodeHub private constructor(context: Context) {
         return all.find { it.id == store.activeHostId } ?: all.firstOrNull()
     }
 
-    /** Load Room index; one-shot import of any leftover prefs session list. */
+    /** Load Room index; one-shot merge of any leftover prefs session list. */
     private fun loadSessionsFromRoom(): Map<String, CodeSessionState> = runBlocking(Dispatchers.IO) {
         val legacy = store.peekLegacySessions()
         if (legacy != null) {
             try {
                 if (legacy.isNotEmpty()) {
                     val existing = sessionDao.getAll()
-                    if (existing.isEmpty()) {
-                        sessionDao.upsertAll(legacy.map { CodeSessionEntity.from(it) })
-                    }
+                    val toUpsert = mergeLegacySessionRows(existing, legacy)
+                    if (toUpsert.isNotEmpty()) sessionDao.upsertAll(toUpsert)
                 }
-                // Mark migrated only after Room write path succeeds (or nothing to import /
-                // Room already had rows). Failure leaves prefs so the next launch retries.
+                // Mark migrated only after merge/upsert succeeds (or nothing to import).
+                // Failure leaves prefs so the next launch retries — never clear on error.
                 store.markSessionsMigrated()
             } catch (t: Throwable) {
                 Log.w(TAG, "Prefs→Room session migration deferred", t)
@@ -139,7 +141,7 @@ class CodeHub private constructor(context: Context) {
         _sessions.value.values.filter { it.summary.hostId == host.id }.forEach { s ->
             s.summary.lastSeq?.let { b.rememberLastSeq(s.summary.id, it) }
         }
-        scope.launch { b.updates.collect { apply(it) } }
+        scope.launch { b.updates.collect { updatePump.offer(it) } }
         scope.launch {
             b.connection.collect { st ->
                 _connections.value = _connections.value + (host.id to st)
@@ -281,45 +283,17 @@ class CodeHub private constructor(context: Context) {
         scope.launch { block(backendFor(host)) }
     }
 
-    private fun apply(u: SessionUpdate) {
-        update(u.sessionId) { s ->
-            val events = TranscriptReducer.apply(s.events, u.update)
-            val running = when (val upd = u.update) {
-                is CodeUpdate.TurnDone -> false
-                is CodeUpdate.TextChunk, is CodeUpdate.ToolPatch -> true
-                is CodeUpdate.Upsert -> if (upd.event is CodeEvent.UserPrompt) true else s.running
-                is CodeUpdate.SessionInfo -> when (upd.status) {
-                    SessionStatus.RUNNING, SessionStatus.NEEDS_APPROVAL -> true
-                    SessionStatus.IDLE, SessionStatus.ERROR -> false
-                    else -> s.running
-                }
-                else -> s.running
-            }
-            val fromText = (events.lastOrNull { it is CodeEvent.AgentText } as? CodeEvent.AgentText)
-                ?.text?.lineSequence()?.lastOrNull { it.isNotBlank() }?.replace(MARKDOWN_MARKS, "")?.trim()?.take(140)
-            val liveSeq = backends[s.summary.hostId]?.peekLastSeq(u.sessionId)
-            val summary = when (val upd = u.update) {
-                is CodeUpdate.SessionInfo -> s.summary.copy(
-                    updatedAt = System.currentTimeMillis(),
-                    title = upd.title ?: s.summary.title,
-                    preview = upd.preview ?: fromText ?: s.summary.preview,
-                    branch = upd.branch ?: s.summary.branch,
-                    lastSeq = liveSeq ?: s.summary.lastSeq
-                )
-                is CodeUpdate.Title -> s.summary.copy(
-                    updatedAt = System.currentTimeMillis(),
-                    title = upd.title,
-                    lastSeq = liveSeq ?: s.summary.lastSeq
-                )
-                else -> s.summary.copy(
-                    updatedAt = System.currentTimeMillis(),
-                    preview = fromText ?: s.summary.preview,
-                    lastSeq = liveSeq ?: s.summary.lastSeq
-                )
-            }
-            s.copy(events = events, running = running, summary = summary)
+    /**
+     * Drain a coalesced batch: fold every pending update in order offline, then one
+     * [_sessions] assignment covering all touched sessionIds. Persist once if any
+     * TurnDone/SessionInfo landed in the batch.
+     */
+    private fun drainSessionUpdates(batch: List<SessionUpdate>) {
+        val result = foldSessionUpdates(_sessions.value, batch) { state, sid ->
+            backends[state.summary.hostId]?.peekLastSeq(sid)
         }
-        if (u.update is CodeUpdate.TurnDone || u.update is CodeUpdate.SessionInfo) persistSessions()
+        if (result.sessions != null) _sessions.value = result.sessions
+        if (result.needsPersist) persistSessions()
     }
 
     private inline fun update(sessionId: String, f: (CodeSessionState) -> CodeSessionState) {
@@ -372,8 +346,6 @@ class CodeHub private constructor(context: Context) {
 
     companion object {
         private const val TAG = "CodeHub"
-        /** Markdown punctuation stripped from list previews. */
-        private val MARKDOWN_MARKS = Regex("[`*_#>]+")
 
         @Volatile
         private var instance: CodeHub? = null
@@ -381,6 +353,7 @@ class CodeHub private constructor(context: Context) {
         /** Tests only: drop the singleton so the next [get] starts from fresh preferences. */
         @androidx.annotation.VisibleForTesting
         fun resetForTesting() {
+            instance?.updatePump?.cancel()
             instance?.backends?.values?.forEach { it.close() }
             instance = null
         }

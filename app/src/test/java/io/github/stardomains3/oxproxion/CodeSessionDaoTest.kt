@@ -180,6 +180,85 @@ class CodeSessionDaoTest {
     }
 
     @Test
+    fun hubMergesPrefsWhenRoomAlreadyHasRows() {
+        // Residual review#6 Q2: non-empty Room must not discard prefs legacy sessions.
+        runBlocking {
+            dao.upsert(
+                CodeSessionEntity.from(
+                    CodeSessionSummary(
+                        id = "room-only",
+                        hostId = "demo",
+                        harness = HarnessKind.CLAUDE_CODE,
+                        workspace = "~/code",
+                        title = "Already in Room",
+                        createdAt = 1L,
+                        updatedAt = 2L,
+                        lastSeq = 3L
+                    )
+                )
+            )
+            dao.upsert(
+                CodeSessionEntity.from(
+                    CodeSessionSummary(
+                        id = "shared",
+                        hostId = "demo",
+                        harness = HarnessKind.CLAUDE_CODE,
+                        workspace = "~/code",
+                        title = "RoomTitle",
+                        createdAt = 1L,
+                        updatedAt = 2L,
+                        lastSeq = 4L
+                    )
+                )
+            )
+        }
+        val json = Json { encodeDefaults = true }
+        val legacy = listOf(
+            CodeSessionSummary(
+                id = "prefs-only",
+                hostId = "demo",
+                harness = HarnessKind.OPENCODE,
+                workspace = "~/other",
+                title = "From prefs",
+                createdAt = 5L,
+                updatedAt = 6L,
+                permissionMode = PermissionMode.PLAN,
+                preview = "legacy",
+                lastSeq = 9L
+            ),
+            CodeSessionSummary(
+                id = "shared",
+                hostId = "demo",
+                harness = HarnessKind.CLAUDE_CODE,
+                workspace = "~/code",
+                title = "PrefsTitle",
+                createdAt = 1L,
+                updatedAt = 2L,
+                lastSeq = 12L // newer than Room's 4
+            )
+        )
+        ctx.getSharedPreferences(CodeStore.PREFS_NAME, 0).edit()
+            .putString(
+                CodeStore.KEY_SESSIONS,
+                json.encodeToString(ListSerializer(CodeSessionSummary.serializer()), legacy)
+            )
+            .putBoolean("sessions_migrated_to_room", false)
+            .commit()
+
+        val hub = CodeHub.get(ctx)
+        assertEquals("Already in Room", hub.sessions.value["room-only"]?.summary?.title)
+        assertEquals("From prefs", hub.sessions.value["prefs-only"]?.summary?.title)
+        assertEquals(9L, hub.sessions.value["prefs-only"]?.summary?.lastSeq)
+        // Prefer newer lastSeq from prefs; keep Room title
+        assertEquals("RoomTitle", hub.sessions.value["shared"]?.summary?.title)
+        assertEquals(12L, hub.sessions.value["shared"]?.summary?.lastSeq)
+        assertTrue(hub.store.sessionsMigratedToRoom)
+        assertNull(
+            ctx.getSharedPreferences(CodeStore.PREFS_NAME, 0).getString(CodeStore.KEY_SESSIONS, null)
+        )
+    }
+
+    @Test
     fun hubPersistSessionsWritesRoom() = runBlocking {
         val hub = CodeHub.get(ctx)
         // Seed via DAO path used by persist: start with empty, write entity, reload hub.
