@@ -51,7 +51,7 @@ class SavedChatsFragment : Fragment() {
     private var allSessions: List<ChatSession> = emptyList()
     private var sessionsLiveData: androidx.lifecycle.LiveData<List<ChatSession>>? = null
     private val sessionsObserver = androidx.lifecycle.Observer<List<ChatSession>> { sessions ->
-        allSessions = sessions ?: emptyList()
+        allSessions = sessions
         filterSessions(searchView.query?.toString().orEmpty())
     }
 
