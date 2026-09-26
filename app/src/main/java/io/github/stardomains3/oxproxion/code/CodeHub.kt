@@ -117,7 +117,7 @@ class CodeHub private constructor(context: Context) {
     private fun backendFor(host: CodeHost): CodeBackend = backends.getOrPut(host.id) {
         val b = when (host.transport) {
             TransportKind.DEMO -> DemoBackend(host, scope)
-            TransportKind.BRIDGE -> BridgeBackend(host, WebSocketTransport(host.url, host.token), AcpAdapter(), scope)
+            TransportKind.BRIDGE -> BridgeBackend(host, WebSocketTransport(host.url, host.token, host.fingerprint), AcpAdapter(), scope)
         }
         // Seed resume cursors from the Room-backed session index (process-death safe).
         _sessions.value.values.filter { it.summary.hostId == host.id }.forEach { s ->

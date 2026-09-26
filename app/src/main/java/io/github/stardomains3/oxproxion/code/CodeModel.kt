@@ -62,6 +62,11 @@ data class CodeHost(
     val url: String = "",
     /** Pairing token. Persisted in Keystore-backed [io.github.stardomains3.oxproxion.code.store.CodeHostSecrets], not in plain prefs. */
     val token: String = "",
+    /**
+     * SHA-256 of the bridge leaf certificate from the pairing QR (`fp=`).
+     * Non-blank → [BridgeTls] pins it on the WebSocket; blank → legacy system-CA trust.
+     */
+    val fingerprint: String = "",
     val transport: TransportKind = TransportKind.BRIDGE,
     val defaultHarness: HarnessKind = HarnessKind.CLAUDE_CODE,
     val defaultWorkspace: String = "",

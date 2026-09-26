@@ -72,13 +72,17 @@ object ReconnectBackoff {
  * WebSocket to a GradatiON bridge: `Authorization: Bearer <token>`, JSON-RPC 2.0 text frames,
  * OkHttp pings every 20 s so dead links surface quickly on mobile networks.
  *
+ * When [fingerprint] is non-blank, the OkHttp client pins that SHA-256 via [BridgeTls]
+ * (self-signed bridges). Empty fingerprint keeps system-CA trust (legacy / demo).
+ *
  * Auto-reconnects with [ReconnectBackoff] after drops (not after [close], and not after an auth
  * rejection). Reconnect pauses while the app is backgrounded unless [setKeepAliveForSession].
  */
 class WebSocketTransport(
     private val url: String,
     private val token: String,
-    private val client: OkHttpClient = defaultClient,
+    fingerprint: String = "",
+    private val client: OkHttpClient = BridgeTls.clientFor(fingerprint, url),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val sleeper: suspend (Long) -> Unit = { delay(it) },
     private val random01: () -> Double = { Random.nextDouble() },
