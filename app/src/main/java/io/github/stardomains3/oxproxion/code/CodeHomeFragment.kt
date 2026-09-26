@@ -504,11 +504,18 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     AppToast.makeText(requireContext(), getString(R.string.code_attach_unsupported), AppToast.LENGTH_SHORT).show()
                     continue
                 }
-                val att = withContext(Dispatchers.IO) { CodePromptImages.fromUri(requireContext(), uri) }
+                val encoded = withContext(Dispatchers.IO) { CodePromptImages.fromUri(requireContext(), uri) }
                 if (!isAdded) return@launch
-                if (att == null) {
-                    AppToast.makeText(requireContext(), getString(R.string.code_attach_failed), AppToast.LENGTH_SHORT).show()
-                    continue
+                val att = when (encoded) {
+                    is CodePromptImages.Result.Ok -> encoded.attachment
+                    is CodePromptImages.Result.TooLarge -> {
+                        AppToast.makeText(requireContext(), getString(R.string.code_attach_too_large), AppToast.LENGTH_SHORT).show()
+                        continue
+                    }
+                    is CodePromptImages.Result.Failed -> {
+                        AppToast.makeText(requireContext(), getString(R.string.code_attach_failed), AppToast.LENGTH_SHORT).show()
+                        continue
+                    }
                 }
                 if (!composer.addAttachment(att)) {
                     AppToast.makeText(

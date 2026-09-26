@@ -1,7 +1,6 @@
 package io.github.stardomains3.oxproxion.code
 
 import android.content.Context
-import android.net.Uri
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
@@ -152,9 +151,12 @@ class CodeComposer(
                 )
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 contentDescription = context.getString(R.string.cd_code_attach)
-                val uri = att.previewUri?.let { Uri.parse(it) }
-                if (uri != null) setImageURI(uri)
-                else setImageResource(R.drawable.ic_attach_plus)
+                // Prefer IO-decoded chip thumb; never setImageURI full-res on Main.
+                val thumb = att.previewBitmap
+                when {
+                    thumb != null && !thumb.isRecycled -> setImageBitmap(thumb)
+                    else -> setImageResource(R.drawable.ic_attach_plus)
+                }
                 background = context.getDrawable(R.drawable.bg_circle_soft)
                 clipToOutline = true
                 outlineProvider = android.view.ViewOutlineProvider.BACKGROUND

@@ -114,7 +114,7 @@ class DemoBackend(
     override suspend fun startSession(request: NewSessionRequest): CodeSessionSummary {
         val now = System.currentTimeMillis()
         val id = "demo-${now}"
-        scope.launch { prompt(id, request.prompt) }
+        scope.launch { prompt(id, request.prompt, request.attachments) }
         return CodeSessionSummary(
             id = id, hostId = host.id, harness = request.harness, workspace = request.workspace,
             title = request.prompt.lineSequence().first().take(60), createdAt = now, updatedAt = now,

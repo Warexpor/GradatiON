@@ -144,12 +144,17 @@ data class CodeSessionSummary(
  * One image (or future media) attachment for [session/prompt] / [NewSessionRequest].
  * [data] is raw base64 (no data-URI prefix); [mimeType] is e.g. `image/jpeg`.
  * [previewUri] is a local content Uri string for composer chips only — never sent on the wire.
+ * [previewBitmap] is a small chip thumbnail decoded on IO; body property so it stays out of
+ * equals/hashCode/copy (wire identity is mime+data only).
  */
 data class PromptAttachment(
     val mimeType: String,
     val data: String,
     val previewUri: String? = null,
-)
+) {
+    /** Small chip thumbnail (IO-decoded); never sent on the wire. */
+    var previewBitmap: android.graphics.Bitmap? = null
+}
 
 data class NewSessionRequest(
     val hostId: String,

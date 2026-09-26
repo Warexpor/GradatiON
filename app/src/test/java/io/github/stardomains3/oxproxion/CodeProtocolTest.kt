@@ -19,6 +19,18 @@ import io.github.stardomains3.oxproxion.code.SessionStatus
 import io.github.stardomains3.oxproxion.code.ToolKind
 import io.github.stardomains3.oxproxion.code.ToolStatus
 import io.github.stardomains3.oxproxion.code.TranscriptReducer
+import io.github.stardomains3.oxproxion.code.CodeHost
+import io.github.stardomains3.oxproxion.code.DemoBackend
+import io.github.stardomains3.oxproxion.code.SessionUpdate
+import io.github.stardomains3.oxproxion.code.TransportKind
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -415,4 +427,49 @@ class CodeProtocolTest {
         assertEquals("hello", prompt[0].jsonObject["text"]!!.jsonPrimitive.content)
     }
 
+    @Test fun demoStartSessionPassesAttachments() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        try {
+            val host = CodeHost(
+                id = "demo",
+                name = "Demo",
+                url = "",
+                token = "",
+                transport = TransportKind.DEMO,
+            )
+            val backend = DemoBackend(host, scope)
+            val att = PromptAttachment(mimeType = "image/jpeg", data = "AAAA")
+            val collected = mutableListOf<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+            backend.startSession(
+                NewSessionRequest(
+                    hostId = host.id,
+                    harness = HarnessKind.CODEX,
+                    workspace = "~/code/GradatiON",
+                    prompt = "see image",
+                    permissionMode = PermissionMode.ASK,
+                    attachments = listOf(att),
+                )
+            )
+            withTimeout(2_000) {
+                while (collected.none { upd ->
+                        val u = upd.update
+                        u is CodeUpdate.Upsert &&
+                            u.event is CodeEvent.UserPrompt &&
+                            u.event.attachmentCount == 1
+                    }
+                ) {
+                    delay(10)
+                }
+            }
+            collectJob.cancel()
+            val prompt = collected.mapNotNull {
+                ((it.update as? CodeUpdate.Upsert)?.event as? CodeEvent.UserPrompt)
+            }.first()
+            assertEquals(1, prompt.attachmentCount)
+            assertEquals("see image", prompt.text)
+        } finally {
+            scope.cancel()
+        }
+    }
 }

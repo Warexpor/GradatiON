@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion.code
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -451,9 +453,19 @@ class BridgeBackend(
         var sendCompleted = false
         try {
             if (isDeliverStale(sessionId, gen)) return false
-            val frame = adapter.prompt(id, sessionId, text, attachments)
-            if (!transport.send(frame)) {
-                throw IllegalStateException(transport.lastError ?: "Not connected")
+            // Frame build embeds multi-MB base64; keep it (and send) off Hub Main.immediate.
+            val sendOk = withContext(Dispatchers.IO) {
+                if (isDeliverStale(sessionId, gen)) return@withContext null
+                val frame = adapter.prompt(id, sessionId, text, attachments)
+                if (!transport.send(frame)) {
+                    throw IllegalStateException(transport.lastError ?: "Not connected")
+                }
+                true
+            }
+            if (sendOk == null) {
+                // Cancel won before send; do not treat as delivered.
+                refreshKeepAlive()
+                return false
             }
             sendCompleted = true
             // Prompt has no timeout: the turn can run for a long time.
