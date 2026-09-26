@@ -5,20 +5,26 @@ import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import io.github.stardomains3.oxproxion.code.CodeSessionDao
+import io.github.stardomains3.oxproxion.code.CodeSessionEntity
 import net.zetetic.database.sqlcipher.SQLiteDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import java.io.File
 import java.io.RandomAccessFile
 
 @Database(
-    entities = [ChatSession::class, ChatMessage::class, RpCharacter::class, RpLorebook::class],
-    version = 3,
+    entities = [
+        ChatSession::class, ChatMessage::class, RpCharacter::class, RpLorebook::class,
+        CodeSessionEntity::class
+    ],
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun chatDao(): ChatDao
     abstract fun rpDao(): RpDao
+    abstract fun codeSessionDao(): CodeSessionDao
 
     companion object {
         const val DB_NAME = "chat_database"
@@ -57,7 +63,11 @@ abstract class AppDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(passphrase.copyOf())
             return Room.databaseBuilder(context, AppDatabase::class.java, DB_NAME)
                 .openHelperFactory(factory)
-                .addMigrations(DatabaseMigrations.MIGRATION_1_2, DatabaseMigrations.MIGRATION_2_3)
+                .addMigrations(
+                    DatabaseMigrations.MIGRATION_1_2,
+                    DatabaseMigrations.MIGRATION_2_3,
+                    DatabaseMigrations.MIGRATION_3_4
+                )
                 .build()
         }
 

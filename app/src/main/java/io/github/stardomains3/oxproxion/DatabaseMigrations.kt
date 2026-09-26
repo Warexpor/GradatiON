@@ -57,4 +57,30 @@ object DatabaseMigrations {
             )
         }
     }
+
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS code_session (
+                    id TEXT NOT NULL,
+                    hostId TEXT NOT NULL,
+                    harness TEXT NOT NULL,
+                    cwd TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    mode TEXT NOT NULL,
+                    branch TEXT,
+                    preview TEXT NOT NULL,
+                    lastSeq INTEGER,
+                    model TEXT,
+                    PRIMARY KEY(id)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_code_session_hostId ON code_session(hostId)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_code_session_updatedAt ON code_session(updatedAt)")
+        }
+    }
 }

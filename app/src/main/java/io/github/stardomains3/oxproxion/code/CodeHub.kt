@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion.code
 
 import android.content.Context
+import io.github.stardomains3.oxproxion.AppDatabase
 import io.github.stardomains3.oxproxion.code.store.CodeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -8,6 +9,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.util.UUID
 
 /** Session as the UI sees it: summary plus live state. */
@@ -24,12 +26,17 @@ data class CodeSessionState(
  * App-wide owner of Code mode state: hosts, one backend per host, sessions and their live
  * transcripts. Outlives fragments so a running agent keeps streaming while the user reads chat.
  * Main-thread confined (all mutation happens on [scope], which runs on Main).
+ *
+ * Session index (summaries + lastSeq) is persisted in Room via [CodeSessionDao]; full transcript
+ * blobs stay in memory for now.
  */
 class CodeHub private constructor(context: Context) {
 
     val store = CodeStore(context)
+    private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backends = HashMap<String, CodeBackend>()
+    private val sessionDao: CodeSessionDao = AppDatabase.getDatabase(appContext).codeSessionDao()
 
     private val _hosts = MutableStateFlow(store.hosts)
     val hosts: StateFlow<List<CodeHost>> = _hosts
@@ -37,7 +44,7 @@ class CodeHub private constructor(context: Context) {
     private val _activeHost = MutableStateFlow(resolveActive())
     val activeHost: StateFlow<CodeHost?> = _activeHost
 
-    private val _sessions = MutableStateFlow(store.sessions.associate { it.id to CodeSessionState(it) })
+    private val _sessions = MutableStateFlow(loadSessionsFromRoom())
     /** All known sessions by id. */
     val sessions: StateFlow<Map<String, CodeSessionState>> = _sessions
 
@@ -51,6 +58,18 @@ class CodeHub private constructor(context: Context) {
     private fun resolveActive(): CodeHost? {
         val all = store.hosts
         return all.find { it.id == store.activeHostId } ?: all.firstOrNull()
+    }
+
+    /** Load Room index; one-shot import of any leftover prefs session list. */
+    private fun loadSessionsFromRoom(): Map<String, CodeSessionState> = runBlocking(Dispatchers.IO) {
+        val legacy = store.consumeLegacySessions()
+        if (legacy != null && legacy.isNotEmpty()) {
+            val existing = sessionDao.getAll()
+            if (existing.isEmpty()) {
+                sessionDao.upsertAll(legacy.map { CodeSessionEntity.from(it) })
+            }
+        }
+        sessionDao.getAll().associate { it.id to CodeSessionState(it.toSummary()) }
     }
 
     // ── hosts ─────────────────────────────────────────────────────────────────────────────
@@ -100,6 +119,10 @@ class CodeHub private constructor(context: Context) {
             TransportKind.DEMO -> DemoBackend(host, scope)
             TransportKind.BRIDGE -> BridgeBackend(host, WebSocketTransport(host.url, host.token), AcpAdapter(), scope)
         }
+        // Seed resume cursors from the Room-backed session index (process-death safe).
+        _sessions.value.values.filter { it.summary.hostId == host.id }.forEach { s ->
+            s.summary.lastSeq?.let { b.rememberLastSeq(s.summary.id, it) }
+        }
         scope.launch { b.updates.collect { apply(it) } }
         scope.launch {
             b.connection.collect { st ->
@@ -131,7 +154,18 @@ class CodeHub private constructor(context: Context) {
         scope.launch {
             val remote = runCatching { b.listSessions() }.getOrNull() ?: return@launch
             val map = _sessions.value.toMutableMap()
-            remote.forEach { s -> map[s.id] = map[s.id]?.copy(summary = s) ?: CodeSessionState(s) }
+            remote.forEach { s ->
+                val prev = map[s.id]
+                val merged = if (prev == null) s else s.copy(
+                    lastSeq = s.lastSeq ?: prev.summary.lastSeq,
+                    permissionMode = if (s.permissionMode != PermissionMode.ASK ||
+                        prev.summary.permissionMode == PermissionMode.ASK
+                    ) s.permissionMode else prev.summary.permissionMode,
+                    preview = s.preview.ifBlank { prev.summary.preview },
+                    title = s.title.ifBlank { prev.summary.title }
+                )
+                map[s.id] = prev?.copy(summary = merged) ?: CodeSessionState(merged)
+            }
             _sessions.value = map
             persistSessions()
         }
@@ -189,6 +223,7 @@ class CodeHub private constructor(context: Context) {
         if (s.attached) return
         update(sessionId) { it.copy(attached = true) }
         val host = _hosts.value.find { it.id == s.summary.hostId } ?: return
+        s.summary.lastSeq?.let { backendFor(host).rememberLastSeq(sessionId, it) }
         scope.launch { runCatching { backendFor(host).attach(s.summary) } }
     }
 
@@ -246,20 +281,24 @@ class CodeHub private constructor(context: Context) {
             }
             val fromText = (events.lastOrNull { it is CodeEvent.AgentText } as? CodeEvent.AgentText)
                 ?.text?.lineSequence()?.lastOrNull { it.isNotBlank() }?.replace(MARKDOWN_MARKS, "")?.trim()?.take(140)
+            val liveSeq = backends[s.summary.hostId]?.peekLastSeq(u.sessionId)
             val summary = when (val upd = u.update) {
                 is CodeUpdate.SessionInfo -> s.summary.copy(
                     updatedAt = System.currentTimeMillis(),
                     title = upd.title ?: s.summary.title,
                     preview = upd.preview ?: fromText ?: s.summary.preview,
-                    branch = upd.branch ?: s.summary.branch
+                    branch = upd.branch ?: s.summary.branch,
+                    lastSeq = liveSeq ?: s.summary.lastSeq
                 )
                 is CodeUpdate.Title -> s.summary.copy(
                     updatedAt = System.currentTimeMillis(),
-                    title = upd.title
+                    title = upd.title,
+                    lastSeq = liveSeq ?: s.summary.lastSeq
                 )
                 else -> s.summary.copy(
                     updatedAt = System.currentTimeMillis(),
-                    preview = fromText ?: s.summary.preview
+                    preview = fromText ?: s.summary.preview,
+                    lastSeq = liveSeq ?: s.summary.lastSeq
                 )
             }
             s.copy(events = events, running = running, summary = summary)
@@ -280,7 +319,19 @@ class CodeHub private constructor(context: Context) {
     }
 
     private fun persistSessions() {
-        store.sessions = _sessions.value.values.map { it.summary }.sortedByDescending { it.updatedAt }
+        // Refresh lastSeq from live adapters before writing.
+        val enriched = _sessions.value.mapValues { (id, state) ->
+            val seq = backends[state.summary.hostId]?.peekLastSeq(id) ?: state.summary.lastSeq
+            if (seq != state.summary.lastSeq) state.copy(summary = state.summary.copy(lastSeq = seq)) else state
+        }
+        if (enriched != _sessions.value) _sessions.value = enriched
+        val entities = enriched.values
+            .map { CodeSessionEntity.from(it.summary) }
+            .sortedByDescending { it.updatedAt }
+            .take(200)
+        scope.launch(Dispatchers.IO) {
+            sessionDao.replaceAll(entities)
+        }
     }
 
     companion object {

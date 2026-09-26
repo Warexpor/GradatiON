@@ -316,6 +316,12 @@ class AcpAdapter : HarnessAdapter {
     /** Highest bridge `_meta.seq` seen for [sessionId], or null if none yet. */
     fun lastSeq(sessionId: String): Long? = lastSeqBySession[sessionId]
 
+    /** Restore a resume cursor from Room after process death (keeps the higher value). */
+    fun seedLastSeq(sessionId: String, seq: Long) {
+        val prev = lastSeqBySession[sessionId]
+        if (prev == null || seq > prev) lastSeqBySession[sessionId] = seq
+    }
+
     /**
      * Stable event key: prefer bridge `_meta.seq` (reconnect/resume safe). Tool/approval/plan keys
      * use ACP ids instead. Without seq (plain ACP / older fixtures), fall back to a local counter.

@@ -12,7 +12,9 @@ import kotlinx.serialization.json.Json
 
 /**
  * Settings and saved hosts for Code mode.
- * Non-secret prefs (enabled, hosts metadata, sessions, defaults) stay in plain SharedPreferences.
+ * Non-secret prefs (enabled, hosts metadata, defaults) stay in plain SharedPreferences.
+ * Session index lives in Room ([io.github.stardomains3.oxproxion.code.CodeSessionDao]); legacy
+ * prefs sessions are migrated once via [consumeLegacySessions].
  * Pairing tokens live in [CodeHostSecrets] (Keystore AES-GCM); plaintext tokens are migrated
  * out of the hosts JSON on first read.
  */
@@ -58,16 +60,26 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
             writeHostsRaw(scrubbed)
         }
 
-    var sessions: List<CodeSessionSummary>
-        get() = prefs.getString(KEY_SESSIONS, null)?.let {
+    /**
+     * One-shot: read any session list still in SharedPreferences, clear the prefs key, and mark
+     * migrated. Returns null when already migrated (caller should load from Room only).
+     * Empty list means "migrated, nothing to import".
+     */
+    fun consumeLegacySessions(): List<CodeSessionSummary>? {
+        if (prefs.getBoolean(KEY_SESSIONS_MIGRATED, false)) return null
+        val legacy = prefs.getString(KEY_SESSIONS, null)?.let {
             runCatching { json.decodeFromString(ListSerializer(CodeSessionSummary.serializer()), it) }.getOrNull()
         } ?: emptyList()
-        set(v) = prefs.edit {
-            putString(
-                KEY_SESSIONS,
-                json.encodeToString(ListSerializer(CodeSessionSummary.serializer()), v.take(200))
-            )
+        prefs.edit {
+            remove(KEY_SESSIONS)
+            putBoolean(KEY_SESSIONS_MIGRATED, true)
         }
+        return legacy
+    }
+
+    /** Test/debug: whether prefs→Room session migration has run. */
+    val sessionsMigratedToRoom: Boolean
+        get() = prefs.getBoolean(KEY_SESSIONS_MIGRATED, false)
 
     /**
      * One-shot: move any pairing tokens still embedded in the hosts JSON into the Keystore vault,
@@ -119,7 +131,8 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         private const val KEY_ACTIVE_HOST = "active_host"
         private const val KEY_PERMISSION = "permission_mode"
         private const val KEY_HOSTS = "hosts"
-        private const val KEY_SESSIONS = "sessions"
+        const val KEY_SESSIONS = "sessions"
+        private const val KEY_SESSIONS_MIGRATED = "sessions_migrated_to_room"
         private const val KEY_TOKENS_MIGRATED = "host_tokens_migrated"
     }
 }

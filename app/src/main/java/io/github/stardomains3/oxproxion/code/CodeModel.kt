@@ -116,7 +116,9 @@ data class CodeSessionSummary(
     val model: String? = null,
     /** One line for the list: last agent sentence, or what it is doing now. */
     val preview: String = "",
-    val branch: String? = null
+    val branch: String? = null,
+    /** Highest bridge `_meta.seq` seen; used for `session/load` resume after process death. */
+    val lastSeq: Long? = null
 )
 
 data class NewSessionRequest(

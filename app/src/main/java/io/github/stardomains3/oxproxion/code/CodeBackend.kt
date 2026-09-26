@@ -56,6 +56,12 @@ interface CodeBackend {
 
     /** Pause transport reconnect while the app is backgrounded (no-op unless a bridge). */
     fun setAppBackgrounded(backgrounded: Boolean) {}
+
+    /** Highest bridge `_meta.seq` seen for [sessionId], or null. Used when persisting resume cursors. */
+    fun peekLastSeq(sessionId: String): Long? = null
+
+    /** Seed a resume cursor after process death / Room load (no-op for demo). */
+    fun rememberLastSeq(sessionId: String, seq: Long) {}
 }
 
 /**
@@ -116,6 +122,13 @@ class BridgeBackend(
         is CodeUpdate.Upsert -> update.event is CodeEvent.Approval ||
             update.event is CodeEvent.ToolCall
         else -> false
+    }
+
+    override fun peekLastSeq(sessionId: String): Long? =
+        (adapter as? AcpAdapter)?.lastSeq(sessionId)
+
+    override fun rememberLastSeq(sessionId: String, seq: Long) {
+        (adapter as? AcpAdapter)?.seedLastSeq(sessionId, seq)
     }
 
     override fun setAppBackgrounded(backgrounded: Boolean) {
@@ -206,7 +219,8 @@ class BridgeBackend(
         initialized = true
         for (session in attached.values.toList()) {
             if (gen != socketGeneration) return
-            val after = (adapter as? AcpAdapter)?.lastSeq(session.id)
+            session.lastSeq?.let { rememberLastSeq(session.id, it) }
+            val after = peekLastSeq(session.id) ?: session.lastSeq
             runCatching {
                 rawCall(
                     { adapter.loadSession(it, session.id, session.workspace, after) },
@@ -274,8 +288,10 @@ class BridgeBackend(
                 title = s("title") ?: "Session",
                 createdAt = l("createdAt"),
                 updatedAt = l("updatedAt"),
+                permissionMode = PermissionMode.fromId(s("permissionMode") ?: s("mode")),
                 preview = s("preview") ?: "",
-                branch = s("branch")
+                branch = s("branch"),
+                lastSeq = (o["lastSeq"] as? JsonPrimitive)?.longOrNull
             )
         }
     }
@@ -328,8 +344,9 @@ class BridgeBackend(
 
     override suspend fun attach(session: CodeSessionSummary) {
         attached[session.id] = session
+        session.lastSeq?.let { rememberLastSeq(session.id, it) }
         ensureReady()
-        val after = (adapter as? AcpAdapter)?.lastSeq(session.id)
+        val after = peekLastSeq(session.id) ?: session.lastSeq
         rawCall({ adapter.loadSession(it, session.id, session.workspace, after) }, DEFAULT_TIMEOUT_MS)
     }
 
