@@ -177,6 +177,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var btnDecreaseFont: MaterialButton
     private lateinit var btnIncreaseFont: MaterialButton
     private lateinit var btnDoneFont: MaterialButton
+    private var ambientBackground: AmbientBackgroundView? = null
     private lateinit var genButton: MaterialButton
     private lateinit var saveMarkdownFileButton: MaterialButton
     private lateinit var saveEpubButton: MaterialButton
@@ -735,6 +736,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         btnDecreaseFont = view.findViewById(R.id.btnDecreaseFont)
         btnIncreaseFont = view.findViewById(R.id.btnIncreaseFont)
         btnDoneFont = view.findViewById(R.id.btnDoneFont)
+        ambientBackground = view.findViewById(R.id.ambientBackground)
         genButton = view.findViewById(R.id.genButton)
         setupClickListeners()
         setupPlusButtonListener()
@@ -817,6 +819,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.chatMode.observe(viewLifecycleOwner) { mode ->
             updateRpChrome()
             val next = mode ?: ChatMode.ASK
+            ambientBackground?.mode = next
             // Only swap composer text on an actual Ask↔RP change. Re-emitting the same mode
             // (draft restore) must not wipe autosend / in-progress typing.
             if (appliedComposerMode != next) {
@@ -1876,6 +1879,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         chatAdapter.onStreamVisualUpdate = { followStreamingEdge() }
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                // Freeze the ambient field while the list moves: each frame re-blurs the glass.
+                ambientBackground?.setScrolling(newState != RecyclerView.SCROLL_STATE_IDLE)
                 when (newState) {
                     RecyclerView.SCROLL_STATE_DRAGGING -> {
                         listDragging = true
@@ -1922,6 +1927,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
     }
     override fun onDestroyView() {
+        ambientBackground = null
         pickerPopover?.dismiss(animated = false)
         if (::textToSpeech.isInitialized) {
             textToSpeech.stop()

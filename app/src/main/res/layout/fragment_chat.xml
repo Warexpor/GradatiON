@@ -30,6 +30,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
 
+            <!-- Ambient style (Settings > Appearance > Background); draws nothing when off -->
+            <io.github.stardomains3.oxproxion.AmbientBackgroundView
+                android:id="@+id/ambientBackground"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:importantForAccessibility="no" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/chatRecyclerView"
                 android:layout_width="match_parent"
@@ -610,8 +617,9 @@
                     android:layout_height="44dp"
                     app:icon="@drawable/ic_check"
                     app:iconSize="20dp"
-                    app:iconTint="@color/xai_canvas"
-                    app:backgroundTint="@color/xai_ink"
+                    app:iconTint="@color/xai_ink"
+                    android:background="@drawable/bg_glass_button_primary"
+                    app:backgroundTint="@null"
                     android:contentDescription="@string/cd_done" />
             </LinearLayout>
 

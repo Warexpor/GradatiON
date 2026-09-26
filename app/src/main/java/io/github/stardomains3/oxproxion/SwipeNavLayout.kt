@@ -76,7 +76,22 @@ class SwipeNavLayout @JvmOverloads constructor(
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (state != DRAGGING) return super.onTouchEvent(event)
+        // No child took the DOWN (an empty history list, blank space), so the intercept path
+        // never sees the MOVEs. Make the call here instead.
+        if (state == UNDECIDED && event.actionMasked == MotionEvent.ACTION_MOVE && onInterceptTouchEvent(event)) {
+            val cancel = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL }
+            super.onTouchEvent(cancel)
+            cancel.recycle()
+            listener?.onDrag(event.x - downX)
+            return true
+        }
+        if (state != DRAGGING) {
+            val handled = super.onTouchEvent(event)
+            val undecided = state == UNDECIDED
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) reset()
+            // Keep the gesture while it may still become a swipe.
+            return handled || undecided
+        }
         val l = listener ?: return false
         velocity?.addMovement(event)
         val dx = event.x - downX
