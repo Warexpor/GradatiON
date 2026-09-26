@@ -17,14 +17,30 @@ internal class IncrementalMarkdown(
     private var stableSource = ""
     private val stableRendered = SpannableStringBuilder()
 
+    /**
+     * After the last [render], index in the returned spannable where the open (unstable) tail
+     * begins — equal to [stableRendered] length, so closed blocks sit at `[0, openTailStart)`.
+     */
+    var openTailStart: Int = 0
+        private set
+
+    /** True if the last [render] called [reset] because the source no longer extended prior stable text. */
+    var didReset: Boolean = false
+        private set
+
     fun reset() {
         stableSource = ""
         stableRendered.clear()
         stableRendered.clearSpans()
+        openTailStart = 0
     }
 
     fun render(text: String): SpannableStringBuilder {
-        if (!text.startsWith(stableSource)) reset()
+        didReset = false
+        if (!text.startsWith(stableSource)) {
+            reset()
+            didReset = true
+        }
         val boundary = stableBoundary(text)
         if (boundary > stableSource.length) {
             appendStable(text.substring(stableSource.length, boundary))
@@ -32,6 +48,7 @@ internal class IncrementalMarkdown(
         }
         val tail = text.substring(stableSource.length)
         val out = SpannableStringBuilder(stableRendered)
+        openTailStart = out.length
         if (tail.isNotBlank()) {
             val rendered = markwon.toMarkdown(preprocess(tail))
             if (rendered.isNotEmpty()) {

@@ -58,10 +58,16 @@ class CodeTranscriptAdapter(
         val fadeStarts = ArrayList<Int>()
         val fadeTimes = ArrayList<Long>()
         var lastRenderedLen = 0
+        /** Last open-tail base; grows when IncrementalMarkdown closes a stable block. */
+        var fadeBase = 0
     }
 
     private val streams = HashMap<String, StreamState>()
     private val expanded = HashSet<String>()
+
+    /** Chat-style: bound TextHolder currently painting the live stream (skip DiffUtil while set). */
+    private var streamBoundHolder: TextHolder? = null
+    private var streamBoundKey: String? = null
 
     init {
         setHasStableIds(true)
@@ -81,6 +87,82 @@ class CodeTranscriptAdapter(
             is CodeEvent.Plan -> T_PLAN
             is CodeEvent.Notice -> T_NOTICE
             is CodeEvent.TurnEnd -> T_TURN
+        }
+    }
+
+    /**
+     * V2: while the streaming AgentText cell is on-screen, paint new tokens in place
+     * (chat [streamRevealBoundHolder] pattern) and skip AsyncListDiffer + full rebind.
+     */
+    override fun submitList(list: List<TranscriptRow>?) {
+        submitList(list, null)
+    }
+
+    override fun submitList(list: List<TranscriptRow>?, commitCallback: Runnable?) {
+        val next = list ?: emptyList()
+        if (tryInPlaceStream(currentList, next)) {
+            commitCallback?.run()
+            return
+        }
+        super.submitList(list, commitCallback)
+    }
+
+    override fun onCurrentListChanged(previousList: MutableList<TranscriptRow>, currentList: MutableList<TranscriptRow>) {
+        pruneStreams(currentList)
+    }
+
+    /** V1: drop StreamState for keys absent from the list or no longer streaming. */
+    private fun pruneStreams(list: List<TranscriptRow>) {
+        if (streams.isEmpty()) return
+        val keep = HashSet<String>()
+        for (row in list) {
+            val e = (row as? TranscriptRow.Event)?.event
+            if (e is CodeEvent.AgentText && e.streaming) keep.add(e.key)
+        }
+        val it = streams.entries.iterator()
+        while (it.hasNext()) {
+            val (key, state) = it.next()
+            if (key !in keep) {
+                state.markdown.reset()
+                it.remove()
+            }
+        }
+    }
+
+    /**
+     * True when [next] differs from [prev] only in the text of one still-streaming AgentText
+     * and that row's [TextHolder] is bound — paint via [bindText] and skip DiffUtil.
+     */
+    private fun tryInPlaceStream(prev: List<TranscriptRow>, next: List<TranscriptRow>): Boolean {
+        if (prev.size != next.size || next.isEmpty()) return false
+        var changedIdx = -1
+        for (i in prev.indices) {
+            val a = prev[i]
+            val b = next[i]
+            if (a.key != b.key) return false
+            if (a == b) continue
+            if (changedIdx >= 0) return false
+            val ae = (a as? TranscriptRow.Event)?.event as? CodeEvent.AgentText ?: return false
+            val be = (b as? TranscriptRow.Event)?.event as? CodeEvent.AgentText ?: return false
+            if (!ae.streaming || !be.streaming || ae.key != be.key) return false
+            changedIdx = i
+        }
+        if (changedIdx < 0) return false
+        val e = (next[changedIdx] as TranscriptRow.Event).event as CodeEvent.AgentText
+        val holder = streamBoundHolder
+        if (holder == null || streamBoundKey != e.key) return false
+        if (!holder.textView.isAttachedToWindow) {
+            clearStreamBound(holder)
+            return false
+        }
+        bindText(holder, e)
+        return true
+    }
+
+    private fun clearStreamBound(holder: TextHolder?) {
+        if (holder == null || streamBoundHolder === holder) {
+            streamBoundHolder = null
+            streamBoundKey = null
         }
     }
 
@@ -127,7 +209,10 @@ class CodeTranscriptAdapter(
 
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
         when (holder) {
-            is TextHolder -> holder.stopFadeTicker()
+            is TextHolder -> {
+                clearStreamBound(holder)
+                holder.stopFadeTicker()
+            }
             else -> (holder.itemView as? TextView)?.let {
                 if (holder.itemViewType == T_WORKING) ShimmerText.stop(it)
             }
@@ -141,6 +226,8 @@ class CodeTranscriptAdapter(
     private fun bindText(holder: TextHolder, e: CodeEvent.AgentText) {
         val tv = holder.textView
         if (e.streaming) {
+            streamBoundHolder = holder
+            streamBoundKey = e.key
             val state = streams.getOrPut(e.key) { StreamState(IncrementalMarkdown(markwon)) }
             try {
                 val spanned = state.markdown.render(e.text)
@@ -162,21 +249,31 @@ class CodeTranscriptAdapter(
                 tv.text = e.text
             }
         } else {
-            streams.remove(e.key)
+            clearStreamBound(holder)
+            streams.remove(e.key)?.markdown?.reset()
             holder.stopFadeTicker()
             tv.text = ChatMarkdown.polished(markwon.toMarkdown(e.text))
         }
     }
 
-    /** Track newly appended rendered ranges and attach a [StreamFadeSpan] per run (chat pattern). */
+    /**
+     * Track newly appended open-tail ranges and attach a [StreamFadeSpan] per run (chat pattern).
+     * V3: on shrink / IncrementalMarkdown reset / stable-boundary advance, clear fade clocks and
+     * only fade past [IncrementalMarkdown.openTailStart] so closed blocks never re-enter a fade.
+     */
     private fun applyStreamFades(state: StreamState, text: SpannableStringBuilder, now: Long) {
         val len = text.length
-        if (len < state.lastRenderedLen) {
-            while (state.fadeStarts.isNotEmpty() && state.fadeStarts.last() >= len) {
-                state.fadeStarts.removeAt(state.fadeStarts.lastIndex)
-                state.fadeTimes.removeAt(state.fadeTimes.lastIndex)
-            }
-        } else if (len > state.lastRenderedLen) {
+        val fadeBase = state.markdown.openTailStart.coerceIn(0, len)
+        if (state.markdown.didReset || len < state.lastRenderedLen || fadeBase > state.fadeBase) {
+            state.fadeStarts.clear()
+            state.fadeTimes.clear()
+            state.lastRenderedLen = fadeBase
+        }
+        state.fadeBase = fadeBase
+        if (state.lastRenderedLen < fadeBase) {
+            state.lastRenderedLen = fadeBase
+        }
+        if (len > state.lastRenderedLen) {
             state.fadeStarts.add(state.lastRenderedLen)
             state.fadeTimes.add(now)
         }
@@ -186,7 +283,7 @@ class CodeTranscriptAdapter(
             state.fadeTimes.removeAt(0)
         }
         for (i in state.fadeStarts.indices) {
-            val start = state.fadeStarts[i].coerceAtMost(len)
+            val start = state.fadeStarts[i].coerceIn(fadeBase, len)
             val end = (if (i + 1 < state.fadeStarts.size) state.fadeStarts[i + 1] else len).coerceAtMost(len)
             if (end > start) {
                 text.setSpan(
