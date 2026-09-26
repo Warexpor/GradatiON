@@ -96,7 +96,6 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="48dp"
         android:layout_marginTop="2dp"
-        android:layout_marginBottom="6dp"
         android:background="@drawable/bg_code_block"
         android:scrollbars="none"
         android:visibility="gone">
@@ -111,4 +110,24 @@
             android:textColor="@color/xai_body"
             android:textIsSelectable="true" />
     </HorizontalScrollView>
+
+    <!-- Opens CodeToolOutputFragment; mirrors the diff card "more lines" affordance -->
+    <TextView
+        android:id="@+id/codeToolFull"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:layout_marginStart="48dp"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/bg_press_svg"
+        android:clickable="true"
+        android:focusable="true"
+        android:ellipsize="end"
+        android:gravity="center_vertical"
+        android:maxLines="1"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:textColor="@color/xai_mute"
+        android:textSize="13sp"
+        android:textFontWeight="600"
+        android:visibility="gone" />
 </LinearLayout>

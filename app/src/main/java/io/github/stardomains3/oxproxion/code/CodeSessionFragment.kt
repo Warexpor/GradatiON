@@ -54,7 +54,8 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                 view.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
                 hub.answer(sessionId, e.requestId, opt)
             },
-            onOpenDiff = { e -> openDiff(e) })
+            onOpenDiff = { e -> openDiff(e) },
+            onOpenToolOutput = { e -> openToolOutput(e) })
         list.layoutManager = LinearLayoutManager(requireContext()).apply { stackFromEnd = false }
         list.adapter = adapter
         list.itemAnimator = androidx.recyclerview.widget.DefaultItemAnimator().apply {
@@ -215,6 +216,14 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         parentFragmentManager.beginTransaction()
             .withGrokStackAnimations()
             .add(R.id.fragment_container, CodeDiffFragment.newInstance(sessionId, e.key))
+            .addToBackStack(null)
+            .commit()
+    }
+
+    private fun openToolOutput(e: CodeEvent.ToolCall) {
+        parentFragmentManager.beginTransaction()
+            .withGrokStackAnimations()
+            .add(R.id.fragment_container, CodeToolOutputFragment.newInstance(sessionId, e.key))
             .addToBackStack(null)
             .commit()
     }

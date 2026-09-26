@@ -191,7 +191,7 @@ sealed class CodeEvent {
         /** Command line, file path or query, shown in mono under the title. */
         val detail: String? = null,
         val status: ToolStatus = ToolStatus.PENDING,
-        /** Terminal output or result text, tail-trimmed by the adapter. */
+        /** Terminal output or result text; card shows last N lines, full viewer shows all stored. */
         val output: String? = null
     ) : CodeEvent()
 

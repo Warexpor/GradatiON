@@ -413,7 +413,7 @@ class AcpAdapter : HarnessAdapter {
     private fun ignored(why: String) = listOf(AdapterOutput.Ignored(why))
 
     companion object {
-        /** Tool output kept per call; the bridge can serve the full log on demand (plan). */
+        /** Tool output kept per call (tail). No bridge full-log RPC yet; phone shows this only. */
         const val MAX_OUTPUT = 4000
     }
 }

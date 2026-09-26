@@ -137,6 +137,10 @@
     <string name="code_changes_prompt_commit">Please review the current uncommitted changes and commit them with an appropriate commit message. Do not push.</string>
     <string name="code_changes_prompt_revert">Please revert the uncommitted changes to %1$s (restore that file to HEAD). Do not commit or push.</string>
 
+    <string name="code_changes_loading">Loading changes…</string>
+    <string name="code_changes_diff_loading">Loading diff…</string>
+    <string name="code_changes_diff_truncated">Showing first %1$d lines</string>
+
     <!-- Diff viewer -->
     <string name="code_diff_counts">+%1$d  −%2$d</string>
     <string name="cd_code_back">Back</string>

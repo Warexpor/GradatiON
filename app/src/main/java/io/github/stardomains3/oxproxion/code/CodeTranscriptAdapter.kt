@@ -36,7 +36,8 @@ sealed class TranscriptRow {
 class CodeTranscriptAdapter(
     context: Context,
     private val onApproval: (CodeEvent.Approval, ApprovalOption) -> Unit,
-    private val onOpenDiff: (CodeEvent.FileDiff) -> Unit
+    private val onOpenDiff: (CodeEvent.FileDiff) -> Unit,
+    private val onOpenToolOutput: (CodeEvent.ToolCall) -> Unit = {}
 ) : ListAdapter<TranscriptRow, RecyclerView.ViewHolder>(DIFF) {
 
     private val markwon: Markwon = Markwon.builder(context)
@@ -152,13 +153,32 @@ class CodeTranscriptAdapter(
         val hasOutput = !e.output.isNullOrBlank()
         // Commands show their output live while they run; everything else opens on tap.
         val open = hasOutput && (e.key in expanded || (e.kind == ToolKind.EXECUTE && e.status == ToolStatus.RUNNING))
+        val raw = e.output.orEmpty()
         v.findViewById<View>(R.id.codeToolOutputScroll).isVisible = open
-        if (open) v.findViewById<TextView>(R.id.codeToolOutput).text = e.output.orEmpty().lines().takeLast(OUTPUT_LINES).joinToString("\n")
+        val full = v.findViewById<TextView>(R.id.codeToolFull)
+        full.isVisible = open
+        if (open) {
+            v.findViewById<TextView>(R.id.codeToolOutput).text = ToolOutputText.cardPreview(raw, OUTPUT_LINES)
+            val hidden = (raw.lines().size - OUTPUT_LINES).coerceAtLeast(0)
+            full.text = if (hidden > 0) {
+                v.context.getString(R.string.code_session_more_lines, hidden)
+            } else {
+                v.context.getString(R.string.code_tool_full_output)
+            }
+            full.setOnClickListener { onOpenToolOutput(e) }
+        } else {
+            full.setOnClickListener(null)
+        }
         v.findViewById<View>(R.id.codeToolRow).apply {
             isClickable = hasOutput
             setOnClickListener {
                 if (!expanded.add(e.key)) expanded.remove(e.key)
                 notifyItemChanged(currentList.indexOfFirst { it.key == e.key })
+            }
+            setOnLongClickListener {
+                if (!hasOutput) return@setOnLongClickListener false
+                onOpenToolOutput(e)
+                true
             }
         }
     }
@@ -274,7 +294,7 @@ class CodeTranscriptAdapter(
         private const val T_TURN = 9
         private const val T_WORKING = 10
         private const val CARD_LINES = 14
-        private const val OUTPUT_LINES = 40
+        private const val OUTPUT_LINES = ToolOutputText.CARD_LINES
 
         fun iconFor(kind: ToolKind) = when (kind) {
             ToolKind.READ -> R.drawable.ic_code_file
