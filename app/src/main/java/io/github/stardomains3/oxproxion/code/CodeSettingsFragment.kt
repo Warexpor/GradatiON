@@ -22,11 +22,6 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
 
     private lateinit var hub: CodeHub
 
-    override fun onResume() {
-        super.onResume()
-        CodePairPending.consume()?.let { CodeHostDialog.show(this, null, it) }
-    }
-
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         hub = CodeHub.get(requireContext())
         view.findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener { parentFragmentManager.popBackStack() }

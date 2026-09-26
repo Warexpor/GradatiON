@@ -14,7 +14,7 @@ import kotlinx.serialization.json.Json
  * Settings and saved hosts for Code mode.
  * Non-secret prefs (enabled, hosts metadata, defaults) stay in plain SharedPreferences.
  * Session index lives in Room ([io.github.stardomains3.oxproxion.code.CodeSessionDao]); legacy
- * prefs sessions are migrated once via [consumeLegacySessions].
+ * prefs sessions are migrated once via [peekLegacySessions] / [markSessionsMigrated].
  * Pairing tokens live in [CodeHostSecrets] (Keystore AES-GCM); plaintext tokens are migrated
  * out of the hosts JSON on first read.
  */
@@ -61,20 +61,27 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         }
 
     /**
-     * One-shot: read any session list still in SharedPreferences, clear the prefs key, and mark
-     * migrated. Returns null when already migrated (caller should load from Room only).
-     * Empty list means "migrated, nothing to import".
+     * Read any session list still in SharedPreferences **without** clearing.
+     * Returns null when already migrated (caller should load from Room only).
+     * Empty list means "not yet migrated, nothing to import".
+     * Call [markSessionsMigrated] only after a successful Room write.
      */
-    fun consumeLegacySessions(): List<CodeSessionSummary>? {
+    fun peekLegacySessions(): List<CodeSessionSummary>? {
         if (prefs.getBoolean(KEY_SESSIONS_MIGRATED, false)) return null
-        val legacy = prefs.getString(KEY_SESSIONS, null)?.let {
+        return prefs.getString(KEY_SESSIONS, null)?.let {
             runCatching { json.decodeFromString(ListSerializer(CodeSessionSummary.serializer()), it) }.getOrNull()
         } ?: emptyList()
+    }
+
+    /**
+     * Clear prefs sessions and set the migrated flag. Call only after Room upsert/replace
+     * succeeds so a crash mid-migration leaves prefs intact for the next launch.
+     */
+    fun markSessionsMigrated() {
         prefs.edit {
             remove(KEY_SESSIONS)
             putBoolean(KEY_SESSIONS_MIGRATED, true)
         }
-        return legacy
     }
 
     /** Test/debug: whether prefs→Room session migration has run. */

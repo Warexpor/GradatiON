@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion.code
 
 import android.content.Context
+import android.util.Log
 import io.github.stardomains3.oxproxion.AppDatabase
 import io.github.stardomains3.oxproxion.code.store.CodeStore
 import kotlinx.coroutines.CoroutineScope
@@ -11,6 +12,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /** Session as the UI sees it: summary plus live state. */
 data class CodeSessionState(
@@ -37,6 +40,10 @@ class CodeHub private constructor(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backends = HashMap<String, CodeBackend>()
     private val sessionDao: CodeSessionDao = AppDatabase.getDatabase(appContext).codeSessionDao()
+    /** Latest session-index snapshot waiting for Room; null when idle. */
+    private val pendingPersist = AtomicReference<List<CodeSessionEntity>?>(null)
+    /** Single-flight flag so only one replaceAll runs at a time. */
+    private val persistRunning = AtomicBoolean(false)
 
     private val _hosts = MutableStateFlow(store.hosts)
     val hosts: StateFlow<List<CodeHost>> = _hosts
@@ -62,11 +69,20 @@ class CodeHub private constructor(context: Context) {
 
     /** Load Room index; one-shot import of any leftover prefs session list. */
     private fun loadSessionsFromRoom(): Map<String, CodeSessionState> = runBlocking(Dispatchers.IO) {
-        val legacy = store.consumeLegacySessions()
-        if (legacy != null && legacy.isNotEmpty()) {
-            val existing = sessionDao.getAll()
-            if (existing.isEmpty()) {
-                sessionDao.upsertAll(legacy.map { CodeSessionEntity.from(it) })
+        val legacy = store.peekLegacySessions()
+        if (legacy != null) {
+            try {
+                if (legacy.isNotEmpty()) {
+                    val existing = sessionDao.getAll()
+                    if (existing.isEmpty()) {
+                        sessionDao.upsertAll(legacy.map { CodeSessionEntity.from(it) })
+                    }
+                }
+                // Mark migrated only after Room write path succeeds (or nothing to import /
+                // Room already had rows). Failure leaves prefs so the next launch retries.
+                store.markSessionsMigrated()
+            } catch (t: Throwable) {
+                Log.w(TAG, "Prefs→Room session migration deferred", t)
             }
         }
         sessionDao.getAll().associate { it.id to CodeSessionState(it.toSummary()) }
@@ -318,6 +334,10 @@ class CodeHub private constructor(context: Context) {
         if (_activeHost.value?.id == host.id) _activeHost.value = host
     }
 
+    /**
+     * Persist the session index to Room. Conflates overlapping calls: snapshots on Main,
+     * a single IO worker always writes the latest pending list; no concurrent replaceAll.
+     */
     private fun persistSessions() {
         // Refresh lastSeq from live adapters before writing.
         val enriched = _sessions.value.mapValues { (id, state) ->
@@ -329,12 +349,29 @@ class CodeHub private constructor(context: Context) {
             .map { CodeSessionEntity.from(it.summary) }
             .sortedByDescending { it.updatedAt }
             .take(200)
+        pendingPersist.set(entities)
+        schedulePersist()
+    }
+
+    /** Drain [pendingPersist] with one in-flight replaceAll; re-arm if a newer snapshot arrives. */
+    private fun schedulePersist() {
+        if (!persistRunning.compareAndSet(false, true)) return
         scope.launch(Dispatchers.IO) {
-            sessionDao.replaceAll(entities)
+            try {
+                while (true) {
+                    val batch = pendingPersist.getAndSet(null) ?: break
+                    sessionDao.replaceAll(batch)
+                }
+            } finally {
+                persistRunning.set(false)
+                // Race window: a newer snapshot may have landed after our last getAndSet.
+                if (pendingPersist.get() != null) schedulePersist()
+            }
         }
     }
 
     companion object {
+        private const val TAG = "CodeHub"
         /** Markdown punctuation stripped from list previews. */
         private val MARKDOWN_MARKS = Regex("[`*_#>]+")
 

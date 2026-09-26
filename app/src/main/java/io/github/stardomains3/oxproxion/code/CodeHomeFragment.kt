@@ -106,7 +106,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         super.onResume()
         // Code settings is added without hiding us, so we stay STARTED; re-read default here.
         syncPermissionFromStore()
-        CodePairPending.consume()?.let { CodeHostDialog.show(this, null, it) }
+        // Pairing dialog is owned solely by CodeModeHost (see onPairingArrived).
     }
 
     private fun syncPermissionFromStore() {

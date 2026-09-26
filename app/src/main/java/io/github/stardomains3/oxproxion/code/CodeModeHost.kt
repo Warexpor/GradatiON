@@ -9,6 +9,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
+import io.github.stardomains3.oxproxion.AppToast
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassFrameLayout
 import io.github.stardomains3.oxproxion.GlassIconButton
@@ -74,15 +75,34 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
         if (!tab.isVisible) refresh(restore = false)
         tab.isVisible = true
         if (!isActive) activate(animate = true)
+        // Single consumer: prefer Settings (Scan-from-Settings) over covered Home.
         container.post {
-            val homeFrag = home()
             val taken = CodePairPending.consume() ?: return@post
-            if (homeFrag != null && homeFrag.isAdded) {
-                CodeHostDialog.show(homeFrag, null, taken)
+            val target = topCodeFragment()
+            if (target != null && target.isAdded) {
+                CodeHostDialog.show(target, null, taken)
             } else {
-                CodePairPending.offer(taken)
+                // Home missing after commitNow — toast + clear; do not re-offer (no tight loop).
+                AppToast.makeText(
+                    fragment.requireContext(),
+                    "Could not open pairing form",
+                    AppToast.LENGTH_SHORT
+                ).show()
             }
         }
+    }
+
+    /**
+     * Fragment that should host the pairing dialog: top [CodeSettingsFragment] on the
+     * activity back stack if present, otherwise [CodeHomeFragment].
+     */
+    private fun topCodeFragment(): Fragment? {
+        val settings = fragment.parentFragmentManager.fragments
+            .asReversed()
+            .filterIsInstance<CodeSettingsFragment>()
+            .firstOrNull { it.isAdded }
+        if (settings != null) return settings
+        return home()?.takeIf { it.isAdded }
     }
 
     /** Re-reads the setting (e.g. back from Settings). Hides the tab and leaves Code if it was turned off. */
