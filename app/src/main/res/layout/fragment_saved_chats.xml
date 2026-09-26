@@ -64,6 +64,58 @@
             app:tint="@color/xai_ink" />
     </LinearLayout>
 
+
+    <!-- Grouped destinations (Grok drawer: Automations · Library · Projects) -->
+    <LinearLayout
+        android:id="@+id/historyNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/historyNavRoleplay"
+            style="@style/Widget.Gradation.DrawerRow"
+            android:text="@string/drawer_nav_roleplay"
+            app:icon="@drawable/ic_nav_characters" />
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/historyNavModels"
+            style="@style/Widget.Gradation.DrawerRow"
+            android:text="@string/drawer_nav_models"
+            app:icon="@drawable/ic_nav_models" />
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/historyNavPrompts"
+            style="@style/Widget.Gradation.DrawerRow"
+            android:text="@string/drawer_nav_prompts"
+            app:icon="@drawable/ic_nav_prompts" />
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/historyNavPresets"
+            style="@style/Widget.Gradation.DrawerRow"
+            android:text="@string/drawer_nav_presets"
+            app:icon="@drawable/ic_nav_presets" />
+    </LinearLayout>
+
     <FrameLayout
         android:id="@+id/historyEmptyContainer"
         android:layout_width="match_parent"

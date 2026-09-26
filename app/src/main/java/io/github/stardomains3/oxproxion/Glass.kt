@@ -664,6 +664,15 @@ class GlassLinearLayout @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : LinearLayout(context, attrs) {
     val glass = GlassMaterial(this, attrs)
+    /** Set on panels with a grabber so a downward drag anywhere on them dismisses. */
+    var dragDismiss: DragDismiss? = null
+
+    override fun onInterceptTouchEvent(ev: MotionEvent): Boolean =
+        dragDismiss?.onIntercept(ev) == true || super.onInterceptTouchEvent(ev)
+
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean =
+        dragDismiss?.onTouch(event) == true || super.onTouchEvent(event)
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()

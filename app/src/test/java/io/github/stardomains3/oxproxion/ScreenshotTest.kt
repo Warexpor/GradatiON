@@ -270,7 +270,7 @@ class ScreenshotTest {
 
     @Test fun attachMenuDark() = withChat { a, _ ->
         a.findViewById<View>(R.id.menuButton).performClick(); idle()
-        snapWithPopup(a, "attach_menu_dark")
+        snap(root(a), "attach_menu_dark")
     }
 
     @Test fun historyDark() = withChat { a, _ ->
@@ -288,7 +288,7 @@ class ScreenshotTest {
 
     @Test fun modelPickerDark() = withChat { a, _ ->
         a.findViewById<View>(R.id.modelNameTextView).performClick(); idle()
-        snapDialog(a, "model_picker_dark")
+        snap(root(a), "model_picker_dark")
     }
 
     // ---- Settings ----
@@ -437,6 +437,51 @@ class ScreenshotTest {
     }
     @Test fun timeoutDialogDark() = withChat { a, _ ->
         TimeoutDialogFragment().show(a.supportFragmentManager, "t"); idle(); snapDialogCentered(a, "dialog_timeout_dark")
+    }
+
+    // ---- Grok-form chrome: mode tabs, anchored popover, pull-to-dismiss ----
+
+    @Test fun chatRoleplayTabDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); idle()
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.tabRoleplay).isSelected)
+        snap(root(a), "chat_rp_tab_dark")
+        // Mode persists across tests; leave the app in Chat.
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
+    @Test fun chatRoleplayCharacterDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); idle()
+        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.emptyAction).visibility)
+        snap(root(a), "chat_rp_empty_dark")
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
+    @Test fun manageModelsFromPopoverDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.modelNameTextView).performClick(); idle()
+        val footer = a.findViewById<android.view.ViewGroup>(R.id.popoverFooter)
+        footer.getChildAt(0).performClick(); idle()
+        snap(root(a), "manage_models_dark")
+    }
+
+    /** Regression: the grabber panel must follow a downward drag and dismiss on release. */
+    @Test fun controlsPanelPullDownDismissesDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.controlsButton).performClick(); idle()
+        val panel = a.findViewById<View>(R.id.headerContainer)
+        org.junit.Assert.assertEquals(View.VISIBLE, panel.visibility)
+        val loc = IntArray(2).also { panel.getLocationOnScreen(it) }
+        val x = loc[0] + panel.width / 2f
+        val y = loc[1] + 12f
+        val t0 = android.os.SystemClock.uptimeMillis()
+        fun ev(action: Int, dy: Float, dt: Long) =
+            android.view.MotionEvent.obtain(t0, t0 + dt, action, x, y + dy, 0).also { it.setLocation(x - loc[0], y + dy - loc[1]) }
+        panel.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_DOWN, 0f, 0))
+        panel.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_MOVE, 40f, 30))
+        panel.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_MOVE, panel.height * 0.45f, 80))
+        org.junit.Assert.assertTrue("panel should follow the finger", panel.translationY > panel.height * 0.3f)
+        snap(root(a), "controls_panel_pull_dark")
+        panel.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_UP, panel.height * 0.45f, 400))
+        idle()
+        org.junit.Assert.assertEquals(View.GONE, panel.visibility)
     }
 
     private fun snapDialogCentered(a: MainActivity, name: String) {

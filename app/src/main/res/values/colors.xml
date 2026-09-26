@@ -96,4 +96,9 @@
     <color name="glass_popup_tint">#F5FAFAFA</color>
     <color name="glass_control_solid_tint">#FFF9F9F9</color>
     <color name="composer_fade_mid">#B3F1F1F1</color>
+    <color name="model_pill_pressed">#FFD2D2D2</color>
+    <color name="glass_popover_tint">#E8F6F6F6</color>
+    <color name="popover_row_selected">#14000000</color>
+    <color name="popover_row_pressed">#1F000000</color>
+    <color name="popover_scrim">#14000000</color>
 </resources>

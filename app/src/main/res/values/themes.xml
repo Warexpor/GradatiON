@@ -512,4 +512,41 @@
         <item name="android:windowEnterAnimation">@anim/dialog_enter</item>
         <item name="android:windowExitAnimation">@anim/dialog_exit</item>
     </style>
+
+    <!-- Top-bar mode tabs (Chat · Roleplay): large semibold labels, ink when selected -->
+    <style name="Gradation.ModeTab" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">11dp</item>
+        <item name="android:paddingEnd">11dp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:fontFamily">@font/app_sans</item>
+        <item name="android:letterSpacing">-0.01</item>
+        <item name="android:textColor">@color/mode_tab_text</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
+    <!-- History drawer destination row: icon + label, full width, grouped-card inset -->
+    <style name="Widget.Gradation.DrawerRow" parent="Widget.Grokion.Button.Text">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textFontWeight">500</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="iconGravity">start</item>
+        <item name="iconPadding">16dp</item>
+        <item name="iconSize">22dp</item>
+        <item name="iconTint">@color/xai_ink</item>
+        <item name="rippleColor">@color/press_ripple_none</item>
+    </style>
 </resources>

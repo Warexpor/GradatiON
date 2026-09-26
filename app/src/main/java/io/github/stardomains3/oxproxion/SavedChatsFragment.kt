@@ -85,6 +85,19 @@ class SavedChatsFragment : Fragment() {
 
         settingsButton.setOnClickListener { openSettings() }
 
+        val host = (parentFragment as? HistoryPanelHost)
+            ?: parentFragmentManager.fragments.filterIsInstance<HistoryPanelHost>().firstOrNull()
+        val nav = view.findViewById<View>(R.id.historyNav)
+        nav.isVisible = host != null
+        mapOf(
+            R.id.historyNavRoleplay to HistoryPanelHost.Destination.ROLEPLAY,
+            R.id.historyNavModels to HistoryPanelHost.Destination.MODELS,
+            R.id.historyNavPrompts to HistoryPanelHost.Destination.PROMPTS,
+            R.id.historyNavPresets to HistoryPanelHost.Destination.PRESETS
+        ).forEach { (id, dest) ->
+            view.findViewById<View>(id).setOnClickListener { host?.openFromHistory(dest) }
+        }
+
         view.findViewById<ImageButton>(R.id.historyNewChatButton).setOnClickListener {
             if (isEmbedded) {
                 (parentFragment as? HistoryPanelHost)?.startNewChatFromHistory()

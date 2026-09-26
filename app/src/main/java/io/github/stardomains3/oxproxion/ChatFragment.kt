@@ -67,6 +67,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
+import coil.load
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ScrollView
@@ -186,7 +187,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var toolsButton: MaterialButton
     private val viewModel: ChatViewModel by activityViewModels()
     private lateinit var modelNameTextView: TextView
-    private lateinit var chatModeChip: TextView
+    private lateinit var tabChat: TextView
+    private lateinit var tabRoleplay: TextView
+    private lateinit var modeTabIndicator: View
     private lateinit var chatRecyclerView: RecyclerView
     private lateinit var chatEditText: EditText
     private lateinit var extBG: LinearLayout
@@ -511,13 +514,20 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         attachmentButton = view.findViewById(R.id.attachmentButton)
         buttonsContainer = view.findViewById(R.id.buttonsContainer)
         modelNameTextView = view.findViewById(R.id.modelNameTextView)
-        chatModeChip = view.findViewById(R.id.chatModeChip)
+        tabChat = view.findViewById(R.id.tabChat)
+        tabRoleplay = view.findViewById(R.id.tabRoleplay)
+        modeTabIndicator = view.findViewById(R.id.modeTabIndicator)
         attachmentPreviewContainer = view.findViewById(R.id.attachmentPreviewContainer)
         previewImageView = view.findViewById(R.id.previewImageView)
         centerWatermarkIcon = view.findViewById(R.id.centerWatermarkIcon)
         emptyStateContainer = view.findViewById(R.id.emptyStateContainer)
         removeAttachmentButton = view.findViewById(R.id.removeAttachmentButton)
         headerContainer = view.findViewById(R.id.headerContainer)
+        (headerContainer as? GlassLinearLayout)?.dragDismiss = DragDismiss(
+            headerContainer,
+            onProgress = { p -> dimOverlay?.alpha = 0.6f * (1f - p) },
+            onDismiss = { hideMenu() }
+        )
         settingsButton = view.findViewById(R.id.settingsButton)
         presetsButton = view.findViewById(R.id.presetsButton)
         presetsButton2 = view.findViewById(R.id.presetsButton2)
@@ -822,24 +832,26 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.rpSwipeNav.observe(viewLifecycleOwner) { nav ->
             applyRpSwipeChrome(nav)
         }
-        chatModeChip.setOnClickListener {
-            if (viewModel.isAwaitingResponse.value == true) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_wait_for_reply), AppToast.LENGTH_SHORT).show()
-                return@setOnClickListener
+        val switchMode: (ChatMode) -> Unit = { target ->
+            val current = if (viewModel.isRpMode()) ChatMode.RP else ChatMode.ASK
+            if (target != current) {
+                if (viewModel.isAwaitingResponse.value == true) {
+                    AppToast.makeText(requireContext(), getString(R.string.rp_wait_for_reply), AppToast.LENGTH_SHORT).show()
+                } else {
+                    tabChat.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                    sharedPreferencesHelper.saveComposerDraft(current, chatEditText.text?.toString().orEmpty())
+                    viewModel.toggleChatMode()
+                }
             }
-            val leaving = if (viewModel.isRpMode()) ChatMode.RP else ChatMode.ASK
-            sharedPreferencesHelper.saveComposerDraft(leaving, chatEditText.text?.toString().orEmpty())
-            viewModel.toggleChatMode()
         }
-        chatModeChip.setOnLongClickListener {
-            parentFragmentManager.beginTransaction()
-                .withGrokStackAnimations()
-                .add(R.id.fragment_container, RpHubFragment.newInstance())
-                .addToBackStack(RpHubFragment.BACK_STACK_TAG)
-                .commit()
+        tabChat.setOnClickListener { switchMode(ChatMode.ASK) }
+        tabRoleplay.setOnClickListener { switchMode(ChatMode.RP) }
+        tabRoleplay.setOnLongClickListener {
+            openRpHub()
             true
         }
-        chatModeChip.contentDescription = getString(R.string.rp_mode_chip_a11y)
+        tabRoleplay.contentDescription = getString(R.string.mode_tab_roleplay_a11y)
+        tabChat.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> placeModeTabIndicator(animate = false) }
 
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -912,7 +924,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             {
                 resetChatButton.icon.alpha = 102
                 emptyStateContainer.visibility = View.VISIBLE
-                centerWatermarkIcon.visibility = View.VISIBLE
+                bindEmptyState(viewModel.isRpMode())
                 emptyStateContainer.alpha = 1f
             }
             if(sharedPreferencesHelper.getScrollersPreference()){
@@ -1334,7 +1346,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val selectedFontName = sharedPreferencesHelper.getSelectedFont()
         val typeface = AppFonts.resolveSelectable(requireContext(), selectedFontName)
         chatEditText.typeface = typeface ?: Typeface.DEFAULT
-        modelNameTextView.typeface = typeface ?: Typeface.DEFAULT
+        modelNameTextView.typeface = Typeface.create(typeface ?: Typeface.DEFAULT, 600, false)
         chatAdapter.updateFont(typeface)
         if (sharedPreferencesHelper.getKeepScreenOnPreference()) {
             requireActivity().window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1419,7 +1431,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val activeChar = viewModel.activeRpCharacter.value
         chatEditText.hint = when {
             llm -> getString(R.string.rp_composer_hint_llm)
-            activeChar != null -> getString(R.string.rp_composer_hint)
+            activeChar != null -> getString(R.string.rp_composer_hint, activeChar.name)
             else -> getString(R.string.rp_composer_hint_empty)
         }
     }
@@ -1488,6 +1500,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 moveView(btn, leftButtonContainer)
                 applyCollapsedParams(btn)
             }
+            // The model pill trails the round actions (Grok: + · mode pill).
+            moveView(modelNameTextView, leftButtonContainer)
 
             // Restore Right side in order (Send will be added first, so it sits at the top)
             rightCollapsed.forEach { btn ->
@@ -1890,6 +1904,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
     }
     override fun onDestroyView() {
+        pickerPopover?.dismiss(animated = false)
         if (::textToSpeech.isInitialized) {
             textToSpeech.stop()
             textToSpeech.shutdown()
@@ -2183,16 +2198,7 @@ $cleanContent
 
         modelNameTextView.setOnClickListener {
             hideKeyboard()
-            if (viewModel.isRpMode()) {
-                parentFragmentManager.beginTransaction()
-                    .withGrokStackAnimations()
-                    .hide(this)
-                    .add(R.id.fragment_container, RpCharacterLibraryFragment.newInstance())
-                    .addToBackStack(RpCharacterLibraryFragment.BACK_STACK_TAG)
-                    .commit()
-                return@setOnClickListener
-            }
-            openBotModelPicker()
+            if (viewModel.isRpMode()) showCharacterPopover() else showModelPopover()
         }
 
         systemMessageButton.setOnClickListener {
@@ -2745,7 +2751,7 @@ $cleanContent
                         sharedPreferencesHelper.saveSelectedFont(fontName)
                         val newTypeface = AppFonts.resolveSelectable(requireContext(), fontName)
                         chatEditText.typeface = newTypeface
-                        modelNameTextView.typeface = newTypeface
+                        modelNameTextView.typeface = Typeface.create(newTypeface, 600, false)
                         chatAdapter.updateFont(newTypeface)
                         dialog.dismiss()
                     }
@@ -3331,7 +3337,6 @@ $cleanContent
         }
     }
 
-    private var attachPopup: PopupWindow? = null
     private var attachPlusOpen = false
 
     private fun showAttachSheet() {
@@ -3339,58 +3344,32 @@ $cleanContent
             AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
             return
         }
-        if (attachPopup?.isShowing == true) {
-            dismissAttachPopup()
+        if (pickerPopover?.isShowing == true) {
+            pickerPopover?.dismiss()
             return
         }
-        val popupView = layoutInflater.inflate(R.layout.popup_attach, null)
-        // Fixed width: match_parent rows inside a wrap_content popup can measure past the screen.
-        val popupWidth = (240 * resources.displayMetrics.density).toInt()
-        val popup = PopupWindow(
-            popupView,
-            popupWidth,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            true
-        ).apply {
-            isOutsideTouchable = true
-            isFocusable = true
-            elevation = 12f * resources.displayMetrics.density
-            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-            setOnDismissListener {
-                attachPopup = null
-                setAttachPlusOpen(false)
+        val rows = ArrayList<PickerPopover.Row>()
+        rows += PickerPopover.Row(getString(R.string.grok_attach_camera), getString(R.string.attach_camera_sub), R.drawable.ic_camera) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            } else {
+                launchCamera()
             }
         }
-        attachPopup = popup
-
-        fun dismissThen(action: () -> Unit) {
-            dismissAttachPopup()
-            action()
-        }
-
-        popupView.findViewById<View>(R.id.attachCamera).setOnClickListener {
-            dismissThen {
-                if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                } else {
-                    launchCamera()
-                }
-            }
-        }
-        popupView.findViewById<View>(R.id.attachGallery).setOnClickListener {
-            dismissAttachPopup()
+        rows += PickerPopover.Row(getString(R.string.grok_attach_gallery), getString(R.string.attach_gallery_sub), R.drawable.ic_gallery) {
             menuButton.post { launchGalleryPicker() }
         }
-        popupView.findViewById<View>(R.id.attachFiles).setOnClickListener {
-            dismissThen { textFilePicker.launch("*/*") }
+        rows += PickerPopover.Row(getString(R.string.grok_attach_files), getString(R.string.attach_files_sub), R.drawable.ic_attachdoc) {
+            textFilePicker.launch("*/*")
         }
-        popupView.findViewById<MaterialButton>(R.id.attachReviewFiles).apply {
-            isVisible = pendingFiles.isNotEmpty()
-            text = resources.getQuantityString(R.plurals.attach_review_files, pendingFiles.size, pendingFiles.size)
-            setOnClickListener { dismissThen { showAttachedFiles() } }
+        if (pendingFiles.isNotEmpty()) {
+            rows += PickerPopover.Row(
+                resources.getQuantityString(R.plurals.attach_review_files, pendingFiles.size, pendingFiles.size),
+                null, R.drawable.ic_check_round
+            ) { showAttachedFiles() }
         }
-        popupView.findViewById<View>(R.id.attachTools).setOnClickListener {
-            dismissThen {
+        val footer = listOf(
+            PickerPopover.Row(getString(R.string.settings_manage_tools), getString(R.string.attach_tools_sub), R.drawable.ic_tools) {
                 parentFragmentManager.beginTransaction()
                     .withGrokStackAnimations()
                     .hide(this)
@@ -3398,20 +3377,13 @@ $cleanContent
                     .addToBackStack(null)
                     .commit()
             }
-        }
-
-        popupView.measure(
-            View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         )
-        val yOff = -(popupView.measuredHeight + menuButton.height + (8 * resources.displayMetrics.density).toInt())
         setAttachPlusOpen(true)
-        popup.showAsDropDown(menuButton, 0, yOff)
+        newPopover(menuButton) { open -> if (!open) setAttachPlusOpen(false) }?.show(null, rows, footer)
     }
 
     private fun dismissAttachPopup() {
-        attachPopup?.dismiss()
-        attachPopup = null
+        pickerPopover?.dismiss()
         setAttachPlusOpen(false)
     }
 
@@ -3514,7 +3486,8 @@ $cleanContent
             dimOverlay?.visibility = View.GONE
         }?.start()
         if (headerContainer.visibility == View.VISIBLE) animateTopBarDim(0f, menuMs)
-        headerContainer.animate().alpha(0f).scaleX(0.97f).scaleY(0.97f).translationY(14f * d)
+        headerContainer.animate().alpha(0f).scaleX(0.97f).scaleY(0.97f)
+            .translationY(maxOf(headerContainer.translationY, 14f * d))
             .setDuration(menuMs - 20).setInterpolator(Motion.iosIn).withEndAction {
                 headerContainer.visibility = View.GONE
                 headerContainer.scaleX = 1f
@@ -3528,7 +3501,7 @@ $cleanContent
         if (!hasMessages) {
             emptyStateContainer.alpha = 0f
             emptyStateContainer.visibility = View.VISIBLE
-            centerWatermarkIcon.visibility = View.VISIBLE
+            bindEmptyState(viewModel.isRpMode())
             emptyStateContainer.animate().alpha(1f).setDuration(menuMs).setInterpolator(Motion.easeOut).start()
         }
     }
@@ -3744,6 +3717,7 @@ $cleanContent
     }
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
+        if (hidden) pickerPopover?.dismiss(animated = false)
         if (!hidden) {  // Fragment is now visible
             updateSystemMessageButtonState()
            // chatEditText.requestFocus()
@@ -3912,6 +3886,23 @@ $cleanContent
             .add(R.id.fragment_container, SettingsFragment())
             .addToBackStack("settings")
             .commit()
+    }
+
+    override fun openFromHistory(destination: HistoryPanelHost.Destination) {
+        when (destination) {
+            HistoryPanelHost.Destination.ROLEPLAY -> openRpHub()
+            HistoryPanelHost.Destination.MODELS -> openBotModelPicker()
+            HistoryPanelHost.Destination.PROMPTS -> parentFragmentManager.beginTransaction()
+                .withGrokFadeAnimations()
+                .add(R.id.fragment_container, PromptLibraryFragment())
+                .addToBackStack(null)
+                .commit()
+            HistoryPanelHost.Destination.PRESETS -> parentFragmentManager.beginTransaction()
+                .withGrokFadeAnimations()
+                .add(R.id.fragment_container, PresetsListFragment())
+                .addToBackStack(null)
+                .commit()
+        }
     }
 
     private fun openHistoryPanel() {
@@ -4913,32 +4904,157 @@ $cleanContent
         chatEditText.showKeyboard()
     }
 
+    private fun applyPickedModel(modelString: String) {
+        val newModelSupportsWebp = viewModel.supportsWebp(modelString)
+        val isStagedImageWebp = selectedImageMime == "image/webp"
+        val historyHasWebp = viewModel.hasWebpInHistory()
+        val hasImagesInCurrentChat = viewModel.hasImagesInChat()
+        if (!newModelSupportsWebp && (isStagedImageWebp || historyHasWebp)) {
+            AppToast.makeText(
+                requireContext(),
+                getString(R.string.model_switch_no_webp),
+                AppToast.LENGTH_LONG
+            ).show()
+        } else if (hasImagesInCurrentChat && !viewModel.isVisionModel(modelString)) {
+            AppToast.makeText(
+                requireContext(),
+                getString(R.string.model_switch_no_vision),
+                AppToast.LENGTH_LONG
+            ).show()
+        } else {
+            viewModel.setModel(modelString)
+            if (viewModel.activeModelIsLan()) {
+                checkLocalNetworkPermission()
+            }
+        }
+    }
+
+    private var pickerPopover: PickerPopover? = null
+
+    private fun newPopover(
+        anchor: View = modelNameTextView,
+        onOpenChange: (Boolean) -> Unit = { open -> modelNameTextView.isSelected = open }
+    ): PickerPopover? {
+        val root = view as? FrameLayout ?: return null
+        pickerPopover?.dismiss(animated = false)
+        return PickerPopover(root, anchor, root.findViewById(R.id.chatBackdrop), chatInputContainer).also { p ->
+            pickerPopover = p
+            onOpenChange(true)
+            p.onDismiss = { onOpenChange(false); if (pickerPopover === p) pickerPopover = null }
+        }
+    }
+
+    /** Grok-style model popover growing out of the composer pill; "Manage models" opens the full list. */
+    private fun showModelPopover() {
+        val active = viewModel.activeChatModel.value
+        val models = (viewModel.getBuiltInModels() + sharedPreferencesHelper.getCustomModels())
+            .distinctBy { it.apiIdentifier }
+            .sortedBy { it.displayName.lowercase() }
+        val rows = models.map { m ->
+            PickerPopover.Row(
+                title = m.displayName,
+                subtitle = modelSubtitle(m),
+                iconRes = when {
+                    m.isLANModel -> R.drawable.ic_lan
+                    m.isImageGenerationCapable -> R.drawable.ic_imgup
+                    m.isVisionCapable -> R.drawable.ic_vision
+                    m.isReasoningCapable -> R.drawable.ic_reasoning
+                    else -> R.drawable.ic_cloud
+                },
+                selected = m.apiIdentifier == active,
+                onClick = { if (m.apiIdentifier != active) applyPickedModel(m.apiIdentifier) }
+            )
+        }
+        val footer = listOf(
+            PickerPopover.Row(
+                title = getString(R.string.popover_manage_models),
+                subtitle = getString(R.string.popover_manage_models_sub),
+                iconRes = R.drawable.ic_tune,
+                onClick = { openBotModelPicker() }
+            )
+        )
+        newPopover()?.show(getString(R.string.popover_models_title), rows, footer)
+    }
+
+    private fun modelSubtitle(m: LlmModel): String {
+        val parts = ArrayList<String>()
+        parts += if (m.isLANModel) getString(R.string.popover_model_local)
+            else m.apiIdentifier.substringBefore('/', "").ifBlank { getString(R.string.popover_model_cloud) }
+        if (m.isReasoningCapable) parts += getString(R.string.popover_cap_reasoning)
+        if (m.isVisionCapable) parts += getString(R.string.popover_cap_vision)
+        if (m.isImageGenerationCapable) parts += getString(R.string.popover_cap_image)
+        if (m.isTranscription) parts += getString(R.string.popover_cap_audio)
+        if (m.isFree && !m.isLANModel) parts += getString(R.string.popover_cap_free)
+        return parts.joinToString(" · ")
+    }
+
+    /** RP pill: switch character in place, plus the roleplay home and the RP model. */
+    private fun showCharacterPopover() {
+        val repo = viewModel.getRpRepository()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val chars = repo.getAllCharactersOnce().sortedByDescending { it.updatedAt }
+            if (view == null) return@launch
+            val activeId = viewModel.activeRpCharacter.value?.id
+            val ctx = requireContext()
+            val rows = chars.map { c ->
+                val file = RpAvatarStorage.avatarFile(ctx, c.id)
+                PickerPopover.Row(
+                    title = c.name,
+                    subtitle = c.personality.ifBlank { c.scenario }.lineSequence().firstOrNull()?.take(80),
+                    avatar = file.takeIf { it.exists() },
+                    monogram = c.name.trim().take(1).uppercase().ifEmpty { "?" },
+                    selected = c.id == activeId,
+                    onClick = { if (c.id != activeId) startRpWith(c) }
+                )
+            }
+            val model = viewModel.activeChatModel.value?.let { viewModel.getModelDisplayName(it) }
+            val footer = listOf(
+                PickerPopover.Row(
+                    title = getString(R.string.popover_all_characters),
+                    subtitle = getString(R.string.popover_all_characters_sub),
+                    iconRes = R.drawable.ic_person,
+                    onClick = { openRpCharacterLibrary() }
+                ),
+                PickerPopover.Row(
+                    title = getString(R.string.popover_rp_model),
+                    subtitle = model,
+                    iconRes = R.drawable.ic_tune,
+                    onClick = { openBotModelPicker() }
+                )
+            )
+            newPopover()?.show(getString(R.string.popover_characters_title), rows, footer)
+        }
+    }
+
+    private fun startRpWith(character: RpCharacter) {
+        val proceed = { viewModel.startRpChatWithCharacter(character) }
+        if (viewModel.rpStartChatNeedsConfirm()) {
+            GrokConfirmDialog.show(
+                fragment = this,
+                title = getString(R.string.rp_new_chat_title),
+                message = getString(R.string.rp_new_chat_body, character.name),
+                confirmText = getString(R.string.rp_new_chat_confirm),
+                onConfirm = proceed,
+                destructive = false
+            )
+        } else {
+            proceed()
+        }
+    }
+
+    fun openRpCharacterLibrary() {
+        hideKeyboard()
+        parentFragmentManager.beginTransaction()
+            .withGrokStackAnimations()
+            .hide(this)
+            .add(R.id.fragment_container, RpCharacterLibraryFragment.newInstance())
+            .addToBackStack(RpCharacterLibraryFragment.BACK_STACK_TAG)
+            .commit()
+    }
+
     private fun openBotModelPicker() {
         val picker = BotModelPickerFragment().apply {
-            onModelSelected = { modelString ->
-                val newModelSupportsWebp = viewModel.supportsWebp(modelString)
-                val isStagedImageWebp = selectedImageMime == "image/webp"
-                val historyHasWebp = viewModel.hasWebpInHistory()
-                val hasImagesInCurrentChat = viewModel.hasImagesInChat()
-                if (!newModelSupportsWebp && (isStagedImageWebp || historyHasWebp)) {
-                    AppToast.makeText(
-                        requireContext(),
-                        getString(R.string.model_switch_no_webp),
-                        AppToast.LENGTH_LONG
-                    ).show()
-                } else if (hasImagesInCurrentChat && !viewModel.isVisionModel(modelString)) {
-                    AppToast.makeText(
-                        requireContext(),
-                        getString(R.string.model_switch_no_vision),
-                        AppToast.LENGTH_LONG
-                    ).show()
-                } else {
-                    viewModel.setModel(modelString)
-                    if (viewModel.activeModelIsLan()) {
-                        checkLocalNetworkPermission()
-                    }
-                }
-            }
+            onModelSelected = { modelString -> applyPickedModel(modelString) }
         }
         parentFragmentManager.beginTransaction()
             .withGrokStackAnimations()
@@ -4946,6 +5062,83 @@ $cleanContent
             .add(R.id.fragment_container, picker)
             .addToBackStack(null)
             .commit()
+    }
+
+    /** Empty chat: the mark and greeting in Chat; a character hero (Character.AI-style) in Roleplay. */
+    private fun bindEmptyState(rp: Boolean) {
+        val root = view ?: return
+        val greeting = root.findViewById<TextView>(R.id.emptyGreeting)
+        val subtitle = root.findViewById<TextView>(R.id.emptySubtitle)
+        val action = root.findViewById<TextView>(R.id.emptyAction)
+        val hero = root.findViewById<View>(R.id.rpHero)
+        val heroAvatar = root.findViewById<ImageView>(R.id.rpHeroAvatar)
+        val heroMono = root.findViewById<TextView>(R.id.rpHeroMonogram)
+        val character = viewModel.activeRpCharacter.value
+        val llm = sharedPreferencesHelper.isRpLlmMode()
+        if (!rp) {
+            greeting.setText(R.string.empty_greeting)
+            subtitle.isVisible = false
+            action.isVisible = false
+            hero.isVisible = false
+            centerWatermarkIcon.isVisible = true
+            return
+        }
+        action.setOnClickListener { showCharacterPopover() }
+        when {
+            llm -> {
+                hero.isVisible = false
+                centerWatermarkIcon.isVisible = true
+                greeting.setText(R.string.rp_empty_llm_title)
+                subtitle.setText(R.string.rp_empty_llm_subtitle)
+                action.isVisible = false
+            }
+            character != null -> {
+                centerWatermarkIcon.isVisible = false
+                hero.isVisible = true
+                val file = RpAvatarStorage.avatarFile(requireContext(), character.id)
+                heroMono.text = character.name.trim().take(1).uppercase()
+                heroAvatar.isVisible = file.exists()
+                if (file.exists()) heroAvatar.load(file) { crossfade(true) }
+                greeting.text = character.name
+                subtitle.text = character.personality.ifBlank { character.scenario }.lineSequence().firstOrNull().orEmpty()
+                action.setText(R.string.rp_empty_switch)
+                action.isVisible = true
+            }
+            else -> {
+                hero.isVisible = false
+                centerWatermarkIcon.isVisible = true
+                greeting.setText(R.string.rp_empty_title)
+                subtitle.setText(R.string.rp_empty_subtitle)
+                action.setText(R.string.rp_empty_choose)
+                action.isVisible = true
+            }
+        }
+        subtitle.isVisible = !subtitle.text.isNullOrBlank()
+    }
+
+    fun openRpHub() {
+        hideKeyboard()
+        parentFragmentManager.beginTransaction()
+            .withGrokStackAnimations()
+            .add(R.id.fragment_container, RpHubFragment.newInstance())
+            .addToBackStack(RpHubFragment.BACK_STACK_TAG)
+            .commit()
+    }
+
+    /** Slides the short underline beneath the active mode tab (Grok-style), springing between tabs. */
+    private fun placeModeTabIndicator(animate: Boolean) {
+        if (!::modeTabIndicator.isInitialized) return
+        val tab = if (tabRoleplay.isSelected) tabRoleplay else tabChat
+        if (tab.width == 0) return
+        val parentLeft = (tab.parent as View).left
+        val x = parentLeft + tab.left + (tab.width - modeTabIndicator.width) / 2f
+        modeTabIndicator.animate().cancel()
+        if (animate && modeTabIndicator.isLaidOut && modeTabIndicator.translationX != 0f) {
+            modeTabIndicator.animate().translationX(x)
+                .setDuration(420).setInterpolator(Motion.spring).start()
+        } else {
+            modeTabIndicator.translationX = x
+        }
     }
 
     private fun applyRpSwipeChrome(nav: ChatViewModel.RpSwipeNav?) {
@@ -4965,10 +5158,10 @@ $cleanContent
     private fun updateRpChrome() {
         val rp = viewModel.isRpMode()
         chatAdapter.isRpMode = rp
-        chatModeChip.text = if (rp) getString(R.string.rp_mode_rp) else getString(R.string.rp_mode_ask)
-        view?.findViewById<TextView>(R.id.emptyGreeting)?.setText(
-            if (rp) R.string.empty_greeting_rp else R.string.empty_greeting
-        )
+        tabChat.isSelected = !rp
+        tabRoleplay.isSelected = rp
+        placeModeTabIndicator(animate = true)
+        bindEmptyState(rp)
         systemMessageButton.visibility = if (rp) View.GONE else View.VISIBLE
         menuButton.visibility = View.VISIBLE
         restoreAttachPlusIcon()

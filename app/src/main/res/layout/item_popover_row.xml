@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="6dp"
+    android:layout_marginEnd="6dp"
+    android:background="@drawable/bg_popover_row"
+    android:gravity="center_vertical"
+    android:minHeight="58dp"
+    android:orientation="horizontal"
+    android:paddingStart="14dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="9dp"
+    android:paddingBottom="9dp">
+
+    <FrameLayout
+        android:layout_width="34dp"
+        android:layout_height="34dp">
+
+        <ImageView
+            android:id="@+id/popoverRowIcon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            app:tint="@color/xai_body" />
+
+        <TextView
+            android:id="@+id/popoverRowMonogram"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_monogram_circle"
+            android:gravity="center"
+            android:textColor="@color/xai_ink"
+            android:textSize="15sp"
+            android:textFontWeight="700"
+            android:fontFamily="@font/app_sans"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/popoverRowAvatar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_monogram_circle"
+            android:clipToOutline="true"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/popoverRowTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            android:textFontWeight="600"
+            android:fontFamily="@font/app_sans" />
+
+        <TextView
+            android:id="@+id/popoverRowSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/xai_mute"
+            android:textSize="13sp"
+            android:fontFamily="@font/app_sans" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/popoverRowCheck"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginStart="10dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_check_round"
+        app:tint="@color/xai_ink"
+        android:visibility="gone" />
+</LinearLayout>
