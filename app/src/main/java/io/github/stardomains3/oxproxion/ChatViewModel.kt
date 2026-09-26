@@ -388,6 +388,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val canGoNext: Boolean
     )
     private var networkJob: Job? = null
+    /** Main-thread coalescer for the in-flight stream; cancelled synchronously on Stop. */
+    private var activeStreamPump: StreamUiPump? = null
     /** Index of the in-flight assistant placeholder / streaming bubble in `_chatMessages`. */
     private var streamingAssistantIndex: Int = -1
     /**
@@ -452,6 +454,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun startNetworkJob(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
         networkJob?.cancel()
+        activeStreamPump?.cancel()
         val job = viewModelScope.launch {
             try {
                 block()
@@ -1061,6 +1064,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         rpPrepJob?.cancel()
         rpPrepJob = null
         networkJob?.cancel()
+        // Drop any partial still queued for the main thread so it can't land after Stop.
+        activeStreamPump?.cancel()
+        activeStreamPump = null
         lanFetchJob?.cancel()
         sharedPreferencesHelper.saveRpPendingInstruct(null)
         if (restoreSwipeAlt && wasRpRegen) {
@@ -3928,124 +3934,107 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val accumulatedImages = mutableListOf<String>()
                     var streamAborted = false
 
-                    forEachSseJsonPayload(
-                        channel,
-                        shouldStop = { streamAborted }
-                    ) { jsonString ->
-                        if (streamAborted) return@forEachSseJsonPayload
-                        val chunk = parseStreamChunk(jsonString) ?: return@forEachSseJsonPayload
+                    val pump = StreamUiPump(viewModelScope) { partial ->
+                        updateMessages { list -> putAssistantMessage(list, thinkingMessage, partial) }
+                    }
+                    activeStreamPump = pump
+                    pump.drive {
+                        forEachSseJsonPayload(
+                            channel,
+                            shouldStop = { streamAborted }
+                        ) { jsonString ->
+                            if (streamAborted) return@forEachSseJsonPayload
+                            val chunk = parseStreamChunk(jsonString) ?: return@forEachSseJsonPayload
 
-                        chunk.error?.let { apiError ->
-                            val rawDetails = "Code: ${apiError.code ?: "unknown"} - ${apiError.message ?: "Mid-stream error"}"
-                            withContext(Dispatchers.Main) {
-                                handleError(Exception(rawDetails), thinkingMessage)
-                            }
-                            streamAborted = true
-                            return@forEachSseJsonPayload
-                        }
-
-                        val choice = chunk.choices.firstOrNull()
-                        finish_reason = choice?.finish_reason ?: finish_reason
-                        lastChoice = choice
-                        choice?.error?.let { apiError ->
-                            withContext(Dispatchers.Main) {
-                                handleErrorResponse(apiError, thinkingMessage)
-                            }
-                            streamAborted = true
-                            return@forEachSseJsonPayload
-                        }
-                        val delta = choice?.delta ?: return@forEachSseJsonPayload
-                        delta.annotations?.forEach { accumulatedAnnotations.add(it) }
-
-                        var contentChanged = false
-                        var reasoningChanged = false
-
-                        if (!delta.content.isNullOrEmpty()) {
-                            val isFirstContentChunk = accumulatedResponse.isEmpty()
-                            accumulatedResponse += delta.content
-                            contentChanged = true
-
-                            if (isFirstContentChunk) {
+                            chunk.error?.let { apiError ->
+                                val rawDetails = "Code: ${apiError.code ?: "unknown"} - ${apiError.message ?: "Mid-stream error"}"
                                 withContext(Dispatchers.Main) {
-                                    updateMessages { list ->
-                                        putAssistantMessage(
-                                            list,
-                                            thinkingMessage,
-                                            FlexibleMessage(
-                                                role = "assistant",
-                                                content = JsonPrimitive(accumulatedResponse),
-                                                reasoning = accumulatedReasoning.ifBlank { null }
-                                            )
-                                        )
-                                    }
+                                    pump.cancel()
+                                    handleError(Exception(rawDetails), thinkingMessage)
                                 }
+                                streamAborted = true
                                 return@forEachSseJsonPayload
                             }
-                        }
 
-                        if (delta.reasoning_details?.isNotEmpty() == true) {
-                            hasUsedReasoningDetails = true
-                            delta.reasoning_details.forEach { detail ->
-                                if (detail.type == "reasoning.text" && detail.text != null) {
-                                    if (!reasoningStarted) {
-                                        accumulatedReasoning = ""
-                                        reasoningStarted = true
+                            val choice = chunk.choices.firstOrNull()
+                            finish_reason = choice?.finish_reason ?: finish_reason
+                            lastChoice = choice
+                            choice?.error?.let { apiError ->
+                                withContext(Dispatchers.Main) {
+                                    pump.cancel()
+                                    handleErrorResponse(apiError, thinkingMessage)
+                                }
+                                streamAborted = true
+                                return@forEachSseJsonPayload
+                            }
+                            val delta = choice?.delta ?: return@forEachSseJsonPayload
+
+                            var contentChanged = false
+                            var reasoningChanged = false
+
+                            if (!delta.content.isNullOrEmpty()) {
+                                accumulatedResponse += delta.content
+                                contentChanged = true
+                            }
+
+                            if (delta.reasoning_details?.isNotEmpty() == true) {
+                                hasUsedReasoningDetails = true
+                                delta.reasoning_details.forEach { detail ->
+                                    if (detail.type == "reasoning.text" && detail.text != null) {
+                                        if (!reasoningStarted) {
+                                            accumulatedReasoning = ""
+                                            reasoningStarted = true
+                                        }
+                                        accumulatedReasoning += detail.text
+                                        reasoningChanged = true
                                     }
-                                    accumulatedReasoning += detail.text
-                                    reasoningChanged = true
                                 }
+                            } else if (!hasUsedReasoningDetails && !delta.reasoning.isNullOrEmpty()) {
+                                if (!reasoningStarted) {
+                                    accumulatedReasoning = ""
+                                    reasoningStarted = true
+                                }
+                                accumulatedReasoning += delta.reasoning
+                                reasoningChanged = true
                             }
-                        } else if (!hasUsedReasoningDetails && !delta.reasoning.isNullOrEmpty()) {
-                            if (!reasoningStarted) {
-                                accumulatedReasoning = ""
-                                reasoningStarted = true
-                            }
-                            accumulatedReasoning += delta.reasoning
-                            reasoningChanged = true
-                        }
 
-                        if (contentChanged || reasoningChanged) {
-                            withContext(Dispatchers.Main) {
-                                updateMessages { list ->
-                                    putAssistantMessage(
-                                        list,
-                                        thinkingMessage,
-                                        FlexibleMessage(
-                                            role = "assistant",
-                                            content = JsonPrimitive(accumulatedResponse),
-                                            reasoning = accumulatedReasoning.ifBlank { null }
+                            if (contentChanged || reasoningChanged) {
+                                pump.offer(
+                                    FlexibleMessage(
+                                        role = "assistant",
+                                        content = JsonPrimitive(accumulatedResponse),
+                                        reasoning = accumulatedReasoning.ifBlank { null }
+                                    )
+                                )
+                            }
+
+                            delta.toolCalls?.forEach { deltaTc ->
+                                val index = deltaTc.index
+                                if (index >= toolCallBuffer.size) {
+                                    toolCallBuffer.add(
+                                        ToolCall(
+                                            id = deltaTc.id ?: "",
+                                            type = deltaTc.type ?: "function",
+                                            function = FunctionCall(
+                                                name = deltaTc.function?.name ?: "",
+                                                arguments = deltaTc.function?.arguments ?: ""
+                                            )
+                                        )
+                                    )
+                                } else {
+                                    val existing = toolCallBuffer[index]
+                                    toolCallBuffer[index] = existing.copy(
+                                        function = existing.function.copy(
+                                            name = existing.function.name + (deltaTc.function?.name ?: ""),
+                                            arguments = existing.function.arguments + (deltaTc.function?.arguments ?: "")
                                         )
                                     )
                                 }
                             }
-                        }
 
-                        delta.toolCalls?.forEach { deltaTc ->
-                            val index = deltaTc.index
-                            if (index >= toolCallBuffer.size) {
-                                toolCallBuffer.add(
-                                    ToolCall(
-                                        id = deltaTc.id ?: "",
-                                        type = deltaTc.type ?: "function",
-                                        function = FunctionCall(
-                                            name = deltaTc.function?.name ?: "",
-                                            arguments = deltaTc.function?.arguments ?: ""
-                                        )
-                                    )
-                                )
-                            } else {
-                                val existing = toolCallBuffer[index]
-                                toolCallBuffer[index] = existing.copy(
-                                    function = existing.function.copy(
-                                        name = existing.function.name + (deltaTc.function?.name ?: ""),
-                                        arguments = existing.function.arguments + (deltaTc.function?.arguments ?: "")
-                                    )
-                                )
-                            }
+                            accumulatedAnnotations.addAll(delta.annotations ?: emptyList())
+                            delta.images?.forEach { accumulatedImages.add(it.image_url.url) }
                         }
-
-                        accumulatedAnnotations.addAll(delta.annotations ?: emptyList())
-                        delta.images?.forEach { accumulatedImages.add(it.image_url.url) }
                     }
 
                     if (streamAborted) return@execute
@@ -4274,133 +4263,117 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val audioBuffer = StringBuilder()
                     var streamAborted = false
 
-                    forEachSseJsonPayload(
-                        channel,
-                        shouldStop = { streamAborted }
-                    ) { jsonString ->
-                        if (streamAborted) return@forEachSseJsonPayload
-                        val chunk = parseStreamChunk(jsonString) ?: return@forEachSseJsonPayload
+                    val pump = StreamUiPump(viewModelScope) { partial ->
+                        updateMessages { list -> putAssistantMessage(list, thinkingMessage, partial) }
+                    }
+                    activeStreamPump = pump
+                    pump.drive {
+                        forEachSseJsonPayload(
+                            channel,
+                            shouldStop = { streamAborted }
+                        ) { jsonString ->
+                            if (streamAborted) return@forEachSseJsonPayload
+                            val chunk = parseStreamChunk(jsonString) ?: return@forEachSseJsonPayload
 
-                        // Handle mid-stream error
-                        chunk.error?.let { apiError ->
-                            val rawDetails =
-                                "Code: ${apiError.code ?: "unknown"} - ${apiError.message ?: "Mid-stream error"}"
-                            withContext(Dispatchers.Main) {
-                                handleError(Exception(rawDetails), thinkingMessage)
-                            }
-                            streamAborted = true
-                            return@forEachSseJsonPayload
-                        }
-
-                        val choice = chunk.choices.firstOrNull()
-                        finish_reason = choice?.finish_reason ?: finish_reason
-                        choice?.error?.let { apiError ->
-                            withContext(Dispatchers.Main) {
-                                handleErrorResponse(apiError, thinkingMessage)
-                            }
-                            streamAborted = true
-                            return@forEachSseJsonPayload
-                        }
-                        val delta = choice?.delta ?: return@forEachSseJsonPayload
-
-                        // === AUDIO ACCUMULATION ===
-                        delta.audio?.let { audioDelta ->
-                            audioDelta.data?.let { audioBuffer.append(it) }
-                        }
-
-                        // === TEXT ACCUMULATION ===
-                        var contentChanged = false
-                        if (!delta.content.isNullOrEmpty()) {
-                            val isFirstContentChunk = accumulatedResponse.isEmpty()
-                            accumulatedResponse += delta.content
-                            contentChanged = true
-
-                            if (isFirstContentChunk) {
+                            // Handle mid-stream error
+                            chunk.error?.let { apiError ->
+                                val rawDetails =
+                                    "Code: ${apiError.code ?: "unknown"} - ${apiError.message ?: "Mid-stream error"}"
                                 withContext(Dispatchers.Main) {
-                                    updateMessages { list ->
-                                        putAssistantMessage(
-                                            list,
-                                            thinkingMessage,
-                                            FlexibleMessage(
-                                                role = "assistant",
-                                                content = JsonPrimitive(accumulatedResponse),
-                                                reasoning = accumulatedReasoning.ifBlank { null }
-                                            )
-                                        )
-                                    }
+                                    pump.cancel()
+                                    handleError(Exception(rawDetails), thinkingMessage)
                                 }
+                                streamAborted = true
                                 return@forEachSseJsonPayload
                             }
-                        }
 
-                        // === REASONING ACCUMULATION ===
-                        var reasoningChanged = false
-                        if (delta.reasoning_details?.isNotEmpty() == true) {
-                            hasUsedReasoningDetails = true
-                            delta.reasoning_details.forEach { detail ->
-                                if (detail.type == "reasoning.text" && detail.text != null) {
-                                    if (!reasoningStarted) {
-                                        accumulatedReasoning = ""
-                                        reasoningStarted = true
+                            val choice = chunk.choices.firstOrNull()
+                            finish_reason = choice?.finish_reason ?: finish_reason
+                            choice?.error?.let { apiError ->
+                                withContext(Dispatchers.Main) {
+                                    pump.cancel()
+                                    handleErrorResponse(apiError, thinkingMessage)
+                                }
+                                streamAborted = true
+                                return@forEachSseJsonPayload
+                            }
+                            val delta = choice?.delta ?: return@forEachSseJsonPayload
+
+                            // === AUDIO ACCUMULATION ===
+                            delta.audio?.let { audioDelta ->
+                                audioDelta.data?.let { audioBuffer.append(it) }
+                            }
+
+                            // === TEXT ACCUMULATION ===
+                            var contentChanged = false
+                            if (!delta.content.isNullOrEmpty()) {
+                                accumulatedResponse += delta.content
+                                contentChanged = true
+                            }
+
+                            // === REASONING ACCUMULATION ===
+                            var reasoningChanged = false
+                            if (delta.reasoning_details?.isNotEmpty() == true) {
+                                hasUsedReasoningDetails = true
+                                delta.reasoning_details.forEach { detail ->
+                                    if (detail.type == "reasoning.text" && detail.text != null) {
+                                        if (!reasoningStarted) {
+                                            accumulatedReasoning = ""
+                                            reasoningStarted = true
+                                        }
+                                        accumulatedReasoning += detail.text
+                                        reasoningChanged = true
                                     }
-                                    accumulatedReasoning += detail.text
-                                    reasoningChanged = true
                                 }
+                            } else if (!hasUsedReasoningDetails && !delta.reasoning.isNullOrEmpty()) {
+                                if (!reasoningStarted) {
+                                    accumulatedReasoning = ""
+                                    reasoningStarted = true
+                                }
+                                accumulatedReasoning += delta.reasoning
+                                reasoningChanged = true
                             }
-                        } else if (!hasUsedReasoningDetails && !delta.reasoning.isNullOrEmpty()) {
-                            if (!reasoningStarted) {
-                                accumulatedReasoning = ""
-                                reasoningStarted = true
-                            }
-                            accumulatedReasoning += delta.reasoning
-                            reasoningChanged = true
-                        }
 
-                        // === REAL-TIME UI UPDATE ===
-                        if (contentChanged || reasoningChanged) {
-                            withContext(Dispatchers.Main) {
-                                updateMessages { list ->
-                                    putAssistantMessage(
-                                        list,
-                                        thinkingMessage,
-                                        FlexibleMessage(
-                                            role = "assistant",
-                                            content = JsonPrimitive(accumulatedResponse),
-                                            reasoning = accumulatedReasoning.ifBlank { null }
+                            // === REAL-TIME UI UPDATE ===
+                            if (contentChanged || reasoningChanged) {
+                                pump.offer(
+                                    FlexibleMessage(
+                                        role = "assistant",
+                                        content = JsonPrimitive(accumulatedResponse),
+                                        reasoning = accumulatedReasoning.ifBlank { null }
+                                    )
+                                )
+                            }
+
+                            // === TOOL CALLS BUFFERING ===
+                            delta.toolCalls?.forEach { deltaTc ->
+                                val index = deltaTc.index
+                                if (index >= toolCallBuffer.size) {
+                                    toolCallBuffer.add(
+                                        ToolCall(
+                                            id = deltaTc.id ?: "",
+                                            type = deltaTc.type ?: "function",
+                                            function = FunctionCall(
+                                                name = deltaTc.function?.name ?: "",
+                                                arguments = deltaTc.function?.arguments ?: ""
+                                            )
+                                        )
+                                    )
+                                } else {
+                                    val existing = toolCallBuffer[index]
+                                    toolCallBuffer[index] = existing.copy(
+                                        function = existing.function.copy(
+                                            name = existing.function.name + (deltaTc.function?.name ?: ""),
+                                            arguments = existing.function.arguments + (deltaTc.function?.arguments ?: "")
                                         )
                                     )
                                 }
                             }
-                        }
 
-                        // === TOOL CALLS BUFFERING ===
-                        delta.toolCalls?.forEach { deltaTc ->
-                            val index = deltaTc.index
-                            if (index >= toolCallBuffer.size) {
-                                toolCallBuffer.add(
-                                    ToolCall(
-                                        id = deltaTc.id ?: "",
-                                        type = deltaTc.type ?: "function",
-                                        function = FunctionCall(
-                                            name = deltaTc.function?.name ?: "",
-                                            arguments = deltaTc.function?.arguments ?: ""
-                                        )
-                                    )
-                                )
-                            } else {
-                                val existing = toolCallBuffer[index]
-                                toolCallBuffer[index] = existing.copy(
-                                    function = existing.function.copy(
-                                        name = existing.function.name + (deltaTc.function?.name ?: ""),
-                                        arguments = existing.function.arguments + (deltaTc.function?.arguments ?: "")
-                                    )
-                                )
-                            }
+                            // === ANNOTATIONS & IMAGES ===
+                            accumulatedAnnotations.addAll(delta.annotations ?: emptyList())
+                            delta.images?.forEach { accumulatedImages.add(it.image_url.url) }
                         }
-
-                        // === ANNOTATIONS & IMAGES ===
-                        accumulatedAnnotations.addAll(delta.annotations ?: emptyList())
-                        delta.images?.forEach { accumulatedImages.add(it.image_url.url) }
                     }
 
                     // ============================================================
