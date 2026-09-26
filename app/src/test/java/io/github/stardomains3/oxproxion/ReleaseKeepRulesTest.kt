@@ -19,7 +19,7 @@ class ReleaseKeepRulesTest {
     private fun xmlDrawableClasses(): Set<String> {
         val re = Regex("""<drawable[^>]*\bclass="([^"]+)"""", RegexOption.DOT_MATCHES_ALL)
         return resDir.walkTopDown()
-            .filter { it.isFile && it.extension == "xml" && it.parentFile.name.startsWith("drawable") }
+            .filter { it.isFile && it.extension == "xml" && it.parentFile?.name?.startsWith("drawable") == true }
             .flatMap { f -> re.findAll(f.readText()).map { it.groupValues[1] } }
             .toSet()
     }
