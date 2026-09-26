@@ -14,6 +14,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.findViewTreeLifecycleOwner
 import coil.load
 import java.io.File
 
@@ -22,6 +24,10 @@ import java.io.File
  * of the control that opened it (above it when the control sits low, below it when high), with
  * rows of icon, title, subtitle and a check on the selected one. Lives inside the fragment's own
  * view tree so the glass can sample the transcript live; tap outside, Back or a pick closes it.
+ *
+ * [modal] adds a full-screen clickable scrim (permission / options). Slash typeahead uses
+ * [modal]=false so the composer dock stays touchable. Pass a [LifecycleOwner] so the Back
+ * callback is removed with the view; [animated]=false skips the grow-in for quiet rebuilds.
  */
 class PickerPopover(
     private val host: FrameLayout,
@@ -45,6 +51,7 @@ class PickerPopover(
     private var scrim: View? = null
     private var card: GlassLinearLayout? = null
     private var backCallback: OnBackPressedCallback? = null
+    private var opensAbove: Boolean = true
     var onDismiss: (() -> Unit)? = null
     val isShowing get() = card != null
 
@@ -52,16 +59,22 @@ class PickerPopover(
         title: CharSequence?,
         rows: List<Row>,
         footer: List<Row> = emptyList(),
-        hint: CharSequence? = null
+        hint: CharSequence? = null,
+        lifecycleOwner: LifecycleOwner? = null,
+        animated: Boolean = true,
+        modal: Boolean = true,
     ) {
         if (isShowing) return
-        val scrimView = View(context).apply {
-            setBackgroundColor(ContextCompat.getColor(context, R.color.popover_scrim))
-            alpha = 0f
-            isClickable = true
-            setOnClickListener { dismiss() }
-        }
-        host.addView(scrimView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        val scrimView = if (modal) {
+            View(context).apply {
+                setBackgroundColor(ContextCompat.getColor(context, R.color.popover_scrim))
+                alpha = 0f
+                isClickable = true
+                setOnClickListener { dismiss() }
+            }.also {
+                host.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            }
+        } else null
 
         val inflater = LayoutInflater.from(context)
         val cardView = inflater.inflate(R.layout.popover_card, host, false) as GlassLinearLayout
@@ -92,6 +105,7 @@ class PickerPopover(
         val gutter = (12 * density).toInt()
         val width = minOf(host.width - 2 * gutter, (340 * density).toInt())
         val above = ey + edge.height / 2 > host.height / 2
+        opensAbove = above
         val gap = (8 * density).toInt()
         val topInset = ViewCompat.getRootWindowInsets(host)?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
         val room = if (above) ey - gap - topInset - gutter - (56 * density).toInt() else host.height - (ey + edge.height + gap) - gutter
@@ -105,25 +119,16 @@ class PickerPopover(
         if (above) lp.bottomMargin = host.height - ay + gap else lp.topMargin = ay + edge.height + gap
         cardView.layoutParams = lp
         // Cap the list height; the footer stays pinned.
-        cardView.measure(
-            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
-        if (cardView.measuredHeight > maxHeight) {
-            val scroll = cardView.findViewById<NestedScrollView>(R.id.popoverScroll)
-            val over = cardView.measuredHeight - maxHeight
-            scroll.layoutParams = scroll.layoutParams.apply { height = (scroll.measuredHeight - over).coerceAtLeast((120 * density).toInt()) }
-            selectedView?.let { sel -> scroll.post { scroll.scrollTo(0, (sel.top - (scroll.height - sel.height) / 2).coerceAtLeast(0)) } }
-        }
+        applyMaxHeight(cardView, width, maxHeight, selectedView)
         host.addView(cardView)
         scrim = scrimView
         card = cardView
 
         // Grow out of the anchor: pivot at the anchor, spring scale + lift, rows ripple in.
-        val animate = Motion.areAnimationsEnabled(context)
+        val shouldAnimate = animated && Motion.areAnimationsEnabled(context)
         cardView.pivotX = (ax - left + anchor.width / 2f).coerceIn(0f, width.toFloat())
         cardView.pivotY = if (above) cardView.measuredHeight.coerceAtMost(maxHeight).toFloat() else 0f
-        if (animate) {
+        if (shouldAnimate) {
             cardView.alpha = 0f
             cardView.scaleX = 0.86f
             cardView.scaleY = 0.86f
@@ -146,15 +151,68 @@ class PickerPopover(
                 v.animate().alpha(1f).translationY(0f)
                     .setStartDelay(40L + 16L * minOf(i, 10)).setDuration(260).setInterpolator(Motion.iosOut).start()
             }
-            scrimView.animate().alpha(1f).setDuration(180).start()
+            scrimView?.animate()?.alpha(1f)?.setDuration(180)?.start()
         } else {
-            scrimView.alpha = 1f
+            scrimView?.alpha = 1f
         }
 
         (context as? ComponentActivity)?.let { act ->
             backCallback = object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() = dismiss()
-            }.also { act.onBackPressedDispatcher.addCallback(it) }
+            }.also { cb ->
+                val owner = lifecycleOwner ?: host.findViewTreeLifecycleOwner()
+                if (owner != null) act.onBackPressedDispatcher.addCallback(owner, cb)
+                else act.onBackPressedDispatcher.addCallback(cb)
+            }
+        }
+    }
+
+    /**
+     * Replace row/footer content in place without tearing down the card or replaying grow-in.
+     * Used by slash typeahead while the draft remains a slash token.
+     */
+    fun updateRows(rows: List<Row>, footer: List<Row> = emptyList()) {
+        val cardView = card ?: return
+        val inflater = LayoutInflater.from(context)
+        val rowsBox = cardView.findViewById<ViewGroup>(R.id.popoverRows)
+        val footerBox = cardView.findViewById<ViewGroup>(R.id.popoverFooter)
+        rowsBox.removeAllViews()
+        footerBox.removeAllViews()
+        cardView.findViewById<View>(R.id.popoverDivider).isVisible = footer.isNotEmpty() && rows.isNotEmpty()
+        var selectedView: View? = null
+        rows.forEach { r -> bindRow(inflater, rowsBox, r).also { if (r.selected) selectedView = it } }
+        footer.forEach { r -> bindRow(inflater, footerBox, r) }
+
+        val lp = cardView.layoutParams as FrameLayout.LayoutParams
+        val width = lp.width
+        val hostLoc = IntArray(2).also { host.getLocationInWindow(it) }
+        val edgeLoc = IntArray(2).also { edge.getLocationInWindow(it) }
+        val ey = edgeLoc[1] - hostLoc[1]
+        val gap = (8 * density).toInt()
+        val gutter = (12 * density).toInt()
+        val topInset = ViewCompat.getRootWindowInsets(host)?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+        val room = if (opensAbove) ey - gap - topInset - gutter - (56 * density).toInt()
+        else host.height - (ey + edge.height + gap) - gutter
+        val maxHeight = room.coerceAtMost((560 * density).toInt()).coerceAtLeast((160 * density).toInt())
+        // Reset scroll height so measure sees natural size before re-capping.
+        val scroll = cardView.findViewById<NestedScrollView>(R.id.popoverScroll)
+        scroll.layoutParams = scroll.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
+        applyMaxHeight(cardView, width, maxHeight, selectedView)
+        cardView.requestLayout()
+    }
+
+    private fun applyMaxHeight(cardView: GlassLinearLayout, width: Int, maxHeight: Int, selectedView: View?) {
+        cardView.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        if (cardView.measuredHeight > maxHeight) {
+            val scroll = cardView.findViewById<NestedScrollView>(R.id.popoverScroll)
+            val over = cardView.measuredHeight - maxHeight
+            scroll.layoutParams = scroll.layoutParams.apply {
+                height = (scroll.measuredHeight - over).coerceAtLeast((120 * density).toInt())
+            }
+            selectedView?.let { sel -> scroll.post { scroll.scrollTo(0, (sel.top - (scroll.height - sel.height) / 2).coerceAtLeast(0)) } }
         }
     }
 
@@ -198,8 +256,8 @@ class PickerPopover(
         backCallback?.remove()
         backCallback = null
         val remove = Runnable {
-            host.removeView(c)
-            if (s != null) host.removeView(s)
+            if (c.parent === host) host.removeView(c)
+            if (s != null && s.parent === host) host.removeView(s)
         }
         if (animated && Motion.areAnimationsEnabled(context)) {
             c.animate().alpha(0f).scaleX(0.92f).scaleY(0.92f).setStartDelay(0)

@@ -9,6 +9,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
+import androidx.lifecycle.LifecycleOwner
 import com.google.android.material.button.MaterialButton
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
@@ -23,7 +24,8 @@ import io.github.stardomains3.oxproxion.R
 class CodeComposer(
     val root: GlassLinearLayout,
     private val popoverHost: FrameLayout,
-    backdrop: GlassBackdropLayout
+    backdrop: GlassBackdropLayout,
+    private val lifecycleOwner: LifecycleOwner,
 ) {
     private val context: Context = root.context
     val input: EditText = root.findViewById(R.id.codeComposerInput)
@@ -118,7 +120,7 @@ class CodeComposer(
         anchor.isSelected = true
         popover = PickerPopover(popoverHost, anchor, backdropRef, edge = root).apply {
             onDismiss = { anchor.isSelected = false }
-            show(title, rows, footer, hint)
+            show(title, rows, footer, hint, lifecycleOwner = lifecycleOwner, modal = true)
         }
     }
 
@@ -133,6 +135,7 @@ class CodeComposer(
     /**
      * When the draft is a bare slash token (`/`, `/com`, …), show filtered [availableCommands]
      * in a glass popover above the composer. Picking replaces the token with `/name `.
+     * Non-modal (no scrim) so the EditText/send stay touchable; rows update in place while typing.
      */
     private fun refreshSlashPicker() {
         val text = input.text?.toString().orEmpty()
@@ -158,12 +161,21 @@ class CodeComposer(
                 onClick = { applySlashCommand(cmd) }
             )
         }
-        // Rebuild without animation so filtering while typing stays quiet.
-        slashPopover?.dismiss(animated = false)
+        val existing = slashPopover
+        if (existing != null && existing.isShowing) {
+            existing.updateRows(rows)
+            return
+        }
         popover?.dismiss(animated = false)
         slashPopover = PickerPopover(popoverHost, input, backdropRef, edge = root).apply {
             onDismiss = { slashPopover = null }
-            show(title = null, rows = rows)
+            show(
+                title = null,
+                rows = rows,
+                lifecycleOwner = lifecycleOwner,
+                animated = true,
+                modal = false,
+            )
         }
     }
 

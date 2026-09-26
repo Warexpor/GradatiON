@@ -72,7 +72,8 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         })
 
         composer = CodeComposer(
-            view.findViewById<View>(R.id.codeSessionComposer) as GlassLinearLayout, frame, backdrop
+            view.findViewById<View>(R.id.codeSessionComposer) as GlassLinearLayout, frame, backdrop,
+            viewLifecycleOwner,
         )
         composer.showPills(agent = false, folder = false, permission = true)
         composer.onSend = { text ->
@@ -239,6 +240,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
 
     private fun close() {
         if (!isAdded || parentFragmentManager.isStateSaved) return
+        composer.dismissPopover()
         composer.hideKeyboard()
         parentFragmentManager.popBackStack()
     }

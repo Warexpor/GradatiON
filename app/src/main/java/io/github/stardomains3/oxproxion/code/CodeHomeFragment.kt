@@ -73,7 +73,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         })
         if (topInset > 0) list.updatePadding(top = topInset)
 
-        composer = CodeComposer(view.findViewById<View>(R.id.codeHomeComposer) as GlassLinearLayout, root, backdrop)
+        composer = CodeComposer(view.findViewById<View>(R.id.codeHomeComposer) as GlassLinearLayout, root, backdrop, viewLifecycleOwner)
         composer.root.addOnLayoutChangeListener { v, _, top, _, _, _, oldTop, _, _ ->
             if (top != oldTop) list.updatePadding(bottom = root.height - top + (16 * resources.displayMetrics.density).toInt())
         }

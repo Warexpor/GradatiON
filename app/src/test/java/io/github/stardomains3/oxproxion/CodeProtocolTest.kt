@@ -328,6 +328,25 @@ class CodeProtocolTest {
         assertTrue(TranscriptReducer.apply(emptyList(), upd.update, now = 1L).isEmpty())
     }
 
+    @Test fun availableCommandsUpdateMalformedIsIgnored() {
+        val bad = listOf(
+            """{"sessionUpdate":"available_commands_update"}""",
+            """{"sessionUpdate":"available_commands_update","availableCommands":null}""",
+            """{"sessionUpdate":"available_commands_update","availableCommands":"x"}""",
+            """{"sessionUpdate":"available_commands_update","availableCommands":{"name":"x"}}""",
+        )
+        for (u in bad) {
+            val out = acp.decode(update(u))
+            assertTrue("expected Ignored for $u, got $out", out.single() is AdapterOutput.Ignored)
+        }
+    }
+
+    @Test fun availableCommandsUpdateEmptyArrayClears() {
+        val out = acp.decode(update("""{"sessionUpdate":"available_commands_update","availableCommands":[]}"""))
+        val cmds = ((out.single() as AdapterOutput.Update).update as CodeUpdate.AvailableCommands).commands
+        assertTrue(cmds.isEmpty())
+    }
+
     @Test fun slashDraftFilterAndInsert() {
         assertTrue(CodeComposer.isSlashDraft("/"))
         assertTrue(CodeComposer.isSlashDraft("/com"))

@@ -243,7 +243,11 @@ class AcpAdapter : HarnessAdapter {
                 // One live plan card per session: same key, so it updates in place.
                 CodeUpdate.Upsert(CodeEvent.Plan("plan:$sid", now, entries))
             }
-            "available_commands_update" -> CodeUpdate.AvailableCommands(parseAvailableCommands(u))
+            "available_commands_update" -> {
+                val arr = u["availableCommands"] as? JsonArray
+                    ?: return ignored("available_commands_update without availableCommands array")
+                CodeUpdate.AvailableCommands(parseAvailableCommands(arr))
+            }
             else -> null
         }
         return if (out == null) ignored("update ${u.str("sessionUpdate")}")
@@ -418,9 +422,9 @@ class AcpAdapter : HarnessAdapter {
     /**
      * ACP `available_commands_update.availableCommands[]`: name + description required;
      * optional unstructured `input.hint` becomes [AvailableCommand.inputHint].
+     * Caller must pass a real [JsonArray] (including `[]`); missing/null/non-array is Ignored upstream.
      */
-    private fun parseAvailableCommands(u: JsonObject): List<AvailableCommand> {
-        val arr = u["availableCommands"] as? JsonArray ?: return emptyList()
+    private fun parseAvailableCommands(arr: JsonArray): List<AvailableCommand> {
         return arr.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             val name = o.str("name")?.trim().orEmpty()
