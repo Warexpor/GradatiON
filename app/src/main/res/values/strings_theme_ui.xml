@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_background">Background</string>
+    <string name="settings_background_off">Off</string>
+    <string name="settings_background_grain">Grain</string>
+    <string name="settings_background_drift">Drift</string>
+    <string name="settings_background_flow">Flow</string>
+    <string name="settings_background_adaptive">Adaptive</string>
+    <string name="settings_background_off_summary">A plain canvas behind the chat.</string>
+    <string name="settings_background_grain_summary">A faint film grain over the chat background.</string>
+    <string name="settings_background_drift_summary">Soft light and shade drifting slowly behind the chat.</string>
+    <string name="settings_background_flow_summary">Slow, smoky texture that moves behind the chat.</string>
+    <string name="settings_background_adaptive_summary">Fits the moment: calm drift for chat, smoke for roleplay, dimmer and slower at night.</string>
+    <string name="cd_background_style">Background: %1$s</string>
+</resources>

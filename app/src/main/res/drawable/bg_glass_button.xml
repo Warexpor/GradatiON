@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Send: a bright glass bead with an ink arrow; fades back when disabled -->
+<!-- Secondary / tonal button: a clear glass capsule (tint, top sheen, lit rim), ink label.
+     Static glass, no live blur; lights up under the finger. -->
 <drawable xmlns:app="http://schemas.android.com/apk/res-auto"
     class="io.github.stardomains3.oxproxion.GlassDrawable"
-    app:glassTint="@color/glass_btn_selected_tint"
+    app:glassTint="@color/glass_btn_tint"
     app:glassCornerRadius="-1dp"
     app:glassInteractive="true"
     app:glassOpaqueWithoutBlur="false" />

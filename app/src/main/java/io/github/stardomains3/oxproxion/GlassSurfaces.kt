@@ -54,6 +54,12 @@ class GlassDrawable() : Drawable() {
     var interactive: Boolean = false
     /** Solid (no see-through) when live blur is unavailable. */
     var opaqueWithoutBlur: Boolean = true
+    /**
+     * Tint while selected/checked ("on" tiles, active controls). Non-null makes the drawable
+     * stateful; the change crossfades and the rim lights up, so "on" reads without inverting
+     * into a solid slab.
+     */
+    var selectedTint: Int? = null
 
     private var density = 1f
     private var highlight = Color.argb(0x33, 255, 255, 255)
@@ -61,6 +67,11 @@ class GlassDrawable() : Drawable() {
     private var glow = Color.argb(0x33, 255, 255, 255)
     private var sheen = Color.argb(0x0D, 255, 255, 255)
     private var pressed = false
+    private var selected = false
+    private var enabled = true
+    /** 0 = normal tint, 1 = [selectedTint]; animated between. */
+    private var selection = 0f
+    private var selectionAnimator: android.animation.ValueAnimator? = null
     private var alphaMul = 255
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -99,6 +110,10 @@ class GlassDrawable() : Drawable() {
             topOnly = a.getBoolean(R.styleable.GlassDrawable_glassTopOnly, false)
             interactive = a.getBoolean(R.styleable.GlassDrawable_glassInteractive, false)
             diameter = a.getDimension(R.styleable.GlassDrawable_glassDiameter, 0f)
+            if (a.hasValue(R.styleable.GlassDrawable_glassSelectedTint)) {
+                selectedTint = a.getColor(R.styleable.GlassDrawable_glassSelectedTint, glassTint)
+            }
+            opaqueWithoutBlur = a.getBoolean(R.styleable.GlassDrawable_glassOpaqueWithoutBlur, true)
         } finally {
             a.recycle()
         }
@@ -153,36 +168,88 @@ class GlassDrawable() : Drawable() {
         if (bounds.isEmpty) return
         rebuild()
         val solid = opaqueWithoutBlur && GlassQuality.level == GlassQuality.Level.SOLID
-        fill.color = if (solid) Color.argb(max(Color.alpha(glassTint), 0xF5), Color.red(glassTint), Color.green(glassTint), Color.blue(glassTint)) else glassTint
-        fill.alpha = fill.alpha * alphaMul / 255
+        val sel = selectedTint
+        val tint = if (sel != null && selection > 0f) blend(glassTint, sel, selection) else glassTint
+        // Disabled controls fade back into the surface instead of greying out a slab.
+        val mul = if (enabled) alphaMul else alphaMul * 45 / 100
+        fill.color = if (solid) Color.argb(max(Color.alpha(tint), 0xF5), Color.red(tint), Color.green(tint), Color.blue(tint)) else tint
+        fill.alpha = fill.alpha * mul / 255
         canvas.drawPath(path, fill)
-        sheenPaint.alpha = alphaMul
+        sheenPaint.alpha = mul
         canvas.drawPath(path, sheenPaint)
         if (pressed) {
             fill.color = glow
-            fill.alpha = fill.alpha * alphaMul / 255
+            fill.alpha = fill.alpha * mul / 255
             canvas.drawPath(path, fill)
         }
         canvas.save()
         canvas.clipPath(path)
-        rimPaint.alpha = alphaMul
+        rimPaint.alpha = mul
         canvas.drawPath(path, rimPaint)
+        if (selection > 0f) {
+            // "On": the rim catches more light all the way round (a soft inner glow, no hue).
+            rimPaint.alpha = (mul * selection).toInt()
+            canvas.drawPath(path, rimPaint)
+            edgePaint.color = glow
+            edgePaint.alpha = (Color.alpha(glow) * selection * mul / 255).toInt()
+            val w = edgePaint.strokeWidth
+            edgePaint.strokeWidth = w * 2.5f
+            canvas.drawPath(path, edgePaint)
+            edgePaint.strokeWidth = w
+        }
         edgePaint.color = edge
-        edgePaint.alpha = edgePaint.alpha * alphaMul / 255
+        edgePaint.alpha = edgePaint.alpha * mul / 255
         canvas.drawPath(path, edgePaint)
         canvas.restore()
     }
 
-    override fun isStateful() = interactive
+    override fun isStateful() = interactive || selectedTint != null
 
     override fun onStateChange(state: IntArray): Boolean {
-        if (!interactive) return false
-        val p = state.contains(android.R.attr.state_pressed)
-        if (p == pressed) return false
-        pressed = p
-        invalidateSelf()
-        return true
+        if (!isStateful) return false
+        var changed = false
+        val p = interactive && state.contains(android.R.attr.state_pressed)
+        if (p != pressed) { pressed = p; changed = true }
+        // Views always report state_enabled while enabled; an empty set means "no state yet".
+        val en = state.isEmpty() || state.contains(android.R.attr.state_enabled)
+        if (en != enabled) { enabled = en; changed = true }
+        if (selectedTint != null) {
+            val s = state.contains(android.R.attr.state_selected) || state.contains(android.R.attr.state_checked) ||
+                state.contains(android.R.attr.state_activated)
+            if (s != selected) {
+                selected = s
+                animateSelection(if (s) 1f else 0f)
+                changed = true
+            }
+        }
+        if (changed) invalidateSelf()
+        return changed
     }
+
+    override fun jumpToCurrentState() {
+        selectionAnimator?.cancel()
+        selection = if (selected) 1f else 0f
+        invalidateSelf()
+    }
+
+    private fun animateSelection(target: Float) {
+        selectionAnimator?.cancel()
+        // First state after inflation (or while hidden): no animation.
+        if (!canAnimateOnScreen()) { selection = target; return }
+        selectionAnimator = android.animation.ValueAnimator.ofFloat(selection, target).apply {
+            duration = 180L
+            interpolator = Motion.iosOut
+            addUpdateListener { selection = it.animatedValue as Float; invalidateSelf() }
+            start()
+        }
+    }
+
+    private fun blend(a: Int, b: Int, t: Float): Int = Color.argb(
+        (Color.alpha(a) + (Color.alpha(b) - Color.alpha(a)) * t).toInt(),
+        (Color.red(a) + (Color.red(b) - Color.red(a)) * t).toInt(),
+        (Color.green(a) + (Color.green(b) - Color.green(a)) * t).toInt(),
+        (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t).toInt()
+    )
 
     override fun getOutline(outline: Outline) {
         shapeRect(rect)
@@ -198,9 +265,11 @@ class GlassDrawable() : Drawable() {
 
     override fun getAlpha(): Int = alphaMul
 
-    override fun setColorFilter(colorFilter: ColorFilter?) {
-        fill.colorFilter = colorFilter
-    }
+    /**
+     * Ignored on purpose: a leftover `backgroundTint` on a button would otherwise flood the
+     * glass into a solid slab (AppCompat applies tints as a color filter). Tint via [glassTint].
+     */
+    override fun setColorFilter(colorFilter: ColorFilter?) = Unit
 
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT

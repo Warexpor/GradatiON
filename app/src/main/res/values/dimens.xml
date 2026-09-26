@@ -1,7 +1,7 @@
 <resources>
     <dimen name="fab_margin">16dp</dimen>
     <dimen name="advanced_reasoning_outline_width">2dp</dimen>
-    <dimen name="grokion_switch_min_width">52dp</dimen>
+    <dimen name="grokion_switch_min_width">60dp</dimen>
     <dimen name="grokion_switch_track_height">32dp</dimen>
     <dimen name="grokion_switch_thumb_size">32dp</dimen>
     <dimen name="glass_sheet_radius">26dp</dimen>

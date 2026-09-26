@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Tile / composer-action foreground: ink on glass in both states (the glass brightens when on) -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_enabled="false" android:color="@color/xai_tertiary" />
-    <item android:state_selected="true" android:color="@color/xai_canvas" />
+    <item android:state_selected="true" android:color="@color/xai_ink_hover" />
     <item android:color="@color/xai_ink" />
 </selector>

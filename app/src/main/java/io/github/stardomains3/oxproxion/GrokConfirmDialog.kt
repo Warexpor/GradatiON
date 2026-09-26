@@ -32,7 +32,7 @@ object GrokConfirmDialog {
         if (destructive) {
             // Destructive: red label on a tonal pill (iOS-style), never a red fill
             actionButton.setTextColor(ContextCompat.getColor(context, R.color.xai_error))
-            actionButton.backgroundTintList = ContextCompat.getColorStateList(context, R.color.xai_canvas_mid)
+            actionButton.background = ContextCompat.getDrawable(context, R.drawable.bg_glass_button)
         }
 
         sheet.findViewById<MaterialButton>(R.id.confirmCancel).setOnClickListener {

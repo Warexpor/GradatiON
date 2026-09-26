@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <gradient
-        android:angle="270"
-        android:startColor="@color/grad_send_top"
-        android:endColor="@color/grad_send_bottom" />
-</shape>
+<!-- Send (has content): bright glass bead, ink arrow (xai_send_icon_enabled) -->
+<drawable xmlns:app="http://schemas.android.com/apk/res-auto"
+    class="io.github.stardomains3.oxproxion.GlassDrawable"
+    app:glassTint="@color/glass_btn_selected_tint"
+    app:glassCornerRadius="-1dp"
+    app:glassInteractive="true"
+    app:glassOpaqueWithoutBlur="false" />

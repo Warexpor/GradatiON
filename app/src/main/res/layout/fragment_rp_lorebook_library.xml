@@ -63,7 +63,7 @@
         android:insetTop="0dp"
         android:insetBottom="0dp"
         app:iconGravity="textStart"
-        app:iconTint="@color/xai_canvas"
+        app:iconTint="@color/xai_ink"
         android:text="@string/rp_add_lorebook"
         app:icon="@drawable/ic_plus" />
 </LinearLayout>

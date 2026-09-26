@@ -88,7 +88,6 @@
             android:insetBottom="0dp"
             android:minHeight="44dp"
             android:text="@string/edit_response_save"
-            app:backgroundTint="@color/xai_send_enabled"
             app:cornerRadius="22dp"
             app:rippleColor="@color/press_ripple_none" />
     </LinearLayout>

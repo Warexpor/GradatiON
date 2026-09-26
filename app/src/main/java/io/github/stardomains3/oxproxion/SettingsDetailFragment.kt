@@ -226,8 +226,8 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                     else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
                 }
                 if (AppCompatDelegate.getDefaultNightMode() != appMode) {
-                    AppCompatDelegate.setDefaultNightMode(appMode)
-                    requireActivity().recreate()
+                    // Reveal the new appearance from the tapped segment.
+                    ThemeTransition.apply(requireActivity(), view.findViewById(checkedId), appMode)
                 }
             }
         }
@@ -375,6 +375,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         hapticRespondingSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.saveHapticResponding(isChecked)
         }
+        bindBackgroundPicker(view, prefs)
 
         listOf(
             R.id.scrollButtonsSwitch,
@@ -398,6 +399,45 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             R.id.hapticRespondingSwitch
         ).forEach { id ->
             view.findViewById<SwitchCompat>(id)?.applyGrokionSwitchStyle()
+        }
+    }
+
+    /**
+     * Background picker: one live swatch per style (only the chosen one animates, the rest
+     * hold a static frame). Every AmbientBackgroundView follows the preference on its own.
+     */
+    private fun bindBackgroundPicker(view: View, prefs: SharedPreferencesHelper) {
+        val picker = view.findViewById<android.widget.LinearLayout>(R.id.backgroundStylePicker) ?: return
+        val summary = view.findViewById<android.widget.TextView>(R.id.backgroundStyleSummary)
+        val choices = listOf(
+            AmbientBackgroundView.Style.OFF to (R.string.settings_background_off to R.string.settings_background_off_summary),
+            AmbientBackgroundView.Style.GRAIN to (R.string.settings_background_grain to R.string.settings_background_grain_summary),
+            AmbientBackgroundView.Style.DRIFT to (R.string.settings_background_drift to R.string.settings_background_drift_summary),
+            AmbientBackgroundView.Style.FLOW to (R.string.settings_background_flow to R.string.settings_background_flow_summary),
+            AmbientBackgroundView.Style.ADAPTIVE to (R.string.settings_background_adaptive to R.string.settings_background_adaptive_summary)
+        )
+        val inflater = layoutInflater
+        val tiles = choices.map { (style, text) ->
+            val tile = inflater.inflate(R.layout.item_background_style, picker, false)
+            tile.findViewById<android.widget.TextView>(R.id.backgroundStyleLabel).setText(text.first)
+            tile.findViewById<AmbientBackgroundView>(R.id.backgroundStylePreview).styleOverride = style
+            tile.contentDescription = getString(R.string.cd_background_style, getString(text.first))
+            picker.addView(tile)
+            style to tile
+        }
+        fun select(style: AmbientBackgroundView.Style) {
+            tiles.forEach { (s, tile) ->
+                tile.isSelected = s == style
+                tile.findViewById<AmbientBackgroundView>(R.id.backgroundStylePreview).animated = s == style
+            }
+            summary?.setText(choices.first { it.first == style }.second.second)
+        }
+        select(AmbientBackgroundView.Style.fromKey(prefs.getBackgroundStyle()))
+        tiles.forEach { (style, tile) ->
+            tile.setOnClickListener {
+                prefs.saveBackgroundStyle(style.key)
+                select(style)
+            }
         }
     }
 

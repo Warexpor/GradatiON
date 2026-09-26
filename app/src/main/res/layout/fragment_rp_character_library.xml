@@ -106,5 +106,5 @@
         android:text="@string/rp_add_character"
         app:icon="@drawable/ic_attach_plus"
         app:iconGravity="textStart"
-        app:iconTint="@color/xai_canvas" />
+        app:iconTint="@color/xai_ink" />
 </LinearLayout>

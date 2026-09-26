@@ -583,6 +583,90 @@ class ScreenshotTest {
         }
     }
 
+    // ---- Theme UI: glass toggles, ambient backgrounds ----
+
+    @Test fun settingsAppearanceDark() = withChat { a, _ ->
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.DRIFT.key)
+        openSettingsRow(a, R.id.settingsRowAppearance); settle(); snap(root(a), "settings_appearance_dark")
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
+    }
+    @Test @Config(qualifiers = LIGHT)
+    fun settingsAppearanceLight() = withChat { a, _ ->
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.FLOW.key)
+        openSettingsRow(a, R.id.settingsRowAppearance); settle(); snap(root(a), "settings_appearance_light")
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
+    }
+
+    /** Glass toggles on and off, one held down (thumb swells into a lens). */
+    private fun toggles(a: MainActivity, name: String) {
+        openSettingsRow(a, R.id.settingsRowAdvanced)
+        val detail = a.supportFragmentManager.fragments.filterIsInstance<SettingsDetailFragment>().first().requireView()
+        val switches = mutableListOf<androidx.appcompat.widget.SwitchCompat>()
+        fun collect(v: View) {
+            if (v is androidx.appcompat.widget.SwitchCompat && v.isShown) switches += v
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) collect(v.getChildAt(i))
+        }
+        collect(detail)
+        generateSequence(switches.firstOrNull()?.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().firstOrNull()
+            ?.let { sv -> sv.scrollTo(0, (switches.first().top + 0).coerceAtLeast(0)); sv.fullScroll(View.FOCUS_DOWN) }
+        switches.forEachIndexed { i, s -> s.isChecked = i % 2 == 0 }
+        switches.getOrNull(2)?.isPressed = true
+        idle()
+        snap(root(a), name)
+    }
+
+    @Test fun settingsTogglesDark() = withChat { a, _ -> toggles(a, "settings_toggles_dark") }
+    @Test @Config(qualifiers = LIGHT)
+    fun settingsTogglesLight() = withChat { a, _ -> toggles(a, "settings_toggles_light") }
+
+    /** Every background style (and Adaptive in both modes), each full-screen over the canvas. */
+    private fun ambientGrid(a: MainActivity, name: String) {
+        val cells = listOf(
+            "grain" to (AmbientBackgroundView.Style.GRAIN to ChatMode.ASK),
+            "drift" to (AmbientBackgroundView.Style.DRIFT to ChatMode.ASK),
+            "flow" to (AmbientBackgroundView.Style.FLOW to ChatMode.ASK),
+            "adaptive_rp" to (AmbientBackgroundView.Style.ADAPTIVE to ChatMode.RP),
+        )
+        val host = a.findViewById<android.view.ViewGroup>(android.R.id.content)
+        for ((label, cell) in cells) {
+            val frame = android.widget.FrameLayout(a).apply {
+                setBackgroundColor(androidx.core.content.ContextCompat.getColor(a, R.color.xai_canvas))
+            }
+            val v = AmbientBackgroundView(a).apply {
+                styleOverride = cell.first
+                mode = cell.second
+                animated = false
+            }
+            frame.addView(v, android.view.ViewGroup.LayoutParams(-1, -1))
+            host.addView(frame, android.view.ViewGroup.LayoutParams(-1, -1))
+            idle()
+            if (cell.first == AmbientBackgroundView.Style.ADAPTIVE) {
+                org.junit.Assert.assertEquals(AmbientBackgroundView.Style.FLOW, v.resolvedStyle)
+            }
+            snap(frame, "${name}_$label")
+            host.removeView(frame)
+        }
+    }
+
+    @Test fun ambientBackgroundsDark() = withChat { a, _ -> ambientGrid(a, "ambient_backgrounds_dark") }
+    @Test @Config(qualifiers = LIGHT)
+    fun ambientBackgroundsLight() = withChat { a, _ -> ambientGrid(a, "ambient_backgrounds_light") }
+    /** API 31-32 path: static pre-rendered fields and the grain tile. */
+    @Test @Config(sdk = [31])
+    fun ambientBackgroundsApi31() = withChat { a, _ -> ambientGrid(a, "ambient_backgrounds_api31") }
+
+    /** With animations off the appearance switch is instant and must not crash or leak an overlay. */
+    @Test fun themeSwitchWithoutAnimation() = withChat { a, _ ->
+        val before = androidx.appcompat.app.AppCompatDelegate.getDefaultNightMode()
+        ThemeTransition.apply(a, a.findViewById(R.id.settingsButton), androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO)
+        idle()
+        // The recreated activity re-applies the saved preference (dark), so only "no crash" is
+        // asserted here, plus that nothing was left over the old window.
+        val decor = a.window.decorView as android.view.ViewGroup
+        org.junit.Assert.assertTrue((0 until decor.childCount).none { decor.getChildAt(it).javaClass.simpleName == "RevealOverlay" })
+        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(before)
+    }
+
     private fun snapDialogCentered(a: MainActivity, name: String) {
         val d: Dialog = ShadowDialog.getLatestDialog() ?: return snap(root(a), name)
         val bg = frostedBackdrop(a)

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Send: a bright glass bead with an ink arrow; fades back when disabled -->
+<!-- Primary button: denser glass than the tonal one, same ink label. Replaces the solid ink
+     slab (white on dark, black on light), which read far too contrasty. -->
 <drawable xmlns:app="http://schemas.android.com/apk/res-auto"
     class="io.github.stardomains3.oxproxion.GlassDrawable"
-    app:glassTint="@color/glass_btn_selected_tint"
+    app:glassTint="@color/glass_btn_primary_tint"
     app:glassCornerRadius="-1dp"
     app:glassInteractive="true"
     app:glassOpaqueWithoutBlur="false" />

@@ -1,32 +1,3 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Grok M3 switch track: 52×32 stadium (m3_comp_switch_track_*). -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_enabled="false" android:state_checked="true">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/trackColorCheckedDisabled" />
-            <corners android:radius="100dp" />
-            <size android:width="52dp" android:height="32dp" />
-        </shape>
-    </item>
-    <item android:state_enabled="false">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/trackColorUncheckedDisabled" />
-            <corners android:radius="100dp" />
-            <size android:width="52dp" android:height="32dp" />
-        </shape>
-    </item>
-    <item android:state_checked="true">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/trackColorChecked" />
-            <corners android:radius="100dp" />
-            <size android:width="52dp" android:height="32dp" />
-        </shape>
-    </item>
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="@color/trackColorUnchecked" />
-            <corners android:radius="100dp" />
-            <size android:width="52dp" android:height="32dp" />
-        </shape>
-    </item>
-</selector>
+<!-- Liquid-glass switch track: clear glass capsule off, dense neutral fill on (GlassSwitch.kt) -->
+<drawable class="io.github.stardomains3.oxproxion.GlassSwitchTrackDrawable" />

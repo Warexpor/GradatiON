@@ -36,7 +36,7 @@
     <color name="xai_link">#FFECECEC</color>
     <color name="xai_send_disabled">#FF242424</color>
     <color name="xai_send_enabled">#FFECECEC</color>
-    <color name="xai_send_icon_enabled">#FF111111</color>
+    <color name="xai_send_icon_enabled">#FFECECEC</color>
 
     <!-- Grok/X monochrome switch (dark): ON = white track + black thumb -->
     <color name="trackColorChecked">#FFECECEC</color>
@@ -102,4 +102,15 @@
     <color name="popover_scrim">#33000000</color>
     <color name="empty_mark">#FF333333</color>
     <color name="glass_chat_action_tint">#8C222222</color>
+    <color name="glass_btn_tint">#17FFFFFF</color>
+    <color name="glass_btn_primary_tint">#29FFFFFF</color>
+    <color name="glass_btn_selected_tint">#47FFFFFF</color>
+    <color name="switch_track_off">#24FFFFFF</color>
+    <color name="switch_track_on">#FF6E6E6E</color>
+    <color name="switch_track_rim">#1AFFFFFF</color>
+    <color name="switch_thumb_top">#FFF4F4F4</color>
+    <color name="switch_thumb_bottom">#FFC9C9C9</color>
+    <color name="switch_thumb_rim">#59FFFFFF</color>
+    <color name="switch_thumb_shadow">#73000000</color>
+    <color name="switch_thumb_lens">#8CFFFFFF</color>
 </resources>

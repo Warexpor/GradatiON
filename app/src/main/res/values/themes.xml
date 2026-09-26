@@ -41,7 +41,9 @@
         <item name="materialButtonStyle">@style/Widget.Grokion.Button</item>
         <item name="materialIconButtonStyle">@style/Widget.Grokion.IconButton</item>
         <item name="borderlessButtonStyle">@style/Widget.Grokion.Button.Text</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.Gradation.Button.Segment</item>
         <item name="materialSwitchStyle">@style/Widget.Gradation.Switch</item>
+        <item name="switchStyle">@style/Widget.Gradation.SwitchCompat</item>
         <item name="colorOutline">@color/xai_canvas_mid</item>
         <item name="colorOutlineVariant">@color/xai_hairline</item>
         <item name="colorSurfaceVariant">@color/xai_canvas_soft</item>
@@ -181,15 +183,17 @@
     <style name="ff" parent="XaiShapeCard" />
 
     <!-- ── Buttons ── -->
-    <!-- Primary: solid ink pill (white on dark, black on light) -->
+    <!-- Primary: dense glass capsule, ink label (no solid white/black slab) -->
     <style name="Widget.Grokion.Button" parent="Widget.Material3.Button">
         <item name="rippleColor">@color/press_ripple_none</item>
         <item name="android:stateListAnimator">@animator/press_scale</item>
-        <item name="android:foreground">@drawable/bg_press_svg</item>
+        <item name="android:foreground">@null</item>
         <item name="android:minHeight">48dp</item>
         <item name="android:textAppearance">@style/TextAppearance.Gradation.Button</item>
-        <item name="android:textColor">@color/xai_canvas</item>
-        <item name="backgroundTint">@color/xai_ink</item>
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="iconTint">@color/xai_ink</item>
+        <item name="android:background">@drawable/bg_glass_button_primary</item>
+        <item name="backgroundTint">@null</item>
         <item name="shapeAppearance">@style/XaiShapePill</item>
         <item name="android:paddingStart">20dp</item>
         <item name="android:paddingEnd">20dp</item>
@@ -200,15 +204,17 @@
         <item name="android:stateListAnimator">@animator/press_scale</item>
         <item name="android:foreground">@drawable/bg_press_svg</item>
         <item name="android:textAppearance">@style/TextAppearance.Gradation.Label</item>
+        <item name="android:textSize">16sp</item>
         <item name="android:textColor">@color/xai_ink</item>
         <item name="iconTint">@color/xai_ink</item>
         <item name="shapeAppearance">@style/XaiShapePill</item>
     </style>
 
-    <!-- Secondary: tonal gray pill -->
+    <!-- Secondary: clear glass capsule -->
     <style name="Widget.Gradation.Button.Tonal" parent="Widget.Grokion.Button">
         <item name="android:textColor">@color/xai_ink</item>
-        <item name="backgroundTint">@color/xai_canvas_mid</item>
+        <item name="android:background">@drawable/bg_glass_button</item>
+        <item name="backgroundTint">@null</item>
         <item name="iconTint">@color/xai_ink</item>
     </style>
 
@@ -244,7 +250,7 @@
         <item name="android:foreground">@drawable/bg_press_svg_borderless</item>
     </style>
 
-    <!-- Controls-panel tile: icon over label, Control Center style; inverts when selected -->
+    <!-- Controls-panel tile: icon over label, Control Center style; glass brightens when on -->
     <style name="Widget.Gradation.ControlTile" parent="Widget.Material3.Button">
         <item name="android:layout_width">76dp</item>
         <item name="android:layout_height">72dp</item>
@@ -262,17 +268,18 @@
         <item name="android:minHeight">0dp</item>
         <item name="android:maxLines">1</item>
         <item name="android:ellipsize">end</item>
-        <item name="android:textSize">11sp</item>
+        <item name="android:textSize">12.5sp</item>
         <item name="android:textFontWeight">500</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:letterSpacing">0</item>
+        <item name="android:letterSpacing">-0.005</item>
         <item name="android:textColor">@color/tile_fg</item>
         <item name="android:fontFamily">@font/app_sans</item>
         <item name="iconGravity">top</item>
         <item name="iconPadding">6dp</item>
         <item name="iconSize">22dp</item>
         <item name="iconTint">@color/tile_fg</item>
-        <item name="backgroundTint">@color/tile_bg</item>
+        <item name="android:background">@drawable/bg_glass_tile</item>
+        <item name="backgroundTint">@null</item>
         <item name="cornerRadius">20dp</item>
         <item name="rippleColor">@color/press_ripple_none</item>
         <item name="android:stateListAnimator">@animator/press_scale</item>
@@ -288,12 +295,28 @@
         <item name="backgroundTint">@color/tile_bg_top</item>
     </style>
 
+    <!-- Segments (MaterialButtonToggleGroup, e.g. Theme: System / Light / Dark) -->
+    <style name="Widget.Gradation.Button.Segment" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:textAppearance">@style/TextAppearance.Gradation.Label</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/xai_ink</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">13dp</item>
+        <item name="android:paddingEnd">13dp</item>
+        <item name="strokeColor">@color/xai_hairline</item>
+        <item name="backgroundTint">@color/toggle_background_selector</item>
+        <item name="rippleColor">@color/press_ripple_none</item>
+        <item name="android:stateListAnimator">@animator/press_scale</item>
+    </style>
+
     <!-- Segmented / toggle chips: gray track, filled selection -->
     <style name="Widget.Grokion.Button.OutlinedToggle" parent="Widget.Material3.Button.OutlinedButton">
         <item name="checkedIconTint">@color/xai_ink</item>
         <item name="iconTint">@color/xai_ink</item>
         <item name="android:textColor">@color/xai_ink</item>
         <item name="android:textAppearance">@style/TextAppearance.Gradation.Label</item>
+        <item name="android:textSize">15sp</item>
         <item name="strokeColor">@color/xai_hairline</item>
         <item name="backgroundTint">@color/toggle_background_selector</item>
         <item name="rippleColor">@color/press_ripple_none</item>
@@ -302,13 +325,13 @@
     </style>
 
     <style name="Widget.Grokion.Button.FilterChip" parent="Widget.Grokion.Button.OutlinedToggle">
-        <item name="android:textSize">13sp</item>
-        <item name="android:minHeight">34dp</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:minHeight">36dp</item>
         <item name="android:paddingStart">14dp</item>
         <item name="android:paddingEnd">14dp</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
-        <item name="cornerRadius">17dp</item>
+        <item name="cornerRadius">18dp</item>
     </style>
 
     <style name="Widget.Grokion.ModelCapabilityBadge" parent="Widget.AppCompat.TextView">
@@ -336,11 +359,26 @@
         <item name="buttonIconTint">@color/button_icon_tint</item>
     </style>
 
+    <!-- Liquid-glass toggles (GlassSwitch.kt): glass track, glass-bead thumb, no tints -->
     <style name="Widget.Gradation.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
-        <item name="thumbTint">@color/switch_thumb_tint</item>
-        <item name="trackTint">@color/switch_track_tint</item>
+        <item name="android:thumb">@drawable/switch_thumb</item>
+        <item name="track">@drawable/switch_track</item>
+        <item name="thumbTint">@null</item>
+        <item name="trackTint">@null</item>
+        <item name="trackDecoration">@null</item>
         <item name="trackDecorationTint">@android:color/transparent</item>
         <item name="thumbIconTint">@android:color/transparent</item>
+        <item name="switchMinWidth">@dimen/grokion_switch_min_width</item>
+    </style>
+
+    <style name="Widget.Gradation.SwitchCompat" parent="Widget.AppCompat.CompoundButton.Switch">
+        <item name="android:thumb">@drawable/switch_thumb</item>
+        <item name="track">@drawable/switch_track</item>
+        <item name="thumbTint">@null</item>
+        <item name="trackTint">@null</item>
+        <item name="showText">false</item>
+        <item name="switchMinWidth">@dimen/grokion_switch_min_width</item>
+        <item name="android:background">@null</item>
     </style>
 
     <!-- Dropdowns (spinners, exposed menus): the same glass as context menus -->

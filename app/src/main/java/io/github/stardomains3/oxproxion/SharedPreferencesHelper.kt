@@ -40,6 +40,8 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_VOICE_INPUT_MODEL = "voice_input_model"
         private const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // "lan", "cloud", "off"
         private const val KEY_THEME_MODE = "theme_mode"
+        /** Ambient background style (AmbientBackgroundView.Style.key): off, grain, drift, flow, adaptive. */
+        const val KEY_BACKGROUND_STYLE = "background_style"
         const val THEME_SYSTEM = 0
         const val THEME_LIGHT = 1
         const val THEME_DARK = 2
@@ -112,7 +114,7 @@ class SharedPreferencesHelper(context: Context) {
         private const val CHAT_DB_PASSPHRASE_ALIAS = "chat_db_passphrase"
         private const val KEY_LAN_API_KEY_MIGRATED = "lan_api_key_migrated"
         private const val API_KEYS_PREFS_STORE = "ApiKeysPrefsStore"
-        private const val MAIN_PREFS = "MainAppPrefs"
+        const val MAIN_PREFS = "MainAppPrefs"
         private const val KEY_MODEL_NEW_CHAT = "modelvalenewchat"
         private const val KEY_MODEL_VALE = "modelvale"
         private const val KEY_CUSTOM_MODELS = "custom_models"
@@ -611,6 +613,13 @@ class SharedPreferencesHelper(context: Context) {
 
     fun saveThemeMode(mode: Int) {
         mainPrefs.edit { putInt(KEY_THEME_MODE, mode) }
+    }
+
+    /** Off by default. */
+    fun getBackgroundStyle(): String = mainPrefs.getString(KEY_BACKGROUND_STYLE, "off") ?: "off"
+
+    fun saveBackgroundStyle(key: String) {
+        mainPrefs.edit { putString(KEY_BACKGROUND_STYLE, key) }
     }
     fun hasMigratedMaverick(): Boolean {
         return mainPrefs.getBoolean("migrated_maverick_to_openrouter", false)

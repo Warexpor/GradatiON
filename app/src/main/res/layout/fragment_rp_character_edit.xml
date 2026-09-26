@@ -87,7 +87,7 @@
                     android:contentDescription="@null"
                     android:importantForAccessibility="no"
                     android:src="@drawable/rp_ic_camera"
-                    app:tint="@color/xai_canvas" />
+                    app:tint="@color/xai_ink" />
             </FrameLayout>
         </FrameLayout>
 

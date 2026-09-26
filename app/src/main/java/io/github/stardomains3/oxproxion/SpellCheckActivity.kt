@@ -171,12 +171,8 @@ class SpellCheckActivity : AppCompatActivity() {
             text = "Accept"
             textSize = 14f
             isAllCaps = false
-            setTextColor(token(R.color.xai_canvas))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 999f
-                setColor(token(R.color.xai_ink))
-            }
+            setTextColor(token(R.color.xai_ink))
+            background = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_glass_button_primary)
             setPadding(48, 24, 48, 24)
             setOnClickListener { onAccept() }
         }

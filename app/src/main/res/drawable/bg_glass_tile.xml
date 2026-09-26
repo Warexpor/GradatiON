@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Composer round actions (+, controls): clear glass disc that brightens while its panel is open -->
+<!-- Controls-panel tile: clear glass; when on (selected) the glass brightens and the rim glows,
+     the icon stays ink. No inversion into a solid slab. -->
 <drawable xmlns:app="http://schemas.android.com/apk/res-auto"
     class="io.github.stardomains3.oxproxion.GlassDrawable"
     app:glassTint="@color/glass_btn_tint"
     app:glassSelectedTint="@color/glass_btn_selected_tint"
-    app:glassCornerRadius="-1dp"
+    app:glassCornerRadius="20dp"
     app:glassInteractive="true"
     app:glassOpaqueWithoutBlur="false" />
