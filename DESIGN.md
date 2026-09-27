@@ -56,6 +56,9 @@ Build surfaces from `GlassDrawable` (`sheet()`, `control()`, or a custom radius)
 
 - UI text is Plus Jakarta Sans (`@font/app_sans`: 400 to 800). Titles use 600.
 - The wordmark is Michroma.
+- The mark is the blade G (`ic_gradation_mark`, same path in the themed-icon layer). The launcher
+  and store icons are an obsidian render of it with a silver edge. The empty chat shows it as live
+  liquid glass (`LiquidMarkView`, 20fps, flat mark on Android 12 and on software canvases).
 - Code is Atkinson Hyperlegible Mono (`TextAppearance.Gradation.Code.Mono`).
 - (hard) Nothing tappable is under 13sp.
 - (hard) Vertical centering is fixed once in the bundled font files' metrics, never with per-view padding.

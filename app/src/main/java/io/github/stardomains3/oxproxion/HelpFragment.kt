@@ -251,7 +251,8 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
             ## Image & audio models
 
             *   **Image generation** — palette badge on model; images save to Downloads; not kept in History.
-            *   **Transcription** — upload audio via mic icon when a transcription model is selected; returns text only. **Live voice/STT in Settings is disabled** in this build.
+            *   **Voice input** — Settings → Voice: Phone (on-device), Cloud (OpenRouter), **Grok** (xAI Speech-to-Text), or Local. Tap mic, talk, tap check; text pastes into the composer and never auto-sends. Grok needs an xAI API key on that same screen.
+            *   **Transcription** — upload audio via mic icon when a transcription model is selected; returns text only.
 
             ---
 

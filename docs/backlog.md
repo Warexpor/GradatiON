@@ -42,6 +42,8 @@ app, drive it to the best direction you think it is."
 
 ## Voice (done)
 - [x] Voice input back: tap, talk, tap check, pastes and never sends. OpenRouter/Local fallback kept.
+- [x] Grok STT engine: Settings > Voice > Grok posts Opus to `api.x.ai/v1/stt` (grok-voice-transcribe-2.0)
+      with an encrypted xAI API key on that same screen.
 
 ## Bugs
 - [x] B1. Mode switch (tap or swipe) flashes a black transition before the next screen. It should go

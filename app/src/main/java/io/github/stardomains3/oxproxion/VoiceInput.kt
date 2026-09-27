@@ -23,11 +23,16 @@ enum class VoiceEngine(val key: String) {
     DEVICE("device"),
     /** Record, then OpenRouter's transcription endpoint (costs credits). */
     CLOUD("cloud"),
+    /** Record, then xAI Grok Speech-to-Text (`POST /v1/stt`). */
+    GROK("grok"),
     /** Record, then the local server's `/v1/audio/transcriptions` (whisper and friends). */
     LAN("lan"),
     OFF("off");
 
     companion object {
+        /** Latest Grok STT model from https://docs.x.ai/developers/model-capabilities/audio/speech-to-text */
+        const val GROK_STT_MODEL = "grok-voice-transcribe-2.0"
+
         fun fromKey(key: String?): VoiceEngine = entries.firstOrNull { it.key == key } ?: DEVICE
     }
 }
@@ -104,7 +109,7 @@ class VoiceInput(
         if (state != State.IDLE) return
         when (val engine = resolveEngine()) {
             VoiceEngine.DEVICE -> startDevice()
-            VoiceEngine.CLOUD, VoiceEngine.LAN -> startRecording(engine)
+            VoiceEngine.CLOUD, VoiceEngine.GROK, VoiceEngine.LAN -> startRecording(engine)
             else -> listener.onError(context.getString(R.string.voice_unavailable))
         }
     }

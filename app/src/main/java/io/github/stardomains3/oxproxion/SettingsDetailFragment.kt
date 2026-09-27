@@ -517,7 +517,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         }
     }
 
-    /** Settings > Voice: on/off, which engine turns speech into text, and the model for Cloud/Local. */
+    /** Settings > Voice: on/off, which engine turns speech into text, and the model/key for Cloud/Grok/Local. */
     private fun bindVoice(view: View, prefs: SharedPreferencesHelper) {
         val ctx = requireContext()
         val enabled = view.findViewById<SwitchCompat>(R.id.voiceEnabledSwitch)
@@ -526,9 +526,12 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         val summary = view.findViewById<TextView>(R.id.voiceEngineSummary)
         val modelGroup = view.findViewById<View>(R.id.voiceModelGroup)
         val modelValue = view.findViewById<TextView>(R.id.voiceModelValue)
+        val grokKeyGroup = view.findViewById<View>(R.id.voiceGrokKeyGroup)
+        val grokKeyValue = view.findViewById<TextView>(R.id.voiceGrokKeyValue)
         val ids = mapOf(
             VoiceEngine.DEVICE to R.id.voiceEnginePhone,
             VoiceEngine.CLOUD to R.id.voiceEngineCloud,
+            VoiceEngine.GROK to R.id.voiceEngineGrok,
             VoiceEngine.LAN to R.id.voiceEngineLocal,
         )
         val deviceOk = VoiceInput.deviceAvailable(ctx)
@@ -542,6 +545,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             summary.setText(
                 when (shown) {
                     VoiceEngine.CLOUD -> R.string.voice_engine_cloud_hint
+                    VoiceEngine.GROK -> R.string.voice_engine_grok_hint
                     VoiceEngine.LAN -> R.string.voice_engine_local_hint
                     else -> when {
                         !deviceOk -> R.string.voice_engine_phone_missing
@@ -550,8 +554,17 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                     }
                 }
             )
-            // The model matters for Cloud and Local, and for Phone when the phone can't recognize.
-            modelGroup.isVisible = on && (engine != VoiceEngine.DEVICE || !deviceOk)
+            grokKeyGroup.isVisible = on && engine == VoiceEngine.GROK
+            val hasXai = prefs.getApiKeyFromPrefs(SharedPreferencesHelper.XAI_API_KEY_ALIAS).isNotBlank()
+            grokKeyValue.text = getString(
+                if (hasXai) R.string.voice_grok_key_saved else R.string.voice_grok_key_unset
+            )
+            // OpenRouter/Local model; Phone without a recognizer also needs a Cloud model.
+            modelGroup.isVisible = on && (
+                engine == VoiceEngine.CLOUD ||
+                    engine == VoiceEngine.LAN ||
+                    (engine == VoiceEngine.DEVICE && !deviceOk)
+                )
             modelValue.text = prefs.getVoiceInputModel().ifBlank { getString(R.string.voice_model_unset) }
         }
 
@@ -569,6 +582,21 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             if (!isChecked || !enabled.isChecked) return@addOnButtonCheckedListener
             prefs.setVoiceInputProvider(pickedEngine().key)
             render()
+        }
+        view.findViewById<View>(R.id.voiceGrokKeyRow).setOnClickListener {
+            GrokInputDialog.show(
+                fragment = this,
+                title = getString(R.string.voice_grok_key),
+                hint = getString(R.string.voice_grok_key_hint),
+                initialText = "",
+                confirmText = getString(R.string.action_save),
+            ) { text ->
+                val key = text.trim()
+                if (key.isNotEmpty()) {
+                    prefs.saveApiKey(SharedPreferencesHelper.XAI_API_KEY_ALIAS, key)
+                }
+                render()
+            }
         }
         view.findViewById<View>(R.id.voiceModelRow).setOnClickListener {
             GrokInputDialog.show(

@@ -38,7 +38,9 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_WATERMARK_STT_ENABLED = "watermark_stt_enabled"
 
         private const val KEY_VOICE_INPUT_MODEL = "voice_input_model"
-        private const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // VoiceEngine keys: device, cloud, lan, off
+        private const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // VoiceEngine keys: device, cloud, grok, lan, off
+        /** Encrypted prefs alias for an xAI API key (Grok STT / future Grok voice). */
+        const val XAI_API_KEY_ALIAS = "xai_api_key"
         private const val KEY_THEME_MODE = "theme_mode"
         /** Ambient background style (AmbientBackgroundView.Style.key): off, grain, drift, flow, adaptive. */
         const val KEY_BACKGROUND_STYLE = "background_style"

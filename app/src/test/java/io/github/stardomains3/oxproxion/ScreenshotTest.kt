@@ -183,6 +183,16 @@ class ScreenshotTest {
 
     @Test fun chatEmptyDark() = withChat { a, _ -> snap(root(a), "chat_empty_dark") }
 
+    /** The empty-chat mark is liquid glass (AGSL) on API 33+: three moments of its motion, close up. */
+    @Test fun chatEmptyLiquidMarkDark() = withChat { a, _ ->
+        val mark = a.findViewById<LiquidMarkView>(R.id.centerWatermarkIcon)
+        listOf(2.4f, 6.1f, 9.8f).forEachIndexed { i, t ->
+            mark.animTime = t
+            snap(mark, "chat_empty_mark_${i + 1}_dark")
+        }
+        org.junit.Assert.assertTrue("the mark draws through the liquid shader", mark.isLiquid)
+    }
+
     @Test fun chatConversationDark() = withChat { a, _ ->
         seedConversation(a); idle(); snap(root(a), "chat_conversation_dark")
     }

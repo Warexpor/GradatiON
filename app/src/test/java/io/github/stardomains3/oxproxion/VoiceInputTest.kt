@@ -43,6 +43,10 @@ class VoiceInputTest {
         assertEquals(VoiceEngine.CLOUD, VoiceInput.resolve(ctx, prefs))
     }
 
+    @Test fun grokSttModelIsPinned() {
+        assertEquals("grok-voice-transcribe-2.0", VoiceEngine.GROK_STT_MODEL)
+    }
+
     @Test fun offWins() {
         prefs.setVoiceInputModel("openai/whisper-1")
         prefs.setVoiceInputProvider(VoiceEngine.OFF.key)
@@ -54,6 +58,8 @@ class VoiceInputTest {
         assertEquals(VoiceEngine.LAN, VoiceInput.resolve(ctx, prefs))
         prefs.setVoiceInputProvider(VoiceEngine.CLOUD.key)
         assertEquals(VoiceEngine.CLOUD, VoiceInput.resolve(ctx, prefs))
+        prefs.setVoiceInputProvider(VoiceEngine.GROK.key)
+        assertEquals(VoiceEngine.GROK, VoiceInput.resolve(ctx, prefs))
     }
 
     @Test fun unknownKeysReadAsPhone() {

@@ -101,7 +101,7 @@
                             android:visibility="gone" />
                     </FrameLayout>
 
-                    <ImageView
+                    <io.github.stardomains3.oxproxion.LiquidMarkView
                         android:id="@+id/centerWatermarkIcon"
                         android:layout_width="148dp"
                         android:layout_height="148dp"
