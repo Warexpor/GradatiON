@@ -1639,7 +1639,8 @@ class CodeBridgeBackendTest {
             val collected = CopyOnWriteArrayList<SessionUpdate>()
             val collectJob = scope.launch { backend.updates.collect { collected += it } }
 
-            backend.prompt("s1", "hello dedupe")
+            // prompt() awaits the full turn — run it in the background like other tests.
+            val promptJob = scope.launch { backend.prompt("s1", "hello dedupe") }
             withTimeout(3_000) {
                 while (collected.none {
                     val u = it.update
@@ -1667,6 +1668,10 @@ class CodeBridgeBackendTest {
                 users.size,
             )
             assertEquals("hello dedupe", users.single().text)
+
+            // Complete the in-flight prompt so the job can finish.
+            transport.replyToPending({ it == "session/prompt" }, """{"stopReason":"end_turn"}""")
+            withTimeout(3_000) { promptJob.join() }
             collectJob.cancel()
         } finally {
             answers.cancel()
@@ -1693,16 +1698,15 @@ class CodeBridgeBackendTest {
             val collectJob = scope.launch { backend.updates.collect { collected += it } }
 
             transport.drop()
-            backend.prompt("s1", "queued echo dedupe")
-            delay(40)
-            assertTrue(
-                collected.any {
+            val promptJob = scope.launch { backend.prompt("s1", "queued echo dedupe") }
+            withTimeout(3_000) {
+                while (collected.none {
                     val u = it.update
                     u is CodeUpdate.Upsert &&
                         u.event is CodeEvent.UserPrompt &&
                         (u.event as CodeEvent.UserPrompt).text == "queued echo dedupe"
-                },
-            )
+                }) delay(5)
+            }
 
             transport.restore()
             withTimeout(5_000) {
@@ -1724,6 +1728,9 @@ class CodeBridgeBackendTest {
             val users = events.filterIsInstance<CodeEvent.UserPrompt>()
             assertEquals(1, users.size)
             assertEquals("queued echo dedupe", users.single().text)
+
+            transport.replyToPending({ it == "session/prompt" }, """{"stopReason":"end_turn"}""")
+            withTimeout(3_000) { promptJob.join() }
             collectJob.cancel()
         } finally {
             answers.cancel()
