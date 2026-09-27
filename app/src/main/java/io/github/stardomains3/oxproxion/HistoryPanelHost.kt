@@ -5,8 +5,8 @@ interface HistoryPanelHost {
     fun startNewChatFromHistory()
     /** Push Settings without flashing Ask under the history panel. */
     fun openSettingsFromHistory()
-    /** Grouped drawer destinations (Roleplay home, Models, Prompt library, Presets). */
+    /** Grouped drawer destinations (Code, Roleplay home, Models, Prompt library, Presets). */
     fun openFromHistory(destination: Destination)
 
-    enum class Destination { ROLEPLAY, MODELS, PROMPTS, PRESETS }
+    enum class Destination { CODE, ROLEPLAY, MODELS, PROMPTS, PRESETS }
 }

@@ -80,11 +80,23 @@
         android:paddingBottom="4dp">
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/historyNavCode"
+            style="@style/Widget.Gradation.DrawerRow"
+            android:text="@string/drawer_nav_code"
+            app:icon="@drawable/ic_code_terminal" />
+        <View
+            android:id="@+id/historyNavCodeDivider"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/historyNavRoleplay"
             style="@style/Widget.Gradation.DrawerRow"
             android:text="@string/drawer_nav_roleplay"
             app:icon="@drawable/ic_nav_characters" />
         <View
+            android:id="@+id/historyNavRoleplayDivider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginStart="54dp"
@@ -113,7 +125,7 @@
             android:id="@+id/historyNavPresets"
             style="@style/Widget.Gradation.DrawerRow"
             android:text="@string/drawer_nav_presets"
-            app:icon="@drawable/ic_nav_presets" />
+            app:icon="@drawable/ic_presets" />
     </LinearLayout>
 
     <FrameLayout

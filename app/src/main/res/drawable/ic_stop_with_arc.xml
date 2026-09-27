@@ -7,7 +7,7 @@
     <!-- Stationary square -->
     <path
         android:pathData="M320,640h320v-320L320,320v320Z"
-        android:fillColor="#54808C"/>
+        android:fillColor="#808080"/>
 
     <!-- Rotating arc group -->
     <group
@@ -20,7 +20,7 @@
             android:name="arc_path"
             android:pathData="M840,480 A360,360 0 0,1 300,791.77"
             android:strokeWidth="80"
-            android:strokeColor="#54808C"
+            android:strokeColor="#808080"
             android:fillColor="@android:color/transparent"/>
     </group>
 </vector>

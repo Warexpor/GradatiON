@@ -19,24 +19,6 @@
         android:background="@color/xai_mute"
         android:alpha="0.4" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/menu_delete"
-        style="@style/Widget.Grokion.Button.Text"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="start|center_vertical"
-        android:minHeight="56dp"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:text="@string/grok_history_delete"
-        android:textColor="@color/xai_error"
-        android:textSize="16sp"
-        app:icon="@drawable/ic_trash"
-        app:iconTint="@color/xai_error"
-        app:iconGravity="start"
-        app:iconPadding="16dp"
-        app:iconSize="22dp"
-        app:rippleColor="@color/press_ripple_none" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/menu_edit"
@@ -71,6 +53,24 @@
         android:textSize="16sp"
         app:icon="@drawable/ic_pin"
         app:iconTint="@color/xai_ink"
+        app:iconGravity="start"
+        app:iconPadding="16dp"
+        app:iconSize="22dp"
+        app:rippleColor="@color/press_ripple_none" />
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/menu_delete"
+        style="@style/Widget.Grokion.Button.Text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="start|center_vertical"
+        android:minHeight="56dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="@string/grok_history_delete"
+        android:textColor="@color/xai_error"
+        android:textSize="16sp"
+        app:icon="@drawable/ic_trash"
+        app:iconTint="@color/xai_error"
         app:iconGravity="start"
         app:iconPadding="16dp"
         app:iconSize="22dp"

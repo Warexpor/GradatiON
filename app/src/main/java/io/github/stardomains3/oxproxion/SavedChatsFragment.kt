@@ -89,7 +89,9 @@ class SavedChatsFragment : Fragment() {
             ?: parentFragmentManager.fragments.filterIsInstance<HistoryPanelHost>().firstOrNull()
         val nav = view.findViewById<View>(R.id.historyNav)
         nav.isVisible = host != null
+        refreshModeRows()
         mapOf(
+            R.id.historyNavCode to HistoryPanelHost.Destination.CODE,
             R.id.historyNavRoleplay to HistoryPanelHost.Destination.ROLEPLAY,
             R.id.historyNavModels to HistoryPanelHost.Destination.MODELS,
             R.id.historyNavPrompts to HistoryPanelHost.Destination.PROMPTS,
@@ -226,6 +228,17 @@ class SavedChatsFragment : Fragment() {
                 "${getString(R.string.grok_history_search_empty_title)}\n\n${getString(R.string.grok_history_search_empty_text)}"
             }
         }
+    }
+
+    /** Code and Roleplay rows follow Settings > Modes; the host calls this each time it opens. */
+    fun refreshModeRows() {
+        val v = view ?: return
+        val rpOn = SharedPreferencesHelper(requireContext()).isRoleplayEnabled()
+        val codeOn = io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store.enabled
+        v.findViewById<View>(R.id.historyNavRoleplay)?.isVisible = rpOn
+        v.findViewById<View>(R.id.historyNavRoleplayDivider)?.isVisible = rpOn
+        v.findViewById<View>(R.id.historyNavCode)?.isVisible = codeOn
+        v.findViewById<View>(R.id.historyNavCodeDivider)?.isVisible = codeOn
     }
 
     private fun showOptionsSheet(session: ChatSession) {

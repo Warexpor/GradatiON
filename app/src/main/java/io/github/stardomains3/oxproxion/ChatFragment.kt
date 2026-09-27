@@ -4265,6 +4265,10 @@ $cleanContent
 
     override fun openFromHistory(destination: HistoryPanelHost.Destination) {
         when (destination) {
+            HistoryPanelHost.Destination.CODE -> {
+                closeHistoryPanel()
+                if (::codeMode.isInitialized) codeMode.activate()
+            }
             HistoryPanelHost.Destination.ROLEPLAY -> openRpHub()
             HistoryPanelHost.Destination.MODELS -> openBotModelPicker()
             HistoryPanelHost.Destination.PROMPTS -> parentFragmentManager.beginTransaction()
@@ -4292,6 +4296,7 @@ $cleanContent
                 .replace(R.id.historyDrawerContainer, SavedChatsFragment.newEmbedded())
                 .commitNow()
         }
+        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.refreshModeRows()
         val lp = panel.layoutParams as FrameLayout.LayoutParams
         lp.width = ViewGroup.LayoutParams.MATCH_PARENT
         lp.gravity = Gravity.START
@@ -4359,6 +4364,7 @@ $cleanContent
                 .replace(R.id.historyDrawerContainer, SavedChatsFragment.newEmbedded())
                 .commitNow()
         }
+        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.refreshModeRows()
 
         val drawerMs = resources.getInteger(R.integer.motion_drawer).toLong()
         val anim = Motion.areAnimationsEnabled(requireContext())

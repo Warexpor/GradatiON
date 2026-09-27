@@ -487,6 +487,7 @@
     <string name="popover_all_characters_sub">Create, edit and import</string>
     <string name="popover_rp_model">Roleplay model</string>
     <string name="drawer_nav_roleplay">Roleplay</string>
+    <string name="drawer_nav_code">Code</string>
     <string name="drawer_nav_models">Models</string>
     <string name="drawer_nav_prompts">Prompt library</string>
     <string name="drawer_nav_presets">Presets</string>
