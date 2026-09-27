@@ -128,6 +128,16 @@ class BridgeBackend(
         val attachments: List<PromptAttachment> = emptyList(),
     )
 
+    /** Outcome of [deliverPrompt]: aborts must not outbox-requeue. */
+    private enum class DeliverResult {
+        /** Turn finished, terminal error, or accepted on the wire (incl. disconnect after send). */
+        Done,
+        /** Failed before accept — caller may outbox-requeue for reconnect flush. */
+        Retry,
+        /** Cancelled / Detached / deliver-stale — do not requeue. */
+        Aborted,
+    }
+
     private fun promptMutex(sessionId: String): Mutex =
         promptMutexes.getOrPut(sessionId) { Mutex() }
 
@@ -412,7 +422,8 @@ class BridgeBackend(
                 }
                 return
             }
-            if (!deliverPrompt(sessionId, text, atts)) {
+            // Cancelled / Detached / deliver-stale → Aborted: never outbox-requeue.
+            if (deliverPrompt(sessionId, text, atts) == DeliverResult.Retry) {
                 // Send failed before the bridge accepted — queue for reconnect flush.
                 synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text, atts)) }
                 runningSessions.add(sessionId)
@@ -436,7 +447,7 @@ class BridgeBackend(
                 promptMutex(next.sessionId).withLock {
                     deliverPrompt(next.sessionId, next.text, next.attachments)
                 }
-            }.getOrDefault(false)
+            }.getOrDefault(DeliverResult.Retry) == DeliverResult.Done
             if (!delivered) break
             synchronized(outboxLock) {
                 if (outbox.isNotEmpty() && outbox.first() == next) outbox.removeFirst()
@@ -446,16 +457,15 @@ class BridgeBackend(
     }
 
     /**
-     * @return true if the prompt was accepted (turn finished, terminal error, or in-flight after
-     * send); false if deliver failed before accept and the caller should keep/requeue it.
-     * User [cancel] bumps the deliver generation and completes the pending prompt deferred so
-     * this returns false without treating a never-sent prompt as delivered.
+     * @return [DeliverResult.Done] if accepted (turn finished, terminal error, or on-wire after
+     * send); [DeliverResult.Retry] if deliver failed before accept (outbox-requeue);
+     * [DeliverResult.Aborted] for Cancelled / Detached / deliver-stale (never requeue).
      */
     private suspend fun deliverPrompt(
         sessionId: String,
         text: String,
         attachments: List<PromptAttachment> = emptyList(),
-    ): Boolean {
+    ): DeliverResult {
         val gen = deliverGen(sessionId)
         suppressAgent.remove(sessionId)
         runningSessions.add(sessionId)
@@ -463,7 +473,7 @@ class BridgeBackend(
         if (isDeliverStale(sessionId, gen)) {
             runningSessions.remove(sessionId)
             refreshKeepAlive()
-            return false
+            return DeliverResult.Aborted
         }
         val id = nextId.getAndIncrement()
         val deferred = CompletableDeferred<JsonElement?>()
@@ -471,7 +481,7 @@ class BridgeBackend(
         inFlightPromptId[sessionId] = id
         var sendCompleted = false
         try {
-            if (isDeliverStale(sessionId, gen)) return false
+            if (isDeliverStale(sessionId, gen)) return DeliverResult.Aborted
             // Frame build embeds multi-MB base64; keep it (and send) off Hub Main.immediate.
             val sendOk = withContext(Dispatchers.IO) {
                 if (isDeliverStale(sessionId, gen)) return@withContext null
@@ -482,9 +492,9 @@ class BridgeBackend(
                 true
             }
             if (sendOk == null) {
-                // Cancel won before send; do not treat as delivered.
+                // Cancel won before send; do not treat as delivered / requeued.
                 refreshKeepAlive()
-                return false
+                return DeliverResult.Aborted
             }
             sendCompleted = true
             // Prompt has no timeout: the turn can run for a long time.
@@ -492,14 +502,14 @@ class BridgeBackend(
             if (isDeliverStale(sessionId, gen)) {
                 // Stop won the race after send; cancel already emitted TurnDone.
                 refreshKeepAlive()
-                return false
+                return DeliverResult.Aborted
             }
             val stop = (result?.get("stopReason") as? JsonPrimitive)?.contentOrNull ?: "end_turn"
             (adapter as? AcpAdapter)?.endTurn(sessionId)
             _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone(stop)))
             runningSessions.remove(sessionId)
             refreshKeepAlive()
-            return true
+            return DeliverResult.Done
         } catch (e: CancellationException) {
             // User Stop / forget-detach: never dequeue as delivered (especially if send never completed).
             // C3: detach completes with "Detached" — same abort semantics as "Cancelled".
@@ -508,21 +518,25 @@ class BridgeBackend(
                 e.message == "Detached"
             ) {
                 refreshKeepAlive()
-                return false
+                return DeliverResult.Aborted
             }
             // Socket dropped mid-turn; keep running so reconnect stays alive. session/load resumes.
             // Treat as accepted for outbox only when the frame was already on the wire.
             refreshKeepAlive()
-            return sendCompleted
+            return if (sendCompleted) DeliverResult.Done else DeliverResult.Retry
         } catch (e: Exception) {
             val notAccepted = !sendCompleted || connection.value != ConnectionState.CONNECTED ||
                 (e is IllegalStateException && (
                     e.message == "Not connected" ||
                         e.message?.startsWith("Can't reach") == true
                     ))
-            if (notAccepted || isDeliverStale(sessionId, gen)) {
+            if (isDeliverStale(sessionId, gen)) {
                 refreshKeepAlive()
-                return false
+                return DeliverResult.Aborted
+            }
+            if (notAccepted) {
+                refreshKeepAlive()
+                return DeliverResult.Retry
             }
             _updates.emit(
                 SessionUpdate(
@@ -540,7 +554,7 @@ class BridgeBackend(
             _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("error")))
             runningSessions.remove(sessionId)
             refreshKeepAlive()
-            return true
+            return DeliverResult.Done
         } finally {
             pending.remove(id)
             inFlightPromptId.remove(sessionId, id)
@@ -567,9 +581,19 @@ class BridgeBackend(
     }
 
     override suspend fun cancel(sessionId: String) {
-        // C1: after forget→detach there is no local work left. Send wire cancel only —
-        // do not re-seed suppressAgent / deliverGeneration (would swallow a later session/load).
-        val locallyActive = attached.containsKey(sessionId) ||
+        // C1 / D1: after forget→detach, never re-seed suppressAgent / deliverGeneration
+        // (would swallow a later session/load). Abort leftovers without suppress stamps.
+        if (!attached.containsKey(sessionId)) {
+            inFlightPromptId.remove(sessionId)?.let { rpcId ->
+                pending.remove(rpcId)?.completeExceptionally(CancellationException("Cancelled"))
+            }
+            synchronized(outboxLock) { outbox.removeAll { it.sessionId == sessionId } }
+            runningSessions.remove(sessionId)
+            refreshKeepAlive()
+            runCatching { transport.send(adapter.cancel(sessionId)) }
+            return
+        }
+        val locallyActive =
             inFlightPromptId.containsKey(sessionId) ||
             sessionId in runningSessions ||
             synchronized(outboxLock) { outbox.any { it.sessionId == sessionId } }
@@ -615,8 +639,12 @@ class BridgeBackend(
         inFlightPromptId.remove(sessionId)?.let { rpcId ->
             pending.remove(rpcId)?.completeExceptionally(CancellationException("Detached"))
         }
-        promptMutexes.remove(sessionId)
+        // D1: on Main.immediate / Unconfined, Detached resume runs inside completeExceptionally.
+        // prompt() must not leave runningSessions/outbox populated for a forgotten id —
+        // re-clear after the sync abort (defense even if prompt skips requeue).
+        runningSessions.remove(sessionId)
         synchronized(outboxLock) { outbox.removeAll { it.sessionId == sessionId } }
+        promptMutexes.remove(sessionId)
         (adapter as? AcpAdapter)?.clearLastSeq(sessionId)
         refreshKeepAlive()
     }

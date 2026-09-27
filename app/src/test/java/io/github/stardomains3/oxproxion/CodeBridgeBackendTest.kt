@@ -820,4 +820,68 @@ class CodeBridgeBackendTest {
             backend.close()
         }
     }
+
+    @Test
+    fun cancelAfterDetachMidTurnDoesNotReseedSuppressAgent() = runBlocking {
+        // D1 / C1 mid-turn: detach completes in-flight deliver with Detached sync
+        // (Unconfined ≈ Hub Main.immediate). Follow-up cancel must stay wire-only —
+        // no suppressAgent re-seed — so re-attach agent chunks still pass.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            val promptJob = scope.launch { backend.prompt("s1", "in flight forget me") }
+            withTimeout(3_000) {
+                while (transport.sent.none {
+                    it.contains("session/prompt") && it.contains("in flight forget me")
+                }) delay(5)
+            }
+
+            backend.detach("s1")
+            backend.cancel("s1")
+            promptJob.join()
+            delay(40)
+
+            assertTrue(
+                "wire session/cancel still sent after mid-turn detach",
+                transport.sent.any { it.contains("session/cancel") },
+            )
+            assertFalse(
+                "wire-only cancel must not emit local TurnDone after mid-turn detach",
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TurnDone && u.stopReason == "cancelled"
+                },
+            )
+
+            backend.attach(summary())
+            transport.deliver(
+                """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":43},
+                "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"after-mid-forget"}}}}"""
+            )
+            delay(40)
+            assertTrue(
+                "agent chunk after re-attach must not be swallowed by suppressAgent",
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TextChunk && u.chunk.contains("after-mid-forget")
+                },
+            )
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
 }
