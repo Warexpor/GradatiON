@@ -12,8 +12,7 @@
     <FrameLayout
         android:id="@+id/codeSessionFrame"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fitsSystemWindows="true">
+        android:layout_height="match_parent">
 
         <io.github.stardomains3.oxproxion.GlassBackdropLayout
             android:id="@+id/codeSessionBackdrop"

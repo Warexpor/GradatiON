@@ -13,6 +13,8 @@ import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -140,6 +142,21 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             if (follow && adapter.itemCount > 0) list.post { followEdge(adapter.itemCount - 1) }
             list.post { updateApprovalBar() }
         }
+        // Edge to edge like chat: the backdrop runs under the system bars; only the chrome and
+        // the transcript's clear area are inset (the list's bottom follows the dock above).
+        val top = view.findViewById<View>(R.id.codeSessionTop)
+        val topPad = top.paddingTop
+        val dockPad = dock.paddingBottom
+        val listTop = list.paddingTop
+        ViewCompat.setOnApplyWindowInsetsListener(frame) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            top.setPadding(bars.left, topPad + bars.top, bars.right, top.paddingBottom)
+            dock.setPadding(bars.left, dock.paddingTop, bars.right, dockPad + maxOf(bars.bottom, ime.bottom))
+            list.setPadding(list.paddingLeft, listTop + bars.top, list.paddingRight, list.paddingBottom)
+            WindowInsetsCompat.CONSUMED
+        }
+        ViewCompat.requestApplyInsets(frame)
         composer.permissionPill.setOnClickListener {
             val cur = hub.sessions.value[sessionId]?.summary?.permissionMode ?: PermissionMode.ASK
             composer.pickPermission(cur) { hub.setPermissionMode(sessionId, it) }
