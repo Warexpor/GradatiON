@@ -532,6 +532,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             onProgress = { p -> dimOverlay?.alpha = 0.6f * (1f - p) },
             onDismiss = { hideMenu() }
         )
+        setupQuickControls(view)
         settingsButton = view.findViewById(R.id.settingsButton)
         presetsButton = view.findViewById(R.id.presetsButton)
         presetsButton2 = view.findViewById(R.id.presetsButton2)
@@ -780,6 +781,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 if (!viewModel.isRpMode()) {
                     modelNameTextView.text = viewModel.getModelDisplayName(model)
                 }
+                updateQuickControls()
                 if (model.contains("google/lyria", ignoreCase = true)) {
                     // Only toggle if it's currently OFF to avoid redundant toasts
                     if (viewModel.isStreamingEnabled.value == false) {
@@ -1209,10 +1211,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             reasoningButton.isSelected = isEnabled
             topReasoningButton.isSelected = isEnabled
             updateReasoningButtonAppearance()
+            updateQuickControls()
         }
 
         viewModel.isAdvancedReasoningOn.observe(viewLifecycleOwner) { isAdvanced ->
             updateReasoningButtonAppearance() // Call helper
+            updateQuickControls()
         }
         viewModel.isExtendedTopBarEnabled.observe(viewLifecycleOwner) { isTopBarEnabled ->
             updateExtendedTopBarVisibility(isTopBarEnabled)
@@ -3302,7 +3306,111 @@ $cleanContent
         }
         return false // Event not handled by this fragment
     }
+    private var effortGroup: GlassSegmentedGroup? = null
+    private var quickControlsBinding = false
+
+    /** Controls sheet top: model row, reasoning effort, and a "More controls" fold for the grid. */
+    private fun setupQuickControls(view: View) {
+        view.findViewById<View>(R.id.controlsModelRow).setOnClickListener {
+            hideMenu()
+            hideKeyboard()
+            showModelPopover()
+        }
+        val group = view.findViewById<GlassSegmentedGroup>(R.id.controlsEffortGroup)
+        effortGroup = group
+        group.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked || quickControlsBinding) return@addOnButtonCheckedListener
+            val on = viewModel.isReasoningEnabled.value == true
+            when (checkedId) {
+                R.id.effortOff -> if (on) viewModel.toggleReasoning()
+                R.id.effortAuto -> {
+                    if (!on) viewModel.toggleReasoning()
+                    sharedPreferencesHelper.saveAdvancedReasoningEnabled(false)
+                }
+                else -> {
+                    if (!on) viewModel.toggleReasoning()
+                    sharedPreferencesHelper.saveAdvancedReasoningEnabled(true)
+                    // An explicit effort wins over a token budget from Advanced Reasoning.
+                    sharedPreferencesHelper.saveReasoningMaxTokens(null)
+                    sharedPreferencesHelper.saveReasoningEffort(
+                        when (checkedId) {
+                            R.id.effortLow -> "low"
+                            R.id.effortHigh -> "high"
+                            else -> "medium"
+                        }
+                    )
+                }
+            }
+            group.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            viewModel.checkAdvancedReasoningStatus()
+            updateQuickControls()
+        }
+        // Long-press the Reasoning header for the full Advanced Reasoning screen.
+        view.findViewById<View>(R.id.controlsEffortLabel).setOnLongClickListener {
+            hideMenu()
+            parentFragmentManager.beginTransaction()
+                .withGrokStackAnimations()
+                .hide(this)
+                .add(R.id.fragment_container, AdvancedReasoningFragment())
+                .addToBackStack(null)
+                .commit()
+            true
+        }
+        val more = view.findViewById<View>(R.id.controlsMoreRow)
+        val chevron = view.findViewById<View>(R.id.controlsMoreChevron)
+        val label = (more as ViewGroup).getChildAt(0) as TextView
+        more.setOnClickListener {
+            val open = !buttonsContainer.isVisible
+            more.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            label.setText(if (open) R.string.controls_less else R.string.controls_more)
+            val anim = Motion.areAnimationsEnabled(requireContext())
+            chevron.animate().rotation(if (open) 180f else 0f).setDuration(if (anim) 260 else 0)
+                .setInterpolator(Motion.iosOut).start()
+            if (anim) {
+                android.transition.TransitionManager.beginDelayedTransition(
+                    headerContainer as ViewGroup,
+                    android.transition.ChangeBounds().setDuration(320).setInterpolator(Motion.iosOut)
+                )
+            }
+            buttonsContainer.isVisible = open
+            if (open) updateMenuRowVisibilities()
+        }
+    }
+
+    /** Mirror model + reasoning state into the sheet's quick controls. */
+    private fun updateQuickControls() {
+        val group = effortGroup ?: return
+        val root = view ?: return
+        val model = viewModel.activeChatModel.value
+        root.findViewById<TextView>(R.id.controlsModelName).text =
+            model?.let { viewModel.getModelDisplayName(it) } ?: ""
+        val supported = viewModel.isReasoningModel(model)
+        val on = viewModel.isReasoningEnabled.value == true
+        val budget = sharedPreferencesHelper.getReasoningMaxTokens()?.takeIf { it > 0 } != null
+        val target = when {
+            !on -> R.id.effortOff
+            !sharedPreferencesHelper.getAdvancedReasoningEnabled() || budget -> R.id.effortAuto
+            else -> when (sharedPreferencesHelper.getReasoningEffort()) {
+                "minimal", "low" -> R.id.effortLow
+                "high" -> R.id.effortHigh
+                else -> R.id.effortMedium
+            }
+        }
+        quickControlsBinding = true
+        if (group.checkedButtonId != target) group.check(target)
+        quickControlsBinding = false
+        group.isEnabled = supported
+        for (i in 0 until group.childCount) group.getChildAt(i).isEnabled = supported
+        group.alpha = if (supported) 1f else 0.45f
+        root.findViewById<TextView>(R.id.controlsEffortHint).text = when {
+            !supported -> getString(R.string.controls_effort_unsupported)
+            on && budget && sharedPreferencesHelper.getAdvancedReasoningEnabled() -> getString(R.string.controls_effort_budget)
+            else -> ""
+        }
+    }
+
     private fun showMenu() {
+        updateQuickControls()
         val anim = Motion.areAnimationsEnabled(requireContext())
         val d = resources.displayMetrics.density
         controlsButton.isSelected = true
@@ -3343,10 +3451,12 @@ $cleanContent
 
     /** Rows of the Controls panel follow the panel in with a slight cascade. */
     private fun staggerPanelRows(d: Float) {
-        val container = headerContainer.findViewById<ViewGroup>(R.id.buttonsContainer) ?: return
+        val rows = listOfNotNull(
+            headerContainer.findViewById<ViewGroup>(R.id.controlsQuick),
+            headerContainer.findViewById<ViewGroup>(R.id.buttonsContainer)?.takeIf { it.isVisible }
+        ).flatMap { c -> (0 until c.childCount).map { c.getChildAt(it) } }
         var index = 0
-        for (i in 0 until container.childCount) {
-            val row = container.getChildAt(i)
+        for (row in rows) {
             if (row.visibility != View.VISIBLE) continue
             row.animate().cancel()
             row.alpha = 0f
@@ -4809,6 +4919,8 @@ $cleanContent
                 popup.visibility = if (shouldShow) View.VISIBLE else View.GONE
             }
         }
+        // The sheet's effort row replaces the Reasoning tile; the top-bar toggle stays.
+        reasoningButton.visibility = View.GONE
         homeButton.visibility = if (extendedEnabled) View.VISIBLE else View.GONE
         val isPresetsOnChatScreen = viewModel.isPresetsExtendedEnabled.value ?: false
         val rp = viewModel.isRpMode()

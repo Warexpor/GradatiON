@@ -270,6 +270,28 @@ class ScreenshotTest {
         snap(root(a), "controls_panel_dark")
     }
 
+    @Test fun controlsPanelMoreDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.controlsButton).performClick(); idle()
+        a.findViewById<View>(R.id.controlsMoreRow).performClick(); idle()
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.buttonsContainer).isShown)
+        snap(root(a), "controls_panel_more_dark")
+    }
+
+    @Test fun controlsPanelEffortPicksReasoning() = withChat { a, _ ->
+        a.findViewById<View>(R.id.controlsButton).performClick(); idle()
+        a.findViewById<View>(R.id.effortHigh).performClick(); idle()
+        val prefs = SharedPreferencesHelper(a)
+        org.junit.Assert.assertEquals("high", prefs.getReasoningEffort())
+        org.junit.Assert.assertTrue(prefs.getAdvancedReasoningEnabled())
+        val group = a.findViewById<GlassSegmentedGroup>(R.id.controlsEffortGroup)
+        org.junit.Assert.assertEquals(R.id.effortHigh, group.checkedButtonId)
+        a.findViewById<View>(R.id.effortOff).performClick(); idle()
+        org.junit.Assert.assertEquals(R.id.effortOff, group.checkedButtonId)
+        a.findViewById<View>(R.id.effortAuto).performClick(); idle()
+        org.junit.Assert.assertEquals(R.id.effortAuto, group.checkedButtonId)
+        org.junit.Assert.assertFalse(prefs.getAdvancedReasoningEnabled())
+    }
+
     @Test fun attachMenuDark() = withChat { a, _ ->
         a.findViewById<View>(R.id.menuButton).performClick(); idle()
         snap(root(a), "attach_menu_dark")
