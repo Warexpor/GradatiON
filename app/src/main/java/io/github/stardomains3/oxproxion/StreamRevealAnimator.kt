@@ -99,17 +99,16 @@ class StreamRevealAnimator(
         choreographer.removeFrameCallback(callback)
     }
 
+    /**
+     * Ease toward the network: reveal about 1/24th of the backlog per frame (a ~0.4s time
+     * constant), never less than a character. A big chunk from the model spreads into a steady
+     * flow instead of landing as a block (the old curve dumped 1000 chars in four frames).
+     */
     private fun charsToReveal(backlog: Int, dtMs: Float, finishing: Boolean): Int {
         val frames = dtMs / 16f
-        val base = when {
-            backlog <= 8 -> 1
-            backlog <= 32 -> 2 + backlog / 16
-            backlog <= 120 -> 4 + backlog / 12
-            backlog <= 400 -> 10 + backlog / 8
-            else -> 20 + backlog / 4
-        }
+        val base = kotlin.math.ceil(backlog / 24f).toInt().coerceAtLeast(1)
         val scaled = (base * frames).toInt().coerceAtLeast(1)
-        return if (finishing) maxOf(scaled * 4, backlog / 3, 24) else scaled
+        return if (finishing) maxOf(scaled * 3, backlog / 6, 12) else scaled
     }
 
     private fun snapToWordEnd(text: String, index: Int): Int {

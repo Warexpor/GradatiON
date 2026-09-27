@@ -989,19 +989,12 @@ class ChatAdapter(
             pulseAnimator?.cancel()
             pulseAnimator = null
             messageContainer.alpha = 1f
-            val cursorColor = ContextCompat.getColor(itemView.context, R.color.xai_mute)
             try {
+                // No cursor glyph: new words ease in on their own (Claude-style), and nothing
+                // hops from line end to line end while the reply flows.
                 val spanned = streamMarkdown.render(displayed)
                 ChatMarkdown.polish(spanned)
                 applyStreamFades(spanned, android.os.SystemClock.uptimeMillis())
-                val cursorStart = spanned.length
-                spanned.append(StreamCursorSpan.GLYPH)
-                spanned.setSpan(
-                    StreamCursorSpan(cursorColor),
-                    cursorStart,
-                    spanned.length,
-                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
                 messageTextView.setText(spanned, TextView.BufferType.SPANNABLE)
                 ensureFadeTicker()
             } catch (_: Exception) {

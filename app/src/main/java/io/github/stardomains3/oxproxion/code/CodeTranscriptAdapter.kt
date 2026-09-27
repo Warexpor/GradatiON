@@ -97,6 +97,29 @@ class CodeTranscriptAdapter(
 
     /** Chat-style: bound TextHolder currently painting the live stream (skip DiffUtil while set). */
     private var streamBoundHolder: TextHolder? = null
+    private var revealKey: String? = null
+    private val reveal = io.github.stardomains3.oxproxion.StreamRevealAnimator(
+        onFrame = { displayed, _ -> revealKey?.let { renderStreaming(it, displayed) } },
+        onCaughtUp = {}
+    )
+
+    /** Paint the paced text into the bound holder: markdown, per-run fades, no cursor. */
+    private fun renderStreaming(key: String, displayed: String) {
+        val holder = streamBoundHolder ?: return
+        if (streamBoundKey != key) return
+        val tv = holder.textView
+        val state = streams.getOrPut(key) { StreamState(IncrementalMarkdown(markwon)) }
+        try {
+            val spanned = state.markdown.render(displayed)
+            ChatMarkdown.polish(spanned)
+            applyStreamFades(state, spanned, SystemClock.uptimeMillis())
+            tv.setText(spanned, TextView.BufferType.SPANNABLE)
+            holder.ensureFadeTicker()
+        } catch (_: Exception) {
+            holder.stopFadeTicker()
+            tv.text = displayed
+        }
+    }
     private var streamBoundKey: String? = null
 
     init {
@@ -258,7 +281,7 @@ class CodeTranscriptAdapter(
     }
 
     /**
-     * Streaming agent text: same soft per-word fade + live cursor as [io.github.stardomains3.oxproxion.ChatAdapter].
+     * Streaming agent text: same pacing and soft per-word fade as [io.github.stardomains3.oxproxion.ChatAdapter] (no cursor).
      * Thoughts/tools stay plain — chat only fades the assistant reply body.
      */
     private fun bindText(holder: TextHolder, e: CodeEvent.AgentText) {
@@ -266,27 +289,15 @@ class CodeTranscriptAdapter(
         if (e.streaming) {
             streamBoundHolder = holder
             streamBoundKey = e.key
-            val state = streams.getOrPut(e.key) { StreamState(IncrementalMarkdown(markwon)) }
-            try {
-                val spanned = state.markdown.render(e.text)
-                ChatMarkdown.polish(spanned)
-                applyStreamFades(state, spanned, SystemClock.uptimeMillis())
-                val cursorColor = ContextCompat.getColor(tv.context, R.color.xai_mute)
-                val cursorStart = spanned.length
-                spanned.append(StreamCursorSpan.GLYPH)
-                spanned.setSpan(
-                    StreamCursorSpan(cursorColor),
-                    cursorStart,
-                    spanned.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-                tv.setText(spanned, TextView.BufferType.SPANNABLE)
-                holder.ensureFadeTicker()
-            } catch (_: Exception) {
-                holder.stopFadeTicker()
-                tv.text = e.text
+            // Agents send text in large bursts; pace it into a steady flow like chat does.
+            if (revealKey != e.key) {
+                reveal.reset()
+                revealKey = e.key
             }
+            reveal.setTarget(e.text)
+            renderStreaming(e.key, reveal.displayed())
         } else {
+            if (revealKey == e.key) { reveal.reset(); revealKey = null }
             clearStreamBound(holder)
             streams.remove(e.key)?.markdown?.reset()
             holder.stopFadeTicker()
