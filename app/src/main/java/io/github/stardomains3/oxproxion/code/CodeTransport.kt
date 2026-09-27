@@ -77,6 +77,9 @@ object ReconnectBackoff {
  *
  * Auto-reconnects with [ReconnectBackoff] after drops (not after [close], and not after an auth
  * rejection). Reconnect pauses while the app is backgrounded unless [setKeepAliveForSession].
+ *
+ * Each [openSocket] bumps a socket generation; OkHttp callbacks from a retired generation are
+ * ignored so a late onOpen/onClosed/onFailure cannot poison a replacement connection (R1).
  */
 class WebSocketTransport(
     private val url: String,
@@ -86,7 +89,10 @@ class WebSocketTransport(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val sleeper: suspend (Long) -> Unit = { delay(it) },
     private val random01: () -> Double = { Random.nextDouble() },
-    private val nowMs: () -> Long = { System.currentTimeMillis() }
+    private val nowMs: () -> Long = { System.currentTimeMillis() },
+    /** Injectable for unit tests; production uses [OkHttpClient.newWebSocket]. */
+    private val webSocketFactory: (Request, WebSocketListener) -> WebSocket =
+        { request, listener -> client.newWebSocket(request, listener) },
 ) : CodeTransport {
 
     private val _state = MutableStateFlow(ConnectionState.DISCONNECTED)
@@ -101,6 +107,10 @@ class WebSocketTransport(
         private set
     @Volatile
     private var socket: WebSocket? = null
+
+    /** Bumped on every new socket and on [close]; stale OkHttp callbacks must no-op. */
+    @Volatile
+    private var socketGeneration = 0
 
     @Volatile private var userWantsConnection = false
     @Volatile private var intentionalClose = false
@@ -136,6 +146,9 @@ class WebSocketTransport(
         openSocket()
     }
 
+    private fun isCurrent(webSocket: WebSocket, generation: Int): Boolean =
+        generation == socketGeneration && socket === webSocket
+
     private fun openSocket() {
         if (_state.value == ConnectionState.CONNECTING || _state.value == ConnectionState.CONNECTED) return
         val request = runCatching {
@@ -149,40 +162,54 @@ class WebSocketTransport(
             return
         }
         _state.value = ConnectionState.CONNECTING
-        socket = client.newWebSocket(request, object : WebSocketListener() {
+        val generation = ++socketGeneration
+        socket = webSocketFactory(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                if (!isCurrent(webSocket, generation)) return
                 lastError = null
                 connectedAtMs = nowMs()
                 _state.value = ConnectionState.CONNECTED
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                if (!isCurrent(webSocket, generation)) return
                 _incoming.tryEmit(text)
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                if (!isCurrent(webSocket, generation)) return
                 webSocket.close(1000, null)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (socket === webSocket) socket = null
-                handleDrop(authReject = false)
+                handleDrop(webSocket, generation, authReject = false)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                if (socket === webSocket) socket = null
-                val reject = response?.code == 401 || response?.code == 403
-                lastError = when (response?.code) {
-                    401, 403 -> "The bridge rejected the pairing token"
-                    null -> t.message ?: t.javaClass.simpleName
-                    else -> "HTTP ${response.code}"
+                handleDrop(webSocket, generation, authReject = response?.code == 401 || response?.code == 403) {
+                    lastError = when (response?.code) {
+                        401, 403 -> "The bridge rejected the pairing token"
+                        null -> t.message ?: t.javaClass.simpleName
+                        else -> "HTTP ${response.code}"
+                    }
                 }
-                handleDrop(authReject = reject)
             }
         })
     }
 
-    private fun handleDrop(authReject: Boolean) {
+    /**
+     * Retire [webSocket] only when it is still the current generation. Stale callbacks return
+     * without mutating state, error, or reconnect scheduling.
+     */
+    private fun handleDrop(
+        webSocket: WebSocket,
+        generation: Int,
+        authReject: Boolean,
+        onCurrent: (() -> Unit)? = null,
+    ) {
+        if (!isCurrent(webSocket, generation)) return
+        onCurrent?.invoke()
+        socket = null
         val heldFor = connectedAtMs?.let { nowMs() - it } ?: 0L
         connectedAtMs = null
         if (authReject) {
@@ -225,6 +252,8 @@ class WebSocketTransport(
         userWantsConnection = false
         reconnectJob?.cancel()
         reconnectJob = null
+        // Retire the live generation before closing so late OkHttp callbacks no-op.
+        socketGeneration++
         socket?.close(1000, "bye")
         socket = null
         connectedAtMs = null
