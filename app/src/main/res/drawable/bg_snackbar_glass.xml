@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Snackbar ("Saved · Open folder"): the same glass as GlassNotice, never M3's baseline slab -->
+<drawable xmlns:app="http://schemas.android.com/apk/res-auto"
+    class="io.github.stardomains3.oxproxion.GlassDrawable"
+    app:glassTint="@color/glass_sheet_tint"
+    app:glassCornerRadius="20dp" />

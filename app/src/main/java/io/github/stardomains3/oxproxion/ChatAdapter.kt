@@ -1315,7 +1315,8 @@ class ChatAdapter(
 
             aipdfButton.setOnClickListener {
                 val fullRawMarkdown = ensureTableSpacing(reasoningText + text)
-                CoroutineScope(Dispatchers.Main).launch {
+                // Fragment-scoped: a long PDF must not outlive the chat screen.
+                scope.launch {
                     val pdfUri = withContext(Dispatchers.IO) {
                         try {
                             val generator = PdfGenerator(itemView.context)
@@ -1352,14 +1353,19 @@ class ChatAdapter(
                         // Create the system chooser intent
                         val chooserIntent = Intent.createChooser(intent, itemView.context.getString(R.string.action_open_folder))
 
-                        Snackbar.make(itemView, R.string.toast_pdf_saved, Snackbar.LENGTH_LONG)
-                            .setAction(R.string.action_open_folder) {
-                                context.startActivity(chooserIntent)
-                            }
-                            .show()
+                        // The row may have scrolled into the recycler pool meanwhile; a detached
+                        // view has no parent for a Snackbar, so fall back to the notice pill.
+                        if (itemView.isAttachedToWindow) {
+                            Snackbar.make(itemView, R.string.toast_pdf_saved, Snackbar.LENGTH_LONG)
+                                .setAction(R.string.action_open_folder) {
+                                    context.startActivity(chooserIntent)
+                                }
+                                .show()
+                        } else {
+                            GlassNotice.show(context, context.getString(R.string.toast_pdf_saved))
+                        }
                     } else {
-                        // Keep the failure toast as it provides immediate error feedback
-                        AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_pdf_failed), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(itemView.context, itemView.context.getString(R.string.toast_pdf_failed))
                     }
                 }
             }

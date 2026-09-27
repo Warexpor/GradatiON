@@ -76,6 +76,16 @@
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Gradation.Medium</item>
         <item name="android:fontFamily">@font/app_sans</item>
         <item name="fontFamily">@font/app_sans</item>
+        <!-- Snackbars: glass with ink text and action; unset, M3 falls back to its purple baseline -->
+        <item name="colorSurfaceInverse">@color/xai_canvas_card</item>
+        <item name="colorOnSurfaceInverse">@color/xai_ink</item>
+        <item name="colorPrimaryInverse">@color/xai_ink</item>
+        <item name="snackbarStyle">@style/Widget.Gradation.Snackbar</item>
+    </style>
+
+    <style name="Widget.Gradation.Snackbar" parent="Widget.Material3.Snackbar">
+        <item name="android:background">@drawable/bg_snackbar_glass</item>
+        <item name="backgroundTint">@null</item>
     </style>
 
     <style name="Theme.Grokion" parent="Base.Theme.Grokion">
