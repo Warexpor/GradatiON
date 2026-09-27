@@ -55,4 +55,37 @@ class RpPromptEngineTest {
         assertTrue(parsed.userText.contains("there"))
         assertTrue(parsed.reminder?.contains("stay tense") == true)
     }
+
+    @Test
+    fun expandMacros_replacesCardPlaceholders() {
+        val out = RpPromptEngine.expandMacros("{{char}} waves at {{ user }}. <BOT> knows <USER>.", "Mira", "Alex")
+        org.junit.Assert.assertEquals("Mira waves at Alex. Mira knows Alex.", out)
+    }
+
+    @Test
+    fun buildSystemPrompt_memoryMacrosAndCraft() {
+        val char = RpCharacter(id = 1, name = "Mira", scenario = "{{user}} walks into {{char}}'s garage.",
+            examplesJson = """[{"user":"hi","char":"*nods*"},{"user":"bye","char":"later"}]""")
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = char, persona = "A pilot", lang = "en", lore = "", instruction = "",
+            thirdPerson = false, showThoughts = false, isLlm = false,
+            memory = "{{user}} owes {{char}} a favor.", userName = "Alex"
+        )
+        assertTrue(prompt.contains("Alex walks into Mira's garage."))
+        assertTrue(prompt.contains("## Memory"))
+        assertTrue(prompt.contains("Alex owes Mira a favor."))
+        assertTrue(prompt.contains("is Alex."))
+        assertTrue("examples on their own lines", prompt.contains("\n  User: bye"))
+        assertTrue(prompt.contains("Never speak, act or decide for the user"))
+        assertFalse(prompt.contains("{{"))
+    }
+
+    @Test
+    fun buildSystemPrompt_blankMemoryAddsNoSection() {
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = RpCharacter(id = 1, name = "Mira"), persona = "", lang = "en", lore = "",
+            instruction = "", thirdPerson = false, showThoughts = false, isLlm = false, memory = "  "
+        )
+        assertFalse(prompt.contains("## Memory"))
+    }
 }

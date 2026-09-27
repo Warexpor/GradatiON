@@ -649,6 +649,40 @@ class ScreenshotTest {
         }
     }
 
+    /** RP with the demo model: a character reply, then Continue on an empty composer takes the next beat. */
+    @Test fun rpConversationContinueDark() = withChat { a, _ ->
+        seedRp()
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        // RP keeps its own model; pick the demo once we're there.
+        vm.setModel(DemoModel.ID); idle()
+        val mira = runBlocking { vm.getRpRepository().getAllCharactersOnce() }.first { it.name == "Mira Vance" }
+        vm.startRpChatWithCharacter(mira); settle()
+        val input = a.findViewById<android.widget.EditText>(R.id.chatEditText)
+        val send = a.findViewById<com.google.android.material.button.MaterialButton>(R.id.sendChatButton)
+        input.setText("I shake the rain off and sit down across from her.")
+        send.performClick()
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().lastOrNull()?.role == "assistant" }
+        idle()
+        org.junit.Assert.assertEquals(DemoModel.ID, vm.activeChatModel.value)
+        org.junit.Assert.assertTrue("continue offered after a reply: rp=${vm.isRpMode()} send=${vm.canSendRpMessage()} " +
+            "await=${vm.isAwaitingResponse.value} roles=${vm.chatMessages.value.orEmpty().map { it.role }}", vm.canContinueRpStory())
+        org.junit.Assert.assertEquals("empty composer offers Continue",
+            a.getString(R.string.rp_continue), send.contentDescription)
+        val before = vm.chatMessages.value.orEmpty().size
+        send.performClick()
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().size >= before + 2 }
+        idle()
+        val msgs = vm.chatMessages.value.orEmpty()
+        org.junit.Assert.assertEquals(a.getString(R.string.rp_reminder_continue), vm.getMessageText(msgs[msgs.size - 2].content))
+        org.junit.Assert.assertEquals("assistant", msgs.last().role)
+        snap(root(a), "rp_conversation_dark")
+        a.findViewById<View>(R.id.modelNameTextView).performClick(); settle()
+        snapDialog(a, "rp_character_panel_dark")
+        ShadowDialog.getLatestDialog()?.dismiss(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
     @Test fun demoModelStreamsWithoutKey() = withChat { a, _ ->
         val vm = ViewModelProvider(a)[ChatViewModel::class.java]
         org.junit.Assert.assertTrue("demo is in the model list",

@@ -1100,6 +1100,21 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit { putString(KEY_RP_PERSONA_PRESETS, json.encodeToString(presets)) }
     }
 
+    /** Per-character story memory (pinned facts), injected into every RP prompt. Null id = GradatiON (LLM mode). */
+    fun getRpMemory(characterId: Long?): String =
+        mainPrefs.getString(rpMemoryKey(characterId), "") ?: ""
+    fun saveRpMemory(characterId: Long?, text: String) = mainPrefs.edit {
+        if (text.isBlank()) remove(rpMemoryKey(characterId)) else putString(rpMemoryKey(characterId), text.trim())
+    }
+    private fun rpMemoryKey(characterId: Long?) = "rp_memory_" + (characterId?.toString() ?: "llm")
+
+    /** Name of the persona preset currently in use, if the persona text came from one. */
+    fun getRpPersonaName(): String {
+        val persona = getRpPersona().trim()
+        if (persona.isEmpty()) return ""
+        return getRpPersonaPresets().firstOrNull { it.description.trim() == persona }?.name.orEmpty()
+    }
+
     fun isRpLoreEnabled(): Boolean = mainPrefs.getBoolean(KEY_RP_LORE_ENABLED, true)
     fun saveRpLoreEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_LORE_ENABLED, enabled) }
 

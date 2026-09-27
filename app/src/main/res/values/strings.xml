@@ -540,4 +540,17 @@
     <string name="rp_plus_stream_off">Off. Replies arrive whole</string>
     <string name="rp_plus_home_sub">Characters, persona, lorebooks</string>
     <string name="rp_plus_a11y">Scene tools: reminder, streaming, characters</string>
+    <string name="rp_you">you</string>
+    <string name="rp_continue">Continue the story</string>
+    <string name="rp_panel_memory">Memory</string>
+    <string name="rp_panel_history">History</string>
+    <string name="rp_panel_persona">Persona</string>
+    <string name="rp_panel_style">Style</string>
+    <string name="rp_panel_lore">Lore</string>
+    <string name="rp_panel_edit">Edit</string>
+    <string name="rp_panel_new_chat">New chat</string>
+    <string name="rp_panel_switch">Switch</string>
+    <string name="rp_memory_title">%1$s remembers</string>
+    <string name="rp_memory_hint">Facts to keep true: names, promises, what happened</string>
+    <string name="rp_memory_save">Save</string>
 </resources>

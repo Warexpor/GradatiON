@@ -898,6 +898,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         viewModel.chatMessages.observe(viewLifecycleOwner) { messages ->
             chatAdapter.setMessages(messages)
+            updateSendButtonChrome()
             val hasMessages = messages.isNotEmpty()
             // STT disabled — watermark never used for hold-to-talk
             centerWatermarkIcon.isClickable = false
@@ -2126,6 +2127,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
                 hideKeyboard()
                 var prompt = chatEditText.text.toString().trim()
+                // Empty RP composer: the send button is "Continue", so the character takes the next beat.
+                if (prompt.isEmpty() && pendingFiles.isEmpty() && selectedImageBytes == null &&
+                    selectedAudioBytes == null && viewModel.canContinueRpStory()
+                ) {
+                    viewModel.continueRpStory()
+                    return@setOnClickListener
+                }
                 // RP forbids attachments; reject before file prepend so drafts stay clean.
                 if (viewModel.isRpMode() &&
                     (selectedImageBytes != null || selectedAudioBytes != null || pendingFiles.isNotEmpty())
@@ -2272,7 +2280,7 @@ $cleanContent
 
         modelNameTextView.setOnClickListener {
             hideKeyboard()
-            if (viewModel.isRpMode()) showCharacterPopover() else showModelPopover()
+            if (viewModel.isRpMode()) showRpCharacterPanel() else showModelPopover()
         }
 
         systemMessageButton.setOnClickListener {
@@ -4903,6 +4911,18 @@ $cleanContent
             pendingFiles.isNotEmpty() ||
             currentTempImageFile != null ||
             selectedAudioBytes != null
+        // RP with nothing typed: the button turns into Continue (fast-forward the story).
+        val canContinue = !hasContent && viewModel.canContinueRpStory()
+        if (canContinue) {
+            sendButtonActive = false
+            sendChatButton.isEnabled = true
+            sendChatButton.setBackgroundResource(R.drawable.bg_send_disabled)
+            sendChatButton.iconTint = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.xai_ink))
+            sendChatButton.setIconResource(R.drawable.ic_fast_forward)
+            sendChatButton.contentDescription = getString(R.string.rp_continue)
+            return
+        }
+        sendChatButton.contentDescription = getString(R.string.cd_send)
         val becameActive = hasContent && !sendButtonActive
         sendButtonActive = hasContent
         sendChatButton.isEnabled = hasContent
@@ -5626,6 +5646,55 @@ $cleanContent
         }
     }
 
+    /** Character pill: the panel for the active character, or the picker when there's none yet. */
+    private fun showRpCharacterPanel() {
+        val llm = sharedPreferencesHelper.isRpLlmMode()
+        val character = viewModel.activeRpCharacter.value
+        if (character == null && !llm) {
+            showCharacterPopover()
+            return
+        }
+        val memoryId = if (llm) null else character?.id
+        val title = if (llm) getString(R.string.rp_llm_speaker) else character!!.name
+        val subtitle = if (llm) "" else character!!.personality.ifBlank { character.scenario }
+            .lineSequence().firstOrNull().orEmpty()
+        val hasMemory = sharedPreferencesHelper.getRpMemory(memoryId).isNotBlank()
+        val tiles = buildList {
+            add(RpCharacterPanel.Tile(R.string.rp_panel_memory, R.drawable.ic_memory, on = hasMemory) { editRpMemory(memoryId, title) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_history, R.drawable.rp_ic_archive) { openHistoryPanel() })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, R.drawable.rp_ic_persona) { pushRp(RpPersonaFragment.newInstance()) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_style, R.drawable.ic_sliders) { pushRp(RpSettingsFragment.newInstance()) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, R.drawable.rp_ic_book) { pushRp(RpLorebookLibraryFragment.newInstance()) })
+            if (character != null && !llm) {
+                add(RpCharacterPanel.Tile(R.string.rp_panel_edit, R.drawable.ic_edit) { pushRp(RpCharacterEditFragment.newInstance(character.id)) })
+                add(RpCharacterPanel.Tile(R.string.rp_panel_new_chat, R.drawable.ic_new_chat) { startRpWith(character) })
+            }
+            add(RpCharacterPanel.Tile(R.string.rp_panel_switch, R.drawable.rp_ic_characters) { menuButton.post { showCharacterPopover() } })
+        }
+        RpCharacterPanel.show(this, if (llm) null else character, title, subtitle, tiles)
+    }
+
+    private fun editRpMemory(characterId: Long?, name: String) {
+        GrokInputDialog.show(
+            fragment = this,
+            title = getString(R.string.rp_memory_title, name),
+            hint = getString(R.string.rp_memory_hint),
+            initialText = sharedPreferencesHelper.getRpMemory(characterId),
+            confirmText = getString(R.string.rp_memory_save),
+            multiline = true
+        ) { text -> sharedPreferencesHelper.saveRpMemory(characterId, text) }
+    }
+
+    private fun pushRp(fragment: Fragment) {
+        hideKeyboard()
+        parentFragmentManager.beginTransaction()
+            .withGrokStackAnimations()
+            .hide(this)
+            .add(R.id.fragment_container, fragment)
+            .addToBackStack(null)
+            .commit()
+    }
+
     private fun startRpWith(character: RpCharacter) {
         val proceed = { viewModel.startRpChatWithCharacter(character) }
         if (viewModel.rpStartChatNeedsConfirm()) {
@@ -5756,6 +5825,7 @@ $cleanContent
         if (!rp) {
             rpSwipeBar.visibility = View.GONE
         }
+        updateSendButtonChrome()
         val activeChar = viewModel.activeRpCharacter.value
         val llm = sharedPreferencesHelper.isRpLlmMode()
         if (rp && activeChar != null && !llm) {

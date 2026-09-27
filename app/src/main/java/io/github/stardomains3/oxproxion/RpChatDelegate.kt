@@ -41,7 +41,9 @@ class RpChatDelegate(
             instruction = instruction,
             thirdPerson = prefs.isRpThirdPerson(),
             showThoughts = prefs.isRpShowThoughts(),
-            isLlm = isLlm
+            isLlm = isLlm,
+            memory = prefs.getRpMemory(if (isLlm) null else character?.id),
+            userName = prefs.getRpPersonaName()
         )
     }
 
@@ -54,7 +56,11 @@ class RpChatDelegate(
     }
 
     fun greetingMessage(character: RpCharacter): String =
-        character.greeting.ifBlank { prefs.string(R.string.rp_default_greeting, character.name) }
+        RpPromptEngine.expandMacros(
+            character.greeting.ifBlank { prefs.string(R.string.rp_default_greeting, character.name) },
+            character.name,
+            prefs.getRpPersonaName().ifBlank { prefs.string(R.string.rp_you) }
+        )
 
     fun sessionTitle(character: RpCharacter?): String {
         if (prefs.isRpLlmMode()) return prefs.string(R.string.rp_session_llm)

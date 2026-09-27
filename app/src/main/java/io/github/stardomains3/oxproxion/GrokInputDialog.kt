@@ -16,6 +16,7 @@ object GrokInputDialog {
         hint: String,
         initialText: String,
         confirmText: String,
+        multiline: Boolean = false,
         onConfirm: (String) -> Unit
     ) {
         val context = fragment.requireContext()
@@ -29,6 +30,14 @@ object GrokInputDialog {
         val inputLayout = sheet.findViewById<TextInputLayout>(R.id.inputLayout)
         val inputField = sheet.findViewById<TextInputEditText>(R.id.inputField)
         inputLayout.hint = hint
+        if (multiline) {
+            inputField.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
+                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            inputField.minLines = 4
+            inputField.maxLines = 10
+            inputField.gravity = android.view.Gravity.TOP or android.view.Gravity.START
+        }
         inputField.setText(initialText)
         inputField.setSelection(initialText.length)
 

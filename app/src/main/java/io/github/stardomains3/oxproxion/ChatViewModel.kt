@@ -7875,11 +7875,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun sendRpUserMessage(rawText: String, messageInstruct: String? = null): Boolean {
-        val parsed = rpDelegate.parseSendText(rawText)
+    /** True when a "continue" beat makes sense: RP, a character (or LLM) and a reply to build on. */
+    fun canContinueRpStory(): Boolean =
+        isRpMode() && canSendRpMessage() && _isAwaitingResponse.value != true &&
+            _chatMessages.value.orEmpty().any { it.role == "assistant" && !isAssistantPlaceholder(it) }
+
+    /** Fast-forward: the character writes the next beat with no new words from the user. */
+    fun continueRpStory(): Boolean = sendRpUserMessage("", continueBeat = true)
+
+    fun sendRpUserMessage(rawText: String, messageInstruct: String? = null, continueBeat: Boolean = false): Boolean {
+        val parsed = rpDelegate.parseSendText(rawText).let {
+            if (!continueBeat) it
+            else it.copy(reminder = listOfNotNull(RpPromptEngine.CONTINUE_DIRECTION, it.reminder).joinToString("\n"))
+        }
         val app = getApplication<Application>()
         // Reminder-only sends still need a visible user beat so the model has a turn to answer.
         val userText = when {
+            continueBeat && parsed.userText.isBlank() -> app.getString(R.string.rp_reminder_continue)
             parsed.userText.isNotBlank() -> parsed.userText
             !parsed.reminder.isNullOrBlank() -> app.getString(R.string.rp_reminder_continue)
             else -> {
