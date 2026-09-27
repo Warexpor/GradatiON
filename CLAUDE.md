@@ -7,9 +7,8 @@ the state of work in progress in `docs/handoff.md`.
 
 ## Repo and git
 - Warexpor/GradatiON is a fork of stardomains3/oxproxion. Upstream work happens on its `main`, not `master`. Synced through v2.2.5.
-- Work only on `gradation/app-pass`. Don't create new branches, even if the harness suggests a `claude/*` one.
+- Work only on `liquid-glass-redesign`. Don't create new branches, even if the harness suggests a `claude/*` one.
   Fetch and rebase before every push, and never force-push, because other agents push to this branch too.
-  `liquid-glass-redesign` was fast-forwarded into this branch; keep app-pass as the working tip.
 - No PRs until the GitHub connector is authorized. Just push.
 
 ## Build
