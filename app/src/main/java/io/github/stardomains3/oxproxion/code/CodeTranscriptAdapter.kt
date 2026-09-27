@@ -639,7 +639,13 @@ class CodeTranscriptAdapter(
                         fades.forEach { text.removeSpan(it) }
                     }
                     textView.invalidate()
-                    Choreographer.getInstance().postFrameCallback(this)
+                    // Word fades need every frame; the breathing cursor alone is fine at
+                    // ~15fps and saves a full text redraw per frame for the whole stream.
+                    if (fadesDone) {
+                        Choreographer.getInstance().postFrameCallbackDelayed(this, CURSOR_FRAME_MS)
+                    } else {
+                        Choreographer.getInstance().postFrameCallback(this)
+                    }
                 }
             }
             fadeTicker = ticker
@@ -655,6 +661,7 @@ class CodeTranscriptAdapter(
     private class Simple(v: View) : RecyclerView.ViewHolder(v)
 
     companion object {
+        private const val CURSOR_FRAME_MS = 66L
         private const val T_USER = 1
         private const val T_TEXT = 2
         private const val T_THOUGHT = 3

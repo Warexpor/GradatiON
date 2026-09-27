@@ -973,7 +973,12 @@ class ChatAdapter(
                         fades.forEach { text.removeSpan(it) }
                     }
                     messageTextView.invalidate()
-                    android.view.Choreographer.getInstance().postFrameCallback(this)
+                    // Word fades need every frame; the breathing cursor alone runs at ~15fps.
+                    if (fadesDone) {
+                        android.view.Choreographer.getInstance().postFrameCallbackDelayed(this, 66L)
+                    } else {
+                        android.view.Choreographer.getInstance().postFrameCallback(this)
+                    }
                 }
             }
             fadeTicker = ticker

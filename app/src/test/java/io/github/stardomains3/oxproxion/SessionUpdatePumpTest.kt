@@ -145,7 +145,7 @@ class SessionUpdatePumpTest {
         // G4: history TextChunk must not force Stop either (Hub.prompt / SessionInfo drive live).
         state = CodeSessionFolder.apply(state, CodeUpdate.TextChunk("k", "hi"), now = 11L)
         assertFalse(state.running)
-        assertEquals("hi", (state.events[0] as CodeEvent.AgentText).text)
+        assertEquals("hi", state.events.filterIsInstance<CodeEvent.AgentText>().single().text)
         // Live turn: Hub.prompt already set running — chunks / UserPrompt keep it.
         state = state.copy(running = true)
         state = CodeSessionFolder.apply(state, CodeUpdate.TextChunk("k", " more"), now = 12L)
