@@ -301,9 +301,11 @@ class MainActivity : AppCompatActivity() {
         if (!fromAway) return
         val hub = CodeHub.get(this)
         if (!hub.awayNotifier.consumeOpenToken(sessionId, token)) return
-        if (hub.sessions.value[sessionId] == null) return
+        val session = hub.sessions.value[sessionId] ?: return
         hub.store.enabled = true
         hub.store.lastTabWasCode = true
+        // B4: bind home/active host to this session's machine before opening.
+        hub.selectHost(session.summary.hostId)
         hub.awayNotifier.cancelSession(sessionId)
         CodeSessionPending.offer(sessionId)
     }

@@ -87,7 +87,7 @@ class CodeAwayNotifier(
                 maybePostApproval(sessionId, hostId, sessionTitle, approval)
             }
             is CodeUpdate.TurnDone -> {
-                if (!sessionWasRunning) return
+                if (!CodeAwayFormat.shouldNotifyTurnDone(sessionWasRunning, update.stopReason)) return
                 maybePostTurnDone(sessionId, hostId, sessionTitle)
             }
             else -> Unit

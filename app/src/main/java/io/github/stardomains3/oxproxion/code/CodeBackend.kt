@@ -501,8 +501,12 @@ class BridgeBackend(
             refreshKeepAlive()
             return true
         } catch (e: CancellationException) {
-            // User Stop: never dequeue as delivered (especially if send never completed).
-            if (isDeliverStale(sessionId, gen) || e.message == "Cancelled") {
+            // User Stop / forget-detach: never dequeue as delivered (especially if send never completed).
+            // C3: detach completes with "Detached" — same abort semantics as "Cancelled".
+            if (isDeliverStale(sessionId, gen) ||
+                e.message == "Cancelled" ||
+                e.message == "Detached"
+            ) {
                 refreshKeepAlive()
                 return false
             }
@@ -563,6 +567,16 @@ class BridgeBackend(
     }
 
     override suspend fun cancel(sessionId: String) {
+        // C1: after forget→detach there is no local work left. Send wire cancel only —
+        // do not re-seed suppressAgent / deliverGeneration (would swallow a later session/load).
+        val locallyActive = attached.containsKey(sessionId) ||
+            inFlightPromptId.containsKey(sessionId) ||
+            sessionId in runningSessions ||
+            synchronized(outboxLock) { outbox.any { it.sessionId == sessionId } }
+        if (!locallyActive) {
+            runCatching { transport.send(adapter.cancel(sessionId)) }
+            return
+        }
         // Abort in-flight deliverPrompt (flush or live turn) and drop queued prompts.
         bumpDeliverGen(sessionId)
         suppressAgent.add(sessionId)

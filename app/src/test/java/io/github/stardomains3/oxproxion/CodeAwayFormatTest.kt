@@ -99,4 +99,14 @@ class CodeAwayFormatTest {
         assertEquals(always, CodeAwayFormat.pickDeny(listOf(always)))
         assertNull(CodeAwayFormat.pickDeny(emptyList()))
     }
+
+    @Test
+    fun shouldNotifyTurnDoneSkipsCancelled() {
+        // C2: local Stop must not post “Turn finished”.
+        assertFalse(CodeAwayFormat.shouldNotifyTurnDone(true, "cancelled"))
+        assertFalse(CodeAwayFormat.shouldNotifyTurnDone(false, "end_turn"))
+        assertTrue(CodeAwayFormat.shouldNotifyTurnDone(true, "end_turn"))
+        assertTrue(CodeAwayFormat.shouldNotifyTurnDone(true, "error"))
+    }
 }
+

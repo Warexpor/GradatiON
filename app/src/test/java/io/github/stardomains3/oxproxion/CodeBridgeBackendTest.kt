@@ -766,4 +766,58 @@ class CodeBridgeBackendTest {
             backend.close()
         }
     }
+
+    @Test
+    fun cancelAfterDetachIsWireOnlyNoSuppressSeed() = runBlocking {
+        // C1: forget → detach then cancel must not re-seed suppressAgent (load replay stays live).
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+            backend.detach("s1")
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            backend.cancel("s1")
+            delay(40)
+            assertTrue(
+                "wire session/cancel still sent after detach",
+                transport.sent.any { it.contains("session/cancel") },
+            )
+            assertFalse(
+                "wire-only cancel must not emit local TurnDone",
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TurnDone && u.stopReason == "cancelled"
+                },
+            )
+
+            // Re-attach and ensure agent chunks are not swallowed by a leaked suppressAgent.
+            backend.attach(summary())
+            transport.deliver(
+                """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":42},
+                "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"after-forget"}}}}"""
+            )
+            delay(40)
+            assertTrue(
+                "agent chunk after re-attach must not be suppressed",
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TextChunk && u.chunk.contains("after-forget")
+                },
+            )
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
 }

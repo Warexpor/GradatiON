@@ -415,7 +415,8 @@ class CodeHub private constructor(context: Context) {
         // B2: detach so reconnect does not session/load a forgotten id.
         val s = _sessions.value[sessionId]
         if (s != null) {
-            suppressRunningFromChunks += sessionId
+            // C1: do not leave cancel-suppress for a dropped id (wire-only cancel emits no TurnDone).
+            suppressRunningFromChunks.remove(sessionId)
             ignoreStaleCancelTurnDone.remove(sessionId)
             val host = _hosts.value.find { it.id == s.summary.hostId }
             if (host != null) {

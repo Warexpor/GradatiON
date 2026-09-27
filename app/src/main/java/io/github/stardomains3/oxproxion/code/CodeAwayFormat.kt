@@ -47,5 +47,12 @@ object CodeAwayFormat {
     /** Whether [posted] already contains this key (skip re-alert). */
     fun shouldPost(posted: Set<String>, key: String): Boolean = key !in posted
 
+    /**
+     * C2: post a turn-finished away notif only for a live turn that ended naturally.
+     * Local Stop / forget cancel use stopReason "cancelled" — never alert those.
+     */
+    fun shouldNotifyTurnDone(sessionWasRunning: Boolean, stopReason: String): Boolean =
+        sessionWasRunning && stopReason != "cancelled"
+
     const val NOTIF_ID_BASE = 0x5A00_0000
 }
