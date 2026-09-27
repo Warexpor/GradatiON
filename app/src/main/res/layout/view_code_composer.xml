@@ -64,6 +64,7 @@
         android:paddingTop="4dp">
 
         <HorizontalScrollView
+            android:id="@+id/codeComposerPills"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -114,6 +115,16 @@
             </LinearLayout>
         </HorizontalScrollView>
 
+        <!-- Takes the pills' place while dictating. -->
+        <io.github.stardomains3.oxproxion.VoiceWaveView
+            android:id="@+id/codeComposerVoiceWave"
+            android:layout_width="0dp"
+            android:layout_height="24dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/codeComposerAttach"
             style="@style/Widget.Grokion.IconButton"
@@ -131,6 +142,29 @@
             app:iconPadding="0dp"
             app:iconSize="20dp"
             app:iconTint="@color/xai_ink" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/codeComposerMic"
+            style="@style/Widget.Grokion.IconButton.Filled"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/bg_composer_action"
+            android:contentDescription="@string/cd_voice_input"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:padding="0dp"
+            android:visibility="gone"
+            app:backgroundTint="@null"
+            app:cornerRadius="19dp"
+            app:icon="@drawable/ic_mic"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="20dp"
+            app:iconTint="@color/tile_fg"
+            app:rippleColor="@color/press_ripple_none" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/codeComposerSend"

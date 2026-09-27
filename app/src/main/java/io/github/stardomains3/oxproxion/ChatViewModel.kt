@@ -1271,9 +1271,50 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         return true
     }
-    suspend fun transcribeAudioForInput(audioBytes: ByteArray, audioFormat: String, fileName: String): String? {
-        // STT disabled
-        return null
+    /**
+     * Voice input fallback when the phone's own recognizer is missing or the user picked Cloud or
+     * Local in Settings > Voice: OpenRouter's transcription endpoint or the LAN server's
+     * OpenAI-style `/v1/audio/transcriptions`. Failure carries a message ready for a toast.
+     */
+    suspend fun transcribeAudioForInput(audioBytes: ByteArray, audioFormat: String, fileName: String): Result<String> {
+        val engine = VoiceEngine.fromKey(sharedPreferencesHelper.getVoiceInputProvider())
+        val modelId = sharedPreferencesHelper.getVoiceInputModel()
+        if (modelId.isBlank()) return Result.failure(IllegalStateException("Set a voice model in Settings > Voice"))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val response = if (engine == VoiceEngine.LAN) {
+                    val lanEndpoint = sharedPreferencesHelper.getLanEndpoint()
+                    if (lanEndpoint.isNullOrBlank()) error("Local server not configured")
+                    lanHttpClient.submitFormWithBinaryData(
+                        url = "$lanEndpoint/v1/audio/transcriptions",
+                        formData = formData {
+                            append("file", audioBytes, Headers.build {
+                                append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                                append(HttpHeaders.ContentType, "audio/$audioFormat")
+                            })
+                            append("model", modelId)
+                        }
+                    ) {
+                        header("Authorization", "Bearer ${sharedPreferencesHelper.getLanApiKeyForRequest()}")
+                    }
+                } else {
+                    if (activeChatApiKey.isBlank()) error("OpenRouter API key not set")
+                    httpClient.post("https://openrouter.ai/api/v1/audio/transcriptions") {
+                        header("Authorization", "Bearer $activeChatApiKey")
+                        contentType(ContentType.Application.Json)
+                        setBody(buildJsonObject {
+                            put("model", JsonPrimitive(modelId))
+                            putJsonObject("input_audio") {
+                                put("data", JsonPrimitive(Base64.getEncoder().encodeToString(audioBytes)))
+                                put("format", JsonPrimitive(audioFormat))
+                            }
+                        })
+                    }
+                }
+                if (!response.status.isSuccess()) error("Transcription failed: ${response.status.value}")
+                response.body<JsonObject>()["text"]?.jsonPrimitive?.content?.trim().orEmpty()
+            }
+        }
     }
     fun sendTranscriptionOpenRouter(audioBytes: ByteArray, audioFormat: String) {
         val modelId = _activeChatModel.value ?: return

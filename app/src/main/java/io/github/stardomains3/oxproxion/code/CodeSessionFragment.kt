@@ -121,6 +121,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             viewLifecycleOwner,
         )
         composer.showPills(agent = false, folder = false, permission = true)
+        composer.enableVoice(this)
         composer.onSend = { text, attachments ->
             follow = true
             if (hub.prompt(sessionId, text, attachments)) composer.clear()

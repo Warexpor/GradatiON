@@ -136,6 +136,25 @@ class CodeModeScreenshotTest {
 
     // ── behaviour ─────────────────────────────────────────────────────────────────────────
 
+    @Test fun codeDictatingDark() = withCode { a, _ ->
+        VoiceInput.deviceAvailableOverride = true
+        val home = a.supportFragmentManager.fragments.flatMap { listOf(it) + it.childFragmentManager.fragments }
+            .filterIsInstance<io.github.stardomains3.oxproxion.code.CodeHomeFragment>().first()
+        val composer = home.javaClass.getDeclaredField("composer").apply { isAccessible = true }.get(home)
+        val d = composer.javaClass.getDeclaredField("dictation").apply { isAccessible = true }.get(composer) as VoiceDictation
+        d.refresh()
+        d.onStateChanged(VoiceInput.State.LISTENING)
+        d.onCommit("add a dark mode toggle to settings")
+        d.onPartial("and remember it")
+        val speech = floatArrayOf(0.2f, 0.6f, 0.95f, 0.5f, 0.3f, 0.85f, 0.4f, 0.1f)
+        repeat(60) { i ->
+            d.onLevel(speech[i % speech.size])
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(66))
+        }
+        snap(root(a), "code_dictating_dark")
+        VoiceInput.deviceAvailableOverride = null
+    }
+
     @Test fun codeTabHiddenWhenDisabled() {
         CodeHub.get(ctx).store.enabled = false
         launch { a, _ ->

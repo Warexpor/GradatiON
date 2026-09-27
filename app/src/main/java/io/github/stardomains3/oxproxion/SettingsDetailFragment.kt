@@ -9,6 +9,7 @@ import android.view.View
 import android.view.WindowManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
+import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.isVisible
 import androidx.biometric.BiometricManager
@@ -387,6 +388,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             prefs.saveHapticResponding(isChecked)
         }
         bindBackgroundPicker(view, prefs)
+        bindVoice(view, prefs)
 
         listOf(
             R.id.scrollButtonsSwitch,
@@ -503,9 +505,77 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         }
     }
 
+    /** Settings > Voice: on/off, which engine turns speech into text, and the model for Cloud/Local. */
+    private fun bindVoice(view: View, prefs: SharedPreferencesHelper) {
+        val ctx = requireContext()
+        val enabled = view.findViewById<SwitchCompat>(R.id.voiceEnabledSwitch)
+        val toggle = view.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.voiceEngineToggle)
+        val engineGroup = view.findViewById<View>(R.id.voiceEngineGroup)
+        val summary = view.findViewById<TextView>(R.id.voiceEngineSummary)
+        val modelGroup = view.findViewById<View>(R.id.voiceModelGroup)
+        val modelValue = view.findViewById<TextView>(R.id.voiceModelValue)
+        val ids = mapOf(
+            VoiceEngine.DEVICE to R.id.voiceEnginePhone,
+            VoiceEngine.CLOUD to R.id.voiceEngineCloud,
+            VoiceEngine.LAN to R.id.voiceEngineLocal,
+        )
+        val deviceOk = VoiceInput.deviceAvailable(ctx)
+
+        fun render() {
+            val engine = VoiceEngine.fromKey(prefs.getVoiceInputProvider())
+            val on = engine != VoiceEngine.OFF
+            engineGroup.isVisible = on
+            summary.isVisible = on
+            val shown = if (on) engine else VoiceEngine.fromKey(null)
+            summary.setText(
+                when (shown) {
+                    VoiceEngine.CLOUD -> R.string.voice_engine_cloud_hint
+                    VoiceEngine.LAN -> R.string.voice_engine_local_hint
+                    else -> when {
+                        !deviceOk -> R.string.voice_engine_phone_missing
+                        VoiceInput.onDeviceAvailable(ctx) -> R.string.voice_engine_phone_ondevice
+                        else -> R.string.voice_engine_phone_hint
+                    }
+                }
+            )
+            // The model matters for Cloud and Local, and for Phone when the phone can't recognize.
+            modelGroup.isVisible = on && (engine != VoiceEngine.DEVICE || !deviceOk)
+            modelValue.text = prefs.getVoiceInputModel().ifBlank { getString(R.string.voice_model_unset) }
+        }
+
+        val current = VoiceEngine.fromKey(prefs.getVoiceInputProvider())
+        enabled.isChecked = current != VoiceEngine.OFF
+        toggle.check(ids[current] ?: R.id.voiceEnginePhone)
+        render()
+
+        fun pickedEngine() = ids.entries.firstOrNull { it.value == toggle.checkedButtonId }?.key ?: VoiceEngine.DEVICE
+        enabled.setOnCheckedChangeListener { _, on ->
+            prefs.setVoiceInputProvider(if (on) pickedEngine().key else VoiceEngine.OFF.key)
+            render()
+        }
+        toggle.addOnButtonCheckedListener { _, _, isChecked ->
+            if (!isChecked || !enabled.isChecked) return@addOnButtonCheckedListener
+            prefs.setVoiceInputProvider(pickedEngine().key)
+            render()
+        }
+        view.findViewById<View>(R.id.voiceModelRow).setOnClickListener {
+            GrokInputDialog.show(
+                fragment = this,
+                title = getString(R.string.voice_model),
+                hint = getString(R.string.voice_model_hint),
+                initialText = prefs.getVoiceInputModel(),
+                confirmText = getString(R.string.action_save),
+            ) { text ->
+                prefs.setVoiceInputModel(text.trim())
+                render()
+            }
+        }
+    }
+
     private fun applySectionVisibility(view: View, section: String) {
         val sectionRoots = mapOf(
             SECTION_APPEARANCE to R.id.appearanceSection,
+            SECTION_VOICE to R.id.voiceSection,
             SECTION_HAPTICS to R.id.hapticsSection,
             SECTION_MODELS to R.id.modelsSection,
             SECTION_ADVANCED to R.id.advancedSection,

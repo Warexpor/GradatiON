@@ -38,7 +38,7 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_WATERMARK_STT_ENABLED = "watermark_stt_enabled"
 
         private const val KEY_VOICE_INPUT_MODEL = "voice_input_model"
-        private const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // "lan", "cloud", "off"
+        private const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // VoiceEngine keys: device, cloud, lan, off
         private const val KEY_THEME_MODE = "theme_mode"
         /** Ambient background style (AmbientBackgroundView.Style.key): off, grain, drift, flow, adaptive. */
         const val KEY_BACKGROUND_STYLE = "background_style"
@@ -359,7 +359,7 @@ class SharedPreferencesHelper(context: Context) {
     fun getVoiceInputModel(): String = mainPrefs.getString(KEY_VOICE_INPUT_MODEL, "") ?: ""
     fun setVoiceInputModel(model: String) = mainPrefs.edit { putString(KEY_VOICE_INPUT_MODEL, model) }
 
-    fun getVoiceInputProvider(): String = mainPrefs.getString(KEY_VOICE_INPUT_PROVIDER, "lan") ?: "lan"
+    fun getVoiceInputProvider(): String = mainPrefs.getString(KEY_VOICE_INPUT_PROVIDER, VoiceEngine.DEVICE.key) ?: VoiceEngine.DEVICE.key
     fun setVoiceInputProvider(provider: String) = mainPrefs.edit { putString(KEY_VOICE_INPUT_PROVIDER, provider) }
     fun saveChatMemoryCount(count: Int) {
         mainPrefs.edit { putInt(KEY_CHAT_MEMORY_COUNT, count) }

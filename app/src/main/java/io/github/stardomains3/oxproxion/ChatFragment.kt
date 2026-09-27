@@ -202,6 +202,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var utilityButton: MaterialButton
     private lateinit var clearButton: MaterialButton
     private lateinit var speechButton: MaterialButton
+    private var dictation: VoiceDictation? = null
     private lateinit var scrollToTopButton: MaterialButton
     private lateinit var scrollToBottomButton: MaterialButton
     private lateinit var convoButton: MaterialButton
@@ -2049,6 +2050,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
         }
         sendChatButton.setOnClickListener {
+            dictation?.finishNow()
             if (sharedPreferencesHelper.getHapticButtons()) {
                 sendChatButton.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
             }
@@ -2911,31 +2913,13 @@ $cleanContent
             }
             true
         }
-        // STT disabled
-        /*
-        speechButton.setOnClickListener {
-            if (isRecording) {
-                stopVoiceRecording()
-            } else {
-                if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                } else {
-                    startSpeechRecognition()
-                }
-            }
-        }
-        speechButton.setOnLongClickListener {
-            if (isRecording) {
-                stopVoiceRecording()
-            } else {
-                startVoiceRecording()
-            }
-            true
-        }
-        */
-        speechButton.visibility = View.GONE
-        speechButton.setOnClickListener(null)
-        speechButton.setOnLongClickListener(null)
+        dictation = VoiceDictation(
+            fragment = this,
+            input = chatEditText,
+            micButton = speechButton,
+            wave = requireView().findViewById(R.id.voiceWave),
+            swapOut = listOf(modelNameTextView),
+        ) { bytes, format, name -> viewModel.transcribeAudioForInput(bytes, format, name) }
 
         clearButton.setOnClickListener {
             chatEditText.text.clear()
@@ -3011,8 +2995,7 @@ $cleanContent
         val isExtended = sharedPreferencesHelper.getExtPreference()
         val hasText = !chatEditText.text.isNullOrEmpty()
         clearButton.visibility = if (isExtended && hasText) View.VISIBLE else View.GONE
-        // STT disabled
-        speechButton.visibility = View.GONE
+        dictation?.refresh()
     }
 
     private fun updateButtonVisibility() {
@@ -3931,6 +3914,7 @@ $cleanContent
     override fun onResume() {
         super.onResume()
         refreshModeTabs()
+        dictation?.refresh()
         updateSystemMessageButtonState()
         viewModel.isStreamingEnabled.value?.let { updateStreamToggleAppearance(it) }
        // chatEditText.requestFocus()

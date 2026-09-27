@@ -40,9 +40,8 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
 
         view.findViewById<View>(R.id.settingsRowAppearance)
             .setOnClickListener { openSection(SettingsDetailFragment.SECTION_APPEARANCE) }
-        // STT disabled
-        // view.findViewById<View>(R.id.settingsRowVoice)
-        //     .setOnClickListener { openSection(SettingsDetailFragment.SECTION_VOICE) }
+        view.findViewById<View>(R.id.settingsRowVoice)
+            .setOnClickListener { openSection(SettingsDetailFragment.SECTION_VOICE) }
         view.findViewById<View>(R.id.settingsRowHaptics)
             .setOnClickListener { openSection(SettingsDetailFragment.SECTION_HAPTICS) }
         view.findViewById<View>(R.id.settingsRowModels)

@@ -41,7 +41,8 @@ the state of work in progress in `docs/handoff.md`.
 - Plus Jakarta Sans for the UI and Michroma for the wordmark. Nothing tappable under 13sp. Fix text
   centering in the font metrics, not per view.
 - Grok screenshots are references for layout and feel only, never for visuals.
-- Live voice input stays off.
+- Voice input: tap the mic, talk, tap the check, and the words paste into the field. It never auto-sends and there is no hold-to-talk.
+  The engine is the phone's own SpeechRecognizer (on-device first). Keep the OpenRouter/Local transcription fallback.
 
 ## Working with the user
 - She voice-dictates, so expect mis-transcriptions ("iOS Green" meant glass) and state how you read it.

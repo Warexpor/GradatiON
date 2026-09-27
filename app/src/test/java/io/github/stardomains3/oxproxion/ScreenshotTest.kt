@@ -520,6 +520,98 @@ class ScreenshotTest {
         snap(root(a), "model_picker_light")
     }
 
+    // ── Voice input ────────────────────────────────────────────────────────────────────
+
+    private fun dictationOf(chat: ChatFragment): VoiceDictation =
+        ChatFragment::class.java.getDeclaredField("dictation").apply { isAccessible = true }.get(chat) as VoiceDictation
+
+    /** Mid-dictation: one settled phrase, one still being recognized, bars full of speech. */
+    private fun dictateInto(a: MainActivity, chat: ChatFragment): VoiceDictation {
+        val d = dictationOf(chat)
+        a.findViewById<android.widget.EditText>(R.id.chatEditText).setText("Quick question.")
+        d.onStateChanged(VoiceInput.State.LISTENING)
+        d.onCommit("how do I center a div")
+        d.onPartial("in flexbox without")
+        val speech = floatArrayOf(0.1f, 0.5f, 0.9f, 0.7f, 0.3f, 0.8f, 1f, 0.6f, 0.2f, 0.05f, 0.4f, 0.75f)
+        repeat(60) { i ->
+            d.onLevel(speech[i % speech.size])
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(66))
+        }
+        return d
+    }
+
+    private fun withVoice(block: (MainActivity, ChatFragment) -> Unit) {
+        VoiceInput.deviceAvailableOverride = true
+        try { withChat(block) } finally { VoiceInput.deviceAvailableOverride = null }
+    }
+
+    @Test fun chatVoiceIdleDark() = withVoice { a, _ -> snap(root(a), "chat_voice_idle_dark") }
+
+    @Test fun chatDictatingDark() = withVoice { a, chat ->
+        dictateInto(a, chat)
+        snap(root(a), "chat_dictating_dark")
+    }
+
+    @Test @Config(qualifiers = LIGHT)
+    fun chatDictatingLight() = withVoice { a, chat ->
+        dictateInto(a, chat)
+        snap(root(a), "chat_dictating_light")
+    }
+
+    @Test fun chatTranscribingDark() = withVoice { a, chat ->
+        val d = dictationOf(chat)
+        d.onStateChanged(VoiceInput.State.LISTENING)
+        d.onStateChanged(VoiceInput.State.TRANSCRIBING)
+        idle()
+        snap(root(a), "chat_transcribing_dark")
+    }
+
+    @Test fun dictationPastesAndNeverSends() = withVoice { a, chat ->
+        val d = dictateInto(a, chat)
+        d.onStateChanged(VoiceInput.State.IDLE)
+        idle()
+        val field = a.findViewById<android.widget.EditText>(R.id.chatEditText)
+        org.junit.Assert.assertEquals("Quick question. How do I center a div in flexbox without", field.text.toString())
+        org.junit.Assert.assertTrue(
+            field.text.getSpans(0, field.length(), android.text.style.ForegroundColorSpan::class.java).isEmpty()
+        )
+        org.junit.Assert.assertTrue(ViewModelProvider(a)[ChatViewModel::class.java].chatMessages.value.isNullOrEmpty())
+        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.modelNameTextView).visibility)
+        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.voiceWave).visibility)
+    }
+
+    @Test fun cloudResultPastesAtCaret() = withVoice { a, chat ->
+        val d = dictationOf(chat)
+        val field = a.findViewById<android.widget.EditText>(R.id.chatEditText)
+        field.setText("Summarize: ")
+        d.onStateChanged(VoiceInput.State.LISTENING)
+        d.onStateChanged(VoiceInput.State.TRANSCRIBING)
+        d.onStateChanged(VoiceInput.State.IDLE)
+        d.onCommit("the meeting notes")
+        org.junit.Assert.assertEquals("Summarize: the meeting notes", field.text.toString())
+    }
+
+    @Test fun micHiddenWithoutAnyEngine() {
+        // No recognizer and no voice model: nothing to dictate with.
+        VoiceInput.deviceAvailableOverride = false
+        try {
+            withChat { a, _ -> org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.speechButton).visibility) }
+        } finally { VoiceInput.deviceAvailableOverride = null }
+    }
+
+    @Test fun settingsVoiceDark() = withVoice { a, _ ->
+        openSettingsRow(a, R.id.settingsRowVoice)
+        snap(root(a), "settings_voice_dark")
+    }
+
+    @Test @Config(qualifiers = LIGHT)
+    fun settingsVoiceCloudLight() = withVoice { a, _ ->
+        SharedPreferencesHelper(a).setVoiceInputProvider(VoiceEngine.CLOUD.key)
+        SharedPreferencesHelper(a).setVoiceInputModel("openai/whisper-1")
+        openSettingsRow(a, R.id.settingsRowVoice)
+        snap(root(a), "settings_voice_cloud_light")
+    }
+
     private fun openSettingsRow(a: MainActivity, rowId: Int) {
         a.findViewById<View>(R.id.settingsButton).performClick(); idle()
         val sf = a.supportFragmentManager.fragments.filterIsInstance<SettingsFragment>().first()

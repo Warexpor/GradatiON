@@ -15,12 +15,16 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.LifecycleOwner
 import com.google.android.material.button.MaterialButton
+import io.github.stardomains3.oxproxion.ChatViewModel
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
 import io.github.stardomains3.oxproxion.PickerPopover
 import io.github.stardomains3.oxproxion.R
+import io.github.stardomains3.oxproxion.VoiceDictation
 
 /**
  * Binds `view_code_composer`: the glass capsule with the prompt field, optional image attach
@@ -44,6 +48,8 @@ class CodeComposer(
     private val attach: MaterialButton = root.findViewById(R.id.codeComposerAttach)
     private val attachStrip: HorizontalScrollView = root.findViewById(R.id.codeComposerAttachStrip)
     private val attachChips: LinearLayout = root.findViewById(R.id.codeComposerAttachChips)
+    private val mic: MaterialButton = root.findViewById(R.id.codeComposerMic)
+    private var dictation: VoiceDictation? = null
     private var popover: PickerPopover? = null
     private val backdropRef = backdrop
 
@@ -95,6 +101,7 @@ class CodeComposer(
                 onStop?.invoke()
                 return@setOnClickListener
             }
+            dictation?.finishNow()
             val text = input.text?.toString()?.trim().orEmpty()
             if (text.isEmpty() && pendingAttachments.isEmpty()) return@setOnClickListener
             dismissSlashPopover()
@@ -393,5 +400,24 @@ class CodeComposer(
             val insert = "/${cmd.name} "
             return (insert + rest) to insert.length
         }
+    }
+
+    /**
+     * Dictation into the prompt (same engine and look as chat). Call from the host fragment's
+     * onViewCreated; the mic hides when Settings > Voice is off or the phone can't recognize speech.
+     */
+    fun enableVoice(fragment: Fragment) {
+        val vm = ViewModelProvider(fragment.requireActivity())[ChatViewModel::class.java]
+        dictation = VoiceDictation(
+            fragment = fragment,
+            input = input,
+            micButton = mic,
+            wave = root.findViewById(R.id.codeComposerVoiceWave),
+            swapOut = listOf(root.findViewById(R.id.codeComposerPills)),
+        ) { bytes, format, name -> vm.transcribeAudioForInput(bytes, format, name) }
+    }
+
+    fun refreshVoice() {
+        dictation?.refresh()
     }
 }
