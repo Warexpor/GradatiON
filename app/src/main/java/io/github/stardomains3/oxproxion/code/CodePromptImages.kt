@@ -9,6 +9,7 @@ import android.net.Uri
 import android.util.Base64
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 
 /**
  * Encode gallery/camera images for Code [session/prompt] image content blocks.
@@ -195,14 +196,32 @@ object CodePromptImages {
     }
 
     /**
-     * Cheap stable fingerprint for cache / identity without hashing the full base64 on Main.
-     * Uses mime, length, and hash of a small head+tail sample.
+     * Collision-free cache / bind identity for an agent inline image.
+     *
+     * [blockId] uniquely identifies the image block (e.g. `"${messageKey}#${index}"`).
+     * Mime and length are diagnostic only — never use a head/tail base64 sample as bitmap
+     * identity (distinct payloads can share the same sample and collide).
+     *
+     * Safe on Main: no full-payload digest. Callers that prefer a content digest must
+     * compute it off Main (see [inlineContentDigest]) and pass that as [blockId] or
+     * compose it into [blockId].
      */
-    fun inlineCacheKey(mimeType: String, data: String): String {
-        val n = data.length
-        val head = data.substring(0, minOf(64, n)).hashCode()
-        val tail = if (n > 64) data.substring(n - 64).hashCode() else 0
-        return "$mimeType|$n|$head|$tail"
+    fun inlineCacheKey(blockId: String, mimeType: String, dataLength: Int): String {
+        require(blockId.isNotEmpty()) { "blockId required for collision-free inline image cache keys" }
+        return "$blockId|$mimeType|$dataLength"
+    }
+
+    /**
+     * SHA-256 hex digest of [data] (UTF-8). Call off Main for large payloads.
+     * Prefer [inlineCacheKey] with a unique message/block id for UI bitmap identity.
+     */
+    fun inlineContentDigest(data: String): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        val bytes = data.toByteArray(Charsets.UTF_8)
+        val digest = md.digest(bytes)
+        val sb = StringBuilder(digest.size * 2)
+        for (b in digest) sb.append("%02x".format(b.toInt() and 0xff))
+        return sb.toString()
     }
 
     /**

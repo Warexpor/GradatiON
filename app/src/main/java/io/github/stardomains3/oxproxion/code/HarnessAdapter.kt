@@ -117,8 +117,22 @@ object TranscriptReducer {
                 }
             }
             is CodeUpdate.ImageChunk -> {
-                val img = AgentInlineImage(update.mimeType, update.data)
                 val i = list.indexOfLast { it.key == update.key }
+                val index = when {
+                    i < 0 -> 0
+                    else -> (list[i] as? CodeEvent.AgentText)?.images?.size ?: 0
+                }
+                // Block identity owns the LruCache slot — distinct payloads never collide
+                // even when mime/length/head+tail samples match (IMAGE-01).
+                val img = AgentInlineImage(
+                    mimeType = update.mimeType,
+                    data = update.data,
+                    cacheKey = CodePromptImages.inlineCacheKey(
+                        blockId = "${update.key}#$index",
+                        mimeType = update.mimeType,
+                        dataLength = update.data.length,
+                    ),
+                )
                 if (i < 0) {
                     list + CodeEvent.AgentText(
                         update.key, now, "", streaming = true, images = listOf(img),

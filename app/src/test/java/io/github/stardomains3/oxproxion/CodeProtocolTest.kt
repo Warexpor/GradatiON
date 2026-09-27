@@ -38,6 +38,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -96,7 +97,13 @@ class CodeProtocolTest {
         assertEquals(1, list.size)
         val t = list[0] as CodeEvent.AgentText
         assertEquals("", t.text)
-        assertEquals(listOf(AgentInlineImage("image/png", png)), t.images)
+        assertEquals(1, t.images.size)
+        assertEquals("image/png", t.images[0].mimeType)
+        assertEquals(png, t.images[0].data)
+        assertEquals(
+            CodePromptImages.inlineCacheKey("${t.key}#0", "image/png", png.length),
+            t.images[0].cacheKey,
+        )
         assertTrue(t.streaming)
     }
 
@@ -144,6 +151,47 @@ class CodeProtocolTest {
             """{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png","data":"$big"}}"""
         )))
         assertTrue(list.none { it is CodeEvent.AgentText && it.images.isNotEmpty() })
+    }
+
+    @Test fun inlineCacheKeyUsesBlockIdNotBase64Sample() {
+        // IMAGE-01: same mime/length/head+tail sample must not collide when block ids differ.
+        val head = "A".repeat(64)
+        val tail = "B".repeat(64)
+        val d1 = head + "X".repeat(128) + tail
+        val d2 = head + "Y".repeat(128) + tail
+        assertEquals(d1.length, d2.length)
+        val k1 = CodePromptImages.inlineCacheKey("text:1#0", "image/png", d1.length)
+        val k2 = CodePromptImages.inlineCacheKey("text:1#1", "image/png", d2.length)
+        assertNotEquals(k1, k2)
+        assertEquals(k1, CodePromptImages.inlineCacheKey("text:1#0", "image/png", d1.length))
+        // Content digest distinguishes payloads even when samples match.
+        assertNotEquals(
+            CodePromptImages.inlineContentDigest(d1),
+            CodePromptImages.inlineContentDigest(d2),
+        )
+    }
+
+    @Test fun twoAgentImagesSameSampleGetDistinctCacheKeys() {
+        // IMAGE-01: reducer assigns messageKey#index so LruCache cannot reuse the wrong bitmap.
+        val head = "A".repeat(64)
+        val tail = "B".repeat(64)
+        val d1 = head + "X".repeat(128) + tail
+        val d2 = head + "Y".repeat(128) + tail
+        val list = fold(listOf(
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png","data":"$d1"}}"""),
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png","data":"$d2"}}"""),
+        ))
+        val t = list.single() as CodeEvent.AgentText
+        assertEquals(2, t.images.size)
+        assertNotEquals(t.images[0].cacheKey, t.images[1].cacheKey)
+        assertEquals(
+            CodePromptImages.inlineCacheKey("${t.key}#0", "image/png", d1.length),
+            t.images[0].cacheKey,
+        )
+        assertEquals(
+            CodePromptImages.inlineCacheKey("${t.key}#1", "image/png", d2.length),
+            t.images[1].cacheKey,
+        )
     }
 
     @Test fun toolCallBreaksTextAndUpdatesInPlace() {

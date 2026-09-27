@@ -192,12 +192,13 @@ data class ApprovalOption(val id: String, val label: String, val kind: Kind) {
  * One inline image from an ACP `agent_message_chunk` content block (`type: image`).
  * [data] is raw base64 (no data-URI prefix); [mimeType] e.g. `image/png`.
  * MVP: data+mime only — no remote URIs.
- * [cacheKey] is a cheap fingerprint for UI bitmap cache identity (avoids full-string hash on Main).
+ * [cacheKey] must uniquely identify this image block (message key + index); see
+ * [CodePromptImages.inlineCacheKey]. Never derive it from a head/tail base64 sample alone.
  */
 data class AgentInlineImage(
     val mimeType: String,
     val data: String,
-    val cacheKey: String = CodePromptImages.inlineCacheKey(mimeType, data),
+    val cacheKey: String,
 )
 
 /**
