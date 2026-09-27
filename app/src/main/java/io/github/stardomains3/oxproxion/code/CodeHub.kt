@@ -628,8 +628,9 @@ class CodeHub private constructor(context: Context) {
 /**
  * Soft-merge a remote `bridge/listSessions` row with a previously known local summary.
  * Prefer non-null / non-blank remote fields; keep local [CodeSessionSummary.model],
- * [CodeSessionSummary.lastSeq], title, preview, and non-ASK permission when the bridge
- * omits them (listSessions often lacks model until it echoes start `_meta.model`).
+ * [CodeSessionSummary.lastSeq], preview, and non-ASK permission when the bridge omits them
+ * (listSessions often lacks model until it echoes start `_meta.model`). Phone-local title
+ * (rename) wins when present so refreshSessions does not clobber it (G2).
  */
 internal fun mergeListSessionsSummary(
     remote: CodeSessionSummary,
@@ -640,7 +641,9 @@ internal fun mergeListSessionsSummary(
         local.permissionMode == PermissionMode.ASK
     ) remote.permissionMode else local.permissionMode,
     preview = remote.preview.ifBlank { local.preview },
-    title = remote.title.ifBlank { local.title },
+    // G2: phone-local rename must survive connect→refreshSessions (listSessions almost
+    // always sends a non-blank title). First sighting still uses remote as-is.
+    title = local.title.ifBlank { remote.title },
     model = remote.model ?: local.model,
 )
 

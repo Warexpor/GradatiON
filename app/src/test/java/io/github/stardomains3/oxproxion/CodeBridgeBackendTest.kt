@@ -964,4 +964,55 @@ class CodeBridgeBackendTest {
         }
     }
 
+
+    @Test
+    fun flushOutboxKeepsIdenticalRepromptAfterAbort() = runBlocking {
+        // G1: after cancel removes peeked head, a re-queued identical prompt must not be
+        // dropped by structural == on dequeue — referential === keeps it for flush.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary("s1"))
+            transport.drop()
+            withTimeout(3_000) { backend.connection.first { it == ConnectionState.DISCONNECTED } }
+            delay(20)
+            val text = "identical-reprompt-g1"
+            backend.prompt("s1", text)
+            transport.restore()
+            withTimeout(5_000) {
+                while (transport.sent.none {
+                    it.contains("session/prompt") && it.contains(text)
+                }) delay(5)
+            }
+            val promptsBeforeCancel = transport.sent.count {
+                it.contains("session/prompt") && it.contains(text)
+            }
+            assertTrue(promptsBeforeCancel >= 1)
+            backend.cancel("s1")
+            backend.prompt("s1", text)
+            withTimeout(5_000) {
+                while (transport.sent.count {
+                    it.contains("session/prompt") && it.contains(text)
+                } < promptsBeforeCancel + 1) delay(10)
+            }
+            assertTrue(
+                "identical re-prompt after cancel must still flush (G1 ===)",
+                transport.sent.count {
+                    it.contains("session/prompt") && it.contains(text)
+                } >= promptsBeforeCancel + 1,
+            )
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+
 }

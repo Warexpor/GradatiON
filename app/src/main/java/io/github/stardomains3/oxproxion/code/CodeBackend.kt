@@ -452,8 +452,10 @@ class BridgeBackend(
                 // E1: Done / Aborted — drop this head if still present and keep flushing
                 // siblings. Only Retry (pre-accept failure) waits for the next reconnect.
                 DeliverResult.Done, DeliverResult.Aborted -> {
+                    // G1: referential match only — structural == would drop a re-queued
+                    // identical prompt if cancel cleared the peeked head mid-deliver.
                     synchronized(outboxLock) {
-                        if (outbox.isNotEmpty() && outbox.first() == next) outbox.removeFirst()
+                        if (outbox.isNotEmpty() && outbox.first() === next) outbox.removeFirst()
                     }
                 }
                 DeliverResult.Retry -> break

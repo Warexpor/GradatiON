@@ -99,4 +99,19 @@ class CodeHubMergeTest {
             ),
         )
     }
+
+    @Test
+    fun keepsLocalTitleWhenRemoteHasTitle() {
+        // G2: phone-local rename must not be clobbered by listSessions refresh.
+        val local = summary(title = "My rename")
+        val remote = summary(title = "Bridge first line")
+        assertEquals("My rename", mergeListSessionsSummary(remote, local).title)
+    }
+
+    @Test
+    fun takesRemoteTitleWhenLocalBlank() {
+        val local = summary(title = "")
+        val remote = summary(title = "From bridge")
+        assertEquals("From bridge", mergeListSessionsSummary(remote, local).title)
+    }
 }

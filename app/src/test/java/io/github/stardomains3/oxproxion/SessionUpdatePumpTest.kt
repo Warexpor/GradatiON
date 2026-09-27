@@ -7,6 +7,7 @@ import io.github.stardomains3.oxproxion.code.CodeSessionFolder
 import io.github.stardomains3.oxproxion.code.CodeSessionState
 import io.github.stardomains3.oxproxion.code.CodeSessionSummary
 import io.github.stardomains3.oxproxion.code.CodeUpdate
+import io.github.stardomains3.oxproxion.code.SessionStatus
 import io.github.stardomains3.oxproxion.code.HarnessKind
 import io.github.stardomains3.oxproxion.code.PermissionMode
 import io.github.stardomains3.oxproxion.code.SessionUpdate
@@ -141,16 +142,40 @@ class SessionUpdatePumpTest {
         )
         assertFalse(state.running)
         assertTrue(state.events.any { it is CodeEvent.UserPrompt })
-        // Live agent activity still marks running.
+        // G4: history TextChunk must not force Stop either (Hub.prompt / SessionInfo drive live).
         state = CodeSessionFolder.apply(state, CodeUpdate.TextChunk("k", "hi"), now = 11L)
+        assertFalse(state.running)
+        assertEquals("hi", (state.events[0] as CodeEvent.AgentText).text)
+        // Live turn: Hub.prompt already set running — chunks / UserPrompt keep it.
+        state = state.copy(running = true)
+        state = CodeSessionFolder.apply(state, CodeUpdate.TextChunk("k", " more"), now = 12L)
         assertTrue(state.running)
-        // Hub.prompt already set running before local UserPrompt — Upsert must keep it.
         state = CodeSessionFolder.apply(
             state,
             CodeUpdate.Upsert(CodeEvent.UserPrompt("user:2", 2L, "live")),
-            now = 12L,
+            now = 13L,
         )
         assertTrue(state.running)
+    }
+
+    @Test
+    fun historicalTextChunkDoesNotForceRunning() {
+        // G4: session/load agent_message_chunk alone must leave idle sessions idle.
+        var state = CodeSessionState(summary(), running = false)
+        state = CodeSessionFolder.apply(state, CodeUpdate.TextChunk("k", "past"), now = 10L)
+        assertFalse(state.running)
+        state = CodeSessionFolder.apply(
+            state,
+            CodeUpdate.SessionInfo(status = SessionStatus.RUNNING),
+            now = 11L,
+        )
+        assertTrue(state.running)
+        state = CodeSessionFolder.apply(
+            state,
+            CodeUpdate.SessionInfo(status = SessionStatus.IDLE),
+            now = 12L,
+        )
+        assertFalse(state.running)
     }
 
     @Test

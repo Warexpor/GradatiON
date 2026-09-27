@@ -92,11 +92,11 @@ internal object CodeSessionFolder {
                 update.stopReason == "cancelled" && ignoreStaleCancelTurnDone -> state.running
                 else -> false
             }
+            // G4 / E2: history replay must not force Stop chrome. Hub.prompt and
+            // SessionInfo.RUNNING / NEEDS_APPROVAL drive live turns; chunks / tool patches /
+            // UserPrompt only preserve the current flag.
             is CodeUpdate.TextChunk, is CodeUpdate.ImageChunk, is CodeUpdate.ToolPatch ->
-                if (suppressRunningFromChunks) state.running else true
-            // E2: UserPrompt must not force running — Hub.prompt already sets it for live
-            // turns; session/load history replays user_message_chunk as UserPrompt and must
-            // leave idle sessions idle (TextChunk / SessionInfo still revive live turns).
+                state.running
             is CodeUpdate.Upsert -> state.running
             is CodeUpdate.SessionInfo -> when (update.status) {
                 SessionStatus.RUNNING, SessionStatus.NEEDS_APPROVAL -> true
