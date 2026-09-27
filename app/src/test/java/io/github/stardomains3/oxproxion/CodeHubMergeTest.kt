@@ -4,11 +4,12 @@ import io.github.stardomains3.oxproxion.code.CodeSessionSummary
 import io.github.stardomains3.oxproxion.code.HarnessKind
 import io.github.stardomains3.oxproxion.code.PermissionMode
 import io.github.stardomains3.oxproxion.code.mergeListSessionsSummary
+import io.github.stardomains3.oxproxion.code.revertPermissionModeIfCurrent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Pure merge used by CodeHub.refreshSessions (review #14 Y1). */
+/** Pure merge used by CodeHub.refreshSessions (review #14 Y1) + F2 CAS helper. */
 class CodeHubMergeTest {
 
     private fun summary(
@@ -72,6 +73,30 @@ class CodeHubMergeTest {
         assertEquals(
             PermissionMode.FULL_AUTO,
             mergeListSessionsSummary(remote, local).permissionMode,
+        )
+    }
+
+    @Test
+    fun revertPermissionCasWhenStillOptimistic() {
+        assertEquals(
+            PermissionMode.ASK,
+            revertPermissionModeIfCurrent(
+                current = PermissionMode.AUTO_EDIT,
+                attempted = PermissionMode.AUTO_EDIT,
+                previous = PermissionMode.ASK,
+            ),
+        )
+    }
+
+    @Test
+    fun revertPermissionCasSkipsWhenNewerToggleWon() {
+        // Ask→Auto fails late after Auto→Full already succeeded: do not clobber Full back to Ask.
+        assertNull(
+            revertPermissionModeIfCurrent(
+                current = PermissionMode.FULL_AUTO,
+                attempted = PermissionMode.AUTO_EDIT,
+                previous = PermissionMode.ASK,
+            ),
         )
     }
 }

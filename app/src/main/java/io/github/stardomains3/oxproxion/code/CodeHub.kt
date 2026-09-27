@@ -51,8 +51,10 @@ class CodeHub private constructor(context: Context) {
     private val ignoreStaleCancelTurnDone = HashSet<String>()
     /** In-flight approval answers (M3); cleared on ApprovalAnswered or send failure. */
     private val answeringRequests = HashSet<String>()
-    /** Sessions currently running backend.attach (E3); blocks overlapping retries. */
+    /** Sessions currently running backend.attach (E3); coalesce overlapping opens. */
     private val attachingSessions = HashSet<String>()
+    /** Opens that arrived while an attach was in flight (F3); re-launch after failure/finally. */
+    private val needsAttach = HashSet<String>()
     private val sessionDao: CodeSessionDao = AppDatabase.getDatabase(appContext).codeSessionDao()
     /** Latest session-index snapshot waiting for Room; null when idle. */
     private val pendingPersist = AtomicReference<List<CodeSessionEntity>?>(null)
@@ -121,21 +123,28 @@ class CodeHub private constructor(context: Context) {
         _hosts.value = list
         // E4: closing the backend aborts in-flight turns without a Hub TurnDone — clear
         // Stop chrome so Send is not stuck after a host edit mid-turn.
+        // F1: also clear Hub attached / in-flight attach so open sessions re-session/load
+        // on the rebuilt backend (sticky attached would skip hub.attach).
         var clearedRunning = false
+        val toReattach = ArrayList<String>()
         _sessions.value = _sessions.value.mapValues { (id, st) ->
             if (st.summary.hostId != host.id) st
             else {
                 suppressRunningFromChunks.remove(id)
                 ignoreStaleCancelTurnDone.remove(id)
-                if (st.running) {
-                    clearedRunning = true
-                    st.copy(running = false)
-                } else st
+                val wasAttaching = id in attachingSessions || id in needsAttach
+                attachingSessions.remove(id)
+                needsAttach.remove(id)
+                if (st.attached || wasAttaching) toReattach += id
+                if (st.running) clearedRunning = true
+                if (st.running || st.attached) st.copy(running = false, attached = false)
+                else st
             }
         }
         if (clearedRunning) persistSessions()
         backends.remove(host.id)?.close()
         if (_activeHost.value == null || _activeHost.value?.id == host.id) selectHost(host.id)
+        toReattach.forEach { attach(it) }
     }
 
     fun removeHost(id: String) {
@@ -302,7 +311,13 @@ class CodeHub private constructor(context: Context) {
     fun attach(sessionId: String) {
         val s = _sessions.value[sessionId] ?: return
         if (s.attached) return
-        if (!attachingSessions.add(sessionId)) return
+        // F3: coalesce overlapping opens onto one in-flight attempt; remember
+        // a concurrent open so failure/finally can re-launch (retry during slow ensureReady).
+        if (!attachingSessions.add(sessionId)) {
+            needsAttach.add(sessionId)
+            return
+        }
+        needsAttach.remove(sessionId)
         val host = _hosts.value.find { it.id == s.summary.hostId }
         if (host == null) {
             attachingSessions.remove(sessionId)
@@ -317,6 +332,10 @@ class CodeHub private constructor(context: Context) {
                 if (ok) update(sessionId) { it.copy(attached = true) }
             } finally {
                 attachingSessions.remove(sessionId)
+                val retry = sessionId in needsAttach &&
+                    _sessions.value[sessionId]?.attached != true
+                needsAttach.remove(sessionId)
+                if (retry) attach(sessionId)
             }
         }
     }
@@ -439,11 +458,20 @@ class CodeHub private constructor(context: Context) {
         update(sessionId) { it.copy(summary = it.summary.copy(permissionMode = mode)) }
         persistSessions()
         // E5: revert local mode when the wire set_mode fails so UI matches the bridge.
+        // F2: CAS — only revert if Hub still shows this optimistic mode (do not clobber
+        // a newer successful toggle whose RPC already completed).
         withBackend(sessionId) {
             val ok = runCatching { it.setPermissionMode(sessionId, mode) }.isSuccess
             if (!ok) {
-                update(sessionId) { it.copy(summary = it.summary.copy(permissionMode = prev)) }
-                persistSessions()
+                var reverted = false
+                update(sessionId) { cur ->
+                    val next = revertPermissionModeIfCurrent(cur.summary.permissionMode, mode, prev)
+                    if (next != null) {
+                        reverted = true
+                        cur.copy(summary = cur.summary.copy(permissionMode = next))
+                    } else cur
+                }
+                if (reverted) persistSessions()
             }
         }
     }
@@ -458,6 +486,7 @@ class CodeHub private constructor(context: Context) {
             suppressRunningFromChunks.remove(sessionId)
             ignoreStaleCancelTurnDone.remove(sessionId)
             attachingSessions.remove(sessionId)
+            needsAttach.remove(sessionId)
             val host = _hosts.value.find { it.id == s.summary.hostId }
             if (host != null) {
                 val backend = backendFor(host)
@@ -615,3 +644,13 @@ internal fun mergeListSessionsSummary(
     title = remote.title.ifBlank { local.title },
     model = remote.model ?: local.model,
 )
+
+/**
+ * F2: on wire set_mode failure, revert only when [current] still equals the optimistic
+ * [attempted] mode. Returns [previous] to write back, or null when a newer toggle won.
+ */
+internal fun revertPermissionModeIfCurrent(
+    current: PermissionMode,
+    attempted: PermissionMode,
+    previous: PermissionMode,
+): PermissionMode? = if (current == attempted) previous else null
