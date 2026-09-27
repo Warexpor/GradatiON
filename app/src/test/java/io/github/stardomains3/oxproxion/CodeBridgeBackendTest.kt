@@ -17,6 +17,7 @@ import io.github.stardomains3.oxproxion.code.ConnectionState
 import io.github.stardomains3.oxproxion.code.HarnessKind
 import io.github.stardomains3.oxproxion.code.PermissionMode
 import io.github.stardomains3.oxproxion.code.SessionUpdate
+import io.github.stardomains3.oxproxion.code.TranscriptReducer
 import io.github.stardomains3.oxproxion.code.TransportKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
@@ -1610,6 +1611,119 @@ class CodeBridgeBackendTest {
                     u is CodeUpdate.TextChunk && u.chunk.contains("still-alive")
                 },
             )
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+
+
+    @Test
+    fun optimisticUserPromptDedupesBridgeEcho() = runBlocking {
+        // R7: optimistic user:<timestamp> + bridge user_message_chunk user:<seq> must
+        // collapse to one UserPrompt after reduce (especially visible after outbox replay).
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            backend.prompt("s1", "hello dedupe")
+            withTimeout(3_000) {
+                while (collected.none {
+                    val u = it.update
+                    u is CodeUpdate.Upsert &&
+                        u.event is CodeEvent.UserPrompt &&
+                        (u.event as CodeEvent.UserPrompt).text == "hello dedupe"
+                }) delay(5)
+            }
+
+            // Bridge echo with a different key (seq-based).
+            transport.deliver(
+                """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":42},
+                "update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"hello dedupe"}}}}"""
+            )
+            delay(50)
+
+            var events = emptyList<CodeEvent>()
+            for (su in collected.filter { it.sessionId == "s1" }) {
+                events = TranscriptReducer.apply(events, su.update)
+            }
+            val users = events.filterIsInstance<CodeEvent.UserPrompt>()
+            assertEquals(
+                "optimistic + echo must leave a single user bubble",
+                1,
+                users.size,
+            )
+            assertEquals("hello dedupe", users.single().text)
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun outboxReplayUserPromptDedupesBridgeEcho() = runBlocking {
+        // R7: offline optimistic bubble + reconnect outbox deliver + bridge echo → one bubble.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            transport.drop()
+            backend.prompt("s1", "queued echo dedupe")
+            delay(40)
+            assertTrue(
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.Upsert &&
+                        u.event is CodeEvent.UserPrompt &&
+                        (u.event as CodeEvent.UserPrompt).text == "queued echo dedupe"
+                },
+            )
+
+            transport.restore()
+            withTimeout(5_000) {
+                while (transport.sent.none {
+                    it.contains("session/prompt") && it.contains("queued echo dedupe")
+                }) delay(10)
+            }
+
+            transport.deliver(
+                """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":77},
+                "update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"queued echo dedupe"}}}}"""
+            )
+            delay(50)
+
+            var events = emptyList<CodeEvent>()
+            for (su in collected.filter { it.sessionId == "s1" }) {
+                events = TranscriptReducer.apply(events, su.update)
+            }
+            val users = events.filterIsInstance<CodeEvent.UserPrompt>()
+            assertEquals(1, users.size)
+            assertEquals("queued echo dedupe", users.single().text)
             collectJob.cancel()
         } finally {
             answers.cancel()

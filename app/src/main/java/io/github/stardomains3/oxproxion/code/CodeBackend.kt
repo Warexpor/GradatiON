@@ -146,6 +146,17 @@ class BridgeBackend(
     private val loadFailed = ConcurrentHashMap<String, String>()
     private var sessionLoadRetry: Job? = null
     private var sessionLoadFailCount = 0
+    /**
+     * R7: optimistic local UserPrompt keys awaiting a bridge `user_message_chunk` echo.
+     * Remap the echo onto the local key so TranscriptReducer upserts one bubble.
+     */
+    private data class PendingUserPrompt(
+        val key: String,
+        val text: String,
+        val attachmentCount: Int,
+    )
+    private val pendingUserPrompts = ConcurrentHashMap<String, ArrayDeque<PendingUserPrompt>>()
+    private val pendingUserLock = Any()
 
     private data class OutboxPrompt(
         val sessionId: String,
@@ -184,6 +195,49 @@ class BridgeBackend(
         else -> false
     }
 
+    private fun rememberPendingUser(sessionId: String, key: String, text: String, attachmentCount: Int) {
+        synchronized(pendingUserLock) {
+            pendingUserPrompts.getOrPut(sessionId) { ArrayDeque() }
+                .addLast(PendingUserPrompt(key, text, attachmentCount))
+        }
+    }
+
+    private fun takePendingUser(sessionId: String, text: String): PendingUserPrompt? {
+        synchronized(pendingUserLock) {
+            val q = pendingUserPrompts[sessionId] ?: return null
+            val it = q.iterator()
+            while (it.hasNext()) {
+                val p = it.next()
+                if (p.text == text) {
+                    it.remove()
+                    if (q.isEmpty()) pendingUserPrompts.remove(sessionId)
+                    return p
+                }
+            }
+            return null
+        }
+    }
+
+    private fun clearPendingUser(sessionId: String) {
+        synchronized(pendingUserLock) { pendingUserPrompts.remove(sessionId) }
+    }
+
+    /**
+     * R7: bridge `user_message_chunk` uses `user:<seq>` while the optimistic local bubble is
+     * `user:<timestamp>`. Reuse the local key (and attachment count) so the reducer upserts
+     * one message instead of leaving duplicates after outbox replay.
+     */
+    private fun remapUserPromptEcho(out: AdapterOutput.Update): AdapterOutput.Update {
+        val upsert = out.update as? CodeUpdate.Upsert ?: return out
+        val ev = upsert.event as? CodeEvent.UserPrompt ?: return out
+        val pending = takePendingUser(out.sessionId, ev.text) ?: return out
+        val merged = ev.copy(
+            key = pending.key,
+            attachmentCount = maxOf(pending.attachmentCount, ev.attachmentCount),
+        )
+        return out.copy(update = CodeUpdate.Upsert(merged))
+    }
+
     override fun peekLastSeq(sessionId: String): Long? =
         (adapter as? AcpAdapter)?.lastSeq(sessionId)
 
@@ -214,12 +268,15 @@ class BridgeBackend(
                         }
                         for (out in decoded) when (out) {
                             is AdapterOutput.Update -> {
-                                if (out.sessionId in suppressAgent && isSuppressedAgentActivity(out.update)) {
+                                val remapped = remapUserPromptEcho(out)
+                                if (remapped.sessionId in suppressAgent &&
+                                    isSuppressedAgentActivity(remapped.update)
+                                ) {
                                     // Stop already ended the turn locally; ignore late bridge activity.
                                     continue
                                 }
-                                if (out.seq != null) noteRunningFromUpdate(out)
-                                _updates.emit(SessionUpdate(out.sessionId, out.update))
+                                if (remapped.seq != null) noteRunningFromUpdate(remapped)
+                                _updates.emit(SessionUpdate(remapped.sessionId, remapped.update))
                             }
                             is AdapterOutput.Result -> pending.remove(out.id)?.let { d ->
                                 if (out.error != null) d.completeExceptionally(IllegalStateException(out.error))
@@ -572,11 +629,13 @@ class BridgeBackend(
     override suspend fun prompt(sessionId: String, text: String, attachments: List<PromptAttachment>) {
         val now = System.currentTimeMillis()
         val atts = attachments.take(CodePromptImages.MAX_COUNT)
+        val localKey = "user:$now"
+        rememberPendingUser(sessionId, localKey, text, atts.size)
         _updates.emit(
             SessionUpdate(
                 sessionId,
                 CodeUpdate.Upsert(
-                    CodeEvent.UserPrompt("user:$now", now, text, attachmentCount = atts.size)
+                    CodeEvent.UserPrompt(localKey, now, text, attachmentCount = atts.size)
                 )
             )
         )
@@ -959,6 +1018,7 @@ class BridgeBackend(
         suppressAgent.remove(sessionId)
         cancelPending.remove(sessionId)
         loadFailed.remove(sessionId)
+        clearPendingUser(sessionId)
         deliverGeneration.remove(sessionId)
         inFlightPromptId.remove(sessionId)?.let { rpcId ->
             pending.remove(rpcId)?.completeExceptionally(CancellationException("Detached"))
@@ -1000,6 +1060,7 @@ class BridgeBackend(
         suppressAgent.clear()
         cancelPending.clear()
         loadFailed.clear()
+        synchronized(pendingUserLock) { pendingUserPrompts.clear() }
         answering.clear()
         promptMutexes.clear()
         synchronized(outboxLock) { outbox.clear() }
