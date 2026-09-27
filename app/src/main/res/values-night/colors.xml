@@ -109,12 +109,15 @@
     <color name="segment_thumb">#2BFFFFFF</color>
     <color name="segment_thumb_rim">#40FFFFFF</color>
     <color name="segment_thumb_shadow">#66000000</color>
+    <!-- Glass toggle (GlassSwitch.kt): the bead never changes color; the track says on/off -->
     <color name="switch_track_off">#1FFFFFFF</color>
-    <color name="switch_track_on">#FFBDBDBD</color>
-    <color name="switch_track_rim">#1AFFFFFF</color>
-    <color name="switch_thumb_rim">#26FFFFFF</color>
-    <color name="switch_thumb_shadow">#66000000</color>
-    <color name="switch_thumb_off">#FF8A8A8A</color>
-    <color name="switch_thumb_on">#FF161616</color>
-    <color name="switch_thumb_lens">#40FFFFFF</color>
+    <color name="switch_track_on">#FF9A9A9A</color>
+    <color name="switch_track_rim">#1FFFFFFF</color>
+    <color name="switch_track_rim_top">#4D000000</color>
+    <color name="switch_bead_top">#F2F5F5F5</color>
+    <color name="switch_bead_mid">#EBECECEC</color>
+    <color name="switch_bead_bottom">#EDF3F3F3</color>
+    <color name="switch_bead_rim_light">#E6FFFFFF</color>
+    <color name="switch_bead_rim_dark">#33000000</color>
+    <color name="switch_thumb_shadow">#80000000</color>
 </resources>

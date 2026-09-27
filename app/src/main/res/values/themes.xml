@@ -369,6 +369,7 @@
         <item name="trackDecorationTint">@android:color/transparent</item>
         <item name="thumbIconTint">@android:color/transparent</item>
         <item name="switchMinWidth">@dimen/grokion_switch_min_width</item>
+        <item name="android:background">@null</item>
     </style>
 
     <style name="Widget.Gradation.SwitchCompat" parent="Widget.AppCompat.CompoundButton.Switch">
