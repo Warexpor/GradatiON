@@ -110,12 +110,12 @@
     <color name="segment_thumb">#8CFFFFFF</color>
     <color name="segment_thumb_rim">#1F000000</color>
     <color name="segment_thumb_shadow">#24000000</color>
-    <color name="switch_track_off">#1A000000</color>
-    <color name="switch_track_on">#FF6B6B6B</color>
+    <color name="switch_track_off">#17000000</color>
+    <color name="switch_track_on">#FF262626</color>
     <color name="switch_track_rim">#14000000</color>
-    <color name="switch_thumb_top">#FFFFFFFF</color>
-    <color name="switch_thumb_bottom">#FFEDEDED</color>
-    <color name="switch_thumb_rim">#26000000</color>
-    <color name="switch_thumb_shadow">#2E000000</color>
-    <color name="switch_thumb_lens">#B3FFFFFF</color>
+    <color name="switch_thumb_rim">#1F000000</color>
+    <color name="switch_thumb_shadow">#33000000</color>
+    <color name="switch_thumb_off">#FFF3F3F3</color>
+    <color name="switch_thumb_on">#FFEAEAEA</color>
+    <color name="switch_thumb_lens">#66FFFFFF</color>
 </resources>
