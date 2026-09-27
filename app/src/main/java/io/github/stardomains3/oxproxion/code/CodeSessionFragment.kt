@@ -94,6 +94,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             onOpenToolOutput = { e -> openToolOutput(e) },
         )
         list.layoutManager = LinearLayoutManager(requireContext()).apply { stackFromEnd = false }
+        adapter.verbose = hub.store.showThinking
         list.adapter = adapter
         list.itemAnimator = androidx.recyclerview.widget.DefaultItemAnimator().apply {
             supportsChangeAnimations = false
@@ -363,6 +364,15 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         val s = hub.sessions.value[sessionId] ?: return
         val rows = ArrayList<PickerPopover.Row>()
         if (s.running) rows += PickerPopover.Row(getString(R.string.code_session_stop), iconRes = R.drawable.ic_stop) { hub.cancel(sessionId) }
+        val thinking = hub.store.showThinking
+        rows += PickerPopover.Row(
+            getString(if (thinking) R.string.code_verbosity_normal else R.string.code_verbosity_thinking),
+            subtitle = getString(if (thinking) R.string.code_verbosity_normal_hint else R.string.code_verbosity_thinking_hint),
+            iconRes = R.drawable.ic_code_bulb
+        ) {
+            hub.store.showThinking = !thinking
+            adapter.verbose = !thinking
+        }
         rows += PickerPopover.Row(getString(R.string.code_session_changes), iconRes = R.drawable.ic_code_branch) {
             openChanges()
         }

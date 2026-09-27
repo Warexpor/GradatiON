@@ -200,4 +200,8 @@
     <string name="code_attach_too_large">Image is too large</string>
     <string name="code_attach_unsupported">Unsupported image format</string>
     <string name="code_attach_failed">Couldn\'t read that image</string>
+    <string name="code_verbosity_thinking">Show thinking</string>
+    <string name="code_verbosity_thinking_hint">Open every thought and tool output</string>
+    <string name="code_verbosity_normal">Normal view</string>
+    <string name="code_verbosity_normal_hint">Fold thoughts and output to one line</string>
 </resources>

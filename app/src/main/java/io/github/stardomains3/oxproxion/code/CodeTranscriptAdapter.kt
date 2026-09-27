@@ -72,6 +72,16 @@ class CodeTranscriptAdapter(
 
     private val streams = HashMap<String, StreamState>()
     private val expanded = HashSet<String>()
+
+    /** Normal (false): thoughts and tool output fold to one line. Thinking (true): all open. */
+    var verbose: Boolean = false
+        @android.annotation.SuppressLint("NotifyDataSetChanged")
+        set(value) {
+            if (field == value) return
+            field = value
+            expanded.clear()
+            notifyDataSetChanged()
+        }
     /**
      * Soft cache of decoded agent inline images (cacheKey → bitmap).
      * Sized by approximate KB footprint (~6MB budget), not entry count.
@@ -459,7 +469,8 @@ class CodeTranscriptAdapter(
     private fun bindThought(v: View, e: CodeEvent.Thought) {
         val body = v.findViewById<TextView>(R.id.codeThoughtText)
         val chevron = v.findViewById<View>(R.id.codeThoughtChevron)
-        val open = e.key in expanded
+        // Thinking verbosity opens every thought; a tap flips just this one either way.
+        val open = (e.key in expanded) != verbose
         body.text = e.text
         body.isVisible = open
         chevron.rotation = if (open) 90f else 0f
@@ -480,11 +491,12 @@ class CodeTranscriptAdapter(
         val status = v.findViewById<ImageView>(R.id.codeToolStatus)
         val running = e.status == ToolStatus.RUNNING || e.status == ToolStatus.PENDING
         spinner.isVisible = running
-        status.isVisible = !running
-        status.setImageResource(if (e.status == ToolStatus.FAILED) R.drawable.ic_code_cross else R.drawable.ic_code_check)
+        // Quiet when it worked; only a failure earns a mark.
+        status.isVisible = e.status == ToolStatus.FAILED
+        status.setImageResource(R.drawable.ic_code_cross)
         val hasOutput = !e.output.isNullOrBlank()
         // Commands show their output live while they run; everything else opens on tap.
-        val open = hasOutput && (e.key in expanded || (e.kind == ToolKind.EXECUTE && e.status == ToolStatus.RUNNING))
+        val open = hasOutput && (((e.key in expanded) != verbose) || (e.kind == ToolKind.EXECUTE && e.status == ToolStatus.RUNNING))
         val raw = e.output.orEmpty()
         v.findViewById<View>(R.id.codeToolOutputScroll).isVisible = open
         val full = v.findViewById<TextView>(R.id.codeToolFull)

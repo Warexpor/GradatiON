@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code transcript: one tool call. Glyph by kind, title, mono detail, status on the right; tap for output -->
+<!-- Code transcript: one tool call as a single line; tap for output -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -10,11 +10,13 @@
     android:paddingTop="2dp"
     android:paddingBottom="2dp">
 
+    <!-- Claude Code style: one quiet line. Kind glyph, verb, mono argument; a spinner while it
+         runs, a cross only on failure. Output hangs under it on tap. -->
     <LinearLayout
         android:id="@+id/codeToolRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="48dp"
+        android:minHeight="36dp"
         android:background="@drawable/bg_press_svg"
         android:clickable="true"
         android:focusable="true"
@@ -23,51 +25,39 @@
         android:paddingStart="6dp"
         android:paddingEnd="6dp">
 
-        <FrameLayout
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:background="@drawable/bg_code_icon_disc">
+        <ImageView
+            android:id="@+id/codeToolIcon"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:importantForAccessibility="no"
+            app:tint="@color/xai_mute" />
 
-            <ImageView
-                android:id="@+id/codeToolIcon"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_gravity="center"
-                android:importantForAccessibility="no"
-                app:tint="@color/xai_ink" />
-        </FrameLayout>
+        <TextView
+            android:id="@+id/codeToolTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/xai_ink"
+            android:textSize="14sp"
+            android:textFontWeight="600" />
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/codeToolDetail"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="12dp"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/codeToolTitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textColor="@color/xai_ink"
-                android:textSize="15sp"
-                android:textFontWeight="500" />
-
-            <TextView
-                android:id="@+id/codeToolDetail"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
-                android:ellipsize="middle"
-                android:singleLine="true"
-                android:textAppearance="@style/TextAppearance.Gradation.Code.Mono" />
-        </LinearLayout>
+            android:layout_marginStart="8dp"
+            android:ellipsize="middle"
+            android:singleLine="true"
+            android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+            android:textColor="@color/xai_mute" />
 
         <FrameLayout
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginStart="10dp">
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="8dp">
 
             <com.google.android.material.progressindicator.CircularProgressIndicator
                 android:id="@+id/codeToolSpinner"
@@ -76,14 +66,14 @@
                 android:layout_gravity="center"
                 android:indeterminate="true"
                 app:indicatorColor="@color/xai_mute"
-                app:indicatorSize="16dp"
-                app:trackThickness="2dp"
+                app:indicatorSize="12dp"
+                app:trackThickness="1.5dp"
                 app:trackColor="@android:color/transparent" />
 
             <ImageView
                 android:id="@+id/codeToolStatus"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:layout_gravity="center"
                 android:importantForAccessibility="no"
                 app:tint="@color/xai_mute" />
@@ -94,7 +84,7 @@
         android:id="@+id/codeToolOutputScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="48dp"
+        android:layout_marginStart="30dp"
         android:layout_marginTop="2dp"
         android:background="@drawable/bg_code_block"
         android:scrollbars="none"
@@ -116,7 +106,7 @@
         android:id="@+id/codeToolFull"
         android:layout_width="match_parent"
         android:layout_height="36dp"
-        android:layout_marginStart="48dp"
+        android:layout_marginStart="30dp"
         android:layout_marginBottom="4dp"
         android:background="@drawable/bg_press_svg"
         android:clickable="true"

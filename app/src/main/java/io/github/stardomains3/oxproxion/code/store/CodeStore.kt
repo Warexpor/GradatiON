@@ -42,6 +42,11 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         get() = prefs.getString(KEY_ACTIVE_HOST, null)
         set(v) = prefs.edit { putString(KEY_ACTIVE_HOST, v) }
 
+    /** Transcript verbosity: false = Normal (folded), true = Thinking (thoughts and output open). */
+    var showThinking: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_THINKING, false)
+        set(v) = prefs.edit { putBoolean(KEY_SHOW_THINKING, v) }
+
     var defaultPermissionMode: PermissionMode
         // New sessions run full auto until the user picks something else.
         get() = prefs.getString(KEY_PERMISSION, null)?.let(PermissionMode::fromId)
@@ -144,6 +149,7 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         private const val TAG = "CodeStore"
         const val PREFS_NAME = "code_mode"
         private const val KEY_ENABLED = "enabled"
+        private const val KEY_SHOW_THINKING = "transcript_show_thinking"
         private const val KEY_LAST_TAB = "last_tab_code"
         private const val KEY_ACTIVE_HOST = "active_host"
         private const val KEY_PERMISSION = "permission_mode"

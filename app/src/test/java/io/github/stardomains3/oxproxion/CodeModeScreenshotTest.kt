@@ -111,6 +111,30 @@ class CodeModeScreenshotTest {
         snap(root(a), "code_session_done_dark")
     }
 
+    /** Thinking verbosity: every thought and tool output opens; Normal folds them back. */
+    @Test fun codeSessionThinkingDark() = withCode { a, _ ->
+        val hub = CodeHub.get(ctx)
+        hub.store.showThinking = true
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        snap(root(a), "code_session_thinking_dark")
+        // Bind the thought row directly (the live list follows the bottom edge).
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val adapter = list.adapter as io.github.stardomains3.oxproxion.code.CodeTranscriptAdapter
+        fun thoughtOpen(): Boolean {
+            val pos = adapter.currentList.indexOfFirst { (it as? io.github.stardomains3.oxproxion.code.TranscriptRow.Event)?.event is CodeEvent.Thought }
+            assertTrue("demo streams a thought", pos >= 0)
+            val holder = adapter.onCreateViewHolder(list, adapter.getItemViewType(pos))
+            adapter.onBindViewHolder(holder, pos)
+            return holder.itemView.findViewById<android.view.View>(R.id.codeThoughtText).visibility == android.view.View.VISIBLE
+        }
+        assertTrue("thoughts open in Thinking view", thoughtOpen())
+        adapter.verbose = false
+        assertEquals("Normal view folds them", false, thoughtOpen())
+        hub.store.showThinking = false
+    }
+
     @Test fun codeDiffDark() = withCode { a, _ ->
         val hub = CodeHub.get(ctx)
         val id = startDemo("Add a follow-system option to the theme setting")
