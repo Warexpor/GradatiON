@@ -1,12 +1,12 @@
-GradatiON is a personal Android chat client for Large Language Models — OpenRouter in the cloud and Ollama, LM Studio, llama.cpp, MLX LM, or Hermes Agent on your LAN.
+GradatiON is a personal Android client for language models: chat, roleplay with your own characters, and a remote for the coding agents on your computers. Everything sits under one quiet, monochrome Liquid Glass interface.
 
-• Multi-model chat with streaming, vision, and image generation where supported
-• History with autosave, search, pin, rename, import/export
-• System messages, presets, reasoning, and optional tool calling
-• Dark monochrome UI with GradatiON branding
-• On-device PDF export and markdown rendering
-• No trackers, analytics, or ads
+• Chat: streaming markdown replies, reasoning, vision, image generation, web search, presets and optional tool calling
+• Roleplay: your own characters, personas and lorebooks; a Memory the character keeps true; Continue to let the story move on without you
+• Code: pair your computers and drive Claude Code, Codex, OpenCode and more; approve edits, read colored diffs, get notified when an agent needs you
+• Voice input in every composer: tap, talk, tap. Words paste into the field and never send by themselves
+• Built-in demo model: try the app with no key or network
+• OpenRouter in the cloud, or Ollama, LM Studio, llama.cpp, MLX LM and Hermes Agent on your LAN
+• History with autosave, search, pin, rename, import and export
+• Encrypted chat database; no trackers, analytics or ads
 
-Fork of oxproxion (Apache 2.0). Not affiliated with xAI or OpenRouter.
-
-Get an OpenRouter API key or point LAN settings at your own server. See in-app Help for the full guide.
+Fork of oxproxion (Apache 2.0). Not affiliated with xAI, Anthropic, OpenAI or OpenRouter.

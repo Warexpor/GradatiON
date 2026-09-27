@@ -85,7 +85,7 @@ app, drive it to the best direction you think it is."
       Wallpaper tiles, and auto-summarized memory (a model call that updates Memory).
 
 ## Repo
-- [ ] P1. New screenshots, a fresh README description of the app, design docs and agent instructions.
+- [x] P1. New screenshots, a fresh README description of the app, design docs and agent instructions.
 
 ## Decided
 - Code syntax highlighting stays colored, and diffs are colored too (done: green/red lines, markers,

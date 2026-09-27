@@ -1,6 +1,7 @@
 # GradatiON: project memory
 
-Auto-loaded by every Claude session, both local and cloud. Cloud containers have no
+Auto-loaded by every Claude session, both local and cloud. Code map and test gotchas: `AGENTS.md`.
+Design contract: `DESIGN.md`. Cloud containers have no
 `/mnt/project-files`, so this file is the memory that lasts. Keep it short. Put durable facts here and
 the state of work in progress in `docs/handoff.md`.
 

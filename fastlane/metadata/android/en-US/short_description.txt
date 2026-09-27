@@ -1,1 +1,1 @@
-GradatiON — OpenRouter & LAN LLM chat (Ollama, LM Studio, Hermes)
+Chat, roleplay and coding agents in one quiet Liquid Glass LLM client
