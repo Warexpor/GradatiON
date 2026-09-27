@@ -75,6 +75,53 @@ class CodeAwayFormatTest {
     }
 
     @Test
+    fun allocateResolvesKnown24BitCollision() {
+        // AWAY-03: these two turn keys share a 24-bit hashCode; allocation must diverge.
+        val a = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess-84400")
+        val b = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess-200064")
+        assertEquals(
+            "fixture must collide on preferred hash",
+            CodeAwayFormat.notificationId(a),
+            CodeAwayFormat.notificationId(b),
+        )
+        val taken = mutableSetOf<Int>()
+        val idA = CodeAwayFormat.allocateNotificationId(a, taken)
+        taken += idA
+        val idB = CodeAwayFormat.allocateNotificationId(b, taken)
+        assertEquals(CodeAwayFormat.notificationId(a), idA)
+        assertNotEquals(idA, idB)
+        assertTrue(CodeAwayFormat.isAwayNotifId(idB))
+        assertFalse("probed id must not reuse taken preferred", idB in taken)
+    }
+
+    @Test
+    fun allocateReusesExistingWhenFree() {
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess")
+        val existing = CodeAwayFormat.NOTIF_ID_BASE + 0x12345
+        val id = CodeAwayFormat.allocateNotificationId(key, emptySet(), existing)
+        assertEquals(existing, id)
+    }
+
+    @Test
+    fun allocateIgnoresExistingWhenTaken() {
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess")
+        val existing = CodeAwayFormat.NOTIF_ID_BASE + 0x12345
+        val taken = setOf(existing)
+        val id = CodeAwayFormat.allocateNotificationId(key, taken, existing)
+        assertNotEquals(existing, id)
+        assertTrue(CodeAwayFormat.isAwayNotifId(id))
+        assertFalse(id in taken)
+    }
+
+    @Test
+    fun allocateStableWhenUncontested() {
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, "s", "r")
+        val preferred = CodeAwayFormat.notificationId(key)
+        assertEquals(preferred, CodeAwayFormat.allocateNotificationId(key, emptySet()))
+        assertEquals(preferred, CodeAwayFormat.allocateNotificationId(key, setOf(preferred + 1)))
+    }
+
+    @Test
     fun headlines() {
         assertEquals("Approval needed · Edit foo.kt", CodeAwayFormat.approvalHeadline("Edit foo.kt"))
         assertEquals("Approval needed", CodeAwayFormat.approvalHeadline("  "))
@@ -109,4 +156,3 @@ class CodeAwayFormatTest {
         assertTrue(CodeAwayFormat.shouldNotifyTurnDone(true, "error"))
     }
 }
-

@@ -26,6 +26,9 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Content intents carry a one-shot opaque [EXTRA_OPEN_TOKEN] minted here; [MainActivity]
  * must present a matching token before opening a session (exported-Activity extras are forgeable).
+ *
+ * Notification ids are allocated collision-free (AWAY-03): key→id is persisted and
+ * cancel/eviction use that allocation rather than recomputing the lossy 24-bit hash alone.
  */
 class CodeAwayNotifier(
     context: Context,
@@ -41,7 +44,10 @@ class CodeAwayNotifier(
     /** Dedup keys currently showing (or suppressed after post). */
     private val posted = LinkedHashSet<String>()
 
-    /** notificationId → dedupKey for cancel-by-session. */
+    /** dedupKey → allocated notificationId (AWAY-03). */
+    private val keyToId = HashMap<String, Int>()
+
+    /** notificationId → dedupKey for cancel-by-session / eviction. */
     private val idToKey = HashMap<Int, String>()
 
     /** sessionId → one-shot open nonce baked into content PendingIntents (A1). */
@@ -50,6 +56,10 @@ class CodeAwayNotifier(
     /** Survives process death so a cold-start notification tap still authenticates (A1). */
     private val tokenPrefs: SharedPreferences =
         appContext.getSharedPreferences(OPEN_TOKEN_PREFS, Context.MODE_PRIVATE)
+
+    /** Survives process death so cancel uses the same id that was posted (AWAY-03). */
+    private val idPrefs: SharedPreferences =
+        appContext.getSharedPreferences(NOTIF_ID_PREFS, Context.MODE_PRIVATE)
 
     fun setBackgrounded(backgrounded: Boolean) {
         this.backgrounded = backgrounded
@@ -98,8 +108,13 @@ class CodeAwayNotifier(
         val toRemove = posted.filter {
             it == CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId) ||
                 it.startsWith("approval:$sessionId:")
+        }.toList()
+        // Also cancel allocated keys that may only live in prefs after process death.
+        val prefKeys = idPrefs.all.keys.filter {
+            it == CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId) ||
+                it.startsWith("approval:$sessionId:")
         }
-        toRemove.forEach { key -> cancelKey(key) }
+        (toRemove + prefKeys).toSet().forEach { key -> cancelKey(key) }
         clearOpenToken(sessionId)
     }
 
@@ -136,14 +151,15 @@ class CodeAwayNotifier(
         tokenPrefs.edit().remove(sessionId).apply()
     }
 
-    /** Drop turn-done dedup so a subsequent finished turn can notify again (A3). */
+    /**
+     * Drop turn-done dedup so a subsequent finished turn can notify again (A3).
+     * Keeps the key→id allocation so the next post updates the same shade id (AWAY-03).
+     */
     fun clearTurnDoneDedup(sessionId: String) {
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId)
         // Remove memory only — leave any still-visible shade entry until open/auto-cancel;
-        // the next TurnDone will post a fresh notification.
-        if (!posted.remove(key)) return
-        val id = CodeAwayFormat.notificationId(key)
-        idToKey.remove(id)
+        // the next TurnDone will post (updating the allocated id).
+        posted.remove(key)
     }
 
     private fun maybePostApproval(
@@ -163,7 +179,7 @@ class CodeAwayNotifier(
         val headline = CodeAwayFormat.approvalHeadline(
             approval.title.ifBlank { sessionTitle },
         )
-        val id = CodeAwayFormat.notificationId(key)
+        val id = idFor(key)
         val builder = baseBuilder(sessionId, headline, sessionTitle.ifBlank { approval.title })
         // Optional Allow / Deny when wire options are present (answer without opening UI).
         val allow = CodeAwayFormat.pickAllow(approval.options)
@@ -172,14 +188,14 @@ class CodeAwayNotifier(
             builder.addAction(
                 0,
                 appContext.getString(R.string.code_away_action_allow),
-                actionPending(sessionId, approval.requestId, allow, REQUEST_ALLOW),
+                actionPending(sessionId, approval.requestId, allow, REQUEST_ALLOW, id),
             )
         }
         if (deny != null) {
             builder.addAction(
                 0,
                 appContext.getString(R.string.code_away_action_deny),
-                actionPending(sessionId, approval.requestId, deny, REQUEST_DENY),
+                actionPending(sessionId, approval.requestId, deny, REQUEST_DENY, id),
             )
         }
         nm?.notify(id, builder.build())
@@ -192,7 +208,7 @@ class CodeAwayNotifier(
         if (!CodeAwayFormat.shouldPost(posted, key)) return
         ensureChannel()
         val headline = CodeAwayFormat.turnDoneHeadline(sessionTitle)
-        val id = CodeAwayFormat.notificationId(key)
+        val id = idFor(key)
         val builder = baseBuilder(sessionId, headline, sessionTitle)
         nm?.notify(id, builder.build())
         markPosted(key, id)
@@ -266,6 +282,7 @@ class CodeAwayNotifier(
         requestId: String,
         option: ApprovalOption,
         requestCodeSalt: Int,
+        notifId: Int,
     ): PendingIntent {
         val intent = Intent(appContext, CodeAwayActionReceiver::class.java).apply {
             action = ACTION_ANSWER
@@ -275,9 +292,7 @@ class CodeAwayNotifier(
             putExtra(EXTRA_OPTION_KIND, option.kind.name)
             putExtra(EXTRA_OPTION_LABEL, option.label)
         }
-        val req = requestCodeSalt xor CodeAwayFormat.notificationId(
-            CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, sessionId, requestId),
-        )
+        val req = requestCodeSalt xor notifId
         return PendingIntent.getBroadcast(
             appContext,
             req,
@@ -286,27 +301,61 @@ class CodeAwayNotifier(
         )
     }
 
+    /**
+     * AWAY-03: resolve a stable, collision-free notification id for [key].
+     * Reuses in-memory or persisted allocation when still free; otherwise probes.
+     */
+    private fun idFor(key: String): Int {
+        keyToId[key]?.let { return it }
+        val savedRaw = idPrefs.getInt(key, Int.MIN_VALUE)
+        val saved = savedRaw.takeIf { it != Int.MIN_VALUE && CodeAwayFormat.isAwayNotifId(it) }
+        // Usable only if no other live key owns this id.
+        val existing = saved?.takeIf { owner -> idToKey[owner] == null || idToKey[owner] == key }
+        val taken = idToKey.keys
+        val id = CodeAwayFormat.allocateNotificationId(key, taken, existing)
+        keyToId[key] = id
+        idToKey[id] = key
+        if (savedRaw != id) {
+            idPrefs.edit().putInt(key, id).apply()
+        }
+        return id
+    }
+
     private fun markPosted(key: String, id: Int) {
         posted += key
+        keyToId[key] = id
         idToKey[id] = key
+        idPrefs.edit().putInt(key, id).apply()
         // Bound memory if many sessions notify while away; cancel shade on eviction (A6).
         while (posted.size > 64) {
             val oldest = posted.first()
             posted.remove(oldest)
-            val evictId = idToKey.entries.firstOrNull { it.value == oldest }?.key
+            val evictId = releaseAllocation(oldest)
                 ?: CodeAwayFormat.notificationId(oldest)
-            idToKey.remove(evictId)
             nm?.cancel(evictId)
         }
     }
 
     private fun cancelKey(key: String) {
-        if (!posted.remove(key) && idToKey.values.none { it == key }) {
-            // Still cancel by derived id in case process restarted with a leftover shade entry.
-        }
-        val id = CodeAwayFormat.notificationId(key)
-        idToKey.remove(id)
+        posted.remove(key)
+        val id = releaseAllocation(key)
+            ?: CodeAwayFormat.notificationId(key) // last-resort for pre-allocation leftovers
         nm?.cancel(id)
+    }
+
+    /** Drop key→id maps (memory + prefs). Returns the freed id when known. */
+    private fun releaseAllocation(key: String): Int? {
+        val fromMem = keyToId.remove(key)
+        val fromPrefs = idPrefs.getInt(key, Int.MIN_VALUE)
+            .takeIf { it != Int.MIN_VALUE && CodeAwayFormat.isAwayNotifId(it) }
+        val id = fromMem ?: fromPrefs
+        if (id != null) {
+            if (idToKey[id] == key) idToKey.remove(id)
+        }
+        if (fromPrefs != null || fromMem != null) {
+            idPrefs.edit().remove(key).apply()
+        }
+        return id
     }
 
     companion object {
@@ -323,5 +372,6 @@ class CodeAwayNotifier(
         private const val REQUEST_ALLOW = 0xA11
         private const val REQUEST_DENY = 0xDE1
         private const val OPEN_TOKEN_PREFS = "code_away_open_tokens"
+        private const val NOTIF_ID_PREFS = "code_away_notif_ids"
     }
 }
