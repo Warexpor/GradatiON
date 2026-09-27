@@ -299,6 +299,7 @@ class BridgeBackend(
                 createdAt = l("createdAt"),
                 updatedAt = l("updatedAt"),
                 permissionMode = PermissionMode.fromId(s("permissionMode") ?: s("mode")),
+                model = s("model"),
                 preview = s("preview") ?: "",
                 branch = s("branch"),
                 lastSeq = (o["lastSeq"] as? JsonPrimitive)?.longOrNull

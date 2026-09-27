@@ -61,6 +61,9 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     private var harness: HarnessKind = HarnessKind.CLAUDE_CODE
     private var workspace: String = ""
     private var permission: PermissionMode = PermissionMode.ASK
+    /** Models reported by the selected harness; empty → hide the model pill. */
+    private var harnessModels: List<String> = emptyList()
+    private var selectedModel: String? = null
     private var boundHostId: String? = null
     private var starting = false
     private var searchQuery: String = ""
@@ -68,6 +71,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     private var searchField: EditText? = null
     private var lastHost: CodeHost? = null
     private var lastConn: ConnectionState = ConnectionState.DISCONNECTED
+    /** Host id + connection we last synced models for (avoid listHarnesses spam). */
+    private var lastModelsSyncKey: Pair<String?, ConnectionState>? = null
 
     /** Space the chat screen's floating top bar takes; set by [CodeModeHost]. */
     var topInset: Int = 0
@@ -152,6 +157,13 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 composer.setPermission(it)
             }
         }
+        composer.modelPill.setOnClickListener {
+            if (harnessModels.isEmpty()) return@setOnClickListener
+            composer.pickModel(harnessModels, selectedModel) {
+                selectedModel = it
+                refreshModelPill()
+            }
+        }
         composer.onSend = { text, attachments -> start(text, attachments) }
         composer.onAttachClick = {
             imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -164,6 +176,14 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 combine(hub.activeHost, hub.connection, hub.sessions) { h, c, _ -> h to c }.collect { (host, conn) ->
                     bindHost(host)
                     render(host, conn)
+                    // listHarnesses needs CONNECTED (or demo); re-sync when host/connection changes.
+                    val key = host?.id to conn
+                    if (key != lastModelsSyncKey && host != null &&
+                        (host.isDemo || conn == ConnectionState.CONNECTED)
+                    ) {
+                        lastModelsSyncKey = key
+                        syncModelsForHarness()
+                    }
                 }
             }
         }
@@ -222,7 +242,11 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         clearSearchQuery()
         harness = host.defaultHarness
         workspace = host.recentWorkspaces.firstOrNull() ?: host.defaultWorkspace
+        harnessModels = emptyList()
+        selectedModel = null
+        lastModelsSyncKey = null
         refreshPills()
+        refreshModelPill()
     }
 
     /** Drop the in-memory filter and sync/clear the bound search field. */
@@ -250,6 +274,21 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         composer.agentPill.text = harness.shortName
         composer.folderPill.text = if (workspace.isBlank()) getString(R.string.code_home_pick_workspace) else CodeComposer.folderName(workspace)
         composer.input.hint = getString(R.string.code_home_composer_hint, harness.shortName)
+        refreshModelPill()
+    }
+
+    private fun refreshModelPill() {
+        if (!::composer.isInitialized) return
+        composer.setModel(selectedModel, harnessModels, editable = true)
+    }
+
+    /** Load models for the current [harness] from bridge/listHarnesses (or demo). */
+    private suspend fun syncModelsForHarness() {
+        val remote = hub.harnesses()
+        val info = remote.find { it.kind == harness }
+        harnessModels = info?.models.orEmpty()
+        selectedModel = CodeModelSelection.resolveSelection(harnessModels, selectedModel)
+        if (isAdded) refreshModelPill()
     }
 
     private fun render(host: CodeHost?, conn: ConnectionState) {
@@ -318,6 +357,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                         // Still allow picking an unavailable harness so the user can set a default
                         // before installing; the bridge will reject session/new if it can't launch.
                         harness = info.kind
+                        harnessModels = info.models
+                        selectedModel = CodeModelSelection.resolveSelection(harnessModels, selectedModel)
                         refreshPills()
                     }
                 }
@@ -325,6 +366,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 HarnessKind.entries.filter { it != HarnessKind.CUSTOM }.map { k ->
                     PickerPopover.Row(k.displayName, iconRes = R.drawable.ic_code_terminal, selected = k == harness) {
                         harness = k
+                        harnessModels = emptyList()
+                        selectedModel = null
                         refreshPills()
                     }
                 }
@@ -471,7 +514,11 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
             try {
                 syncPermissionFromStore()
                 val result = hub.startSession(
-                    NewSessionRequest(host.id, harness, workspace, prompt, permission, attachments = attachments)
+                    NewSessionRequest(
+                        host.id, harness, workspace, prompt, permission,
+                        model = selectedModel,
+                        attachments = attachments,
+                    )
                 )
                 result.onSuccess { id ->
                     composer.clear()

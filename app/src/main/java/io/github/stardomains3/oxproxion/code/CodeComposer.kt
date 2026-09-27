@@ -24,9 +24,9 @@ import io.github.stardomains3.oxproxion.R
 
 /**
  * Binds `view_code_composer`: the glass capsule with the prompt field, optional image attach
- * chips, the agent / folder / approvals pills and the send button (which turns into stop while
- * the agent works). Home uses all three pills to start a session; a session shows only the
- * approvals pill.
+ * chips, the agent / folder / model / approvals pills and the send button (which turns into stop
+ * while the agent works). Home uses agent/folder/(optional model)/approvals to start a session;
+ * a session shows approvals and an optional read-only model pill.
  */
 class CodeComposer(
     val root: GlassLinearLayout,
@@ -38,6 +38,7 @@ class CodeComposer(
     val input: EditText = root.findViewById(R.id.codeComposerInput)
     val agentPill: TextView = root.findViewById(R.id.codeComposerAgent)
     val folderPill: TextView = root.findViewById(R.id.codeComposerFolder)
+    val modelPill: TextView = root.findViewById(R.id.codeComposerModel)
     val permissionPill: TextView = root.findViewById(R.id.codeComposerPermission)
     private val send: MaterialButton = root.findViewById(R.id.codeComposerSend)
     private val attach: MaterialButton = root.findViewById(R.id.codeComposerAttach)
@@ -190,7 +191,7 @@ class CodeComposer(
 
     fun setPermission(mode: PermissionMode) {
         // Home (agent/folder visible) uses a short label so the row fits; session keeps the full name.
-        val short = agentPill.isVisible || folderPill.isVisible
+        val short = agentPill.isVisible || folderPill.isVisible || modelPill.isVisible
         permissionPill.text = context.getString(if (short) permissionPillLabel(mode) else permissionLabel(mode))
     }
 
@@ -294,12 +295,52 @@ class CodeComposer(
         })
     }
 
-    fun showPills(agent: Boolean, folder: Boolean, permission: Boolean) {
+    /** Model list popover when the harness reports [models] (hidden when empty). */
+    fun pickModel(models: List<String>, current: String?, onPick: (String) -> Unit) {
+        if (models.isEmpty()) return
+        pick(modelPill, context.getString(R.string.code_home_pick_model), models.map { m ->
+            PickerPopover.Row(
+                title = m,
+                selected = m == current,
+                onClick = { onPick(m) }
+            )
+        })
+    }
+
+    /**
+     * Updates the model pill label/visibility. Hidden when [models] is empty.
+     * [editable]=false drops the expand chevron and clickability (in-session read-only;
+     * ACP has session/new model `_meta` but no session/set_model yet).
+     */
+    fun setModel(model: String?, models: List<String>, editable: Boolean = true) {
+        val show = models.isNotEmpty()
+        modelPill.isVisible = show
+        if (show) {
+            modelPill.text = if (!model.isNullOrBlank()) CodeModelSelection.pillLabel(model)
+            else context.getString(R.string.code_home_pick_model)
+            modelPill.isClickable = editable
+            modelPill.isFocusable = editable
+            val end = if (editable) R.drawable.ic_expand_more else 0
+            modelPill.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                R.drawable.ic_nav_models, 0, end, 0
+            )
+        }
+        val gap = (4 * context.resources.displayMetrics.density).toInt()
+        (permissionPill.layoutParams as? android.view.ViewGroup.MarginLayoutParams)?.marginStart =
+            if (agentPill.isVisible || folderPill.isVisible || show) gap else 0
+    }
+
+    fun showPills(agent: Boolean, folder: Boolean, permission: Boolean, model: Boolean = false) {
         agentPill.isVisible = agent
         folderPill.isVisible = folder
+        if (!model) modelPill.isVisible = false
         permissionPill.isVisible = permission
+        val gap = (4 * context.resources.displayMetrics.density).toInt()
+        (folderPill.layoutParams as? android.view.ViewGroup.MarginLayoutParams)?.marginStart =
+            if (agent) gap else 0
+        (modelPill.layoutParams as? android.view.ViewGroup.MarginLayoutParams)?.marginStart = gap
         (permissionPill.layoutParams as? android.view.ViewGroup.MarginLayoutParams)?.marginStart =
-            if (agent || folder) (4 * context.resources.displayMetrics.density).toInt() else 0
+            if (agent || folder || modelPill.isVisible) gap else 0
     }
 
     companion object {

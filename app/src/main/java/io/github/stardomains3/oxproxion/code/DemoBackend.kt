@@ -54,7 +54,10 @@ class DemoBackend(
         listOf("~/code/GradatiON", "~/code/gradation-bridge", "~/code/site", "~/notes")
 
     override suspend fun listHarnesses(): List<HarnessInfo> = listOf(
-        HarnessInfo("claude-code", "Claude Code", available = true),
+        HarnessInfo(
+            "claude-code", "Claude Code", available = true,
+            models = listOf("claude-sonnet-4", "claude-opus-4", "claude-haiku-3.5"),
+        ),
         HarnessInfo("codex", "Codex CLI", available = true),
         HarnessInfo("opencode", "OpenCode", available = true),
         HarnessInfo("grok-build", "Grok Build", available = true),
@@ -118,7 +121,7 @@ class DemoBackend(
         return CodeSessionSummary(
             id = id, hostId = host.id, harness = request.harness, workspace = request.workspace,
             title = request.prompt.lineSequence().first().take(60), createdAt = now, updatedAt = now,
-            permissionMode = request.permissionMode, branch = "main"
+            permissionMode = request.permissionMode, model = request.model, branch = "main"
         )
     }
 

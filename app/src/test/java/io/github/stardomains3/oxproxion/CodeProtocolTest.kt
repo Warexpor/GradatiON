@@ -36,6 +36,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -145,6 +146,22 @@ class CodeProtocolTest {
         assertEquals("/w", params["cwd"]!!.jsonPrimitive.content)
         assertEquals("codex", params["_meta"]!!.jsonObject["harness"]!!.jsonPrimitive.content)
         assertEquals("plan", params["_meta"]!!.jsonObject["permissionMode"]!!.jsonPrimitive.content)
+        assertNull(params["_meta"]!!.jsonObject["model"])
+    }
+
+    @Test fun newSessionCarriesModelInMeta() {
+        val frame = Json.parseToJsonElement(
+            acp.newSession(
+                1,
+                NewSessionRequest(
+                    "h", HarnessKind.CLAUDE_CODE, "/w", "hi", PermissionMode.ASK,
+                    model = "claude-sonnet-4",
+                ),
+            ),
+        ).jsonObject
+        val meta = frame["params"]!!.jsonObject["_meta"]!!.jsonObject
+        assertEquals("claude-sonnet-4", meta["model"]!!.jsonPrimitive.content)
+        assertEquals("claude-code", meta["harness"]!!.jsonPrimitive.content)
     }
 
     @Test fun listHarnessesAndBrowseFrames() {

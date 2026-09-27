@@ -169,11 +169,19 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                         title.text = s.summary.title
                         subtitle.text = listOfNotNull(
                             s.summary.harness.displayName,
+                            s.summary.model?.let { CodeModelSelection.pillLabel(it) },
                             CodeComposer.folderName(s.summary.workspace).ifEmpty { null },
                             s.summary.branch
                         ).joinToString("  ·  ")
                         composer.running = s.running
                         composer.setPermission(s.summary.permissionMode)
+                        // No session/set_model on the wire yet — show read-only current model when known.
+                        val model = s.summary.model
+                        if (!model.isNullOrBlank()) {
+                            composer.setModel(model, listOf(model), editable = false)
+                        } else {
+                            composer.setModel(null, emptyList())
+                        }
                         composer.availableCommands = s.availableCommands
                         composer.input.hint = getString(R.string.code_session_reply_hint, s.summary.harness.shortName)
                         render(s)
