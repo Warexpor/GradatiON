@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <solid android:color="@color/xai_send_disabled" />
-</shape>
+<!-- Composer round actions at rest (+, idle send, stop): clear glass disc like the controls button -->
+<drawable xmlns:app="http://schemas.android.com/apk/res-auto"
+    class="io.github.stardomains3.oxproxion.GlassDrawable"
+    app:glassTint="@color/glass_btn_tint"
+    app:glassSelectedTint="@color/glass_btn_selected_tint"
+    app:glassCornerRadius="-1dp"
+    app:glassInteractive="true"
+    app:glassOpaqueWithoutBlur="false" />

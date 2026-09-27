@@ -132,17 +132,9 @@
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" />
 
-                        <HorizontalScrollView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:scrollbars="none"
-                            android:fadeScrollbars="false"
-                            android:overScrollMode="ifContentScrolls"
-                            android:fillViewport="false">
-
-                            <io.github.stardomains3.oxproxion.GlassSegmentedGroup
+                        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
                                 android:id="@+id/themeToggleGroup"
+                                android:layout_marginStart="12dp"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 app:selectionRequired="true"
@@ -175,7 +167,6 @@
                                     app:backgroundTint="@color/toggle_background_selector"
                                     app:strokeColor="@color/xai_hairline" />
                             </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
-                        </HorizontalScrollView>
                     </LinearLayout>
                 </LinearLayout>
 

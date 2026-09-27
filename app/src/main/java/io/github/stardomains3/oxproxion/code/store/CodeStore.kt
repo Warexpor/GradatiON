@@ -43,7 +43,9 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         set(v) = prefs.edit { putString(KEY_ACTIVE_HOST, v) }
 
     var defaultPermissionMode: PermissionMode
-        get() = PermissionMode.fromId(prefs.getString(KEY_PERMISSION, null))
+        // New sessions run full auto until the user picks something else.
+        get() = prefs.getString(KEY_PERMISSION, null)?.let(PermissionMode::fromId)
+            ?: PermissionMode.FULL_AUTO
         set(v) = prefs.edit { putString(KEY_PERMISSION, v.id) }
 
     /**

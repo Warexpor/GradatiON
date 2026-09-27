@@ -45,7 +45,6 @@ class GlassSegmentedGroup @JvmOverloads constructor(
         color = res(R.color.switch_track_rim)
     }
     private val thumbFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = res(R.color.segment_thumb) }
-    private val thumbSpec = Paint(Paint.ANTI_ALIAS_FLAG)
     private val thumbRim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = max(1f, density * 0.9f)
@@ -53,7 +52,6 @@ class GlassSegmentedGroup @JvmOverloads constructor(
     }
     private val thumbShadow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = res(R.color.segment_thumb_shadow) }
     private val sheen = res(R.color.glass_sheen)
-    private val highlight = res(R.color.glass_highlight)
     private val shadowA = Color.alpha(thumbShadow.color)
     private val fillA = Color.alpha(thumbFill.color)
     private val rimA = Color.alpha(thumbRim.color)
@@ -64,7 +62,6 @@ class GlassSegmentedGroup @JvmOverloads constructor(
     private val from = RectF()
     private val to = RectF()
     private var trackShaderH = -1f
-    private var thumbShaderKey = -1f
 
     private var targetId = View.NO_ID
     private var progress = 1f
@@ -198,15 +195,6 @@ class GlassSegmentedGroup @JvmOverloads constructor(
 
         thumbFill.alpha = fillA * a / 255
         canvas.drawRoundRect(thumb, r, r, thumbFill)
-
-        val key = thumb.top + thumb.height() * 1000f
-        if (thumbShaderKey != key) {
-            thumbShaderKey = key
-            thumbSpec.shader = LinearGradient(0f, thumb.top, 0f, thumb.top + thumb.height() * 0.55f, highlight, Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        }
-        thumbSpec.alpha = a
-        val si = 1.5f * density
-        canvas.drawRoundRect(thumb.left + si, thumb.top + si * 0.6f, thumb.right - si, thumb.centerY(), r, r, thumbSpec)
 
         thumbRim.alpha = rimA * a / 255
         val ri = thumbRim.strokeWidth / 2f

@@ -62,7 +62,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
     private var harness: HarnessKind = HarnessKind.CLAUDE_CODE
     private var workspace: String = ""
-    private var permission: PermissionMode = PermissionMode.ASK
+    private var permission: PermissionMode = PermissionMode.FULL_AUTO
     /** Models reported by the selected harness; empty → hide the model pill. */
     private var harnessModels: List<String> = emptyList()
     private var selectedModel: String? = null

@@ -1,24 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Composer model pill: tonal capsule matching the round composer actions; darkens while pressed/open -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:enterFadeDuration="90"
-    android:exitFadeDuration="160">
-    <item android:state_pressed="true">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/model_pill_pressed" />
-            <corners android:radius="19dp" />
-        </shape>
-    </item>
-    <item android:state_selected="true">
-        <shape android:shape="rectangle">
-            <solid android:color="@color/model_pill_pressed" />
-            <corners android:radius="19dp" />
-        </shape>
-    </item>
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="@color/xai_send_disabled" />
-            <corners android:radius="19dp" />
-        </shape>
-    </item>
-</selector>
+<!-- Composer model pill: the same clear glass as the round composer actions; brightens while open -->
+<drawable xmlns:app="http://schemas.android.com/apk/res-auto"
+    class="io.github.stardomains3.oxproxion.GlassDrawable"
+    app:glassTint="@color/glass_btn_tint"
+    app:glassSelectedTint="@color/glass_btn_selected_tint"
+    app:glassCornerRadius="-1dp"
+    app:glassInteractive="true"
+    app:glassOpaqueWithoutBlur="false" />

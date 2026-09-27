@@ -103,7 +103,13 @@ class PickerPopover(
         val ey = edgeLoc[1] - hostLoc[1]
         val ex = edgeLoc[0] - hostLoc[0]
         val gutter = (12 * density).toInt()
-        val width = minOf(host.width - 2 * gutter, (340 * density).toInt())
+        // With an edge (composer) the card spans it edge to edge, so it lines up on both sides;
+        // a bare anchor keeps the compact 340dp card.
+        val width = if (edge !== anchor) {
+            minOf(edge.width, host.width - 2 * gutter, (560 * density).toInt())
+        } else {
+            minOf(host.width - 2 * gutter, (340 * density).toInt())
+        }
         val above = ey + edge.height / 2 > host.height / 2
         opensAbove = above
         val gap = (8 * density).toInt()

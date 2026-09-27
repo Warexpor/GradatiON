@@ -101,7 +101,7 @@ enum class PermissionMode(val id: String) {
     AUTO_EDIT("auto-edit"),
     /** Read-only planning; the agent proposes, nothing is written. */
     PLAN("plan"),
-    /** Everything goes through. Dangerous, off by default. */
+    /** Everything goes through. Default for new sessions (user's choice). */
     FULL_AUTO("full-auto");
 
     companion object {
