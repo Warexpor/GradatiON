@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
-import android.graphics.Color import android.view.LayoutInflater import android.view.View import android.view.ViewGroup import android.view.WindowManager import android.widget.ImageView import android.widget.PopupWindow import android.widget.TextView import androidx.core.graphics.drawable.toDrawable import androidx.recyclerview.widget.RecyclerView
+import android.graphics.Color import android.view.LayoutInflater import android.view.View import android.view.ViewGroup import android.view.WindowManager import android.widget.ImageView import android.widget.PopupWindow import android.widget.TextView import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toDrawable import androidx.recyclerview.widget.RecyclerView
 import androidx.core.view.isVisible
 
 class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val onItemEdit: (Preset) -> Unit, private val onItemDelete: (Preset) -> Unit ) : RecyclerView.Adapter<PresetAdapter.PresetVH>() {
@@ -116,7 +117,7 @@ class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val on
         val context = anchorView.context
         val rootView = (context as android.app.Activity).window.decorView.findViewById<ViewGroup>(android.R.id.content)
         val dimView = View(context).apply {
-            setBackgroundColor(Color.argb(140, 0, 0, 0)) // ~60% opacity dim
+            setBackgroundColor(ContextCompat.getColor(context, R.color.popover_scrim))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT

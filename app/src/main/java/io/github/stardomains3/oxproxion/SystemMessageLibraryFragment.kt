@@ -14,6 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.SearchView
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -277,7 +278,7 @@ class SystemMessageLibraryFragment : Fragment() {
         popupWindow.isOutsideTouchable = true
         val rootView = requireActivity().window.decorView.findViewById<ViewGroup>(android.R.id.content)
         val dimView = View(requireContext()).apply {
-            setBackgroundColor(Color.argb(140, 0, 0, 0)) // 150 = ~60% opacity
+            setBackgroundColor(ContextCompat.getColor(requireContext(), R.color.popover_scrim))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
