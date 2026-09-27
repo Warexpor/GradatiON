@@ -70,6 +70,8 @@ class CodeBridgeBackendTest {
         var keepAlive = false
         /** When true, the next session/prompt send fails once (simulates deliver failure). */
         var failPromptSendOnce = false
+        /** When true, the next non-prompt send fails once (approval answer / cancel). */
+        var failNextNonPromptSend = false
         private val open = AtomicBoolean(false)
 
         override fun connect() {
@@ -83,6 +85,11 @@ class CodeBridgeBackendTest {
             if (!open.get() || _state.value != ConnectionState.CONNECTED) return false
             if (failPromptSendOnce && frame.contains("session/prompt")) {
                 failPromptSendOnce = false
+                lastError = "Not connected"
+                return false
+            }
+            if (failNextNonPromptSend && !frame.contains("session/prompt")) {
+                failNextNonPromptSend = false
                 lastError = "Not connected"
                 return false
             }
@@ -647,5 +654,72 @@ class CodeBridgeBackendTest {
             backend.close()
         }
     }
+
+    @Test
+    fun answerDoesNotEmitWhenSendFails() = runBlocking {
+        // H2: failed transport.send must not emit ApprovalAnswered.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(5_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+            transport.failNextNonPromptSend = true
+            val threw = runCatching {
+                backend.answer("s1", "42", io.github.stardomains3.oxproxion.code.ApprovalOption(
+                    "allow", "Allow", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ONCE
+                ))
+            }.exceptionOrNull()
+            assertTrue("expected send failure", threw is IllegalStateException)
+            delay(50)
+            assertFalse(
+                collected.any { it.update is CodeUpdate.ApprovalAnswered }
+            )
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun answerRetryAfterSendFailureSucceeds() = runBlocking {
+        // H2 follow-up: after a failed send, a later answer can still go out.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(5_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            val opt = io.github.stardomains3.oxproxion.code.ApprovalOption(
+                "allow", "Allow", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ONCE
+            )
+            transport.failNextNonPromptSend = true
+            assertTrue(runCatching { backend.answer("s1", "77", opt) }.isFailure)
+            val before = transport.sent.count { it.contains("\"id\":77") || it.contains("\"id\":\"77\"") }
+            assertEquals(0, before)
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+            backend.answer("s1", "77", opt)
+            delay(50)
+            assertTrue(transport.sent.any { it.contains("\"id\":77") || it.contains("\"id\":\"77\"") })
+            assertTrue(collected.any { it.update is CodeUpdate.ApprovalAnswered })
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
 
 }

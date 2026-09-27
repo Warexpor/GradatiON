@@ -44,6 +44,8 @@ class CodeHub private constructor(context: Context) {
     private val backends = HashMap<String, CodeBackend>()
     /** Sessions cancelled locally until their queued TurnDone is folded. */
     private val suppressRunningFromChunks = HashSet<String>()
+    /** In-flight approval answers (M3); cleared on ApprovalAnswered or send failure. */
+    private val answeringRequests = HashSet<String>()
     private val sessionDao: CodeSessionDao = AppDatabase.getDatabase(appContext).codeSessionDao()
     /** Latest session-index snapshot waiting for Room; null when idle. */
     private val pendingPersist = AtomicReference<List<CodeSessionEntity>?>(null)
@@ -301,11 +303,33 @@ class CodeHub private constructor(context: Context) {
             }
         }
         if (!accepted) return false
+        // H1: this prompt owns the session now; a queued cancel TurnDone must not clear running.
+        suppressRunningFromChunks.remove(sessionId)
         withBackend(sessionId) { b -> b.prompt(sessionId, text, attachments) }
         return true
     }
 
-    fun answer(sessionId: String, requestId: String, option: ApprovalOption?) = withBackend(sessionId) { it.answer(sessionId, requestId, option) }
+    fun answer(sessionId: String, requestId: String, option: ApprovalOption?) {
+        // M3: drop a second tap before ApprovalAnswered folds (and skip already-chosen).
+        if (!answeringRequests.add(requestId)) return
+        val s = _sessions.value[sessionId]
+        val open = s?.events?.any {
+            it is CodeEvent.Approval && it.requestId == requestId && it.chosen == null
+        } == true
+        val host = s?.let { st -> _hosts.value.find { it.id == st.summary.hostId } }
+        if (!open || host == null) {
+            answeringRequests.remove(requestId)
+            return
+        }
+        scope.launch {
+            try {
+                backendFor(host).answer(sessionId, requestId, option)
+            } catch (_: Throwable) {
+                // H2: send failed — allow retry.
+                answeringRequests.remove(requestId)
+            }
+        }
+    }
 
     /**
      * Away-notification Allow/Deny (A2): run the answer on the hub scope and invoke [onDone]
@@ -327,6 +351,10 @@ class CodeHub private constructor(context: Context) {
             onDone(false)
             return
         }
+        if (!answeringRequests.add(requestId)) {
+            onDone(false)
+            return
+        }
         scope.launch {
             val ok = try {
                 withTimeout(AWAY_ANSWER_TIMEOUT_MS) {
@@ -334,6 +362,7 @@ class CodeHub private constructor(context: Context) {
                     true
                 }
             } catch (_: Throwable) {
+                answeringRequests.remove(requestId)
                 false
             }
             onDone(ok)
@@ -356,6 +385,15 @@ class CodeHub private constructor(context: Context) {
 
     fun forget(sessionId: String) {
         awayNotifier.cancelSession(sessionId) // A5
+        // M2: stop an in-flight turn so keepalive / outbox do not outlive the row.
+        val s = _sessions.value[sessionId]
+        if (s != null) {
+            suppressRunningFromChunks += sessionId
+            val host = _hosts.value.find { it.id == s.summary.hostId }
+            if (host != null) {
+                scope.launch { runCatching { backendFor(host).cancel(sessionId) } }
+            }
+        }
         _sessions.value = _sessions.value - sessionId
         persistSessions()
     }
@@ -396,6 +434,9 @@ class CodeHub private constructor(context: Context) {
         batch.forEach { if (it.update is CodeUpdate.TurnDone) suppressRunningFromChunks.remove(it.sessionId) }
         // Local away notifs (§5.6): approval / turn finished while backgrounded + connected.
         for (su in batch) {
+            if (su.update is CodeUpdate.ApprovalAnswered) {
+                answeringRequests.remove(su.update.requestId)
+            }
             val state = _sessions.value[su.sessionId] ?: continue
             val wasRunning = before[su.sessionId]?.running == true ||
                 su.sessionId in suppressSnapshot

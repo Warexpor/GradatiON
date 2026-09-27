@@ -194,7 +194,14 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                     }
                 }
                 launch {
-                    combine(hub.connection, hub.activeHost) { c, h -> c to h }.collect { (c, h) ->
+                    // M1: banner must track this session's host, not whatever machine is active
+                    // on home (away-open / host switch under an open session).
+                    combine(hub.sessions, hub.connections, hub.hosts) { sessions, conns, hosts ->
+                        val hostId = sessions[sessionId]?.summary?.hostId
+                        val host = hosts.find { it.id == hostId }
+                        val conn = hostId?.let { conns[it] } ?: ConnectionState.DISCONNECTED
+                        host to conn
+                    }.distinctUntilChanged().collect { (h, c) ->
                         if (h == null || h.isDemo ||
                             (c != ConnectionState.FAILED &&
                                 c != ConnectionState.DISCONNECTED &&

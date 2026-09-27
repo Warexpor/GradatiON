@@ -90,6 +90,43 @@ class SessionUpdatePumpTest {
     }
 
     @Test
+    fun staleCancelTurnDoneAfterNewPromptKeepsRunning() {
+        // H1: prompt accepted → suppress cleared → queued cancel TurnDone must not clear running.
+        val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))
+        val result = foldSessionUpdates(
+            sessions,
+            listOf(SessionUpdate("s1", CodeUpdate.TurnDone("cancelled"))),
+            now = 101L,
+            suppressRunningFromChunks = emptySet(),
+        )
+        assertTrue(result.sessions!!["s1"]!!.running)
+    }
+
+    @Test
+    fun cancelTurnDoneWithSuppressClearsRunning() {
+        val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))
+        val result = foldSessionUpdates(
+            sessions,
+            listOf(SessionUpdate("s1", CodeUpdate.TurnDone("cancelled"))),
+            now = 102L,
+            suppressRunningFromChunks = setOf("s1"),
+        )
+        assertFalse(result.sessions!!["s1"]!!.running)
+    }
+
+    @Test
+    fun naturalTurnDoneClearsRunningEvenWithoutSuppress() {
+        val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))
+        val result = foldSessionUpdates(
+            sessions,
+            listOf(SessionUpdate("s1", CodeUpdate.TurnDone("end_turn"))),
+            now = 103L,
+            suppressRunningFromChunks = emptySet(),
+        )
+        assertFalse(result.sessions!!["s1"]!!.running)
+    }
+
+    @Test
     fun foldBatchSingleMapWriteCoversMultiSession() {
         val sessions = mapOf(
             "a" to CodeSessionState(summary("a"), running = true),

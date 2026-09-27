@@ -84,7 +84,12 @@ internal object CodeSessionFolder {
         }
         val events = TranscriptReducer.apply(state.events, update, now)
         val running = when (update) {
-            is CodeUpdate.TurnDone -> false
+            // H1: stale cancel TurnDone after a newer prompt claimed the session must not
+            // clear running. Honor cancelled only while the cancel-suppress flag is still set.
+            is CodeUpdate.TurnDone -> when {
+                update.stopReason == "cancelled" && !suppressRunningFromChunks -> state.running
+                else -> false
+            }
             is CodeUpdate.TextChunk, is CodeUpdate.ImageChunk, is CodeUpdate.ToolPatch ->
                 if (suppressRunningFromChunks) state.running else true
             is CodeUpdate.Upsert -> if (update.event is CodeEvent.UserPrompt) true else state.running

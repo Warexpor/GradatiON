@@ -114,6 +114,8 @@ class BridgeBackend(
     private val suppressAgent = ConcurrentHashMap.newKeySet<String>()
     /** Serialize prompt + flush deliver per session so turns never overlap. */
     private val promptMutexes = ConcurrentHashMap<String, Mutex>()
+    /** In-flight permission answers (M3); key = requestId. */
+    private val answering = ConcurrentHashMap.newKeySet<String>()
 
     private data class OutboxPrompt(
         val sessionId: String,
@@ -537,13 +539,22 @@ class BridgeBackend(
     }
 
     override suspend fun answer(sessionId: String, requestId: String, option: ApprovalOption?) {
-        transport.send(adapter.answerApproval(requestId, option?.id))
-        _updates.emit(
-            SessionUpdate(
-                sessionId,
-                CodeUpdate.ApprovalAnswered(requestId, option?.kind ?: ApprovalOption.Kind.REJECT_ONCE)
+        // M3: ignore a second Allow/Deny before the first send+emit finishes.
+        if (!answering.add(requestId)) return
+        try {
+            // H2: do not mark answered / cancel away shade when the frame never left the device.
+            if (!transport.send(adapter.answerApproval(requestId, option?.id))) {
+                throw IllegalStateException(transport.lastError ?: "Not connected")
+            }
+            _updates.emit(
+                SessionUpdate(
+                    sessionId,
+                    CodeUpdate.ApprovalAnswered(requestId, option?.kind ?: ApprovalOption.Kind.REJECT_ONCE)
+                )
             )
-        )
+        } finally {
+            answering.remove(requestId)
+        }
     }
 
     override suspend fun cancel(sessionId: String) {
@@ -590,6 +601,7 @@ class BridgeBackend(
         deliverGeneration.clear()
         inFlightPromptId.clear()
         suppressAgent.clear()
+        answering.clear()
         promptMutexes.clear()
         synchronized(outboxLock) { outbox.clear() }
         failPending("Closed")
