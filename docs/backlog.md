@@ -28,7 +28,7 @@ Tick items off here as they land so a fresh session can pick up.
 - [x] 10. Swipe between chat, roleplay and history: lower threshold, and the next screen
       follows the finger while dragging instead of the current one cutting off.
 - [x] 11. Code mode: real harness logos next to each harness.
-- [ ] 12. Polish pass by screenshots: spacing, scale, glass, weak icons, conversation
+- [x] 12. Polish pass by screenshots: spacing, scale, glass, weak icons, conversation
       menu (roleplay and code entries too).
 
 ## Verification
