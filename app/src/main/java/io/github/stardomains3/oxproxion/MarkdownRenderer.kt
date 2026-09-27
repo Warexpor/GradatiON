@@ -1,5 +1,8 @@
 package io.github.stardomains3.oxproxion
 
+import android.content.Context
+import android.graphics.Color
+import androidx.core.content.ContextCompat
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.footnotes.FootnotesExtension
 import org.commonmark.ext.gfm.tables.TablesExtension
@@ -217,7 +220,24 @@ object MarkdownRenderer {
     </html>
     """.trimIndent()
     }
-    fun toHtml(markdown: String, fontName: String = "system_default"): String {
+    /** Page colors for [toHtml], read from the app palette so the viewer follows the theme. */
+    class Palette(val canvas: String, val ink: String, val body: String, val mute: String, val hairline: String, val cell: String) {
+        companion object {
+            fun from(context: Context): Palette {
+                fun css(id: Int): String {
+                    val c = ContextCompat.getColor(context, id)
+                    return "rgba(${Color.red(c)},${Color.green(c)},${Color.blue(c)},${Color.alpha(c) / 255f})"
+                }
+                return Palette(
+                    css(R.color.xai_canvas), css(R.color.xai_ink), css(R.color.xai_body),
+                    css(R.color.xai_mute), css(R.color.xai_hairline), css(R.color.xai_cell)
+                )
+            }
+        }
+    }
+
+    fun toHtml(markdown: String, fontName: String = "system_default", palette: Palette): String {
+        val p = palette
         // Escape backslashes for math delimiters so Commonmark doesn't eat them
         val escapedMarkdown = markdown
             .replace("\\(", "\\\\(")
@@ -269,11 +289,11 @@ object MarkdownRenderer {
             $fontCss
             
             body { 
-                font-size: 16px; line-height: 1.6; color: #cecece; 
-                background: #000000; margin: 0; padding: 16px; overflow-x: hidden;
+                font-size: 16px; line-height: 1.6; color: ${p.body}; 
+                background: ${p.canvas}; margin: 0; padding: 16px; overflow-x: hidden;
             }
             a { 
-    color: #4fc3f7; 
+    color: ${p.ink}; text-decoration: underline; 
     word-wrap: break-word; 
     overflow-wrap: break-word; 
     word-break: break-word;
@@ -281,12 +301,12 @@ object MarkdownRenderer {
     display: inline-block;
     max-width: 100%;
 }
-            h1,h2,h3 { color: #dbdbdb; border-bottom: 1px solid #333; margin-top: 24px; }
-            strong { color: #dbdbdb; }
-            del { color: #d32f2f; text-decoration: line-through; }
+            h1,h2,h3 { color: ${p.ink}; border-bottom: 1px solid ${p.hairline}; margin-top: 24px; }
+            strong { color: ${p.ink}; }
+            del { color: ${p.mute}; text-decoration: line-through; }
             
             .table-scroll-wrapper {
-                width: 100%; overflow-x: auto; margin: 16px 0; background: #111; border-radius: 8px; 
+                width: 100%; overflow-x: auto; margin: 16px 0; background: ${p.cell}; border-radius: 8px; 
                 -webkit-overflow-scrolling: touch;
             }
             table { 
@@ -294,33 +314,33 @@ object MarkdownRenderer {
                 border-collapse: collapse; margin: 0;
             }
             th, td { 
-                border: 1px solid #444; padding: 12px 16px; text-align: left; color: #cecece;
+                border: 1px solid ${p.hairline}; padding: 12px 16px; text-align: left; color: ${p.body};
                 white-space: normal; vertical-align: top;
             }
-            th { background: #222; color: #FFFFFF; font-weight: bold; }
-            tr:nth-child(even) { background: #1a1a1a; }
+            th { background: ${p.hairline}; color: ${p.ink}; font-weight: bold; }
+            tr:nth-child(even) { background: ${p.canvas}; }
 
             .code-wrapper {
                 position: relative; margin: 12px 0; border-radius: 8px; overflow: hidden;
-                background: #22272e; border: 1px solid #444;
+                background: #1A1A1A; border: 1px solid ${p.hairline};
             }
             pre { margin: 0; }
             pre code.hljs {
+                background: transparent;
                 padding: 40px 16px 16px 16px !important;
                 font-family: monospace; font-size: 14px; overflow-x: auto;
             }
             .copy-btn {
                 position: absolute; top: 8px; right: 8px; 
-                background: #333; color: #fff; border: 1px solid #555; 
-                padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: bold;
+                background: rgba(255,255,255,0.09); color: #ECECEC; border: 1px solid rgba(255,255,255,0.12); 
+                padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
                 cursor: pointer; z-index: 100;
             }
 
             ul, ol { padding-left: 24px; margin: 12px 0; }
             li:has(input[type="checkbox"]) { list-style-type: none; margin-left: -4px; }
             input[type="checkbox"] { margin-right: 10px; transform: scale(1.2); cursor: default; vertical-align: -2px; }
-            blockquote { border-left: 4px solid #4fc3f7; padding-left: 16px; color: #ccc; margin: 16px 0; background: #111; }
-            a { color: #4fc3f7; }
+            blockquote { border-left: 4px solid ${p.mute}; padding-left: 16px; color: ${p.mute}; margin: 16px 0; background: ${p.cell}; }
             
             /* ADDED: Ensure images don't overflow the screen */
             img { max-width: 100%; height: auto; border-radius: 4px; }
@@ -401,7 +421,7 @@ object MarkdownRenderer {
                 wrappers.forEach(function(wrapper) {
                     var btn = document.createElement('button');
                     btn.className = 'copy-btn';
-                    btn.textContent = '📋 Copy';
+                    btn.textContent = 'Copy';
                     btn.addEventListener('click', function(e) {
                         e.stopPropagation();
                         var pre = wrapper.querySelector('pre');
@@ -416,9 +436,8 @@ object MarkdownRenderer {
                     wrapper.appendChild(btn);
                 });
                 function showFeedback(btn) {
-                    btn.textContent = '✅ Copied!';
-                    btn.style.background = '#2a5a2a';
-                    setTimeout(function() { btn.textContent = '📋 Copy'; btn.style.background = '#333'; }, 2000);
+                    btn.textContent = 'Copied';
+                    setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
                 }
             })();
         </script>

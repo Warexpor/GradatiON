@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
 import android.os.Environment
 import android.print.PrintAttributes
@@ -19,6 +18,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.core.content.ContextCompat
+import androidx.core.view.doOnDetach
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
@@ -47,7 +48,6 @@ class MarkdownViewerFragment : Fragment() {
     }
 
     private var webView: WebView? = null
-    private var isWebViewDestroyed = false
     private var currentHtml: String = ""
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
@@ -118,15 +118,15 @@ class MarkdownViewerFragment : Fragment() {
                 }
             }
 
-            // Rendered page is a light document; match it so there is no dark flash while loading
-            setBackgroundColor(Color.WHITE)
+            // The page is drawn on the app canvas; match it so there is no flash while loading
+            setBackgroundColor(ContextCompat.getColor(context, R.color.xai_canvas))
 
             val markdown = arguments?.getString(ARG_MARKDOWN, "") ?: return@apply
             val fontName = arguments?.getString(ARG_FONT_NAME, "system_default") ?: "system_default"
             val modelName = arguments?.getString(ARG_MODEL_NAME, "AI") ?: "AI"
             toolbar.title = modelName
             // Pass the font name to the renderer
-            currentHtml = MarkdownRenderer.toHtml(markdown, fontName)
+            currentHtml = MarkdownRenderer.toHtml(markdown, fontName, MarkdownRenderer.Palette.from(requireContext()))
 
             loadDataWithBaseURL("file:///android_asset/", currentHtml, "text/html", "UTF-8", null)
             currentFontSize = prefs.getFontSize()
@@ -183,22 +183,15 @@ class MarkdownViewerFragment : Fragment() {
     }
 
     override fun onDestroyView() {
-        // Detach the UI immediately
-        webView?.removeAllViews()
-        super.onDestroyView()
-    }
-
-    override fun onDestroy() {
-        // Destroy the heavy engine when the fragment is truly gone
-        if (!isWebViewDestroyed) {
-            webView?.apply {
-                stopLoading()
-                destroy()
-                isWebViewDestroyed = true
-            }
-            webView = null
+        // Each view gets its own WebView, so destroy this one with its view (a recreated view
+        // would otherwise leak the old engine). Wait for detach so the exit animation keeps it.
+        webView?.apply {
+            removeAllViews()
+            stopLoading()
+            doOnDetach { destroy() }
         }
-        super.onDestroy()
+        webView = null
+        super.onDestroyView()
     }
 
     class WebAppInterface(private val context: Context) {

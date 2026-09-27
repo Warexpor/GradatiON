@@ -315,7 +315,7 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
 
                     override fun updateDrawState(ds: TextPaint) {
                         super.updateDrawState(ds)
-                        ds.color = ContextCompat.getColor(requireContext(), android.R.color.holo_blue_dark)
+                        ds.color = ContextCompat.getColor(requireContext(), R.color.xai_link)
                         ds.isUnderlineText = true
                     }
                 }
