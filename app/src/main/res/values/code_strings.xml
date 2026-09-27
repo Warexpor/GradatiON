@@ -43,6 +43,26 @@
     <string name="code_host_test_unreachable">Can\'t reach the bridge. Check Tailscale, Wi-Fi, or your SSH tunnel.</string>
     <string name="code_host_remove_confirm">Remove %1$s? Sessions keep running on the machine; they just disappear from this phone.</string>
 
+    <!-- Machine detail -->
+    <string name="code_machine_detail_title">Machine</string>
+    <string name="code_machine_section_status">Status</string>
+    <string name="code_machine_section_harnesses">Harnesses</string>
+    <string name="code_machine_bridge_version">Bridge version</string>
+    <string name="code_machine_version_unknown">Unknown</string>
+    <string name="code_machine_transport_bridge">Transport · Bridge</string>
+    <string name="code_machine_transport_demo">Transport · Demo</string>
+    <string name="code_machine_fingerprint">Fingerprint · %1$s</string>
+    <string name="code_machine_status_error">Error</string>
+    <string name="code_machine_harness_available">Available</string>
+    <string name="code_machine_harness_unavailable">Not installed</string>
+    <string name="code_machine_harnesses_offline">Connect to load harnesses from this machine.</string>
+    <string name="code_machine_harnesses_empty">No harnesses reported.</string>
+    <string name="code_machine_edit">Edit</string>
+    <string name="code_machine_revoke">Revoke this phone</string>
+    <string name="code_machine_revoke_confirm">Remove this phone\'s access to %1$s? The pairing token is deleted locally. Sessions keep running on the machine.\n\nHost-side revoke (gradation-bridge revoke) is separate and is not done from this phone.</string>
+    <string name="code_machine_revoke_hint">Removes this phone\'s local token and host entry. Host-side gradation-bridge revoke is separate.</string>
+    <string name="code_machine_about">About this machine</string>
+
     <!-- Home -->
     <string name="code_home_greeting">What should we build?</string>
     <string name="code_home_subtitle">%1$s works in %2$s on %3$s. You approve edits and commands.</string>

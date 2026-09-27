@@ -14,6 +14,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.materialswitch.MaterialSwitch
 import io.github.stardomains3.oxproxion.GlassAlertDialogBuilder
+import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.launch
 
@@ -44,8 +45,9 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
         card.removeAllViews()
         hosts.forEach { h ->
             addRow(card, R.drawable.ic_code_machine, h.name,
-                if (h.isDemo) getString(R.string.code_host_demo_sub) else h.url, chevron = true) {
-                CodeHostDialog.show(this, h)
+                if (h.isDemo) getString(R.string.code_host_demo_sub) else CodeMachineDetail.redactUrl(h.url).ifBlank { h.url },
+                chevron = true) {
+                openMachineDetail(h.id)
             }
         }
         addRow(card, R.drawable.ic_code_plus, getString(R.string.code_settings_add_machine), null, chevron = false) {
@@ -74,6 +76,14 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
                 }
                 .show()
         }
+    }
+
+    private fun openMachineDetail(hostId: String) {
+        parentFragmentManager.beginTransaction()
+            .withGrokStackAnimations()
+            .add(R.id.fragment_container, CodeMachineDetailFragment.newInstance(hostId))
+            .addToBackStack(null)
+            .commit()
     }
 
     /** Grouped-card row (the RP hub's row): icon, title, optional subtitle or trailing value, chevron. */

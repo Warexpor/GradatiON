@@ -68,6 +68,12 @@ interface CodeBackend {
 
     /** Seed a resume cursor after process death / Room load (no-op for demo). */
     fun rememberLastSeq(sessionId: String, seq: Long) {}
+
+    /**
+     * Bridge / server version from the last successful ACP `initialize` handshake
+     * (`_meta.bridge.version` or `serverInfo.version`). Null when unknown / demo / never connected.
+     */
+    fun peekBridgeVersion(): String? = null
 }
 
 /**
@@ -98,6 +104,8 @@ class BridgeBackend(
     private var lifecycle: Job? = null
     private var initialized = false
     private var socketGeneration = 0
+    /** From initialize `_meta.bridge.version` / `serverInfo.version`; kept across reconnect until close. */
+    @Volatile private var bridgeVersion: String? = null
     /** Bumped on cancel so in-flight deliverPrompt/flush abort and do not dequeue. */
     private val deliverGeneration = ConcurrentHashMap<String, AtomicLong>()
     /** RPC id of the in-flight session/prompt, so cancel can complete it. */
@@ -222,10 +230,13 @@ class BridgeBackend(
         }
     }
 
+    override fun peekBridgeVersion(): String? = bridgeVersion
+
     private suspend fun onSocketReady() {
         val gen = socketGeneration
-        rawCall({ adapter.initialize(it) }, DEFAULT_TIMEOUT_MS)
+        val initResult = rawCall({ adapter.initialize(it) }, DEFAULT_TIMEOUT_MS) as? JsonObject
         if (gen != socketGeneration) return
+        CodeMachineDetail.parseBridgeVersion(initResult)?.let { bridgeVersion = it }
         initialized = true
         for (session in attached.values.toList()) {
             if (gen != socketGeneration) return
@@ -573,6 +584,7 @@ class BridgeBackend(
         reader = null
         ready.value = false
         initialized = false
+        bridgeVersion = null
         attached.clear()
         runningSessions.clear()
         deliverGeneration.clear()

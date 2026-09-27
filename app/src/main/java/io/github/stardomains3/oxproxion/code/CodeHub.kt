@@ -165,6 +165,19 @@ class CodeHub private constructor(context: Context) {
 
     fun lastError(): String? = _activeHost.value?.let { backends[it.id]?.lastError }
 
+    /** Connection state for [hostId] (falls back to DISCONNECTED when unknown). */
+    fun connectionOf(hostId: String): ConnectionState =
+        _connections.value[hostId] ?: ConnectionState.DISCONNECTED
+
+    /** Last transport error for [hostId], if any. */
+    fun lastErrorOf(hostId: String): String? = backends[hostId]?.lastError
+
+    /**
+     * Bridge / server version from the last successful initialize on [hostId]'s backend.
+     * Null when demo, never connected, or the handshake omitted version.
+     */
+    fun bridgeVersionOf(hostId: String): String? = backends[hostId]?.peekBridgeVersion()
+
     /** Pause bridge reconnect while backgrounded unless a session turn is in flight. */
     fun setAppBackgrounded(backgrounded: Boolean) {
         backends.values.forEach { it.setAppBackgrounded(backgrounded) }

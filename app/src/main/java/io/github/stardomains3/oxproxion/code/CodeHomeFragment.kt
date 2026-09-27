@@ -495,9 +495,29 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         val hosts = hub.hosts.value
         val active = hub.activeHost.value
         composer.pick(anchor, getString(R.string.code_home_pick_machine), hosts.map { h ->
-            PickerPopover.Row(h.name, subtitle = if (h.isDemo) getString(R.string.code_status_demo) else h.url,
-                iconRes = R.drawable.ic_code_machine, selected = h.id == active?.id) { hub.selectHost(h.id) }
-        }, footer = listOf(PickerPopover.Row(getString(R.string.code_home_manage_machines), iconRes = R.drawable.ic_settings_stroke) { openSettings() }))
+            PickerPopover.Row(
+                h.name,
+                subtitle = if (h.isDemo) getString(R.string.code_status_demo)
+                else CodeMachineDetail.redactUrl(h.url).ifBlank { h.url },
+                iconRes = R.drawable.ic_code_machine,
+                selected = h.id == active?.id,
+            ) { hub.selectHost(h.id) }
+        }, footer = buildList {
+            active?.let { h ->
+                add(
+                    PickerPopover.Row(
+                        getString(R.string.code_machine_about),
+                        iconRes = R.drawable.ic_code_machine,
+                    ) { openMachineDetail(h.id) }
+                )
+            }
+            add(
+                PickerPopover.Row(
+                    getString(R.string.code_home_manage_machines),
+                    iconRes = R.drawable.ic_settings_stroke,
+                ) { openSettings() }
+            )
+        })
     }
 
     // ── actions ───────────────────────────────────────────────────────────────────────────
@@ -601,6 +621,14 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
             .commit()
     }
 
+    private fun openMachineDetail(hostId: String) {
+        requireParentFragment().parentFragmentManager.beginTransaction()
+            .withGrokStackAnimations()
+            .add(R.id.fragment_container, CodeMachineDetailFragment.newInstance(hostId))
+            .addToBackStack("code_machine_detail")
+            .commit()
+    }
+
     // ── list ──────────────────────────────────────────────────────────────────────────────
 
     private sealed class HomeItem(val key: String) {
@@ -660,7 +688,12 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     v.findViewById<TextView>(R.id.codeMachineStatus).setText(label)
                     v.findViewById<View>(R.id.codeMachineDot).background.mutate().setTint(
                         requireContext().getColor(if (on) R.color.code_status_on else R.color.code_status_off))
-                    v.findViewById<View>(R.id.codeMachinePill).setOnClickListener { pickMachine(it) }
+                    val pill = v.findViewById<View>(R.id.codeMachinePill)
+                    pill.setOnClickListener { pickMachine(it) }
+                    pill.setOnLongClickListener {
+                        openMachineDetail(item.host.id)
+                        true
+                    }
                     v.findViewById<View>(R.id.codeHomeSettings).setOnClickListener { openSettings() }
                 }
                 is HomeItem.Hero -> v.findViewById<TextView>(R.id.codeHeroSubtitle).text = getString(
