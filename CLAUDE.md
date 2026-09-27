@@ -42,6 +42,7 @@ the state of work in progress in `docs/handoff.md`.
 - Performance is a hard rule: few blur layers, animations pause offscreen, and backgrounds run at 12 to 15fps.
 - Plus Jakarta Sans for the UI and Michroma for the wordmark. Nothing tappable under 13sp. Fix text
   centering in the font metrics, not per view.
+- Showcase images (README `screenshots/`, fastlane) are dark theme only.
 - Grok screenshots are references for layout and feel only, never for visuals.
 - Voice input: tap the mic, talk, tap the check, and the words paste into the field. It never auto-sends and there is no hold-to-talk.
   The engine is the phone's own SpeechRecognizer (on-device first). Keep the OpenRouter/Local transcription fallback.

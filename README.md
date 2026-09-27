@@ -23,9 +23,9 @@ Not affiliated with xAI, Anthropic, OpenAI or OpenRouter.
 |------|--------------|-------------|
 | ![Code](screenshots/04-code_home.png) | ![Code session](screenshots/05-code_session_done.png) | ![Voice](screenshots/06-chat_dictating.png) |
 
-| History | Appearance | Light |
+| History | Appearance | Bubbles layout |
 |---------|------------|-------|
-| ![History](screenshots/07-history.png) | ![Appearance](screenshots/08-settings_appearance.png) | ![Light](screenshots/09-chat_empty-light.png) |
+| ![History](screenshots/07-history.png) | ![Appearance](screenshots/08-settings_appearance.png) | ![Bubbles layout](screenshots/09-rp_bubbles.png) |
 
 Screenshots come from the Robolectric tests (`ScreenshotTest`, `CodeModeScreenshotTest`), so
 they always match the code.
