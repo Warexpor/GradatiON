@@ -152,7 +152,8 @@
                 android:clipToOutline="true"
                 android:scaleType="centerCrop"
                 android:contentDescription="@string/rp_character_avatar"
-                android:src="@drawable/ic_gradation_mark" />
+                android:src="@drawable/ic_gradation_mark"
+                app:tint="@color/xai_mute" />
 
             <TextView
                 android:id="@+id/rpSpeakerName"

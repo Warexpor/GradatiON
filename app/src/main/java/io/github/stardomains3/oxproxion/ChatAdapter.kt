@@ -24,8 +24,10 @@ import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.core.widget.ImageViewCompat
 import androidx.recyclerview.widget.RecyclerView
-import coil.ImageLoader
+import coil.dispose
+import coil.imageLoader
 import coil.request.ImageRequest
 import com.google.android.material.snackbar.Snackbar
 import io.noties.markwon.Markwon
@@ -754,7 +756,7 @@ class ChatAdapter(
                         .data(userImageUri)
                         .target(imageView)
                         .build()
-                    ImageLoader(itemView.context).enqueue(request)
+                    itemView.context.imageLoader.enqueue(request)
                     imageView.visibility = View.VISIBLE
                     imageView.setOnClickListener {
                         try {
@@ -902,8 +904,14 @@ class ChatAdapter(
                     request.memoryCacheKey("rp-avatar-${model.absolutePath}-${model.lastModified()}")
                     request.diskCacheKey("rp-avatar-${model.absolutePath}-${model.lastModified()}")
                 }
-                ImageLoader(itemView.context).enqueue(request.build())
+                // The placeholder mark is tinted mute; a photo must not be.
+                ImageViewCompat.setImageTintList(rpSpeakerAvatar, null)
+                itemView.context.imageLoader.enqueue(request.build())
             } else {
+                rpSpeakerAvatar.dispose()
+                ImageViewCompat.setImageTintList(
+                    rpSpeakerAvatar, ColorStateList.valueOf(ContextCompat.getColor(itemView.context, R.color.xai_mute))
+                )
                 rpSpeakerAvatar.setImageResource(R.drawable.ic_gradation_mark)
             }
         }
@@ -1174,7 +1182,7 @@ class ChatAdapter(
                         .data(generatedUri)
                         .target(generatedImageView)
                         .build()
-                    ImageLoader(itemView.context).enqueue(request)
+                    itemView.context.imageLoader.enqueue(request)
                     generatedImageView.visibility = View.VISIBLE
 
                     generatedImageView.setOnClickListener {
