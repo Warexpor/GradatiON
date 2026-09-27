@@ -3,11 +3,13 @@ package io.github.stardomains3.oxproxion
 import android.app.Application
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import io.github.stardomains3.oxproxion.code.ApprovalOption
 import io.github.stardomains3.oxproxion.code.CodeHub
 import io.github.stardomains3.oxproxion.code.HarnessKind
 import io.github.stardomains3.oxproxion.code.NewSessionRequest
 import io.github.stardomains3.oxproxion.code.PermissionMode
 import io.github.stardomains3.oxproxion.code.store.CodeStore
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -78,4 +80,44 @@ class CodeHubAttachTest {
         assertFalse("E4 running stays clear after rebuild", hub.sessions.value[id]!!.running)
         assertEquals("Demo renamed", hub.hosts.value.find { it.id == host.id }!!.name)
     }
+
+    @Test
+    fun answerFromAwayAttemptsWireWhenEventsEmpty() = runBlocking {
+        // AWAY-01 / G3: after process death Room has the session index but no transcript
+        // events. Away Allow/Deny must still hit the wire (demo answers immediately).
+        val hub = CodeHub.get(ctx)
+        hub.store.enabled = true
+        val host = hub.addDemoHost()
+        val id = hub.startSession(
+            NewSessionRequest(
+                hostId = host.id,
+                harness = HarnessKind.CLAUDE_CODE,
+                workspace = "~/code/GradatiON",
+                prompt = "G3 cold away answer",
+                permissionMode = PermissionMode.ASK,
+            ),
+        ).getOrThrow()
+        // Wait until Room has the index row (async persist).
+        val dao = AppDatabase.getDatabase(ctx).codeSessionDao()
+        withTimeout(3_000) {
+            while (dao.getAll().none { it.id == id }) delay(5)
+        }
+        CodeHub.resetForTesting()
+        val cold = CodeHub.get(ctx)
+        cold.store.enabled = true
+        assertTrue("session reloaded from Room", cold.sessions.value.containsKey(id))
+        assertTrue("cold start has empty transcript", cold.sessions.value[id]!!.events.isEmpty())
+
+        val done = CompletableDeferred<Boolean>()
+        cold.answerFromAway(
+            id,
+            "req-cold",
+            ApprovalOption("allow", "Allow", ApprovalOption.Kind.ALLOW_ONCE),
+        ) { done.complete(it) }
+        assertTrue(
+            "missing local approval row must still attempt wire (demo answers)",
+            withTimeout(3_000) { done.await() },
+        )
+    }
+
 }

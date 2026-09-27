@@ -722,6 +722,37 @@ class CodeBridgeBackendTest {
     }
 
     @Test
+    fun answerConnectsWhenCold() = runBlocking {
+        // AWAY-01: answer() must ensureReady (connect + initialize) when the socket is down.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            assertEquals(ConnectionState.DISCONNECTED, backend.connection.value)
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+            val opt = io.github.stardomains3.oxproxion.code.ApprovalOption(
+                "allow", "Allow", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ONCE
+            )
+            backend.answer("s1", "42", opt)
+            assertTrue(
+                "cold answer must initialize first",
+                transport.sent.any { it.contains("\"initialize\"") },
+            )
+            assertTrue(
+                "permission reply must leave the device",
+                transport.sent.any { it.contains("\"id\":42") || it.contains("\"id\":\"42\"") },
+            )
+            assertTrue(collected.any { it.update is CodeUpdate.ApprovalAnswered })
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
     fun detachRemovesAttachedSoReconnectSkipsLoad() = runBlocking {
         // B2: forget → detach; reconnect must not session/load the forgotten id.
         val transport = FakeTransport()

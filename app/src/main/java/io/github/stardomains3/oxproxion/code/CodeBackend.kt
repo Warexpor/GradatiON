@@ -571,6 +571,9 @@ class BridgeBackend(
         // M3: ignore a second Allow/Deny before the first send+emit finishes.
         if (!answering.add(requestId)) return
         try {
+            // AWAY-01: cold-start / disconnected hosts must connect + await ACP ready
+            // before the permission reply; otherwise transport.send returns false.
+            ensureReady()
             // H2: do not mark answered / cancel away shade when the frame never left the device.
             if (!transport.send(adapter.answerApproval(requestId, option?.id))) {
                 throw IllegalStateException(transport.lastError ?: "Not connected")

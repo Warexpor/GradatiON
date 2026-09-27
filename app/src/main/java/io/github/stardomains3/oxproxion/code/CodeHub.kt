@@ -390,8 +390,10 @@ class CodeHub private constructor(context: Context) {
     }
 
     /**
-     * Away-notification Allow/Deny (A2): run the answer on the hub scope and invoke [onDone]
-     * when finished (or after timeout / missing session). Caller cancels the shade only on success.
+     * Away-notification Allow/Deny (A2 / AWAY-01): run the answer on the hub scope and invoke
+     * [onDone] when finished (or after timeout / missing session). Connects and awaits ACP
+     * readiness inside [AWAY_ANSWER_TIMEOUT_MS] when the transport is cold. Caller cancels the
+     * shade only on success (send accepted).
      */
     fun answerFromAway(
         sessionId: String,
@@ -409,24 +411,21 @@ class CodeHub private constructor(context: Context) {
             onDone(false)
             return
         }
-        // B3: mirror in-UI answer — refuse missing / already-chosen; dismiss shade if answered.
+        // B3: already-chosen → dismiss shade. Missing local row (cold start: Room index
+        // has no transcript) still attempts the wire — PendingIntent is app-private (AWAY-01).
         val approval = s.events.filterIsInstance<CodeEvent.Approval>()
             .find { it.requestId == requestId }
-        when {
-            approval == null -> {
-                onDone(false)
-                return
-            }
-            approval.chosen != null -> {
-                onDone(true) // already answered — cancel lingering shade
-                return
-            }
+        if (approval?.chosen != null) {
+            onDone(true) // already answered — cancel lingering shade
+            return
         }
         if (!answeringRequests.add(requestId)) {
             onDone(false)
             return
         }
         scope.launch {
+            // AWAY-01: BridgeBackend.answer ensureReady() connects + awaits ACP readiness
+            // inside this timeout; only report success after send is accepted.
             val ok = try {
                 withTimeout(AWAY_ANSWER_TIMEOUT_MS) {
                     backendFor(host).answer(sessionId, requestId, option)
