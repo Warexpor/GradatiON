@@ -67,19 +67,22 @@ app, drive it to the best direction you think it is."
 - [x] C4. Message action buttons (copy, etc. on user and bot messages): smaller, and not in a rounded pill.
 
 ## Code mode
-- [ ] K1. Rework the session transcript to feel like Claude Code: less clutter, with Normal and Thinking
+- [x] K1. Rework the session transcript to feel like Claude Code: less clutter, with Normal and Thinking
       verbosity levels.
 
 ## Roleplay
-- [ ] R1. Revisit the RP harness (prompt assembly, character/persona/lorebook handling) and make it better.
+- [x] R1. Revisit the RP harness (prompt assembly, character/persona/lorebook handling) and make it better.
       Chat harness too where it helps.
 - [ ] R2. RP UI polish.
-- [ ] R3. From the user's RP references (layout and feel only, never visuals):
+- [x] R3. From the user's RP references (layout and feel only, never visuals):
       - A "continue" / fast-forward button: the AI writes the next beat without a user message,
         to drive the story. It has to fit our composer somehow.
       - A character panel (bottom sheet from the character name) with tiles: Memory, History
         (sessions by date), Voice, Layout, Wallpaper (per-character background), Chat style and
         Persona. The harness (prompt assembly, memory) matters most.
+      Done: Memory note per character, card macros, scene-craft rules, Continue on the empty
+      send button, panel with titled glass cards. Not yet: Voice, Layout, per-character
+      Wallpaper tiles, and auto-summarized memory (a model call that updates Memory).
 
 ## Repo
 - [ ] P1. New screenshots, a fresh README description of the app, design docs and agent instructions.

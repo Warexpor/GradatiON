@@ -677,6 +677,7 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(a.getString(R.string.rp_reminder_continue), vm.getMessageText(msgs[msgs.size - 2].content))
         org.junit.Assert.assertEquals("assistant", msgs.last().role)
         snap(root(a), "rp_conversation_dark")
+        SharedPreferencesHelper(a).saveRpMemory(mira.id, "Owes Sam a favor from the Kessel run. Hates the innkeeper.")
         a.findViewById<View>(R.id.modelNameTextView).performClick(); settle()
         snapDialog(a, "rp_character_panel_dark")
         ShadowDialog.getLatestDialog()?.dismiss(); idle()

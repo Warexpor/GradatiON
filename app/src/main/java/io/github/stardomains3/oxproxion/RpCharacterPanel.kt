@@ -23,7 +23,16 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
  */
 object RpCharacterPanel {
 
-    class Tile(@StringRes val label: Int, @DrawableRes val icon: Int, val on: Boolean = false, val onClick: () -> Unit)
+    class Tile(
+        @StringRes val label: Int,
+        @DrawableRes val icon: Int,
+        val on: Boolean = false,
+        /** Short live content shown instead of the glyph (the memory itself, the persona's name). */
+        val preview: String? = null,
+        /** Round glass button in the header row instead of a card (quick actions). */
+        val header: Boolean = false,
+        val onClick: () -> Unit
+    )
 
     fun show(fragment: Fragment, character: RpCharacter?, title: String, subtitle: String, tiles: List<Tile>): BottomSheetDialog {
         val ctx = fragment.requireContext()
@@ -61,52 +70,76 @@ object RpCharacterPanel {
 
         val grid = sheet.findViewById<GridLayout>(R.id.rpPanelTiles)
         val ink = ContextCompat.getColor(ctx, R.color.xai_ink)
-        tiles.forEach { t ->
-            val cell = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(0, (6 * d).toInt(), 0, (10 * d).toInt())
+        val mute = ContextCompat.getColor(ctx, R.color.xai_mute)
+        val gap = (5 * d).toInt()
+        val actions = sheet.findViewById<LinearLayout>(R.id.rpPanelActions)
+        tiles.filter { it.header }.forEach { t ->
+            actions.addView(ImageView(ctx).apply {
+                setImageResource(t.icon)
+                imageTintList = android.content.res.ColorStateList.valueOf(ink)
+                val pad = (12 * d).toInt()
+                setPadding(pad, pad, pad, pad)
+                background = GlassDrawable.control(ctx, 44f)
+                contentDescription = ctx.getString(t.label)
                 isClickable = true
                 isFocusable = true
-                contentDescription = ctx.getString(t.label)
+                setOnClickListener {
+                    dialog.dismiss()
+                    t.onClick()
+                }
+            }, LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt()).apply { marginStart = (6 * d).toInt() })
+        }
+        tiles.filterNot { it.header }.forEach { t ->
+            // A titled glass card (c.ai layout, our glass): name top-left, a quiet preview or a
+            // large glyph bottom-right.
+            val card = android.widget.FrameLayout(ctx).apply {
+                background = GlassDrawable(ctx, ContextCompat.getColor(ctx, R.color.glass_control_tint), 22 * d)
+                    .also {
+                        it.interactive = true
+                        it.selectedTint = ContextCompat.getColor(ctx, R.color.glass_control_solid_tint)
+                    }
                 isSelected = t.on
+                isClickable = true
+                isFocusable = true
+                contentDescription = listOfNotNull(ctx.getString(t.label), t.preview).joinToString(", ")
+                setPadding((14 * d).toInt(), (12 * d).toInt(), (12 * d).toInt(), (12 * d).toInt())
                 setOnClickListener {
                     dialog.dismiss()
                     t.onClick()
                 }
             }
-            val disc = ImageView(ctx).apply {
-                setImageResource(t.icon)
-                imageTintList = android.content.res.ColorStateList.valueOf(ink)
-                scaleType = ImageView.ScaleType.CENTER_INSIDE
-                val pad = (17 * d).toInt()
-                setPadding(pad, pad, pad, pad)
-                background = GlassDrawable(
-                    ctx,
-                    ContextCompat.getColor(ctx, R.color.glass_control_tint),
-                    18 * d
-                ).also {
-                    it.interactive = true
-                    it.selectedTint = ContextCompat.getColor(ctx, R.color.glass_control_solid_tint)
-                }
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                isDuplicateParentStateEnabled = true
-            }
-            cell.addView(disc, LinearLayout.LayoutParams((58 * d).toInt(), (58 * d).toInt()))
-            cell.addView(TextView(ctx).apply {
+            card.addView(TextView(ctx).apply {
                 setText(t.label)
                 setTextColor(ink)
-                textSize = 13f
-                gravity = Gravity.CENTER
+                textSize = 16f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
                 maxLines = 1
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = (6 * d).toInt()
-            })
-            grid.addView(cell, GridLayout.LayoutParams(
+            }, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
+            if (!t.preview.isNullOrBlank()) {
+                card.addView(TextView(ctx).apply {
+                    text = t.preview
+                    setTextColor(mute)
+                    textSize = 13f
+                    maxLines = 3
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }, android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM or Gravity.START))
+            } else {
+                card.addView(ImageView(ctx).apply {
+                    setImageResource(t.icon)
+                    imageTintList = android.content.res.ColorStateList.valueOf(if (t.on) ink else mute)
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }, android.widget.FrameLayout.LayoutParams((34 * d).toInt(), (34 * d).toInt(), Gravity.BOTTOM or Gravity.END))
+            }
+            grid.addView(card, GridLayout.LayoutParams(
                 GridLayout.spec(GridLayout.UNDEFINED),
                 GridLayout.spec(GridLayout.UNDEFINED, 1f)
-            ).apply { width = 0 })
+            ).apply {
+                width = 0
+                height = (104 * d).toInt()
+                setMargins(gap, gap, gap, gap)
+            })
         }
 
         dialog.setContentView(sheet)

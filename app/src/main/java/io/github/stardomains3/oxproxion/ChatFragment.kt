@@ -5658,18 +5658,20 @@ $cleanContent
         val title = if (llm) getString(R.string.rp_llm_speaker) else character!!.name
         val subtitle = if (llm) "" else character!!.personality.ifBlank { character.scenario }
             .lineSequence().firstOrNull().orEmpty()
-        val hasMemory = sharedPreferencesHelper.getRpMemory(memoryId).isNotBlank()
+        val memory = sharedPreferencesHelper.getRpMemory(memoryId)
+        val hasMemory = memory.isNotBlank()
+        val personaName = sharedPreferencesHelper.getRpPersonaName()
         val tiles = buildList {
-            add(RpCharacterPanel.Tile(R.string.rp_panel_memory, R.drawable.ic_memory, on = hasMemory) { editRpMemory(memoryId, title) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_memory, R.drawable.ic_memory, on = hasMemory, preview = memory.takeIf { hasMemory }) { editRpMemory(memoryId, title) })
             add(RpCharacterPanel.Tile(R.string.rp_panel_history, R.drawable.rp_ic_archive) { openHistoryPanel() })
-            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, R.drawable.rp_ic_persona) { pushRp(RpPersonaFragment.newInstance()) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, R.drawable.rp_ic_persona, preview = personaName.ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
             add(RpCharacterPanel.Tile(R.string.rp_panel_style, R.drawable.ic_sliders) { pushRp(RpSettingsFragment.newInstance()) })
             add(RpCharacterPanel.Tile(R.string.rp_panel_lore, R.drawable.rp_ic_book) { pushRp(RpLorebookLibraryFragment.newInstance()) })
             if (character != null && !llm) {
                 add(RpCharacterPanel.Tile(R.string.rp_panel_edit, R.drawable.ic_edit) { pushRp(RpCharacterEditFragment.newInstance(character.id)) })
-                add(RpCharacterPanel.Tile(R.string.rp_panel_new_chat, R.drawable.ic_new_chat) { startRpWith(character) })
+                add(RpCharacterPanel.Tile(R.string.rp_panel_new_chat, R.drawable.ic_new_chat, header = true) { startRpWith(character) })
             }
-            add(RpCharacterPanel.Tile(R.string.rp_panel_switch, R.drawable.rp_ic_characters) { menuButton.post { showCharacterPopover() } })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_switch, R.drawable.rp_ic_characters, header = true) { menuButton.post { showCharacterPopover() } })
         }
         RpCharacterPanel.show(this, if (llm) null else character, title, subtitle, tiles)
     }
