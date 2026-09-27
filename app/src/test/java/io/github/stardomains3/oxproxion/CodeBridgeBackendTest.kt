@@ -9,7 +9,10 @@ import io.github.stardomains3.oxproxion.code.HarnessInfo
 import io.github.stardomains3.oxproxion.code.CodeHost
 import io.github.stardomains3.oxproxion.code.CodeSessionSummary
 import io.github.stardomains3.oxproxion.code.CodeTransport
+import io.github.stardomains3.oxproxion.code.CodeEvent
 import io.github.stardomains3.oxproxion.code.CodeUpdate
+import io.github.stardomains3.oxproxion.code.NoticeLevel
+import io.github.stardomains3.oxproxion.code.SessionStatus
 import io.github.stardomains3.oxproxion.code.ConnectionState
 import io.github.stardomains3.oxproxion.code.HarnessKind
 import io.github.stardomains3.oxproxion.code.PermissionMode
@@ -1454,5 +1457,114 @@ class CodeBridgeBackendTest {
             backend.close()
         }
     }
+
+
+    @Test
+    fun failedSessionLoadRetriesAndSurfacesError() = runBlocking {
+        // R5: after reconnect, session/load error must not be swallowed — surface error,
+        // retry with backoff, and do not treat that session as fully resumed meanwhile.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        var loadCount = 0
+        val answers = scope.launch {
+            val answered = HashSet<Long>()
+            while (true) {
+                for (frame in transport.sent.toList()) {
+                    val obj = runCatching { json.parseToJsonElement(frame).jsonObject }.getOrNull() ?: continue
+                    val id = obj["id"]?.jsonPrimitive?.longOrNull ?: continue
+                    if (id in answered) continue
+                    val method = obj["method"]?.jsonPrimitive?.content ?: continue
+                    when (method) {
+                        "initialize" -> {
+                            answered += id
+                            transport.deliver(
+                                """{"jsonrpc":"2.0","id":$id,"result":{"protocolVersion":1}}"""
+                            )
+                        }
+                        "session/load" -> {
+                            loadCount++
+                            answered += id
+                            if (loadCount == 1) {
+                                // First attach load succeeds.
+                                transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":{}}""")
+                            } else if (loadCount == 2) {
+                                // First reconnect load fails.
+                                transport.deliver(
+                                    """{"jsonrpc":"2.0","id":$id,"error":{"code":-32000,"message":"load blew up"}}"""
+                                )
+                            } else {
+                                transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":{}}""")
+                            }
+                        }
+                        "bridge/listSessions" -> {
+                            answered += id
+                            transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":{"sessions":[]}}""")
+                        }
+                        else -> {
+                            answered += id
+                            transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":{}}""")
+                        }
+                    }
+                }
+                delay(5)
+            }
+        }
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+            assertEquals(1, loadCount)
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            transport.drop()
+            delay(30)
+            transport.restore()
+
+            // Failed resume surfaces OFFLINE + Notice; global ready can still come up.
+            withTimeout(5_000) {
+                while (collected.none {
+                    val u = it.update
+                    u is CodeUpdate.SessionInfo && u.status == SessionStatus.OFFLINE
+                }) delay(10)
+            }
+            assertTrue(
+                "load failure notice must reach the session UI",
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.Upsert &&
+                        u.event is CodeEvent.Notice &&
+                        (u.event as CodeEvent.Notice).text.contains("load blew up")
+                },
+            )
+
+            // Handshake still completed — listSessions works (ready true) despite lost resume.
+            withTimeout(5_000) { backend.listSessions() }
+
+            // Backoff retry eventually re-issues session/load and succeeds.
+            withTimeout(8_000) {
+                while (loadCount < 3) delay(10)
+            }
+            assertTrue("failed load must be retried", loadCount >= 3)
+
+            // After successful retry, a prompt for the session should be deliverable.
+            backend.prompt("s1", "after resume ok")
+            withTimeout(5_000) {
+                while (transport.sent.none {
+                    it.contains("session/prompt") && it.contains("after resume ok")
+                }) delay(10)
+            }
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
 
 }

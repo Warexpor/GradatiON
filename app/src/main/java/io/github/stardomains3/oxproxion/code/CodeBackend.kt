@@ -138,6 +138,14 @@ class BridgeBackend(
      */
     private val cancelPending = ConcurrentHashMap<String, Boolean>()
     private var cancelFlushJob: Job? = null
+    /**
+     * R5: attached sessions whose reconnect `session/load` failed. Global [ready] may still
+     * be true (handshake ok); these sessions stay not-fully-resumed until load succeeds.
+     * Value = last error message for UI.
+     */
+    private val loadFailed = ConcurrentHashMap<String, String>()
+    private var sessionLoadRetry: Job? = null
+    private var sessionLoadFailCount = 0
 
     private data class OutboxPrompt(
         val sessionId: String,
@@ -268,6 +276,9 @@ class BridgeBackend(
                             socketGeneration++
                             outboxFlushRetry?.cancel()
                             outboxFlushRetry = null
+                            sessionLoadRetry?.cancel()
+                            sessionLoadRetry = null
+                            loadFailed.clear()
                             failPending("Disconnected")
                         }
                     }
@@ -313,22 +324,105 @@ class BridgeBackend(
         initialized = true
         for (session in attached.values.toList()) {
             if (gen != socketGeneration) return
-            session.lastSeq?.let { rememberLastSeq(session.id, it) }
-            val after = peekLastSeq(session.id) ?: session.lastSeq
-            runCatching {
-                rawCall(
-                    { adapter.loadSession(it, session.id, session.workspace, after) },
-                    DEFAULT_TIMEOUT_MS
-                )
-            }
+            loadAttachedSession(session)
         }
         if (gen != socketGeneration) return
         handshakeFailCount = 0
         handshakeError = null
         ready.value = true
         outboxFlushFailCount = 0
+        sessionLoadFailCount = 0
         flushCancelPending()
         flushOutbox()
+        if (loadFailed.isNotEmpty()) scheduleSessionLoadRetry()
+    }
+
+    /**
+     * R5: `session/load` for one attached session. Success clears [loadFailed]; failure
+     * records the error, surfaces OFFLINE + Notice for the session UI, and returns false
+     * so the caller can schedule a backoff retry. Does not throw (reconnect must not
+     * treat one bad resume as a full handshake failure).
+     */
+    private suspend fun loadAttachedSession(session: CodeSessionSummary): Boolean {
+        session.lastSeq?.let { rememberLastSeq(session.id, it) }
+        val after = peekLastSeq(session.id) ?: session.lastSeq
+        return try {
+            rawCall(
+                { adapter.loadSession(it, session.id, session.workspace, after) },
+                DEFAULT_TIMEOUT_MS
+            )
+            loadFailed.remove(session.id)
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val msg = e.message?.takeIf { it.isNotBlank() } ?: "session/load failed"
+            loadFailed[session.id] = msg
+            _updates.emit(
+                SessionUpdate(session.id, CodeUpdate.SessionInfo(status = SessionStatus.OFFLINE))
+            )
+            _updates.emit(
+                SessionUpdate(
+                    session.id,
+                    CodeUpdate.Upsert(
+                        CodeEvent.Notice(
+                            "load-fail:${session.id}",
+                            System.currentTimeMillis(),
+                            "Resume failed — retrying: $msg",
+                            NoticeLevel.ERROR
+                        )
+                    )
+                )
+            )
+            false
+        }
+    }
+
+    /**
+     * R5: retry failed reconnect loads with backoff while still CONNECTED/ready.
+     * On full recovery, flush outbox so deferred prompts for those sessions can leave.
+     */
+    private fun scheduleSessionLoadRetry() {
+        if (sessionLoadRetry?.isActive == true) return
+        if (loadFailed.isEmpty()) return
+        sessionLoadRetry = scope.launch {
+            val self = coroutineContext[Job]
+            try {
+                while (lifecycle != null &&
+                    loadFailed.isNotEmpty() &&
+                    ready.value &&
+                    connection.value == ConnectionState.CONNECTED
+                ) {
+                    if (sessionLoadFailCount > 16) break
+                    val attempt = sessionLoadFailCount++
+                    val wait = ReconnectBackoff.delayMs(attempt.coerceAtMost(6), Random.nextDouble())
+                        .coerceAtLeast(50L)
+                    delay(wait)
+                    if (lifecycle == null) break
+                    if (!ready.value || connection.value != ConnectionState.CONNECTED) break
+                    val gen = socketGeneration
+                    val toRetry = loadFailed.keys.mapNotNull { id -> attached[id] }
+                    if (toRetry.isEmpty()) {
+                        loadFailed.clear()
+                        break
+                    }
+                    for (session in toRetry) {
+                        if (gen != socketGeneration) return@launch
+                        if (!attached.containsKey(session.id)) {
+                            loadFailed.remove(session.id)
+                            continue
+                        }
+                        loadAttachedSession(session)
+                    }
+                    if (loadFailed.isEmpty()) {
+                        sessionLoadFailCount = 0
+                        flushOutbox()
+                    }
+                }
+            } finally {
+                if (sessionLoadRetry === self) sessionLoadRetry = null
+            }
+        }
     }
 
     private fun refreshKeepAlive() {
@@ -506,7 +600,20 @@ class BridgeBackend(
     private suspend fun flushOutbox() {
         while (true) {
             val next = synchronized(outboxLock) {
-                if (outbox.isEmpty()) null else outbox.first()
+                if (outbox.isEmpty()) null
+                else {
+                    // R5: rotate past sessions whose resume load has not completed so a
+                    // lost resume does not block sibling outbox items forever.
+                    var skipped = 0
+                    while (outbox.isNotEmpty() && skipped < outbox.size) {
+                        val head = outbox.first()
+                        if (!loadFailed.containsKey(head.sessionId)) return@synchronized head
+                        outbox.removeFirst()
+                        outbox.addLast(head)
+                        skipped++
+                    }
+                    null
+                }
             } ?: break
             refreshKeepAlive()
             val result = runCatching {
@@ -837,6 +944,7 @@ class BridgeBackend(
         runningSessions.remove(sessionId)
         suppressAgent.remove(sessionId)
         cancelPending.remove(sessionId)
+        loadFailed.remove(sessionId)
         deliverGeneration.remove(sessionId)
         inFlightPromptId.remove(sessionId)?.let { rpcId ->
             pending.remove(rpcId)?.completeExceptionally(CancellationException("Detached"))
@@ -857,6 +965,9 @@ class BridgeBackend(
         outboxFlushRetry?.cancel()
         outboxFlushRetry = null
         outboxFlushFailCount = 0
+        sessionLoadRetry?.cancel()
+        sessionLoadRetry = null
+        sessionLoadFailCount = 0
         cancelFlushJob?.cancel()
         cancelFlushJob = null
         lifecycle?.cancel()
@@ -874,6 +985,7 @@ class BridgeBackend(
         inFlightPromptId.clear()
         suppressAgent.clear()
         cancelPending.clear()
+        loadFailed.clear()
         answering.clear()
         promptMutexes.clear()
         synchronized(outboxLock) { outbox.clear() }
