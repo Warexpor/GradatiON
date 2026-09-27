@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.button.MaterialButton
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -32,6 +33,7 @@ class SystemMessageLibraryFragment : Fragment() {
 
     private lateinit var systemMessageAdapter: SystemMessageAdapter
     private lateinit var sharedPreferencesHelper: SharedPreferencesHelper
+    private var picked = false
     private val systemMessages = mutableListOf<SystemMessage>()
     private lateinit var searchView: SearchView  // NEW: Reference to SearchView
     private val allSystemMessages = mutableListOf<SystemMessage>()  // NEW: Store full list for filtering
@@ -118,6 +120,7 @@ class SystemMessageLibraryFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        picked = false
         sharedPreferencesHelper = SharedPreferencesHelper(requireContext())
 
         val toolbar = view.findViewById<MaterialToolbar>(R.id.toolbar)
@@ -193,10 +196,16 @@ class SystemMessageLibraryFragment : Fragment() {
         val selectedMessage = sharedPreferencesHelper.getSelectedSystemMessage()
         systemMessageAdapter = SystemMessageAdapter(systemMessages, selectedMessage,
             onItemClick = { systemMessage ->
-                sharedPreferencesHelper.saveSelectedSystemMessage(systemMessage)
-                view.postDelayed({
-                    parentFragmentManager.popBackStack()
-                }, 200)
+                // One pick per visit: a second tap (or Back) inside the beat must not pop twice.
+                if (!picked) {
+                    picked = true
+                    sharedPreferencesHelper.saveSelectedSystemMessage(systemMessage)
+                    // Brief beat so the new check registers; cancelled if the view goes first.
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        delay(200)
+                        if (!isStateSaved) parentFragmentManager.popBackStack()
+                    }
+                }
             },
             onMenuClick = { anchorView, systemMessage ->
                 showPopupMenu(anchorView, systemMessage)
