@@ -3986,37 +3986,129 @@ $cleanContent
                     !inside(topBar, x, y) && !inside(dock, x, y) &&
                     parentFragmentManager.backStackEntryCount == 0
 
+            // What the drag is heading to: a neighbouring tab, history (back past the first
+            // tab), or nothing (rubber band). Worked out on every move so reversing works.
+            fun tabsInOrder(): List<TextView> = listOfNotNull(
+                tabChat,
+                tabRoleplay.takeIf { it.isVisible },
+                codeMode.tab.takeIf { it.isVisible }
+            )
+            fun currentTab(): TextView = when {
+                codeMode.isActive -> codeMode.tab
+                viewModel.isRpMode() && tabRoleplay.isVisible -> tabRoleplay
+                else -> tabChat
+            }
+            fun targetFor(direction: Int): TextView? {
+                val order = tabsInOrder()
+                val i = order.indexOf(currentTab()).coerceAtLeast(0)
+                return order.getOrNull(if (direction > 0) i - 1 else i + 1)
+            }
+            // The page layers that slide; the top bar and its tabs stay put.
+            fun pages(): List<View> = listOfNotNull(
+                root.findViewById(R.id.chatFrameView),
+                root.findViewById(R.id.composerDock),
+                root.findViewById(R.id.composerFade),
+                root.findViewById(R.id.codeModeContainer)
+            ).filter { it.isVisible }
+            var historyDrag = false
+
+            fun resetPages(animate: Boolean) {
+                pages().forEach { p ->
+                    if (animate) p.animate().translationX(0f).alpha(1f).setDuration(420).setInterpolator(Motion.spring).start()
+                    else { p.translationX = 0f; p.alpha = 1f }
+                }
+                content.animate().translationX(0f).setDuration(if (animate) 420 else 0).setInterpolator(Motion.spring).start()
+            }
+
             override fun onDrag(dx: Float) {
-                // Resist: the page only leans toward where it will go.
-                val max = 36f * d
-                content.translationX = max * (dx / (abs(dx) + 5 * max)) * 3f
+                val w = content.width.coerceAtLeast(1).toFloat()
+                val direction = if (dx > 0) 1 else -1
+                val target = targetFor(direction)
+                val toHistory = direction > 0 && target == null
+                if (toHistory != historyDrag) {
+                    if (historyDrag) cancelHistoryDrag(animate = false)
+                    historyDrag = toHistory
+                    if (toHistory) { hideKeyboard(); resetPages(animate = false); beginHistoryDrag() }
+                }
+                if (historyDrag) {
+                    dragHistory(dx)
+                    return
+                }
+                if (target == null) {
+                    // Nothing that way: lean a little and resist.
+                    val max = 36f * d
+                    val lean = max * (dx / (abs(dx) + 5 * max)) * 3f
+                    pages().forEach { it.translationX = lean; it.alpha = 1f }
+                    return
+                }
+                // The page follows the finger; the tab underline slides toward the destination.
+                val progress = (abs(dx) / (w * 0.5f)).coerceIn(0f, 1f)
+                pages().forEach {
+                    it.animate().cancel()
+                    it.translationX = dx
+                    it.alpha = 1f - 0.4f * progress
+                }
+                val from = indicatorXFor(currentTab())
+                val to = indicatorXFor(target)
+                if (from != null && to != null) {
+                    modeTabIndicator.animate().cancel()
+                    modeTabIndicator.translationX = from + (to - from) * progress
+                }
             }
 
             override fun onCommit(direction: Int) {
-                content.animate().translationX(0f).setDuration(260).setInterpolator(Motion.iosOut).start()
                 content.performHapticFeedback(android.view.HapticFeedbackConstants.GESTURE_END)
-                // Tabs in order, only the enabled ones: back past the first opens history.
-                val order = listOfNotNull(
-                    tabChat,
-                    tabRoleplay.takeIf { it.isVisible },
-                    codeMode.tab.takeIf { it.isVisible }
-                )
-                val current = when {
-                    codeMode.isActive -> codeMode.tab
-                    viewModel.isRpMode() && tabRoleplay.isVisible -> tabRoleplay
-                    else -> tabChat
+                if (historyDrag) {
+                    historyDrag = false
+                    settleHistoryDrag()
+                    return
                 }
-                val i = order.indexOf(current).coerceAtLeast(0)
-                if (direction > 0) {
-                    if (i == 0) { hideKeyboard(); openHistoryPanel() } else order[i - 1].performClick()
-                } else {
-                    order.getOrNull(i + 1)?.performClick()
+                val target = targetFor(direction)
+                if (target == null) { onCancel(); return }
+                val w = content.width.toFloat()
+                val anim = Motion.areAnimationsEnabled(requireContext())
+                val out = pages()
+                if (!anim) {
+                    target.performClick()
+                    resetPages(animate = false)
+                    return
+                }
+                // Finish sliding out the way the finger went, switch, slide the new page in
+                // from the other side.
+                var remaining = out.size.coerceAtLeast(1)
+                val switchNow = {
+                    target.performClick()
+                    pages().forEach { p ->
+                        p.animate().cancel()
+                        p.translationX = -direction * w * 0.28f
+                        p.alpha = 0f
+                        p.animate().translationX(0f).alpha(1f).setDuration(380).setInterpolator(Motion.iosOut).start()
+                    }
+                    // Hidden layers (the old page) come back to rest for next time.
+                    out.filter { !it.isVisible }.forEach { it.translationX = 0f; it.alpha = 1f }
+                }
+                if (out.isEmpty()) { switchNow(); return }
+                out.forEach { p ->
+                    p.animate().translationX(direction * w).alpha(0f).setDuration(170)
+                        .setInterpolator(Motion.easeOut)
+                        .withEndAction { if (--remaining == 0) switchNow() }
+                        .start()
                 }
             }
 
             override fun onCancel() {
-                content.animate().translationX(0f).setDuration(420).setInterpolator(Motion.spring).start()
+                if (historyDrag) {
+                    historyDrag = false
+                    cancelHistoryDrag(animate = true)
+                    return
+                }
+                resetPages(animate = true)
+                placeModeTabIndicator(animate = true)
             }
+        }
+        (root as? SwipeNavLayout)?.apply {
+            // Easier than before: shorter pull commits, and a light flick is enough.
+            commitFraction = 0.22f
         }
 
         val drawer = historyDrawerContainer as? SwipeNavLayout ?: return
@@ -4186,6 +4278,73 @@ $cleanContent
                 .addToBackStack(null)
                 .commit()
         }
+    }
+
+    // ── History drawer following a wide swipe (see setupWideSwipes) ──
+
+    private fun beginHistoryDrag() {
+        val panel = historyDrawerContainer ?: return
+        val scrim = historyDrawerScrim ?: return
+        if (panel.visibility == View.VISIBLE) return
+        cancelDrawerAnimation()
+        if (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) == null) {
+            childFragmentManager.beginTransaction()
+                .replace(R.id.historyDrawerContainer, SavedChatsFragment.newEmbedded())
+                .commitNow()
+        }
+        val lp = panel.layoutParams as FrameLayout.LayoutParams
+        lp.width = ViewGroup.LayoutParams.MATCH_PARENT
+        lp.gravity = Gravity.START
+        panel.layoutParams = lp
+        val w = (view?.width ?: panel.width).coerceAtLeast(1)
+        panel.translationX = -w.toFloat()
+        panel.visibility = View.VISIBLE
+        panel.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        scrim.visibility = View.VISIBLE
+        scrim.alpha = 0f
+    }
+
+    private fun dragHistory(dx: Float) {
+        val panel = historyDrawerContainer ?: return
+        val w = (view?.width ?: panel.width).coerceAtLeast(1).toFloat()
+        val x = dx.coerceIn(0f, w)
+        panel.translationX = x - w
+        historyDrawerScrim?.alpha = 0.35f * (x / w)
+        view?.findViewById<View>(R.id.rootLayout)?.translationX = x * 0.25f
+    }
+
+    private fun settleHistoryDrag() {
+        val panel = historyDrawerContainer ?: return
+        val w = (view?.width ?: panel.width).coerceAtLeast(1).toFloat()
+        val ms = resources.getInteger(R.integer.motion_drawer).toLong()
+        historyDrawerScrim?.animate()?.alpha(0.35f)?.setDuration(ms)?.setInterpolator(Motion.iosOut)?.start()
+        panel.animate().translationX(0f).setDuration(ms).setInterpolator(Motion.iosOut)
+            .withEndAction { panel.setLayerType(View.LAYER_TYPE_NONE, null) }.start()
+        view?.findViewById<View>(R.id.rootLayout)?.animate()
+            ?.translationX(w * 0.25f)?.setDuration(ms)?.setInterpolator(Motion.iosOut)?.start()
+    }
+
+    private fun cancelHistoryDrag(animate: Boolean) {
+        val panel = historyDrawerContainer ?: return
+        val scrim = historyDrawerScrim
+        val w = (view?.width ?: panel.width).coerceAtLeast(1).toFloat()
+        val root = view?.findViewById<View>(R.id.rootLayout)
+        val done = {
+            panel.visibility = View.GONE
+            panel.translationX = 0f
+            panel.setLayerType(View.LAYER_TYPE_NONE, null)
+            scrim?.visibility = View.GONE
+        }
+        if (!animate) {
+            root?.translationX = 0f
+            scrim?.alpha = 0f
+            done()
+            return
+        }
+        scrim?.animate()?.alpha(0f)?.setDuration(260)?.setInterpolator(Motion.iosOut)?.start()
+        root?.animate()?.translationX(0f)?.setDuration(420)?.setInterpolator(Motion.spring)?.start()
+        panel.animate().translationX(-w).setDuration(260).setInterpolator(Motion.iosOut)
+            .withEndAction { done() }.start()
     }
 
     private fun openHistoryPanel() {
@@ -5376,6 +5535,16 @@ $cleanContent
      * tabs. Position is derived from the tab's text bounds, and re-derived on every layout pass of
      * the tab row (rotation, font changes), so it can never drift off the word.
      */
+    /** Where the tab underline sits under [tab], or null before layout. */
+    private fun indicatorXFor(tab: TextView): Float? {
+        if (tab.width == 0 || modeTabIndicator.width == 0) return null
+        val row = tab.parent as View
+        val visibleTextW = (tab.width - tab.totalPaddingLeft - tab.totalPaddingRight).toFloat().coerceAtLeast(0f)
+        val textW = minOf(tab.paint.measureText(tab.text.toString()), visibleTextW)
+        val contentLeft = tab.totalPaddingLeft + (visibleTextW - textW) / 2f
+        return row.left + tab.left + contentLeft + (textW - modeTabIndicator.width) / 2f
+    }
+
     private fun placeModeTabIndicator(animate: Boolean) {
         if (!::modeTabIndicator.isInitialized) return
         val tab = when {
@@ -5383,12 +5552,7 @@ $cleanContent
             tabRoleplay.isSelected -> tabRoleplay
             else -> tabChat
         }
-        if (tab.width == 0 || modeTabIndicator.width == 0) return
-        val row = tab.parent as View
-        val visibleTextW = (tab.width - tab.totalPaddingLeft - tab.totalPaddingRight).toFloat().coerceAtLeast(0f)
-        val textW = minOf(tab.paint.measureText(tab.text.toString()), visibleTextW)
-        val contentLeft = tab.totalPaddingLeft + (visibleTextW - textW) / 2f
-        val x = row.left + tab.left + contentLeft + (textW - modeTabIndicator.width) / 2f
+        val x = indicatorXFor(tab) ?: return
         // A layout pass mid-spring toward the same spot must not cut the animation short.
         if (!animate && kotlin.math.abs(x - indicatorTargetX) < 0.5f) return
         indicatorTargetX = x

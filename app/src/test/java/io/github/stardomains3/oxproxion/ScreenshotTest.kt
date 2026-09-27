@@ -731,6 +731,58 @@ class ScreenshotTest {
         SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
     }
 
+    // ---- Wide swipes: the page follows the finger ----
+
+    private fun motion(v: View, action: Int, down: Long, t: Long, x: Float, y: Float) {
+        val e = android.view.MotionEvent.obtain(down, t, action, x, y, 0)
+        v.dispatchTouchEvent(e)
+        e.recycle()
+    }
+
+    /** Drag across [root] from its middle by [dx] in small steps; lifts only if [release]. */
+    private fun drag(root: View, dx: Float, release: Boolean, stepMs: Long = 16L) {
+        val y = root.height * 0.45f
+        val x0 = root.width * 0.5f
+        val down = android.os.SystemClock.uptimeMillis()
+        var t = down
+        motion(root, android.view.MotionEvent.ACTION_DOWN, down, t, x0, y)
+        val steps = 12
+        for (i in 1..steps) {
+            t += stepMs
+            motion(root, android.view.MotionEvent.ACTION_MOVE, down, t, x0 + dx * i / steps, y)
+        }
+        if (release) {
+            t += stepMs
+            motion(root, android.view.MotionEvent.ACTION_UP, down, t, x0 + dx, y)
+        }
+    }
+
+    @Test fun swipeMidDragDark() = withChat { a, chat ->
+        val root = chat.requireView()
+        drag(root, -root.width * 0.3f, release = false, stepMs = 40L)
+        val page = a.findViewById<View>(R.id.chatFrameView)
+        org.junit.Assert.assertTrue("page follows the finger", page.translationX < -root.width * 0.2f)
+        snap(root(a), "swipe_mid_dark")
+    }
+
+    @Test fun swipeCommitsToNextTab() = withChat { a, chat ->
+        val root = chat.requireView()
+        drag(root, -root.width * 0.3f, release = true, stepMs = 40L)
+        idle()
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.tabRoleplay).isSelected)
+        org.junit.Assert.assertEquals(0f, a.findViewById<View>(R.id.chatFrameView).translationX, 0.5f)
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
+    @Test fun swipeRightFromChatPullsHistory() = withChat { a, chat ->
+        val root = chat.requireView()
+        drag(root, root.width * 0.3f, release = false, stepMs = 40L)
+        val panel = a.findViewById<View>(R.id.historyDrawerContainer)
+        org.junit.Assert.assertTrue(panel.isShown)
+        org.junit.Assert.assertTrue("drawer tracks the finger", panel.translationX > -root.width * 0.8f && panel.translationX < 0f)
+        snap(root(a), "swipe_history_mid_dark")
+    }
+
     @Test fun grainMigratesToDrift() {
         org.junit.Assert.assertEquals(AmbientBackgroundView.Style.DRIFT, AmbientBackgroundView.Style.fromKey("grain"))
     }

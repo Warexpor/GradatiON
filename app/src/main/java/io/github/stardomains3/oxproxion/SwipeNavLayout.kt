@@ -13,8 +13,8 @@ import kotlin.math.abs
  * FrameLayout that recognises deliberate, wide horizontal swipes anywhere on it (not just at an
  * edge) and hands them to [listener]. It is strict on purpose so it never fights scrolling,
  * text selection or taps:
- *  - the finger must travel mostly sideways (|dx| > 2 x |dy|) past a large slop before the
- *    gesture is claimed, and must not have started as a vertical scroll;
+ *  - the finger must travel mostly sideways (|dx| > 1.7 x |dy|) past twice the touch slop
+ *    before the gesture is claimed, and must not have started as a vertical scroll;
  *  - a press held still for a long-press (selection handles, context menus) is never claimed;
  *  - the swipe commits only past [commitFraction] of the width, or a fast fling past half that.
  * While claimed, [Listener.onDrag] reports the offset so the UI can follow the finger.
@@ -38,7 +38,7 @@ class SwipeNavLayout @JvmOverloads constructor(
 
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private val longPress = ViewConfiguration.getLongPressTimeout().toLong()
-    private val flingMin = ViewConfiguration.get(context).scaledMinimumFlingVelocity * 12f
+    private val flingMin = ViewConfiguration.get(context).scaledMinimumFlingVelocity * 8f
     private var downX = 0f
     private var downY = 0f
     private var downTime = 0L
@@ -60,10 +60,10 @@ class SwipeNavLayout @JvmOverloads constructor(
                 val dy = ev.y - downY
                 when {
                     abs(dy) > slop * 1.5f && abs(dy) >= abs(dx) -> state = REJECTED
-                    SystemClock.uptimeMillis() - downTime > longPress && abs(dx) < slop * 3 -> state = REJECTED
-                    abs(dx) > slop * 3 && abs(dx) > abs(dy) * 2f -> {
+                    SystemClock.uptimeMillis() - downTime > longPress && abs(dx) < slop * 2 -> state = REJECTED
+                    abs(dx) > slop * 2 && abs(dx) > abs(dy) * 1.7f -> {
                         state = DRAGGING
-                        downX = ev.x - (if (dx > 0) slop * 3f else -slop * 3f)
+                        downX = ev.x - (if (dx > 0) slop * 2f else -slop * 2f)
                         parent?.requestDisallowInterceptTouchEvent(true)
                         return true
                     }
