@@ -3,12 +3,15 @@
 <resources>
     <color name="code_block_bg">#FFE9E9E9</color>
     <color name="code_card_bg">#FFF9F9F9</color>
-    <color name="code_diff_add_bg">#17000000</color>
-    <color name="code_diff_del_bg">#B3FFFFFF</color>
+    <!-- Diffs keep git colors (user call: code and diffs are the exception to grays-only) -->
+    <color name="code_diff_add_bg">#262DA44E</color>
+    <color name="code_diff_del_bg">#1FCF222E</color>
     <color name="code_diff_hunk_bg">#0A000000</color>
     <color name="code_diff_gutter">#FFB2B2B2</color>
     <color name="code_status_on">#FF1B1B1B</color>
     <color name="code_status_off">#FFB2B2B2</color>
     <color name="code_badge_bg">#FF1B1B1B</color>
     <color name="code_badge_fg">#FFF1F1F1</color>
+    <color name="code_diff_add_fg">#FF1A7F37</color>
+    <color name="code_diff_del_fg">#FFCF222E</color>
 </resources>

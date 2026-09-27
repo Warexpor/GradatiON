@@ -22,9 +22,10 @@ class CodeDiffFragment : Fragment(R.layout.fragment_code_diff) {
             return
         }
         toolbar.title = CodeComposer.folderName(event.path)
-        toolbar.subtitle = "${event.path.substringBeforeLast('/', "")}  ·  " +
+        toolbar.subtitle = android.text.SpannableStringBuilder("${event.path.substringBeforeLast('/', "")}  ·  ").append(
             if (event.isNewFile) getString(R.string.code_session_new_file)
-            else getString(R.string.code_diff_counts, event.added, event.removed)
+            else coloredDiffCounts(requireContext(), event.added, event.removed)
+        )
         view.findViewById<DiffView>(R.id.codeDiffFull).apply {
             wrapWidth = false
             lines = event.lines

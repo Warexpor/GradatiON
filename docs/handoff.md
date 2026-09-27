@@ -35,7 +35,7 @@ Read `CLAUDE.md` first, then `docs/backlog.md` (Pass 2 is the live list). Branch
    character panel sheet.
 3. P1: repo pass. New screenshots in `screenshots/` from the Robolectric tests, a README rewrite,
    and design and agent docs (`DESIGN.md` exists but predates these passes).
-4. Open question for the user: should code-block syntax colors stay, given the grays-only rule?
+4. (Decided) Code syntax and diffs stay colored. Diffs are done.
 
 ## Test gotchas learned
 - `ScreenshotTest` resets `CodeHub` in `@After` and forces Chat mode in `withChat`. Modes leak

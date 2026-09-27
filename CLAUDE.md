@@ -35,6 +35,7 @@ the state of work in progress in `docs/handoff.md`.
 ## Design rules
 - Only pure neutral grays, with R, G and B equal. Dark base #111111, light is a dimmed off-white. No blue tint,
   no solid white buttons, nothing glowy. No red or green, even for delete and error states.
+  Exception (user call): code syntax highlighting and diffs keep their colors (git green/red).
 - iOS Liquid Glass on every surface. Lens edge on Android 13+, plain blur on 12, and a solid frosted fill
   on battery saver or low-RAM phones.
 - Performance is a hard rule: few blur layers, animations pause offscreen, and backgrounds run at 12 to 15fps.

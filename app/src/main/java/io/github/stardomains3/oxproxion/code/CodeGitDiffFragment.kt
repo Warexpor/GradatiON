@@ -71,11 +71,11 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
                 ParsedDiff(shown, add, del, truncated)
             }
             val dir = path.substringBeforeLast('/', "").ifBlank { "." }
-            val counts = getString(R.string.code_diff_counts, parsed.add, parsed.del)
+            val counts = coloredDiffCounts(requireContext(), parsed.add, parsed.del)
             toolbar.subtitle = if (parsed.truncated) {
-                "$dir  ·  $counts  ·  " + getString(R.string.code_changes_diff_truncated, MAX_LINES)
+                android.text.SpannableStringBuilder("$dir  ·  ").append(counts).append("  ·  " + getString(R.string.code_changes_diff_truncated, MAX_LINES))
             } else {
-                "$dir  ·  $counts"
+                android.text.SpannableStringBuilder("$dir  ·  ").append(counts)
             }
             diffView.maxLines = MAX_LINES
             diffView.wrapWidth = false

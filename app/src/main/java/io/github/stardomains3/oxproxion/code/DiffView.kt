@@ -42,11 +42,13 @@ class DiffView @JvmOverloads constructor(
         textAlign = Paint.Align.RIGHT
         textSize = 11f * resources.displayMetrics.scaledDensity
     }
-    private val marker = Paint(text).apply { color = ContextCompat.getColor(context, R.color.xai_ink) }
+    private val addMark = Paint(text).apply { color = ContextCompat.getColor(context, R.color.code_diff_add_fg) }
+    private val delMark = Paint(text).apply { color = ContextCompat.getColor(context, R.color.code_diff_del_fg) }
     private val addFill = Paint().apply { color = ContextCompat.getColor(context, R.color.code_diff_add_bg) }
     private val delFill = Paint().apply { color = ContextCompat.getColor(context, R.color.code_diff_del_bg) }
     private val hunkFill = Paint().apply { color = ContextCompat.getColor(context, R.color.code_diff_hunk_bg) }
-    private val bar = Paint().apply { color = ContextCompat.getColor(context, R.color.xai_ink) }
+    private val addBar = Paint().apply { color = ContextCompat.getColor(context, R.color.code_diff_add_fg) }
+    private val delBar = Paint().apply { color = ContextCompat.getColor(context, R.color.code_diff_del_fg) }
 
     private val lineH = ceil(text.fontSpacing * 1.28f)
     private val baseline = (lineH - (text.descent() + text.ascent())) / 2f
@@ -95,9 +97,12 @@ class DiffView @JvmOverloads constructor(
             when (l.type) {
                 DiffLine.Type.ADD -> {
                     canvas.drawRect(0f, y, w, y + lineH, addFill)
-                    canvas.drawRect(0f, y, 2.5f * d, y + lineH, bar)
+                    canvas.drawRect(0f, y, 2.5f * d, y + lineH, addBar)
                 }
-                DiffLine.Type.DELETE -> canvas.drawRect(0f, y, w, y + lineH, delFill)
+                DiffLine.Type.DELETE -> {
+                    canvas.drawRect(0f, y, w, y + lineH, delFill)
+                    canvas.drawRect(0f, y, 2.5f * d, y + lineH, delBar)
+                }
                 DiffLine.Type.HUNK -> canvas.drawRect(0f, y, w, y + lineH, hunkFill)
                 DiffLine.Type.CONTEXT -> Unit
             }
@@ -108,11 +113,11 @@ class DiffView @JvmOverloads constructor(
             }
             (l.newNo ?: l.oldNo)?.let { canvas.drawText(it.toString(), xNo, by, gutter) }
             when (l.type) {
-                DiffLine.Type.ADD -> canvas.drawText("+", xMark, by, marker)
-                DiffLine.Type.DELETE -> canvas.drawText("−", xMark, by, muted)
+                DiffLine.Type.ADD -> canvas.drawText("+", xMark, by, addMark)
+                DiffLine.Type.DELETE -> canvas.drawText("−", xMark, by, delMark)
                 else -> Unit
             }
-            val p = if (l.type == DiffLine.Type.DELETE) muted else text
+            val p = text
             val s = l.text.replace("\t", "    ")
             if (wrapWidth) {
                 val room = w - xText - padH
@@ -123,4 +128,16 @@ class DiffView @JvmOverloads constructor(
             }
         }
     }
+}
+
+/** "+12  −3" with the numbers in the diff colors. */
+fun coloredDiffCounts(context: Context, added: Int, removed: Int): CharSequence {
+    val plain = context.getString(R.string.code_diff_counts, added, removed)
+    val out = android.text.SpannableString(plain)
+    val cut = plain.indexOf('−').takeIf { it >= 0 } ?: return plain
+    out.setSpan(android.text.style.ForegroundColorSpan(ContextCompat.getColor(context, R.color.code_diff_add_fg)),
+        0, cut, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    out.setSpan(android.text.style.ForegroundColorSpan(ContextCompat.getColor(context, R.color.code_diff_del_fg)),
+        cut, plain.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    return out
 }

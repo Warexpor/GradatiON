@@ -519,7 +519,7 @@ class CodeTranscriptAdapter(
         val ctx = v.context
         v.findViewById<TextView>(R.id.codeDiffPath).text = e.path
         v.findViewById<TextView>(R.id.codeDiffCounts).text =
-            if (e.isNewFile) ctx.getString(R.string.code_session_new_file) else ctx.getString(R.string.code_diff_counts, e.added, e.removed)
+            if (e.isNewFile) ctx.getString(R.string.code_session_new_file) else coloredDiffCounts(ctx, e.added, e.removed)
         val dv = v.findViewById<DiffView>(R.id.codeDiffLines)
         dv.maxLines = CARD_LINES
         dv.lines = e.lines
