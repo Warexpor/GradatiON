@@ -231,7 +231,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/messageContainer">
 
-            <!-- Message actions sit in one small glass capsule; scroll on narrow widths -->
+            <!-- Message actions: small bare icons under the message (no capsule); scroll on narrow widths -->
             <HorizontalScrollView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -243,9 +243,8 @@
                 android:id="@+id/aiActionButtons"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_chat_actions"
-                android:paddingStart="3dp"
-                android:paddingEnd="3dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
                 android:paddingTop="1dp"
                 android:paddingBottom="1dp"
                 android:orientation="horizontal"
@@ -253,131 +252,131 @@
 
             <ImageButton
                 android:id="@+id/copyButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_copy_text"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_copi"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/shareButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_share_text"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_share"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/ttsButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_speak_text"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_volume_up"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/instructButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/rp_instruct"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_editnote"
                 android:visibility="gone"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/regenerateButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/rp_regenerate"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_redo"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/editButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_edit_message"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_edit"
                 android:visibility="visible"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/aipdfButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_make_pdf"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_pdfnew"
                 android:visibility="gone"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/markdownButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_make_md"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_markdown"
                 android:visibility="gone"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/pngButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_make_png"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_png"
                 android:visibility="gone"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/htmlButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_view_html"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_html"
                 android:visibility="gone"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/saveFileButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_save_file"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_filesave"
                 android:visibility="gone"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/collapseToggleButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_toggle_expand"
-                android:padding="9dp"
+                android:padding="8.5dp"
                 android:src="@drawable/ic_expand_more"
                 android:visibility="visible"
-                app:tint="@color/xai_body" />
+                app:tint="@color/xai_mute" />
             </LinearLayout>
             </HorizontalScrollView>
 
@@ -392,7 +391,6 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
                 android:visibility="gone"
-                android:background="@drawable/bg_chat_actions"
                 android:paddingStart="2dp"
                 android:paddingEnd="2dp">
 
@@ -404,7 +402,7 @@
                     android:contentDescription="@string/fork_prev"
                     android:padding="6dp"
                     android:src="@drawable/ic_chevron_left"
-                    app:tint="@color/xai_body" />
+                    app:tint="@color/xai_mute" />
 
                 <TextView
                     android:id="@+id/forkLabel"
@@ -424,7 +422,7 @@
                     android:contentDescription="@string/fork_next"
                     android:padding="6dp"
                     android:src="@drawable/ic_chevron_right"
-                    app:tint="@color/xai_body" />
+                    app:tint="@color/xai_mute" />
             </LinearLayout>
         </LinearLayout>
 
