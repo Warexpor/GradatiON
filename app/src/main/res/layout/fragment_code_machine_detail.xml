@@ -143,6 +143,7 @@
                     android:visibility="gone" />
 
                 <View
+                    android:id="@+id/codeMachineVersionDivider"
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
                     android:layout_marginTop="12dp"
@@ -150,6 +151,7 @@
                     android:background="@color/xai_hairline" />
 
                 <TextView
+                    android:id="@+id/codeMachineVersionLabel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/code_machine_bridge_version"

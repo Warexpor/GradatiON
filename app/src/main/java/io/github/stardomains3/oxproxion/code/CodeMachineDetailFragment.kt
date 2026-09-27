@@ -15,6 +15,7 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import io.github.stardomains3.oxproxion.GrokConfirmDialog
 import io.github.stardomains3.oxproxion.R
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -41,6 +42,11 @@ class CodeMachineDetailFragment : Fragment(R.layout.fragment_code_machine_detail
     private lateinit var editBtn: MaterialButton
     private lateinit var revokeBtn: MaterialButton
     private lateinit var revokeHint: TextView
+    private lateinit var versionLabel: TextView
+    private lateinit var versionDivider: View
+    /** Single-flight harness refresh; cancel + generation gate so a stale empty result cannot wipe rows (Z2). */
+    private var harnessJob: Job? = null
+    private var harnessGen: Int = 0
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         hub = CodeHub.get(requireContext())
@@ -53,6 +59,8 @@ class CodeMachineDetailFragment : Fragment(R.layout.fragment_code_machine_detail
         statusView = view.findViewById(R.id.codeMachineStatus)
         lastErrorView = view.findViewById(R.id.codeMachineLastError)
         versionView = view.findViewById(R.id.codeMachineBridgeVersion)
+        versionLabel = view.findViewById(R.id.codeMachineVersionLabel)
+        versionDivider = view.findViewById(R.id.codeMachineVersionDivider)
         harnessesCard = view.findViewById(R.id.codeMachineHarnessesCard)
         harnessesHint = view.findViewById(R.id.codeMachineHarnessesHint)
         editBtn = view.findViewById(R.id.codeMachineEdit)
@@ -88,7 +96,11 @@ class CodeMachineDetailFragment : Fragment(R.layout.fragment_code_machine_detail
             urlView.text = getString(R.string.code_host_demo_sub)
             transportView.setText(R.string.code_machine_transport_demo)
             fingerprintView.isVisible = false
-            revokeHint.setText(R.string.code_machine_revoke_hint)
+            revokeHint.setText(R.string.code_machine_revoke_hint_demo)
+            // Demo has no bridge handshake — hide version chrome (Z4).
+            versionDivider.isVisible = false
+            versionLabel.isVisible = false
+            versionView.isVisible = false
         } else {
             urlView.text = CodeMachineDetail.redactUrl(host.url).ifBlank { host.url }
             transportView.setText(R.string.code_machine_transport_bridge)
@@ -99,6 +111,10 @@ class CodeMachineDetailFragment : Fragment(R.layout.fragment_code_machine_detail
             } else {
                 fingerprintView.isVisible = false
             }
+            versionDivider.isVisible = true
+            versionLabel.isVisible = true
+            versionView.isVisible = true
+            revokeHint.setText(R.string.code_machine_revoke_hint)
         }
 
         val conn = hub.connectionOf(host.id)
@@ -122,17 +138,30 @@ class CodeMachineDetailFragment : Fragment(R.layout.fragment_code_machine_detail
             lastErrorView.isVisible = false
         }
 
+        applyBridgeVersion(host)
+    }
+
+    /** Re-read [CodeHub.bridgeVersionOf] into the status card (initialize may finish after CONNECTED). */
+    private fun applyBridgeVersion(host: CodeHost) {
+        if (host.isDemo) return
         val version = hub.bridgeVersionOf(host.id)
         versionView.text = version?.takeIf { it.isNotBlank() }
             ?: getString(R.string.code_machine_version_unknown)
     }
 
     private fun refreshHarnesses(host: CodeHost) {
-        viewLifecycleOwner.lifecycleScope.launch {
+        // Z2: cancel prior job and bump generation. Generation is required because
+        // CodeHub.harnessesFor uses runCatching and can swallow CancellationException.
+        harnessJob?.cancel()
+        val gen = ++harnessGen
+        harnessJob = viewLifecycleOwner.lifecycleScope.launch {
             val live = hub.harnessesFor(host)
-            if (!isAdded) return@launch
+            if (!isAdded || gen != harnessGen) return@launch
             // Host may have been removed while suspending.
             if (hub.hosts.value.none { it.id == host.id }) return@launch
+            // Z1: always refresh version after harnessesFor returns (even on empty early-return).
+            // listHarnesses → ensureReady waits for initialize, so version is set by now when connected.
+            applyBridgeVersion(host)
             harnessesCard.removeAllViews()
             if (live.isEmpty()) {
                 val offline = !host.isDemo && hub.connectionOf(host.id) != ConnectionState.CONNECTED
@@ -145,10 +174,6 @@ class CodeMachineDetailFragment : Fragment(R.layout.fragment_code_machine_detail
             }
             harnessesHint.isVisible = false
             live.forEachIndexed { index, info -> addHarnessRow(info, showDivider = index > 0) }
-            // Initialize may finish after CONNECTED; re-read version once harness RPCs succeeded.
-            val version = hub.bridgeVersionOf(host.id)
-            versionView.text = version?.takeIf { it.isNotBlank() }
-                ?: getString(R.string.code_machine_version_unknown)
         }
     }
 
@@ -199,10 +224,15 @@ class CodeMachineDetailFragment : Fragment(R.layout.fragment_code_machine_detail
 
     private fun confirmRevoke() {
         val host = hub.hosts.value.find { it.id == hostId } ?: return
+        val body = if (host.isDemo) {
+            getString(R.string.code_machine_revoke_confirm_demo, host.name)
+        } else {
+            getString(R.string.code_machine_revoke_confirm, host.name)
+        }
         GrokConfirmDialog.show(
             this,
             getString(R.string.code_machine_revoke),
-            getString(R.string.code_machine_revoke_confirm, host.name),
+            body,
             getString(R.string.code_machine_revoke),
             onConfirm = {
                 hub.removeHost(host.id)

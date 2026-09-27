@@ -13,6 +13,8 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
@@ -694,6 +696,20 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                         openMachineDetail(item.host.id)
                         true
                     }
+                    // Z3: TalkBack long-press affordance announces "About this machine".
+                    ViewCompat.replaceAccessibilityAction(
+                        pill,
+                        AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_LONG_CLICK,
+                        getString(R.string.code_machine_about),
+                    ) { _, _ ->
+                        openMachineDetail(item.host.id)
+                        true
+                    }
+                    pill.contentDescription = getString(
+                        R.string.cd_code_machine_pill,
+                        item.host.name,
+                        getString(label),
+                    )
                     v.findViewById<View>(R.id.codeHomeSettings).setOnClickListener { openSettings() }
                 }
                 is HomeItem.Hero -> v.findViewById<TextView>(R.id.codeHeroSubtitle).text = getString(

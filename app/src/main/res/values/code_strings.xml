@@ -61,7 +61,10 @@
     <string name="code_machine_revoke">Revoke this phone</string>
     <string name="code_machine_revoke_confirm">Remove this phone\'s access to %1$s? The pairing token is deleted locally. Sessions keep running on the machine.\n\nHost-side revoke (gradation-bridge revoke) is separate and is not done from this phone.</string>
     <string name="code_machine_revoke_hint">Removes this phone\'s local token and host entry. Host-side gradation-bridge revoke is separate.</string>
+    <string name="code_machine_revoke_hint_demo">Removes this demo machine from the phone.</string>
+    <string name="code_machine_revoke_confirm_demo">Remove %1$s from this phone? Demo has no pairing token or host-side revoke.</string>
     <string name="code_machine_about">About this machine</string>
+    <string name="cd_code_machine_pill">%1$s, %2$s. Double-tap to switch machine.</string>
 
     <!-- Home -->
     <string name="code_home_greeting">What should we build?</string>
