@@ -70,7 +70,9 @@ All 19 items from the owner's list, 452 tests pass, `assembleDev` built.
 - Code: gear on Code home removed (top-left opens the same screen). Approval modes have icons
   (`CodeComposer.permissionIcon`) in the popover, the pill and Code settings.
 - Voice: the mic check no longer swells; `VoiceWaveView` runs ~30fps while listening and glides.
-- Switches: every screen is a SwitchCompat (MaterialSwitch sized differently); round 28dp bead
-  that widens and clears while held.
+- Switches: every screen is a SwitchCompat (MaterialSwitch sized differently). Redesigned after
+  iOS 26: 60x28 groove, 36x24 frosted pill that becomes a clear lens while held, dragged or
+  sliding (the thumb watches its own bounds move, since SwitchCompat cancels pressed on drag).
+  Geometry lives in the track's side padding (`GlassSwitchTrackDrawable.getPadding`).
 - Photo background blur is about 2.4x softer.
 Phone: every motion above, the Controls sheet under the nav bar, blur cost on an older phone.

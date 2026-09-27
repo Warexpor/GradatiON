@@ -110,14 +110,19 @@
     <color name="segment_thumb">#8CFFFFFF</color>
     <color name="segment_thumb_rim">#1F000000</color>
     <color name="segment_thumb_shadow">#24000000</color>
-    <!-- Glass toggle (GlassSwitch.kt): the bead never changes color; the track says on/off -->
+    <!-- Glass toggle (GlassSwitch.kt): the pill never changes color; the groove says on/off -->
     <color name="switch_track_off">#1C000000</color>
     <color name="switch_track_on">#FF262626</color>
+    <color name="switch_track_shade">#1F000000</color>
     <color name="switch_track_rim">#0F000000</color>
-    <color name="switch_track_rim_top">#2E000000</color>
-    <color name="switch_bead_top">#F7FFFFFF</color>
-    <color name="switch_bead_bottom">#F2FEFEFE</color>
+    <color name="switch_track_rim_top">#33000000</color>
+    <color name="switch_track_lip">#B3FFFFFF</color>
+    <color name="switch_bead_top">#F2FFFFFF</color>
+    <color name="switch_bead_bottom">#E0F2F2F2</color>
+    <color name="switch_bead_sheen">#80FFFFFF</color>
     <color name="switch_bead_rim_light">#FFFFFFFF</color>
-    <color name="switch_bead_rim_dark">#1F000000</color>
+    <color name="switch_bead_rim_dark">#29000000</color>
+    <color name="switch_lens_tint">#1FFFFFFF</color>
+    <color name="switch_lens_edge">#F2FFFFFF</color>
     <color name="switch_thumb_shadow">#3D000000</color>
 </resources>
