@@ -49,6 +49,8 @@ class ScreenshotTest {
         Settings.Global.putFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
         db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java).allowMainThreadQueries().build()
         AppDatabase.setInstanceForTesting(db)
+        // Roleplay is opt-in now; these screens cover it, so switch it on (see ModesDefaultTest).
+        SharedPreferencesHelper(ctx).setRoleplayEnabled(true)
     }
 
     private fun snap(view: View, name: String) {

@@ -851,7 +851,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
         }
-        // Code mode (third tab, off unless enabled in Settings) lives in its own package; see CodeModeHost.
+        // Code mode (third tab, on by default, Settings > Modes turns it off) lives in its own package; see CodeModeHost.
         codeMode = io.github.stardomains3.oxproxion.code.CodeModeHost(this, view)
         codeMode.onTabsChanged = {
             val rp = viewModel.isRpMode()
@@ -873,6 +873,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             true
         }
         tabRoleplay.contentDescription = getString(R.string.mode_tab_roleplay_a11y)
+        refreshModeTabs()
         val retab = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             modeTabIndicator.post { placeModeTabIndicator(animate = false) }
         }
@@ -3786,11 +3787,24 @@ $cleanContent
             topReasoningButton.strokeWidth = 0
         }
     }
+    /** Roleplay and Code tabs follow Settings > Modes; leaving a disabled Roleplay lands on Chat. */
+    private fun refreshModeTabs() {
+        if (!::tabRoleplay.isInitialized) return
+        val rpOn = sharedPreferencesHelper.isRoleplayEnabled()
+        tabRoleplay.isVisible = rpOn
+        if (!rpOn && viewModel.isRpMode() && viewModel.isAwaitingResponse.value != true) {
+            sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, chatEditText.text?.toString().orEmpty())
+            viewModel.toggleChatMode()
+        }
+        if (::codeMode.isInitialized) codeMode.refresh()
+        modeTabIndicator.post { placeModeTabIndicator(animate = false) }
+    }
+
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
         if (hidden) pickerPopover?.dismiss(animated = false)
         if (!hidden) {  // Fragment is now visible
-            if (::codeMode.isInitialized) codeMode.refresh()
+            refreshModeTabs()
             updateSystemMessageButtonState()
            // chatEditText.requestFocus()
             viewModel.checkAdvancedReasoningStatus()
@@ -3806,7 +3820,7 @@ $cleanContent
     }
     override fun onResume() {
         super.onResume()
-        if (::codeMode.isInitialized) codeMode.refresh()
+        refreshModeTabs()
         updateSystemMessageButtonState()
         viewModel.isStreamingEnabled.value?.let { updateStreamToggleAppearance(it) }
        // chatEditText.requestFocus()
@@ -3871,14 +3885,22 @@ $cleanContent
             override fun onCommit(direction: Int) {
                 content.animate().translationX(0f).setDuration(260).setInterpolator(Motion.iosOut).start()
                 content.performHapticFeedback(android.view.HapticFeedbackConstants.GESTURE_END)
-                val rp = viewModel.isRpMode()
-                when {
-                    codeMode.isActive -> if (direction > 0) tabRoleplay.performClick()
-                    direction < 0 && rp && codeMode.tab.isVisible -> codeMode.tab.performClick()
-                    direction > 0 && rp -> tabChat.performClick()
-                    direction > 0 -> { hideKeyboard(); openHistoryPanel() }
-                    !rp -> tabRoleplay.performClick()
-                    else -> { hideKeyboard(); openBotModelPicker() }
+                // Tabs in order, only the enabled ones: back past the first opens history.
+                val order = listOfNotNull(
+                    tabChat,
+                    tabRoleplay.takeIf { it.isVisible },
+                    codeMode.tab.takeIf { it.isVisible }
+                )
+                val current = when {
+                    codeMode.isActive -> codeMode.tab
+                    viewModel.isRpMode() && tabRoleplay.isVisible -> tabRoleplay
+                    else -> tabChat
+                }
+                val i = order.indexOf(current).coerceAtLeast(0)
+                if (direction > 0) {
+                    if (i == 0) { hideKeyboard(); openHistoryPanel() } else order[i - 1].performClick()
+                } else {
+                    order.getOrNull(i + 1)?.performClick()
                 }
             }
 

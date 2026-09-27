@@ -42,6 +42,8 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_THEME_MODE = "theme_mode"
         /** Ambient background style (AmbientBackgroundView.Style.key): off, grain, drift, flow, adaptive. */
         const val KEY_BACKGROUND_STYLE = "background_style"
+        /** Roleplay tab on the main screen; off by default (Settings > Modes). */
+        const val KEY_ROLEPLAY_ENABLED = "roleplay_enabled"
         const val THEME_SYSTEM = 0
         const val THEME_LIGHT = 1
         const val THEME_DARK = 2
@@ -616,6 +618,12 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     /** Off by default. */
+    fun isRoleplayEnabled(): Boolean = mainPrefs.getBoolean(KEY_ROLEPLAY_ENABLED, false)
+
+    fun setRoleplayEnabled(enabled: Boolean) {
+        mainPrefs.edit { putBoolean(KEY_ROLEPLAY_ENABLED, enabled) }
+    }
+
     fun getBackgroundStyle(): String = mainPrefs.getString(KEY_BACKGROUND_STYLE, "off") ?: "off"
 
     fun saveBackgroundStyle(key: String) {

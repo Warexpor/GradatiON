@@ -30,6 +30,11 @@
     <string name="grok_history_more">More</string>
     <string name="grok_ask_tab">Chat</string>
     <string name="settings_group_app">App</string>
+    <string name="settings_group_modes">Modes</string>
+    <string name="settings_mode_roleplay">Roleplay</string>
+    <string name="settings_mode_roleplay_sub">Characters, personas and lorebooks as a tab</string>
+    <string name="settings_mode_code">Code</string>
+    <string name="settings_mode_code_sub">Drive coding agents on your machines</string>
     <string name="settings_group_grok">AI</string>
     <string name="settings_group_voice">Voice</string>
     <string name="grok_history_delete_title">Delete conversation?</string>

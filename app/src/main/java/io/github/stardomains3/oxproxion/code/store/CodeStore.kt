@@ -30,7 +30,7 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     var enabled: Boolean
-        get() = prefs.getBoolean(KEY_ENABLED, false)
+        get() = prefs.getBoolean(KEY_ENABLED, true)
         set(v) = prefs.edit { putBoolean(KEY_ENABLED, v) }
 
     /** Whether the Code tab was the last one open, so the app comes back to it. */

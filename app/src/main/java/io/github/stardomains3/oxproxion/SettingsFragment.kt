@@ -24,6 +24,20 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
                 .commit()
         }
 
+        val prefs = SharedPreferencesHelper(requireContext())
+        view.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsRoleplaySwitch).apply {
+            isChecked = prefs.isRoleplayEnabled()
+            setOnCheckedChangeListener { _, on -> prefs.setRoleplayEnabled(on) }
+        }
+        val codeStore = io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store
+        view.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsCodeSwitch).apply {
+            isChecked = codeStore.enabled
+            setOnCheckedChangeListener { _, on ->
+                codeStore.enabled = on
+                if (!on) codeStore.lastTabWasCode = false
+            }
+        }
+
         view.findViewById<View>(R.id.settingsRowAppearance)
             .setOnClickListener { openSection(SettingsDetailFragment.SECTION_APPEARANCE) }
         // STT disabled
@@ -45,5 +59,13 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
                 .addToBackStack(null)
                 .commit()
         }
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (hidden) return
+        // Code settings has its own switch for the same flag.
+        view?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsCodeSwitch)?.isChecked =
+            io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store.enabled
     }
 }
