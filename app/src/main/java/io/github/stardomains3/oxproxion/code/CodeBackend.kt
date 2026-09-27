@@ -101,6 +101,9 @@ class BridgeBackend(
     @Volatile private var handshakeError: String? = null
     private var handshakeFailCount = 0
     private var handshakeRetry: Job? = null
+    /** R4: bounded flush retry when send fails while still CONNECTED (queue full). */
+    private var outboxFlushRetry: Job? = null
+    private var outboxFlushFailCount = 0
     override val lastError: String? get() = handshakeError ?: transport.lastError
     private val _updates = MutableSharedFlow<SessionUpdate>(extraBufferCapacity = 256)
     override val updates: SharedFlow<SessionUpdate> = _updates
@@ -263,6 +266,8 @@ class BridgeBackend(
                             ready.value = false
                             initialized = false
                             socketGeneration++
+                            outboxFlushRetry?.cancel()
+                            outboxFlushRetry = null
                             failPending("Disconnected")
                         }
                     }
@@ -321,6 +326,7 @@ class BridgeBackend(
         handshakeFailCount = 0
         handshakeError = null
         ready.value = true
+        outboxFlushFailCount = 0
         flushCancelPending()
         flushOutbox()
     }
@@ -488,6 +494,10 @@ class BridgeBackend(
                     connection.value != ConnectionState.CONNECTED
                 ) {
                     connect()
+                } else {
+                    // R4: still CONNECTED (e.g. OkHttp queue full) — no reconnect event;
+                    // schedule a bounded flush so the item is not stuck forever.
+                    scheduleOutboxFlushRetry()
                 }
             }
         }
@@ -506,18 +516,58 @@ class BridgeBackend(
             }.getOrDefault(DeliverResult.Retry)
             when (result) {
                 // E1: Done / Aborted — drop this head if still present and keep flushing
-                // siblings. Only Retry (pre-accept failure) waits for the next reconnect.
+                // siblings. Only Retry (pre-accept failure) waits for reconnect / R4 flush.
                 DeliverResult.Done, DeliverResult.Aborted -> {
                     // G1: referential match only — structural == would drop a re-queued
                     // identical prompt if cancel cleared the peeked head mid-deliver.
                     synchronized(outboxLock) {
                         if (outbox.isNotEmpty() && outbox.first() === next) outbox.removeFirst()
                     }
+                    outboxFlushFailCount = 0
                 }
-                DeliverResult.Retry -> break
+                DeliverResult.Retry -> {
+                    // R4: send failed while transport may still be CONNECTED — schedule a
+                    // bounded flush retry instead of waiting forever for a drop.
+                    scheduleOutboxFlushRetry()
+                    break
+                }
             }
         }
         refreshKeepAlive()
+    }
+
+    /**
+     * R4: when [transport.send] returns false while still [ConnectionState.CONNECTED]
+     * (queue full), [flushOutbox] breaks on Retry and no reconnect fires. One worker
+     * loops with backoff so a Retry inside [flushOutbox] (same job still active) still
+     * gets another attempt. Keep the item queued until success or user cancel.
+     */
+    private fun scheduleOutboxFlushRetry() {
+        if (connection.value != ConnectionState.CONNECTED || !ready.value) return
+        if (synchronized(outboxLock) { outbox.isEmpty() }) return
+        if (outboxFlushRetry?.isActive == true) return
+        outboxFlushRetry = scope.launch {
+            val self = coroutineContext[Job]
+            try {
+                while (lifecycle != null &&
+                    ready.value &&
+                    connection.value == ConnectionState.CONNECTED &&
+                    synchronized(outboxLock) { outbox.isNotEmpty() }
+                ) {
+                    if (outboxFlushFailCount > 16) break
+                    val attempt = outboxFlushFailCount++
+                    val wait = ReconnectBackoff.delayMs(attempt.coerceAtMost(6), Random.nextDouble())
+                        .coerceAtLeast(50L)
+                    delay(wait)
+                    if (lifecycle == null) break
+                    if (!ready.value || connection.value != ConnectionState.CONNECTED) break
+                    if (synchronized(outboxLock) { outbox.isEmpty() }) break
+                    flushOutbox()
+                }
+            } finally {
+                if (outboxFlushRetry === self) outboxFlushRetry = null
+            }
+        }
     }
 
     /**
@@ -804,6 +854,9 @@ class BridgeBackend(
     override fun close() {
         handshakeRetry?.cancel()
         handshakeRetry = null
+        outboxFlushRetry?.cancel()
+        outboxFlushRetry = null
+        outboxFlushFailCount = 0
         cancelFlushJob?.cancel()
         cancelFlushJob = null
         lifecycle?.cancel()

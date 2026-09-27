@@ -100,7 +100,8 @@ class CodeBridgeBackendTest {
             if (!open.get() || _state.value != ConnectionState.CONNECTED) return false
             if (failPromptSendOnce && frame.contains("session/prompt")) {
                 failPromptSendOnce = false
-                lastError = "Not connected"
+                // Stay CONNECTED — R4 queue-full / backpressure (not a drop).
+                lastError = "Send queue full"
                 return false
             }
             if (failCancelSendOnce && frame.contains("session/cancel")) {
@@ -522,12 +523,13 @@ class CodeBridgeBackendTest {
                 transport.sent.count { it.contains("session/prompt") }
             )
             assertTrue(transport.keepAlive)
+            assertEquals(
+                "transport stays CONNECTED after queue-full send false",
+                ConnectionState.CONNECTED,
+                transport.state.value,
+            )
 
-            // Second reconnect (or continued ready): send succeeds and flushes.
-            // ready may still be true; force another flush via drop+restore.
-            transport.drop()
-            delay(20)
-            transport.restore()
+            // R4: bounded flush retry while still CONNECTED — no drop required.
             withTimeout(5_000) {
                 while (transport.sent.count { it.contains("session/prompt") } < 1) delay(10)
             }
@@ -1408,5 +1410,49 @@ class CodeBridgeBackendTest {
         }
     }
 
+
+
+
+    @Test
+    fun outboxRetriesFlushWhenSendFailsWhileConnected() = runBlocking {
+        // R4: live prompt path — send false while CONNECTED must keep item queued and
+        // schedule flush retry (no reconnect event).
+        val transport = FakeTransport()
+        transport.failPromptSendOnce = true
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            backend.prompt("s1", "queue full stuck")
+            withTimeout(3_000) {
+                while (transport.failPromptSendOnce) delay(5)
+                delay(20)
+            }
+            assertEquals(ConnectionState.CONNECTED, transport.state.value)
+            assertEquals(
+                "failed live send must not accept the prompt yet",
+                0,
+                transport.sent.count { it.contains("session/prompt") },
+            )
+            assertTrue(transport.keepAlive)
+
+            withTimeout(5_000) {
+                while (transport.sent.none {
+                    it.contains("session/prompt") && it.contains("queue full stuck")
+                }) delay(10)
+            }
+            assertEquals(ConnectionState.CONNECTED, transport.state.value)
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
 
 }
