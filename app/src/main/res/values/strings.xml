@@ -465,6 +465,11 @@
     <string name="cd_add_prompt">Add new prompt</string>
     <string name="cd_add_preset">Add preset</string>
     <string name="cd_close">Close</string>
+    <string name="cd_scroll_to_top">Scroll to top</string>
+    <string name="cd_scroll_to_bottom">Scroll to bottom</string>
+    <string name="cd_presets">Presets</string>
+    <string name="cd_eject_model">Eject model</string>
+    <string name="cd_load_model">Load model</string>
     <string name="cd_preset_clear_chat">Clear chat when applying this preset</string>
     <string name="prompt_library_title">Prompt Library</string>
     <string name="edit_prompt_title">Edit prompt</string>

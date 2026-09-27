@@ -53,29 +53,31 @@
 
     <ImageButton
         android:id="@+id/btnEject"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="8dp"
+        android:contentDescription="@string/cd_eject_model"
+        android:padding="10dp"
         android:src="@drawable/ic_eject"
         android:visibility="gone"
         app:tint="@color/xai_mute" />
 
     <ImageButton
         android:id="@+id/btnLoad"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="8dp"
+        android:contentDescription="@string/cd_load_model"
+        android:padding="10dp"
         android:src="@drawable/ic_loadmodel"
         android:visibility="gone"
         app:tint="@color/xai_mute" />
 
     <ProgressBar
         android:id="@+id/progressLoading"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:padding="8dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:padding="10dp"
         android:visibility="gone" />
 
     <ImageView

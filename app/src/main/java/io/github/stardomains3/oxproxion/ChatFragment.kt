@@ -737,6 +737,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         setupRecyclerView()
         setupEdgeToEdge(view)
         setupGlassChrome(view)
+        // Compact glass controls keep their size; their hit areas grow to 44dp.
+        TouchTargets.expand(
+            view.findViewById(R.id.composerDock),
+            menuButton, controlsButton, modelNameTextView, speechButton, sendChatButton,
+            rpReminderButton, rpStreamButton, rpSwipePrevButton, rpSwipeNextButton
+        )
+        TouchTargets.expand(view.findViewById(R.id.extBG), scrollToTopButton, scrollToBottomButton, presetsButton2)
+        TouchTargets.expand(removeAttachmentButton.parent as ViewGroup, removeAttachmentButton)
 
         // In onViewCreated(), after initializing chatEditText and before setupClickListeners()
         chatEditText.addTextChangedListener(object : android.text.TextWatcher {

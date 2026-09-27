@@ -29,6 +29,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import io.github.stardomains3.oxproxion.AppToast
 import io.github.stardomains3.oxproxion.GlassNotice
+import io.github.stardomains3.oxproxion.TouchTargets
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
 import io.github.stardomains3.oxproxion.GrokInputDialog
@@ -680,7 +681,10 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 6 -> R.layout.item_code_home_filter_empty
                 else -> R.layout.item_code_session
             }
-            return object : RecyclerView.ViewHolder(LayoutInflater.from(parent.context).inflate(res, parent, false)) {}
+            val v = LayoutInflater.from(parent.context).inflate(res, parent, false)
+            // The 38dp machine pill keeps its size; its hit area grows to 44dp.
+            if (viewType == 0) TouchTargets.expand(v as ViewGroup, v.findViewById(R.id.codeMachinePill))
+            return object : RecyclerView.ViewHolder(v) {}
         }
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {

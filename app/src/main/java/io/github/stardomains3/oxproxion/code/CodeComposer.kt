@@ -22,6 +22,7 @@ import com.google.android.material.button.MaterialButton
 import io.github.stardomains3.oxproxion.AppViewModelFactory
 import io.github.stardomains3.oxproxion.ChatViewModel
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
+import io.github.stardomains3.oxproxion.TouchTargets
 import io.github.stardomains3.oxproxion.GlassLinearLayout
 import io.github.stardomains3.oxproxion.PickerPopover
 import io.github.stardomains3.oxproxion.R
@@ -81,6 +82,8 @@ class CodeComposer(
     private var slashPopover: PickerPopover? = null
 
     init {
+        // Compact pills and buttons keep their size; their hit areas grow to 44dp.
+        TouchTargets.expand(root, agentPill, folderPill, modelPill, permissionPill, attach, mic, send)
         root.glass.source = backdrop
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
