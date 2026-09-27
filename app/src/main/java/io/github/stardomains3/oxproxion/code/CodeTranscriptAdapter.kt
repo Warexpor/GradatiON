@@ -71,6 +71,11 @@ class CodeTranscriptAdapter(
     }
 
     private val streams = HashMap<String, StreamState>()
+    /**
+     * Streaming text painted in place by [tryInPlaceStream]. That path skips the differ, so
+     * [getCurrentList] keeps an older row; a rebind (scrolled off and back) reads this instead.
+     */
+    private val paintedInPlace = HashMap<String, CodeEvent.AgentText>()
     private val expanded = HashSet<String>()
 
     /** Normal (false): thoughts and tool output fold to one line. Thinking (true): all open. */
@@ -176,12 +181,13 @@ class CodeTranscriptAdapter(
 
     /** V1: drop StreamState for keys absent from the list or no longer streaming. */
     private fun pruneStreams(list: List<TranscriptRow>) {
-        if (streams.isEmpty()) return
+        if (streams.isEmpty() && paintedInPlace.isEmpty()) return
         val keep = HashSet<String>()
         for (row in list) {
             val e = (row as? TranscriptRow.Event)?.event
             if (e is CodeEvent.AgentText && e.streaming) keep.add(e.key)
         }
+        paintedInPlace.keys.retainAll(keep)
         val it = streams.entries.iterator()
         while (it.hasNext()) {
             val (key, state) = it.next()
@@ -219,7 +225,14 @@ class CodeTranscriptAdapter(
             return false
         }
         bindText(holder, e)
+        paintedInPlace[e.key] = e
         return true
+    }
+
+    /** The newest text for a streaming row: the list's, or a longer one painted in place since. */
+    private fun latest(e: CodeEvent.AgentText): CodeEvent.AgentText {
+        val painted = paintedInPlace[e.key] ?: return e
+        return if (e.streaming && painted.text.length > e.text.length) painted else e
     }
 
     private fun clearStreamBound(holder: TextHolder?) {
@@ -261,7 +274,7 @@ class CodeTranscriptAdapter(
                         else -> e.text + v.context.getString(R.string.code_user_images_suffix, e.attachmentCount)
                     }
                 }
-                is CodeEvent.AgentText -> bindText(holder as TextHolder, e)
+                is CodeEvent.AgentText -> bindText(holder as TextHolder, latest(e))
                 is CodeEvent.Thought -> bindThought(v, e)
                 is CodeEvent.ToolCall -> bindTool(v, e)
                 is CodeEvent.FileDiff -> bindDiff(v, e)
