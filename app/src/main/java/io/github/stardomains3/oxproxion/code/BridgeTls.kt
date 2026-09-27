@@ -75,9 +75,11 @@ object BridgeTls {
      * OkHttp client for a bridge URL.
      *
      * - Blank / unparseable [fingerprint]: returns [base] unchanged (legacy system-CA trust).
-     * - Non-blank: [CertificatePinner] for [hostPatternOf] plus a TrustManager that only
-     *   accepts a leaf whose SHA-256 matches; hostname verification is skipped because the
-     *   pin from the pairing QR is the identity.
+     * - Cleartext `ws://` URL: returns [base] unchanged — TLS pinning is inert without TLS.
+     *   Callers must reject fingerprint + `ws://` at pairing (see [pinRequiresWss]).
+     * - Non-blank pin + `wss://`: [CertificatePinner] for [hostPatternOf] plus a TrustManager
+     *   that only accepts a leaf whose SHA-256 matches; hostname verification is skipped
+     *   because the pin from the pairing QR is the identity.
      */
     fun clientFor(
         fingerprint: String,
@@ -85,6 +87,8 @@ object BridgeTls {
         base: OkHttpClient = defaultBaseClient()
     ): OkHttpClient {
         val pin = normalizePin(fingerprint) ?: return base
+        // Pinning without TLS would be silent false security; never install an inert pinner.
+        if (isCleartextWs(url)) return base
         val host = hostPatternOf(url)
         val trust = pinnedTrustManager(pin)
         val ssl = SSLContext.getInstance("TLS").apply {
@@ -97,6 +101,18 @@ object BridgeTls {
             .certificatePinner(pinner)
             .build()
     }
+
+    /** True when [url] is a cleartext WebSocket (`ws://`). */
+    fun isCleartextWs(url: String): Boolean =
+        url.trim().startsWith("ws://", ignoreCase = true)
+
+    /**
+     * True when a usable pin is present but [url] is cleartext — pinning cannot protect
+     * the bearer token over `ws://`. Pairing / host UI must reject this combination and
+     * require `wss://` (or an explicit no-pin cleartext LAN path).
+     */
+    fun pinRequiresWss(fingerprint: String, url: String): Boolean =
+        shouldPin(fingerprint) && isCleartextWs(url)
 
     /** True when [fingerprint] is non-blank and normalizes to a pin. */
     fun shouldPin(fingerprint: String): Boolean = normalizePin(fingerprint) != null

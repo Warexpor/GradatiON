@@ -72,11 +72,34 @@ class CodePairingTest {
     }
 
     @Test
-    fun parse_wsAllowed() {
+    fun parse_wsAllowedWithoutFingerprint() {
         val r = CodePairing.parse(uri(url = "ws://192.168.1.10:7878/v1", fp = null))
             as CodePairing.ParseResult.Ok
         assertEquals("ws://192.168.1.10:7878/v1", r.pairing.url)
+        assertEquals("", r.pairing.fingerprint)
         assertEquals("192.168.1.10", r.pairing.nameHint)
+    }
+
+    @Test
+    fun parse_rejectsWsWithFingerprint() {
+        val err = CodePairing.parse(uri(url = "ws://192.168.1.10:7878/v1", fp = pinHex))
+            as CodePairing.ParseResult.Err
+        assertEquals(CodePairing.Reason.PIN_REQUIRES_WSS, err.reason)
+    }
+
+    @Test
+    fun parse_rejectsWsWithPrefixedPin() {
+        val err = CodePairing.parse(uri(url = "ws://192.168.1.10:7878/v1", fp = pinB64))
+            as CodePairing.ParseResult.Err
+        assertEquals(CodePairing.Reason.PIN_REQUIRES_WSS, err.reason)
+    }
+
+    @Test
+    fun parse_wssWithFingerprintAllowed() {
+        val r = CodePairing.parse(uri(url = goodUrl, fp = pinHex))
+            as CodePairing.ParseResult.Ok
+        assertEquals(goodUrl, r.pairing.url)
+        assertEquals(pinB64, r.pairing.fingerprint)
     }
 
     @Test

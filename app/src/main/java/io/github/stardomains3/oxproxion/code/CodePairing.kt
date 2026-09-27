@@ -33,6 +33,8 @@ object CodePairing {
         MISSING_TOKEN,
         BAD_URL,
         BAD_FINGERPRINT,
+        /** Fingerprint present with cleartext `ws://` — pin requires `wss://`. */
+        PIN_REQUIRES_WSS,
     }
 
     sealed class ParseResult {
@@ -57,7 +59,8 @@ object CodePairing {
      *
      * Query aliases: `url`|`address`|`ws`; `token`|`t`|`auth`; `fp`|`fingerprint`|`pin`.
      * Missing url/token → error. Present but unparseable `fp` → [Reason.BAD_FINGERPRINT].
-     * Absent `fp` is allowed (legacy / plain ws).
+     * Valid `fp` with cleartext `ws://` → [Reason.PIN_REQUIRES_WSS] (pin needs `wss://`).
+     * Absent `fp` is allowed (legacy cleartext LAN / no-pin path).
      */
     fun parse(raw: String?): ParseResult {
         if (raw.isNullOrBlank()) return ParseResult.Err(Reason.NOT_PAIR_URI)
@@ -82,6 +85,10 @@ object CodePairing {
             fpRaw.isEmpty() -> ""
             else -> BridgeTls.normalizePin(fpRaw)
                 ?: return ParseResult.Err(Reason.BAD_FINGERPRINT)
+        }
+        // Pin is inert over cleartext WS; never accept fingerprint + ws://.
+        if (BridgeTls.pinRequiresWss(fingerprint, url)) {
+            return ParseResult.Err(Reason.PIN_REQUIRES_WSS)
         }
 
         return ParseResult.Ok(Result(url = url, token = token, fingerprint = fingerprint))

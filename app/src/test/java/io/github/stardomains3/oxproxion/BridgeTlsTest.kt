@@ -166,4 +166,28 @@ nwonylCc+6YBfSJvgp8P
             .build()
         assertEquals(expected.pins, pinned.certificatePinner.pins)
     }
+
+    @Test
+    fun pinRequiresWss_trueForCleartextWithPin() {
+        assertTrue(BridgeTls.pinRequiresWss(pinHex, "ws://192.168.1.10:7878/v1"))
+        assertTrue(BridgeTls.pinRequiresWss(pinB64, "WS://laptop.local/v1"))
+        assertTrue(BridgeTls.isCleartextWs("ws://192.168.1.10:7878/v1"))
+    }
+
+    @Test
+    fun pinRequiresWss_falseWhenNoPinOrWss() {
+        assertFalse(BridgeTls.pinRequiresWss("", "ws://192.168.1.10:7878/v1"))
+        assertFalse(BridgeTls.pinRequiresWss("   ", "ws://192.168.1.10:7878/v1"))
+        assertFalse(BridgeTls.pinRequiresWss(pinHex, "wss://bridge.test:7878/v1"))
+        assertFalse(BridgeTls.pinRequiresWss("garbage", "ws://192.168.1.10:7878/v1"))
+        assertFalse(BridgeTls.isCleartextWs("wss://bridge.test/v1"))
+    }
+
+    @Test
+    fun clientFor_cleartextWithPinDoesNotInstallPinner() {
+        // Defense in depth: never install an inert pin on ws:// (pairing rejects this combo).
+        val base = BridgeTls.freshBaseClient()
+        val client = BridgeTls.clientFor(pinHex, "ws://192.168.1.10:7878/v1", base)
+        assertSame(base, client)
+    }
 }

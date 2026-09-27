@@ -183,7 +183,14 @@ object CodeHostDialog {
                 fingerprintLayout.error = context.getString(R.string.code_pair_bad_fingerprint)
                 return@setOnClickListener
             }
+            // Fingerprint pinning needs TLS; reject ws:// + pin (no silent false security).
+            if (!isDemo && BridgeTls.pinRequiresWss(fpTyped, u)) {
+                fingerprintLayout.error = context.getString(R.string.code_pair_pin_requires_wss)
+                urlLayout.error = context.getString(R.string.code_pair_pin_requires_wss)
+                return@setOnClickListener
+            }
             fingerprintLayout.error = null
+            urlLayout.error = null
             val host = (existing ?: CodeHost(id = hub.newHostId(), name = "")).copy(
                 name = name.text?.toString()?.trim().orEmpty().ifEmpty {
                     u.substringAfter("://").substringBefore(':').substringBefore('/')
@@ -242,13 +249,33 @@ object CodeHostDialog {
             }
         }
 
+        fun refreshPlainWsWarning() {
+            val u = url.text?.toString()?.trim().orEmpty()
+            val fp = fingerprint.text?.toString()?.trim().orEmpty()
+            urlLayout.helperText = when {
+                // Pin + cleartext is rejected on save; no "pin active" implication here.
+                BridgeTls.pinRequiresWss(fp, u) ->
+                    context.getString(R.string.code_pair_pin_requires_wss)
+                BridgeTls.isCleartextWs(u) ->
+                    context.getString(R.string.code_host_plain_ws_warning)
+                else -> null
+            }
+        }
         url.setOnFocusChangeListener { _, has ->
             if (has) return@setOnFocusChangeListener
-            val u = url.text?.toString()?.trim().orEmpty()
-            urlLayout.helperText = if (u.startsWith("ws://", ignoreCase = true)) {
-                context.getString(R.string.code_host_plain_ws_warning)
-            } else null
+            refreshPlainWsWarning()
         }
+        fingerprint.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) = refreshPlainWsWarning()
+        })
+        url.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) = refreshPlainWsWarning()
+        })
+        refreshPlainWsWarning()
 
         sheet.findViewById<MaterialButton>(R.id.codeHostRemove).apply {
             isVisible = existing != null

@@ -80,6 +80,7 @@ class CodePairScanActivity : AppCompatActivity() {
         CodePairing.Reason.MISSING_TOKEN -> R.string.code_pair_missing_token
         CodePairing.Reason.BAD_URL -> R.string.code_host_bad_url
         CodePairing.Reason.BAD_FINGERPRINT -> R.string.code_pair_bad_fingerprint
+        CodePairing.Reason.PIN_REQUIRES_WSS -> R.string.code_pair_pin_requires_wss
     }
 
     companion object {
