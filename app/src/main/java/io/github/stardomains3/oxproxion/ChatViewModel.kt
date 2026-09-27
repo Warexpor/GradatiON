@@ -490,7 +490,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         sharedPreferencesHelper.saveExtendedTopBarEnabled(newValue)
     }
     fun toggleScrollProgress() {
-        val newValue = !(_isScrollProgressEnabled.value ?: true)  // Default true
+        val newValue = !(_isScrollProgressEnabled.value ?: false)
         _isScrollProgressEnabled.value = newValue
         sharedPreferencesHelper.saveScrollProgressEnabled(newValue)
     }

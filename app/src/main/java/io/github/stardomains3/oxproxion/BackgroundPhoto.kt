@@ -62,14 +62,28 @@ object BackgroundPhoto {
 
     fun setOption(ctx: Context, key: String, on: Boolean) = prefs(ctx).edit { putBoolean(key, on) }
 
-    fun version(ctx: Context): Long = prefs(ctx).getLong(KEY_VERSION, 0L)
+    /*
+     * [slot] picks whose picture: null is the app background, "char_<id>" a roleplay
+     * character's own wallpaper (shown while that character is active).
+     */
+    fun slotForCharacter(id: Long) = "char_$id"
 
-    fun file(ctx: Context) = File(File(ctx.filesDir, "backgrounds"), "photo.jpg")
+    private fun versionKey(slot: String?) = if (slot == null) KEY_VERSION else "${KEY_VERSION}_$slot"
 
-    fun hasPhoto(ctx: Context) = file(ctx).isFile
+    fun version(ctx: Context, slot: String? = null): Long = prefs(ctx).getLong(versionKey(slot), 0L)
+
+    fun file(ctx: Context, slot: String? = null) =
+        File(File(ctx.filesDir, "backgrounds"), if (slot == null) "photo.jpg" else "$slot.jpg")
+
+    fun hasPhoto(ctx: Context, slot: String? = null) = file(ctx, slot).isFile
+
+    fun delete(ctx: Context, slot: String) {
+        file(ctx, slot).delete()
+        prefs(ctx).edit { putLong(versionKey(slot), System.currentTimeMillis()) }
+    }
 
     /** Copy [uri] into app storage (downscaled JPEG), off the main thread; [done] on main. */
-    fun import(ctx: Context, uri: Uri, done: (Boolean) -> Unit) {
+    fun import(ctx: Context, uri: Uri, slot: String? = null, done: (Boolean) -> Unit) {
         val app = ctx.applicationContext
         io.execute {
             val ok = runCatching {
@@ -84,14 +98,14 @@ object BackgroundPhoto {
                 val bmp = if (scale < 1f) {
                     Bitmap.createScaledBitmap(src, (src.width * scale).roundToInt(), (src.height * scale).roundToInt(), true)
                 } else src
-                val out = file(app)
+                val out = file(app, slot)
                 out.parentFile?.mkdirs()
-                val tmp = File(out.parentFile, "photo.tmp")
+                val tmp = File(out.parentFile, out.name + ".tmp")
                 tmp.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
                 tmp.renameTo(out)
             }.getOrDefault(false)
             main.post {
-                if (ok) prefs(app).edit { putLong(KEY_VERSION, System.currentTimeMillis()) }
+                if (ok) prefs(app).edit { putLong(versionKey(slot), System.currentTimeMillis()) }
                 done(ok)
             }
         }
@@ -101,16 +115,16 @@ object BackgroundPhoto {
      * Decode, center-crop to [w]x[h], gray (unless color) and blur (if asked), off the main
      * thread; [done] runs on main with null when there is no picture.
      */
-    fun loadAsync(ctx: Context, w: Int, h: Int, opts: Options, done: (Bitmap?) -> Unit) {
+    fun loadAsync(ctx: Context, w: Int, h: Int, opts: Options, slot: String? = null, done: (Bitmap?) -> Unit) {
         val app = ctx.applicationContext
         io.execute {
-            val result = runCatching { process(app, w, h, opts) }.getOrNull()
+            val result = runCatching { process(app, w, h, opts, slot) }.getOrNull()
             main.post { done(result) }
         }
     }
 
-    private fun process(ctx: Context, w: Int, h: Int, opts: Options): Bitmap? {
-        val f = file(ctx)
+    private fun process(ctx: Context, w: Int, h: Int, opts: Options, slot: String?): Bitmap? {
+        val f = file(ctx, slot)
         if (!f.isFile || w <= 0 || h <= 0) return null
         val src = BitmapFactory.decodeFile(f.path) ?: return null
         // Center crop to the view's aspect.

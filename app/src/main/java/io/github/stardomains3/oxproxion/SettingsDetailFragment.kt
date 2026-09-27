@@ -165,7 +165,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         volumeScrollSwitch.isChecked = viewModel.isVolumeScrollEnabled.value ?: false
         expandableInputSwitch.isChecked = viewModel.isExpandableInputEnabled.value ?: false
         presetsExtendedSwitch.isChecked = viewModel.isPresetsExtendedEnabled.value ?: false
-        scrollProgressSwitch.isChecked = viewModel.isScrollProgressEnabled.value ?: true
+        scrollProgressSwitch.isChecked = viewModel.isScrollProgressEnabled.value ?: false
         copyOrOpenSwitch.isChecked = prefs.getUseCopyButton()
         autoDisableWebSearchSwitch.isChecked = prefs.getDisableWebSearchAfterSend()
         openRouterTransformsSwitch.isChecked = prefs.getOpenRouterTransformsEnabled()

@@ -75,6 +75,14 @@ class ChatAdapter(
         }
 
     /** Shown above assistant bubbles in RP when a character is active. */
+    /** RP layout ([SharedPreferencesHelper.RP_LAYOUT_CLASSIC] and friends) for the active character. */
+    var rpLayout: String = SharedPreferencesHelper.RP_LAYOUT_CLASSIC
+        @android.annotation.SuppressLint("NotifyDataSetChanged")
+        set(value) {
+            if (field == value) return
+            field = value
+            if (isRpMode && messages.isNotEmpty()) notifyDataSetChanged()
+        }
     var rpSpeakerName: String? = null
         set(value) {
             if (field == value) return
@@ -847,7 +855,7 @@ class ChatAdapter(
 
         private fun bindRpSpeakerHeader(isThinking: Boolean) {
             val name = rpSpeakerName
-            if (!isRpMode || isThinking || name.isNullOrBlank()) {
+            if (!isRpMode || isThinking || name.isNullOrBlank() || rpLayout == SharedPreferencesHelper.RP_LAYOUT_BOOK) {
                 rpSpeakerHeader.visibility = View.GONE
                 return
             }
@@ -1098,6 +1106,24 @@ class ChatAdapter(
             bindRpSpeakerHeader(isThinking)
 
             messageContainer.setBackgroundResource(R.drawable.bg_ai_message)
+            val d = itemView.resources.displayMetrics.density
+            if (isRpMode && rpLayout == SharedPreferencesHelper.RP_LAYOUT_BUBBLES && !isThinking) {
+                messageContainer.setBackgroundResource(R.drawable.bg_rp_bubble)
+                messageContainer.setPadding((14 * d).toInt(), (10 * d).toInt(), (14 * d).toInt(), (10 * d).toInt())
+            } else {
+                val p = (4 * d).toInt()
+                messageContainer.setPadding(p, p, p, p)
+            }
+            (messageContainer.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams)?.let { lp ->
+                // Bubbles hug their text; the flat layouts use the full column.
+                val bubble = isRpMode && rpLayout == SharedPreferencesHelper.RP_LAYOUT_BUBBLES
+                val w = if (bubble) ViewGroup.LayoutParams.WRAP_CONTENT else 0
+                if (lp.width != w || lp.constrainedWidth != bubble) {
+                    lp.width = w
+                    lp.constrainedWidth = bubble
+                    messageContainer.layoutParams = lp
+                }
+            }
             if (isError) {
                 messageTextView.setTextColor(ContextCompat.getColor(itemView.context, R.color.xai_error))
             } else {

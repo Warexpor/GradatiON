@@ -87,6 +87,9 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_DISABLE_WEB_SEARCH_AFTER_SEND = "disable_web_search_after_send"
         private const val KEY_SCROLLERS_ENABLED = "scrollers_enabled"
         private const val KEY_CUSTOM_PROMPTS = "custom_prompts"
+        const val RP_LAYOUT_CLASSIC = "classic"
+        const val RP_LAYOUT_BUBBLES = "bubbles"
+        const val RP_LAYOUT_BOOK = "book"
         private const val KEY_SCROLL_PROGRESS_ENABLED = "scroll_progress_enabled"
         private const val KEY_FONT_SIZE = "font_size"
         private const val KEY_CLEAR_CHAT_DEFAULT = "clear_chat_default"
@@ -459,7 +462,7 @@ class SharedPreferencesHelper(context: Context) {
         // Notify the listener if it exists
         timeoutListener?.onTimeoutChanged(minutes)
     }
-    fun getScrollProgressEnabled(): Boolean = mainPrefs.getBoolean(KEY_SCROLL_PROGRESS_ENABLED, true)  // 🔥 Default TRUE
+    fun getScrollProgressEnabled(): Boolean = mainPrefs.getBoolean(KEY_SCROLL_PROGRESS_ENABLED, false)  // Off: a full-width rule under the tabs reads as a glitch
     fun saveScrollProgressEnabled(enabled: Boolean) = mainPrefs.edit {
         putBoolean(KEY_SCROLL_PROGRESS_ENABLED, enabled)
     }
@@ -1107,6 +1110,29 @@ class SharedPreferencesHelper(context: Context) {
         if (text.isBlank()) remove(rpMemoryKey(characterId)) else putString(rpMemoryKey(characterId), text.trim())
     }
     private fun rpMemoryKey(characterId: Long?) = "rp_memory_" + (characterId?.toString() ?: "llm")
+
+    /** RP chat layout per character: [RP_LAYOUT_CLASSIC], [RP_LAYOUT_BUBBLES] or [RP_LAYOUT_BOOK]. */
+    fun getRpLayout(characterId: Long?): String =
+        mainPrefs.getString("rp_layout_" + (characterId?.toString() ?: "llm"), RP_LAYOUT_CLASSIC) ?: RP_LAYOUT_CLASSIC
+    fun saveRpLayout(characterId: Long?, layout: String) =
+        mainPrefs.edit { putString("rp_layout_" + (characterId?.toString() ?: "llm"), layout) }
+
+    /** Read-aloud voice per character: a system TTS voice name (null = engine default), pitch and speed. */
+    data class RpVoice(val name: String?, val pitch: Float, val rate: Float)
+    fun getRpVoice(characterId: Long?): RpVoice {
+        val k = characterId?.toString() ?: "llm"
+        return RpVoice(
+            mainPrefs.getString("rp_voice_$k", null),
+            mainPrefs.getFloat("rp_voice_pitch_$k", 1f),
+            mainPrefs.getFloat("rp_voice_rate_$k", 1f)
+        )
+    }
+    fun saveRpVoice(characterId: Long?, voice: RpVoice) = mainPrefs.edit {
+        val k = characterId?.toString() ?: "llm"
+        if (voice.name == null) remove("rp_voice_$k") else putString("rp_voice_$k", voice.name)
+        putFloat("rp_voice_pitch_$k", voice.pitch)
+        putFloat("rp_voice_rate_$k", voice.rate)
+    }
 
     /** Name of the persona preset currently in use, if the persona text came from one. */
     fun getRpPersonaName(): String {

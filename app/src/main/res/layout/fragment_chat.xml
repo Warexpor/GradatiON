@@ -846,6 +846,7 @@
                 android:layout_gravity="top"
                 android:background="@color/xai_progress"
                 android:scaleX="0"
+                android:alpha="0"
                 android:visibility="visible"
                 android:elevation="4dp" />
 

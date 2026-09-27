@@ -29,6 +29,8 @@ object RpCharacterPanel {
         val on: Boolean = false,
         /** Short live content shown instead of the glyph (the memory itself, the persona's name). */
         val preview: String? = null,
+        /** A picture to show in the card (the character's wallpaper). */
+        val image: java.io.File? = null,
         /** Round glass button in the header row instead of a card (quick actions). */
         val header: Boolean = false,
         val onClick: () -> Unit
@@ -116,7 +118,19 @@ object RpCharacterPanel {
                 maxLines = 1
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
-            if (!t.preview.isNullOrBlank()) {
+            val picture = t.image?.let { f ->
+                BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = 8 })
+            }
+            if (picture != null) {
+                card.addView(ImageView(ctx).apply {
+                    setImageDrawable(
+                        androidx.core.graphics.drawable.RoundedBitmapDrawableFactory.create(resources, centerCrop(picture, 2.4f))
+                            .apply { cornerRadius = 12 * d }
+                    )
+                    scaleType = ImageView.ScaleType.FIT_XY
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }, android.widget.FrameLayout.LayoutParams(-1, (44 * d).toInt(), Gravity.BOTTOM))
+            } else if (!t.preview.isNullOrBlank()) {
                 card.addView(TextView(ctx).apply {
                     text = t.preview
                     setTextColor(mute)
@@ -143,8 +157,23 @@ object RpCharacterPanel {
         }
 
         dialog.setContentView(sheet)
+        // Tall enough for three rows of cards: open fully instead of peeking.
+        dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        dialog.behavior.skipCollapsed = true
         dialog.show()
         GlassChrome.glassDialog(dialog)
         return dialog
+    }
+
+    /** Crop [src] around its center to [aspect] (width / height), so a rounded thumbnail isn't squashed. */
+    private fun centerCrop(src: android.graphics.Bitmap, aspect: Float): android.graphics.Bitmap {
+        val srcAspect = src.width / src.height.toFloat()
+        return if (srcAspect > aspect) {
+            val w = (src.height * aspect).toInt().coerceAtLeast(1)
+            android.graphics.Bitmap.createBitmap(src, (src.width - w) / 2, 0, w, src.height)
+        } else {
+            val h = (src.width / aspect).toInt().coerceAtLeast(1)
+            android.graphics.Bitmap.createBitmap(src, 0, (src.height - h) / 2, src.width, h)
+        }
     }
 }

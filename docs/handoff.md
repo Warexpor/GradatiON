@@ -17,6 +17,9 @@ Read `CLAUDE.md`, then `AGENTS.md` (code map, test gotchas) and `docs/backlog.md
 
 ## Next
 - RP: auto-summarize Memory (a model call that rewrites the note once old turns fall out of the
-  API window). Also the Voice, Layout and per-character Wallpaper cards from the c.ai reference.
+  API window). Voice/Layout/Wallpaper cards are done (RpVoiceDialog, ChatAdapter.rpLayout,
+  AmbientBackgroundView.photoSlot with BackgroundPhoto slots "char_<id>").
+- The old scroll-progress bar (the full-width line under the tabs) is off by default and fades
+  when idle if someone turns it on.
 - The phone still needs to check: Continue feel, the panel's blur and lens, the Thinking toggle, and
   all motion.

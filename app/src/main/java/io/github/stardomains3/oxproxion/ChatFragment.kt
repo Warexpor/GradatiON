@@ -146,6 +146,17 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var menuClosedByTouch = false
     private lateinit var speechLauncher: ActivityResultLauncher<Intent>
     private lateinit var textToSpeech: TextToSpeech
+
+    /** Character whose wallpaper the photo picker is choosing (set just before launching it). */
+    private var rpWallpaperFor: Long? = null
+    private val pickRpWallpaper = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val id = rpWallpaperFor ?: return@registerForActivityResult
+        rpWallpaperFor = null
+        if (uri == null) return@registerForActivityResult
+        BackgroundPhoto.import(requireContext(), uri, BackgroundPhoto.slotForCharacter(id)) { ok ->
+            if (!ok) context?.let { GlassNotice.show(it, getString(R.string.toast_could_not_open_image)) }
+        }
+    }
     private var isSpeaking = false
     private var isShare = false
     private lateinit var chatFrameView: FrameLayout
@@ -1223,6 +1234,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.isScrollProgressEnabled.observe(viewLifecycleOwner) { enabled ->
             isScrollProgressEnabled = enabled  // Cache for perf
             progressBar.visibility = if (enabled) View.VISIBLE else View.GONE
+            progressBar.alpha = 0f
         }
         viewModel.isChatLoading.observe(viewLifecycleOwner) { isLoading ->
             if (isLoading) {
@@ -1408,7 +1420,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                   }, 100)*/
             }
         }
-        chatRecyclerView.post { updateScrollProgress() }
+        if (isScrollProgressEnabled) chatRecyclerView.post { updateScrollProgress() }
 
         updateExtendedTopBarVisibility(sharedPreferencesHelper.getExtendedTopBarEnabled())
         updateModelSourceIndicator()
@@ -3127,6 +3139,7 @@ $cleanContent
     }
 
     private fun speakText(text: String, position: Int) {
+        applyReadAloudVoice()
         if (isSpeaking) {
             if (position == currentSpeakingPosition) {
                 // Stop current speech
@@ -5206,6 +5219,11 @@ $cleanContent
             addUpdateListener { setTextColor(it.animatedValue as Int) }
             start()
         }
+    private val hideScrollProgress = Runnable {
+        if (!Motion.areAnimationsEnabled(requireContext())) { progressBar.alpha = 0f; return@Runnable }
+        progressBar.animate().alpha(0f).setDuration(280).setInterpolator(Motion.easeOut).start()
+    }
+
     private fun updateScrollProgress() {
         val offset = chatRecyclerView.computeVerticalScrollOffset()
         val extent = chatRecyclerView.computeVerticalScrollExtent()
@@ -5214,7 +5232,12 @@ $cleanContent
         if (range > 0f) {
             val progress = (offset.toFloat() / range).coerceIn(0f, 1f)
             progressBar.visibility = View.VISIBLE
-            progressBar.scaleX = progress  // GROWS left→right! 🎯
+            progressBar.scaleX = progress
+            // Like an iOS scroll indicator: there while you move, gone once you stop.
+            progressBar.removeCallbacks(hideScrollProgress)
+            progressBar.animate().cancel()
+            progressBar.alpha = 0.6f
+            progressBar.postDelayed(hideScrollProgress, 700)
         } else {
             progressBar.visibility = View.GONE
         }
@@ -5664,6 +5687,30 @@ $cleanContent
         val tiles = buildList {
             add(RpCharacterPanel.Tile(R.string.rp_panel_memory, R.drawable.ic_memory, on = hasMemory, preview = memory.takeIf { hasMemory }) { editRpMemory(memoryId, title) })
             add(RpCharacterPanel.Tile(R.string.rp_panel_history, R.drawable.rp_ic_archive) { openHistoryPanel() })
+            val voice = sharedPreferencesHelper.getRpVoice(memoryId)
+            val tts = if (::textToSpeech.isInitialized) textToSpeech else null
+            val tweaks = listOfNotNull(
+                when { voice.pitch < 1f -> getString(R.string.rp_voice_low); voice.pitch > 1f -> getString(R.string.rp_voice_high); else -> null },
+                when { voice.rate < 1f -> getString(R.string.rp_voice_slow); voice.rate > 1f -> getString(R.string.rp_voice_fast); else -> null },
+            )
+            val voiceName = RpVoiceDialog.label(this@ChatFragment, tts, voice.name)
+            val voiceLabel = if (voiceName == null && tweaks.isEmpty()) null
+                else (listOf(voiceName ?: getString(R.string.rp_voice_default)) + tweaks).joinToString(" · ")
+            add(RpCharacterPanel.Tile(R.string.rp_panel_voice, R.drawable.ic_volume_up, on = voiceLabel != null, preview = voiceLabel) {
+                RpVoiceDialog.show(this@ChatFragment, title, tts, voice) { sharedPreferencesHelper.saveRpVoice(memoryId, it) }
+            })
+            val layout = sharedPreferencesHelper.getRpLayout(memoryId)
+            add(RpCharacterPanel.Tile(R.string.rp_panel_layout, R.drawable.ic_rp_layout, preview = getString(layoutLabel(layout))) {
+                menuButton.post { showRpLayoutPicker(memoryId, layout) }
+            })
+            if (character != null && !llm) {
+                val slot = BackgroundPhoto.slotForCharacter(character.id)
+                val wallpaper = BackgroundPhoto.file(requireContext(), slot).takeIf { it.isFile }
+                add(RpCharacterPanel.Tile(R.string.rp_panel_wallpaper, R.drawable.ic_gallery, on = wallpaper != null, image = wallpaper) {
+                    if (wallpaper == null) pickRpWallpaperFor(character.id)
+                    else menuButton.post { showRpWallpaperMenu(character) }
+                })
+            }
             add(RpCharacterPanel.Tile(R.string.rp_panel_persona, R.drawable.rp_ic_persona, preview = personaName.ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
             add(RpCharacterPanel.Tile(R.string.rp_panel_style, R.drawable.ic_sliders) { pushRp(RpSettingsFragment.newInstance()) })
             add(RpCharacterPanel.Tile(R.string.rp_panel_lore, R.drawable.rp_ic_book) { pushRp(RpLorebookLibraryFragment.newInstance()) })
@@ -5674,6 +5721,63 @@ $cleanContent
             add(RpCharacterPanel.Tile(R.string.rp_panel_switch, R.drawable.rp_ic_characters, header = true) { menuButton.post { showCharacterPopover() } })
         }
         RpCharacterPanel.show(this, if (llm) null else character, title, subtitle, tiles)
+    }
+
+    private fun layoutLabel(layout: String) = when (layout) {
+        SharedPreferencesHelper.RP_LAYOUT_BUBBLES -> R.string.rp_layout_bubbles
+        SharedPreferencesHelper.RP_LAYOUT_BOOK -> R.string.rp_layout_book
+        else -> R.string.rp_layout_classic
+    }
+
+    private fun showRpLayoutPicker(characterId: Long?, current: String) {
+        val options = listOf(
+            Triple(SharedPreferencesHelper.RP_LAYOUT_CLASSIC, R.string.rp_layout_classic, R.string.rp_layout_classic_sub),
+            Triple(SharedPreferencesHelper.RP_LAYOUT_BUBBLES, R.string.rp_layout_bubbles, R.string.rp_layout_bubbles_sub),
+            Triple(SharedPreferencesHelper.RP_LAYOUT_BOOK, R.string.rp_layout_book, R.string.rp_layout_book_sub),
+        )
+        val rows = options.map { (key, title, sub) ->
+            PickerPopover.Row(getString(title), getString(sub), R.drawable.ic_rp_layout, selected = key == current) {
+                sharedPreferencesHelper.saveRpLayout(characterId, key)
+                chatAdapter.rpLayout = key
+            }
+        }
+        newPopover()?.show(getString(R.string.rp_panel_layout), rows, emptyList())
+    }
+
+    private fun pickRpWallpaperFor(characterId: Long) {
+        rpWallpaperFor = characterId
+        pickRpWallpaper.launch(
+            androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
+    }
+
+    private fun showRpWallpaperMenu(character: RpCharacter) {
+        val slot = BackgroundPhoto.slotForCharacter(character.id)
+        val rows = listOf(
+            PickerPopover.Row(getString(R.string.rp_wallpaper_change), getString(R.string.rp_wallpaper_change_sub, character.name), R.drawable.ic_gallery) {
+                pickRpWallpaperFor(character.id)
+            },
+            PickerPopover.Row(getString(R.string.rp_wallpaper_remove), getString(R.string.rp_wallpaper_remove_sub), R.drawable.ic_code_trash) {
+                BackgroundPhoto.delete(requireContext(), slot)
+            },
+        )
+        newPopover()?.show(getString(R.string.rp_panel_wallpaper), rows, emptyList())
+    }
+
+    /** Before reading aloud: the active character's voice in Roleplay, the phone's default elsewhere. */
+    private fun applyReadAloudVoice() {
+        if (!::textToSpeech.isInitialized) return
+        val tts = textToSpeech
+        val rp = viewModel.isRpMode()
+        val llm = sharedPreferencesHelper.isRpLlmMode()
+        val id = viewModel.activeRpCharacter.value?.id
+        val v = if (rp && (llm || id != null)) sharedPreferencesHelper.getRpVoice(if (llm) null else id) else null
+        runCatching {
+            val voice = v?.name?.let { n -> RpVoiceDialog.voicesFor(tts).firstOrNull { it.name == n } } ?: tts.defaultVoice
+            if (voice != null && tts.voice?.name != voice.name) tts.voice = voice
+            tts.setPitch(v?.pitch ?: 1f)
+            tts.setSpeechRate(v?.rate ?: 1f)
+        }
     }
 
     private fun editRpMemory(characterId: Long?, name: String) {
@@ -5830,6 +5934,9 @@ $cleanContent
         updateSendButtonChrome()
         val activeChar = viewModel.activeRpCharacter.value
         val llm = sharedPreferencesHelper.isRpLlmMode()
+        // Per-character look: its own wallpaper over the app background, and its chat layout.
+        ambientBackground?.photoSlot = if (rp && activeChar != null && !llm) BackgroundPhoto.slotForCharacter(activeChar.id) else null
+        chatAdapter.rpLayout = if (rp) sharedPreferencesHelper.getRpLayout(if (llm) null else activeChar?.id) else SharedPreferencesHelper.RP_LAYOUT_CLASSIC
         if (rp && activeChar != null && !llm) {
             chatAdapter.rpSpeakerName = activeChar.name
             chatAdapter.rpSpeakerAvatarUri = activeChar.photoUri

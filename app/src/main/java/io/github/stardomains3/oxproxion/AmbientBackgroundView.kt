@@ -83,6 +83,19 @@ class AmbientBackgroundView @JvmOverloads constructor(
         }
 
     /** Force a style (previews); null follows the preference. */
+    /**
+     * A roleplay character's own wallpaper ([BackgroundPhoto.slotForCharacter]). While that slot
+     * holds a picture it replaces the app background, with the same photo options.
+     */
+    var photoSlot: String? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            retune()
+        }
+
+    private fun activeSlot(): String? = photoSlot?.takeIf { BackgroundPhoto.hasPhoto(context, it) }
+
     var styleOverride: Style? = null
         set(value) {
             field = value
@@ -159,7 +172,9 @@ class AmbientBackgroundView @JvmOverloads constructor(
     private val prefs: SharedPreferences? =
         if (isInEditMode) null else context.getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, Context.MODE_PRIVATE)
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == SharedPreferencesHelper.KEY_BACKGROUND_STYLE || key in BackgroundPhoto.PREF_KEYS) readPref()
+        if (key == SharedPreferencesHelper.KEY_BACKGROUND_STYLE || key in BackgroundPhoto.PREF_KEYS ||
+            key?.startsWith(BackgroundPhoto.KEY_VERSION) == true
+        ) readPref()
     }
 
     private val frame = object : Choreographer.FrameCallback {
@@ -245,7 +260,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
         retune()
     }
 
-    private fun prefOrOverride(): Style = styleOverride ?: prefStyle
+    private fun prefOrOverride(): Style = styleOverride ?: if (activeSlot() != null) Style.PHOTO else prefStyle
 
     private fun retune() {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -319,7 +334,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
     }
 
     private fun photoKeyNow(): String =
-        "${BackgroundPhoto.version(context)}:${max(1, width / 2)}:${max(1, height / 2)}:" +
+        "${activeSlot()}:${BackgroundPhoto.version(context, activeSlot())}:${max(1, width / 2)}:${max(1, height / 2)}:" +
             "${photoOptions.blur}:${photoOptions.color}"
 
     /** Start decoding as soon as size and options are known, not on the first draw. */
@@ -328,7 +343,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
         val key = photoKeyNow()
         if (photoKey == key || photoLoading == key) return
         photoLoading = key
-        BackgroundPhoto.loadAsync(context, max(1, width / 2), max(1, height / 2), photoOptions) { loaded ->
+        BackgroundPhoto.loadAsync(context, max(1, width / 2), max(1, height / 2), photoOptions, activeSlot()) { loaded ->
             if (photoLoading != key) return@loadAsync
             photoLoading = ""
             photo = loaded

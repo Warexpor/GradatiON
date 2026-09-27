@@ -678,9 +678,33 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals("assistant", msgs.last().role)
         snap(root(a), "rp_conversation_dark")
         SharedPreferencesHelper(a).saveRpMemory(mira.id, "Owes Sam a favor from the Kessel run. Hates the innkeeper.")
+        // Top of a chat with messages: no stray rule under the tabs (the old scroll-progress bar).
+        org.junit.Assert.assertEquals(0f, a.findViewById<View>(R.id.progressBar).alpha)
+        // Per-character wallpaper, voice and bubbles, as the panel shows them.
+        val ctx = ApplicationProvider.getApplicationContext<Application>()
+        val wp = BackgroundPhoto.file(ctx, BackgroundPhoto.slotForCharacter(mira.id))
+        wp.parentFile?.mkdirs()
+        wp.outputStream().use { out ->
+            Bitmap.createBitmap(400, 700, Bitmap.Config.ARGB_8888).apply {
+                val c = Canvas(this)
+                val paint = android.graphics.Paint()
+                paint.shader = android.graphics.LinearGradient(0f, 0f, 400f, 700f, 0xFF505050.toInt(), 0xFF1A1A1A.toInt(), android.graphics.Shader.TileMode.CLAMP)
+                c.drawRect(0f, 0f, 400f, 700f, paint)
+            }.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        }
+        SharedPreferencesHelper(a).saveRpLayout(mira.id, SharedPreferencesHelper.RP_LAYOUT_BUBBLES)
+        SharedPreferencesHelper(a).saveRpVoice(mira.id, SharedPreferencesHelper.RpVoice(null, 0.8f, 1f))
         a.findViewById<View>(R.id.modelNameTextView).performClick(); settle()
         snapDialog(a, "rp_character_panel_dark")
         ShadowDialog.getLatestDialog()?.dismiss(); idle()
+        // Re-apply RP chrome (the panel reads prefs; the chat reads them on mode change).
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        val bg = a.findViewById<AmbientBackgroundView>(R.id.ambientBackground)
+        org.junit.Assert.assertEquals(BackgroundPhoto.slotForCharacter(mira.id), bg.photoSlot)
+        snap(root(a), "rp_conversation_bubbles_dark")
+        SharedPreferencesHelper(a).saveRpLayout(mira.id, SharedPreferencesHelper.RP_LAYOUT_CLASSIC)
+        BackgroundPhoto.delete(ctx, BackgroundPhoto.slotForCharacter(mira.id))
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
 
