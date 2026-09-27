@@ -303,6 +303,23 @@ class ScreenshotTest {
         snap(root(a), "history_dark")
     }
 
+    @Test fun historyOptionsSheetDark() = withChat { a, _ ->
+        seedHistory()
+        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
+        val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.savedChatsRecyclerView)
+        list.findViewHolderForAdapterPosition(firstSessionRow(list))!!.itemView.performLongClick(); idle()
+        snapDialog(a, "history_options_dark")
+    }
+
+    /** First row that is a session (the list may lead with section headers). */
+    private fun firstSessionRow(list: androidx.recyclerview.widget.RecyclerView): Int {
+        for (i in 0 until (list.adapter?.itemCount ?: 0)) {
+            val vh = list.findViewHolderForAdapterPosition(i) ?: continue
+            if (vh.itemView.findViewById<View>(R.id.iconEditt) != null) return i
+        }
+        return 0
+    }
+
     @Test @Config(qualifiers = LIGHT)
     fun historyLight() = withChat { a, _ ->
         seedHistory()

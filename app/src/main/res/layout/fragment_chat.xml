@@ -476,7 +476,7 @@
                         android:layout_height="72dp"
                         android:contentDescription="@string/cd_system_message"
                         android:text="@string/control_system"
-                        app:icon="@drawable/ic_tune" />
+                        app:icon="@drawable/ic_system_prompt" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/settingsButton"
                         style="@style/Widget.Gradation.ControlTile"
@@ -1417,7 +1417,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="38dp"
                             android:layout_gravity="start|center_vertical"
-                            android:maxWidth="168dp"
+                            android:maxWidth="240dp"
                             android:background="@drawable/bg_model_pill"
                             android:clickable="true"
                             android:focusable="true"

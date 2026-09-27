@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Read aloud: speaker with two sound waves -->
+<!-- System message: a page of standing instructions -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:pathData="M4,9.5H7.5L12,5.5V18.5L7.5,14.5H4Z"
+        android:pathData="M6.5,3.5H14L18.5,8V19C18.5,19.8 17.8,20.5 17,20.5H6.5C5.7,20.5 5,19.8 5,19V5C5,4.2 5.7,3.5 6.5,3.5Z"
         android:strokeWidth="1.8"
         android:strokeColor="#FFFFFFFF"
         android:strokeLineJoin="round" />
     <path
-        android:pathData="M15.5,9.2C16.4,10 16.9,11 16.9,12C16.9,13 16.4,14 15.5,14.8"
+        android:pathData="M13.5,3.8V8.5H18.2"
         android:strokeWidth="1.8"
         android:strokeColor="#FFFFFFFF"
-        android:strokeLineCap="round" />
+        android:strokeLineJoin="round" />
     <path
-        android:pathData="M18.2,6.5C19.8,8 20.6,9.9 20.6,12C20.6,14.1 19.8,16 18.2,17.5"
+        android:pathData="M8.5,12.5H15M8.5,16H13"
         android:strokeWidth="1.8"
         android:strokeColor="#FFFFFFFF"
         android:strokeLineCap="round" />

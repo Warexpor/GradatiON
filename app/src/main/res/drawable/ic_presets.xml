@@ -1,9 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Presets: stacked layers (saved setups) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="960"
-    android:viewportHeight="960">
-  <path
-      android:pathData="M240,840v-720h280q100,0 170,70t70,170q0,100 -70,170t-170,70L400,600v240L240,840ZM400,440h128q33,0 56.5,-23.5T608,360q0,-33 -23.5,-56.5T528,280L400,280v160Z"
-      android:fillColor="#e3e3e3"/>
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M12,3.5L20.5,8L12,12.5L3.5,8Z"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M3.5,12L12,16.5L20.5,12"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M3.5,16L12,20.5L20.5,16"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

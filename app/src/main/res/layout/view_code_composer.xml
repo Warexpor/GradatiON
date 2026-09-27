@@ -69,7 +69,9 @@
             android:layout_weight="1"
             android:clipChildren="true"
             android:clipToPadding="true"
+            android:fadingEdgeLength="28dp"
             android:overScrollMode="never"
+            android:requiresFadingEdge="horizontal"
             android:scrollbars="none">
 
             <LinearLayout
