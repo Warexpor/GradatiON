@@ -858,7 +858,7 @@ class ChatAdapter(
         // "Thinking" sheen replaces the old bar meter; bars stay in the layout for ID stability.
         private fun startThinkingBars() {
             itemView.findViewById<View>(R.id.thinkingBars).visibility = View.GONE
-            thinkingLabel.post { ShimmerText.start(thinkingLabel, ShimmerText.highlightFor(thinkingLabel)) }
+            ShimmerText.post(thinkingLabel, ShimmerText.highlightFor(thinkingLabel))
         }
 
         private fun stopThinkingBars() {
@@ -952,9 +952,7 @@ class ChatAdapter(
             }
             if (stillThinking) {
                 if (reasoningTitle.getTag(R.id.tag_shimmer_animator) == null) {
-                    reasoningTitle.post {
-                        ShimmerText.start(reasoningTitle, ShimmerText.highlightFor(reasoningTitle))
-                    }
+                    ShimmerText.post(reasoningTitle, ShimmerText.highlightFor(reasoningTitle))
                 }
             } else {
                 ShimmerText.stop(reasoningTitle)
@@ -1408,6 +1406,7 @@ class ChatAdapter(
             pulseAnimator = null
             bgColorAnimator = null
             stopThinkingBars()
+            ShimmerText.stop(reasoningTitle)
             thinkingRow.visibility = View.GONE
             messageContainer.visibility = View.VISIBLE
             messageContainer.alpha = 1f

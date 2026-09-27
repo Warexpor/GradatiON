@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <item name="tag_shimmer_animator" type="id" />
+    <item name="tag_shimmer_pauser" type="id" />
+    <item name="tag_shimmer_pending" type="id" />
     <item name="backgroundPhotoPlaceholder" type="id" />
     <item name="tag_press_spring" type="id" />
     <item name="tag_visibility_animator" type="id" />

@@ -171,6 +171,12 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         observe(view)
     }
 
+    override fun onDestroyView() {
+        // Recycle the rows so their per-row work (the "Working" sweep, stream fades) stops.
+        list.adapter = null
+        super.onDestroyView()
+    }
+
     private fun observe(view: View) {
         val title = view.findViewById<TextView>(R.id.codeSessionTitle)
         val subtitle = view.findViewById<TextView>(R.id.codeSessionSubtitle)
