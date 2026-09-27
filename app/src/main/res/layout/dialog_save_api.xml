@@ -22,6 +22,7 @@
         android:layout_height="wrap_content"
         android:hint="Enter Key"
         app:hintTextColor="@color/xai_mute"
+        app:endIconMode="password_toggle"
         android:id="@+id/edit_text_lay">
 
         <com.google.android.material.textfield.TextInputEditText
@@ -29,7 +30,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textSize="20sp"
-            android:inputType="textCapSentences"
+            android:inputType="textPassword"
+            android:importantForAutofill="no"
 
 
             android:textColor="@color/xai_ink"

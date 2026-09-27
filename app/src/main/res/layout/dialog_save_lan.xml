@@ -142,13 +142,15 @@
             android:layout_height="wrap_content"
             android:hint="Enter if Required"
             app:hintTextColor="@color/xai_mute"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="16dp"
+            app:endIconMode="password_toggle">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/edit_text_lan_api_key"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="text"
+                android:inputType="textPassword"
+                android:importantForAutofill="no"
                 android:imeOptions="actionDone"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp"
