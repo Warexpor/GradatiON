@@ -204,7 +204,7 @@ class SystemMessageLibraryFragment : Fragment() {
                     // Brief beat so the new check registers; cancelled if the view goes first.
                     viewLifecycleOwner.lifecycleScope.launch {
                         delay(200)
-                        if (!isStateSaved) parentFragmentManager.popBackStack()
+                        if (!isStateSaved) parentFragmentManager.popBackStack() else picked = false
                     }
                 }
             },
