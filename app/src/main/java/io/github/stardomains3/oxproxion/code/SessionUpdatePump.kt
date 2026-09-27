@@ -85,7 +85,7 @@ internal object CodeSessionFolder {
         val events = TranscriptReducer.apply(state.events, update, now)
         val running = when (update) {
             is CodeUpdate.TurnDone -> false
-            is CodeUpdate.TextChunk, is CodeUpdate.ToolPatch ->
+            is CodeUpdate.TextChunk, is CodeUpdate.ImageChunk, is CodeUpdate.ToolPatch ->
                 if (suppressRunningFromChunks) state.running else true
             is CodeUpdate.Upsert -> if (update.event is CodeEvent.UserPrompt) true else state.running
             is CodeUpdate.SessionInfo -> when (update.status) {

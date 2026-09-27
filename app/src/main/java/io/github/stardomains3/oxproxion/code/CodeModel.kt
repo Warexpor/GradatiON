@@ -189,6 +189,16 @@ data class ApprovalOption(val id: String, val label: String, val kind: Kind) {
 }
 
 /**
+ * One inline image from an ACP `agent_message_chunk` content block (`type: image`).
+ * [data] is raw base64 (no data-URI prefix); [mimeType] e.g. `image/png`.
+ * MVP: data+mime only — no remote URIs.
+ */
+data class AgentInlineImage(
+    val mimeType: String,
+    val data: String,
+)
+
+/**
  * Everything the transcript can show. [key] is stable across updates of the same thing (a tool
  * call's status changing, text streaming in), so the list can diff and animate cheaply.
  */
@@ -204,12 +214,15 @@ sealed class CodeEvent {
         val attachmentCount: Int = 0,
     ) : CodeEvent()
 
-    /** Agent prose (markdown). Chunks for the same message are merged by the controller. */
+    /** Agent prose (markdown). Chunks for the same message are merged by the controller.
+     *  [images] are inline ACP `type: image` blocks (base64 + mime); decoded in the transcript UI.
+     */
     data class AgentText(
         override val key: String,
         override val at: Long,
         val text: String,
-        val streaming: Boolean = false
+        val streaming: Boolean = false,
+        val images: List<AgentInlineImage> = emptyList(),
     ) : CodeEvent()
 
     /** Reasoning summary, collapsed by default. */

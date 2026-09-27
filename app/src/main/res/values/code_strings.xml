@@ -189,6 +189,7 @@
     <string name="cd_code_stop">Stop the agent</string>
     <string name="cd_code_settings">Code settings</string>
     <string name="cd_code_attach">Attach image</string>
+    <string name="cd_code_agent_image">Agent image</string>
     <string name="cd_code_remove_attachment">Remove image</string>
     <string name="cd_code_model">Model</string>
     <string name="cd_code_model_selected">Model, %1$s</string>

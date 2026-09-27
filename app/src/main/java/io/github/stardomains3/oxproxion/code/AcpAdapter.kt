@@ -30,9 +30,10 @@ import kotlinx.serialization.json.put
  * `session/load` accepts `_meta.afterSeq` so TranscriptReducer upserts stay idempotent on replay.
  *
  * Not yet: the terminal and fs client methods (the bridge answers those on the machine itself),
- * current_mode_update, images in agent_message_chunk (render).
+ * current_mode_update.
  * Slash commands: `available_commands_update` → [CodeUpdate.AvailableCommands].
  * Prompt images: [prompt] accepts [PromptAttachment] → ACP `type: image` content blocks.
+ * Agent images: `agent_message_chunk` with `type: image` (data+mimeType) → [CodeUpdate.ImageChunk].
  */
 class AcpAdapter : HarnessAdapter {
 
@@ -235,7 +236,25 @@ class AcpAdapter : HarnessAdapter {
                 openThought.remove(sid)
                 // Key from the first chunk's bridge seq so session/load replay upserts, not duplicates.
                 val key = openText.getOrPut(sid) { stableKey("text", seq) }
-                u["content"]?.jsonObject?.str("text")?.let { CodeUpdate.TextChunk(key, it) }
+                val content = u["content"]?.jsonObject
+                    ?: return ignored("agent_message_chunk without content")
+                when (content.str("type")) {
+                    "image" -> {
+                        val mime = content.str("mimeType")?.trim()?.lowercase().orEmpty()
+                        val data = content.str("data")?.trim().orEmpty()
+                        // MVP: data+mime only — no remote http/resource URIs.
+                        if (mime.isEmpty() || data.isEmpty()) {
+                            return ignored("agent_message_chunk image missing mimeType/data")
+                        }
+                        if (!mime.startsWith("image/")) {
+                            return ignored("agent_message_chunk unsupported mime $mime")
+                        }
+                        CodeUpdate.ImageChunk(key, mime, data)
+                    }
+                    // Missing type: treat as text when a text field is present (older fixtures).
+                    "text", null -> content.str("text")?.let { CodeUpdate.TextChunk(key, it) }
+                    else -> return ignored("agent_message_chunk type ${content.str("type")}")
+                }
             }
             "agent_thought_chunk" -> {
                 val key = openThought.getOrPut(sid) { stableKey("thought", seq) }

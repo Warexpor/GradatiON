@@ -1,14 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code transcript: agent prose, full width, no bubble (like chat replies) -->
-<io.github.stardomains3.oxproxion.ChatTextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/codeAgentText"
+<!-- Code transcript: agent prose + optional inline ACP images under the text -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:orientation="vertical"
     android:paddingStart="18dp"
     android:paddingEnd="18dp"
     android:paddingTop="8dp"
-    android:paddingBottom="8dp"
-    android:textColor="@color/xai_body"
-    android:textSize="16sp"
-    android:lineSpacingMultiplier="1.36"
-    android:textIsSelectable="true" />
+    android:paddingBottom="8dp">
+
+    <io.github.stardomains3.oxproxion.ChatTextView
+        android:id="@+id/codeAgentText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/xai_body"
+        android:textSize="16sp"
+        android:lineSpacingMultiplier="1.36"
+        android:textIsSelectable="true" />
+
+    <HorizontalScrollView
+        android:id="@+id/codeAgentImagesScroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:scrollbars="none"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/codeAgentImages"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+</LinearLayout>

@@ -13,6 +13,12 @@ sealed class CodeUpdate {
     /** Streamed prose: appended to the open agent message (or thought) with [key]. */
     data class TextChunk(val key: String, val chunk: String, val thought: Boolean = false) : CodeUpdate()
 
+    /**
+     * Inline image for the open agent message with [key] (ACP `agent_message_chunk` `type: image`).
+     * Merged into [CodeEvent.AgentText.images]; [data] is raw base64, [mimeType] e.g. `image/png`.
+     */
+    data class ImageChunk(val key: String, val mimeType: String, val data: String) : CodeUpdate()
+
     /** Partial update of a tool call; null fields keep their value. */
     data class ToolPatch(
         val callId: String,
@@ -109,6 +115,25 @@ object TranscriptReducer {
                     list.toMutableList().also { it[i] = merged }
                 }
             }
+            is CodeUpdate.ImageChunk -> {
+                val img = AgentInlineImage(update.mimeType, update.data)
+                val i = list.indexOfLast { it.key == update.key }
+                if (i < 0) {
+                    list + CodeEvent.AgentText(
+                        update.key, now, "", streaming = true, images = listOf(img),
+                    )
+                } else {
+                    val e = list[i]
+                    if (e !is CodeEvent.AgentText) list
+                    else {
+                        val images = if (e.images.size >= MAX_AGENT_IMAGES) e.images
+                        else e.images + img
+                        list.toMutableList().also {
+                            it[i] = e.copy(images = images, streaming = true)
+                        }
+                    }
+                }
+            }
             is CodeUpdate.ToolPatch -> {
                 val i = list.indexOfLast { it is CodeEvent.ToolCall && it.callId == update.callId }
                 if (i < 0) list else {
@@ -146,4 +171,7 @@ object TranscriptReducer {
         list.lastOrNull() is CodeEvent.Notice && (list.last() as CodeEvent.Notice).level == NoticeLevel.ERROR -> SessionStatus.ERROR
         else -> SessionStatus.IDLE
     }
+
+    /** Cap inline images merged into one [CodeEvent.AgentText] (matches prompt attach max). */
+    private const val MAX_AGENT_IMAGES = 4
 }

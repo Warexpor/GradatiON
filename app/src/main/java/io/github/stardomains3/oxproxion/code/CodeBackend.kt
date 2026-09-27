@@ -134,7 +134,7 @@ class BridgeBackend(
         deliverGen(sessionId) != gen
 
     private fun isSuppressedAgentActivity(update: CodeUpdate): Boolean = when (update) {
-        is CodeUpdate.TextChunk, is CodeUpdate.ToolPatch, is CodeUpdate.TurnDone -> true
+        is CodeUpdate.TextChunk, is CodeUpdate.ImageChunk, is CodeUpdate.ToolPatch, is CodeUpdate.TurnDone -> true
         is CodeUpdate.SessionInfo -> update.status == SessionStatus.RUNNING ||
             update.status == SessionStatus.NEEDS_APPROVAL
         is CodeUpdate.Upsert -> update.event is CodeEvent.Approval ||

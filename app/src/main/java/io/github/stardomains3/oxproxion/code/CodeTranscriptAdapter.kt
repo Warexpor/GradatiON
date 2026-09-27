@@ -1,7 +1,9 @@
 package io.github.stardomains3.oxproxion.code
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.SystemClock
+import android.util.LruCache
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -64,6 +66,10 @@ class CodeTranscriptAdapter(
 
     private val streams = HashMap<String, StreamState>()
     private val expanded = HashSet<String>()
+    /** Soft cache of decoded agent inline images (data+mime → bitmap). */
+    private val inlineBitmaps = object : LruCache<String, Bitmap>(12) {
+        override fun sizeOf(key: String, value: Bitmap): Int = 1
+    }
 
     /** Chat-style: bound TextHolder currently painting the live stream (skip DiffUtil while set). */
     private var streamBoundHolder: TextHolder? = null
@@ -171,7 +177,7 @@ class CodeTranscriptAdapter(
         fun v(res: Int) = inf.inflate(res, parent, false)
         return when (viewType) {
             T_USER -> Simple(v(R.layout.item_code_user))
-            T_TEXT -> TextHolder(v(R.layout.item_code_text) as TextView).also {
+            T_TEXT -> TextHolder(v(R.layout.item_code_text)).also {
                 it.textView.movementMethod = LinkMovementMethod.getInstance()
             }
             T_THOUGHT -> Simple(v(R.layout.item_code_thought))
@@ -259,9 +265,55 @@ class CodeTranscriptAdapter(
             clearStreamBound(holder)
             streams.remove(e.key)?.markdown?.reset()
             holder.stopFadeTicker()
-            tv.text = ChatMarkdown.polished(markwon.toMarkdown(e.text))
+            tv.text = if (e.text.isEmpty()) "" else ChatMarkdown.polished(markwon.toMarkdown(e.text))
         }
+        tv.isVisible = e.text.isNotEmpty() || e.streaming || e.images.isEmpty()
+        bindAgentImages(holder, e.images)
     }
+
+    /** Decode (capped) and show [images] under agent text; data/base64 only. */
+    private fun bindAgentImages(holder: TextHolder, images: List<AgentInlineImage>) {
+        val row = holder.imagesRow
+        val scroll = holder.imagesScroll
+        if (images.isEmpty()) {
+            row.removeAllViews()
+            scroll.isVisible = false
+            return
+        }
+        row.removeAllViews()
+        val ctx = row.context
+        val d = ctx.resources.displayMetrics.density
+        val maxH = (160 * d).toInt()
+        val gap = (8 * d).toInt()
+        var shown = 0
+        for (img in images) {
+            val key = inlineCacheKey(img)
+            val bmp = inlineBitmaps.get(key) ?: CodePromptImages.decodeInline(
+                img.data, img.mimeType,
+            )?.also { inlineBitmaps.put(key, it) }
+            if (bmp == null || bmp.isRecycled) continue
+            val iv = ImageView(ctx).apply {
+                adjustViewBounds = true
+                scaleType = ImageView.ScaleType.FIT_START
+                // maxHeight is API 16+ on ImageView via setMaxHeight
+                setMaxHeight(maxH)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).also { lp ->
+                    if (shown > 0) lp.marginStart = gap
+                }
+                setImageBitmap(bmp)
+                contentDescription = ctx.getString(R.string.cd_code_agent_image)
+            }
+            row.addView(iv)
+            shown++
+        }
+        scroll.isVisible = shown > 0
+    }
+
+    private fun inlineCacheKey(img: AgentInlineImage): String =
+        "${img.mimeType}|${img.data.length}|${img.data.hashCode()}"
 
     /**
      * Track newly appended open-tail ranges and attach a [StreamFadeSpan] per run (chat pattern).
@@ -459,7 +511,10 @@ class CodeTranscriptAdapter(
         }
     }
 
-    private class TextHolder(val textView: TextView) : RecyclerView.ViewHolder(textView) {
+    private class TextHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        val textView: TextView = itemView.findViewById(R.id.codeAgentText)
+        val imagesScroll: View = itemView.findViewById(R.id.codeAgentImagesScroll)
+        val imagesRow: LinearLayout = itemView.findViewById(R.id.codeAgentImages)
         private var fadeTicker: Choreographer.FrameCallback? = null
 
         fun ensureFadeTicker() {

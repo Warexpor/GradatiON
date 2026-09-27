@@ -177,4 +177,42 @@ object CodePromptImages {
         val nh = (h * scale).toInt().coerceAtLeast(1)
         return Bitmap.createScaledBitmap(src, nw, nh, true)
     }
+
+    /** True when [mime] is an allowed image content type for prompt / agent inline images. */
+    fun isAllowedMime(mime: String?): Boolean {
+        val m = mime?.lowercase() ?: return false
+        return m in allowedMime
+    }
+
+    /**
+     * Decode a base64 ACP image content block for transcript inline display.
+     * Caps source bytes and long edge like [fromUri]; returns null on bad mime/data/OOM.
+     * Does not load remote URIs — caller must pass data+mime only.
+     */
+    fun decodeInline(base64: String, mimeType: String?, maxEdgePx: Int = MAX_EDGE_PX): Bitmap? {
+        if (!isAllowedMime(mimeType) && mimeType != null) return null
+        // Reject absurd base64 before allocating (≈4/3 expansion + padding).
+        if (base64.length > MAX_SOURCE_BYTES) return null
+        val raw = try {
+            Base64.decode(base64, Base64.DEFAULT)
+        } catch (_: Exception) {
+            return null
+        }
+        if (raw.isEmpty() || raw.size > MAX_SOURCE_BYTES) return null
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            val maxSide = maxOf(bounds.outWidth, bounds.outHeight)
+            var sample = 1
+            while (maxSide / sample > maxEdgePx) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            val decoded = BitmapFactory.decodeByteArray(raw, 0, raw.size, opts) ?: return null
+            val scaled = scaleToMaxEdge(decoded, maxEdgePx)
+            if (scaled !== decoded) decoded.recycle()
+            scaled
+        } catch (_: Throwable) {
+            null
+        }
+    }
 }

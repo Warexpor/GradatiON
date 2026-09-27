@@ -225,7 +225,10 @@ class DemoBackend(
         }
         emit(sid, CodeUpdate.ToolPatch(test, ToolStatus.COMPLETED))
         emit(sid, CodeUpdate.Upsert(CodeEvent.Plan("plan:$sid", now(), plan.map { it.copy(status = PlanStatus.COMPLETED) })))
-        stream(sid, key(), "Done. `ThemeMode` now has **System**, **Light** and **Dark**; the old boolean migrates on first read. All 48 tests pass.")
+        val replyKey = key()
+        stream(sid, replyKey, "Done. `ThemeMode` now has **System**, **Light** and **Dark**; the old boolean migrates on first read. All 48 tests pass. Here is a tiny preview image:")
+        // Tiny 8×8 PNG for manual QA of agent_message_chunk inline image render.
+        emit(sid, CodeUpdate.ImageChunk(replyKey, "image/png", DEMO_INLINE_PNG))
         emit(sid, CodeUpdate.TurnDone("end_turn", "1 file changed · 38 s"))
     }
 
@@ -242,6 +245,10 @@ class DemoBackend(
     private fun now() = System.currentTimeMillis()
 
     private companion object {
+        /** 8×8 red PNG (base64) — small enough for unit/demo wire fixtures. */
+        const val DEMO_INLINE_PNG =
+            "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFElEQVR4nGP87+DAgA0wYRUdtBIAMBABj8Ckfi4AAAAASUVORK5CYII="
+
         val DEMO_SLASH_COMMANDS = listOf(
             AvailableCommand("compact", "Compact conversation context"),
             AvailableCommand("clear", "Clear session context for a fresh start"),

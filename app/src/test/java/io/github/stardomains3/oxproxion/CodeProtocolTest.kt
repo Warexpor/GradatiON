@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import io.github.stardomains3.oxproxion.code.AcpAdapter
+import io.github.stardomains3.oxproxion.code.AgentInlineImage
 import io.github.stardomains3.oxproxion.code.AvailableCommand
 import io.github.stardomains3.oxproxion.code.CodeComposer
 import io.github.stardomains3.oxproxion.code.AdapterOutput
@@ -68,6 +69,49 @@ class CodeProtocolTest {
         val t = list[0] as CodeEvent.AgentText
         assertEquals("Hello world", t.text)
         assertTrue(t.streaming)
+    }
+
+    @Test fun agentMessageChunkTextPlusImageMerges() {
+        // Tiny 1×1 PNG base64
+        val png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12P4z8AAAAADAAEABf4C/gAAAABJRU5ErkJggg=="
+        val list = fold(listOf(
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"See this:"}}"""),
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png","data":"$png"}}""")
+        ))
+        assertEquals(1, list.size)
+        val t = list[0] as CodeEvent.AgentText
+        assertEquals("See this:", t.text)
+        assertEquals(1, t.images.size)
+        assertEquals("image/png", t.images[0].mimeType)
+        assertEquals(png, t.images[0].data)
+        assertTrue(t.streaming)
+    }
+
+    @Test fun agentMessageChunkImageOnly() {
+        val png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12P4z8AAAAADAAEABf4C/gAAAABJRU5ErkJggg=="
+        val list = fold(listOf(
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png","data":"$png"}}""")
+        ))
+        assertEquals(1, list.size)
+        val t = list[0] as CodeEvent.AgentText
+        assertEquals("", t.text)
+        assertEquals(listOf(AgentInlineImage("image/png", png)), t.images)
+        assertTrue(t.streaming)
+    }
+
+    @Test fun agentMessageChunkImageMissingDataIgnored() {
+        val outs = acp.decode(update(
+            """{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png"}}"""
+        ))
+        assertTrue(outs.single() is AdapterOutput.Ignored)
+    }
+
+    @Test fun agentMessageChunkUriOnlyImageIgnored() {
+        // MVP: no remote URI loading — uri without data is ignored.
+        val outs = acp.decode(update(
+            """{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png","uri":"https://evil.example/x.png"}}"""
+        ))
+        assertTrue(outs.single() is AdapterOutput.Ignored)
     }
 
     @Test fun toolCallBreaksTextAndUpdatesInPlace() {
