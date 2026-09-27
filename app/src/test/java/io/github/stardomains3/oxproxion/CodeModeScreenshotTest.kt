@@ -136,11 +136,17 @@ class CodeModeScreenshotTest {
 
     // ── behaviour ─────────────────────────────────────────────────────────────────────────
 
-    @Test fun codeTabHiddenUntilEnabled() {
+    @Test fun codeTabHiddenWhenDisabled() {
         CodeHub.get(ctx).store.enabled = false
         launch { a, _ ->
             assertEquals(View.GONE, a.findViewById<View>(R.id.tabCode).visibility)
         }
+    }
+
+    @Test fun codeHarnessPickerDark() = withCode { a, _ ->
+        a.findViewById<View>(R.id.codeComposerAgent).performClick()
+        idle(3)
+        snap(root(a), "code_harness_picker_dark")
     }
 
     @Test fun codeTabSwitchesAndComesBack() = withCode { a, _ ->

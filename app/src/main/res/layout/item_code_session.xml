@@ -20,16 +20,15 @@
         android:padding="14dp"
         android:stateListAnimator="@animator/press_scale">
 
-        <TextView
+        <ImageView
             android:id="@+id/codeSessionGlyph"
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:background="@drawable/bg_code_icon_disc"
-            android:gravity="center"
             android:importantForAccessibility="no"
-            android:textColor="@color/xai_ink"
-            android:textSize="15sp"
-            android:textFontWeight="700" />
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            app:tint="@color/xai_ink" />
 
         <LinearLayout
             android:layout_width="0dp"

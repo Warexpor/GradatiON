@@ -282,6 +282,12 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
     private fun refreshPills() {
         composer.agentPill.text = harness.shortName
+        // The harness's own mark leads the pill.
+        val size = (16 * resources.displayMetrics.density).toInt()
+        val mark = androidx.core.content.ContextCompat.getDrawable(requireContext(), harness.iconRes)?.mutate()
+            ?.apply { setBounds(0, 0, size, size) }
+        val end = composer.agentPill.compoundDrawablesRelative[2]
+        composer.agentPill.setCompoundDrawablesRelative(mark, null, end, null)
         composer.folderPill.text = if (workspace.isBlank()) getString(R.string.code_home_pick_workspace) else CodeComposer.folderName(workspace)
         composer.input.hint = getString(R.string.code_home_composer_hint, harness.shortName)
         refreshModelPill()
@@ -361,7 +367,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     PickerPopover.Row(
                         info.name,
                         subtitle = subtitle,
-                        iconRes = R.drawable.ic_code_terminal,
+                        iconRes = info.kind.iconRes,
                         selected = info.kind == harness
                     ) {
                         // Still allow picking an unavailable harness so the user can set a default
@@ -374,7 +380,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 }
             } else {
                 HarnessKind.entries.filter { it != HarnessKind.CUSTOM }.map { k ->
-                    PickerPopover.Row(k.displayName, iconRes = R.drawable.ic_code_terminal, selected = k == harness) {
+                    PickerPopover.Row(k.displayName, iconRes = k.iconRes, selected = k == harness) {
                         harness = k
                         harnessModels = emptyList()
                         selectedModel = null
@@ -764,7 +770,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
         private fun bindSession(v: View, s: CodeSessionState) {
             val sum = s.summary
-            v.findViewById<TextView>(R.id.codeSessionGlyph).text = sum.harness.shortName.take(1)
+            v.findViewById<android.widget.ImageView>(R.id.codeSessionGlyph).setImageResource(sum.harness.iconRes)
             v.findViewById<TextView>(R.id.codeSessionRowTitle).text = sum.title
             val now = System.currentTimeMillis()
             val ago = if (now - sum.updatedAt < DateUtils.MINUTE_IN_MILLIS) getString(R.string.code_just_now)
