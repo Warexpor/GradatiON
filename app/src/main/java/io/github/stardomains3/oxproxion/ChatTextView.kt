@@ -46,7 +46,8 @@ class ChatTextView @JvmOverloads constructor(
     }
     private val copyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = ContextCompat.getColor(context, R.color.xai_mute)
-        textSize = 12.5f * resources.displayMetrics.scaledDensity
+        // The chip is tappable (CopyCodeSpan), so it keeps the 13sp floor.
+        textSize = 13f * resources.displayMetrics.scaledDensity
         typeface = runCatching { ResourcesCompat.getFont(context, R.font.jakarta_medium) }.getOrNull()
         textAlign = Paint.Align.RIGHT
     }
