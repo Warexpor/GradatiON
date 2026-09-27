@@ -75,9 +75,9 @@ object DemoModel {
 
     class Script(val thinking: String?, val text: String)
 
-    /** Background chores (RP memory upkeep) ask without streaming; answer with one JSON reply. */
+    /** Background chores (RP Facts upkeep) ask without streaming; answer with one JSON reply. */
     private fun oneShot(request: okhttp3.Request, userText: String): Response {
-        val text = if ("memory notes" in userText) DEMO_MEMORY else "OK"
+        val text = if ("fact notes" in userText) DEMO_MEMORY else "OK"
         Thread.sleep((300 * pace).toLong())
         val json = buildJsonObject {
             put("id", "demo")

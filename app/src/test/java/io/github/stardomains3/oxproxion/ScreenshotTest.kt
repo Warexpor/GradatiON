@@ -637,7 +637,8 @@ class ScreenshotTest {
         }
     }
 
-    /** Long RP chats keep Memory current: after a reply near the API window, the model rewrites it. */
+    /** Long RP chats keep Facts current: after a reply near the API window, the model rewrites the
+     *  chat's Facts. The Memory note the user wrote is never saved over. */
     @Test fun rpAutoMemoryUpdatesAfterReply() = withChat { a, _ ->
         seedRp()
         val vm = ViewModelProvider(a)[ChatViewModel::class.java]
@@ -661,17 +662,18 @@ class ScreenshotTest {
                     }
                 }
             }
-            // Switched off: a reply that would qualify leaves Memory alone.
+            // Switched off: a reply that would qualify leaves Facts empty.
             prefs.saveRpAutoMemory(false)
             prefs.saveRpMemory(mira.id, "kept")
             sendAndWait("Where are we going?")
             Thread.sleep(300); idle()
-            org.junit.Assert.assertEquals("switch off leaves Memory alone", "kept", prefs.getRpMemory(mira.id))
-            // Switched on: the next reply folds the story into Memory.
+            org.junit.Assert.assertEquals("switch off leaves Facts alone", "", vm.currentRpFacts())
+            // Switched on: the next reply folds the story into Facts; Memory stays the user's note.
             prefs.saveRpAutoMemory(true)
             sendAndWait("And then?")
-            waitFor(10_000) { prefs.getRpMemory(mira.id) != "kept" }
-            org.junit.Assert.assertEquals(DemoModel.DEMO_MEMORY, prefs.getRpMemory(mira.id))
+            waitFor(10_000) { vm.currentRpFacts().isNotEmpty() }
+            org.junit.Assert.assertEquals(DemoModel.DEMO_MEMORY.trim(), vm.currentRpFacts())
+            org.junit.Assert.assertEquals("Memory is never rewritten", "kept", prefs.getRpMemory(mira.id))
         } finally {
             prefs.saveChatMemoryCount(oldBudget)
             prefs.saveRpAutoMemory(true)

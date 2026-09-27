@@ -37,15 +37,14 @@ Clipped labels, verified with the screenshot tests that cover each screen:
 - Lorebook editor shows "Always-on lore, then [keys: word, phrase] blocks" under the field. It was a
   one-line hint cut at "phra…", then a helper line the text box covered.
 `assembleDev` succeeded. The minified APK is `app/build/outputs/apk/dev/app-dev.apk`.
-Phone still has to check motion, glass blur, and the Thinking toggle. `rpAutoMemoryUpdatesAfterReply`
-failed while regenerating screenshots (Memory stayed "kept" after Facts was turned back on). That is
-behavior, not layout.
+Phone still has to check motion, glass blur, and the Thinking toggle.
 
 ## UI bug pass (2026-09-27)
 UI audit + fixes (112a867..27bf705): glass Snackbars (theme inverse colors), PDF Snackbar crash on a
 recycled row, Markdown viewer follows the palette, shimmer pauses offscreen, shared Coil loader,
 masked API-key fields, one-shot system message pick, visible checkbox checks, failures raise
 GlassNotice (toasts stay silent), Code session edge to edge, 44dp hit areas (`TouchTargets`), glass
-settings cards, strings moved to resources. 443 tests, only `rpAutoMemoryUpdatesAfterReply` fails
-(pre-existing). Skipped: HTML/PDF export colors, GlassNotice under dialog dims, CodeHostDialog 36dp pill.
+settings cards, strings moved to resources. 443 tests pass. `rpAutoMemoryUpdatesAfterReply` was stale
+after the Facts split; it now checks Facts (and that Memory is untouched), and DemoModel answers the
+"fact notes" prompt. Skipped: HTML/PDF export colors, GlassNotice under dialog dims, CodeHostDialog 36dp pill.
 Phone: touch edges of send/mic, Code session insets + IME, Snackbar look, settings cards on a photo bg.
