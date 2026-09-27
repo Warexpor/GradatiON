@@ -38,6 +38,7 @@ import kotlinx.serialization.json.longOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CopyOnWriteArrayList
@@ -83,7 +84,10 @@ class CodeBridgeBackendTest {
         var nonPromptSendEntered: CountDownLatch? = null
         private val open = AtomicBoolean(false)
 
+        var connectCount = 0
+
         override fun connect() {
+            connectCount++
             open.set(true)
             lastError = null
             _state.value = ConnectionState.CONNECTING
@@ -1112,6 +1116,77 @@ class CodeBridgeBackendTest {
                 collected.count { it.update is CodeUpdate.ApprovalAnswered },
             )
             collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun handshakeFailureClearsReadyAndReconnects() = runBlocking {
+        // R2: initialize JSON-RPC error must not leave CONNECTED + !ready forever.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        var initCount = 0
+        val answers = scope.launch {
+            val answered = HashSet<Long>()
+            while (true) {
+                for (frame in transport.sent.toList()) {
+                    val obj = runCatching { json.parseToJsonElement(frame).jsonObject }.getOrNull() ?: continue
+                    val id = obj["id"]?.jsonPrimitive?.longOrNull ?: continue
+                    if (id in answered) continue
+                    val method = obj["method"]?.jsonPrimitive?.content ?: continue
+                    when (method) {
+                        "initialize" -> {
+                            initCount++
+                            answered += id
+                            if (initCount == 1) {
+                                transport.deliver(
+                                    """{"jsonrpc":"2.0","id":$id,"error":{"code":-32000,"message":"init blew up"}}"""
+                                )
+                            } else {
+                                transport.deliver(
+                                    """{"jsonrpc":"2.0","id":$id,"result":{"protocolVersion":1}}"""
+                                )
+                            }
+                        }
+                        "session/load" -> {
+                            answered += id
+                            transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":{}}""")
+                        }
+                        "bridge/listSessions" -> {
+                            answered += id
+                            transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":{"sessions":[]}}""")
+                        }
+                        else -> {
+                            answered += id
+                            transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":{}}""")
+                        }
+                    }
+                }
+                delay(5)
+            }
+        }
+        try {
+            backend.connect()
+            withTimeout(5_000) {
+                while (backend.lastError != "init blew up") delay(10)
+            }
+            assertEquals("init blew up", backend.lastError)
+            // Dropped out of CONNECTED (close) and scheduled reconnect.
+            withTimeout(5_000) {
+                while (transport.connectCount < 2) delay(10)
+            }
+            assertTrue("must reconnect after handshake failure", transport.connectCount >= 2)
+            // Second initialize succeeds → ready; listSessions should work.
+            withTimeout(5_000) {
+                backend.listSessions()
+            }
+            assertNull("handshake error cleared after successful ready", backend.lastError)
+            assertTrue(
+                transport.sent.count { it.contains("\"initialize\"") } >= 2,
+            )
         } finally {
             answers.cancel()
             backend.close()

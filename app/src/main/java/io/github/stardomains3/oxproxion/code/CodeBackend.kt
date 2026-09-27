@@ -5,6 +5,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -15,6 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlin.random.Random
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -94,7 +97,11 @@ class BridgeBackend(
 ) : CodeBackend {
 
     override val connection: StateFlow<ConnectionState> get() = transport.state
-    override val lastError: String? get() = transport.lastError
+    /** Handshake failure message when transport stays up briefly then is dropped (R2). */
+    @Volatile private var handshakeError: String? = null
+    private var handshakeFailCount = 0
+    private var handshakeRetry: Job? = null
+    override val lastError: String? get() = handshakeError ?: transport.lastError
     private val _updates = MutableSharedFlow<SessionUpdate>(extraBufferCapacity = 256)
     override val updates: SharedFlow<SessionUpdate> = _updates
 
@@ -229,7 +236,18 @@ class BridgeBackend(
                     ConnectionState.CONNECTED -> {
                         if (!wasUp) {
                             wasUp = true
-                            launch { runCatching { onSocketReady() } }
+                            launch {
+                                try {
+                                    onSocketReady()
+                                } catch (t: TimeoutCancellationException) {
+                                    // initialize/load timed out — not a job cancel.
+                                    failHandshake(t)
+                                } catch (t: CancellationException) {
+                                    throw t
+                                } catch (t: Throwable) {
+                                    failHandshake(t)
+                                }
+                            }
                         }
                     }
                     ConnectionState.DISCONNECTED, ConnectionState.FAILED -> {
@@ -243,6 +261,32 @@ class BridgeBackend(
                     }
                     ConnectionState.CONNECTING -> Unit
                 }
+            }
+        }
+    }
+
+    /**
+     * R2: initialize/handshake failure must not leave the transport CONNECTED while
+     * [ready] stays false (operations would wait up to 30s). Clear readiness, surface
+     * the error, drop the socket, and schedule a backoff reconnect.
+     */
+    private fun failHandshake(cause: Throwable) {
+        ready.value = false
+        initialized = false
+        socketGeneration++
+        val msg = cause.message?.takeIf { it.isNotBlank() } ?: "Handshake failed"
+        handshakeError = msg
+        failPending(msg)
+        handshakeRetry?.cancel()
+        transport.close()
+        val attempt = handshakeFailCount++
+        handshakeRetry = scope.launch {
+            delay(ReconnectBackoff.delayMs(attempt.coerceAtMost(8), Random.nextDouble()))
+            if (lifecycle == null) return@launch
+            if (connection.value == ConnectionState.DISCONNECTED ||
+                connection.value == ConnectionState.FAILED
+            ) {
+                transport.connect()
             }
         }
     }
@@ -267,6 +311,8 @@ class BridgeBackend(
             }
         }
         if (gen != socketGeneration) return
+        handshakeFailCount = 0
+        handshakeError = null
         ready.value = true
         flushOutbox()
     }
@@ -665,12 +711,16 @@ class BridgeBackend(
     }
 
     override fun close() {
+        handshakeRetry?.cancel()
+        handshakeRetry = null
         lifecycle?.cancel()
         lifecycle = null
         reader?.cancel()
         reader = null
         ready.value = false
         initialized = false
+        handshakeError = null
+        handshakeFailCount = 0
         bridgeVersion = null
         attached.clear()
         runningSessions.clear()
