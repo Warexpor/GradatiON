@@ -177,12 +177,13 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     bindHost(host)
                     render(host, conn)
                     // listHarnesses needs CONNECTED (or demo); re-sync when host/connection changes.
+                    // Stamp key after await (not before) so cancel mid-sync retries; start() also re-syncs.
                     val key = host?.id to conn
                     if (key != lastModelsSyncKey && host != null &&
                         (host.isDemo || conn == ConnectionState.CONNECTED)
                     ) {
-                        lastModelsSyncKey = key
                         syncModelsForHarness()
+                        lastModelsSyncKey = key
                     }
                 }
             }
@@ -242,8 +243,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         clearSearchQuery()
         harness = host.defaultHarness
         workspace = host.recentWorkspaces.firstOrNull() ?: host.defaultWorkspace
-        harnessModels = emptyList()
-        selectedModel = null
+        // Y2: keep prior selection visible until syncModelsForHarness resolves the new list
+        // (resolveSelection drops stale ids). Clearing here raced Send → null `_meta.model`.
         lastModelsSyncKey = null
         refreshPills()
         refreshModelPill()
@@ -513,10 +514,16 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 syncPermissionFromStore()
+                // Y2: await models so a fast Send after host bind still defaults when the
+                // harness reports a non-empty list (omit `_meta.model` only when truly empty).
+                syncModelsForHarness()
+                val model = CodeModelSelection.resolveSelection(harnessModels, selectedModel)
+                selectedModel = model
+                refreshModelPill()
                 val result = hub.startSession(
                     NewSessionRequest(
                         host.id, harness, workspace, prompt, permission,
-                        model = selectedModel,
+                        model = model,
                         attachments = attachments,
                     )
                 )

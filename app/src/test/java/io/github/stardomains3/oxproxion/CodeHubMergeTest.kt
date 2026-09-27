@@ -1,0 +1,77 @@
+package io.github.stardomains3.oxproxion
+
+import io.github.stardomains3.oxproxion.code.CodeSessionSummary
+import io.github.stardomains3.oxproxion.code.HarnessKind
+import io.github.stardomains3.oxproxion.code.PermissionMode
+import io.github.stardomains3.oxproxion.code.mergeListSessionsSummary
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+/** Pure merge used by CodeHub.refreshSessions (review #14 Y1). */
+class CodeHubMergeTest {
+
+    private fun summary(
+        id: String = "s1",
+        model: String? = null,
+        lastSeq: Long? = null,
+        title: String = "Title",
+        preview: String = "prev",
+        permissionMode: PermissionMode = PermissionMode.ASK,
+    ) = CodeSessionSummary(
+        id = id,
+        hostId = "h1",
+        harness = HarnessKind.CLAUDE_CODE,
+        workspace = "/w",
+        title = title,
+        createdAt = 1L,
+        updatedAt = 2L,
+        permissionMode = permissionMode,
+        model = model,
+        preview = preview,
+        lastSeq = lastSeq,
+    )
+
+    @Test
+    fun keepsLocalModelWhenRemoteOmits() {
+        val local = summary(model = "claude-sonnet-4", lastSeq = 7L)
+        val remote = summary(model = null, lastSeq = null, title = "", preview = "")
+        val merged = mergeListSessionsSummary(remote, local)
+        assertEquals("claude-sonnet-4", merged.model)
+        assertEquals(7L, merged.lastSeq)
+        assertEquals("Title", merged.title)
+        assertEquals("prev", merged.preview)
+    }
+
+    @Test
+    fun prefersRemoteModelWhenPresent() {
+        val local = summary(model = "claude-sonnet-4")
+        val remote = summary(model = "claude-opus-4")
+        assertEquals("claude-opus-4", mergeListSessionsSummary(remote, local).model)
+    }
+
+    @Test
+    fun bothNullModelStaysNull() {
+        assertNull(mergeListSessionsSummary(summary(model = null), summary(model = null)).model)
+    }
+
+    @Test
+    fun preservesNonAskPermissionWhenRemoteIsAsk() {
+        val local = summary(permissionMode = PermissionMode.AUTO_EDIT)
+        val remote = summary(permissionMode = PermissionMode.ASK)
+        assertEquals(
+            PermissionMode.AUTO_EDIT,
+            mergeListSessionsSummary(remote, local).permissionMode,
+        )
+    }
+
+    @Test
+    fun takesRemoteNonAskPermission() {
+        val local = summary(permissionMode = PermissionMode.ASK)
+        val remote = summary(permissionMode = PermissionMode.FULL_AUTO)
+        assertEquals(
+            PermissionMode.FULL_AUTO,
+            mergeListSessionsSummary(remote, local).permissionMode,
+        )
+    }
+}

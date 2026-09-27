@@ -178,14 +178,7 @@ class CodeHub private constructor(context: Context) {
             val map = _sessions.value.toMutableMap()
             remote.forEach { s ->
                 val prev = map[s.id]
-                val merged = if (prev == null) s else s.copy(
-                    lastSeq = s.lastSeq ?: prev.summary.lastSeq,
-                    permissionMode = if (s.permissionMode != PermissionMode.ASK ||
-                        prev.summary.permissionMode == PermissionMode.ASK
-                    ) s.permissionMode else prev.summary.permissionMode,
-                    preview = s.preview.ifBlank { prev.summary.preview },
-                    title = s.title.ifBlank { prev.summary.title }
-                )
+                val merged = if (prev == null) s else mergeListSessionsSummary(s, prev.summary)
                 map[s.id] = prev?.copy(summary = merged) ?: CodeSessionState(merged)
             }
             _sessions.value = map
@@ -409,3 +402,22 @@ class CodeHub private constructor(context: Context) {
             instance ?: synchronized(this) { instance ?: CodeHub(context.applicationContext).also { instance = it } }
     }
 }
+
+/**
+ * Soft-merge a remote `bridge/listSessions` row with a previously known local summary.
+ * Prefer non-null / non-blank remote fields; keep local [CodeSessionSummary.model],
+ * [CodeSessionSummary.lastSeq], title, preview, and non-ASK permission when the bridge
+ * omits them (listSessions often lacks model until it echoes start `_meta.model`).
+ */
+internal fun mergeListSessionsSummary(
+    remote: CodeSessionSummary,
+    local: CodeSessionSummary,
+): CodeSessionSummary = remote.copy(
+    lastSeq = remote.lastSeq ?: local.lastSeq,
+    permissionMode = if (remote.permissionMode != PermissionMode.ASK ||
+        local.permissionMode == PermissionMode.ASK
+    ) remote.permissionMode else local.permissionMode,
+    preview = remote.preview.ifBlank { local.preview },
+    title = remote.title.ifBlank { local.title },
+    model = remote.model ?: local.model,
+)

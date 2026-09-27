@@ -174,7 +174,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                             s.summary.branch
                         ).joinToString("  ·  ")
                         composer.running = s.running
-                        composer.setPermission(s.summary.permissionMode)
+                        // Y4: setModel before setPermission so short permission label uses modelPill visibility.
                         // No session/set_model on the wire yet — show read-only current model when known.
                         val model = s.summary.model
                         if (!model.isNullOrBlank()) {
@@ -182,6 +182,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                         } else {
                             composer.setModel(null, emptyList())
                         }
+                        composer.setPermission(s.summary.permissionMode)
                         composer.availableCommands = s.availableCommands
                         composer.input.hint = getString(R.string.code_session_reply_hint, s.summary.harness.shortName)
                         render(s)

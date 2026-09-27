@@ -318,12 +318,20 @@ class CodeComposer(
         if (show) {
             modelPill.text = if (!model.isNullOrBlank()) CodeModelSelection.pillLabel(model)
             else context.getString(R.string.code_home_pick_model)
+            // TalkBack prefers contentDescription over visible text — include the selected id.
+            modelPill.contentDescription = if (!model.isNullOrBlank()) {
+                context.getString(R.string.cd_code_model_selected, model)
+            } else {
+                context.getString(R.string.cd_code_model)
+            }
             modelPill.isClickable = editable
             modelPill.isFocusable = editable
             val end = if (editable) R.drawable.ic_expand_more else 0
             modelPill.setCompoundDrawablesRelativeWithIntrinsicBounds(
                 R.drawable.ic_nav_models, 0, end, 0
             )
+        } else {
+            modelPill.contentDescription = context.getString(R.string.cd_code_model)
         }
         val gap = (4 * context.resources.displayMetrics.density).toInt()
         (permissionPill.layoutParams as? android.view.ViewGroup.MarginLayoutParams)?.marginStart =
