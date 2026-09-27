@@ -147,9 +147,9 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
             if (needsPermission && !permissionGranted) {
                 // 👇 UPDATED: Show oxproxion-specific message for SAF tools
                 if (isSafTool) {
-                    permissionWarning.text = "Tap to select Download/gradation folder"
+                    permissionWarning.text = getString(R.string.tools_select_folder)
                 } else {
-                    permissionWarning.text = "Permission required. Tap to grant."
+                    permissionWarning.text = getString(R.string.tools_permission_required)
                 }
                 permissionWarning.visibility = View.VISIBLE
 

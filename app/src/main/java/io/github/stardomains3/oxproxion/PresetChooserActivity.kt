@@ -44,8 +44,8 @@ class PresetChooserActivity : AppCompatActivity() {
         if (allPresets.isEmpty()) {
             // No presets available
             GlassAlertDialogBuilder(this)
-                .setTitle("No Presets Available")
-                .setMessage("You don't have any presets yet. Create some in the app first.")
+                .setTitle(R.string.preset_chooser_empty_title)
+                .setMessage(R.string.preset_chooser_empty_body)
                 .setPositiveButton("OK") { _, _ -> finish() }
                 .setOnDismissListener { finish() }
                 .show()
@@ -80,7 +80,7 @@ class PresetChooserActivity : AppCompatActivity() {
         listView.layoutParams = listParams
 
         val titleTextView = TextView(this).apply {
-            text = "Choose Preset"
+            text = getString(R.string.preset_chooser_title)
             textSize = 20f
             setTextColor(ContextCompat.getColor(this@PresetChooserActivity, R.color.xai_ink))
             gravity = Gravity.CENTER
@@ -89,7 +89,7 @@ class PresetChooserActivity : AppCompatActivity() {
         val dialog = GlassAlertDialogBuilder(this)
             .setCustomTitle(titleTextView)
             .setView(dialogView)
-            .setPositiveButton("Send") { dialogInterface, _ ->
+            .setPositiveButton(R.string.chooser_send) { dialogInterface, _ ->
                 val selectedPosition = listView.checkedItemPosition
                 if (selectedPosition != -1) {
                     val selectedPreset = allPresets[selectedPosition]
@@ -98,7 +98,7 @@ class PresetChooserActivity : AppCompatActivity() {
                 }
                 dialogInterface.dismiss()
             }
-            .setNeutralButton("Input Only") { dialogInterface, _ ->
+            .setNeutralButton(R.string.chooser_input_only) { dialogInterface, _ ->
                 val selectedPosition = listView.checkedItemPosition
                 if (selectedPosition != -1) {
                     val selectedPreset = allPresets[selectedPosition]
@@ -107,7 +107,7 @@ class PresetChooserActivity : AppCompatActivity() {
                 }
                 dialogInterface.dismiss()
             }
-            .setNegativeButton("Cancel") { dialogInterface, _ ->
+            .setNegativeButton(R.string.action_cancel) { dialogInterface, _ ->
                 dialogInterface.dismiss()
                 finish()
             }

@@ -29,7 +29,7 @@
                 android:id="@+id/tv_live_transcription"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Preparing..."
+                android:text="@string/transcription_preparing"
                 android:textColor="?attr/colorOnSurface"
                 android:textSize="18sp"
                 android:textAlignment="center"
@@ -40,7 +40,7 @@
                 android:id="@+id/btn_action"
                 android:layout_width="match_parent"
                 android:layout_height="64dp"
-                android:text="Start Recording"
+                android:text="@string/transcription_start_recording"
                 app:cornerRadius="32dp" />
 
         </LinearLayout>

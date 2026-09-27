@@ -44,11 +44,11 @@ class AddEditSystemMessageFragment : Fragment() {
         val originalPrompt = arguments?.getString(ARG_PROMPT)
 
         if (originalTitle != null) {
-            toolbar.title = "Edit System Message"
+            toolbar.title = getString(R.string.edit_system_message_title)
             titleEditText.setText(originalTitle)
             promptEditText.setText(originalPrompt)
         } else {
-            toolbar.title = "Add System Message"
+            toolbar.title = getString(R.string.add_system_message_title)
         }
 
         val isDefaultMessage = arguments?.getBoolean(ARG_IS_DEFAULT, false) ?: false
@@ -91,7 +91,7 @@ class AddEditSystemMessageFragment : Fragment() {
 
                         if (hasDuplicate) {
                             // Show error with Snackbar
-                            Snackbar.make(requireView(), "A message with this title already exists", Snackbar.LENGTH_LONG)
+                            Snackbar.make(requireView(), R.string.system_message_title_exists, Snackbar.LENGTH_LONG)
                                 .setAction("OK") { /* Dismiss action */ }
                                 .show()
                             return@setOnMenuItemClickListener true

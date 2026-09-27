@@ -29,7 +29,7 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Title"
+            android:hint="@string/add_edit_prompt_title"
             style="@style/Xai.TextInputLayout">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -45,7 +45,7 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:layout_marginTop="8dp"
-            android:hint="Prompt"
+            android:hint="@string/add_edit_prompt_prompt"
             style="@style/Xai.TextInputLayout">
 
             <com.google.android.material.textfield.TextInputEditText

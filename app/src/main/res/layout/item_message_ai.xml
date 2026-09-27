@@ -203,7 +203,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:gravity="start|top"
-                android:text="AI message here"
+                tools:text="AI message here"
                 android:textColor="@color/xai_body"
                 android:textColorLink="@color/xai_link"
                 android:textColorHighlight="@color/xai_text_highlight"

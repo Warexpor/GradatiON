@@ -614,4 +614,122 @@
     <string name="rp_facts_choice_title">Carry facts into the new chat?</string>
     <string name="rp_facts_choice_body">Facts are what this chat has established. Your Memory note stays either way.</string>
     <string name="rp_memory_note">Memory note</string>
+
+    <!-- Legacy screens and menus (moved out of layouts) -->
+    <string name="transcription_preparing">Preparing...</string>
+    <string name="transcription_start_recording">Start Recording</string>
+    <string name="add_model_model_name">Model Name</string>
+    <string name="add_model_api_identifier">API Identifier</string>
+    <string name="add_model_vision_capable">Vision Capable</string>
+    <string name="add_model_reasoning_capable">Reasoning Capable</string>
+    <string name="add_model_lan_model">LAN Model</string>
+    <string name="add_model_image_generation">Image Generation</string>
+    <string name="add_model_transcription">Transcription</string>
+    <string name="add_model_is_free_model">Is Free Model</string>
+    <string name="chooser_clear_chat_first">Clear existing chat before sending</string>
+    <string name="preset_chooser_clear_chat">Clear Chat</string>
+    <string name="save_api_title">Save OpenRouter API Key</string>
+    <string name="save_api_hint">Enter Key</string>
+    <string name="save_brave_api_title">Save Brave Search API Key</string>
+    <string name="save_brave_api_hint">Enter Brave API Key</string>
+    <string name="save_file_name">File Name</string>
+    <string name="save_file_extension">File Extension (No period)</string>
+    <string name="save_lan_title">Set LAN Endpoint</string>
+    <string name="save_lan_example">Example: http://10.0.0.23:11434</string>
+    <string name="save_lan_endpoint_hint">Enter LAN endpoint URL</string>
+    <string name="save_lan_select_provider">Select Provider:</string>
+    <string name="save_lan_ollama" translatable="false">Ollama</string>
+    <string name="save_lan_lm_studio" translatable="false">LM Studio</string>
+    <string name="save_lan_llama_cpp" translatable="false">llama.cpp</string>
+    <string name="save_lan_mlx_lm" translatable="false">MLX LM</string>
+    <string name="save_lan_hermes_agent" translatable="false">Hermes Agent</string>
+    <string name="save_lan_omlx" translatable="false">oMLX</string>
+    <string name="save_lan_nativ" translatable="false">Nativ</string>
+    <string name="save_lan_api_key_label">LAN API Key (optional)</string>
+    <string name="save_lan_enter_if_required">Enter if Required</string>
+    <string name="save_maxtokens_set_max_tokens">Set Max Tokens</string>
+    <string name="save_maxtokens_enter_max_tokens">Enter Max Tokens</string>
+    <string name="save_maxtokens_help">Max tokens limit the length of the AI\'s response. A higher number allows longer replies but may increase costs. Default is 12000.</string>
+    <string name="timeout_set_request_timeout">Set Request Timeout</string>
+    <string name="timeout_minutes_1_45">Minutes (1‑45)</string>
+    <string name="timeout_help">The timeout defines how long the app will wait for the AI response before terminating the request. Longer values allow the model more time to generate answers. Default is 5 minutes.</string>
+    <string name="add_edit_prompt_title">Title</string>
+    <string name="add_edit_prompt_prompt">Prompt</string>
+    <string name="add_edit_system_message_title">Title</string>
+    <string name="add_edit_system_message_system_message_prompt">System Message Prompt</string>
+    <string name="advanced_reasoning_note">Note: You can set Effort OR Max Reasoning Tokens, not both. Setting Max Reasoning Tokens disables Effort. To use Effort, make sure Max Reasoning Tokens has no value.</string>
+    <string name="advanced_reasoning_effort_level">Effort Level:</string>
+    <string name="advanced_reasoning_minimal">Minimal</string>
+    <string name="advanced_reasoning_low">Low</string>
+    <string name="advanced_reasoning_medium">Medium</string>
+    <string name="advanced_reasoning_high">High</string>
+    <string name="advanced_reasoning_include_in_response">Include in Response:</string>
+    <string name="advanced_reasoning_max_reasoning_tokens">Max Reasoning Tokens:</string>
+    <string name="advanced_reasoning_optional">Optional</string>
+    <string name="inference_parameters_temperature">Temperature</string>
+    <string name="inference_parameters_e_g_1_0">e.g., 1.0</string>
+    <string name="inference_parameters_top_p">Top P</string>
+    <string name="inference_parameters_top_k">Top K</string>
+    <string name="inference_parameters_e_g_40">e.g., 40</string>
+    <string name="inference_parameters_min_p">Min P</string>
+    <string name="inference_parameters_e_g_0_0">e.g., 0.0</string>
+    <string name="inference_parameters_repetition_penalty">Repetition Penalty</string>
+    <string name="inference_parameters_presence_penalty">Presence Penalty</string>
+    <string name="preset_edit_title">Title</string>
+    <string name="preset_edit_model">Model</string>
+    <string name="preset_edit_system_message">System Message</string>
+    <string name="preset_edit_streaming">Streaming</string>
+    <string name="preset_edit_reasoning">Reasoning</string>
+    <string name="preset_edit_conversation_mode">Conversation Mode</string>
+    <string name="preset_edit_web_search">Web Search</string>
+    <string name="preset_edit_tools">Tools</string>
+    <string name="action_advanced">Advanced</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_decrease_font">Decrease Font</string>
+    <string name="action_increase_font">Increase Font</string>
+    <string name="action_print">Print</string>
+    <string name="action_search">Search</string>
+    <string name="action_import">Import</string>
+    <string name="action_export">Export</string>
+
+    <!-- Dialogs, share targets and helpers (moved out of Kotlin) -->
+    <string name="chooser_open_file_manager">Open with File Manager</string>
+    <string name="dialog_load_image_or_pdf">Load Image or PDF</string>
+    <string name="dialog_select_pdf_page">Select PDF Page</string>
+    <string name="dialog_attached_files">Attached Files (%1$d)</string>
+    <string name="dialog_enable_disable_tools">Enable / Disable Tools</string>
+    <string name="dialog_web_search_engine">Web Search Engine</string>
+    <string name="dialog_search_context_size">Search Context Size</string>
+    <string name="dialog_max_search_results">Max Search Results\n(Higher values increase costs)</string>
+    <string name="spell_title">AI Grammar Fix</string>
+    <string name="spell_consulting">Consulting AI...</string>
+    <string name="spell_accept">Accept</string>
+    <string name="spell_sending">Sending to AI...</string>
+    <string name="spell_no_fixes">AI couldn\'t find any fixes for this text.</string>
+    <string name="spell_error_timeout">Request timed out. Please try again.</string>
+    <string name="spell_error_network">Error connecting with AI. Check your internet connection.</string>
+    <string name="spell_error_service">Error connecting with AI. The service may be unavailable.</string>
+    <string name="spell_error_auth">Authentication error. Check your API key.</string>
+    <string name="spell_error_generic">Error connecting with AI. Please try again.</string>
+    <string name="spell_suggestion">AI Suggestion:</string>
+    <string name="spell_close">Close</string>
+    <string name="licenses_title">Third-Party Licenses</string>
+    <string name="licenses_title_count">Third-Party Licenses (%1$d)</string>
+    <string name="tools_select_folder">Tap to select Download/gradation folder</string>
+    <string name="tools_permission_required">Permission required. Tap to grant.</string>
+    <string name="edit_model_title">Edit Model</string>
+    <string name="add_model_title">Add Model</string>
+    <string name="edit_system_message_title">Edit System Message</string>
+    <string name="add_system_message_title">Add System Message</string>
+    <string name="system_message_title_exists">A message with this title already exists</string>
+    <string name="prompt_title_exists">A prompt with this title already exists</string>
+    <string name="prompt_empty">Title and prompt cannot be empty</string>
+    <string name="biometric_title">Unlock GradatiON</string>
+    <string name="biometric_subtitle">Use your biometric credential</string>
+    <string name="chooser_title">Choose and Send\nModel: %1$s</string>
+    <string name="chooser_send">Send</string>
+    <string name="chooser_input_only">Input Only</string>
+    <string name="preset_chooser_empty_title">No Presets Available</string>
+    <string name="preset_chooser_empty_body">You don\'t have any presets yet. Create some in the app first.</string>
+    <string name="preset_chooser_title">Choose Preset</string>
 </resources>

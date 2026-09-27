@@ -4,7 +4,7 @@
 
     <item
         android:id="@+id/action_save_prompt"
-        android:title="Save"
+        android:title="@string/action_save"
         android:icon="@drawable/ic_savechat"
         app:showAsAction="always" />
 

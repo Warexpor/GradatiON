@@ -18,7 +18,7 @@
             android:id="@+id/dialog_title_lan"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Set LAN Endpoint"
+            android:text="@string/save_lan_title"
             android:textColor="@color/xai_ink"
             android:textAppearance="@style/TextAppearance.Gradation.Headline"
             android:layout_marginBottom="16dp" />
@@ -26,7 +26,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Example: http://10.0.0.23:11434"
+            android:text="@string/save_lan_example"
             android:textColor="@color/xai_mute"
             android:textSize="12sp"
             android:layout_marginBottom="8dp" />
@@ -35,7 +35,7 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Enter LAN endpoint URL"
+            android:hint="@string/save_lan_endpoint_hint"
             app:hintTextColor="@color/xai_mute">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -53,7 +53,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Select Provider:"
+            android:text="@string/save_lan_select_provider"
             android:textColor="@color/xai_ink"
             android:textSize="14sp"
             android:layout_marginTop="16dp"
@@ -71,7 +71,7 @@
                 android:id="@+id/checkbox_ollama"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Ollama"
+                android:text="@string/save_lan_ollama"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox"
                 android:layout_marginBottom="8dp" />
@@ -80,7 +80,7 @@
                 android:id="@+id/checkbox_lm_studio"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="LM Studio"
+                android:text="@string/save_lan_lm_studio"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox"
                 android:layout_marginBottom="8dp" />
@@ -89,7 +89,7 @@
                 android:id="@+id/checkbox_llama_cpp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="llama.cpp"
+                android:text="@string/save_lan_llama_cpp"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox"
                 android:layout_marginBottom="8dp" />
@@ -99,28 +99,28 @@
                 android:id="@+id/checkbox_mlx_lm"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="MLX LM"
+                android:text="@string/save_lan_mlx_lm"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox" />
             <CheckBox
                 android:id="@+id/checkbox_hermes_agent"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Hermes Agent"
+                android:text="@string/save_lan_hermes_agent"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox" />
             <CheckBox
                 android:id="@+id/checkbox_olmx"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="oMLX"
+                android:text="@string/save_lan_omlx"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox" />
             <CheckBox
                 android:id="@+id/checkbox_nativ"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Nativ"
+                android:text="@string/save_lan_nativ"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox" />
 
@@ -131,7 +131,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="LAN API Key (optional)"
+            android:text="@string/save_lan_api_key_label"
             android:textColor="@color/xai_ink"
             android:textSize="14sp"
             android:layout_marginTop="8dp"
@@ -140,7 +140,7 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Enter if Required"
+            android:hint="@string/save_lan_enter_if_required"
             app:hintTextColor="@color/xai_mute"
             android:layout_marginBottom="16dp"
             app:endIconMode="password_toggle">

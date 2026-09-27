@@ -72,7 +72,7 @@ class AddEditPromptFragment : Fragment() {
                         }
 
                         if (hasDuplicate) {
-                            Snackbar.make(requireView(), "A prompt with this title already exists", Snackbar.LENGTH_LONG)
+                            Snackbar.make(requireView(), R.string.prompt_title_exists, Snackbar.LENGTH_LONG)
                                 .setAction("OK") { }
                                 .show()
                             return@setOnMenuItemClickListener true
@@ -97,7 +97,7 @@ class AddEditPromptFragment : Fragment() {
                         sharedPreferencesHelper.saveCustomPrompts(updatedPrompts)
                         parentFragmentManager.popBackStack()
                     } else {
-                        Snackbar.make(requireView(), "Title and prompt cannot be empty", Snackbar.LENGTH_SHORT).show()
+                        Snackbar.make(requireView(), R.string.prompt_empty, Snackbar.LENGTH_SHORT).show()
                     }
                     true
                 }

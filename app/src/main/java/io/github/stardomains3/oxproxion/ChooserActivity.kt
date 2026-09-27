@@ -55,7 +55,7 @@ class ChooserActivity : AppCompatActivity() {
         listView.adapter = adapter
         listView.setItemChecked(currentIndex, true)  // Pre-select current
         val titleTextView = TextView(this).apply {
-            text = "Choose and Send\nModel: $modelDisplayName"
+            text = getString(R.string.chooser_title, modelDisplayName)
             textSize = 20f
             setTextColor(ContextCompat.getColor(this@ChooserActivity, R.color.xai_ink))
             gravity = Gravity.CENTER
@@ -64,7 +64,7 @@ class ChooserActivity : AppCompatActivity() {
         GlassAlertDialogBuilder(this)
             .setCustomTitle(titleTextView)
             .setView(dialogView)
-            .setPositiveButton("Send") { dialog, _ ->
+            .setPositiveButton(R.string.chooser_send) { dialog, _ ->
                 val selectedPosition = listView.checkedItemPosition
                 if (selectedPosition != -1) {
                     val selectedMessage = allMessages[selectedPosition]
@@ -74,7 +74,7 @@ class ChooserActivity : AppCompatActivity() {
                 }
                 dialog.dismiss()
             }
-            .setNeutralButton("Input Only") { dialog, _ ->
+            .setNeutralButton(R.string.chooser_input_only) { dialog, _ ->
                 val selectedPosition = listView.checkedItemPosition
                 if (selectedPosition != -1) {
                     val selectedMessage = allMessages[selectedPosition]
@@ -84,7 +84,7 @@ class ChooserActivity : AppCompatActivity() {
                 }
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel") { dialog, _ ->
+            .setNegativeButton(R.string.action_cancel) { dialog, _ ->
                 dialog.dismiss()
                 finish()
             }

@@ -59,9 +59,9 @@ object BiometricGateHelper {
         )
 
         val info = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock GradatiON")
-            .setSubtitle("Use your biometric credential")
-            .setNegativeButtonText("Cancel")
+            .setTitle(activity.getString(R.string.biometric_title))
+            .setSubtitle(activity.getString(R.string.biometric_subtitle))
+            .setNegativeButtonText(activity.getString(R.string.action_cancel))
             .setAllowedAuthenticators(BIOMETRIC_STRONG)
             .build()
 

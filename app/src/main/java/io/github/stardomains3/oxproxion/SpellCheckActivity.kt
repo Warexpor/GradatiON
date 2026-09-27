@@ -67,7 +67,7 @@ class SpellCheckActivity : AppCompatActivity() {
 
         // Title
         val titleView = TextView(this).apply {
-            text = "AI Grammar Fix"
+            text = getString(R.string.spell_title)
             textSize = 18f
             setTextColor(token(R.color.xai_ink))
             setPadding(0, 0, 0, 24)
@@ -115,7 +115,7 @@ class SpellCheckActivity : AppCompatActivity() {
 
         // Status Text
         statusText = TextView(this).apply {
-            text = "Consulting AI..."
+            text = getString(R.string.spell_consulting)
             textSize = 14f
             setTextColor(token(R.color.xai_mute))
             setPadding(0, 16, 0, 0)
@@ -147,7 +147,7 @@ class SpellCheckActivity : AppCompatActivity() {
 
         // Cancel Button
         cancelButton = AppCompatButton(this).apply {
-            text = "Cancel"
+            text = getString(R.string.action_cancel)
             textSize = 14f
             isAllCaps = false
             setTextColor(token(R.color.xai_ink))
@@ -168,7 +168,7 @@ class SpellCheckActivity : AppCompatActivity() {
 
         // Accept Button
         acceptButton = AppCompatButton(this).apply {
-            text = "Accept"
+            text = getString(R.string.spell_accept)
             textSize = 14f
             isAllCaps = false
             setTextColor(token(R.color.xai_ink))
@@ -216,7 +216,7 @@ class SpellCheckActivity : AppCompatActivity() {
     private fun processText(inputText: String) {
         activeJob = lifecycleScope.launch {
             try {
-                statusText.text = "Sending to AI..."
+                statusText.text = getString(R.string.spell_sending)
                 val rawText = vm.getAIFixContent(inputText)
 
                 if (!rawText.isNullOrBlank()) {
@@ -231,7 +231,7 @@ class SpellCheckActivity : AppCompatActivity() {
                     correctedResult = cleanedText
                     showResult(cleanedText)
                 } else {
-                    showError("AI couldn't find any fixes for this text.")
+                    showError(getString(R.string.spell_no_fixes))
                 }
             } catch (e: Exception) {
                 // Don't show error if user cancelled
@@ -244,16 +244,16 @@ class SpellCheckActivity : AppCompatActivity() {
               //  Log.e("AIFix", "Correction failed", e)
                 val errorMessage = when {
                     e.message?.contains("timeout", ignoreCase = true) == true ->
-                        "Request timed out. Please try again."
+                        getString(R.string.spell_error_timeout)
                     e.message?.contains("Unable to resolve host", ignoreCase = true) == true ||
                             e.message?.contains("ConnectException", ignoreCase = true) == true ->
-                        "Error connecting with AI. Check your internet connection."
+                        getString(R.string.spell_error_network)
                     e.message?.contains("API Error", ignoreCase = true) == true ->
-                        "Error connecting with AI. The service may be unavailable."
+                        getString(R.string.spell_error_service)
                     e.message?.contains("401", ignoreCase = true) == true ||
                             e.message?.contains("Unauthorized", ignoreCase = true) == true ->
-                        "Authentication error. Check your API key."
-                    else -> "Error connecting with AI. Please try again."
+                        getString(R.string.spell_error_auth)
+                    else -> getString(R.string.spell_error_generic)
                 }
                 showError(errorMessage)
             }
@@ -269,7 +269,7 @@ class SpellCheckActivity : AppCompatActivity() {
     private fun showResult(correctedText: String) {
         loadingCancelButton.visibility = View.GONE
         progressBar.visibility = View.GONE
-        statusText.text = "AI Suggestion:"
+        statusText.text = getString(R.string.spell_suggestion)
 
         resultText.text = correctedText
         resultScrollView.visibility = View.VISIBLE
@@ -285,7 +285,7 @@ class SpellCheckActivity : AppCompatActivity() {
         }
 
         // Show just a "Close" button (relabel Cancel)
-        cancelButton.text = "Close"
+        cancelButton.text = getString(R.string.spell_close)
         buttonContainer.visibility = View.VISIBLE
     }
 

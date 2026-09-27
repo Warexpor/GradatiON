@@ -1272,7 +1272,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             event.getContentIfNotHandled()?.let { message ->
 
                 Snackbar.make(requireView(), message, Snackbar.LENGTH_LONG)
-                    .setAction("Open Folder") {
+                    .setAction(R.string.action_open_folder) {
                         WorkspacePaths.ensureWorkspaceExists()
                         val path = WorkspacePaths.workspaceDirForRead()
                         val intent = Intent(Intent.ACTION_VIEW)
@@ -1289,7 +1289,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
                         // Always show system chooser
-                        val chooserIntent = Intent.createChooser(intent, "Open with File Manager")
+                        val chooserIntent = Intent.createChooser(intent, getString(R.string.chooser_open_file_manager))
                         startActivity(chooserIntent)
                     }
                     .show()
@@ -1312,7 +1312,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 if (isInstalled) {
                     // 2. App found: Show Snackbar with Action
                     Snackbar.make(requireView(), message, Snackbar.LENGTH_LONG)
-                        .setAction("Open Folder") {
+                        .setAction(R.string.action_open_folder) {
                             val path = WorkspacePaths.workspaceDirForRead()
                             //val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                             val intent = Intent(Intent.ACTION_VIEW)
@@ -2494,11 +2494,11 @@ $cleanContent
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
                         // Create the system chooser intent
-                        val chooserIntent = Intent.createChooser(intent, "Open Folder")
+                        val chooserIntent = Intent.createChooser(intent, getString(R.string.action_open_folder))
 
                         // Show Snackbar with the action
-                        Snackbar.make(rootView, "PDF saved to Downloads", Snackbar.LENGTH_LONG)
-                            .setAction("Open Folder") {
+                        Snackbar.make(rootView, R.string.toast_pdf_saved, Snackbar.LENGTH_LONG)
+                            .setAction(R.string.action_open_folder) {
                                 context.startActivity(chooserIntent)
                             }
                             .show()
@@ -3807,7 +3807,7 @@ $cleanContent
             if (supportsPdf) items.add("Choose PDF") // NEW: Add PDF option
 
             GlassAlertDialogBuilder(requireContext())
-                .setTitle("Load Image or PDF")
+                .setTitle(R.string.dialog_load_image_or_pdf)
                 .setItems(items.toTypedArray()) { _, which ->
                     when (which) {
                         0 -> { // Take Photo
@@ -4798,7 +4798,7 @@ $cleanContent
         }
 
         GlassAlertDialogBuilder(requireContext())
-            .setTitle("Select PDF Page")
+            .setTitle(R.string.dialog_select_pdf_page)
             .setSingleChoiceItems(pageTitles, 0) { _, which -> selectedPage = which }
             .setPositiveButton("Convert") { _, _ ->
                 converting = true
@@ -4987,7 +4987,7 @@ $cleanContent
         }
 
         val builder = GlassAlertDialogBuilder(requireContext())
-            .setTitle("Attached Files (${pendingFiles.size})")
+            .setTitle(getString(R.string.dialog_attached_files, pendingFiles.size))
             .setMessage(filesList)
             .setPositiveButton("Remove All") { _, _ ->
                 pendingFiles.clear()
@@ -5037,7 +5037,7 @@ $cleanContent
         val dialog = GlassAlertDialogBuilder(requireContext(),
             R.style.CustomMaterialAlertDialogTheme
         )
-            .setTitle("Enable / Disable Tools")
+            .setTitle(R.string.dialog_enable_disable_tools)
             .setNegativeButton(R.string.action_cancel, null)
             .setPositiveButton(R.string.action_save) { _, _ ->
                 // Note: We map from the mutableItems which is already filtered
@@ -5150,7 +5150,7 @@ $cleanContent
         GlassAlertDialogBuilder(requireContext(),
             R.style.CustomMaterialAlertDialogTheme
         )
-            .setTitle("Web Search Engine")
+            .setTitle(R.string.dialog_web_search_engine)
             .setSingleChoiceItems(
                 engines.map { it.second }.toTypedArray(),
                 engines.indexOfFirst { it.first == currentEngine }.takeIf { it >= 0 } ?: 0
@@ -5179,7 +5179,7 @@ $cleanContent
         GlassAlertDialogBuilder(requireContext(),
             R.style.CustomMaterialAlertDialogTheme
         )
-            .setTitle("Search Context Size")
+            .setTitle(R.string.dialog_search_context_size)
             .setSingleChoiceItems(
                 sizes.map { it.second }.toTypedArray(),
                 sizes.indexOfFirst { it.first == currentSize }.takeIf { it >= 0 } ?: 1 // Default to medium
@@ -5205,7 +5205,7 @@ $cleanContent
             R.style.CustomMaterialAlertDialogTheme
         )
             // Combine the title and the message here
-            .setTitle("Max Search Results\n(Higher values increase costs)")
+            .setTitle(R.string.dialog_max_search_results)
             .setSingleChoiceItems(
                 optionsStrings,
                 options.indexOf(currentMax).takeIf { it >= 0 } ?: 4 // Index 4 is '5'

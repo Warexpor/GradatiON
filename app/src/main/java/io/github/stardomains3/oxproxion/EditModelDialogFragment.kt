@@ -69,12 +69,12 @@ class EditModelDialogFragment : DialogFragment() {
             switchImage.isChecked  = m.isImageGenerationCapable
             switchTranscription.isChecked = m.isTranscription // NEW
             switchIsFree.isChecked = m.isFree
-            builder.setTitle("Edit Model")
-        } ?: builder.setTitle("Add Model")
+            builder.setTitle(R.string.edit_model_title)
+        } ?: builder.setTitle(R.string.add_model_title)
 
         /* ----------  buttons  ---------- */
         builder.setView(view)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.action_save) { _, _ ->
                 val name = editName.text.toString().trim()
                 val id   = editApiId.text.toString().trim()
 
@@ -104,7 +104,7 @@ class EditModelDialogFragment : DialogFragment() {
                 existingModel?.let { old -> onModelUpdated?.invoke(old, newModel) }
                     ?: onModelAdded?.invoke(newModel)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
 
         return builder.create()
     }

@@ -40,7 +40,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Temperature"
+                    android:text="@string/inference_parameters_temperature"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
                     android:textFontWeight="600"
@@ -57,7 +57,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="e.g., 1.0"
+                android:hint="@string/inference_parameters_e_g_1_0"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/tempEdit"
@@ -76,7 +76,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Top P"
+                    android:text="@string/inference_parameters_top_p"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
                     android:textFontWeight="600"
@@ -93,7 +93,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="e.g., 1.0"
+                android:hint="@string/inference_parameters_e_g_1_0"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/topPEdit"
@@ -112,7 +112,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Top K"
+                    android:text="@string/inference_parameters_top_k"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
                     android:textFontWeight="600"
@@ -129,7 +129,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="e.g., 40"
+                android:hint="@string/inference_parameters_e_g_40"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/topKEdit"
@@ -148,7 +148,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Min P"
+                    android:text="@string/inference_parameters_min_p"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
                     android:textFontWeight="600"
@@ -165,7 +165,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="e.g., 0.0"
+                android:hint="@string/inference_parameters_e_g_0_0"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/minPEdit"
@@ -184,7 +184,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Repetition Penalty"
+                    android:text="@string/inference_parameters_repetition_penalty"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
                     android:textFontWeight="600"
@@ -201,7 +201,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="e.g., 1.0"
+                android:hint="@string/inference_parameters_e_g_1_0"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/repPenaltyEdit"
@@ -220,7 +220,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Presence Penalty"
+                    android:text="@string/inference_parameters_presence_penalty"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp"
                     android:textFontWeight="600"
@@ -237,7 +237,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="e.g., 0.0"
+                android:hint="@string/inference_parameters_e_g_0_0"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/presPenaltyEdit"

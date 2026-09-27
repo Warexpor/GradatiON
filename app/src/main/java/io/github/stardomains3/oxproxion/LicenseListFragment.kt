@@ -26,7 +26,7 @@ class LicenseListFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val toolbar = view.findViewById<MaterialToolbar>(R.id.toolbar)
-        toolbar.title = "Third-Party Licenses"
+        toolbar.title = getString(R.string.licenses_title)
         toolbar.setNavigationOnClickListener {
             parentFragmentManager.popBackStack()
         }
@@ -41,7 +41,7 @@ class LicenseListFragment : Fragment() {
                 .sortedBy { it.libraryName }
 
             Log.d("Licenses", "Loaded ${metadataList.size} libs")
-            toolbar.title = "Third-Party Licenses (${metadataList.size})"
+            toolbar.title = getString(R.string.licenses_title_count, metadataList.size)
 
             recyclerView.adapter = LicenseAdapter(metadataList) { metadata ->
                 try {

@@ -11,7 +11,7 @@
         android:id="@+id/dialog_title_brave_api"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Save Brave Search API Key"
+        android:text="@string/save_brave_api_title"
         android:textColor="@color/xai_ink"
         android:textAppearance="@style/TextAppearance.Gradation.Headline"
         android:layout_marginBottom="16dp" />
@@ -19,7 +19,7 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Enter Brave API Key"
+        android:hint="@string/save_brave_api_hint"
         app:hintTextColor="@color/xai_mute"
         app:endIconMode="password_toggle"
         android:id="@+id/edit_text_lay_brave_api">

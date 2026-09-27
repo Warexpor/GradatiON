@@ -9,7 +9,7 @@
         android:id="@+id/clearChatCheckBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Clear existing chat before sending"
+        android:text="@string/chooser_clear_chat_first"
         android:textColor="@color/xai_ink"
         android:checked="false"
         style="@style/Widget.App.CheckBox" />

@@ -10,7 +10,7 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="File Name"
+        android:hint="@string/save_file_name"
         app:hintTextColor="@color/xai_mute"
         app:endIconMode="clear_text">
 
@@ -28,7 +28,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:hint="File Extension (No period)"
+        android:hint="@string/save_file_extension"
         app:hintTextColor="@color/xai_mute"
         app:endIconMode="clear_text"
         app:helperText="e.g., js, kt, html, py, txt"

@@ -37,7 +37,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp"
                 style="@style/Xai.TextInputLayout"
-                android:hint="Title">
+                android:hint="@string/preset_edit_title">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/editPresetTitle"
@@ -54,7 +54,7 @@
                 android:layout_marginBottom="24dp"
                 style="@style/Xai.TextInputLayout"
                 app:endIconMode="dropdown_menu"
-                android:hint="Model">
+                android:hint="@string/preset_edit_model">
 
                 <com.google.android.material.textfield.MaterialAutoCompleteTextView
                     android:id="@+id/autoCompleteModel"
@@ -75,7 +75,7 @@
                 android:layout_marginBottom="24dp"
                 style="@style/Xai.TextInputLayout"
                 app:endIconMode="dropdown_menu"
-                android:hint="System Message">
+                android:hint="@string/preset_edit_system_message">
 
                 <com.google.android.material.textfield.MaterialAutoCompleteTextView
                     android:id="@+id/autoCompleteSystemMessage"
@@ -96,7 +96,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                android:text="Streaming"
+                android:text="@string/preset_edit_streaming"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp" />
 
@@ -105,7 +105,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                android:text="Reasoning"
+                android:text="@string/preset_edit_reasoning"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp" />
 
@@ -114,7 +114,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                android:text="Conversation Mode"
+                android:text="@string/preset_edit_conversation_mode"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp" />
 
@@ -123,7 +123,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="32dp"
-                android:text="Web Search"
+                android:text="@string/preset_edit_web_search"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp" />
 
@@ -134,7 +134,7 @@
                 android:layout_marginBottom="32dp"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp"
-                android:text="Tools" />
+                android:text="@string/preset_edit_tools" />
 
             <LinearLayout
                 android:layout_width="match_parent"
