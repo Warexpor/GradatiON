@@ -8,7 +8,6 @@ import android.graphics.ColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PixelFormat
-import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
@@ -18,14 +17,16 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * Liquid-glass toggle, after the iOS 26 switch: a round capsule track (a faint sunken wash
- * when off, a dense neutral fill when on) carrying a round glass bead. The bead never changes
- * color, so a toggle reads by the track alone and nothing flashes. Held, it stretches
- * sideways like a drop of gel; it wobbles a touch as it lands. Neutral grays only.
+ * Liquid-glass toggle, after the iOS 26 switch: a 52x32 capsule cage (a faint sunken wash
+ * when off, a dense neutral fill when on) carrying a round 28dp bead. The bead never changes
+ * color, so a toggle reads by the track alone and nothing flashes. Held, the bead widens into
+ * a short pill and turns clear, a lens over the track, then settles back into a circle.
+ * Neutral grays only. Every switch in the app is a SwitchCompat on these two drawables, so
+ * they are all the same size.
  *
  * Both parts are plain drawables (no blur, no layers), inflatable from XML via
- * `<drawable class="...GlassSwitchTrackDrawable" />`, so they work on SwitchCompat and
- * MaterialSwitch through the theme, and through [applyGrokionSwitchStyle].
+ * `<drawable class="...GlassSwitchTrackDrawable" />`, set through the theme's switch style
+ * and through [applyGrokionSwitchStyle].
  */
 private fun Resources.color(id: Int, theme: Resources.Theme?) = getColor(id, theme)
 
@@ -37,8 +38,6 @@ private fun lerpColor(a: Int, b: Int, t: Float): Int = Color.argb(
 )
 
 private fun IntArray.has(attr: Int) = contains(attr)
-
-private fun withAlphaOf(color: Int, f: Float) = Color.argb((Color.alpha(color) * f).roundToInt(), Color.red(color), Color.green(color), Color.blue(color))
 
 /** Animate only what is on screen; state set while binding (not laid out yet) just jumps. */
 internal fun Drawable.canAnimateOnScreen(): Boolean {
@@ -156,28 +155,22 @@ class GlassSwitchThumbDrawable : Drawable() {
 
     private var density = 1f
     private var bodyTop = 0
-    private var bodyMid = 0
     private var bodyBottom = 0
     private var rimLight = 0
     private var rimDark = 0
     private var shadow = 0
 
     private var pressed = false
-    private var checked = false
     private var enabled = true
-    private var initialized = false
-    /** 0 = round bead, 1 = stretched while held. */
-    private var stretch = 0f
-    /** Damped wobble on landing, 0 = none. */
-    private var wobble = 0f
-    private var pressAnimator: ValueAnimator? = null
-    private var wobbleAnimator: ValueAnimator? = null
+    private var checked = false
+    /** 0 = round bead at rest, 1 = held: a wider, clearer lens. */
+    private var hold = 0f
+    private var holdAnimator: ValueAnimator? = null
     private var alphaMul = 255
 
     private val body = Paint(Paint.ANTI_ALIAS_FLAG)
     private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val spec = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rect = RectF()
     private var shaderKey = Float.NaN
 
@@ -185,14 +178,13 @@ class GlassSwitchThumbDrawable : Drawable() {
         super.inflate(r, parser, attrs, theme)
         density = r.displayMetrics.density
         bodyTop = r.color(R.color.switch_bead_top, theme)
-        bodyMid = r.color(R.color.switch_bead_mid, theme)
         bodyBottom = r.color(R.color.switch_bead_bottom, theme)
         rimLight = r.color(R.color.switch_bead_rim_light, theme)
         rimDark = r.color(R.color.switch_bead_rim_dark, theme)
         shadow = r.color(R.color.switch_thumb_shadow, theme)
-        rimPaint.strokeWidth = max(1f, density * 0.8f)
+        rimPaint.strokeWidth = max(1f, density * 0.75f)
         shadowPaint.color = Color.TRANSPARENT
-        shadowPaint.setShadowLayer(3f * density, 0f, 1.2f * density, shadow)
+        shadowPaint.setShadowLayer(2.5f * density, 0f, 1f * density, shadow)
     }
 
     override fun getIntrinsicWidth() = (THUMB_W_DP * density).roundToInt()
@@ -202,54 +194,33 @@ class GlassSwitchThumbDrawable : Drawable() {
 
     override fun onStateChange(state: IntArray): Boolean {
         val p = state.has(android.R.attr.state_pressed)
-        val c = state.has(android.R.attr.state_checked)
         val e = state.has(android.R.attr.state_enabled)
+        val c = state.has(android.R.attr.state_checked)
         var changed = false
         if (e != enabled) { enabled = e; changed = true }
+        if (c != checked) { checked = c; changed = true }
         if (p != pressed) {
             pressed = p
-            animateStretch(if (p) 1f else 0f)
+            animateHold(if (p) 1f else 0f)
             changed = true
         }
-        if (c != checked) {
-            checked = c
-            if (initialized) land()
-            changed = true
-        }
-        initialized = true
         if (changed) invalidateSelf()
         return changed
     }
 
     override fun jumpToCurrentState() {
-        pressAnimator?.cancel(); wobbleAnimator?.cancel()
-        stretch = if (pressed) 1f else 0f
-        wobble = 0f
+        holdAnimator?.cancel()
+        hold = if (pressed) 1f else 0f
         invalidateSelf()
     }
 
-    private fun animateStretch(target: Float) {
-        pressAnimator?.cancel()
-        if (!canAnimateOnScreen()) { stretch = target; return }
-        pressAnimator = ValueAnimator.ofFloat(stretch, target).apply {
-            duration = if (target > 0f) 320L else 420L
-            interpolator = Motion.springBouncy
-            addUpdateListener { stretch = it.animatedValue as Float; invalidateSelf() }
-            start()
-        }
-    }
-
-    /** A small springy wobble as the bead lands on the other side (runs alongside the slide). */
-    private fun land() {
-        wobbleAnimator?.cancel()
-        if (!canAnimateOnScreen()) { wobble = 0f; return }
-        wobbleAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 480L
-            addUpdateListener {
-                val t = it.animatedFraction
-                wobble = (kotlin.math.sin(t * Math.PI * 2.2) * kotlin.math.exp(-4.6 * t)).toFloat()
-                invalidateSelf()
-            }
+    private fun animateHold(target: Float) {
+        holdAnimator?.cancel()
+        if (!canAnimateOnScreen()) { hold = target; return }
+        holdAnimator = ValueAnimator.ofFloat(hold, target).apply {
+            duration = if (target > 0f) 200L else 320L
+            interpolator = if (target > 0f) Motion.iosOut else Motion.spring
+            addUpdateListener { hold = it.animatedValue as Float; invalidateSelf() }
             start()
         }
     }
@@ -259,44 +230,37 @@ class GlassSwitchThumbDrawable : Drawable() {
         if (b.isEmpty) return
         val mul = if (enabled) alphaMul else alphaMul * 55 / 100
         val d = BEAD_DP * density
-        // Held: stretches sideways toward the track's middle, never past the switch's edge.
-        val w = (d + 7f * density * stretch) * (1f + 0.08f * wobble)
-        val h = d * (1f - 0.05f * wobble)
+        // Held, the bead widens toward the middle of the track, never past its own edge.
+        val w = d + HOLD_GROW_DP * density * hold
         val grow = (w - d) / 2f
         val cx = b.exactCenterX() + if (checked) -grow else grow
         val cy = b.exactCenterY()
-        rect.set(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f)
-        val r = h / 2f
+        rect.set(cx - w / 2f, cy - d / 2f, cx + w / 2f, cy + d / 2f)
+        val r = d / 2f
 
-        if (shaderKey != rect.top + rect.width()) {
-            // Glass, not metal: a bright crown, a barely deeper middle and light gathering again
-            // at the base (the caustic), with the track showing faintly through.
+        if (shaderKey != rect.top) {
+            // A plain, bright bead: the faintest fall-off toward the base, no hotspot.
             body.shader = LinearGradient(
                 0f, rect.top, 0f, rect.bottom,
-                intArrayOf(bodyTop, bodyMid, bodyBottom), floatArrayOf(0f, 0.55f, 1f),
-                Shader.TileMode.CLAMP
+                bodyTop, bodyBottom, Shader.TileMode.CLAMP
             )
-            // Rim: bright along the top, a soft hairline at the sides, lit again at the bottom.
+            // Rim: lit along the top, a soft hairline everywhere else.
             rimPaint.shader = LinearGradient(
                 0f, rect.top, 0f, rect.bottom,
-                intArrayOf(rimLight, rimDark, rimDark, withAlphaOf(rimLight, 0.55f)),
-                floatArrayOf(0f, 0.4f, 0.7f, 1f),
+                intArrayOf(rimLight, rimDark, rimDark),
+                floatArrayOf(0f, 0.45f, 1f),
                 Shader.TileMode.CLAMP
             )
-            // Where the light enters: a soft spot up and to the left, not a glow.
-            spec.shader = RadialGradient(
-                rect.left + rect.width() * 0.34f, rect.top + rect.height() * 0.28f, rect.height() * 0.42f,
-                intArrayOf(withAlphaOf(Color.WHITE, 0.55f), Color.TRANSPARENT), null, Shader.TileMode.CLAMP
-            )
-            shaderKey = rect.top + rect.width()
+            shaderKey = rect.top
         }
 
-        shadowPaint.alpha = mul
+        // Held, it turns into clear glass: the body thins out and the shadow lifts, so the
+        // track reads through the lens.
+        val bodyAlpha = (mul * (1f - 0.4f * hold)).roundToInt()
+        shadowPaint.alpha = (mul * (1f - 0.5f * hold)).roundToInt()
         canvas.drawRoundRect(rect, r, r, shadowPaint)
-        body.alpha = mul
+        body.alpha = bodyAlpha
         canvas.drawRoundRect(rect, r, r, body)
-        spec.alpha = mul
-        canvas.drawRoundRect(rect, r, r, spec)
         rimPaint.alpha = mul
         val ri = rimPaint.strokeWidth / 2f
         rect.inset(ri, ri)
@@ -310,8 +274,10 @@ class GlassSwitchThumbDrawable : Drawable() {
     override fun getOpacity() = PixelFormat.TRANSLUCENT
 
     companion object {
-        /** Thumb slot: travel = track width minus this; bead sits 3dp inside the track. */
+        /** Thumb slot: travel = track width minus this; the bead sits 2dp inside the track. */
         const val THUMB_W_DP = 32f
-        const val BEAD_DP = 26f
+        const val BEAD_DP = 28f
+        /** How much wider the bead gets while held. */
+        const val HOLD_GROW_DP = 8f
     }
 }

@@ -538,6 +538,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         tabChat = view.findViewById(R.id.tabChat)
         tabRoleplay = view.findViewById(R.id.tabRoleplay)
         modeTabIndicator = view.findViewById(R.id.modeTabIndicator)
+        // A rebuilt view starts the underline at x=0; the old target belongs to the old view.
+        indicatorPlaced = false
+        indicatorTargetX = Float.NaN
+        pager = null
+        pagerOrigin = null
+        pagerBusy = false
         attachmentPreviewContainer = view.findViewById(R.id.attachmentPreviewContainer)
         previewImageView = view.findViewById(R.id.previewImageView)
         centerWatermarkIcon = view.findViewById(R.id.centerWatermarkIcon)
@@ -885,6 +891,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         tabRoleplay.contentDescription = getString(R.string.mode_tab_roleplay_a11y)
         refreshModeTabs()
+        watchModeSwitches()
         val retab = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             modeTabIndicator.post { placeModeTabIndicator(animate = false) }
         }
@@ -1005,6 +1012,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
 
         viewModel.isAwaitingResponse.observe(viewLifecycleOwner) { isAwaiting ->
+            chatAdapter.replyInFlight = isAwaiting
             if (!isAwaiting && sharedPreferencesHelper.getConversationModeEnabled()) {
                 val messages = viewModel.chatMessages.value ?: return@observe
                 if (messages.isNotEmpty()) {
@@ -1634,6 +1642,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val code = root.findViewById<View>(R.id.codeModeContainer)
         val barTop = topBar.paddingTop
         val dockBottom = dock.paddingBottom
+        val sheet = root.findViewById<View>(R.id.headerContainer)
+        val sheetBottom = sheet.paddingBottom
         frame.clipToPadding = false
         ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
@@ -1651,6 +1661,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
             dock.setPadding(dock.paddingLeft, dock.paddingTop, dock.paddingRight, dockBottom + bottom)
+            sheet.setPadding(sheet.paddingLeft, sheet.paddingTop, sheet.paddingRight, sheetBottom + bottom)
             code.setPadding(0, 0, 0, bottom)
             WindowInsetsCompat.CONSUMED
         }
@@ -1711,7 +1722,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 bottom + (14 * d).toInt()
             )
             if (atBottom && grew > 0) chatRecyclerView.post { chatRecyclerView.scrollBy(0, grew) }
-            listOf(headerContainer, attachmentPreviewContainer, extBG, fontSizeControlsContainer).forEach { v ->
+            listOf(attachmentPreviewContainer, extBG, fontSizeControlsContainer).forEach { v ->
                 val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
                 val base = chromeBaseMargins.getOrPut(v) { lp.bottomMargin }
                 if (lp.bottomMargin != base + bottom) {
@@ -3170,7 +3181,7 @@ $cleanContent
                 currentSpeakingPosition = position
                 chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
                 // flashissue: Update icon directly if holder is attached, else notify
-                updateIconDirectlyOrNotify(position, R.drawable.ic_stop_circle)
+                updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
                 val safeText = text.take(3900)
                 if (safeText.length < text.length) {
                     AppToast.makeText(requireContext(), getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
@@ -3181,7 +3192,7 @@ $cleanContent
             isSpeaking = true
             currentSpeakingPosition = position
             chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
-            updateIconDirectlyOrNotify(position, R.drawable.ic_stop_circle)
+            updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
             val safeText = text.take(3900)
             if (safeText.length < text.length) {
                 AppToast.makeText(requireContext(), getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
@@ -3293,7 +3304,7 @@ $cleanContent
         chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
         if (pos != -1) {
             // flashissue: Update icon directly if holder is attached, else notify
-            updateIconDirectlyOrNotify(pos, R.drawable.ic_volume_up)
+            updateIconDirectlyOrNotify(pos, R.drawable.ic_msg_speak)
         }
     }
     override fun handleKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -3465,30 +3476,24 @@ $cleanContent
         headerContainer.animate().cancel()
         headerContainer.apply {
             visibility = View.VISIBLE
+            alpha = 1f; scaleX = 1f; scaleY = 1f
             if (anim) {
-                // Control Center: rises from the composer with a spring, rows settle in behind it.
-                pivotX = width.takeIf { it > 0 }?.div(2f) ?: (resources.displayMetrics.widthPixels / 2f)
-                pivotY = height.takeIf { it > 0 }?.toFloat() ?: (300f * d)
-                alpha = 0f
-                scaleX = 0.94f
-                scaleY = 0.94f
-                translationY = 28f * d
-                animate().alpha(1f).setDuration(160).setInterpolator(Motion.iosOut).start()
-                animate().scaleX(1f).scaleY(1f).translationY(0f)
-                    .setDuration(520).setInterpolator(Motion.spring).start()
+                // A sheet: slides up from the bottom edge (no overshoot, or a gap would open
+                // under it), rows settle in behind it.
+                translationY = height.takeIf { it > 0 }?.toFloat() ?: (420f * d)
+                animate().translationY(0f).setDuration(380).setInterpolator(Motion.iosPush).start()
                 staggerPanelRows(d)
             } else {
-                alpha = 1f; scaleX = 1f; scaleY = 1f; translationY = 0f
+                translationY = 0f
             }
         }
-        (chatFrameView as ViewGroup).bringChildToFront(headerContainer)
+        // The dim now sits over the whole screen, top bar included.
         dimOverlay?.apply {
             animate().cancel()
             alpha = 0f
             visibility = View.VISIBLE
             animate().alpha(0.6f).setDuration(260).setInterpolator(Motion.iosOut).start()
         }
-        animateTopBarDim(0.6f, 260)
         // Fade empty-state (mark + prompt) while menu is open
         if (emptyStateContainer.isVisible) {
             emptyStateContainer.visibility = View.GONE
@@ -3714,9 +3719,10 @@ $cleanContent
             dimOverlay?.visibility = View.GONE
         }?.start()
         if (headerContainer.visibility == View.VISIBLE) animateTopBarDim(0f, menuMs)
-        headerContainer.animate().alpha(0f).scaleX(0.97f).scaleY(0.97f)
-            .translationY(maxOf(headerContainer.translationY, 14f * d))
-            .setDuration(menuMs - 20).setInterpolator(Motion.iosIn).withEndAction {
+        // Back down past the bottom edge, the way it came.
+        headerContainer.animate()
+            .translationY(maxOf(headerContainer.translationY, headerContainer.height.toFloat().coerceAtLeast(14f * d)))
+            .setDuration(menuMs + 40).setInterpolator(Motion.iosIn).withEndAction {
                 headerContainer.visibility = View.GONE
                 headerContainer.scaleX = 1f
                 headerContainer.scaleY = 1f
@@ -3943,6 +3949,40 @@ $cleanContent
             topReasoningButton.strokeWidth = 0
         }
     }
+    // Held here: SharedPreferences keeps its change listeners only weakly.
+    private var roleplaySwitchWatcher: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var codeSwitchWatcher: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+
+    /**
+     * Settings can sit on top of the chat without hiding it (opened from the history panel), so
+     * neither onResume nor onHiddenChanged runs when a mode switch flips. Follow the prefs.
+     */
+    private fun watchModeSwitches() {
+        val prefs = sharedPreferencesHelper.mainPrefs
+        val rp = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == SharedPreferencesHelper.KEY_ROLEPLAY_ENABLED) onModeSwitchChanged()
+        }
+        prefs.registerOnSharedPreferenceChangeListener(rp)
+        roleplaySwitchWatcher = rp
+        val store = io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store
+        val code = store.addEnabledListener { onModeSwitchChanged() }
+        codeSwitchWatcher = code
+        viewLifecycleOwner.lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+                prefs.unregisterOnSharedPreferenceChangeListener(rp)
+                store.removeEnabledListener(code)
+                if (roleplaySwitchWatcher === rp) roleplaySwitchWatcher = null
+                if (codeSwitchWatcher === code) codeSwitchWatcher = null
+            }
+        })
+    }
+
+    private fun onModeSwitchChanged() {
+        if (view == null) return
+        refreshModeTabs()
+        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.refreshModeRows()
+    }
+
     /** Roleplay and Code tabs follow Settings > Modes; leaving a disabled Roleplay lands on Chat. */
     private fun refreshModeTabs() {
         if (!::tabRoleplay.isInitialized) return
@@ -4007,7 +4047,16 @@ $cleanContent
     private fun cancelDrawerAnimation() {
         historyDrawerContainer?.animate()?.cancel()
         historyDrawerScrim?.animate()?.cancel()
+        view?.findViewById<View>(R.id.rootLayout)?.animate()?.cancel()
     }
+
+    /**
+     * Where the chat sits while the history panel's left edge is at [panelX] (-w closed, 0 open):
+     * pinned to the panel's right edge, like the next page of a pager. A slower parallax slide
+     * left both screens' look-alike chrome (round top buttons, bottom capsules) visible at once,
+     * reading as a doubled UI.
+     */
+    private fun historyChatOffset(panelX: Float, w: Float): Float = w + panelX
 
     /**
      * Wide, deliberate swipes across the whole chat, read as pages
@@ -4046,14 +4095,25 @@ $cleanContent
     }
 
     /** The page layers that slide; the top bar and its tabs stay put. */
-    private fun modePages(): List<View> {
+    private fun modePages(): List<View> = allModePages().filter { it.isVisible }
+
+    private fun allModePages(): List<View> {
         val root = view ?: return emptyList()
         return listOfNotNull(
             root.findViewById(R.id.chatFrameView),
             root.findViewById(R.id.composerDock),
             root.findViewById(R.id.composerFade),
             root.findViewById(R.id.codeModeContainer)
-        ).filter { it.isVisible }
+        )
+    }
+
+    /**
+     * Park every page layer back at rest. Cancels their animators first: a cancelled slide's
+     * page animators end on the same frame as the snapshot's, and one landing after this reset
+     * would leave the chat (composer included) parked a page off screen.
+     */
+    private fun restModePages() {
+        allModePages().forEach { it.animate().cancel(); it.translationX = 0f; it.alpha = 1f }
     }
 
     /** Switch now, no animation. False when blocked (a reply is still streaming). */
@@ -4140,7 +4200,7 @@ $cleanContent
         val lineTo = indicatorXFor(if (commit) p.target else p.origin)
         val done = {
             if (!commit) switchToTab(p.origin)
-            modePages().forEach { it.translationX = 0f; it.alpha = 1f }
+            restModePages()
             // Give an async mode reload a beat to draw before the snapshot goes.
             p.shot.postDelayed({
                 (p.shot.parent as? ViewGroup)?.removeView(p.shot)
@@ -4166,7 +4226,7 @@ $cleanContent
         val p = pager ?: return
         pager = null
         switchToTab(p.origin)
-        modePages().forEach { it.translationX = 0f; it.alpha = 1f }
+        restModePages()
         p.shot.postDelayed({
             (p.shot.parent as? ViewGroup)?.removeView(p.shot)
             p.shot.setImageDrawable(null)
@@ -4204,12 +4264,26 @@ $cleanContent
             val top = vLoc[1] - rootLoc[1]
             return x >= left && x <= left + v.width && y >= top && y <= top + v.height
         }
+        /**
+         * Top of the bottom bar band (Chat/RP composer and its extras, or Code's composer), in
+         * root coordinates. Everything from there down belongs to the bar: its pills and chips
+         * scroll sideways, so a page swipe must never start on it.
+         */
+        fun bottomBarTop(): Float? {
+            val bars = listOfNotNull(
+                dock, rpComposerExtras, attachmentPreviewContainer,
+                root.findViewById<View>(R.id.codeHomeComposer)
+            ).filter { it.isShown && it.height > 0 }
+            if (bars.isEmpty()) return null
+            root.getLocationInWindow(rootLoc)
+            return bars.minOf { v -> v.getLocationInWindow(vLoc); (vLoc[1] - rootLoc[1]).toFloat() } - 6f * d
+        }
         (root as? SwipeNavLayout)?.listener = object : SwipeNavLayout.Listener {
             override fun canStart(x: Float, y: Float): Boolean =
                 historyDrawerContainer?.visibility != View.VISIBLE &&
                     pickerPopover?.isShowing != true &&
                     !headerContainer.isVisible &&
-                    !inside(topBar, x, y) && !inside(dock, x, y) &&
+                    !inside(topBar, x, y) && y < (bottomBarTop() ?: Float.MAX_VALUE) &&
                     parentFragmentManager.backStackEntryCount == 0
 
             var historyDrag = false
@@ -4287,7 +4361,7 @@ $cleanContent
                 val w = drawer.width.coerceAtLeast(1).toFloat()
                 val t = dx.coerceAtMost(0f)
                 drawer.translationX = t
-                content.translationX = w * 0.25f * (1f + t / w)
+                content.translationX = historyChatOffset(t, w)
                 historyDrawerScrim?.alpha = 0.35f * (1f + t / w)
             }
 
@@ -4298,7 +4372,7 @@ $cleanContent
             override fun onCancel() {
                 val w = drawer.width.coerceAtLeast(1).toFloat()
                 drawer.animate().translationX(0f).setDuration(380).setInterpolator(Motion.spring).start()
-                content.animate().translationX(w * 0.25f).setDuration(380).setInterpolator(Motion.spring).start()
+                content.animate().translationX(historyChatOffset(0f, w)).setDuration(380).setInterpolator(Motion.spring).start()
                 historyDrawerScrim?.animate()?.alpha(0.35f)?.setDuration(200)?.start()
             }
         }
@@ -4483,7 +4557,7 @@ $cleanContent
         val x = dx.coerceIn(0f, w)
         panel.translationX = x - w
         historyDrawerScrim?.alpha = 0.35f * (x / w)
-        view?.findViewById<View>(R.id.rootLayout)?.translationX = x * 0.25f
+        view?.findViewById<View>(R.id.rootLayout)?.translationX = historyChatOffset(x - w, w)
     }
 
     private fun settleHistoryDrag() {
@@ -4494,7 +4568,7 @@ $cleanContent
         panel.animate().translationX(0f).setDuration(ms).setInterpolator(Motion.iosOut)
             .withEndAction { panel.setLayerType(View.LAYER_TYPE_NONE, null) }.start()
         view?.findViewById<View>(R.id.rootLayout)?.animate()
-            ?.translationX(w * 0.25f)?.setDuration(ms)?.setInterpolator(Motion.iosOut)?.start()
+            ?.translationX(historyChatOffset(0f, w))?.setDuration(ms)?.setInterpolator(Motion.iosOut)?.start()
     }
 
     private fun cancelHistoryDrag(animate: Boolean) {
@@ -4551,8 +4625,10 @@ $cleanContent
             val w = panel.width.coerceAtLeast(1)
             panel.translationX = -w.toFloat()
             panel.visibility = View.VISIBLE
+            val chat = view?.findViewById<View>(R.id.rootLayout)
             if (!anim) {
                 panel.translationX = 0f
+                chat?.translationX = historyChatOffset(0f, w.toFloat())
                 return@post
             }
             panel.setLayerType(View.LAYER_TYPE_HARDWARE, null)
@@ -4565,9 +4641,9 @@ $cleanContent
                 .setInterpolator(Motion.iosPush)
                 .withEndAction { panel.setLayerType(View.LAYER_TYPE_NONE, null) }
                 .start()
-            // Parallax: the chat drifts a little the same way, like an iOS push.
-            view?.findViewById<View>(R.id.rootLayout)?.animate()
-                ?.translationX(w * 0.25f)?.setDuration(drawerMs)?.setInterpolator(Motion.iosPush)?.start()
+            // The chat is the next page: it leaves pinned to the panel's edge.
+            chat?.animate()
+                ?.translationX(historyChatOffset(0f, w.toFloat()))?.setDuration(drawerMs)?.setInterpolator(Motion.iosPush)?.start()
         }
     }
 
@@ -5594,6 +5670,11 @@ $cleanContent
         onOpenChange: (Boolean) -> Unit = { open -> modelNameTextView.isSelected = open }
     ): PickerPopover? {
         val root = view as? FrameLayout ?: return null
+        // Second tap on the control that opened it folds the card.
+        if (pickerPopover?.isOpenOn(anchor) == true) {
+            pickerPopover?.dismiss()
+            return null
+        }
         pickerPopover?.dismiss(animated = false)
         return PickerPopover(root, anchor, root.findViewById(R.id.chatBackdrop), chatInputContainer).also { p ->
             pickerPopover = p
@@ -5990,7 +6071,7 @@ $cleanContent
         }
         val x = indicatorXFor(tab) ?: return
         // A layout pass mid-spring toward the same spot must not cut the animation short.
-        if (!animate && kotlin.math.abs(x - indicatorTargetX) < 0.5f) return
+        if (!animate && indicatorPlaced && kotlin.math.abs(x - indicatorTargetX) < 0.5f) return
         indicatorTargetX = x
         modeTabIndicator.animate().cancel()
         if (animate && indicatorPlaced && Motion.areAnimationsEnabled(requireContext())) {

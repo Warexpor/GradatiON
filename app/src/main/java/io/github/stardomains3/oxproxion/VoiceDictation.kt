@@ -18,8 +18,8 @@ import com.google.android.material.button.MaterialButton
 
 /**
  * Puts [VoiceInput] into a composer: tap the mic, talk, tap again, and the words land in [input]
- * at the cursor. Nothing is ever sent. While listening the mic turns into a "done" check whose
- * glass swells with your voice, [swapOut] (the model pill, say) gives way to a [VoiceWaveView],
+ * at the cursor. Nothing is ever sent. While listening the mic turns into a steady "done"
+ * check, [swapOut] (the model pill, say) gives way to a [VoiceWaveView] that follows the voice,
  * and words still being recognized show in a dimmer gray until they settle.
  *
  * Must be created in onViewCreated or earlier (it registers the mic permission request).
@@ -50,7 +50,6 @@ class VoiceDictation(
     private var settled = StringBuilder()
     private var pending = ""
     private var capitalize = false
-    private var level = 0f
     /** Last state we were told about; the UI follows this, not the engine's internals. */
     private var state = VoiceInput.State.IDLE
 
@@ -148,13 +147,9 @@ class VoiceDictation(
     }
 
     override fun onLevel(level: Float) {
+        // Only the wave follows the voice. The check stays still: it is the button that ends
+        // dictation, and a target that swells under the finger is harder to hit.
         wave.setLevel(level)
-        this.level += (level - this.level) * 0.5f
-        if (!animate || state != VoiceInput.State.LISTENING) return
-        // The glass disc breathes with the voice; kept small so the row never jumps.
-        val s = 1f + 0.14f * this.level
-        micButton.scaleX = s
-        micButton.scaleY = s
     }
 
     override fun onError(message: String) {
@@ -242,7 +237,6 @@ class VoiceDictation(
     }
 
     private fun settleMic() {
-        level = 0f
         if (!animate) {
             micButton.scaleX = 1f
             micButton.scaleY = 1f

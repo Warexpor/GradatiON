@@ -204,6 +204,7 @@ class CodeComposer(
         // Home (agent/folder visible) uses a short label so the row fits; session keeps the full name.
         val short = agentPill.isVisible || folderPill.isVisible || modelPill.isVisible
         permissionPill.text = context.getString(if (short) permissionPillLabel(mode) else permissionLabel(mode))
+        permissionPill.setCompoundDrawablesRelativeWithIntrinsicBounds(permissionIcon(mode), 0, R.drawable.ic_expand_more, 0)
     }
 
     /** Opens the anchored glass popover above [anchor] (Grok's model-pill popover). */
@@ -215,6 +216,12 @@ class CodeComposer(
         hint: CharSequence? = null,
     ) {
         dismissSlashPopover()
+        // The glass composer sits above the scrim, so a second tap on the same pill lands on
+        // the pill: fold the card instead of rebuilding it.
+        if (popover?.isOpenOn(anchor) == true) {
+            popover?.dismiss()
+            return
+        }
         popover?.dismiss(animated = false)
         hideKeyboard()
         anchor.isSelected = true
@@ -300,6 +307,7 @@ class CodeComposer(
             PickerPopover.Row(
                 title = context.getString(permissionLabel(m)),
                 subtitle = context.getString(permissionSub(m)),
+                iconRes = permissionIcon(m),
                 selected = m == current,
                 onClick = { onPick(m) }
             )
@@ -375,6 +383,14 @@ class CodeComposer(
             PermissionMode.AUTO_EDIT -> R.string.code_perm_auto_edit_pill
             PermissionMode.PLAN -> R.string.code_perm_plan_pill
             PermissionMode.FULL_AUTO -> R.string.code_perm_full_pill
+        }
+
+        /** One glyph per mode, from most to least hands-on: ask, edit alone, plan, run alone. */
+        fun permissionIcon(m: PermissionMode) = when (m) {
+            PermissionMode.ASK -> R.drawable.ic_code_perm_ask
+            PermissionMode.AUTO_EDIT -> R.drawable.ic_code_perm_edit
+            PermissionMode.PLAN -> R.drawable.ic_code_perm_plan
+            PermissionMode.FULL_AUTO -> R.drawable.ic_code_perm_auto
         }
 
         fun permissionSub(m: PermissionMode) = when (m) {

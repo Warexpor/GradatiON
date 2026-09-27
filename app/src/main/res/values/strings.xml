@@ -522,6 +522,7 @@
     </plurals>
     <string name="action_copy">Copy</string>
     <string name="toast_code_copied">Code copied</string>
+    <string name="code_copied_chip">Copied</string>
     <string name="presets_empty">No presets yet.\nTap Add to save a model, prompt and settings combo.</string>
     <string name="prompts_empty">No prompts yet.\nTap Add to save one you reuse.</string>
     <string name="mode_tab_chat">Chat</string>

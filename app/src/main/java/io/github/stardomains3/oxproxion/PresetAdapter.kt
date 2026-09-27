@@ -115,20 +115,6 @@ class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val on
         popupWindow.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
         popupWindow.isOutsideTouchable = true
         val context = anchorView.context
-        val rootView = (context as android.app.Activity).window.decorView.findViewById<ViewGroup>(android.R.id.content)
-        val dimView = View(context).apply {
-            setBackgroundColor(ContextCompat.getColor(context, R.color.popover_scrim))
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-
-        rootView.addView(dimView)
-
-        popupWindow.setOnDismissListener {
-            rootView.removeView(dimView)
-        }
         val editItem = menuView.findViewById<TextView>(R.id.menu_edit)
         val deleteItem = menuView.findViewById<TextView>(R.id.menu_delete)
 
@@ -168,5 +154,6 @@ class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val on
         } else {
             popupWindow.showAsDropDown(anchorView)
         }
+        BackdropBlur.behind(popupWindow)
     }
 }

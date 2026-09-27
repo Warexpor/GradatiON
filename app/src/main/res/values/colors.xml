@@ -116,7 +116,6 @@
     <color name="switch_track_rim">#0F000000</color>
     <color name="switch_track_rim_top">#2E000000</color>
     <color name="switch_bead_top">#F7FFFFFF</color>
-    <color name="switch_bead_mid">#F2F8F8F8</color>
     <color name="switch_bead_bottom">#F2FEFEFE</color>
     <color name="switch_bead_rim_light">#FFFFFFFF</color>
     <color name="switch_bead_rim_dark">#1F000000</color>

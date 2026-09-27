@@ -143,9 +143,11 @@ object BackgroundPhoto {
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         Canvas(out).drawBitmap(src, crop, Rect(0, 0, w, h), paint)
         if (!opts.blur) return out
-        // Blur at quarter size (it is drawn scaled up anyway): three box passes ≈ a gaussian.
-        val small = Bitmap.createScaledBitmap(out, max(1, w / 4), max(1, h / 4), true)
-        boxBlur(small, radius = max(2, small.width / 28), passes = 3)
+        // Blur at a third of the size (it is drawn scaled up anyway): three box passes ≈ a
+        // gaussian of ~1.5% of the width, a frost the photo still reads through. The old
+        // quarter-size, width/28 pass (~3.5%) smeared it into a wash.
+        val small = Bitmap.createScaledBitmap(out, max(1, w / 3), max(1, h / 3), true)
+        boxBlur(small, radius = max(1, small.width / 72), passes = 3)
         return small
     }
 

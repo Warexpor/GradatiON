@@ -233,15 +233,6 @@ class PromptLibraryFragment : Fragment() {
         popupWindow.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
         popupWindow.isOutsideTouchable = true
 
-        // Dim overlay (same as system)
-        val rootView = requireActivity().window.decorView.findViewById<ViewGroup>(android.R.id.content)
-        val dimView = View(requireContext()).apply {
-            setBackgroundColor(ContextCompat.getColor(requireContext(), R.color.popover_scrim))
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        }
-        rootView.addView(dimView)
-        popupWindow.setOnDismissListener { rootView.removeView(dimView) }
-
         val editItem = menuView.findViewById<TextView>(R.id.menu_edit)
         val deleteItem = menuView.findViewById<TextView>(R.id.menu_delete)
 
@@ -273,6 +264,7 @@ class PromptLibraryFragment : Fragment() {
         } else {
             popupWindow.showAsDropDown(anchorView)
         }
+        BackdropBlur.behind(popupWindow)
     }
 
     private fun navigateToEditScreen(prompt: Prompt) {

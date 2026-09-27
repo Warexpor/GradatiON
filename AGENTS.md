@@ -13,7 +13,7 @@ upstream's and stays as it is.
 | Area | Files |
 |---|---|
 | Shell | `MainActivity` (touch lock during transitions), `ChatFragment` (top bar, composer, mode pager, RP chrome), `ChatViewModel` (sending, streaming, saving, forks, RP flow) |
-| Glass | `Glass.kt` (`GlassQuality` tiers, backdrop and lens), `GlassSurfaces.kt` (`GlassDrawable`, dialog chrome), `GlassSwitch`, `GlassNotice`, `GlassSegmentedGroup`, `PickerPopover` |
+| Glass | `Glass.kt` (`GlassQuality` tiers, backdrop and lens), `GlassSurfaces.kt` (`GlassDrawable`, dialog chrome), `GlassSwitch`, `GlassNotice`, `GlassSegmentedGroup`, `PickerPopover`, `BackdropBlur` (frost behind open menus) |
 | Motion | `Motion.kt` (curves, stack animations), `StreamRevealAnimator` (paced streaming) |
 | Backgrounds | `AmbientBackgroundView`, `BackgroundPhoto` |
 | Voice | `VoiceInput` (engine choice, device recognizer, cloud and local fallback), `VoiceDictation` (composer wiring, mic states), `VoiceWaveView` |

@@ -129,6 +129,8 @@ class ChatAdapter(
     private val noCopyFactory = NoCopySpannableFactory.getInstance()
     var isSpeaking = false
     var currentSpeakingPosition = -1
+    /** A reply is being generated: the last assistant row keeps its action icons hidden. */
+    var replyInFlight = false
     private var currentTypeface: Typeface = Typeface.DEFAULT
 
     // OPTIMIZATION: Conflated Channel for throttling updates
@@ -717,7 +719,7 @@ class ChatAdapter(
 
                     collapseToggleButton.visibility = View.VISIBLE
                     collapseToggleButton.setImageResource(
-                        if (isCollapsed) R.drawable.ic_expand_more else R.drawable.ic_expand_less2
+                        if (isCollapsed) R.drawable.ic_msg_expand else R.drawable.ic_msg_collapse
                     )
                     collapseToggleButton.setOnClickListener {
                         collapsedStates[msgKey] = !isCollapsed
@@ -972,14 +974,14 @@ class ChatAdapter(
             reasoningTextView.text = reasoning
             reasoningTextView.visibility = if (collapsed) View.GONE else View.VISIBLE
             reasoningChevron.setImageResource(
-                if (collapsed) R.drawable.ic_expand_more else R.drawable.ic_expand_less2
+                if (collapsed) R.drawable.ic_msg_expand else R.drawable.ic_msg_collapse
             )
             reasoningHeader.setOnClickListener {
                 val next = !collapsedStates.getOrDefault(key, defaultCollapsed)
                 collapsedStates[key] = next
                 animateDisclosure(reasoningTextView, expand = !next)
                 reasoningChevron.setImageResource(
-                    if (next) R.drawable.ic_expand_more else R.drawable.ic_expand_less2
+                    if (next) R.drawable.ic_msg_expand else R.drawable.ic_msg_collapse
                 )
                 onCollapse()
             }
@@ -1045,6 +1047,7 @@ class ChatAdapter(
 
         fun bindTextOnly(message: FlexibleMessage) {
             attachStreamRevealHolder(this)
+            itemView.findViewById<View>(R.id.aiActionRow).visibility = View.GONE
             val text = getMessageText(message.content)
 
             if (ThinkingPlaceholder.matches(text) || text.isBlank()) {
@@ -1104,7 +1107,7 @@ class ChatAdapter(
 
                 collapseToggleButton.visibility = View.VISIBLE
                 collapseToggleButton.setImageResource(
-                    if (isCollapsed) R.drawable.ic_expand_more else R.drawable.ic_expand_less2
+                    if (isCollapsed) R.drawable.ic_msg_expand else R.drawable.ic_msg_collapse
                 )
 
                 collapseToggleButton.setOnClickListener {
@@ -1113,7 +1116,7 @@ class ChatAdapter(
 
                     applyCollapseState(newState)
                     collapseToggleButton.setImageResource(
-                        if (newState) R.drawable.ic_expand_more else R.drawable.ic_expand_less2
+                        if (newState) R.drawable.ic_msg_expand else R.drawable.ic_msg_collapse
                     )
                     onCollapse()
                 }
@@ -1132,8 +1135,22 @@ class ChatAdapter(
 
             val isError = message.role == "assistant" && isRpErrorText(text)
 
-            itemView.findViewById<View>(R.id.aiActionRow).visibility =
-                if (isThinking) View.GONE else View.VISIBLE
+            // Copy, share, regenerate and the rest only make sense on a finished reply: the
+            // row stays away while this one is still streaming and fades in once it lands.
+            val actionRow = itemView.findViewById<View>(R.id.aiActionRow)
+            val streamingHere = replyInFlight && position == messages.lastIndex
+            val showActions = !isThinking && !streamingHere
+            actionRow.animate().cancel()
+            if (showActions && actionRow.visibility != View.VISIBLE && itemView.isAttachedToWindow &&
+                Motion.areAnimationsEnabled(itemView.context)
+            ) {
+                actionRow.alpha = 0f
+                actionRow.visibility = View.VISIBLE
+                actionRow.animate().alpha(1f).setDuration(220).setInterpolator(Motion.easeOut).start()
+            } else {
+                actionRow.alpha = 1f
+                actionRow.visibility = if (showActions) View.VISIBLE else View.GONE
+            }
 
             bindThinkingState(isThinking)
             bindRpSpeakerHeader(isThinking)
@@ -1292,9 +1309,9 @@ class ChatAdapter(
             }
 
             val iconRes = if (isSpeaking && position == currentPosition) {
-                R.drawable.ic_stop_circle
+                R.drawable.ic_msg_stop
             } else {
-                R.drawable.ic_volume_up
+                R.drawable.ic_msg_speak
             }
             ttsButton.setImageResource(iconRes)
 

@@ -41,7 +41,7 @@
                 android:paddingTop="4dp"
                 android:paddingBottom="4dp">
 
-                <com.google.android.material.materialswitch.MaterialSwitch
+                <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/rpLoreEnabledSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -57,7 +57,7 @@
                     android:layout_height="1dp"
                     android:background="@color/xai_hairline" />
 
-                <com.google.android.material.materialswitch.MaterialSwitch
+                <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/rpThirdPersonSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -73,7 +73,7 @@
                     android:layout_height="1dp"
                     android:background="@color/xai_hairline" />
 
-                <com.google.android.material.materialswitch.MaterialSwitch
+                <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/rpShowThoughtsSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -91,7 +91,7 @@
 
                 <!-- The model folds long stories into each character's Memory as old turns age out -->
                 <!-- The sentence is the control: two lines clip it to "left al…", which hides that Memory stays put. -->
-                <com.google.android.material.materialswitch.MaterialSwitch
+                <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/rpAutoMemorySwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -105,7 +105,7 @@
                     android:layout_height="1dp"
                     android:background="@color/xai_hairline" />
 
-                <com.google.android.material.materialswitch.MaterialSwitch
+                <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/rpLlmModeSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

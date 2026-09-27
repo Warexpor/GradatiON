@@ -69,7 +69,8 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <!-- Grok-style: edit + copy primary (right), then local extras; hidden until tap -->
+        <!-- Edit + copy primary (right), then local extras; hidden until tap. Bare icons, no
+             capsule, the same row the reply has under it. -->
         <LinearLayout
             android:id="@+id/buttonContainer"
             android:layout_width="wrap_content"
@@ -77,56 +78,51 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:visibility="gone"
-            android:background="@drawable/bg_chat_actions"
-            android:paddingStart="0dp"
-            android:paddingEnd="0dp"
-            android:paddingTop="1dp"
-            android:paddingBottom="1dp"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="2dp"
             android:layout_marginBottom="2dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/messageContainer">
 
             <ImageButton
                 android:id="@+id/editButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_edit_message"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_edit"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_edit"
                 android:visibility="visible"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/copyButtonuser"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_copy_text"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_copi"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_copy"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/deleteButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_delete_message"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_trash"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_delete"
                 android:visibility="visible"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/collapseToggleButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_toggle_expand"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_expand_more"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_expand"
                 android:visibility="gone"
                 app:tint="@color/xai_mute" />
 
@@ -137,7 +133,7 @@
                 android:layout_height="0dp"
                 android:visibility="gone"
                 android:contentDescription="@string/rp_regenerate"
-                android:src="@drawable/ic_redo" />
+                android:src="@drawable/ic_msg_regenerate" />
 
         </LinearLayout>
 

@@ -20,60 +20,62 @@
         app:layout_constraintWidth_percent="1.0"
         app:layout_constraintHorizontal_bias="0.0">
 
-        <!-- Collapsible reasoning / thinking block (Grok-style) -->
+        <!-- Collapsible reasoning: a quiet "Thinking" line, no chip; opened thoughts hang off a
+             hairline rule so they read apart from the answer. -->
         <LinearLayout
             android:id="@+id/reasoningBlock"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:visibility="gone"
-            android:layout_marginBottom="8dp"
+            android:layout_marginBottom="6dp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
             <LinearLayout
                 android:id="@+id/reasoningHeader"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:minHeight="36dp"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_reasoning_header"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="8dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:foreground="?attr/selectableItemBackground">
-
-                <ImageView
-                    android:id="@+id/reasoningChevron"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/ic_expand_more"
-                    app:tint="@color/xai_mute"
-                    android:contentDescription="@string/toggle_reasoning" />
+                android:background="@drawable/bg_press_svg">
 
                 <TextView
                     android:id="@+id/reasoningTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
                     android:text="@string/thinking_label"
                     android:textColor="@color/xai_mute"
-                    android:textSize="13sp"
-                    android:textFontWeight="600" />
+                    android:textSize="14sp"
+                    android:textFontWeight="500" />
+
+                <ImageView
+                    android:id="@+id/reasoningChevron"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginStart="4dp"
+                    android:src="@drawable/ic_msg_expand"
+                    app:tint="@color/xai_mute"
+                    android:contentDescription="@string/toggle_reasoning" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/reasoningTextView"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="4dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginTop="2dp"
+                android:background="@drawable/bg_reasoning_rule"
+                android:paddingStart="14dp"
+                android:paddingEnd="4dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
                 android:textColor="@color/xai_mute"
                 android:textSize="13sp"
                 android:lineSpacingMultiplier="1.55"
@@ -253,129 +255,129 @@
 
             <ImageButton
                 android:id="@+id/copyButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_copy_text"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_copi"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_copy"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/shareButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_share_text"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_share"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_share"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/ttsButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_speak_text"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_volume_up"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_speak"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/instructButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/rp_instruct"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_editnote"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_instruct"
                 android:visibility="gone"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/regenerateButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/rp_regenerate"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_redo"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_regenerate"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/editButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_edit_message"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_edit"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_edit"
                 android:visibility="visible"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/aipdfButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_make_pdf"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_pdfnew"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_pdf"
                 android:visibility="gone"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/markdownButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_make_md"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_markdown"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_markdown"
                 android:visibility="gone"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/pngButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_make_png"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_png"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_image"
                 android:visibility="gone"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/htmlButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_view_html"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_html"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_html"
                 android:visibility="gone"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/saveFileButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_save_file"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_filesave"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_save"
                 android:visibility="gone"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/collapseToggleButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_toggle_expand"
-                android:padding="8.5dp"
-                android:src="@drawable/ic_expand_more"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_expand"
                 android:visibility="visible"
                 app:tint="@color/xai_mute" />
             </LinearLayout>
@@ -397,12 +399,12 @@
 
                 <ImageButton
                     android:id="@+id/forkPrev"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
                     android:background="@drawable/bg_action_press"
                     android:contentDescription="@string/fork_prev"
-                    android:padding="6dp"
-                    android:src="@drawable/ic_chevron_left"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_msg_chevron_left"
                     app:tint="@color/xai_mute" />
 
                 <TextView
@@ -417,12 +419,12 @@
 
                 <ImageButton
                     android:id="@+id/forkNext"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
                     android:background="@drawable/bg_action_press"
                     android:contentDescription="@string/fork_next"
-                    android:padding="6dp"
-                    android:src="@drawable/ic_chevron_right"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_msg_chevron_right"
                     app:tint="@color/xai_mute" />
             </LinearLayout>
         </LinearLayout>

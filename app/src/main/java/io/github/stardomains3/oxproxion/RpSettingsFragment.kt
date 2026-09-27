@@ -10,7 +10,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.materialswitch.MaterialSwitch
+import androidx.appcompat.widget.SwitchCompat
 import kotlinx.coroutines.launch
 
 class RpSettingsFragment : Fragment() {
@@ -28,20 +28,20 @@ class RpSettingsFragment : Fragment() {
         view.findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener {
             parentFragmentManager.popBackStack()
         }
-        view.findViewById<MaterialSwitch>(R.id.rpLoreEnabledSwitch).apply {
+        view.findViewById<SwitchCompat>(R.id.rpLoreEnabledSwitch).apply {
             isChecked = prefs.isRpLoreEnabled()
             setOnCheckedChangeListener { _, checked -> prefs.saveRpLoreEnabled(checked) }
         }
-        val thirdPersonSwitch = view.findViewById<MaterialSwitch>(R.id.rpThirdPersonSwitch)
+        val thirdPersonSwitch = view.findViewById<SwitchCompat>(R.id.rpThirdPersonSwitch)
         thirdPersonSwitch.isChecked = prefs.isRpThirdPerson()
         thirdPersonSwitch.setOnCheckedChangeListener { _, checked -> prefs.saveRpThirdPerson(checked) }
 
-        view.findViewById<MaterialSwitch>(R.id.rpAutoMemorySwitch).apply {
+        view.findViewById<SwitchCompat>(R.id.rpAutoMemorySwitch).apply {
             isChecked = prefs.isRpAutoMemory()
             setOnCheckedChangeListener { _, checked -> prefs.saveRpAutoMemory(checked) }
         }
 
-        val showThoughtsSwitch = view.findViewById<MaterialSwitch>(R.id.rpShowThoughtsSwitch)
+        val showThoughtsSwitch = view.findViewById<SwitchCompat>(R.id.rpShowThoughtsSwitch)
         showThoughtsSwitch.isChecked = prefs.isRpShowThoughts()
         showThoughtsSwitch.setOnCheckedChangeListener { _, checked -> prefs.saveRpShowThoughts(checked) }
 
@@ -54,7 +54,7 @@ class RpSettingsFragment : Fragment() {
         }
         syncLlmGatedSwitches(prefs.isRpLlmMode())
 
-        val llmSwitch = view.findViewById<MaterialSwitch>(R.id.rpLlmModeSwitch)
+        val llmSwitch = view.findViewById<SwitchCompat>(R.id.rpLlmModeSwitch)
         llmSwitch.isChecked = prefs.isRpLlmMode()
         llmSwitch.setOnCheckedChangeListener { button, checked ->
             if (!button.isPressed) {

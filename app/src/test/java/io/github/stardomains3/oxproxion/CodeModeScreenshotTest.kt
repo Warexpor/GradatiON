@@ -208,6 +208,27 @@ class CodeModeScreenshotTest {
         snap(root(a), "code_harness_picker_dark")
     }
 
+    @Test fun codeApprovalsPickerDark() = withCode { a, _ ->
+        a.findViewById<View>(R.id.codeComposerPermission).performClick()
+        idle(3)
+        val rows = a.findViewById<android.view.ViewGroup>(R.id.popoverRows)
+        assertEquals(PermissionMode.entries.size, rows.childCount)
+        for (i in 0 until rows.childCount) {
+            val icon = rows.getChildAt(i).findViewById<android.widget.ImageView>(R.id.popoverRowIcon)
+            assertTrue("approval row $i needs its icon", icon.isShown && icon.drawable != null)
+        }
+        snap(root(a), "code_approvals_picker_dark")
+    }
+
+    /** The composer sits above the popover's scrim: a second tap on the pill must fold the card. */
+    @Test fun codePillSecondTapFolds() = withCode { a, _ ->
+        val pill = a.findViewById<View>(R.id.codeComposerAgent)
+        pill.performClick(); idle(3)
+        assertTrue(a.findViewById<View>(R.id.popoverRows)?.isShown == true)
+        pill.performClick(); idle(3)
+        assertTrue("card should be gone", a.findViewById<View>(R.id.popoverRows) == null)
+    }
+
     @Test fun codeTabSwitchesAndComesBack() = withCode { a, _ ->
         val code = a.findViewById<View>(R.id.codeModeContainer)
         assertEquals(View.VISIBLE, code.visibility)

@@ -48,3 +48,29 @@ settings cards, strings moved to resources. 443 tests pass. `rpAutoMemoryUpdates
 after the Facts split; it now checks Facts (and that Memory is untouched), and DemoModel answers the
 "fact notes" prompt. Skipped: HTML/PDF export colors, GlassNotice under dialog dims, CodeHostDialog 36dp pill.
 Phone: touch edges of send/mic, Code session insets + IME, Snackbar look, settings cards on a photo bg.
+
+## User bug list (2026-09-27, evening)
+All 19 items from the owner's list, 452 tests pass, `assembleDev` built.
+- History panel: the chat is pinned to the panel's edge (`historyChatOffset`), not a 0.25 parallax.
+  The parallax showed both screens' look-alike chrome at once ("the UI doubles").
+- Mode pager: a cancelled swipe left the chat pages a page off screen (page animators ended after
+  the reset); `restModePages` cancels them first. Swipes can't start on the bottom bar band
+  (`bottomBarTop`, includes Code's composer).
+- Tab underline: `BotModelPickerFragment` used `replace` for LAN/OpenRouter, which rebuilt the chat
+  view; the new view kept the old underline target and sat at x=0. Both fixed.
+- Roleplay/Code switches apply at once: `ChatFragment.watchModeSwitches` (prefs listeners,
+  `CodeStore.addEnabledListener`). Settings opened from history never hid the chat.
+- Controls panel is a bottom sheet now (moved into `rootLayout` above the composer, dim over all).
+- `PickerPopover`: second tap on its control folds it (`isOpenOn`), it follows its edge while the
+  keyboard drops (`refit`), and modal cards frost what's behind (`BackdropBlur`). The four list
+  PopupWindows blur behind their window (`BackdropBlur.behind`).
+- Messages: new `ic_msg_*` stroke set, bare user action row, thinking header without a chip
+  (thoughts hang off a hairline), reply actions hidden while streaming (`ChatAdapter.replyInFlight`),
+  code card header row with a Copy chip that has an icon and turns into "Copied".
+- Code: gear on Code home removed (top-left opens the same screen). Approval modes have icons
+  (`CodeComposer.permissionIcon`) in the popover, the pill and Code settings.
+- Voice: the mic check no longer swells; `VoiceWaveView` runs ~30fps while listening and glides.
+- Switches: every screen is a SwitchCompat (MaterialSwitch sized differently); round 28dp bead
+  that widens and clears while held.
+- Photo background blur is about 2.4x softer.
+Phone: every motion above, the Controls sheet under the nav bar, blur cost on an older phone.

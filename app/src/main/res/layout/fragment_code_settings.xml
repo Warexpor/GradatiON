@@ -55,7 +55,7 @@
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp">
 
-                <com.google.android.material.materialswitch.MaterialSwitch
+                <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/codeShowTabSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -84,7 +84,7 @@
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp">
 
-                <com.google.android.material.materialswitch.MaterialSwitch
+                <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/codeNotifyAwaySwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

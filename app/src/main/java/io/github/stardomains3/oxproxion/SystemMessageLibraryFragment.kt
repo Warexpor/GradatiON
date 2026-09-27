@@ -276,19 +276,6 @@ class SystemMessageLibraryFragment : Fragment() {
         // Setup background - Important for dismissing when touching outside
         popupWindow.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
         popupWindow.isOutsideTouchable = true
-        val rootView = requireActivity().window.decorView.findViewById<ViewGroup>(android.R.id.content)
-        val dimView = View(requireContext()).apply {
-            setBackgroundColor(ContextCompat.getColor(requireContext(), R.color.popover_scrim))
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-        rootView.addView(dimView)
-        // Remove dim when popup is dismissed
-        popupWindow.setOnDismissListener {
-            rootView.removeView(dimView)
-        }
         val editItem = menuView.findViewById<TextView>(R.id.menu_edit)
         val deleteItem = menuView.findViewById<TextView>(R.id.menu_delete)
 
@@ -345,6 +332,7 @@ class SystemMessageLibraryFragment : Fragment() {
             // Show below the anchor view (default behavior)
             popupWindow.showAsDropDown(anchorView)
         }
+        BackdropBlur.behind(popupWindow)
     }
 
 

@@ -5,4 +5,6 @@
     <dimen name="grokion_switch_track_height">32dp</dimen>
     <dimen name="grokion_switch_thumb_size">32dp</dimen>
     <dimen name="glass_sheet_radius">26dp</dimen>
+    <!-- Controls sheet: space under its last row, before the nav bar inset is added -->
+    <dimen name="controls_sheet_pad_bottom">18dp</dimen>
 </resources>

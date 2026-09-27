@@ -52,8 +52,14 @@ class PickerPopover(
     private var card: GlassLinearLayout? = null
     private var backCallback: OnBackPressedCallback? = null
     private var opensAbove: Boolean = true
+    /** Host children frosted behind a modal card; un-frosted on dismiss. */
+    private var frosted: List<View> = emptyList()
+    private var follower: android.view.ViewTreeObserver.OnGlobalLayoutListener? = null
     var onDismiss: (() -> Unit)? = null
     val isShowing get() = card != null
+
+    /** True when this popover is open on [view]: a second tap on the same control should fold it. */
+    fun isOpenOn(view: View) = isShowing && anchor === view
 
     fun show(
         title: CharSequence?,
@@ -65,11 +71,17 @@ class PickerPopover(
         modal: Boolean = true,
     ) {
         if (isShowing) return
+        // Frost what the card floats over (not other popovers still fading out).
+        frosted = if (modal) {
+            (0 until host.childCount).map { host.getChildAt(it) }
+                .filter { it.isVisible && it.getTag(R.id.tag_popover_layer) == null }
+        } else emptyList()
         val scrimView = if (modal) {
             View(context).apply {
                 setBackgroundColor(ContextCompat.getColor(context, R.color.popover_scrim))
                 alpha = 0f
                 isClickable = true
+                setTag(R.id.tag_popover_layer, true)
                 setOnClickListener { dismiss() }
             }.also {
                 host.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -80,6 +92,7 @@ class PickerPopover(
         val cardView = inflater.inflate(R.layout.popover_card, host, false) as GlassLinearLayout
         cardView.glass.source = backdrop
         cardView.isClickable = true
+        cardView.setTag(R.id.tag_popover_layer, true)
         val titleView = cardView.findViewById<TextView>(R.id.popoverTitle)
         titleView.text = title
         titleView.isVisible = !title.isNullOrEmpty()
@@ -110,7 +123,10 @@ class PickerPopover(
         } else {
             minOf(host.width - 2 * gutter, (340 * density).toInt())
         }
-        val above = ey + edge.height / 2 > host.height / 2
+        // Measured against the space the keyboard leaves: a composer riding the keyboard sits
+        // mid-screen but is still a bottom bar, and the card belongs above it.
+        val imeBottom = ViewCompat.getRootWindowInsets(host)?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
+        val above = ey + edge.height / 2 > (host.height - imeBottom) / 2
         opensAbove = above
         val gap = (8 * density).toInt()
         val topInset = ViewCompat.getRootWindowInsets(host)?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
@@ -129,6 +145,11 @@ class PickerPopover(
         host.addView(cardView)
         scrim = scrimView
         card = cardView
+        fitEdgeY = ey
+        follower = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            card?.let { refit(it, null, force = false) }
+        }.also { host.viewTreeObserver.addOnGlobalLayoutListener(it) }
+        BackdropBlur.set(frosted, on = true, animate = animated)
 
         // Grow out of the anchor: pivot at the anchor, spring scale + lift, rows ripple in.
         val shouldAnimate = animated && Motion.areAnimationsEnabled(context)
@@ -188,14 +209,26 @@ class PickerPopover(
         var selectedView: View? = null
         rows.forEach { r -> bindRow(inflater, rowsBox, r).also { if (r.selected) selectedView = it } }
         footer.forEach { r -> bindRow(inflater, footerBox, r) }
+        refit(cardView, selectedView, force = true)
+    }
 
+    private var fitEdgeY = Int.MIN_VALUE
+
+    /**
+     * Keep the card against its edge and re-cap its height to the room there. Runs on every
+     * layout while open: the composer the card hangs from drops when the keyboard closes (the
+     * callers hide it right before showing), and the card must go with it.
+     */
+    private fun refit(cardView: GlassLinearLayout, selectedView: View?, force: Boolean) {
         val lp = cardView.layoutParams as FrameLayout.LayoutParams
-        val width = lp.width
         val hostLoc = IntArray(2).also { host.getLocationInWindow(it) }
         val edgeLoc = IntArray(2).also { edge.getLocationInWindow(it) }
         val ey = edgeLoc[1] - hostLoc[1]
+        if (!force && ey == fitEdgeY) return
+        fitEdgeY = ey
         val gap = (8 * density).toInt()
         val gutter = (12 * density).toInt()
+        if (opensAbove) lp.bottomMargin = host.height - ey + gap else lp.topMargin = ey + edge.height + gap
         val topInset = ViewCompat.getRootWindowInsets(host)?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
         val room = if (opensAbove) ey - gap - topInset - gutter - (56 * density).toInt()
         else host.height - (ey + edge.height + gap) - gutter
@@ -203,8 +236,9 @@ class PickerPopover(
         // Reset scroll height so measure sees natural size before re-capping.
         val scroll = cardView.findViewById<NestedScrollView>(R.id.popoverScroll)
         scroll.layoutParams = scroll.layoutParams.apply { height = ViewGroup.LayoutParams.WRAP_CONTENT }
-        applyMaxHeight(cardView, width, maxHeight, selectedView)
-        cardView.requestLayout()
+        applyMaxHeight(cardView, lp.width, maxHeight, selectedView)
+        if (opensAbove) cardView.pivotY = cardView.measuredHeight.toFloat()
+        cardView.layoutParams = lp
     }
 
     private fun applyMaxHeight(cardView: GlassLinearLayout, width: Int, maxHeight: Int, selectedView: View?) {
@@ -261,6 +295,10 @@ class PickerPopover(
         scrim = null
         backCallback?.remove()
         backCallback = null
+        follower?.let { host.viewTreeObserver.removeOnGlobalLayoutListener(it) }
+        follower = null
+        BackdropBlur.set(frosted, on = false, animate = animated)
+        frosted = emptyList()
         val remove = Runnable {
             if (c.parent === host) host.removeView(c)
             if (s != null && s.parent === host) host.removeView(s)

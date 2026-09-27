@@ -47,9 +47,8 @@ object ChatMarkdown {
     /** Tapping the code header copies the block. */
     class CopyCodeSpan(private val code: String) : ClickableSpan() {
         override fun onClick(widget: View) {
-            val clipboard = widget.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
-            AppToast.makeText(widget.context, widget.context.getString(R.string.toast_code_copied), AppToast.LENGTH_SHORT).show()
+            copyCode(widget, code)
+            (widget as? ChatTextView)?.showCopied(code)
         }
 
         override fun updateDrawState(ds: TextPaint) {
@@ -68,6 +67,13 @@ object ChatMarkdown {
     }
 
     fun plugin(context: Context): AbstractMarkwonPlugin = Plugin(context.applicationContext)
+
+    /** The chip turns into "Copied" for feedback; no toast on top of it. */
+    fun copyCode(widget: View, code: String) {
+        val clipboard = widget.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
+        widget.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+    }
 
     /**
      * Shrinks the blank separator line between blocks (outside code cards). Idempotent enough
@@ -96,6 +102,8 @@ object ChatMarkdown {
     private class GapSpan(scale: Float) : RelativeSizeSpan(scale)
 
     private const val GAP_SCALE = 0.5f
+    /** Text size of the invisible header label; with the chat's line spacing, a ~32dp row. */
+    private const val HEADER_ROW_SP = 19f
 
     private class Plugin(private val context: Context) : AbstractMarkwonPlugin() {
         private val density = context.resources.displayMetrics.density
@@ -163,20 +171,28 @@ object ChatMarkdown {
             val b = visitor.builder()
             val start = b.length
 
-            // Header: language label (tap anywhere on the line to copy).
+            // Header row: ChatTextView paints the language label and the Copy chip centered in
+            // it. The text here only sizes the row (a larger, invisible label) and keeps the
+            // label selectable and tappable.
             val label = info.ifBlank { "code" }.lowercase()
             b.append(label)
             SpannableBuilder.setSpans(
                 b,
                 arrayOf<Any>(
                     FontSpan(medium),
-                    AbsoluteSizeSpan((12.5f * scaled).toInt()),
-                    ForegroundColorSpan(mute),
+                    AbsoluteSizeSpan((HEADER_ROW_SP * scaled).toInt()),
+                    ForegroundColorSpan(android.graphics.Color.TRANSPARENT),
                     CopyCodeSpan(code)
                 ),
                 start,
                 b.length
             )
+            b.append('\n')
+
+            // Air under the header's hairline, matching the pad under the last code line.
+            val topPadStart = b.length
+            b.append(' ')
+            SpannableBuilder.setSpans(b, AbsoluteSizeSpan(dp(6f)), topPadStart, b.length)
             b.append('\n')
 
             val codeStart = b.length

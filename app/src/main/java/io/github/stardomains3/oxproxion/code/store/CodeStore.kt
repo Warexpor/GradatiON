@@ -33,6 +33,17 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         get() = prefs.getBoolean(KEY_ENABLED, true)
         set(v) = prefs.edit { putBoolean(KEY_ENABLED, v) }
 
+    /**
+     * Calls [onChange] whenever [enabled] flips. SharedPreferences keeps listeners weakly, so
+     * the caller must hold the returned handle and pass it to [removeEnabledListener].
+     */
+    fun addEnabledListener(onChange: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, key -> if (key == KEY_ENABLED) onChange() }
+            .also { prefs.registerOnSharedPreferenceChangeListener(it) }
+
+    fun removeEnabledListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs.unregisterOnSharedPreferenceChangeListener(listener)
+
     /** Whether the Code tab was the last one open, so the app comes back to it. */
     var lastTabWasCode: Boolean
         get() = prefs.getBoolean(KEY_LAST_TAB, false)

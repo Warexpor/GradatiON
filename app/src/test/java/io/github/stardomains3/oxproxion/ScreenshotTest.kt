@@ -234,6 +234,8 @@ class ScreenshotTest {
         seedConversation(a); idle()
         val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
         val holder = rv.findViewHolderForAdapterPosition(1) as ChatAdapter.AssistantViewHolder
+        // As bindTextOnly does for the live row: action icons wait until the reply lands.
+        holder.itemView.findViewById<View>(R.id.aiActionRow).visibility = View.GONE
         val full = """
             Dividing by **√d** keeps the dot products from growing with the key size.
 
@@ -271,6 +273,14 @@ class ScreenshotTest {
 
     @Test fun controlsPanelDark() = withChat { a, _ ->
         a.findViewById<View>(R.id.controlsButton).performClick(); idle()
+        // A sheet on the screen's bottom edge, over the composer; not a card floating above it.
+        val sheet = a.findViewById<View>(R.id.headerContainer)
+        val content = a.findViewById<View>(R.id.rootLayout)
+        org.junit.Assert.assertEquals(content.height, sheet.bottom)
+        org.junit.Assert.assertEquals(0f, sheet.translationY, 0.5f)
+        org.junit.Assert.assertTrue(sheet.top < a.findViewById<View>(R.id.chatInputContainer).let { c ->
+            IntArray(2).also { c.getLocationInWindow(it) }[1] - IntArray(2).also { content.getLocationInWindow(it) }[1]
+        })
         snap(root(a), "controls_panel_dark")
     }
 
@@ -1005,8 +1015,7 @@ class ScreenshotTest {
     }
 
     /** Drag across [root] from its middle by [dx] in small steps; lifts only if [release]. */
-    private fun drag(root: View, dx: Float, release: Boolean, stepMs: Long = 16L) {
-        val y = root.height * 0.45f
+    private fun drag(root: View, dx: Float, release: Boolean, stepMs: Long = 16L, y: Float = root.height * 0.45f) {
         val x0 = root.width * 0.5f
         val down = android.os.SystemClock.uptimeMillis()
         var t = down
@@ -1078,6 +1087,88 @@ class ScreenshotTest {
         org.junit.Assert.assertTrue(panel.isShown)
         org.junit.Assert.assertTrue("drawer tracks the finger", panel.translationX > -root.width * 0.8f && panel.translationX < 0f)
         snap(root(a), "swipe_history_mid_dark")
+    }
+
+    /** Closing history: the chat rides the panel's edge like the next page, never underneath it. */
+    @Test fun historyCloseMidDragDark() = withChat { a, _ ->
+        seedHistory()
+        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
+        val panel = a.findViewById<View>(R.id.historyDrawerContainer)
+        drag(panel, -panel.width * 0.4f, release = false, stepMs = 40L)
+        val chat = a.findViewById<View>(R.id.rootLayout)
+        org.junit.Assert.assertTrue("panel follows the finger", panel.translationX < -panel.width * 0.2f)
+        org.junit.Assert.assertEquals(panel.translationX + panel.width, chat.translationX, 2f)
+        snap(root(a), "history_close_mid_dark")
+    }
+
+    /** A cancelled swipe with animations on must leave every page (composer included) home. */
+    @Test fun swipeCancelWithAnimationsLeavesPagesHome() = withChat { a, chat ->
+        Settings.Global.putFloat(a.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+        val root = chat.requireView()
+        drag(root, -root.width * 0.12f, release = true, stepMs = 120L)
+        idle()
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.tabChat).isSelected)
+        org.junit.Assert.assertTrue(pagerShots(a).isEmpty())
+        for (id in listOf(R.id.chatFrameView, R.id.composerDock, R.id.composerFade)) {
+            org.junit.Assert.assertEquals(0f, a.findViewById<View>(id).translationX, 0.5f)
+        }
+    }
+
+    /** The bottom bar's pills and chips scroll sideways: a swipe there must never change page. */
+    @Test fun swipeOnComposerDoesNotPage() = withChat { a, chat ->
+        val root = chat.requireView()
+        val bar = a.findViewById<View>(R.id.chatInputContainer)
+        val rl = IntArray(2).also { root.getLocationInWindow(it) }
+        val bl = IntArray(2).also { bar.getLocationInWindow(it) }
+        drag(root, -root.width * 0.4f, release = true, stepMs = 40L, y = (bl[1] - rl[1] + bar.height / 2).toFloat())
+        idle()
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.tabChat).isSelected)
+        org.junit.Assert.assertFalse(a.findViewById<View>(R.id.tabRoleplay).isSelected)
+        org.junit.Assert.assertTrue(pagerShots(a).isEmpty())
+    }
+
+    /** A rebuilt chat view (a screen replaced it) must put the tab underline back under its tab. */
+    @Test fun tabUnderlineSurvivesChatViewRebuild() = withChat { a, _ ->
+        val before = a.findViewById<View>(R.id.modeTabIndicator).translationX
+        org.junit.Assert.assertTrue(before > 0f)
+        a.supportFragmentManager.beginTransaction()
+            .replace(R.id.fragment_container, LanModelsFragment())
+            .addToBackStack(null).commit()
+        idle()
+        a.supportFragmentManager.popBackStack(); idle()
+        org.junit.Assert.assertEquals(before, a.findViewById<View>(R.id.modeTabIndicator).translationX, 1f)
+    }
+
+    /** Settings can cover the chat without hiding it; the Roleplay switch must still apply at once. */
+    @Test fun roleplaySwitchAppliesImmediately() = withChat { a, _ ->
+        val tab = a.findViewById<View>(R.id.tabRoleplay)
+        org.junit.Assert.assertEquals(View.VISIBLE, tab.visibility)
+        SharedPreferencesHelper(a).setRoleplayEnabled(false); idle()
+        org.junit.Assert.assertEquals(View.GONE, tab.visibility)
+        SharedPreferencesHelper(a).setRoleplayEnabled(true); idle()
+        org.junit.Assert.assertEquals(View.VISIBLE, tab.visibility)
+    }
+
+    /** Copy, share, regenerate... only once the reply has landed. */
+    @Test fun replyActionsWaitForTheStream() = withChat { a, _ ->
+        seedConversation(a); idle()
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        val f = ChatViewModel::class.java.getDeclaredField("_chatMessages").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val live = f.get(vm) as MutableLiveData<List<FlexibleMessage>>
+        live.value = live.value!! + FlexibleMessage("assistant", JsonPrimitive("Because dot products grow with d."))
+        idle()
+        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        val adapter = rv.adapter as ChatAdapter
+        val last = adapter.itemCount - 1
+        org.junit.Assert.assertEquals(ChatAdapter.VIEW_TYPE_ASSISTANT, adapter.getItemViewType(last))
+        val vh = adapter.onCreateViewHolder(rv, ChatAdapter.VIEW_TYPE_ASSISTANT)
+        adapter.replyInFlight = true
+        adapter.onBindViewHolder(vh, last)
+        org.junit.Assert.assertEquals(View.GONE, vh.itemView.findViewById<View>(R.id.aiActionRow).visibility)
+        adapter.replyInFlight = false
+        adapter.onBindViewHolder(vh, last)
+        org.junit.Assert.assertEquals(View.VISIBLE, vh.itemView.findViewById<View>(R.id.aiActionRow).visibility)
     }
 
     @Test fun grainMigratesToDrift() {

@@ -178,10 +178,12 @@ class BotModelPickerFragment : Fragment() {
         loadModels()
     }
 
+    // Push over this list: replace would also tear down the chat screen underneath and rebuild it on return.
     private fun openLanModels() {
         parentFragmentManager.beginTransaction()
             .withGrokStackAnimations()
-            .replace(R.id.fragment_container, LanModelsFragment())
+            .hide(this)
+            .add(R.id.fragment_container, LanModelsFragment())
             .addToBackStack(null)
             .commit()
     }
@@ -189,9 +191,15 @@ class BotModelPickerFragment : Fragment() {
     private fun openOpenRouterModels() {
         parentFragmentManager.beginTransaction()
             .withGrokStackAnimations()
-            .replace(R.id.fragment_container, OpenRouterModelsFragment())
+            .hide(this)
+            .add(R.id.fragment_container, OpenRouterModelsFragment())
             .addToBackStack(null)
             .commit()
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (!hidden && view != null) loadModels()
     }
 
     private fun loadModels() {

@@ -722,7 +722,6 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                         item.host.name,
                         getString(label),
                     )
-                    v.findViewById<View>(R.id.codeHomeSettings).setOnClickListener { openSettings() }
                 }
                 is HomeItem.Hero -> v.findViewById<TextView>(R.id.codeHeroSubtitle).text = getString(
                     R.string.code_home_subtitle, item.harness.displayName,
