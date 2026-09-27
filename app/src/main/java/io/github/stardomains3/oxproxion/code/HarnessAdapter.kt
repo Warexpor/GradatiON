@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion.code
 
+import android.util.Log
 import kotlinx.serialization.json.JsonElement
 
 /**
@@ -126,8 +127,10 @@ object TranscriptReducer {
                     val e = list[i]
                     if (e !is CodeEvent.AgentText) list
                     else {
-                        val images = if (e.images.size >= MAX_AGENT_IMAGES) e.images
-                        else e.images + img
+                        val images = if (e.images.size >= MAX_AGENT_IMAGES) {
+                            Log.d("TranscriptReducer", "drop agent image over cap $MAX_AGENT_IMAGES key=${update.key}")
+                            e.images
+                        } else e.images + img
                         list.toMutableList().also {
                             it[i] = e.copy(images = images, streaming = true)
                         }

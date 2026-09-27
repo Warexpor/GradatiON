@@ -246,8 +246,13 @@ class AcpAdapter : HarnessAdapter {
                         if (mime.isEmpty() || data.isEmpty()) {
                             return ignored("agent_message_chunk image missing mimeType/data")
                         }
-                        if (!mime.startsWith("image/")) {
+                        // Same allowlist as decode / prompt path (jpeg/png/webp) — do not waste slots.
+                        if (!CodePromptImages.isAllowedMime(mime)) {
                             return ignored("agent_message_chunk unsupported mime $mime")
+                        }
+                        // Parse-time size gate: refuse unbounded base64 into the session model.
+                        if (data.length > CodePromptImages.MAX_INLINE_BASE64_CHARS) {
+                            return ignored("agent_message_chunk image data too large")
                         }
                         CodeUpdate.ImageChunk(key, mime, data)
                     }

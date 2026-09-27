@@ -24,6 +24,16 @@ object CodePromptImages {
     const val MAX_EDGE_PX = 1536
     /** Chip strip thumbnail long edge (≈56dp × 3). */
     const val THUMB_EDGE_PX = 168
+    /**
+     * Long-edge target for transcript inline images (~160dp strip at ~3× density).
+     * Far smaller than [MAX_EDGE_PX] used for prompt encode.
+     */
+    const val TRANSCRIPT_EDGE_PX = 480
+    /**
+     * Hard cap on base64 character length for agent inline images at parse / model retention.
+     * Aligned with outbound [MAX_ENCODED_BYTES] (4/3 expansion + padding) ≈ 2MB chars.
+     */
+    const val MAX_INLINE_BASE64_CHARS = (MAX_ENCODED_BYTES * 4) / 3 + 4
     private const val JPEG_QUALITY = 82
 
     private val allowedMime = setOf("image/jpeg", "image/png", "image/webp")
@@ -185,14 +195,26 @@ object CodePromptImages {
     }
 
     /**
+     * Cheap stable fingerprint for cache / identity without hashing the full base64 on Main.
+     * Uses mime, length, and hash of a small head+tail sample.
+     */
+    fun inlineCacheKey(mimeType: String, data: String): String {
+        val n = data.length
+        val head = data.substring(0, minOf(64, n)).hashCode()
+        val tail = if (n > 64) data.substring(n - 64).hashCode() else 0
+        return "$mimeType|$n|$head|$tail"
+    }
+
+    /**
      * Decode a base64 ACP image content block for transcript inline display.
      * Caps source bytes and long edge like [fromUri]; returns null on bad mime/data/OOM.
      * Does not load remote URIs — caller must pass data+mime only.
      */
     fun decodeInline(base64: String, mimeType: String?, maxEdgePx: Int = MAX_EDGE_PX): Bitmap? {
-        if (!isAllowedMime(mimeType) && mimeType != null) return null
-        // Reject absurd base64 before allocating (≈4/3 expansion + padding).
-        if (base64.length > MAX_SOURCE_BYTES) return null
+        // Require allowlisted mime (null / gif / svg / … rejected — same as parse gate).
+        if (!isAllowedMime(mimeType)) return null
+        // Reject absurd base64 before allocating (aligned with AcpAdapter parse cap).
+        if (base64.length > MAX_INLINE_BASE64_CHARS) return null
         val raw = try {
             Base64.decode(base64, Base64.DEFAULT)
         } catch (_: Exception) {

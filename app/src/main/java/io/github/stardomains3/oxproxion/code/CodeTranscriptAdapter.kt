@@ -5,6 +5,11 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.LruCache
 import android.text.Spannable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.method.LinkMovementMethod
@@ -45,6 +50,7 @@ sealed class TranscriptRow {
  */
 class CodeTranscriptAdapter(
     context: Context,
+    private val decodeScope: CoroutineScope,
     private val onApproval: (CodeEvent.Approval, ApprovalOption) -> Unit,
     private val onOpenDiff: (CodeEvent.FileDiff) -> Unit,
     private val onOpenToolOutput: (CodeEvent.ToolCall) -> Unit = {}
@@ -66,10 +72,28 @@ class CodeTranscriptAdapter(
 
     private val streams = HashMap<String, StreamState>()
     private val expanded = HashSet<String>()
-    /** Soft cache of decoded agent inline images (data+mime → bitmap). */
-    private val inlineBitmaps = object : LruCache<String, Bitmap>(12) {
-        override fun sizeOf(key: String, value: Bitmap): Int = 1
+    /**
+     * Soft cache of decoded agent inline images (cacheKey → bitmap).
+     * Sized by approximate KB footprint (~6MB budget), not entry count.
+     */
+    private val inlineBitmaps = object : LruCache<String, Bitmap>(INLINE_CACHE_MAX_KB) {
+        override fun sizeOf(key: String, value: Bitmap): Int =
+            (value.byteCount / 1024).coerceAtLeast(1)
+
+        override fun entryRemoved(
+            evicted: Boolean,
+            key: String,
+            oldValue: Bitmap,
+            newValue: Bitmap?,
+        ) {
+            if (!evicted) return
+            // Only recycle when no ImageView still displays this key.
+            if (key in displayedImageKeys) return
+            if (!oldValue.isRecycled) oldValue.recycle()
+        }
     }
+    /** Cache keys currently set on bound ImageViews (prevents recycle-while-displayed). */
+    private val displayedImageKeys = HashSet<String>()
 
     /** Chat-style: bound TextHolder currently painting the live stream (skip DiffUtil while set). */
     private var streamBoundHolder: TextHolder? = null
@@ -225,6 +249,7 @@ class CodeTranscriptAdapter(
             is TextHolder -> {
                 clearStreamBound(holder)
                 holder.stopFadeTicker()
+                clearAgentImages(holder)
             }
             else -> (holder.itemView as? TextView)?.let {
                 if (holder.itemViewType == T_WORKING) ShimmerText.stop(it)
@@ -271,31 +296,36 @@ class CodeTranscriptAdapter(
         bindAgentImages(holder, e.images)
     }
 
-    /** Decode (capped) and show [images] under agent text; data/base64 only. */
+    /**
+     * Show [images] under agent text. Decode is always off Main ([decodeScope] + Default);
+     * skip row rebuild when the bound fingerprint is unchanged (TextChunk stream path).
+     */
     private fun bindAgentImages(holder: TextHolder, images: List<AgentInlineImage>) {
+        val keys = images.map { it.cacheKey }
+        // I3: identity gate — do not removeAllViews / re-query on every TextChunk.
+        if (holder.boundImageKeys == keys) return
+
+        clearAgentImages(holder)
+        holder.boundImageKeys = keys
+        val gen = holder.decodeGeneration
         val row = holder.imagesRow
         val scroll = holder.imagesScroll
         if (images.isEmpty()) {
-            row.removeAllViews()
             scroll.isVisible = false
             return
         }
-        row.removeAllViews()
         val ctx = row.context
         val d = ctx.resources.displayMetrics.density
         val maxH = (160 * d).toInt()
         val gap = (8 * d).toInt()
-        var shown = 0
-        for (img in images) {
-            val key = inlineCacheKey(img)
-            val bmp = inlineBitmaps.get(key) ?: CodePromptImages.decodeInline(
-                img.data, img.mimeType,
-            )?.also { inlineBitmaps.put(key, it) }
-            if (bmp == null || bmp.isRecycled) continue
+        // Decode near display size (≈160dp × 2), not prompt-encode 1536px.
+        val maxEdge = (160 * d * 2f).toInt().coerceIn(160, CodePromptImages.TRANSCRIPT_EDGE_PX)
+        for ((shown, img) in images.withIndex()) {
+            val key = keys[shown]
             val iv = ImageView(ctx).apply {
+                tag = key
                 adjustViewBounds = true
                 scaleType = ImageView.ScaleType.FIT_START
-                // maxHeight is API 16+ on ImageView via setMaxHeight
                 setMaxHeight(maxH)
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -303,17 +333,77 @@ class CodeTranscriptAdapter(
                 ).also { lp ->
                     if (shown > 0) lp.marginStart = gap
                 }
-                setImageBitmap(bmp)
                 contentDescription = ctx.getString(R.string.cd_code_agent_image)
             }
             row.addView(iv)
-            shown++
+            val cached = inlineBitmaps.get(key)
+            if (cached != null && !cached.isRecycled) {
+                iv.setImageBitmap(cached)
+                displayedImageKeys.add(key)
+            } else {
+                // Placeholder until async decode posts the bitmap.
+                requestInlineDecode(holder, gen, key, img, maxEdge)
+            }
         }
-        scroll.isVisible = shown > 0
+        scroll.isVisible = true
     }
 
-    private fun inlineCacheKey(img: AgentInlineImage): String =
-        "${img.mimeType}|${img.data.length}|${img.data.hashCode()}"
+    private fun requestInlineDecode(
+        holder: TextHolder,
+        gen: Int,
+        key: String,
+        img: AgentInlineImage,
+        maxEdge: Int,
+    ) {
+        // Coalesce in-flight decodes for the same key on this holder.
+        val existing = holder.decodeJobs[key]
+        if (existing != null && existing.isActive) return
+        val job = decodeScope.launch(Dispatchers.Default) {
+            val bmp = CodePromptImages.decodeInline(img.data, img.mimeType, maxEdge)
+            withContext(Dispatchers.Main.immediate) {
+                holder.decodeJobs.remove(key)
+                if (bmp == null || bmp.isRecycled) return@withContext
+                // Prefer an already-cached live bitmap; recycle our duplicate decode.
+                val cached = inlineBitmaps.get(key)
+                val use = if (cached != null && !cached.isRecycled) {
+                    if (cached !== bmp) bmp.recycle()
+                    cached
+                } else {
+                    inlineBitmaps.put(key, bmp)
+                    bmp
+                }
+                if (holder.decodeGeneration != gen) return@withContext
+                if (holder.boundImageKeys?.contains(key) != true) return@withContext
+                val row = holder.imagesRow
+                for (i in 0 until row.childCount) {
+                    val child = row.getChildAt(i) as? ImageView ?: continue
+                    if (child.tag == key) {
+                        child.setImageBitmap(use)
+                        displayedImageKeys.add(key)
+                        break
+                    }
+                }
+            }
+        }
+        holder.decodeJobs[key] = job
+    }
+
+    /** Clear image row, cancel pending decodes, drop displayed-key refs. */
+    private fun clearAgentImages(holder: TextHolder) {
+        holder.decodeJobs.values.forEach { it.cancel() }
+        holder.decodeJobs.clear()
+        holder.decodeGeneration++
+        val row = holder.imagesRow
+        for (i in 0 until row.childCount) {
+            val child = row.getChildAt(i) as? ImageView ?: continue
+            val key = child.tag as? String
+            if (key != null) displayedImageKeys.remove(key)
+            child.setImageBitmap(null)
+        }
+        row.removeAllViews()
+        holder.imagesScroll.isVisible = false
+        holder.boundImageKeys = null
+    }
 
     /**
      * Track newly appended open-tail ranges and attach a [StreamFadeSpan] per run (chat pattern).
@@ -515,6 +605,11 @@ class CodeTranscriptAdapter(
         val textView: TextView = itemView.findViewById(R.id.codeAgentText)
         val imagesScroll: View = itemView.findViewById(R.id.codeAgentImagesScroll)
         val imagesRow: LinearLayout = itemView.findViewById(R.id.codeAgentImages)
+        /** Last bound image cache keys — skip rebuild when unchanged (stream TextChunks). */
+        var boundImageKeys: List<String>? = null
+        /** Bumped on clear/rebind so in-flight decode results ignore stale holders. */
+        var decodeGeneration: Int = 0
+        val decodeJobs = HashMap<String, Job>()
         private var fadeTicker: Choreographer.FrameCallback? = null
 
         fun ensureFadeTicker() {
@@ -572,6 +667,8 @@ class CodeTranscriptAdapter(
         private const val T_WORKING = 10
         private const val CARD_LINES = 14
         private const val OUTPUT_LINES = ToolOutputText.CARD_LINES
+        /** Inline bitmap LruCache budget in KB (~6MB). */
+        private const val INLINE_CACHE_MAX_KB = 6 * 1024
 
         fun iconFor(kind: ToolKind) = when (kind) {
             ToolKind.READ -> R.drawable.ic_code_file

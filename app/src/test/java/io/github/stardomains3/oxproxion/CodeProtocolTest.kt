@@ -14,6 +14,7 @@ import io.github.stardomains3.oxproxion.code.HarnessKind
 import io.github.stardomains3.oxproxion.code.NewSessionRequest
 import io.github.stardomains3.oxproxion.code.PermissionMode
 import io.github.stardomains3.oxproxion.code.PromptAttachment
+import io.github.stardomains3.oxproxion.code.CodePromptImages
 import io.github.stardomains3.oxproxion.code.ReconnectBackoff
 import io.github.stardomains3.oxproxion.code.PlanStatus
 import io.github.stardomains3.oxproxion.code.SessionStatus
@@ -112,6 +113,37 @@ class CodeProtocolTest {
             """{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png","uri":"https://evil.example/x.png"}}"""
         ))
         assertTrue(outs.single() is AdapterOutput.Ignored)
+    }
+
+    @Test fun agentMessageChunkGifMimeIgnored() {
+        // I4: parse allowlist matches decode (jpeg/png/webp) — gif must not consume a slot.
+        val gif = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+        val outs = acp.decode(update(
+            """{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/gif","data":"$gif"}}"""
+        ))
+        val ign = outs.single() as AdapterOutput.Ignored
+        assertTrue(ign.reason.contains("mime"))
+        val list = fold(listOf(
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/gif","data":"$gif"}}"""),
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12P4z8AAAAADAAEABf4C/gAAAABJRU5ErkJggg=="}}"""),
+        ))
+        val t = list.single() as CodeEvent.AgentText
+        assertEquals(1, t.images.size)
+        assertEquals("image/png", t.images[0].mimeType)
+    }
+
+    @Test fun agentMessageChunkOversizedImageIgnored() {
+        // I2: parse-time size gate — oversized base64 must not enter the session model.
+        val big = "A".repeat(CodePromptImages.MAX_INLINE_BASE64_CHARS + 1)
+        val outs = acp.decode(update(
+            """{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png","data":"$big"}}"""
+        ))
+        val ign = outs.single() as AdapterOutput.Ignored
+        assertTrue(ign.reason.contains("too large"))
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"agent_message_chunk","content":{"type":"image","mimeType":"image/png","data":"$big"}}"""
+        )))
+        assertTrue(list.none { it is CodeEvent.AgentText && it.images.isNotEmpty() })
     }
 
     @Test fun toolCallBreaksTextAndUpdatesInPlace() {

@@ -76,13 +76,16 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         val backdrop = view.findViewById<GlassBackdropLayout>(R.id.codeSessionBackdrop)
         val frame = view.findViewById<FrameLayout>(R.id.codeSessionFrame)
         list = view.findViewById(R.id.codeTranscript)
-        adapter = CodeTranscriptAdapter(requireContext(),
+        adapter = CodeTranscriptAdapter(
+            requireContext(),
+            decodeScope = viewLifecycleOwner.lifecycleScope,
             onApproval = { e, opt ->
                 view.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
                 hub.answer(sessionId, e.requestId, opt)
             },
             onOpenDiff = { e -> openDiff(e) },
-            onOpenToolOutput = { e -> openToolOutput(e) })
+            onOpenToolOutput = { e -> openToolOutput(e) },
+        )
         list.layoutManager = LinearLayoutManager(requireContext()).apply { stackFromEnd = false }
         list.adapter = adapter
         list.itemAnimator = androidx.recyclerview.widget.DefaultItemAnimator().apply {
