@@ -153,6 +153,13 @@ class AcpAdapter : HarnessAdapter {
     // ── inbound ───────────────────────────────────────────────────────────────────────────
 
     override fun decode(frame: String): List<AdapterOutput> {
+        // R6: never throw out of decode — a single malformed frame must not kill the reader.
+        return runCatching { decodeFrame(frame) }.getOrElse { t ->
+            ignored("decode failed: ${t.message ?: t::class.simpleName}")
+        }
+    }
+
+    private fun decodeFrame(frame: String): List<AdapterOutput> {
         val obj = runCatching { json.parseToJsonElement(frame).jsonObject }.getOrElse {
             return listOf(AdapterOutput.Ignored("not JSON"))
         }
@@ -160,19 +167,19 @@ class AcpAdapter : HarnessAdapter {
         val idEl = obj["id"]
         return when {
             method == "session/update" -> {
-                val params = obj["params"]?.jsonObject ?: return ignored("no params")
+                val params = obj["params"] as? JsonObject ?: return ignored("no params")
                 decodeUpdate(params, bridgeSeq(params, obj))
             }
             method == "session/request_permission" && idEl != null -> {
-                val params = obj["params"]?.jsonObject ?: return ignored("no params")
+                val params = obj["params"] as? JsonObject ?: return ignored("no params")
                 decodePermission(idEl, params, bridgeSeq(params, obj))
             }
             method == "bridge/permissionResolved" -> {
-                val params = obj["params"]?.jsonObject ?: return ignored("no params")
+                val params = obj["params"] as? JsonObject ?: return ignored("no params")
                 decodePermissionResolved(params, bridgeSeq(params, obj))
             }
             method == "bridge/sessionStatus" -> {
-                val params = obj["params"]?.jsonObject ?: return ignored("no params")
+                val params = obj["params"] as? JsonObject ?: return ignored("no params")
                 decodeSessionStatus(params, bridgeSeq(params, obj))
             }
             method == null && idEl != null -> {
@@ -228,7 +235,7 @@ class AcpAdapter : HarnessAdapter {
 
     private fun decodeUpdate(params: JsonObject, seq: Long?): List<AdapterOutput> {
         val sid = params.str("sessionId") ?: return ignored("no sessionId")
-        val u = params["update"]?.jsonObject ?: return ignored("no update")
+        val u = params["update"] as? JsonObject ?: return ignored("no update")
         noteSeq(sid, seq)
         val now = System.currentTimeMillis()
         val out: CodeUpdate? = when (u.str("sessionUpdate")) {
@@ -236,7 +243,7 @@ class AcpAdapter : HarnessAdapter {
                 openThought.remove(sid)
                 // Key from the first chunk's bridge seq so session/load replay upserts, not duplicates.
                 val key = openText.getOrPut(sid) { stableKey("text", seq) }
-                val content = u["content"]?.jsonObject
+                val content = u["content"] as? JsonObject
                     ?: return ignored("agent_message_chunk without content")
                 when (content.str("type")) {
                     "image" -> {
@@ -263,12 +270,12 @@ class AcpAdapter : HarnessAdapter {
             }
             "agent_thought_chunk" -> {
                 val key = openThought.getOrPut(sid) { stableKey("thought", seq) }
-                u["content"]?.jsonObject?.str("text")?.let { CodeUpdate.TextChunk(key, it, thought = true) }
+                (u["content"] as? JsonObject)?.str("text")?.let { CodeUpdate.TextChunk(key, it, thought = true) }
             }
             "user_message_chunk" -> {
                 // Replayed history (session/load) or a prompt sent from another device.
                 closeText(sid)
-                u["content"]?.jsonObject?.str("text")?.let {
+                (u["content"] as? JsonObject)?.str("text")?.let {
                     CodeUpdate.Upsert(CodeEvent.UserPrompt(stableKey("user", seq), now, it))
                 }
             }
@@ -339,8 +346,10 @@ class AcpAdapter : HarnessAdapter {
     private fun decodePermission(idEl: JsonElement, params: JsonObject, seq: Long?): List<AdapterOutput> {
         val sid = params.str("sessionId") ?: return ignored("permission without session")
         noteSeq(sid, seq)
-        val call = params["toolCall"]?.jsonObject
-        val requestId = (idEl as JsonPrimitive).content
+        val call = params["toolCall"] as? JsonObject
+        // R6: non-primitive JSON-RPC id must not ClassCastException out of decode.
+        val requestId = (idEl as? JsonPrimitive)?.contentOrNull
+            ?: return ignored("non-primitive permission id")
         val options = params["options"]?.jsonArray?.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             val kind = when (o.str("kind")) {

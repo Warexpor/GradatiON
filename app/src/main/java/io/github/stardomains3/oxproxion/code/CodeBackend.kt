@@ -204,21 +204,35 @@ class BridgeBackend(
     private fun ensureReader() {
         if (reader != null) return
         reader = scope.launch {
-            transport.incoming.collect { frame ->
-                for (out in adapter.decode(frame)) when (out) {
-                    is AdapterOutput.Update -> {
-                        if (out.sessionId in suppressAgent && isSuppressedAgentActivity(out.update)) {
-                            // Stop already ended the turn locally; ignore late bridge activity.
-                            continue
+            // R6: supervise the collector — one bad frame (or unexpected decode throw)
+            // must not leave a CONNECTED dead pipe with no inbound handling.
+            while (true) {
+                try {
+                    transport.incoming.collect { frame ->
+                        val decoded = runCatching { adapter.decode(frame) }.getOrElse {
+                            return@collect
                         }
-                        if (out.seq != null) noteRunningFromUpdate(out)
-                        _updates.emit(SessionUpdate(out.sessionId, out.update))
+                        for (out in decoded) when (out) {
+                            is AdapterOutput.Update -> {
+                                if (out.sessionId in suppressAgent && isSuppressedAgentActivity(out.update)) {
+                                    // Stop already ended the turn locally; ignore late bridge activity.
+                                    continue
+                                }
+                                if (out.seq != null) noteRunningFromUpdate(out)
+                                _updates.emit(SessionUpdate(out.sessionId, out.update))
+                            }
+                            is AdapterOutput.Result -> pending.remove(out.id)?.let { d ->
+                                if (out.error != null) d.completeExceptionally(IllegalStateException(out.error))
+                                else d.complete(out.result)
+                            }
+                            is AdapterOutput.Ignored -> Unit
+                        }
                     }
-                    is AdapterOutput.Result -> pending.remove(out.id)?.let { d ->
-                        if (out.error != null) d.completeExceptionally(IllegalStateException(out.error))
-                        else d.complete(out.result)
-                    }
-                    is AdapterOutput.Ignored -> Unit
+                    break
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    delay(50)
                 }
             }
         }

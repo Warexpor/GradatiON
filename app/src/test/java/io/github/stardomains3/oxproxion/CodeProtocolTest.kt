@@ -263,6 +263,26 @@ class CodeProtocolTest {
         assertTrue(acp.decode("""{"jsonrpc":"2.0","method":"something/else"}""").single() is AdapterOutput.Ignored)
     }
 
+    @Test fun malformedPermissionIdIsIgnoredNotThrown() {
+        // R6: non-primitive JSON-RPC id must not ClassCastException out of decode.
+        val outs = acp.decode(
+            """{"jsonrpc":"2.0","id":{"nested":true},"method":"session/request_permission","params":{"sessionId":"s1","options":[]}}"""
+        )
+        assertTrue(outs.single() is AdapterOutput.Ignored)
+    }
+
+    @Test fun malformedUpdateContentIsIgnoredNotThrown() {
+        // R6: content that is not an object must not throw from .jsonObject.
+        val outs = acp.decode(
+            """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":1},"update":{"sessionUpdate":"agent_message_chunk","content":"not-an-object"}}}"""
+        )
+        assertTrue(outs.single() is AdapterOutput.Ignored)
+        val user = acp.decode(
+            """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":2},"update":{"sessionUpdate":"user_message_chunk","content":["array"]}}}"""
+        )
+        assertTrue(user.single() is AdapterOutput.Ignored)
+    }
+
     @Test fun newSessionCarriesHarnessAndMode() {
         val frame = Json.parseToJsonElement(acp.newSession(1, NewSessionRequest("h", HarnessKind.CODEX, "/w", "hi", PermissionMode.PLAN))).jsonObject
         assertEquals("session/new", frame["method"]!!.jsonPrimitive.content)

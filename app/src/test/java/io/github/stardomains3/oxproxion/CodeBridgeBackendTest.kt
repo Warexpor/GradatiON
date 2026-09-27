@@ -1567,4 +1567,55 @@ class CodeBridgeBackendTest {
     }
 
 
+
+    @Test
+    fun malformedFrameDoesNotKillReader() = runBlocking {
+        // R6: a malformed inbound frame must not permanently stop the reader while
+        // the socket stays CONNECTED — subsequent good frames must still decode.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            // Malformed: permission with object id (historically threw in decodePermission).
+            transport.deliver(
+                """{"jsonrpc":"2.0","id":{"bad":true},"method":"session/request_permission","params":{"sessionId":"s1","options":[]}}"""
+            )
+            delay(40)
+
+            // Good follow-up frame must still be handled.
+            transport.deliver(
+                """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":99},
+                "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"still-alive"}}}}"""
+            )
+            withTimeout(3_000) {
+                while (collected.none {
+                    val u = it.update
+                    u is CodeUpdate.TextChunk && u.chunk.contains("still-alive")
+                }) delay(10)
+            }
+            assertTrue(
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TextChunk && u.chunk.contains("still-alive")
+                },
+            )
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+
 }
