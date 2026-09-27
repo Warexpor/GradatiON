@@ -591,6 +591,16 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals("Summarize: the meeting notes", field.text.toString())
     }
 
+    @Test fun sendWithoutKeySaysWhy() = withChat { a, _ ->
+        a.findViewById<android.widget.EditText>(R.id.chatEditText).setText("Hello?")
+        a.findViewById<View>(R.id.sendChatButton).performClick()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(400))
+        val notice = a.findViewById<android.view.ViewGroup>(android.R.id.content).findViewWithTag<android.widget.TextView>("glass_notice")
+        org.junit.Assert.assertNotNull("no notice shown", notice)
+        org.junit.Assert.assertEquals(a.getString(R.string.notice_need_key), notice.text.toString())
+        snap(root(a), "notice_need_key_dark")
+    }
+
     @Test fun micHiddenWithoutAnyEngine() {
         // No recognizer and no voice model: nothing to dictate with.
         VoiceInput.deviceAvailableOverride = false

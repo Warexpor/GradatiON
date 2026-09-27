@@ -41,7 +41,7 @@ class VoiceDictation(
 
     private val permission = fragment.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) engine.start()
-        else AppToast.makeText(context, context.getString(R.string.toast_mic_permission), AppToast.LENGTH_SHORT).show()
+        else GlassNotice.show(context, context.getString(R.string.toast_mic_permission))
     }
 
     // The span of [input] this dictation owns: separator + settled words + words in flight.
@@ -158,7 +158,7 @@ class VoiceDictation(
     }
 
     override fun onError(message: String) {
-        AppToast.makeText(context, message, AppToast.LENGTH_SHORT).show()
+        GlassNotice.show(context, message)
     }
 
     // ── Text ────────────────────────────────────────────────────────────────────────────

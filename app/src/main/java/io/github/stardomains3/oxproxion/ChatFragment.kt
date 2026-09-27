@@ -1040,6 +1040,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     applyAwaitingChrome()
                 } else {
                     materialButton.animate().cancel()
+                    // A cancelled send "pop" would otherwise leave the button shrunk.
+                    materialButton.scaleX = 1f
+                    materialButton.scaleY = 1f
                     materialButton.animate().alpha(0f).setDuration(morphMs / 2).setInterpolator(Motion.easeOut).withEndAction {
                         applyAwaitingChrome()
                         materialButton.animate().alpha(1f).setDuration(morphMs / 2).setInterpolator(Motion.easeOut).start()
@@ -1051,6 +1054,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     applyIdleChrome()
                 } else {
                     materialButton.animate().cancel()
+                    // A cancelled send "pop" would otherwise leave the button shrunk.
+                    materialButton.scaleX = 1f
+                    materialButton.scaleY = 1f
                     materialButton.animate().alpha(0f).setDuration(morphMs / 2).setInterpolator(Motion.easeOut).withEndAction {
                         applyIdleChrome()
                         materialButton.animate().alpha(1f).setDuration(morphMs / 2).setInterpolator(Motion.easeOut).start()
@@ -2063,21 +2069,19 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     // LAN model: Check endpoint instead of API key
                     val lanEndpoint = viewModel.getLanEndpoint()
                     if (lanEndpoint.isNullOrBlank()) {
-                        AppToast.makeText(requireContext(), getString(R.string.toast_lan_endpoint_missing), AppToast.LENGTH_SHORT)
-                            .show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_need_lan))
                         return@setOnClickListener
                     }
                 } else {
                     // Non-LAN model: Check API key
                     if (viewModel.activeChatApiKey.isBlank()) {
-                        AppToast.makeText(requireContext(), getString(R.string.toast_api_key_missing), AppToast.LENGTH_SHORT)
-                            .show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_need_key))
                         return@setOnClickListener
                     }
                 }
                 if (viewModel.isTranscriptionModel(viewModel.activeChatModel.value) && selectedAudioBytes != null) {
                     if (viewModel.isRpMode()) {
-                        AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
                         return@setOnClickListener
                     }
                     hideKeyboard()
@@ -2104,7 +2108,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 if (viewModel.isRpMode() &&
                     (selectedImageBytes != null || selectedAudioBytes != null || pendingFiles.isNotEmpty())
                 ) {
-                    AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
                     return@setOnClickListener
                 }
                 if (pendingFiles.isNotEmpty()) {
@@ -3566,7 +3570,7 @@ $cleanContent
     /** Late Ask picker results must not stage media after a flip to RP. */
     private fun discardAttachmentIfRp(): Boolean {
         if (!viewModel.isRpMode()) return false
-        AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+        GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
         return true
     }
 
@@ -3706,7 +3710,7 @@ $cleanContent
     private fun setupTextFilePicker() {
         attachmentButton.setOnClickListener {
             if (viewModel.isRpMode()) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
                 return@setOnClickListener
             }
             // Launch multi-picker with primary MIME (broadens to text-like; client-side filters the rest)
@@ -3716,7 +3720,7 @@ $cleanContent
 
         attachmentButton.setOnLongClickListener {
             if (viewModel.isRpMode()) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_attachments_disabled), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
                 return@setOnLongClickListener true
             }
             showAttachedFiles()
@@ -3898,6 +3902,7 @@ $cleanContent
         if (hidden) pickerPopover?.dismiss(animated = false)
         if (!hidden) {  // Fragment is now visible
             refreshModeTabs()
+            settleSendButton()
             updateSystemMessageButtonState()
            // chatEditText.requestFocus()
             viewModel.checkAdvancedReasoningStatus()
@@ -3915,6 +3920,7 @@ $cleanContent
         super.onResume()
         refreshModeTabs()
         dictation?.refresh()
+        settleSendButton()
         updateSystemMessageButtonState()
         viewModel.isStreamingEnabled.value?.let { updateStreamToggleAppearance(it) }
        // chatEditText.requestFocus()
@@ -4726,6 +4732,15 @@ $cleanContent
 
 
     private var sendButtonActive = false
+
+    /** Undo any interrupted pop/morph (fragment hidden or paused mid-animation). */
+    private fun settleSendButton() {
+        if (!::sendChatButton.isInitialized) return
+        sendChatButton.animate().cancel()
+        sendChatButton.scaleX = 1f
+        sendChatButton.scaleY = 1f
+        sendChatButton.alpha = 1f
+    }
 
     private fun updateSendButtonChrome() {
         if (!::sendChatButton.isInitialized) return

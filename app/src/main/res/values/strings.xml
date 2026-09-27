@@ -353,6 +353,8 @@
     <string name="cd_font_decrease">Decrease font</string>
     <string name="cd_done">Done</string>
     <string name="cd_voice_input">Voice input</string>
+    <string name="notice_need_key">Add your OpenRouter API key in Settings &gt; Models to start chatting.</string>
+    <string name="notice_need_lan">Set your local server address in Settings &gt; Models.</string>
     <string name="cd_voice_done">Done dictating</string>
     <string name="cd_voice_transcribing">Transcribing</string>
     <string name="voice_unavailable">Voice input isn\'t available. Pick an engine in Settings &gt; Voice.</string>
