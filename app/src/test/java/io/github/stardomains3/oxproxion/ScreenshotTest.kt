@@ -610,6 +610,26 @@ class ScreenshotTest {
         snap(root(a), "notice_need_key_dark")
     }
 
+    @Test fun backdropRunsUnderStatusBar() = withChat { a, _ ->
+        // Pretend a phone: 40dp status bar, 24dp gesture bar.
+        val d = a.resources.displayMetrics.density
+        val insets = androidx.core.view.WindowInsetsCompat.Builder()
+            .setInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars(), androidx.core.graphics.Insets.of(0, (40 * d).toInt(), 0, 0))
+            .setInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars(), androidx.core.graphics.Insets.of(0, 0, 0, (24 * d).toInt()))
+            .build()
+        val content = a.findViewById<View>(R.id.rootLayout)
+        androidx.core.view.ViewCompat.dispatchApplyWindowInsets(content, insets)
+        idle()
+        val backdrop = a.findViewById<View>(R.id.chatBackdrop)
+        val loc = IntArray(2); backdrop.getLocationInWindow(loc)
+        val rootLoc = IntArray(2); content.getLocationInWindow(rootLoc)
+        org.junit.Assert.assertEquals("backdrop starts at the very top", rootLoc[1], loc[1])
+        org.junit.Assert.assertEquals(content.height, backdrop.height)
+        val bar = a.findViewById<View>(R.id.topBarGlass)
+        org.junit.Assert.assertTrue("bar content clears the status bar", bar.paddingTop >= (40 * d).toInt())
+        snap(root(a), "chat_insets_dark")
+    }
+
     @Test fun micHiddenWithoutAnyEngine() {
         // No recognizer and no voice model: nothing to dictate with.
         VoiceInput.deviceAvailableOverride = false

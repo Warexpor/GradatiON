@@ -56,8 +56,8 @@
         <item name="colorError">@color/xai_error</item>
         <item name="colorOnError">@color/white</item>
         <item name="android:colorBackground">@color/xai_canvas</item>
-        <item name="android:statusBarColor">@color/xai_canvas</item>
-        <item name="android:navigationBarColor">@color/xai_canvas</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:colorAccent">@color/xai_ink</item>
         <item name="colorAccent">@color/xai_ink</item>
         <item name="materialAlertDialogTheme">@style/CustomMaterialAlertDialogTheme</item>

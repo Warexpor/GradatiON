@@ -60,6 +60,11 @@ object Motion {
         )
     }
 
+    /** Push a screen over one that stays visible (the history panel): it slides, never fades through. */
+    fun FragmentTransaction.withGrokPushOver(): FragmentTransaction {
+        return setCustomAnimations(R.anim.fragment_open_enter, 0, 0, R.anim.fragment_close_exit)
+    }
+
     fun FragmentTransaction.withGrokFadeAnimations(): FragmentTransaction {
         return setCustomAnimations(
             R.anim.fade_in,

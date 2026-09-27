@@ -24,6 +24,15 @@ class MainActivity : AppCompatActivity() {
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op */ }
 
+    private var navLockUntil = 0L
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN &&
+            android.os.SystemClock.uptimeMillis() < navLockUntil
+        ) return true
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val savedTheme = SharedPreferencesHelper(this).getThemeMode()
         val mode = when (savedTheme) {
@@ -35,6 +44,12 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         GlassQuality.init(this)
         GlassChrome.install(supportFragmentManager)
+        // While a screen slides in or out, taps would stack a second copy on top (a double tap
+        // on a settings row sank the stack a level too deep). Hold touches for the transition.
+        supportFragmentManager.addOnBackStackChangedListener {
+            navLockUntil = android.os.SystemClock.uptimeMillis() +
+                resources.getInteger(R.integer.motion_fragment)
+        }
 
         /* ------------------------------------------------------ */
         /* 1.  Cold-start gate:  finish() if auth fails / none    */
@@ -52,6 +67,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun continueOnCreate() {
+        // Edge to edge on every version (Android 15+ already forces it): screens pad themselves,
+        // and chat lets its background run under the status bar.
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
         askNotificationPermission()
         handleCodePairIntent(intent)

@@ -1,6 +1,6 @@
 package io.github.stardomains3.oxproxion
 
-import io.github.stardomains3.oxproxion.Motion.withGrokFadeAnimations
+import io.github.stardomains3.oxproxion.Motion.withGrokPushOver
 import io.github.stardomains3.oxproxion.Motion.setShownAnimated
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 
@@ -720,6 +720,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             timeZone = TimeZone.getDefault()
         }
         setupRecyclerView()
+        setupEdgeToEdge(view)
         setupGlassChrome(view)
 
         // In onViewCreated(), after initializing chatEditText and before setupClickListeners()
@@ -1599,6 +1600,44 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var chromeTop = -1
     private var chromeBottom = -1
     private val chromeBaseMargins = HashMap<View, Int>()
+
+    /**
+     * Edge to edge: the backdrop (and the chosen background) runs under the status and
+     * navigation bars instead of stopping at a flat canvas strip. Only the chrome is inset: the
+     * glass top bar grows by the status bar, the composer and Code mode sit above the nav bar
+     * and the keyboard.
+     */
+    private fun setupEdgeToEdge(root: View) {
+        val content = root.findViewById<ViewGroup>(R.id.rootLayout)
+        val frame = root.findViewById<ViewGroup>(R.id.chatFrameView)
+        val backdrop = root.findViewById<View>(R.id.chatBackdrop)
+        val topBar = root.findViewById<View>(R.id.topBarGlass)
+        val dock = root.findViewById<View>(R.id.composerDock)
+        val code = root.findViewById<View>(R.id.codeModeContainer)
+        val barTop = topBar.paddingTop
+        val dockBottom = dock.paddingBottom
+        frame.clipToPadding = false
+        ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottom = maxOf(bars.bottom, ime.bottom)
+            v.setPadding(bars.left, 0, bars.right, 0)
+            topBar.setPadding(topBar.paddingLeft, barTop + bars.top, topBar.paddingRight, topBar.paddingBottom)
+            // Everything in the chat frame keeps its old place; only the backdrop bleeds out.
+            frame.setPadding(0, bars.top, 0, bottom)
+            (backdrop.layoutParams as ViewGroup.MarginLayoutParams).let { lp ->
+                if (lp.topMargin != -bars.top || lp.bottomMargin != -bottom) {
+                    lp.topMargin = -bars.top
+                    lp.bottomMargin = -bottom
+                    backdrop.layoutParams = lp
+                }
+            }
+            dock.setPadding(dock.paddingLeft, dock.paddingTop, dock.paddingRight, dockBottom + bottom)
+            code.setPadding(0, 0, 0, bottom)
+            WindowInsetsCompat.CONSUMED
+        }
+        ViewCompat.requestApplyInsets(content)
+    }
 
     private fun setupGlassChrome(root: View) {
         val backdrop = root.findViewById<GlassBackdropLayout>(R.id.chatBackdrop)
@@ -4345,10 +4384,10 @@ $cleanContent
     }
 
     override fun openSettingsFromHistory() {
-        // Fade settings over the history panel — do not hide chat or close history first,
-        // or the chat layer flashes through during the exit animation.
+        // Push settings over the history panel — do not hide chat or close history first, or the
+        // chat layer flashes through. A slide, not a fade: a fading page let the list show through.
         parentFragmentManager.beginTransaction()
-            .withGrokFadeAnimations()
+            .withGrokPushOver()
             .add(R.id.fragment_container, SettingsFragment())
             .addToBackStack("settings")
             .commit()
@@ -4363,12 +4402,12 @@ $cleanContent
             HistoryPanelHost.Destination.ROLEPLAY -> openRpHub()
             HistoryPanelHost.Destination.MODELS -> openBotModelPicker()
             HistoryPanelHost.Destination.PROMPTS -> parentFragmentManager.beginTransaction()
-                .withGrokFadeAnimations()
+                .withGrokPushOver()
                 .add(R.id.fragment_container, PromptLibraryFragment())
                 .addToBackStack(null)
                 .commit()
             HistoryPanelHost.Destination.PRESETS -> parentFragmentManager.beginTransaction()
-                .withGrokFadeAnimations()
+                .withGrokPushOver()
                 .add(R.id.fragment_container, PresetsListFragment())
                 .addToBackStack(null)
                 .commit()
