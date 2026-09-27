@@ -8,6 +8,12 @@
     <string name="code_settings_intro">Drive Claude Code, Codex, OpenCode and other coding agents running on your own machines. Agents run there; this phone only steers them, reads their work and approves what they do.</string>
     <string name="code_settings_show_tab">Show Code tab</string>
     <string name="code_settings_show_tab_sub">Adds Code next to Chat and Roleplay</string>
+    <string name="code_settings_notify_away">Notify when away</string>
+    <string name="code_settings_notify_away_sub">Local alert when approval is needed or a turn finishes while you are in another app (bridge still connected). Off by default.</string>
+    <string name="code_away_channel_name">Code away</string>
+    <string name="code_away_channel_desc">Approvals and finished turns while GradatiON is in the background</string>
+    <string name="code_away_action_allow">Allow</string>
+    <string name="code_away_action_deny">Deny</string>
     <string name="code_settings_machines">Machines</string>
     <string name="code_settings_add_machine">Add a machine</string>
     <string name="code_settings_try_demo">Try the demo machine</string>

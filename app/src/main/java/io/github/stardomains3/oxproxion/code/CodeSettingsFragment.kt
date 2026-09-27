@@ -1,11 +1,16 @@
 package io.github.stardomains3.oxproxion.code
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
@@ -18,10 +23,24 @@ import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.launch
 
-/** Code mode settings: the tab toggle, machines, default approval mode, setup notes. */
+/** Code mode settings: the tab toggle, away notifications, machines, default approval mode, setup notes. */
 class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
 
     private lateinit var hub: CodeHub
+
+    /** Request POST_NOTIFICATIONS only when the user opts into "Notify when away" (API 33+). */
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!::hub.isInitialized) return@registerForActivityResult
+            val sw = view?.findViewById<MaterialSwitch>(R.id.codeNotifyAwaySwitch)
+            if (granted) {
+                hub.store.notifyWhenAway = true
+                sw?.isChecked = true
+            } else {
+                hub.store.notifyWhenAway = false
+                sw?.isChecked = false
+            }
+        }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         hub = CodeHub.get(requireContext())
@@ -33,12 +52,42 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
                 if (!on) hub.store.lastTabWasCode = false
             }
         }
+        view.findViewById<MaterialSwitch>(R.id.codeNotifyAwaySwitch).apply {
+            isChecked = hub.store.notifyWhenAway
+            setOnCheckedChangeListener { _, on ->
+                if (on) {
+                    if (!ensureNotificationPermission()) {
+                        // Permission pending or denied — keep pref off until granted.
+                        isChecked = false
+                        return@setOnCheckedChangeListener
+                    }
+                    hub.store.notifyWhenAway = true
+                } else {
+                    hub.store.notifyWhenAway = false
+                }
+            }
+        }
         bindDefaults(view.findViewById(R.id.codeDefaultsCard))
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 hub.hosts.collect { bindMachines(view.findViewById(R.id.codeMachinesCard), it) }
             }
         }
+    }
+
+    /**
+     * @return true when notifications may be posted (permission granted or not required).
+     * Launches the runtime prompt on API 33+ when not yet granted.
+     */
+    private fun ensureNotificationPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < 33) return true
+        val granted = ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) return true
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        return false
     }
 
     private fun bindMachines(card: LinearLayout, hosts: List<CodeHost>) {

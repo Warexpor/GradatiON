@@ -13,7 +13,9 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
+import io.github.stardomains3.oxproxion.code.CodeAwayNotifier
 import io.github.stardomains3.oxproxion.code.CodeHub
+import io.github.stardomains3.oxproxion.code.CodeSessionPending
 import io.github.stardomains3.oxproxion.code.CodePairPending
 import io.github.stardomains3.oxproxion.code.CodePairing
 
@@ -53,6 +55,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         askNotificationPermission()
         handleCodePairIntent(intent)
+        handleCodeAwayIntent(intent)
         val sharedPreferencesHelper = SharedPreferencesHelper(this)
         sharedPreferencesHelper.seedDefaultModelsIfNeeded()
         sharedPreferencesHelper.seedDefaultSystemMessagesIfNeeded()
@@ -212,6 +215,7 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleCodePairIntent(intent)
+        handleCodeAwayIntent(intent)
         if (intent.getBooleanExtra("from_notification", false)) {
             (supportFragmentManager.findFragmentById(R.id.fragment_container) as? ChatFragment)
                 ?.onOpenedFromNotification()
@@ -276,6 +280,22 @@ class MainActivity : AppCompatActivity() {
             // STT disabled
             // fragment?.startSpeechRecognitionSafely()
         }
+    }
+
+    /**
+     * Away-notification tap: queue [CodeSessionPending] so [io.github.stardomains3.oxproxion.code.CodeModeHost]
+     * opens the session. Does not touch ChatFragment.
+     */
+    private fun handleCodeAwayIntent(intent: Intent?) {
+        if (intent == null) return
+        val sessionId = intent.getStringExtra(CodeAwayNotifier.EXTRA_SESSION_ID) ?: return
+        intent.removeExtra(CodeAwayNotifier.EXTRA_SESSION_ID)
+        intent.removeExtra(CodeAwayNotifier.EXTRA_FROM_AWAY)
+        val hub = CodeHub.get(this)
+        hub.store.enabled = true
+        hub.store.lastTabWasCode = true
+        hub.awayNotifier.cancelSession(sessionId)
+        CodeSessionPending.offer(sessionId)
     }
 
     /**

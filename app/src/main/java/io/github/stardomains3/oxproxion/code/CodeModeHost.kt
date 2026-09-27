@@ -66,6 +66,41 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
                 }
             }
         }
+        // Away-notification tap: enable Code, switch tab, open the session.
+        fragment.lifecycleScope.launch {
+            fragment.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                CodeSessionPending.pending.collect { sessionId ->
+                    if (sessionId == null) return@collect
+                    onSessionPendingArrived()
+                }
+            }
+        }
+    }
+
+    /** Enable Code, activate tab, open the queued session from an away notification. */
+    private fun onSessionPendingArrived() {
+        hub.store.enabled = true
+        hub.store.lastTabWasCode = true
+        if (!tab.isVisible) refresh(restore = false)
+        tab.isVisible = true
+        if (!isActive) activate(animate = true)
+        container.post {
+            val id = CodeSessionPending.consume() ?: return@post
+            hub.awayNotifier.cancelSession(id)
+            val fm = fragment.parentFragmentManager
+            val top = fm.fragments.asReversed().filterIsInstance<CodeSessionFragment>().firstOrNull { it.isAdded }
+            if (top != null && top.arguments?.getString("session_id") == id) return@post
+            // Avoid stacking duplicates of the same session.
+            if (top != null) {
+                // Pop existing session screens back to chat, then open target.
+                fm.popBackStack(CodeSessionFragment.BACK_STACK_TAG, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE)
+            }
+            fm.beginTransaction()
+                .withGrokStackAnimations()
+                .add(R.id.fragment_container, CodeSessionFragment.newInstance(id))
+                .addToBackStack(CodeSessionFragment.BACK_STACK_TAG)
+                .commit()
+        }
     }
 
     /** Enable the Code tab, activate it, and show [CodeHostDialog] if a pending pair remains. */

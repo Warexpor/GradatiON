@@ -46,6 +46,14 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         get() = PermissionMode.fromId(prefs.getString(KEY_PERMISSION, null))
         set(v) = prefs.edit { putString(KEY_PERMISSION, v.id) }
 
+    /**
+     * Opt-in local notifications when approval needed / turn finished while the app is away
+     * and the bridge WebSocket is still connected (§5.6 local slice). Default off.
+     */
+    var notifyWhenAway: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFY_AWAY, false)
+        set(v) = prefs.edit { putBoolean(KEY_NOTIFY_AWAY, v) }
+
     var hosts: List<CodeHost>
         get() {
             migratePlaintextTokensIfNeeded()
@@ -137,6 +145,7 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         private const val KEY_LAST_TAB = "last_tab_code"
         private const val KEY_ACTIVE_HOST = "active_host"
         private const val KEY_PERMISSION = "permission_mode"
+        private const val KEY_NOTIFY_AWAY = "notify_when_away"
         private const val KEY_HOSTS = "hosts"
         const val KEY_SESSIONS = "sessions"
         private const val KEY_SESSIONS_MIGRATED = "sessions_migrated_to_room"

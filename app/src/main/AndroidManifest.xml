@@ -70,6 +70,10 @@
             android:exported="false"
             android:enabled="true"
             android:foregroundServiceType="dataSync|remoteMessaging" />
+        <receiver
+            android:name=".code.CodeAwayActionReceiver"
+            android:exported="false"
+            android:enabled="true" />
         <activity
             android:name=".MainActivity"
             android:windowSoftInputMode="stateHidden|adjustResize"

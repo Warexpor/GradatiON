@@ -52,6 +52,12 @@ class CodeHub private constructor(context: Context) {
     /** Coalesce backend SessionUpdates to ~one _sessions write per frame (see SessionUpdatePump). */
     private val updatePump = SessionUpdatePump(scope, ::drainSessionUpdates)
 
+    /** Local away notifications (§5.6); no sticky FGS. */
+    val awayNotifier = CodeAwayNotifier(appContext, store) { hostId ->
+        val host = _hosts.value.find { it.id == hostId }
+        host?.isDemo == true || connectionOf(hostId) == ConnectionState.CONNECTED
+    }
+
     private val _hosts = MutableStateFlow(store.hosts)
     val hosts: StateFlow<List<CodeHost>> = _hosts
 
@@ -180,6 +186,7 @@ class CodeHub private constructor(context: Context) {
 
     /** Pause bridge reconnect while backgrounded unless a session turn is in flight. */
     fun setAppBackgrounded(backgrounded: Boolean) {
+        awayNotifier.setBackgrounded(backgrounded)
         backends.values.forEach { it.setAppBackgrounded(backgrounded) }
     }
 
@@ -346,6 +353,16 @@ class CodeHub private constructor(context: Context) {
         if (result.sessions != null) _sessions.value = result.sessions
         // The guard is only for the cancelled turn; a later prompt starts normally.
         batch.forEach { if (it.update is CodeUpdate.TurnDone) suppressRunningFromChunks.remove(it.sessionId) }
+        // Local away notifs (§5.6): approval / turn finished while backgrounded + connected.
+        for (su in batch) {
+            val state = _sessions.value[su.sessionId] ?: continue
+            awayNotifier.onUpdate(
+                su.sessionId,
+                state.summary.hostId,
+                state.summary.title,
+                su.update,
+            )
+        }
         if (result.needsPersist) persistSessions()
     }
 

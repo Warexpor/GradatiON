@@ -75,6 +75,35 @@
                 android:text="@string/code_settings_show_tab_sub"
                 android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_settings_card"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/codeNotifyAwaySwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="56dp"
+                    android:maxLines="2"
+                    android:ellipsize="end"
+                    android:text="@string/code_settings_notify_away"
+                    android:textColor="@color/xai_ink"
+                    android:textSize="16sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="6dp"
+                android:text="@string/code_settings_notify_away_sub"
+                android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

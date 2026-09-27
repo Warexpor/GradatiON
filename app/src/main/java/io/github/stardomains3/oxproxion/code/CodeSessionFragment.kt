@@ -71,6 +71,8 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         hub = CodeHub.get(requireContext())
+        // User is looking at this session — drop any away notifications for it.
+        hub.awayNotifier.cancelSession(sessionId)
         val backdrop = view.findViewById<GlassBackdropLayout>(R.id.codeSessionBackdrop)
         val frame = view.findViewById<FrameLayout>(R.id.codeSessionFrame)
         list = view.findViewById(R.id.codeTranscript)
