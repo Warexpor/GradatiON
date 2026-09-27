@@ -389,6 +389,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         }
         bindBackgroundPicker(view, prefs)
         bindVoice(view, prefs)
+        bindChatTextSize(view, prefs)
 
         listOf(
             R.id.scrollButtonsSwitch,
@@ -502,6 +503,17 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                 isChecked = pref.second
                 setOnCheckedChangeListener { _, on -> BackgroundPhoto.setOption(ctx, pref.first, on) }
             }
+        }
+    }
+
+    /** Appearance > Chat text: S/M/L/XL presets over the chat scale (the old +/- steps were 5%). */
+    private fun bindChatTextSize(view: View, prefs: SharedPreferencesHelper) {
+        val group = view.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.chatTextSizeGroup)
+        val sizes = listOf(R.id.chatTextS to 90, R.id.chatTextM to 100, R.id.chatTextL to 115, R.id.chatTextXL to 130)
+        val current = prefs.getFontSizeCh()
+        group.check(sizes.minByOrNull { kotlin.math.abs(it.second - current) }!!.first)
+        group.addOnButtonCheckedListener { _, id, checked ->
+            if (checked) sizes.firstOrNull { it.first == id }?.let { prefs.saveFontSizeCh(it.second) }
         }
     }
 

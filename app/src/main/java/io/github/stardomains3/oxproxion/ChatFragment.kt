@@ -1411,8 +1411,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
         updateExtendedTopBarVisibility(sharedPreferencesHelper.getExtendedTopBarEnabled())
         updateModelSourceIndicator()
-        val savedScale = sharedPreferencesHelper.getFontSizeCh()
-        chatAdapter.updateFontSize(savedScale)
+        applyChatTextScale()
         rootView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
             override fun onGlobalLayout() {
                 // 1. IMPORTANT: Remove the listener immediately so it doesn't fire
@@ -3926,6 +3925,7 @@ $cleanContent
         if (!hidden) {  // Fragment is now visible
             refreshModeTabs()
             settleSendButton()
+            applyChatTextScale()
             updateSystemMessageButtonState()
            // chatEditText.requestFocus()
             viewModel.checkAdvancedReasoningStatus()
@@ -3941,6 +3941,7 @@ $cleanContent
     }
     override fun onResume() {
         super.onResume()
+        applyChatTextScale()
         refreshModeTabs()
         dictation?.refresh()
         settleSendButton()
@@ -4872,6 +4873,15 @@ $cleanContent
 
 
     private var sendButtonActive = false
+    private var appliedTextScale = -1
+
+    /** Settings > Appearance > Chat text may have changed while we were hidden. */
+    private fun applyChatTextScale() {
+        val scale = sharedPreferencesHelper.getFontSizeCh()
+        if (scale == appliedTextScale || !::chatAdapter.isInitialized) return
+        appliedTextScale = scale
+        chatAdapter.updateFontSize(scale)
+    }
 
     /** Undo any interrupted pop/morph (fragment hidden or paused mid-animation). */
     private fun settleSendButton() {

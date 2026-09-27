@@ -630,6 +630,16 @@ class ScreenshotTest {
         snap(root(a), "chat_insets_dark")
     }
 
+    @Test fun chatTextSizeFromAppearance() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowAppearance)
+        snap(root(a), "settings_appearance_textsize_dark")
+        a.findViewById<View>(R.id.chatTextXL).performClick(); idle()
+        org.junit.Assert.assertEquals(130, SharedPreferencesHelper(a).getFontSizeCh())
+        a.supportFragmentManager.popBackStackImmediate(); a.supportFragmentManager.popBackStackImmediate(); idle()
+        seedConversation(a); idle()
+        snap(root(a), "chat_text_xl_dark")
+    }
+
     @Test fun micHiddenWithoutAnyEngine() {
         // No recognizer and no voice model: nothing to dictate with.
         VoiceInput.deviceAvailableOverride = false
