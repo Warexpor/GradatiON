@@ -40,3 +40,12 @@ Clipped labels, verified with the screenshot tests that cover each screen:
 Phone still has to check motion, glass blur, and the Thinking toggle. `rpAutoMemoryUpdatesAfterReply`
 failed while regenerating screenshots (Memory stayed "kept" after Facts was turned back on). That is
 behavior, not layout.
+
+## UI bug pass (2026-09-27)
+UI audit + fixes (112a867..27bf705): glass Snackbars (theme inverse colors), PDF Snackbar crash on a
+recycled row, Markdown viewer follows the palette, shimmer pauses offscreen, shared Coil loader,
+masked API-key fields, one-shot system message pick, visible checkbox checks, failures raise
+GlassNotice (toasts stay silent), Code session edge to edge, 44dp hit areas (`TouchTargets`), glass
+settings cards, strings moved to resources. 443 tests, only `rpAutoMemoryUpdatesAfterReply` fails
+(pre-existing). Skipped: HTML/PDF export colors, GlassNotice under dialog dims, CodeHostDialog 36dp pill.
+Phone: touch edges of send/mic, Code session insets + IME, Snackbar look, settings cards on a photo bg.
