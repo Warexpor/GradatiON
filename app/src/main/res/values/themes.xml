@@ -510,12 +510,12 @@
     </style>
 
     <!-- Brand wordmark (history header) -->
-    <!-- Masthead wordmark: Instrument Serif italic (see Wordmark.kt for the "ON" treatment) -->
+    <!-- Masthead wordmark: Michroma, tracked out; matches Wordmark.build() before it binds -->
     <style name="GrokionBrandWordmark" parent="@android:style/TextAppearance">
-        <item name="android:fontFamily">@font/instrumentserif_italic</item>
-        <item name="fontFamily">@font/instrumentserif_italic</item>
+        <item name="android:fontFamily">@font/michroma_regular</item>
+        <item name="fontFamily">@font/michroma_regular</item>
         <item name="android:textAllCaps">false</item>
-        <item name="android:letterSpacing">-0.01</item>
+        <item name="android:letterSpacing">0.04</item>
         <item name="android:textStyle">normal</item>
     </style>
 
