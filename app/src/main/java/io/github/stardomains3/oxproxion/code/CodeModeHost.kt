@@ -86,6 +86,8 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
         if (!isActive) activate(animate = true)
         container.post {
             val id = CodeSessionPending.consume() ?: return@post
+            // Stale tap after forget/removeHost: do not push an empty session screen (A5).
+            if (hub.sessions.value[id] == null) return@post
             hub.awayNotifier.cancelSession(id)
             val fm = fragment.parentFragmentManager
             val top = fm.fragments.asReversed().filterIsInstance<CodeSessionFragment>().firstOrNull { it.isAdded }

@@ -15,11 +15,12 @@ object CodeAwayFormat {
     }
 
     /**
-     * NotificationManager id derived from [dedupKey]. Stays clear of answer-ready (2)
-     * and legacy sticky FGS (1).
+     * NotificationManager id derived from [dedupKey]. Uses 24-bit entropy under
+     * [NOTIF_ID_BASE] so collisions across sessions are rare; stays clear of
+     * answer-ready (2) and legacy sticky FGS (1).
      */
     fun notificationId(dedupKey: String): Int {
-        val h = dedupKey.hashCode() and 0xFFFF
+        val h = dedupKey.hashCode() and 0x00FF_FFFF
         return NOTIF_ID_BASE + h
     }
 

@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -13,6 +14,8 @@ import androidx.core.content.ContextCompat
 import io.github.stardomains3.oxproxion.MainActivity
 import io.github.stardomains3.oxproxion.R
 import io.github.stardomains3.oxproxion.code.store.CodeStore
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Local notifications when Code mode is away (§5.6 local slice).
@@ -20,6 +23,9 @@ import io.github.stardomains3.oxproxion.code.store.CodeStore
  * Posts ordinary (non-ongoing, non-FGS) notifications while the process is backgrounded,
  * the opt-in flag is on, and the session's host WebSocket is still CONNECTED.
  * No sticky "Code running" chrome — follow [io.github.stardomains3.oxproxion.ForegroundService].
+ *
+ * Content intents carry a one-shot opaque [EXTRA_OPEN_TOKEN] minted here; [MainActivity]
+ * must present a matching token before opening a session (exported-Activity extras are forgeable).
  */
 class CodeAwayNotifier(
     context: Context,
@@ -38,6 +44,13 @@ class CodeAwayNotifier(
     /** notificationId → dedupKey for cancel-by-session. */
     private val idToKey = HashMap<Int, String>()
 
+    /** sessionId → one-shot open nonce baked into content PendingIntents (A1). */
+    private val openTokens = ConcurrentHashMap<String, String>()
+
+    /** Survives process death so a cold-start notification tap still authenticates (A1). */
+    private val tokenPrefs: SharedPreferences =
+        appContext.getSharedPreferences(OPEN_TOKEN_PREFS, Context.MODE_PRIVATE)
+
     fun setBackgrounded(backgrounded: Boolean) {
         this.backgrounded = backgrounded
     }
@@ -47,16 +60,25 @@ class CodeAwayNotifier(
     /**
      * Inspect one session update. Posts approval / turn-finished while away+connected;
      * always cancels on [CodeUpdate.ApprovalAnswered].
+     *
+     * @param sessionWasRunning pre-fold running flag — TurnDone only notifies when the
+     *   session was already live (suppresses historical attach/seed replays; A4).
      */
     fun onUpdate(
         sessionId: String,
         hostId: String,
         sessionTitle: String,
         update: CodeUpdate,
+        sessionWasRunning: Boolean = true,
     ) {
         when (update) {
             is CodeUpdate.ApprovalAnswered -> cancelApproval(sessionId, update.requestId)
             is CodeUpdate.Upsert -> {
+                // A3: a new user turn must allow a later TurnDone to re-alert.
+                if (update.event is CodeEvent.UserPrompt) {
+                    clearTurnDoneDedup(sessionId)
+                    return
+                }
                 val approval = update.event as? CodeEvent.Approval ?: return
                 if (approval.chosen != null) {
                     cancelApproval(sessionId, approval.requestId)
@@ -64,7 +86,10 @@ class CodeAwayNotifier(
                 }
                 maybePostApproval(sessionId, hostId, sessionTitle, approval)
             }
-            is CodeUpdate.TurnDone -> maybePostTurnDone(sessionId, hostId, sessionTitle)
+            is CodeUpdate.TurnDone -> {
+                if (!sessionWasRunning) return
+                maybePostTurnDone(sessionId, hostId, sessionTitle)
+            }
             else -> Unit
         }
     }
@@ -75,10 +100,50 @@ class CodeAwayNotifier(
                 it.startsWith("approval:$sessionId:")
         }
         toRemove.forEach { key -> cancelKey(key) }
+        clearOpenToken(sessionId)
     }
 
     fun cancelApproval(sessionId: String, requestId: String) {
         cancelKey(CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, sessionId, requestId))
+    }
+
+    /**
+     * A1: mint (or refresh) the one-shot open nonce for [sessionId].
+     * Only [consumeOpenToken] with the matching value authorizes a deep open.
+     */
+    fun issueOpenToken(sessionId: String): String {
+        val token = UUID.randomUUID().toString()
+        openTokens[sessionId] = token
+        tokenPrefs.edit().putString(sessionId, token).apply()
+        return token
+    }
+
+    /**
+     * A1: one-shot check. Returns true only when [token] matches the nonce issued for
+     * [sessionId], then clears it so a forged/replayed Intent cannot reopen.
+     * Checks in-memory first, then persisted prefs (cold start after process death).
+     */
+    fun consumeOpenToken(sessionId: String, token: String?): Boolean {
+        if (sessionId.isBlank() || token.isNullOrBlank()) return false
+        val expected = openTokens[sessionId] ?: tokenPrefs.getString(sessionId, null) ?: return false
+        if (expected != token) return false
+        clearOpenToken(sessionId)
+        return true
+    }
+
+    private fun clearOpenToken(sessionId: String) {
+        openTokens.remove(sessionId)
+        tokenPrefs.edit().remove(sessionId).apply()
+    }
+
+    /** Drop turn-done dedup so a subsequent finished turn can notify again (A3). */
+    fun clearTurnDoneDedup(sessionId: String) {
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId)
+        // Remove memory only — leave any still-visible shade entry until open/auto-cancel;
+        // the next TurnDone will post a fresh notification.
+        if (!posted.remove(key)) return
+        val id = CodeAwayFormat.notificationId(key)
+        idToKey.remove(id)
     }
 
     private fun maybePostApproval(
@@ -171,10 +236,12 @@ class CodeAwayNotifier(
         title: String,
         contentText: String,
     ): NotificationCompat.Builder {
+        val token = issueOpenToken(sessionId)
         val open = Intent(appContext, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra(EXTRA_SESSION_ID, sessionId)
             putExtra(EXTRA_FROM_AWAY, true)
+            putExtra(EXTRA_OPEN_TOKEN, token)
         }
         val contentPi = PendingIntent.getActivity(
             appContext,
@@ -222,11 +289,14 @@ class CodeAwayNotifier(
     private fun markPosted(key: String, id: Int) {
         posted += key
         idToKey[id] = key
-        // Bound memory if many sessions notify while away.
+        // Bound memory if many sessions notify while away; cancel shade on eviction (A6).
         while (posted.size > 64) {
             val oldest = posted.first()
             posted.remove(oldest)
-            idToKey.entries.removeAll { it.value == oldest }
+            val evictId = idToKey.entries.firstOrNull { it.value == oldest }?.key
+                ?: CodeAwayFormat.notificationId(oldest)
+            idToKey.remove(evictId)
+            nm?.cancel(evictId)
         }
     }
 
@@ -243,6 +313,7 @@ class CodeAwayNotifier(
         const val CHANNEL_ID = "code_away"
         const val EXTRA_SESSION_ID = "code_away_session_id"
         const val EXTRA_FROM_AWAY = "code_away_from_notification"
+        const val EXTRA_OPEN_TOKEN = "code_away_open_token"
         const val EXTRA_REQUEST_ID = "code_away_request_id"
         const val EXTRA_OPTION_ID = "code_away_option_id"
         const val EXTRA_OPTION_KIND = "code_away_option_kind"
@@ -251,5 +322,6 @@ class CodeAwayNotifier(
 
         private const val REQUEST_ALLOW = 0xA11
         private const val REQUEST_DENY = 0xDE1
+        private const val OPEN_TOKEN_PREFS = "code_away_open_tokens"
     }
 }

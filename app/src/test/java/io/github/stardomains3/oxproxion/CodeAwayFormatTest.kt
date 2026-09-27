@@ -42,6 +42,16 @@ class CodeAwayFormatTest {
     }
 
     @Test
+    fun shouldPostAgainAfterTurnKeyCleared() {
+        // A3: clearing the turn-done key (on new UserPrompt) must allow a later post.
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "s1")
+        val posted = mutableSetOf(key)
+        assertFalse(CodeAwayFormat.shouldPost(posted, key))
+        posted.remove(key)
+        assertTrue(CodeAwayFormat.shouldPost(posted, key))
+    }
+
+    @Test
     fun notificationIdsStableAndAwayFromLegacy() {
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess")
         val id1 = CodeAwayFormat.notificationId(key)
@@ -50,6 +60,18 @@ class CodeAwayFormatTest {
         assertTrue(id1 >= CodeAwayFormat.NOTIF_ID_BASE)
         assertNotEquals(1, id1)
         assertNotEquals(2, id1)
+    }
+
+    @Test
+    fun notificationIdsUseWideSpace() {
+        // A6: 24-bit entropy under NOTIF_ID_BASE — many distinct session keys stay unique.
+        val ids = (0 until 500).map {
+            CodeAwayFormat.notificationId(
+                CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess-$it"),
+            )
+        }.toSet()
+        assertTrue("expected high uniqueness, got ${ids.size}", ids.size >= 490)
+        assertTrue(ids.all { it != 1 && it != 2 && it >= CodeAwayFormat.NOTIF_ID_BASE })
     }
 
     @Test

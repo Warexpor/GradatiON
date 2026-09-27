@@ -285,13 +285,23 @@ class MainActivity : AppCompatActivity() {
     /**
      * Away-notification tap: queue [CodeSessionPending] so [io.github.stardomains3.oxproxion.code.CodeModeHost]
      * opens the session. Does not touch ChatFragment.
+     *
+     * A1: extras on this exported Activity are forgeable. Accept only when
+     * [CodeAwayNotifier.EXTRA_FROM_AWAY] is set, a one-shot open token matches, and the
+     * session still exists in the hub — never trust a bare session id from an external Intent.
      */
     private fun handleCodeAwayIntent(intent: Intent?) {
         if (intent == null) return
         val sessionId = intent.getStringExtra(CodeAwayNotifier.EXTRA_SESSION_ID) ?: return
+        val fromAway = intent.getBooleanExtra(CodeAwayNotifier.EXTRA_FROM_AWAY, false)
+        val token = intent.getStringExtra(CodeAwayNotifier.EXTRA_OPEN_TOKEN)
         intent.removeExtra(CodeAwayNotifier.EXTRA_SESSION_ID)
         intent.removeExtra(CodeAwayNotifier.EXTRA_FROM_AWAY)
+        intent.removeExtra(CodeAwayNotifier.EXTRA_OPEN_TOKEN)
+        if (!fromAway) return
         val hub = CodeHub.get(this)
+        if (!hub.awayNotifier.consumeOpenToken(sessionId, token)) return
+        if (hub.sessions.value[sessionId] == null) return
         hub.store.enabled = true
         hub.store.lastTabWasCode = true
         hub.awayNotifier.cancelSession(sessionId)

@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -54,8 +55,9 @@ class CodeHub private constructor(context: Context) {
 
     /** Local away notifications (§5.6); no sticky FGS. */
     val awayNotifier = CodeAwayNotifier(appContext, store) { hostId ->
-        val host = _hosts.value.find { it.id == hostId }
-        host?.isDemo == true || connectionOf(hostId) == ConnectionState.CONNECTED
+        // Real CONNECTED only (demo included once its backend is up). No isDemo bypass —
+        // historical attach TurnDone is gated via sessionWasRunning in onUpdate (A4).
+        connectionOf(hostId) == ConnectionState.CONNECTED
     }
 
     private val _hosts = MutableStateFlow(store.hosts)
@@ -113,6 +115,8 @@ class CodeHub private constructor(context: Context) {
     }
 
     fun removeHost(id: String) {
+        // A5: clear shade entries before dropping sessions for this host.
+        sessionsFor(id).forEach { awayNotifier.cancelSession(it.summary.id) }
         backends.remove(id)?.close()
         _connections.value = _connections.value - id
         val list = _hosts.value.filterNot { it.id == id }
@@ -303,6 +307,39 @@ class CodeHub private constructor(context: Context) {
 
     fun answer(sessionId: String, requestId: String, option: ApprovalOption?) = withBackend(sessionId) { it.answer(sessionId, requestId, option) }
 
+    /**
+     * Away-notification Allow/Deny (A2): run the answer on the hub scope and invoke [onDone]
+     * when finished (or after timeout / missing session). Caller cancels the shade only on success.
+     */
+    fun answerFromAway(
+        sessionId: String,
+        requestId: String,
+        option: ApprovalOption?,
+        onDone: (Boolean) -> Unit,
+    ) {
+        val s = _sessions.value[sessionId]
+        if (s == null) {
+            onDone(false)
+            return
+        }
+        val host = _hosts.value.find { it.id == s.summary.hostId }
+        if (host == null) {
+            onDone(false)
+            return
+        }
+        scope.launch {
+            val ok = try {
+                withTimeout(AWAY_ANSWER_TIMEOUT_MS) {
+                    backendFor(host).answer(sessionId, requestId, option)
+                    true
+                }
+            } catch (_: Throwable) {
+                false
+            }
+            onDone(ok)
+        }
+    }
+
     fun cancel(sessionId: String) {
         // Eager clear so Stop→Send is not rejected while pump still holds TurnDone.
         // Keep stale queued chunks from reviving running until that turn's done arrives.
@@ -318,6 +355,7 @@ class CodeHub private constructor(context: Context) {
     }
 
     fun forget(sessionId: String) {
+        awayNotifier.cancelSession(sessionId) // A5
         _sessions.value = _sessions.value - sessionId
         persistSessions()
     }
@@ -344,8 +382,11 @@ class CodeHub private constructor(context: Context) {
      * TurnDone/SessionInfo landed in the batch.
      */
     private fun drainSessionUpdates(batch: List<SessionUpdate>) {
+        // Snapshot pre-fold running + cancel-suppress so TurnDone eligibility is correct (A4).
+        val before = _sessions.value
+        val suppressSnapshot = suppressRunningFromChunks.toSet()
         val result = foldSessionUpdates(
-            _sessions.value,
+            before,
             batch,
             liveSeqOf = { state, sid -> backends[state.summary.hostId]?.peekLastSeq(sid) },
             suppressRunningFromChunks = suppressRunningFromChunks,
@@ -356,11 +397,14 @@ class CodeHub private constructor(context: Context) {
         // Local away notifs (§5.6): approval / turn finished while backgrounded + connected.
         for (su in batch) {
             val state = _sessions.value[su.sessionId] ?: continue
+            val wasRunning = before[su.sessionId]?.running == true ||
+                su.sessionId in suppressSnapshot
             awayNotifier.onUpdate(
                 su.sessionId,
                 state.summary.hostId,
                 state.summary.title,
                 su.update,
+                sessionWasRunning = wasRunning,
             )
         }
         if (result.needsPersist) persistSessions()
@@ -416,6 +460,8 @@ class CodeHub private constructor(context: Context) {
 
     companion object {
         private const val TAG = "CodeHub"
+        /** Max wait for away Allow/Deny to reach the bridge before releasing goAsync (A2). */
+        private const val AWAY_ANSWER_TIMEOUT_MS = 8_000L
 
         @Volatile
         private var instance: CodeHub? = null

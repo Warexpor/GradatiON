@@ -7,6 +7,9 @@ import android.content.Intent
 /**
  * Handles Allow / Deny actions on Code away-approval notifications without opening the UI.
  * Uses the same [CodeHub.answer] path as the transcript approval buttons.
+ *
+ * A2: [goAsync] keeps the process alive until the answer RPC finishes (or times out);
+ * the shade entry is cancelled only after a successful answer.
  */
 class CodeAwayActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
@@ -17,8 +20,13 @@ class CodeAwayActionReceiver : BroadcastReceiver() {
         val kindName = intent.getStringExtra(CodeAwayNotifier.EXTRA_OPTION_KIND) ?: return
         val label = intent.getStringExtra(CodeAwayNotifier.EXTRA_OPTION_LABEL).orEmpty()
         val kind = runCatching { ApprovalOption.Kind.valueOf(kindName) }.getOrNull() ?: return
+        val pending = goAsync()
         val hub = CodeHub.get(context)
-        hub.answer(sessionId, requestId, ApprovalOption(optionId, label, kind))
-        hub.awayNotifier.cancelApproval(sessionId, requestId)
+        hub.answerFromAway(sessionId, requestId, ApprovalOption(optionId, label, kind)) { success ->
+            if (success) {
+                hub.awayNotifier.cancelApproval(sessionId, requestId)
+            }
+            pending.finish()
+        }
     }
 }
