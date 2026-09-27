@@ -16,6 +16,7 @@ import io.github.stardomains3.oxproxion.code.PermissionMode
 import io.github.stardomains3.oxproxion.code.SessionUpdate
 import io.github.stardomains3.oxproxion.code.TransportKind
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +41,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -72,6 +75,12 @@ class CodeBridgeBackendTest {
         var failPromptSendOnce = false
         /** When true, the next non-prompt send fails once (approval answer / cancel). */
         var failNextNonPromptSend = false
+        /**
+         * AWAY-02: when set, non-prompt [send] counts down [nonPromptSendEntered] then blocks
+         * until [holdNonPromptSend] reaches zero (so a second answer can race the in-flight set).
+         */
+        var holdNonPromptSend: CountDownLatch? = null
+        var nonPromptSendEntered: CountDownLatch? = null
         private val open = AtomicBoolean(false)
 
         override fun connect() {
@@ -92,6 +101,10 @@ class CodeBridgeBackendTest {
                 failNextNonPromptSend = false
                 lastError = "Not connected"
                 return false
+            }
+            if (!frame.contains("session/prompt") && holdNonPromptSend != null) {
+                nonPromptSendEntered?.countDown()
+                holdNonPromptSend!!.await(5, TimeUnit.SECONDS)
             }
             sent += frame
             return true
@@ -1014,5 +1027,95 @@ class CodeBridgeBackendTest {
         }
     }
 
+    @Test
+    fun answerAllowsSameRequestIdAcrossSessions() = runBlocking {
+        // AWAY-02: two sessions on one host may share numeric request id "1".
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(5_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            val opt = io.github.stardomains3.oxproxion.code.ApprovalOption(
+                "allow", "Allow", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ONCE
+            )
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            val release = CountDownLatch(1)
+            val entered = CountDownLatch(1)
+            transport.holdNonPromptSend = release
+            transport.nonPromptSendEntered = entered
+
+            val first = async(Dispatchers.IO) { backend.answer("sA", "1", opt) }
+            assertTrue("first answer must reach transport.send", entered.await(3, TimeUnit.SECONDS))
+            // Bare requestId key would reject this; composite (sessionId, requestId) allows it.
+            val second = async(Dispatchers.IO) { backend.answer("sB", "1", opt) }
+            delay(80)
+            release.countDown()
+            first.await()
+            second.await()
+            delay(50)
+
+            val answered = collected.filter { it.update is CodeUpdate.ApprovalAnswered }
+            assertEquals("both sessions must emit ApprovalAnswered", 2, answered.size)
+            assertTrue(answered.any { it.sessionId == "sA" })
+            assertTrue(answered.any { it.sessionId == "sB" })
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun answerDedupesSameSessionRequestWhileInFlight() = runBlocking {
+        // AWAY-02 / M3: same session+request still collapses while the first send is held.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(5_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            val opt = io.github.stardomains3.oxproxion.code.ApprovalOption(
+                "allow", "Allow", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ONCE
+            )
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            val release = CountDownLatch(1)
+            val entered = CountDownLatch(1)
+            transport.holdNonPromptSend = release
+            transport.nonPromptSendEntered = entered
+
+            val first = async(Dispatchers.IO) { backend.answer("s1", "99", opt) }
+            assertTrue(entered.await(3, TimeUnit.SECONDS))
+            backend.answer("s1", "99", opt) // must no-op while first is in flight
+            release.countDown()
+            first.await()
+            delay(50)
+
+            val replies = transport.sent.filter {
+                it.contains("\"outcome\"") && (it.contains("\"id\":99") || it.contains("\"id\":\"99\""))
+            }
+            assertEquals(1, replies.size)
+            assertEquals(
+                1,
+                collected.count { it.update is CodeUpdate.ApprovalAnswered },
+            )
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
 
 }

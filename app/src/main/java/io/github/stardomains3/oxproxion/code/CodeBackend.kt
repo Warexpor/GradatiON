@@ -119,7 +119,7 @@ class BridgeBackend(
     private val suppressAgent = ConcurrentHashMap.newKeySet<String>()
     /** Serialize prompt + flush deliver per session so turns never overlap. */
     private val promptMutexes = ConcurrentHashMap<String, Mutex>()
-    /** In-flight permission answers (M3); key = requestId. */
+    /** In-flight permission answers (M3 / AWAY-02); key = sessionId + requestId. */
     private val answering = ConcurrentHashMap.newKeySet<String>()
 
     private data class OutboxPrompt(
@@ -570,8 +570,9 @@ class BridgeBackend(
     }
 
     override suspend fun answer(sessionId: String, requestId: String, option: ApprovalOption?) {
-        // M3: ignore a second Allow/Deny before the first send+emit finishes.
-        if (!answering.add(requestId)) return
+        // M3 / AWAY-02: ignore a second Allow/Deny for the same session+request while in flight.
+        val key = answeringKey(sessionId, requestId)
+        if (!answering.add(key)) return
         try {
             // AWAY-01: cold-start / disconnected hosts must connect + await ACP ready
             // before the permission reply; otherwise transport.send returns false.
@@ -587,9 +588,12 @@ class BridgeBackend(
                 )
             )
         } finally {
-            answering.remove(requestId)
+            answering.remove(key)
         }
     }
+
+    /** AWAY-02: composite in-flight key so two sessions may share a numeric request id. */
+    private fun answeringKey(sessionId: String, requestId: String) = "$sessionId\u0000$requestId"
 
     override suspend fun cancel(sessionId: String) {
         // C1 / D1: after forget→detach, never re-seed suppressAgent / deliverGeneration

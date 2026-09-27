@@ -120,4 +120,61 @@ class CodeHubAttachTest {
         )
     }
 
+
+    @Test
+    fun answerFromAwayAllowsSameRequestIdAcrossSessions() = runBlocking {
+        // AWAY-02: Hub answeringRequests keyed by (sessionId, requestId). Two sessions may
+        // share numeric id "1"; both away answers must proceed (bare requestId rejected B).
+        val hub = CodeHub.get(ctx)
+        hub.store.enabled = true
+        val host = hub.addDemoHost()
+        suspend fun start(prompt: String) = hub.startSession(
+            NewSessionRequest(
+                hostId = host.id,
+                harness = HarnessKind.CLAUDE_CODE,
+                workspace = "~/code/GradatiON",
+                prompt = prompt,
+                permissionMode = PermissionMode.ASK,
+            ),
+        ).getOrThrow()
+        val idA = start("AWAY-02 session A")
+        val idB = start("AWAY-02 session B")
+        val opt = ApprovalOption("allow", "Allow", ApprovalOption.Kind.ALLOW_ONCE)
+
+        val doneA = CompletableDeferred<Boolean>()
+        val doneB = CompletableDeferred<Boolean>()
+        hub.answerFromAway(idA, "1", opt) { doneA.complete(it) }
+        // Still in-flight / uncleared for A — composite key must not block B.
+        hub.answerFromAway(idB, "1", opt) { doneB.complete(it) }
+        assertTrue("session A away answer", withTimeout(3_000) { doneA.await() })
+        assertTrue("session B away answer must not collide on requestId", withTimeout(3_000) { doneB.await() })
+    }
+
+    @Test
+    fun answerFromAwayDedupesSameSessionRequest() = runBlocking {
+        // AWAY-02 / M3: same session+request still collapses while the first is in flight.
+        val hub = CodeHub.get(ctx)
+        hub.store.enabled = true
+        val host = hub.addDemoHost()
+        val id = hub.startSession(
+            NewSessionRequest(
+                hostId = host.id,
+                harness = HarnessKind.CLAUDE_CODE,
+                workspace = "~/code/GradatiON",
+                prompt = "AWAY-02 dedupe",
+                permissionMode = PermissionMode.ASK,
+            ),
+        ).getOrThrow()
+        val opt = ApprovalOption("allow", "Allow", ApprovalOption.Kind.ALLOW_ONCE)
+        val first = CompletableDeferred<Boolean>()
+        val second = CompletableDeferred<Boolean>()
+        hub.answerFromAway(id, "dup-1", opt) { first.complete(it) }
+        hub.answerFromAway(id, "dup-1", opt) { second.complete(it) }
+        assertTrue(withTimeout(3_000) { first.await() })
+        assertFalse(
+            "duplicate away answer for same session+request must be rejected",
+            withTimeout(3_000) { second.await() },
+        )
+    }
+
 }

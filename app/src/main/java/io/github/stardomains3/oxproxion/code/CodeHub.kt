@@ -49,7 +49,7 @@ class CodeHub private constructor(context: Context) {
      * Only those ids ignore a queued TurnDone("cancelled"); natural ACP cancelled clears running.
      */
     private val ignoreStaleCancelTurnDone = HashSet<String>()
-    /** In-flight approval answers (M3); cleared on ApprovalAnswered or send failure. */
+    /** In-flight approval answers (M3 / AWAY-02); key = sessionId + requestId. */
     private val answeringRequests = HashSet<String>()
     /** Sessions currently running backend.attach (E3); coalesce overlapping opens. */
     private val attachingSessions = HashSet<String>()
@@ -367,16 +367,21 @@ class CodeHub private constructor(context: Context) {
         return true
     }
 
+
+    /** AWAY-02: approval in-flight keys must not collide across sessions. */
+    private fun answeringKey(sessionId: String, requestId: String) = "$sessionId\u0000$requestId"
+
     fun answer(sessionId: String, requestId: String, option: ApprovalOption?) {
-        // M3: drop a second tap before ApprovalAnswered folds (and skip already-chosen).
-        if (!answeringRequests.add(requestId)) return
+        // M3 / AWAY-02: drop a second tap for the same session+request before fold.
+        val key = answeringKey(sessionId, requestId)
+        if (!answeringRequests.add(key)) return
         val s = _sessions.value[sessionId]
         val open = s?.events?.any {
             it is CodeEvent.Approval && it.requestId == requestId && it.chosen == null
         } == true
         val host = s?.let { st -> _hosts.value.find { it.id == st.summary.hostId } }
         if (!open || host == null) {
-            answeringRequests.remove(requestId)
+            answeringRequests.remove(key)
             return
         }
         scope.launch {
@@ -384,7 +389,7 @@ class CodeHub private constructor(context: Context) {
                 backendFor(host).answer(sessionId, requestId, option)
             } catch (_: Throwable) {
                 // H2: send failed — allow retry.
-                answeringRequests.remove(requestId)
+                answeringRequests.remove(key)
             }
         }
     }
@@ -419,7 +424,8 @@ class CodeHub private constructor(context: Context) {
             onDone(true) // already answered — cancel lingering shade
             return
         }
-        if (!answeringRequests.add(requestId)) {
+        val key = answeringKey(sessionId, requestId)
+        if (!answeringRequests.add(key)) {
             onDone(false)
             return
         }
@@ -432,7 +438,7 @@ class CodeHub private constructor(context: Context) {
                     true
                 }
             } catch (_: Throwable) {
-                answeringRequests.remove(requestId)
+                answeringRequests.remove(key)
                 false
             }
             onDone(ok)
@@ -540,7 +546,7 @@ class CodeHub private constructor(context: Context) {
         // Local away notifs (§5.6): approval / turn finished while backgrounded + connected.
         for (su in batch) {
             if (su.update is CodeUpdate.ApprovalAnswered) {
-                answeringRequests.remove(su.update.requestId)
+                answeringRequests.remove(answeringKey(su.sessionId, su.update.requestId))
             }
             val state = _sessions.value[su.sessionId] ?: continue
             val wasRunning = before[su.sessionId]?.running == true ||
