@@ -30,10 +30,10 @@
         <!-- Force a style (previews); unset = follow Settings > Appearance > Background -->
         <attr name="ambientStyle" format="enum">
             <enum name="off" value="0" />
-            <enum name="grain" value="1" />
-            <enum name="drift" value="2" />
-            <enum name="flow" value="3" />
-            <enum name="adaptive" value="4" />
+            <enum name="drift" value="1" />
+            <enum name="flow" value="2" />
+            <enum name="adaptive" value="3" />
+            <enum name="photo" value="4" />
         </attr>
         <!-- Animate at the style's low frame rate (default true); false = one static frame -->
         <attr name="ambientAnimated" format="boolean" />

@@ -20,6 +20,19 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
+            <!-- Canvas + ambient background inside the backdrop so glass samples them -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/xai_canvas"
+                android:importantForAccessibility="no" />
+
+            <io.github.stardomains3.oxproxion.AmbientBackgroundView
+                android:id="@+id/codeAmbient"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:importantForAccessibility="no" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/codeTranscript"
                 android:layout_width="match_parent"

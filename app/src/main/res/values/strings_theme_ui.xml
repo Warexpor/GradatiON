@@ -2,14 +2,23 @@
 <resources>
     <string name="settings_background">Background</string>
     <string name="settings_background_off">Off</string>
-    <string name="settings_background_grain">Grain</string>
     <string name="settings_background_drift">Drift</string>
     <string name="settings_background_flow">Flow</string>
     <string name="settings_background_adaptive">Adaptive</string>
     <string name="settings_background_off_summary">A plain canvas behind the chat.</string>
-    <string name="settings_background_grain_summary">A faint film grain over the chat background.</string>
     <string name="settings_background_drift_summary">Soft light and shade drifting slowly behind the chat.</string>
     <string name="settings_background_flow_summary">Slow, smoky texture that moves behind the chat.</string>
-    <string name="settings_background_adaptive_summary">Fits the moment: calm drift for chat, smoke for roleplay, dimmer and slower at night.</string>
+    <string name="settings_background_adaptive_summary">Follows your phone wallpaper\'s light: calm drift for chat, smoke for roleplay, dimmer and slower at night.</string>
+    <string name="settings_background_photo">Photo</string>
+    <string name="settings_background_photo_summary">Your own picture behind the chat, in grays unless you keep its color.</string>
+    <string name="settings_background_photo_empty_summary">Tap Photo to pick a picture for the background.</string>
+    <string name="settings_background_photo_choose">Choose photo</string>
+    <string name="settings_background_photo_change">Change photo</string>
+    <string name="settings_background_photo_blur">Blur</string>
+    <string name="settings_background_photo_dim">Dim</string>
+    <string name="settings_background_photo_tint">Fade behind bars</string>
+    <string name="settings_background_photo_liquid">Liquid motion</string>
+    <string name="settings_background_photo_color">Keep color</string>
+    <string name="settings_background_photo_failed">Couldn\'t load that picture</string>
     <string name="cd_background_style">Background: %1$s</string>
 </resources>

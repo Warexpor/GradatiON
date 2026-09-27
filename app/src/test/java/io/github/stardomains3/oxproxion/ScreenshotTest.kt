@@ -647,8 +647,9 @@ class ScreenshotTest {
 
     /** Every background style (and Adaptive in both modes), each full-screen over the canvas. */
     private fun ambientGrid(a: MainActivity, name: String) {
+        seedBackgroundPhoto(a)
         val cells = listOf(
-            "grain" to (AmbientBackgroundView.Style.GRAIN to ChatMode.ASK),
+            "photo" to (AmbientBackgroundView.Style.PHOTO to ChatMode.ASK),
             "drift" to (AmbientBackgroundView.Style.DRIFT to ChatMode.ASK),
             "flow" to (AmbientBackgroundView.Style.FLOW to ChatMode.ASK),
             "adaptive_rp" to (AmbientBackgroundView.Style.ADAPTIVE to ChatMode.RP),
@@ -666,12 +667,72 @@ class ScreenshotTest {
             frame.addView(v, android.view.ViewGroup.LayoutParams(-1, -1))
             host.addView(frame, android.view.ViewGroup.LayoutParams(-1, -1))
             idle()
+            if (cell.first == AmbientBackgroundView.Style.PHOTO) awaitPhoto()
             if (cell.first == AmbientBackgroundView.Style.ADAPTIVE) {
                 org.junit.Assert.assertEquals(AmbientBackgroundView.Style.FLOW, v.resolvedStyle)
             }
             snap(frame, "${name}_$label")
             host.removeView(frame)
         }
+    }
+
+    /** A synthetic "photo": soft light blobs over a dark-to-light sweep, saved where Photo reads it. */
+    private fun seedBackgroundPhoto(a: MainActivity) {
+        val w = 540; val h = 1200
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.shader = android.graphics.LinearGradient(0f, 0f, w.toFloat(), h.toFloat(),
+            android.graphics.Color.rgb(40, 70, 120), android.graphics.Color.rgb(230, 180, 120),
+            android.graphics.Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
+        p.shader = null
+        p.color = android.graphics.Color.argb(200, 250, 250, 250)
+        c.drawCircle(w * 0.3f, h * 0.3f, 140f, p)
+        c.drawCircle(w * 0.75f, h * 0.65f, 190f, p)
+        val f = BackgroundPhoto.file(a)
+        f.parentFile?.mkdirs()
+        f.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        a.getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, android.content.Context.MODE_PRIVATE)
+            .edit().putLong(BackgroundPhoto.KEY_VERSION, 1L).commit()
+    }
+
+    /** Photo decodes on a worker thread and posts back to main. */
+    private fun awaitPhoto() {
+        repeat(20) {
+            Thread.sleep(50)
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+        }
+    }
+
+    @Test fun chatWithBackgroundDark() = withChat { a, _ ->
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.DRIFT.key)
+        idle()
+        val ambient = a.findViewById<AmbientBackgroundView>(R.id.ambientBackground)
+        org.junit.Assert.assertEquals(AmbientBackgroundView.Style.DRIFT, ambient.resolvedStyle)
+        snap(root(a), "chat_background_drift_dark")
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
+    }
+
+    @Test fun chatWithPhotoBackgroundDark() = withChat { a, _ ->
+        seedBackgroundPhoto(a)
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.PHOTO.key)
+        idle(); awaitPhoto(); idle()
+        snap(root(a), "chat_background_photo_dark")
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
+    }
+
+    @Test fun settingsAppearancePhotoDark() = withChat { a, _ ->
+        seedBackgroundPhoto(a)
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.PHOTO.key)
+        openSettingsRow(a, R.id.settingsRowAppearance); settle(); awaitPhoto(); settle()
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.backgroundPhotoOptions).isShown)
+        snap(root(a), "settings_appearance_photo_dark")
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
+    }
+
+    @Test fun grainMigratesToDrift() {
+        org.junit.Assert.assertEquals(AmbientBackgroundView.Style.DRIFT, AmbientBackgroundView.Style.fromKey("grain"))
     }
 
     @Test fun ambientBackgroundsDark() = withChat { a, _ -> ambientGrid(a, "ambient_backgrounds_dark") }

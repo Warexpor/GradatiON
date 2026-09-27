@@ -4,9 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.Bitmap
-import android.graphics.BitmapShader
 import android.graphics.Canvas
-import android.graphics.Matrix
+import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RenderNode
 import android.graphics.RuntimeShader
@@ -30,27 +30,30 @@ import kotlin.math.cos
 
 /**
  * Ambient background behind content (Settings > Appearance > Background). Strictly neutral:
- * every style is a signed gray field drawn as white or black at a few percent alpha, so it
- * reads on either theme's canvas and never adds a hue.
+ * every generated style is a signed gray field drawn as white or black at a few percent alpha,
+ * so it reads on either theme's canvas and never adds a hue.
  *
  * Styles ([Style]):
- * - GRAIN: fine film grain that re-rolls ~12 fps.
- * - DRIFT: a slow mesh of soft light and dark blobs drifting (~8 fps).
+ * - DRIFT: a slow mesh of soft light and dark blobs drifting (~12 fps).
  * - FLOW: domain-warped noise, like slow smoke (~14 fps).
- * - ADAPTIVE: Drift in Chat, Flow in Roleplay, with a whisper of grain; follows the theme,
- *   and calms down in the evening and at night (dimmer, slower).
+ * - ADAPTIVE: Drift in Chat, Flow in Roleplay, over a soft vertical light whose strength and
+ *   side follow the phone wallpaper's brightness; calmer (dimmer, slower) in the evening.
+ * - PHOTO: the user's own picture ([BackgroundPhoto]), grayscale unless "Keep color", with
+ *   optional blur, dim toward the canvas, a legibility tint at the top and bottom, and an
+ *   optional animated liquid (Flow) layer. Static unless liquid is on.
  *
  * Usage: place it full-size behind the transcript (inside the glass backdrop is fine). It
  * reads the preference when attached and follows changes live. Tell it the mode with
  * [mode] and call [setScrolling] from the list's scroll state to freeze it while scrolling.
  *
- * Cost (API 33+): each frame is one AGSL pass. Drift and Flow render at 1/4 resolution into
- * a tiny layer that is upscaled (the fields are smooth), Grain is a per-pixel hash at full
- * size. It only invalidates itself; nothing else in the tree redraws. When it sits inside a
- * [GlassBackdropLayout], each frame also refreshes the glass sampling it (RenderThread only),
- * which is why frame rates are 8-14 fps. It holds a static frame (no callbacks at all) when
- * hidden, backgrounded, scrolling, with animations off, or in battery saver / low-RAM
- * ([GlassQuality] SOLID). API 31-32 get a static pre-rendered field and a shifting grain tile.
+ * Cost (API 33+): each animated frame is one AGSL pass at 1/4 resolution into a tiny layer
+ * that is upscaled (the fields are smooth). It only invalidates itself; nothing else in the
+ * tree redraws. When it sits inside a [GlassBackdropLayout], each frame also refreshes the
+ * glass sampling it (RenderThread only), which is why frame rates are 12-14 fps. It holds a
+ * static frame (no callbacks at all) when hidden, backgrounded, scrolling, with animations
+ * off, or in battery saver / low-RAM ([GlassQuality] SOLID). API 31-32 get a static
+ * pre-rendered field. The photo is decoded, cropped, grayed and blurred once, off the main
+ * thread, at half the view's size.
  */
 class AmbientBackgroundView @JvmOverloads constructor(
     context: Context,
@@ -59,13 +62,15 @@ class AmbientBackgroundView @JvmOverloads constructor(
 
     enum class Style(val key: String, val frameMs: Long) {
         OFF("off", 0L),
-        GRAIN("grain", 83L),
-        DRIFT("drift", 125L),
+        DRIFT("drift", 83L),
         FLOW("flow", 71L),
-        ADAPTIVE("adaptive", 0L);
+        ADAPTIVE("adaptive", 0L),
+        PHOTO("photo", 71L);
 
         companion object {
-            fun fromKey(key: String?): Style = entries.find { it.key == key } ?: OFF
+            /** Grain was retired; anyone who had it gets Drift. */
+            fun fromKey(key: String?): Style =
+                if (key == "grain") DRIFT else entries.find { it.key == key } ?: OFF
         }
     }
 
@@ -112,42 +117,49 @@ class AmbientBackgroundView @JvmOverloads constructor(
 
     private class Tuning(
         val style: Style,
+        /** Field drawn on top (DRIFT/FLOW), or null for none. */
+        val field: Style?,
         val fieldAmp: Float,
-        val grainAmp: Float,
         val speed: Float,
-        val frameMs: Long
+        val frameMs: Long,
+        /** ADAPTIVE: signed strength of the vertical light (+ top light, - bottom shade). */
+        val horizon: Float = 0f
     )
 
     private var prefStyle = Style.OFF
-    private var tuning = Tuning(Style.OFF, 0f, 0f, 0f, 0L)
+    private var tuning = Tuning(Style.OFF, null, 0f, 0f, 0L)
     private var tunedAtHour = -1
+    private var photoOptions = BackgroundPhoto.Options()
+    private var wallpaperLuma: Float? = null
 
     private val density = resources.displayMetrics.density
-    private val cellPx = max(1f, density * 0.9f)
     private val paint = Paint()
     private val fieldPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val photoPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val washPaint = Paint()
     private var ticking = false
     private var windowVisible = true
     private var animTime = 7.5f // seconds of animation; starts mid-flow so the first frame isn't bland
     private var lastTick = 0L
-    private var seed = 0
 
     // API 33+ (kept untyped so the class loads on 31-32).
-    private var grainShader: Any? = null
     private var fieldShader: Any? = null
     private var fieldShaderStyle: Style? = null
     private var fieldNode: RenderNode? = null
 
     // API 31-32 / software canvases.
-    private var tileShader: BitmapShader? = null
-    private val tileMatrix = Matrix()
     private var staticField: Bitmap? = null
     private var staticFieldKey = ""
+
+    // PHOTO: processed bitmap, keyed by size + options + file version.
+    private var photo: Bitmap? = null
+    private var photoKey = ""
+    private var photoLoading = ""
 
     private val prefs: SharedPreferences? =
         if (isInEditMode) null else context.getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, Context.MODE_PRIVATE)
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == SharedPreferencesHelper.KEY_BACKGROUND_STYLE) readPref()
+        if (key == SharedPreferencesHelper.KEY_BACKGROUND_STYLE || key in BackgroundPhoto.PREF_KEYS) readPref()
     }
 
     private val frame = object : Choreographer.FrameCallback {
@@ -156,7 +168,6 @@ class AmbientBackgroundView @JvmOverloads constructor(
             val now = SystemClock.uptimeMillis()
             if (canAnimate()) {
                 animTime += min(0.25f, (now - lastTick) / 1000f) * tuning.speed
-                seed = (seed + 1) and 0xFF
                 if (tunedAtHour != Calendar.getInstance().get(Calendar.HOUR_OF_DAY) && prefOrOverride() == Style.ADAPTIVE) retune()
                 invalidate()
                 lastTick = now
@@ -195,6 +206,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         prefs?.registerOnSharedPreferenceChangeListener(prefListener)
+        wallpaperLuma = if (isInEditMode) null else BackgroundPhoto.systemWallpaperLuma(context)
         readPref()
     }
 
@@ -221,8 +233,15 @@ class AmbientBackgroundView @JvmOverloads constructor(
         retune()
     }
 
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        requestPhoto()
+        invalidate()
+    }
+
     private fun readPref() {
         prefStyle = Style.fromKey(prefs?.getString(SharedPreferencesHelper.KEY_BACKGROUND_STYLE, Style.OFF.key))
+        photoOptions = prefs?.let { BackgroundPhoto.readOptions(it) } ?: BackgroundPhoto.Options()
         retune()
     }
 
@@ -231,10 +250,16 @@ class AmbientBackgroundView @JvmOverloads constructor(
     private fun retune() {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         tunedAtHour = hour
-        tuning = tune(prefOrOverride(), mode, isNight(), hour, intensity)
+        tuning = tune(prefOrOverride(), mode, isNight(), hour, intensity, photoOptions, wallpaperLuma)
         if (tuning.style == Style.OFF) {
             fieldNode?.discardDisplayList()
             staticField = null
+        }
+        if (tuning.style != Style.PHOTO) {
+            photo = null
+            photoKey = ""
+        } else {
+            requestPhoto()
         }
         updateTicking()
         invalidate()
@@ -247,7 +272,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
         Motion.areAnimationsEnabled(context) && GlassQuality.level != GlassQuality.Level.SOLID
 
     private fun updateTicking() {
-        val run = tuning.style != Style.OFF && animated && !scrolling &&
+        val run = tuning.field != null && tuning.frameMs > 0 && animated && !scrolling &&
             isAttachedToWindow && windowVisible && isShown
         if (run == ticking) return
         if (run) {
@@ -269,23 +294,90 @@ class AmbientBackgroundView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         val t = tuning
         if (t.style == Style.OFF || width == 0 || height == 0) return
-        val hw = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && canvas.isHardwareAccelerated
-        if (t.style != Style.GRAIN && t.fieldAmp > 0f) {
-            if (!(hw && drawFieldAgsl(canvas, t))) drawFieldStatic(canvas, t)
+        if (t.style == Style.PHOTO) drawPhoto(canvas)
+        if (t.horizon != 0f) drawHorizon(canvas, t.horizon)
+        val field = t.field
+        if (field != null && t.fieldAmp > 0f) {
+            val hw = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && canvas.isHardwareAccelerated
+            if (!(hw && drawFieldAgsl(canvas, field, t.fieldAmp))) drawFieldStatic(canvas, field, t.fieldAmp)
         }
-        if (t.grainAmp > 0f) {
-            if (!(hw && drawGrainAgsl(canvas, t.grainAmp))) drawGrainTiled(canvas, t.grainAmp)
+    }
+
+    /** ADAPTIVE: a soft neutral light from the top (bright wallpaper) or shade at the bottom. */
+    private fun drawHorizon(canvas: Canvas, strength: Float) {
+        val a = (abs(strength) * 255).roundToInt().coerceIn(0, 255)
+        val tone = if (isNight()) Color.WHITE else Color.BLACK
+        val c = Color.argb(a, Color.red(tone), Color.green(tone), Color.blue(tone))
+        val h = height.toFloat()
+        washPaint.shader = if (strength > 0f) {
+            LinearGradient(0f, 0f, 0f, h * 0.7f, c, Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        } else {
+            LinearGradient(0f, h * 0.3f, 0f, h, Color.TRANSPARENT, c, Shader.TileMode.CLAMP)
+        }
+        canvas.drawRect(0f, 0f, width.toFloat(), h, washPaint)
+        washPaint.shader = null
+    }
+
+    private fun photoKeyNow(): String =
+        "${BackgroundPhoto.version(context)}:${max(1, width / 2)}:${max(1, height / 2)}:" +
+            "${photoOptions.blur}:${photoOptions.color}"
+
+    /** Start decoding as soon as size and options are known, not on the first draw. */
+    private fun requestPhoto() {
+        if (tuning.style != Style.PHOTO || width == 0 || height == 0 || isInEditMode) return
+        val key = photoKeyNow()
+        if (photoKey == key || photoLoading == key) return
+        photoLoading = key
+        BackgroundPhoto.loadAsync(context, max(1, width / 2), max(1, height / 2), photoOptions) { loaded ->
+            if (photoLoading != key) return@loadAsync
+            photoLoading = ""
+            photo = loaded
+            photoKey = key
+            invalidate()
+        }
+    }
+
+    private fun drawPhoto(canvas: Canvas) {
+        val opts = photoOptions
+        val canvasColor = context.getColor(R.color.xai_canvas)
+        requestPhoto()
+        val bmp = photo
+        if (bmp != null) {
+            canvas.save()
+            canvas.scale(width / bmp.width.toFloat(), height / bmp.height.toFloat())
+            canvas.drawBitmap(bmp, 0f, 0f, photoPaint)
+            canvas.restore()
+        }
+        // Dim: wash toward the canvas so text keeps its contrast.
+        if (opts.dim) {
+            washPaint.color = canvasColor
+            washPaint.alpha = if (isNight()) 130 else 120
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), washPaint)
+        }
+        // Tint: canvas-toned fades behind the top bar and the composer.
+        if (opts.tint) {
+            val h = height.toFloat()
+            val solid = Color.argb(170, Color.red(canvasColor), Color.green(canvasColor), Color.blue(canvasColor))
+            washPaint.shader = LinearGradient(
+                0f, 0f, 0f, h,
+                intArrayOf(solid, Color.TRANSPARENT, Color.TRANSPARENT, solid),
+                floatArrayOf(0f, 0.22f, 0.62f, 1f),
+                Shader.TileMode.CLAMP
+            )
+            washPaint.alpha = 255
+            canvas.drawRect(0f, 0f, width.toFloat(), h, washPaint)
+            washPaint.shader = null
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    private fun drawFieldAgsl(canvas: Canvas, t: Tuning): Boolean {
-        val shader = fieldShaderFor(t.style) ?: return false
+    private fun drawFieldAgsl(canvas: Canvas, style: Style, amp: Float): Boolean {
+        val shader = fieldShaderFor(style) ?: return false
         val fw = max(1, ceil(width / FIELD_DOWNSCALE).toInt())
         val fh = max(1, ceil(height / FIELD_DOWNSCALE).toInt())
         shader.setFloatUniform("res", fw.toFloat(), fh.toFloat())
         shader.setFloatUniform("time", animTime)
-        shader.setFloatUniform("amp", t.fieldAmp)
+        shader.setFloatUniform("amp", amp)
         shader.setFloatUniform("polarity", if (isNight()) 1f else -1f)
         fieldPaint.shader = shader
         // Smooth fields: shade a quarter-resolution layer, upscale it with filtering.
@@ -322,41 +414,12 @@ class AmbientBackgroundView @JvmOverloads constructor(
         return s
     }
 
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    private fun drawGrainAgsl(canvas: Canvas, amp: Float): Boolean {
-        val shader = (grainShader as? RuntimeShader)
-            ?: runCatching { RuntimeShader(GRAIN_AGSL) }.getOrNull()?.also { grainShader = it }
-            ?: return false
-        shader.setFloatUniform("seed", seed.toFloat())
-        shader.setFloatUniform("amp", amp)
-        shader.setFloatUniform("cell", cellPx)
-        paint.shader = shader
-        paint.alpha = 255
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
-        return true
-    }
-
-    /** Pre-rolled noise tile, shifted by whole cells each frame so it "boils" without new bitmaps. */
-    private fun drawGrainTiled(canvas: Canvas, amp: Float) {
-        val shader = tileShader ?: BitmapShader(noiseTile(), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT).also {
-            tileShader = it
-        }
-        val h = (seed * 2654435761L).toInt()
-        tileMatrix.setScale(cellPx, cellPx)
-        tileMatrix.postTranslate((abs(h) % TILE) * cellPx, (abs(h shr 11) % TILE) * cellPx)
-        shader.setLocalMatrix(tileMatrix)
-        paint.shader = shader
-        paint.alpha = (255 * (amp / TILE_AMP).coerceIn(0f, 1f)).roundToInt()
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
-        paint.alpha = 255
-    }
-
     /** API 31-32 and software canvases: the same field evaluated once on the CPU, small, upscaled. */
-    private fun drawFieldStatic(canvas: Canvas, t: Tuning) {
+    private fun drawFieldStatic(canvas: Canvas, style: Style, amp: Float) {
         val fw = max(8, (width / STATIC_DOWNSCALE).roundToInt())
         val fh = max(8, (height / STATIC_DOWNSCALE).roundToInt())
-        val key = "${t.style}:$fw:$fh:${t.fieldAmp}:${isNight()}"
-        val bmp = staticField?.takeIf { staticFieldKey == key } ?: renderFieldCpu(t.style, fw, fh, t.fieldAmp, if (isNight()) 1f else -1f).also {
+        val key = "$style:$fw:$fh:$amp:${isNight()}"
+        val bmp = staticField?.takeIf { staticFieldKey == key } ?: renderFieldCpu(style, fw, fh, amp, if (isNight()) 1f else -1f).also {
             staticField = it
             staticFieldKey = key
         }
@@ -368,21 +431,31 @@ class AmbientBackgroundView @JvmOverloads constructor(
 
     companion object {
         private const val IDLE_POLL_MS = 2000L
-        private const val TILE = 128
-        private const val TILE_AMP = 0.2f
         private const val FIELD_DOWNSCALE = 4f
         private const val STATIC_DOWNSCALE = 8f
         /** Fixed moment the static fallback shows. */
         private const val STATIC_TIME = 7.5f
 
-        private fun tune(style: Style, mode: ChatMode, night: Boolean, hour: Int, k: Float): Tuning {
+        private fun tune(
+            style: Style,
+            mode: ChatMode,
+            night: Boolean,
+            hour: Int,
+            k: Float,
+            photo: BackgroundPhoto.Options,
+            wallpaperLuma: Float?
+        ): Tuning {
             // Light canvases show the same alpha more strongly, so they get a little less.
             val th = if (night) 1f else 0.8f
             return when (style) {
-                Style.OFF -> Tuning(Style.OFF, 0f, 0f, 0f, 0L)
-                Style.GRAIN -> Tuning(Style.GRAIN, 0f, 0.06f * th * k, 1f, Style.GRAIN.frameMs)
-                Style.DRIFT -> Tuning(Style.DRIFT, 0.075f * th * k, 0f, 1f, Style.DRIFT.frameMs)
-                Style.FLOW -> Tuning(Style.FLOW, 0.09f * th * k, 0f, 1f, Style.FLOW.frameMs)
+                Style.OFF -> Tuning(Style.OFF, null, 0f, 0f, 0L)
+                Style.DRIFT -> Tuning(Style.DRIFT, Style.DRIFT, 0.075f * th * k, 1f, Style.DRIFT.frameMs)
+                Style.FLOW -> Tuning(Style.FLOW, Style.FLOW, 0.09f * th * k, 1f, Style.FLOW.frameMs)
+                Style.PHOTO -> if (photo.liquid) {
+                    Tuning(Style.PHOTO, Style.FLOW, 0.07f * th * k, 0.8f, Style.PHOTO.frameMs)
+                } else {
+                    Tuning(Style.PHOTO, null, 0f, 0f, 0L)
+                }
                 Style.ADAPTIVE -> {
                     val base = if (mode == ChatMode.RP) Style.FLOW else Style.DRIFT
                     // Calmer after dark: dimmer and slower late in the day and overnight.
@@ -391,9 +464,14 @@ class AmbientBackgroundView @JvmOverloads constructor(
                         in 19..21 -> 0.8f
                         else -> 1f
                     }
-                    val fieldAmp = (if (base == Style.FLOW) 0.085f else 0.075f) * th * k * calm
+                    // Wallpaper brightness: a bright one lights the top, a dark one shades the
+                    // bottom; a busy mid-tone gets a slightly livelier field. Unknown = neutral.
+                    val l = wallpaperLuma ?: 0.5f
+                    val horizon = ((l - 0.5f) * 0.16f * th * k * calm).coerceIn(-0.08f, 0.08f)
+                    val lively = 1f + 0.35f * (1f - abs(l - 0.5f) * 2f)
+                    val fieldAmp = (if (base == Style.FLOW) 0.08f else 0.07f) * th * k * calm * lively
                     val speed = if (calm < 1f) calm * 0.8f else 1f
-                    Tuning(base, fieldAmp, 0.03f * th * k * (0.5f + 0.5f * calm), speed, base.frameMs + if (calm < 1f) 40L else 0L)
+                    Tuning(base, base, fieldAmp, speed, base.frameMs + if (calm < 1f) 40L else 0L, horizon)
                 }
             }
         }
@@ -412,21 +490,6 @@ class AmbientBackgroundView @JvmOverloads constructor(
             half4 signedGray(float v, float amp, float2 c) {
                 // Tiny dither so low-alpha gradients don't band.
                 float a = clamp(abs(v) * amp + (hash(c + time) - 0.5) / 255.0, 0.0, 1.0);
-                half l = v > 0.0 ? 1.0 : 0.0;
-                return half4(half3(l * a), half(a));
-            }
-        """
-
-        const val GRAIN_AGSL = """
-            uniform float seed;
-            uniform float amp;
-            uniform float cell;
-            $HASH
-            half4 main(float2 coord) {
-                float2 g = floor(coord / cell);
-                float2 o = float2(seed * 37.0, seed * 91.0);
-                float v = hash(g + o) + hash(g.yx + o + 17.0) - 1.0;
-                float a = clamp(abs(v) * amp * 1.6, 0.0, 1.0);
                 half l = v > 0.0 ? 1.0 : 0.0;
                 return half4(half3(l * a), half(a));
             }
@@ -494,26 +557,6 @@ class AmbientBackgroundView @JvmOverloads constructor(
                 return signedGray(polarity * clamp(v, -1.0, 1.0), amp, c);
             }
         """
-
-        private var cachedTile: Bitmap? = null
-
-        /** 128x128 grain with the shader's distribution, generated once per process. */
-        private fun noiseTile(): Bitmap {
-            cachedTile?.let { if (!it.isRecycled) return it }
-            val px = IntArray(TILE * TILE)
-            var x = 0x9E3779B9.toInt()
-            fun next(): Float {
-                x = x xor (x shl 13); x = x xor (x ushr 17); x = x xor (x shl 5)
-                return (x ushr 8) / 16777216f
-            }
-            for (i in px.indices) {
-                val v = next() + next() - 1f
-                val a = (abs(v) * TILE_AMP * 1.6f * 255f).roundToInt().coerceIn(0, 255)
-                val l = if (v > 0f) 255 else 0 // unpremultiplied white or black specks
-                px[i] = (a shl 24) or (l shl 16) or (l shl 8) or l
-            }
-            return Bitmap.createBitmap(px, TILE, TILE, Bitmap.Config.ARGB_8888).also { cachedTile = it }
-        }
 
         // ── CPU twins of the shaders for the static fallback ──
 

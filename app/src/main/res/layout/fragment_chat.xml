@@ -30,6 +30,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
 
+            <!-- Canvas lives inside the backdrop so glass samples it; the list above is clear -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/xai_canvas"
+                android:importantForAccessibility="no" />
+
             <!-- Ambient style (Settings > Appearance > Background); draws nothing when off -->
             <io.github.stardomains3.oxproxion.AmbientBackgroundView
                 android:id="@+id/ambientBackground"
@@ -41,7 +48,7 @@
                 android:id="@+id/chatRecyclerView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@color/xai_canvas"
+                android:background="@android:color/transparent"
                 android:clipToPadding="false"
                 android:paddingTop="72dp"
                 android:paddingBottom="120dp"

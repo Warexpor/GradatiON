@@ -76,6 +76,13 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         val backdrop = view.findViewById<GlassBackdropLayout>(R.id.codeSessionBackdrop)
         val frame = view.findViewById<FrameLayout>(R.id.codeSessionFrame)
         list = view.findViewById(R.id.codeTranscript)
+        // Hold the ambient background still while the list scrolls (it re-samples the glass).
+        val ambient = view.findViewById<io.github.stardomains3.oxproxion.AmbientBackgroundView>(R.id.codeAmbient)
+        list.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(rv: androidx.recyclerview.widget.RecyclerView, newState: Int) {
+                ambient?.setScrolling(newState != androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE)
+            }
+        })
         adapter = CodeTranscriptAdapter(
             requireContext(),
             decodeScope = viewLifecycleOwner.lifecycleScope,

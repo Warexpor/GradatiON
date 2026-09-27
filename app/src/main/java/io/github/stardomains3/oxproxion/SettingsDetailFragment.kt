@@ -10,6 +10,7 @@ import android.view.WindowManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.view.isVisible
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.core.os.bundleOf
@@ -26,6 +27,16 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         get() = requireArguments().getString(ARG_SECTION) ?: SECTION_APPEARANCE
 
     private val savedChatsViewModel: SavedChatsViewModel by viewModels()
+
+    private var onPhotoPicked: ((Boolean) -> Unit)? = null
+    private val pickBackgroundPhoto = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val ctx = context ?: return@registerForActivityResult
+        if (uri == null) { onPhotoPicked?.invoke(false); return@registerForActivityResult }
+        BackgroundPhoto.import(ctx, uri) { ok ->
+            if (!ok) AppToast.makeText(ctx, getString(R.string.settings_background_photo_failed), AppToast.LENGTH_SHORT).show()
+            onPhotoPicked?.invoke(ok)
+        }
+    }
 
     private val exportChatsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -409,12 +420,15 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
     private fun bindBackgroundPicker(view: View, prefs: SharedPreferencesHelper) {
         val picker = view.findViewById<android.widget.LinearLayout>(R.id.backgroundStylePicker) ?: return
         val summary = view.findViewById<android.widget.TextView>(R.id.backgroundStyleSummary)
+        val photoOptions = view.findViewById<View>(R.id.backgroundPhotoOptions)
+        val chooseButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.backgroundPhotoChoose)
+        val ctx = requireContext()
         val choices = listOf(
             AmbientBackgroundView.Style.OFF to (R.string.settings_background_off to R.string.settings_background_off_summary),
-            AmbientBackgroundView.Style.GRAIN to (R.string.settings_background_grain to R.string.settings_background_grain_summary),
             AmbientBackgroundView.Style.DRIFT to (R.string.settings_background_drift to R.string.settings_background_drift_summary),
             AmbientBackgroundView.Style.FLOW to (R.string.settings_background_flow to R.string.settings_background_flow_summary),
-            AmbientBackgroundView.Style.ADAPTIVE to (R.string.settings_background_adaptive to R.string.settings_background_adaptive_summary)
+            AmbientBackgroundView.Style.ADAPTIVE to (R.string.settings_background_adaptive to R.string.settings_background_adaptive_summary),
+            AmbientBackgroundView.Style.PHOTO to (R.string.settings_background_photo to R.string.settings_background_photo_summary)
         )
         val inflater = layoutInflater
         val tiles = choices.map { (style, text) ->
@@ -422,6 +436,16 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             tile.findViewById<android.widget.TextView>(R.id.backgroundStyleLabel).setText(text.first)
             tile.findViewById<AmbientBackgroundView>(R.id.backgroundStylePreview).styleOverride = style
             tile.contentDescription = getString(R.string.cd_background_style, getString(text.first))
+            if (style == AmbientBackgroundView.Style.PHOTO) {
+                // Placeholder glyph until a picture is chosen.
+                val swatch = tile.findViewById<android.widget.FrameLayout>(R.id.backgroundStyleSwatch)
+                val d = resources.displayMetrics.density
+                swatch.addView(android.widget.ImageView(ctx).apply {
+                    id = R.id.backgroundPhotoPlaceholder
+                    setImageResource(R.drawable.ic_imgup)
+                    imageTintList = android.content.res.ColorStateList.valueOf(ctx.getColor(R.color.xai_mute))
+                }, android.widget.FrameLayout.LayoutParams((24 * d).toInt(), (24 * d).toInt(), android.view.Gravity.CENTER))
+            }
             picker.addView(tile)
             style to tile
         }
@@ -430,13 +454,51 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                 tile.isSelected = s == style
                 tile.findViewById<AmbientBackgroundView>(R.id.backgroundStylePreview).animated = s == style
             }
-            summary?.setText(choices.first { it.first == style }.second.second)
+            val photo = style == AmbientBackgroundView.Style.PHOTO
+            val has = BackgroundPhoto.hasPhoto(ctx)
+            summary?.setText(
+                if (photo && !has) R.string.settings_background_photo_empty_summary
+                else choices.first { it.first == style }.second.second
+            )
+            photoOptions?.isVisible = photo
+            picker.findViewById<View>(R.id.backgroundPhotoPlaceholder)?.isVisible = !has
+            chooseButton?.setText(if (has) R.string.settings_background_photo_change else R.string.settings_background_photo_choose)
+        }
+        fun pickPhoto() {
+            onPhotoPicked = { ok ->
+                if (ok) prefs.saveBackgroundStyle(AmbientBackgroundView.Style.PHOTO.key)
+                select(AmbientBackgroundView.Style.fromKey(prefs.getBackgroundStyle()))
+            }
+            pickBackgroundPhoto.launch(
+                androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
         }
         select(AmbientBackgroundView.Style.fromKey(prefs.getBackgroundStyle()))
         tiles.forEach { (style, tile) ->
             tile.setOnClickListener {
+                // Photo with nothing picked yet goes straight to the picker.
+                if (style == AmbientBackgroundView.Style.PHOTO && !BackgroundPhoto.hasPhoto(ctx)) {
+                    pickPhoto()
+                    return@setOnClickListener
+                }
                 prefs.saveBackgroundStyle(style.key)
                 select(style)
+            }
+        }
+        chooseButton?.setOnClickListener { pickPhoto() }
+        val mainPrefs = ctx.getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, android.content.Context.MODE_PRIVATE)
+        val opts = BackgroundPhoto.readOptions(mainPrefs)
+        listOf(
+            R.id.backgroundPhotoBlur to (BackgroundPhoto.KEY_BLUR to opts.blur),
+            R.id.backgroundPhotoDim to (BackgroundPhoto.KEY_DIM to opts.dim),
+            R.id.backgroundPhotoTint to (BackgroundPhoto.KEY_TINT to opts.tint),
+            R.id.backgroundPhotoLiquid to (BackgroundPhoto.KEY_LIQUID to opts.liquid),
+            R.id.backgroundPhotoColor to (BackgroundPhoto.KEY_COLOR to opts.color),
+        ).forEach { (id, pref) ->
+            view.findViewById<SwitchCompat>(id)?.apply {
+                applyGrokionSwitchStyle()
+                isChecked = pref.second
+                setOnCheckedChangeListener { _, on -> BackgroundPhoto.setOption(ctx, pref.first, on) }
             }
         }
     }

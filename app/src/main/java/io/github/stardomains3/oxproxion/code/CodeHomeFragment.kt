@@ -91,6 +91,13 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         val root = view as FrameLayout
         val backdrop = view.findViewById<GlassBackdropLayout>(R.id.codeHomeBackdrop)
         list = view.findViewById(R.id.codeHomeList)
+        // Hold the ambient background still while the list scrolls (it re-samples the glass).
+        val ambient = view.findViewById<io.github.stardomains3.oxproxion.AmbientBackgroundView>(R.id.codeAmbient)
+        list.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(rv: androidx.recyclerview.widget.RecyclerView, newState: Int) {
+                ambient?.setScrolling(newState != androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE)
+            }
+        })
         list.layoutManager = LinearLayoutManager(requireContext())
         list.adapter = adapter
         list.itemAnimator?.changeDuration = 0
