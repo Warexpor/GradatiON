@@ -44,27 +44,27 @@ app, drive it to the best direction you think it is."
 - [x] Voice input back: tap, talk, tap check, pastes and never sends. OpenRouter/Local fallback kept.
 
 ## Bugs
-- [ ] B1. Mode switch (tap or swipe) flashes a black transition before the next screen. It should go
+- [x] B1. Mode switch (tap or swipe) flashes a black transition before the next screen. It should go
       straight to the next screen.
-- [ ] B2. Settings: going between sections and in/out of the models list can glitch heavily and "sink too
+- [x] B2. Settings: going between sections and in/out of the models list can glitch heavily and "sink too
       deep" [the back stack grows or pages stack up]. The Chat/RP/Code tab underline can end up in the wrong place.
-- [ ] B3. Opening Settings briefly flashes the conversation list underneath.
-- [ ] B4. Status-bar strip (the black bar under the phone's top bar) should blend with the app's
+- [x] B3. Opening Settings briefly flashes the conversation list underneath.
+- [x] B4. Status-bar strip (the black bar under the phone's top bar) should blend with the app's
       background, including the chosen background style.
-- [ ] B5. The send button in Chat/RP sometimes renders smaller than intended until you type (a stale
+- [x] B5. The send button in Chat/RP sometimes renders smaller than intended until you type (a stale
       scale from the pop animation).
-- [ ] B6. The text cursor is too thick. Use a thin, default-width caret.
-- [ ] B7. Sending with no model or key set does nothing silently. Say what's missing and where to fix it.
+- [x] B6. The text cursor is too thick. Use a thin, default-width caret.
+- [x] B7. Sending with no model or key set does nothing silently. Say what's missing and where to fix it.
 
 ## Toggles (top priority for feel)
-- [ ] T1. Rounder capsule, a full-circle knob, glassy (not solid or metal). No color flash on press.
+- [x] T1. Rounder capsule, a full-circle knob, glassy (not solid or metal). No color flash on press.
 
 ## Chat
-- [ ] C1. The streaming reveal is too abrupt, especially in Code. Make it graceful, like Claude's apps.
-- [ ] C2. Demo model: a built-in model that streams varied sample replies (markdown, code, lists, a table,
+- [x] C1. The streaming reveal is too abrupt, especially in Code. Make it graceful, like Claude's apps.
+- [x] C2. Demo model: a built-in model that streams varied sample replies (markdown, code, lists, a table,
       thinking) at a medium speed, so the chat can be tried without any API key.
-- [ ] C3. Chat text scale option (smaller/larger) in Settings.
-- [ ] C4. Message action buttons (copy, etc. on user and bot messages): smaller, and not in a rounded pill.
+- [x] C3. Chat text scale option (smaller/larger) in Settings.
+- [x] C4. Message action buttons (copy, etc. on user and bot messages): smaller, and not in a rounded pill.
 
 ## Code mode
 - [ ] K1. Rework the session transcript to feel like Claude Code: less clutter, with Normal and Thinking
@@ -74,6 +74,16 @@ app, drive it to the best direction you think it is."
 - [ ] R1. Revisit the RP harness (prompt assembly, character/persona/lorebook handling) and make it better.
       Chat harness too where it helps.
 - [ ] R2. RP UI polish.
+- [ ] R3. From the user's RP references (layout and feel only, never visuals):
+      - A "continue" / fast-forward button: the AI writes the next beat without a user message,
+        to drive the story. It has to fit our composer somehow.
+      - A character panel (bottom sheet from the character name) with tiles: Memory, History
+        (sessions by date), Voice, Layout, Wallpaper (per-character background), Chat style and
+        Persona. The harness (prompt assembly, memory) matters most.
 
 ## Repo
 - [ ] P1. New screenshots, a fresh README description of the app, design docs and agent instructions.
+
+## Open questions
+- Code blocks use colored syntax highlighting (orange, green, purple). That breaks the grays-only
+  rule, but it predates this pass. Should it stay colored or go gray?

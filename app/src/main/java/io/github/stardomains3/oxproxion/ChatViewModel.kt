@@ -211,6 +211,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val model = allModels.find { it.apiIdentifier == modelIdentifier }
         return model?.isTranscription ?: false
     }
+    /** Answers locally with a paced stream; see [DemoModel]. */
+    private val demoHttpClient: HttpClient by lazy {
+        HttpClient(OkHttp) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            engine { addInterceptor(DemoModel.StreamInterceptor { isRpMode() }) }
+        }
+    }
+
     private fun createHttpClient(): HttpClient {
         val timeoutMs = sharedPreferencesHelper.getTimeoutMinutes().toLong() * 60_000L
         return HttpClient(OkHttp) {
@@ -1235,7 +1243,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         handleNonStreamedResponseLAN(modelForRequest, messagesForApiRequest, thinkingMessage)
                     }
                 } else {
-                    if (_isStreamingEnabled.value == true) {
+                    // The demo model only speaks in streams.
+                    if (_isStreamingEnabled.value == true || DemoModel.isDemo(modelForRequest)) {
                         handleStreamedResponse(modelForRequest, messagesForApiRequest, thinkingMessage)
                     } else {
                         handleNonStreamedResponse(modelForRequest, messagesForApiRequest, thinkingMessage)
@@ -1613,7 +1622,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         handleNonStreamedResponseLAN(modelForRequest, messagesForApiRequest, thinkingMessage)
                     }
                 } else {
-                    if (_isStreamingEnabled.value == true) {
+                    // The demo model only speaks in streams.
+                    if (_isStreamingEnabled.value == true || DemoModel.isDemo(modelForRequest)) {
                         handleStreamedResponse(modelForRequest, messagesForApiRequest, thinkingMessage)
                     } else {
                         handleNonStreamedResponse(modelForRequest, messagesForApiRequest, thinkingMessage)
@@ -4273,7 +4283,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             try {
-                httpClient.preparePost(activeChatUrl) {
+                (if (DemoModel.isDemo(modelForRequest)) demoHttpClient else httpClient).preparePost(activeChatUrl) {
                     header("Authorization", "Bearer $activeChatApiKey")
                     header("HTTP-Referer", "https://github.com/Warexpor/oxproxion")
                     header("X-Title", "GradatiON")
@@ -5374,6 +5384,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return !modelName.lowercase().contains("grok")
     }
     suspend fun getSuggestedChatTitle(): String? {
+        if (DemoModel.isDemo(_activeChatModel.value)) {
+            val first = _chatMessages.value.orEmpty().firstOrNull { it.role == "user" }
+            return DemoModel.titleFor(first?.let { getMessageText(it.content) }.orEmpty())
+        }
         val chatContent = getFormattedChatHistory()
 
         // 1. Get the current provider (important for llama.cpp logic)
@@ -6537,6 +6551,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val builtIns = getBuiltInModels()
         return customModels.find { it.apiIdentifier == id } ?: builtIns.find { it.apiIdentifier == id } }
     fun activeModelIsLan(): Boolean = getActiveLlmModel()?.isLANModel == true
+
+    fun activeModelIsDemo(): Boolean = DemoModel.isDemo(_activeChatModel.value)
 
     // 3. Add this suspend aggregator (calls your existing fetch* funcs; assumes they are suspend)
     private suspend fun fetchLanModels(provider: String): List<LlmModel> = withContext(Dispatchers.IO) {

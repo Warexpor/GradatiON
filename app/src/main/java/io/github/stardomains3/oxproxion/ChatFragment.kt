@@ -2096,7 +2096,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     }
                 } else {
                     // Non-LAN model: Check API key
-                    if (viewModel.activeChatApiKey.isBlank()) {
+                    if (viewModel.activeChatApiKey.isBlank() && !viewModel.activeModelIsDemo()) {
                         GlassNotice.show(requireContext(), getString(R.string.notice_need_key))
                         return@setOnClickListener
                     }

@@ -640,6 +640,31 @@ class ScreenshotTest {
         snap(root(a), "chat_text_xl_dark")
     }
 
+    /** Pump the main looper in real time while a background stream (demo thread) runs. */
+    private fun waitFor(timeoutMs: Long, done: () -> Boolean) {
+        val end = System.currentTimeMillis() + timeoutMs
+        while (!done() && System.currentTimeMillis() < end) {
+            Thread.sleep(50)
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
+        }
+    }
+
+    @Test fun demoModelStreamsWithoutKey() = withChat { a, _ ->
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        org.junit.Assert.assertTrue("demo is in the model list",
+            SharedPreferencesHelper(a).getCustomModels().any { DemoModel.isDemo(it.apiIdentifier) })
+        vm.setModel(DemoModel.ID); idle()
+        a.findViewById<android.widget.EditText>(R.id.chatEditText).setText("Hi! What can you do?")
+        a.findViewById<View>(R.id.sendChatButton).performClick()
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && (vm.chatMessages.value?.size ?: 0) >= 2 }
+        idle()
+        val reply = vm.chatMessages.value.orEmpty().last()
+        org.junit.Assert.assertEquals("assistant", reply.role)
+        org.junit.Assert.assertTrue(vm.getMessageText(reply.content).contains("demo model"))
+        org.junit.Assert.assertFalse("thinking came through", reply.reasoning.isNullOrBlank())
+        snap(root(a), "chat_demo_reply_dark")
+    }
+
     @Test fun micHiddenWithoutAnyEngine() {
         // No recognizer and no voice model: nothing to dictate with.
         VoiceInput.deviceAvailableOverride = false

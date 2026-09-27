@@ -353,7 +353,7 @@
     <string name="cd_font_decrease">Decrease font</string>
     <string name="cd_done">Done</string>
     <string name="cd_voice_input">Voice input</string>
-    <string name="notice_need_key">Add your OpenRouter API key in Settings &gt; Models to start chatting.</string>
+    <string name="notice_need_key">Add your OpenRouter API key in Settings &gt; Models, or pick GradatiON: Demo to try the app.</string>
     <string name="notice_need_lan">Set your local server address in Settings &gt; Models.</string>
     <string name="settings_chat_text_size">Chat text</string>
     <string name="text_size_s">S</string>

@@ -903,6 +903,7 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun seedDefaultModelsIfNeeded() {
+        ensureDemoModel()
         if (!mainPrefs.getBoolean(KEY_DEFAULT_MODELS_SEEDED, false)) {
             val defaultModels = listOf(
                 LlmModel("OpenAI: ChatGPT-4o", "openai/chatgpt-4o-latest", true),
@@ -924,6 +925,15 @@ class SharedPreferencesHelper(context: Context) {
             customModels.addAll(defaultModels)
             saveCustomModels(customModels)
             mainPrefs.edit { putBoolean(KEY_DEFAULT_MODELS_SEEDED, true) }
+        }
+    }
+
+    /** The built-in demo model is always in the list (first), for new and existing installs. */
+    private fun ensureDemoModel() {
+        val models = getCustomModels()
+        if (models.none { DemoModel.isDemo(it.apiIdentifier) }) {
+            models.add(0, DemoModel.model())
+            saveCustomModels(models)
         }
     }
 
