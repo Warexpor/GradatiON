@@ -50,7 +50,7 @@
                 android:layout_height="0dp"
                 android:layout_weight="1"
                 android:layout_marginTop="8dp"
-                android:hint="@string/rp_field_lore_content">
+                android:hint="@string/rp_field_lore">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/rpLoreContentInput"
                     android:layout_width="match_parent"
@@ -58,6 +58,16 @@
                     android:gravity="top" />
             </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="4dp"
+            android:text="@string/rp_field_lore_content"
+            android:textColor="@color/xai_mute"
+            android:textSize="13sp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/saveRpLorebookButton"

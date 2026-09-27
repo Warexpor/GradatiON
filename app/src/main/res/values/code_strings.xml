@@ -27,7 +27,8 @@
     <string name="code_host_add_title">Add a machine</string>
     <string name="code_host_edit_title">Edit machine</string>
     <string name="code_host_name_hint">Name, e.g. Studio Mac</string>
-    <string name="code_host_url_hint">Bridge address, e.g. wss://studio.tailnet.ts.net:7878/v1</string>
+    <string name="code_host_url_hint">Bridge address</string>
+    <string name="code_host_url_example">For example, wss://studio.tailnet.ts.net:7878/v1</string>
     <string name="code_host_token_hint">Pairing token</string>
     <string name="code_host_agent_label">Default agent</string>
     <string name="code_host_save">Save</string>

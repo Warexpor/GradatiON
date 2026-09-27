@@ -140,6 +140,7 @@
     <string name="rp_add_lorebook">Add lorebook</string>
     <string name="rp_edit_lorebook">Edit lorebook</string>
     <string name="rp_save_lorebook">Save lorebook</string>
+    <string name="rp_field_lore">Lore</string>
     <string name="rp_field_lore_content">Always-on lore, then [keys: word, phrase] blocks</string>
     <string name="rp_lore_use_active">Use the active lorebook</string>
     <string name="rp_lore_edit">Edit lorebooks</string>

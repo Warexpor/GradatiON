@@ -83,6 +83,17 @@
                 android:textSize="15sp" />
         </com.google.android.material.textfield.TextInputLayout>
 
+        <TextView
+            android:id="@+id/codeHostUrlExample"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:text="@string/code_host_url_example"
+            android:textColor="@color/xai_mute"
+            android:textSize="13sp" />
+
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/codeHostTokenLayout"
             style="@style/Xai.TextInputLayout"
@@ -129,19 +140,26 @@
             android:text="@string/code_host_agent_label"
             android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
-        <HorizontalScrollView
+        <!-- Wrap: a scrollbar-less row was clipping Grok Build, Cursor CLI and Pi off the card. -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/codeHostAgents"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:overScrollMode="never"
-            android:scrollbars="none">
+            android:layout_marginTop="8dp">
 
-            <LinearLayout
-                android:id="@+id/codeHostAgents"
-                android:layout_width="wrap_content"
+            <androidx.constraintlayout.helper.widget.Flow
+                android:id="@+id/codeHostAgentsFlow"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal" />
-        </HorizontalScrollView>
+                app:flow_horizontalBias="0"
+                app:flow_horizontalGap="6dp"
+                app:flow_horizontalStyle="packed"
+                app:flow_verticalGap="8dp"
+                app:flow_wrapMode="chain"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <TextView
             android:id="@+id/codeHostStatus"

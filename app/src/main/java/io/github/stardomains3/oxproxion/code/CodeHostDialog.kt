@@ -3,8 +3,9 @@ package io.github.stardomains3.oxproxion.code
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
-import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.constraintlayout.helper.widget.Flow
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -82,20 +83,22 @@ object CodeHostDialog {
         sheet.findViewById<TextView>(R.id.codeHostManualLabel).isVisible = isAdd && !isDemo
 
         var agent = existing?.defaultHarness ?: HarnessKind.CLAUDE_CODE
-        val agents = sheet.findViewById<LinearLayout>(R.id.codeHostAgents)
-        val d = context.resources.displayMetrics.density
+        val agents = sheet.findViewById<ConstraintLayout>(R.id.codeHostAgents)
+        val flow = sheet.findViewById<Flow>(R.id.codeHostAgentsFlow)
 
         fun bindPills(options: List<Pair<String, HarnessKind>>) {
-            agents.removeAllViews()
+            for (i in agents.childCount - 1 downTo 0) {
+                if (agents.getChildAt(i).id != R.id.codeHostAgentsFlow) agents.removeViewAt(i)
+            }
             val pills = options.map { (label, k) ->
                 (LayoutInflater.from(context).inflate(R.layout.item_code_pill, agents, false) as TextView).apply {
+                    id = android.view.View.generateViewId()
                     text = label
                     isSelected = k == agent
-                    agents.addView(this, (layoutParams as LinearLayout.LayoutParams).apply {
-                        if (agents.childCount > 0) marginStart = (6 * d).toInt()
-                    })
+                    agents.addView(this)
                 } to k
             }
+            flow.referencedIds = pills.map { it.first.id }.toIntArray()
             pills.forEach { (pill, k) ->
                 pill.setOnClickListener {
                     agent = k

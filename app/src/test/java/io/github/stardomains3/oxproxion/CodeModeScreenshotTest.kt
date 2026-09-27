@@ -136,6 +136,16 @@ class CodeModeScreenshotTest {
 
     @Test fun codeSettingsDark() = withCode { a, _ ->
         push(a, CodeSettingsFragment())
+        idle()
+        val settings = a.supportFragmentManager.fragments.last { it is CodeSettingsFragment }.requireView()
+        val hits = ArrayList<android.view.View>()
+        settings.findViewsWithText(hits, "nothing leaves the phone", android.view.View.FIND_VIEWS_WITH_TEXT)
+        val demo = hits.filterIsInstance<android.widget.TextView>().first()
+        val layout = demo.layout
+        org.junit.Assert.assertNotNull(layout)
+        val cut = (0 until layout.lineCount).sumOf { layout.getEllipsisCount(it) }
+        org.junit.Assert.assertEquals("demo machine row is clipped", 0, cut)
+        org.junit.Assert.assertTrue(demo.text.toString().contains("nothing leaves the phone"))
         snap(root(a), "code_settings_dark")
     }
 
@@ -145,6 +155,22 @@ class CodeModeScreenshotTest {
         io.github.stardomains3.oxproxion.code.CodeHostDialog.show(f, null)
         idle()
         val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        val agents = dialog.findViewById<android.view.ViewGroup>(io.github.stardomains3.oxproxion.R.id.codeHostAgents)
+        val labels = (0 until agents.childCount).map { agents.getChildAt(it) }
+            .filterIsInstance<android.widget.TextView>().map { it.text.toString() }
+        val example = dialog.findViewById<android.widget.TextView>(io.github.stardomains3.oxproxion.R.id.codeHostUrlExample)
+        val exampleLayout = example.layout
+        org.junit.Assert.assertNotNull(exampleLayout)
+        val exampleCut = (0 until exampleLayout.lineCount).sumOf { exampleLayout.getEllipsisCount(it) }
+        org.junit.Assert.assertEquals("bridge example is clipped", 0, exampleCut)
+        org.junit.Assert.assertTrue(example.text.toString().contains("7878/v1"))
+        org.junit.Assert.assertTrue("every default agent is on the card",
+            listOf("Grok Build", "Cursor CLI", "Pi").all { it in labels })
+        for (i in 0 until agents.childCount) {
+            val pill = agents.getChildAt(i) as? android.widget.TextView ?: continue
+            org.junit.Assert.assertTrue("${pill.text} is clipped",
+                pill.width > 0 && pill.left >= 0 && pill.right <= agents.width)
+        }
         snap(dialog.window!!.decorView, "code_host_dialog_dark")
     }
 

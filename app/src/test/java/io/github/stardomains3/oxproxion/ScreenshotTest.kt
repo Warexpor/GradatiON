@@ -469,7 +469,18 @@ class ScreenshotTest {
     @Test fun rpLorebooksDark() = withChat { a, _ -> pushFragment(a, RpLorebookLibraryFragment.newInstance()); snap(root(a), "rp_lorebooks_dark") }
     @Test fun rpPersonaDark() = rpScreen("rp_persona_dark") { RpPersonaFragment.newInstance() }
     @Test fun rpCharacterEditDark() = withChat { a, _ -> pushFragment(a, RpCharacterEditFragment.newInstance(0L)); snap(root(a), "rp_character_edit_dark") }
-    @Test fun rpLorebookEditDark() = withChat { a, _ -> pushFragment(a, RpLorebookEditFragment.newInstance(0L)); snap(root(a), "rp_lorebook_edit_dark") }
+    @Test fun rpLorebookEditDark() = withChat { a, _ ->
+        pushFragment(a, RpLorebookEditFragment.newInstance(0L)); idle()
+        val hits = ArrayList<android.view.View>()
+        a.findViewById<android.view.ViewGroup>(android.R.id.content)
+            .findViewsWithText(hits, "phrase] blocks", android.view.View.FIND_VIEWS_WITH_TEXT)
+        val help = hits.filterIsInstance<android.widget.TextView>().first()
+        val layout = help.layout
+        org.junit.Assert.assertNotNull(layout)
+        val cut = (0 until layout.lineCount).sumOf { layout.getEllipsisCount(it) }
+        org.junit.Assert.assertEquals("lore format hint is clipped", 0, cut)
+        snap(root(a), "rp_lorebook_edit_dark")
+    }
     @Test fun helpDark() = withChat { a, _ -> pushFragment(a, HelpFragment()); snap(root(a), "help_dark") }
     @Test fun licensesDark() = withChat { a, _ -> pushFragment(a, LicenseListFragment()); snap(root(a), "licenses_dark") }
     @Test fun advancedReasoningDark() = withChat { a, _ -> pushFragment(a, AdvancedReasoningFragment()); snap(root(a), "advanced_reasoning_dark") }
@@ -486,7 +497,16 @@ class ScreenshotTest {
 
     @Test fun toolsDark() = withChat { a, _ -> pushFragment(a, ToolsFragment()); snap(root(a), "tools_dark") }
     @Test fun promptsDark() = withChat { a, _ -> pushFragment(a, PromptLibraryFragment()); snap(root(a), "prompts_dark") }
-    @Test fun rpSettingsDark() = withChat { a, _ -> pushFragment(a, RpSettingsFragment()); snap(root(a), "rp_settings_dark") }
+    @Test fun rpSettingsDark() = withChat { a, _ ->
+        pushFragment(a, RpSettingsFragment()); idle()
+        val facts = a.findViewById<android.widget.TextView>(R.id.rpAutoMemorySwitch)
+        val layout = facts.layout
+        org.junit.Assert.assertNotNull("facts switch laid out", layout)
+        val cut = (0 until layout.lineCount).sumOf { layout.getEllipsisCount(it) }
+        org.junit.Assert.assertEquals("facts row must show the whole sentence", 0, cut)
+        org.junit.Assert.assertTrue(layout.text.toString().endsWith("left alone."))
+        snap(root(a), "rp_settings_dark")
+    }
     @Test fun inferenceDark() = withChat { a, _ -> pushFragment(a, InferenceParametersFragment()); snap(root(a), "inference_dark") }
 
     @Test fun confirmDialogDark() = withChat { a, chat ->

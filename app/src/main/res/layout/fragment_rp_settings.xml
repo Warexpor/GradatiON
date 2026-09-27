@@ -90,13 +90,12 @@
                     android:background="@color/xai_hairline" />
 
                 <!-- The model folds long stories into each character's Memory as old turns age out -->
+                <!-- The sentence is the control: two lines clip it to "left al…", which hides that Memory stays put. -->
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/rpAutoMemorySwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
-                    android:maxLines="2"
-                    android:ellipsize="end"
                     android:text="@string/rp_auto_memory"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />
