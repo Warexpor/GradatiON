@@ -50,6 +50,7 @@ class CodeModeScreenshotTest {
 
     @Before
     fun setUp() {
+        TestEnv.resetViewModelFactory()
         Settings.Global.putFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
         AppDatabase.setInstanceForTesting(
             Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java).allowMainThreadQueries().build()

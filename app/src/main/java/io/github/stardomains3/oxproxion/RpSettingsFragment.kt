@@ -36,6 +36,11 @@ class RpSettingsFragment : Fragment() {
         thirdPersonSwitch.isChecked = prefs.isRpThirdPerson()
         thirdPersonSwitch.setOnCheckedChangeListener { _, checked -> prefs.saveRpThirdPerson(checked) }
 
+        view.findViewById<MaterialSwitch>(R.id.rpAutoMemorySwitch).apply {
+            isChecked = prefs.isRpAutoMemory()
+            setOnCheckedChangeListener { _, checked -> prefs.saveRpAutoMemory(checked) }
+        }
+
         val showThoughtsSwitch = view.findViewById<MaterialSwitch>(R.id.rpShowThoughtsSwitch)
         showThoughtsSwitch.isChecked = prefs.isRpShowThoughts()
         showThoughtsSwitch.setOnCheckedChangeListener { _, checked -> prefs.saveRpShowThoughts(checked) }

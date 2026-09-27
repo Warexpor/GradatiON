@@ -7687,6 +7687,62 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun sessionIsLlm(): Boolean = isRpMode() && sharedPreferencesHelper.isRpLlmMode()
 
+    /** Message count at the last memory upkeep, per chat (see [RpAutoMemory.shouldUpdate]). */
+    private val rpMemoryRunAt = HashMap<Long, Int>()
+    private var rpMemoryJob: Job? = null
+
+    /**
+     * After a finished RP reply: once the chat nears the API window, have the model fold the story
+     * so far into this character's Memory, in the background. Never blocks or touches the chat;
+     * any failure just leaves Memory as it was.
+     */
+    private fun maybeUpdateRpMemory(latestReply: String) {
+        if (!sharedPreferencesHelper.isRpAutoMemory() || rpMemoryJob?.isActive == true) return
+        val modelId = _activeChatModel.value ?: return
+        val demo = DemoModel.isDemo(modelId)
+        val llm = sharedPreferencesHelper.isRpLlmMode()
+        val character = _activeRpCharacter.value
+        if (!llm && character == null) return
+        val characterId = if (llm) null else character?.id
+        val turns = _chatMessages.value.orEmpty()
+            .filter { (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it) }
+            .map { it.role to getMessageText(it.content) }
+            .toMutableList()
+        // The finished reply may not be in the list yet.
+        if (turns.lastOrNull()?.let { it.first == "assistant" && it.second.trim() == latestReply.trim() } != true) {
+            turns += "assistant" to latestReply
+        }
+        val sessionKey = currentSessionId ?: -1L
+        val budget = sharedPreferencesHelper.getChatMemoryCount()
+        if (!RpAutoMemory.shouldUpdate(turns.size, budget, rpMemoryRunAt[sessionKey] ?: 0)) return
+        rpMemoryRunAt[sessionKey] = turns.size
+
+        val charName = if (llm) getApplication<Application>().getString(R.string.rp_llm_speaker) else character!!.name
+        val userName = sharedPreferencesHelper.getRpPersonaName().ifBlank { "User" }
+        val memory = sharedPreferencesHelper.getRpMemory(characterId)
+        val prompt = RpAutoMemory.prompt(charName, userName, memory, RpAutoMemory.transcript(turns, charName, userName))
+        val isLan = activeModelIsLan() && !demo
+        val endpoint = if (isLan) sharedPreferencesHelper.getLanEndpoint()?.takeIf { it.isNotBlank() }?.let { "$it/v1/chat/completions" }
+            else "https://openrouter.ai/api/v1/chat/completions"
+        val apiKey = if (isLan) sharedPreferencesHelper.getLanApiKeyForRequest() else activeChatApiKey
+        if (endpoint == null || (!isLan && !demo && apiKey.isBlank())) return
+        rpMemoryJob = viewModelScope.launch(Dispatchers.IO) {
+            val reply = llmService.completeOnce(
+                prompt = prompt,
+                apiKey = apiKey,
+                modelId = modelId,
+                endpoint = endpoint,
+                maxTokens = 400,
+                lanProvider = if (isLan) sharedPreferencesHelper.getLanProvider() else null,
+                isReasoningModel = isReasoningModel(modelId),
+                client = if (demo) demoHttpClient else if (isLan) lanHttpClient else null
+            )
+            val note = RpAutoMemory.clean(reply) ?: return@launch
+            // The user may have switched characters meanwhile; the note belongs to the one it was built for.
+            sharedPreferencesHelper.saveRpMemory(characterId, note)
+        }
+    }
+
     private fun finalizeAssistantContent(text: String): String {
         if (!isRpMode()) return text
         // Reply is complete — Stop must not treat the finished bubble as a mid-stream partial.
@@ -7697,6 +7753,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             pendingRpSwipeAppend = false
             return cleaned
         }
+        maybeUpdateRpMemory(cleaned)
         if (pendingRpSwipeAppend) {
             pendingRpSwipeAppend = false
             appendRpSwipeAlt(cleaned)

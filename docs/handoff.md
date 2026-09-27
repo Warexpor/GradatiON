@@ -16,8 +16,9 @@ Read `CLAUDE.md`, then `AGENTS.md` (code map, test gotchas) and `docs/backlog.md
   dump and `SHELL.md` are gone, still in history) and the store descriptions. `AGENTS.md` is new.
 
 ## Next
-- RP: auto-summarize Memory (a model call that rewrites the note once old turns fall out of the
-  API window). Voice/Layout/Wallpaper cards are done (RpVoiceDialog, ChatAdapter.rpLayout,
+- RP auto memory is done: after a reply, once the chat nears the API window (or 60 messages when
+  memory is "All"), a quiet non-streamed call (`LlmService.completeOnce`) rewrites the character's
+  Memory, at most every 6 messages. Switch in RP settings. The demo model answers it too. Voice/Layout/Wallpaper cards are done (RpVoiceDialog, ChatAdapter.rpLayout,
   AmbientBackgroundView.photoSlot with BackgroundPhoto slots "char_<id>").
 - The old scroll-progress bar (the full-width line under the tabs) is off by default and fades
   when idle if someone turns it on.

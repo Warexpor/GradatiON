@@ -1134,6 +1134,10 @@ class SharedPreferencesHelper(context: Context) {
         putFloat("rp_voice_rate_$k", voice.rate)
     }
 
+    /** Let the model keep each character's Memory up to date as long chats outgrow the API window. */
+    fun isRpAutoMemory(): Boolean = mainPrefs.getBoolean("rp_auto_memory", true)
+    fun saveRpAutoMemory(on: Boolean) = mainPrefs.edit { putBoolean("rp_auto_memory", on) }
+
     /** Name of the persona preset currently in use, if the persona text came from one. */
     fun getRpPersonaName(): String {
         val persona = getRpPersona().trim()

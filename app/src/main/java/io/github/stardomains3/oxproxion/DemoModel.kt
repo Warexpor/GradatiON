@@ -52,10 +52,13 @@ object DemoModel {
     class StreamInterceptor(private val roleplay: () -> Boolean) : Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {
             val request = chain.request()
-            val userText = runCatching {
-                val buf = Buffer().also { request.body?.writeTo(it) }
-                lastUserText(buf.readUtf8())
-            }.getOrDefault("")
+            val body = runCatching { Buffer().also { request.body?.writeTo(it) }.readUtf8() }.getOrDefault("")
+            val userText = runCatching { lastUserText(body) }.getOrDefault("")
+            val streaming = runCatching {
+                // `stream: false` is a default and isn't serialized, so only an explicit true streams.
+                Json.parseToJsonElement(body).jsonObject["stream"]?.jsonPrimitive?.contentOrNull == "true"
+            }.getOrDefault(true)
+            if (!streaming) return oneShot(request, userText)
             val script = reply(userText, roleplay())
             val pipe = Pipe(64 * 1024)
             Thread({ play(script, pipe) }, "demo-stream").apply { isDaemon = true }.start()
@@ -71,6 +74,38 @@ object DemoModel {
     }
 
     class Script(val thinking: String?, val text: String)
+
+    /** Background chores (RP memory upkeep) ask without streaming; answer with one JSON reply. */
+    private fun oneShot(request: okhttp3.Request, userText: String): Response {
+        val text = if ("memory notes" in userText) DEMO_MEMORY else "OK"
+        Thread.sleep((300 * pace).toLong())
+        val json = buildJsonObject {
+            put("id", "demo")
+            put("object", "chat.completion")
+            put("created", System.currentTimeMillis() / 1000)
+            put("model", ID)
+            put("choices", buildJsonArray {
+                add(buildJsonObject {
+                    put("index", 0)
+                    put("message", buildJsonObject { put("role", "assistant"); put("content", text) })
+                    put("finish_reason", "stop")
+                })
+            })
+        }
+        return Response.Builder()
+            .request(request)
+            .protocol(Protocol.HTTP_1_1)
+            .code(200)
+            .message("OK")
+            .header("Content-Type", "application/json")
+            .body(Buffer().writeUtf8(json.toString()).asResponseBody("application/json".toMediaType()))
+            .build()
+    }
+
+    const val DEMO_MEMORY = "- The river nearly took the user on the way here\n" +
+        "- The map marks where it happened, circled in red\n" +
+        "- They leave at first light with the rope\n" +
+        "- The innkeeper must not know where they are going"
 
     private fun lastUserText(body: String): String {
         val messages = Json.parseToJsonElement(body).jsonObject["messages"]?.jsonArray ?: return ""

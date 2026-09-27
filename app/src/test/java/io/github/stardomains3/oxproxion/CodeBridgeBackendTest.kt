@@ -78,6 +78,8 @@ class CodeBridgeBackendTest {
         var keepAlive = false
         /** When true, the next session/prompt send fails once (simulates deliver failure). */
         var failPromptSendOnce = false
+        /** Prompts already delivered when the failing send happened (-1 = it hasn't happened). */
+        @Volatile var promptsSentAtFailure = -1
         /** When true, the next non-prompt send fails once (approval answer / cancel). */
         var failNextNonPromptSend = false
         /** When true, the next session/cancel send fails once (R3 queue-full / drop). */
@@ -103,6 +105,7 @@ class CodeBridgeBackendTest {
         override fun send(frame: String): Boolean {
             if (!open.get() || _state.value != ConnectionState.CONNECTED) return false
             if (failPromptSendOnce && frame.contains("session/prompt")) {
+                promptsSentAtFailure = sent.count { it.contains("session/prompt") }
                 failPromptSendOnce = false
                 // Stay CONNECTED — R4 queue-full / backpressure (not a drop).
                 lastError = "Send queue full"
@@ -519,13 +522,10 @@ class CodeBridgeBackendTest {
             transport.restore()
             withTimeout(5_000) {
                 while (transport.failPromptSendOnce) delay(10)
-                delay(60)
             }
-            assertEquals(
-                "failed deliver must not consume the outbox item",
-                0,
-                transport.sent.count { it.contains("session/prompt") }
-            )
+            // Checked at the failing send itself: the backend's own retry may deliver right after,
+            // so a sleep-then-count here raced it under a loaded run.
+            assertEquals("nothing delivered before the failed send", 0, transport.promptsSentAtFailure)
             assertTrue(transport.keepAlive)
             assertEquals(
                 "transport stays CONNECTED after queue-full send false",
@@ -538,6 +538,12 @@ class CodeBridgeBackendTest {
                 while (transport.sent.count { it.contains("session/prompt") } < 1) delay(10)
             }
             assertTrue(transport.sent.any { it.contains("session/prompt") && it.contains("retry me") })
+            delay(100)
+            assertEquals(
+                "failed deliver must not consume the outbox item, nor send it twice",
+                1,
+                transport.sent.count { it.contains("session/prompt") }
+            )
         } finally {
             answers.cancel()
             backend.close()

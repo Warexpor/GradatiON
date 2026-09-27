@@ -108,6 +108,52 @@ class LlmService(
         }
     }
 
+    /**
+     * One quiet, non-streamed completion for background chores (RP memory upkeep). Thinking is
+     * switched off where the provider allows. Returns the reply text, or null on any failure.
+     */
+    suspend fun completeOnce(
+        prompt: String,
+        apiKey: String,
+        modelId: String,
+        endpoint: String,
+        maxTokens: Int,
+        lanProvider: String? = null,
+        isReasoningModel: Boolean = false,
+        timeoutMs: Long = 45_000,
+        client: HttpClient? = null
+    ): String? {
+        val think = if (lanProvider == LAN_PROVIDER_OLLAMA && isReasoningModel) false else null
+        val kwargs = if (lanProvider == LAN_PROVIDER_LLAMA_CPP && isReasoningModel) {
+            mapOf("enable_thinking" to JsonPrimitive(false))
+        } else null
+        return try {
+            withTimeout(timeoutMs) {
+                val response = (client ?: httpClient).post(endpoint) {
+                    header("Authorization", "Bearer $apiKey")
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        ChatRequest(
+                            model = modelId,
+                            messages = listOf(FlexibleMessage(role = "user", content = JsonPrimitive(prompt))),
+                            max_tokens = maxTokens,
+                            temperature = 0.2,
+                            stream = false,
+                            think = think,
+                            chatTemplateKwargs = kwargs
+                        )
+                    )
+                }
+                if (!response.status.isSuccess()) return@withTimeout null
+                response.body<ChatResponse>().choices.firstOrNull()?.message?.content?.trim()?.ifBlank { null }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            if (e is TimeoutCancellationException) null else throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun getRemainingCredits(apiKey: String): Double? {
         if (apiKey.isBlank()) {
            // Log.e(TAG, "API key is blank. Cannot fetch credits.")

@@ -46,6 +46,8 @@ export ANDROID_HOME=/opt/android-sdk        # or wherever your SDK lives
   the Roleplay tab.
 - Robolectric's animator scale is static per JVM, so animations can finish instantly. Assert on
   the first frame, not mid-flight.
+- The default ViewModel factory caches the first Application in a static, so later tests' ViewModels
+  read stale prefs. Screenshot tests call `TestEnv.resetViewModelFactory()` in `@Before`.
 - Robolectric reports a speech recognizer as available. Use `VoiceInput.deviceAvailableOverride`.
 - The demo stream runs on a real thread. Pump the looper in real time with `waitFor`.
   `ScreenshotTest` sets `DemoModel.pace` near 0 so it doesn't wait on the fake typing.

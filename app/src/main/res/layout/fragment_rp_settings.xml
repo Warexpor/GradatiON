@@ -89,6 +89,23 @@
                     android:layout_height="1dp"
                     android:background="@color/xai_hairline" />
 
+                <!-- The model folds long stories into each character's Memory as old turns age out -->
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/rpAutoMemorySwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="56dp"
+                    android:maxLines="2"
+                    android:ellipsize="end"
+                    android:text="@string/rp_auto_memory"
+                    android:textColor="@color/xai_ink"
+                    android:textSize="16sp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/xai_hairline" />
+
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/rpLlmModeSwitch"
                     android:layout_width="match_parent"

@@ -82,8 +82,8 @@ app, drive it to the best direction you think it is."
         Persona. The harness (prompt assembly, memory) matters most.
       Done: Memory note per character, card macros, scene-craft rules, Continue on the empty
       send button, panel with titled glass cards. Voice (system TTS voice, pitch, speed),
-      Layout (Classic, Bubbles, Book) and per-character Wallpaper are in too. Not yet:
-      auto-summarized memory (a model call that updates Memory).
+      Layout (Classic, Bubbles, Book) and per-character Wallpaper are in too. Auto memory is in too
+      (RpAutoMemory; switch in RP settings).
 
 ## Repo
 - [x] P1. New screenshots, a fresh README description of the app, design docs and agent instructions.
