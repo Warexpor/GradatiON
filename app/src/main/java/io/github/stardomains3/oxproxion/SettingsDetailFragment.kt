@@ -34,7 +34,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         val ctx = context ?: return@registerForActivityResult
         if (uri == null) { onPhotoPicked?.invoke(false); return@registerForActivityResult }
         BackgroundPhoto.import(ctx, uri) { ok ->
-            if (!ok) AppToast.makeText(ctx, getString(R.string.settings_background_photo_failed), AppToast.LENGTH_SHORT).show()
+            if (!ok) GlassNotice.show(ctx, getString(R.string.settings_background_photo_failed))
             onPhotoPicked?.invoke(ok)
         }
     }
@@ -50,7 +50,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                         }
                         AppToast.makeText(requireContext(), "Chats exported successfully", AppToast.LENGTH_SHORT).show()
                     } catch (_: Exception) {
-                        AppToast.makeText(requireContext(), "Error exporting chats", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_export_chats_failed))
                     }
                 }
             }
@@ -71,14 +71,14 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                                     is ChatImportResult.Success ->
                                         AppToast.makeText(requireContext(), "Chats imported successfully", AppToast.LENGTH_SHORT).show()
                                     is ChatImportResult.Error ->
-                                        AppToast.makeText(requireContext(), importResult.message, AppToast.LENGTH_LONG).show()
+                                        GlassNotice.show(requireContext(), importResult.message)
                                 }
                             }
                         } else {
                             throw Exception("Failed to read file content.")
                         }
                     } catch (_: Exception) {
-                        AppToast.makeText(requireContext(), "Import failed. Check file format.", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_import_failed_format))
                     }
                 }
             }
@@ -272,7 +272,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         }
         creditsButton.setOnClickListener {
             if (viewModel.activeChatApiKey.isBlank()) {
-                AppToast.makeText(requireContext(), "API Key is not set.", AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_api_key_missing))
             } else {
                 parentFragmentManager.popBackStack()
                 viewModel.checkRemainingCredits()
@@ -374,7 +374,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                     BiometricManager.BIOMETRIC_SUCCESS -> prefs.saveBiometricEnabled(true)
                     else -> {
                         biometricsSwitch.isChecked = false
-                        AppToast.makeText(requireContext(), "No biometrics available", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_no_biometrics))
                     }
                 }
             } else {
@@ -602,7 +602,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
     private fun exportChats() {
         val sessions = savedChatsViewModel.allSessions.value.orEmpty()
         if (sessions.isEmpty()) {
-            AppToast.makeText(requireContext(), "No chats to export.", AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.notice_no_chats_export))
             return
         }
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {

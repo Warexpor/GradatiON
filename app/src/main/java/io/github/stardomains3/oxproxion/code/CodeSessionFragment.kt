@@ -20,6 +20,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import io.github.stardomains3.oxproxion.AppToast
+import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
 import io.github.stardomains3.oxproxion.GlassTextView
@@ -433,16 +434,12 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         viewLifecycleOwner.lifecycleScope.launch {
             for (uri in uris) {
                 if (composer.attachmentCount >= CodePromptImages.MAX_COUNT) {
-                    AppToast.makeText(
-                        requireContext(),
-                        getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT),
-                        AppToast.LENGTH_SHORT
-                    ).show()
+                    GlassNotice.show(requireContext(), getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT))
                     break
                 }
                 val mime = requireContext().contentResolver.getType(uri)?.lowercase()
                 if (mime != null && mime !in setOf("image/jpeg", "image/png", "image/webp")) {
-                    AppToast.makeText(requireContext(), getString(R.string.code_attach_unsupported), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.code_attach_unsupported))
                     continue
                 }
                 val encoded = withContext(Dispatchers.IO) { CodePromptImages.fromUri(requireContext(), uri) }
@@ -450,20 +447,16 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                 val att = when (encoded) {
                     is CodePromptImages.Result.Ok -> encoded.attachment
                     is CodePromptImages.Result.TooLarge -> {
-                        AppToast.makeText(requireContext(), getString(R.string.code_attach_too_large), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.code_attach_too_large))
                         continue
                     }
                     is CodePromptImages.Result.Failed -> {
-                        AppToast.makeText(requireContext(), getString(R.string.code_attach_failed), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.code_attach_failed))
                         continue
                     }
                 }
                 if (!composer.addAttachment(att)) {
-                    AppToast.makeText(
-                        requireContext(),
-                        getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT),
-                        AppToast.LENGTH_SHORT
-                    ).show()
+                    GlassNotice.show(requireContext(), getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT))
                     break
                 }
             }

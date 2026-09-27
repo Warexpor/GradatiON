@@ -28,6 +28,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import io.github.stardomains3.oxproxion.AppToast
+import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
 import io.github.stardomains3.oxproxion.GrokInputDialog
@@ -569,7 +570,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     composer.hideKeyboard()
                     openSession(id)
                 }.onFailure {
-                    AppToast.makeText(requireContext(), getString(R.string.code_home_start_failed, it.message ?: "?"), AppToast.LENGTH_LONG).show()
+                    GlassNotice.show(requireContext(), getString(R.string.code_home_start_failed, it.message ?: "?"))
                 }
             } finally {
                 // View teardown cancels this job; clear the guard so a later start isn't stuck.
@@ -583,16 +584,12 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         viewLifecycleOwner.lifecycleScope.launch {
             for (uri in uris) {
                 if (composer.attachmentCount >= CodePromptImages.MAX_COUNT) {
-                    AppToast.makeText(
-                        requireContext(),
-                        getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT),
-                        AppToast.LENGTH_SHORT
-                    ).show()
+                    GlassNotice.show(requireContext(), getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT))
                     break
                 }
                 val mime = requireContext().contentResolver.getType(uri)?.lowercase()
                 if (mime != null && mime !in setOf("image/jpeg", "image/png", "image/webp")) {
-                    AppToast.makeText(requireContext(), getString(R.string.code_attach_unsupported), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.code_attach_unsupported))
                     continue
                 }
                 val encoded = withContext(Dispatchers.IO) { CodePromptImages.fromUri(requireContext(), uri) }
@@ -600,20 +597,16 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 val att = when (encoded) {
                     is CodePromptImages.Result.Ok -> encoded.attachment
                     is CodePromptImages.Result.TooLarge -> {
-                        AppToast.makeText(requireContext(), getString(R.string.code_attach_too_large), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.code_attach_too_large))
                         continue
                     }
                     is CodePromptImages.Result.Failed -> {
-                        AppToast.makeText(requireContext(), getString(R.string.code_attach_failed), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.code_attach_failed))
                         continue
                     }
                 }
                 if (!composer.addAttachment(att)) {
-                    AppToast.makeText(
-                        requireContext(),
-                        getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT),
-                        AppToast.LENGTH_SHORT
-                    ).show()
+                    GlassNotice.show(requireContext(), getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT))
                     break
                 }
             }

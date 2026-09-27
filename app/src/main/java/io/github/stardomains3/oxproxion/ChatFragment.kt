@@ -377,12 +377,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     val rawBytes = requireContext().contentResolver.openInputStream(imageUri)?.use { stream ->
                         stream.readBytes()
                     } ?: run {
-                        AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_image), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_image))
                         return@registerForActivityResult
                     }
 
                     if (rawBytes.size > 12_000_000) {
-                        AppToast.makeText(requireContext(), getString(R.string.toast_image_too_large), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.toast_image_too_large))
                         requireContext().contentResolver.delete(imageUri, null, null)
                         return@registerForActivityResult
                     }
@@ -399,7 +399,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     // Notify for gallery refresh
                     requireContext().contentResolver.notifyChange(imageUri, null)
                 } catch (e: Exception) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_failed_process_photo), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_failed_process_photo))
                     requireContext().contentResolver.delete(imageUri, null, null)
                 }
             } else {
@@ -2495,7 +2495,7 @@ $cleanContent
                             }
                             .show()
                     } else {
-                        AppToast.makeText(requireContext(), getString(R.string.toast_pdf_failed), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.toast_pdf_failed))
                     }
                 }
             }
@@ -2766,7 +2766,7 @@ $cleanContent
                 val intent = Intent(Intent.ACTION_VIEW, "https://openrouter.ai/models".toUri())
                 startActivity(intent)
             } catch (e: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_open_browser_failed), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_open_browser_failed))
             }
             true
         }
@@ -3078,7 +3078,7 @@ $cleanContent
 
 
                 if (formatFromMime !in supportedFormats && extension !in supportedFormats) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_audio_unsupported), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_audio_unsupported))
                     return@launch
                 }
 
@@ -3089,7 +3089,7 @@ $cleanContent
                 }
 
                 if (bytes == null || bytes.size > 25_000_000) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_audio_too_large), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_audio_too_large))
                     return@launch
                 }
                 if (discardAttachmentIfRp()) return@launch
@@ -3102,7 +3102,7 @@ $cleanContent
                 attachmentPreviewContainer.visibility = View.VISIBLE
                 AppToast.makeText(requireContext(), getString(R.string.toast_audio_attached), AppToast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_audio_read_failed, e.message ?: ""), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_audio_read_failed, e.message ?: ""))
             }
         }
     }
@@ -3638,7 +3638,7 @@ $cleanContent
         val resolver = requireContext().applicationContext.contentResolver
         val mime = resolver.getType(uri)
         if (mime !in setOf("image/jpeg", "image/png", "image/webp")) {
-            AppToast.makeText(requireContext(), getString(R.string.toast_unsupported_image_format), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_unsupported_image_format))
             return
         }
         viewLifecycleOwner.lifecycleScope.launch {
@@ -3663,11 +3663,11 @@ $cleanContent
             }
             if (!isAdded) return@launch
             if (bytes == null) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_image), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_image))
                 return@launch
             }
             if (bytes.size > maxBytes) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_image_too_large), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_image_too_large))
                 return@launch
             }
             if (discardAttachmentIfRp()) return@launch
@@ -3788,7 +3788,7 @@ $cleanContent
                 return@setOnClickListener
             }
             if (model == null || !viewModel.isVisionModel(model)) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_image_pdf_not_supported), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_image_pdf_not_supported))
                 return@setOnClickListener
             }
 
@@ -3827,7 +3827,7 @@ $cleanContent
                 return@setOnLongClickListener true
             }
             if (model == null || !viewModel.isVisionModel(model)) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_image_not_supported), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_image_not_supported))
                 return@setOnLongClickListener false
             }
 
@@ -3853,7 +3853,7 @@ $cleanContent
         try {
             speechLauncher.launch(intent)
         } catch (e: Exception) {
-            AppToast.makeText(requireContext(), getString(R.string.toast_speech_not_supported), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_speech_not_supported))
         }
         */
     }
@@ -4604,7 +4604,7 @@ $cleanContent
                 currentCameraUri = null  // NEW: Clean up
             }
         } ?: run {
-            AppToast.makeText(requireContext(), getString(R.string.toast_could_not_create_image), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_could_not_create_image))
         }
     }
     fun startSpeechRecognitionSafely() {
@@ -4651,7 +4651,7 @@ $cleanContent
                 }
 
                 if (parcelFd == null) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_pdf_access_failed), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_pdf_access_failed))
                     return@launch
                 }
 
@@ -4674,8 +4674,7 @@ $cleanContent
                     }
                 }
             } catch (e: Exception) {
-                val errorMsg = "Failed to process PDF: ${e.message}"
-                AppToast.makeText(requireContext(), errorMsg, AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.notice_pdf_process_failed, e.message ?: ""))
             } finally {
                 try {
                     parcelFd?.close()
@@ -4734,7 +4733,7 @@ $cleanContent
         val bytes = byteArrayOutputStream.toByteArray()
 
         if (bytes.size > 12_000_000) {
-            AppToast.makeText(requireContext(), getString(R.string.toast_pdf_page_too_large), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_pdf_page_too_large))
             bitmap.recycle()
             return
         }
@@ -4800,7 +4799,7 @@ $cleanContent
                         val bitmap = renderPdfPageToBitmap(pdfRenderer, selectedPage)
                         processPdfBitmap(bitmap, "Page ${selectedPage + 1} of $pageCount")
                     } catch (e: Exception) {
-                        AppToast.makeText(requireContext(), "Render failed: ${e.message}", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_pdf_render_failed, e.message ?: ""))
                     } finally {
                         release()
                     }
@@ -4852,7 +4851,7 @@ $cleanContent
                 }
 
                 if (!isAllowed) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_unsupported_file, fileName, mimeType), AppToast.LENGTH_LONG).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_unsupported_file, fileName, mimeType))
                     return@launch
                 }
 
@@ -4876,12 +4875,12 @@ $cleanContent
 
                 // Size validation (your existing checks)
                 if (fileSize > MAX_SINGLE_FILE_SIZE) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_file_too_large, fileName, MAX_SINGLE_FILE_SIZE / 1024 / 1024), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_file_too_large, fileName, MAX_SINGLE_FILE_SIZE / 1024 / 1024))
                     return@launch
                 }
 
                 if (currentTotalSize + fileSize > MAX_FILE_SIZE) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_attachments_total_limit, fileName, (currentTotalSize + fileSize) / 1024 / 1024, MAX_FILE_SIZE / 1024 / 1024), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_attachments_total_limit, fileName, (currentTotalSize + fileSize) / 1024 / 1024, MAX_FILE_SIZE / 1024 / 1024))
                     return@launch
                 }
                 if (discardAttachmentIfRp()) return@launch
@@ -4894,7 +4893,7 @@ $cleanContent
                 AppToast.makeText(requireContext(), getString(R.string.toast_file_attached, fileName), AppToast.LENGTH_SHORT).show()
 
             } catch (e: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_file, e.message ?: ""), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_file, e.message ?: ""))
             }
         }
     }
@@ -5318,7 +5317,7 @@ $cleanContent
             if (bitmap != null) {
                 viewModel.saveBitmapToDownloads(bitmap, format)
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_failed_capture_view), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_failed_capture_view))
             }
         } else {
             AppToast.makeText(requireContext(), getString(R.string.toast_item_not_visible), AppToast.LENGTH_SHORT).show()
@@ -5455,7 +5454,7 @@ $cleanContent
             speechButton.isSelected = true
             AppToast.makeText(requireContext(), getString(R.string.toast_recording), AppToast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            AppToast.makeText(requireContext(), getString(R.string.toast_recording_failed, e.message ?: ""), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_recording_failed, e.message ?: ""))
             voiceRecordFile?.delete()
             voiceRecordFile = null
         }
@@ -5521,10 +5520,10 @@ $cleanContent
                     chatEditText.setSelection(transcribedText.length)
                     // AppToast.makeText(requireContext(), "Transcription complete", AppToast.LENGTH_SHORT).show()
                 } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_transcription_failed), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_transcription_failed))
                 }
             } catch (e: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_error_generic, e.message ?: ""), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_error_generic, e.message ?: ""))
             } finally {
                 file.delete()
                 voiceRecordFile = null

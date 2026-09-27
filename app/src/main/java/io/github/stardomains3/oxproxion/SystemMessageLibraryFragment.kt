@@ -59,7 +59,7 @@ class SystemMessageLibraryFragment : Fragment() {
                         }
                         AppToast.makeText(requireContext(), "System Messages exported successfully", AppToast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
-                        AppToast.makeText(requireContext(), "Error exporting System Messages", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_export_system_messages_failed))
                     }
                 }
             }
@@ -100,10 +100,10 @@ class SystemMessageLibraryFragment : Fragment() {
                         }
                     } catch (e: SerializationException) {
                         // Log.e("Import", "Import failed due to JSON format", e)
-                        AppToast.makeText(requireContext(), "Import failed. Check file format.", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_import_failed_format))
                     } catch (e: Exception) {
                         //Log.e("Import", "Import failed", e)
-                        AppToast.makeText(requireContext(), "Import failed.", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_import_failed))
                     }
                 }
             }
@@ -173,7 +173,7 @@ class SystemMessageLibraryFragment : Fragment() {
 
     private fun exportSystemMessages() {
         if (sharedPreferencesHelper.getCustomSystemMessages().isEmpty()) {
-            AppToast.makeText(requireContext(), "No system messages to export.", AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.notice_no_system_messages_export))
             return
         }
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -304,7 +304,7 @@ class SystemMessageLibraryFragment : Fragment() {
         deleteItem.setOnClickListener {
             popupWindow.dismiss()
             if (systemMessage.isDefault) {
-                AppToast.makeText(context, "Default system message cannot be deleted", AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.notice_default_system_message_undeletable))
             } else {
                 showDeleteConfirmationDialog(systemMessage)
             }
@@ -364,7 +364,7 @@ class SystemMessageLibraryFragment : Fragment() {
                 }
                 R.id.delete_model -> {
                     if (systemMessage.isDefault) {
-                        AppToast.makeText(context, "Default system message cannot be deleted", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_default_system_message_undeletable))
                     } else {
                         showDeleteConfirmationDialog(systemMessage)
                     }

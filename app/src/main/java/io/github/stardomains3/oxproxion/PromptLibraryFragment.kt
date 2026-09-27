@@ -50,7 +50,7 @@ class PromptLibraryFragment : Fragment() {
                         }
                         AppToast.makeText(requireContext(), "Prompts exported successfully", AppToast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
-                        AppToast.makeText(requireContext(), "Error exporting prompts", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_export_prompts_failed))
                     }
                 }
             }
@@ -82,7 +82,7 @@ class PromptLibraryFragment : Fragment() {
                             throw Exception("Failed to read file content.")
                         }
                     } catch (e: Exception) {
-                        AppToast.makeText(requireContext(), "Import failed. Check file format.", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_import_failed_format))
                     }
                 }
             }
@@ -139,7 +139,7 @@ class PromptLibraryFragment : Fragment() {
 
     private fun exportPrompts() {
         if (sharedPreferencesHelper.getCustomPrompts().isEmpty()) {
-            AppToast.makeText(requireContext(), "No prompts to export.", AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.notice_no_prompts_export))
             return
         }
         val intent = android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT).apply {
