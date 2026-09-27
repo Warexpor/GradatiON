@@ -88,4 +88,18 @@ class RpPromptEngineTest {
         )
         assertFalse(prompt.contains("## Memory"))
     }
+
+    @Test
+    fun buildSystemPrompt_clipsDefinitionFromTheEnd() {
+        val card = "HEAD stays.\n" + "x".repeat(200)
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = RpCharacter(id = 1, name = "Mira", prompt = card),
+            persona = "", lang = "en", lore = "", instruction = "",
+            thirdPerson = false, showThoughts = false, isLlm = false,
+            definitionCap = 40
+        )
+        assertTrue(prompt.contains("HEAD stays."))
+        assertFalse(prompt.contains("x".repeat(80)))
+        assertTrue(prompt.contains("## Response Format"))
+    }
 }

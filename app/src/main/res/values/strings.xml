@@ -140,7 +140,11 @@
     <string name="rp_add_lorebook">Add lorebook</string>
     <string name="rp_edit_lorebook">Edit lorebook</string>
     <string name="rp_save_lorebook">Save lorebook</string>
-    <string name="rp_field_lore_content">World lore (flat text)</string>
+    <string name="rp_field_lore_content">Always-on lore, then [keys: word, phrase] blocks</string>
+    <string name="rp_lore_use_active">Use the active lorebook</string>
+    <string name="rp_lore_edit">Edit lorebooks</string>
+    <string name="rp_pin_on">Pinned. This line stays when the chat gets long.</string>
+    <string name="rp_pin_off">Unpinned.</string>
     <string name="rp_lore_activated">Lorebook activated</string>
     <string name="rp_lore_activated_disabled">Lorebook activated — turn on “Use active lorebook” in RP settings to include it</string>
     <string name="rp_lore_deleted_active">Active lorebook removed — tap Set active on another book (or leave none)</string>

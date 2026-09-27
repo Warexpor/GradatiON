@@ -18,14 +18,12 @@ class RpChatDelegate(
 
     suspend fun buildSystemPrompt(
         character: RpCharacter?,
-        extraInstruction: String? = null
+        extraInstruction: String? = null,
+        loreScan: String = "",
+        definitionCap: Int? = null
     ): String {
         val isLlm = prefs.isRpLlmMode()
-        val lore = if (prefs.isRpLoreEnabled()) {
-            rpRepository.getActiveLorebook()?.content.orEmpty()
-        } else {
-            ""
-        }
+        val lore = resolveLore(isLlm, character, loreScan)
         val charInstruction = if (isLlm) "" else character?.instruction.orEmpty()
         val pending = prefs.getRpPendingInstruct()
         val instruction = RpPromptEngine.combineInstruction(
@@ -43,8 +41,24 @@ class RpChatDelegate(
             showThoughts = prefs.isRpShowThoughts(),
             isLlm = isLlm,
             memory = prefs.getRpMemory(if (isLlm) null else character?.id),
-            userName = prefs.getRpPersonaName()
+            userName = prefs.getRpPersonaName(),
+            definitionCap = definitionCap
         )
+    }
+
+    /**
+     * A character can pin its own book. Otherwise the global active book is used.
+     * A pin that points at a deleted book falls back to the active one.
+     */
+    private suspend fun resolveLore(isLlm: Boolean, character: RpCharacter?, scan: String): String {
+        if (!prefs.isRpLoreEnabled()) return ""
+        val pinned = if (!isLlm && character != null) prefs.getRpLorebookId(character.id) else null
+        val book = if (pinned != null) {
+            rpRepository.getLorebookById(pinned) ?: rpRepository.getActiveLorebook()
+        } else {
+            rpRepository.getActiveLorebook()
+        }
+        return RpLore.select(book?.content.orEmpty(), scan)
     }
 
     fun cleanReply(text: String): String = RpReplyCleaner.clean(text)

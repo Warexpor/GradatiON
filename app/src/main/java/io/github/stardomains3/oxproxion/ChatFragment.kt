@@ -1934,6 +1934,16 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
 
         )
+        chatAdapter.onTogglePin = { index ->
+            val pinned = viewModel.toggleMessagePin(index)
+            if (pinned != null) {
+                AppToast.makeText(
+                    requireContext(),
+                    getString(if (pinned) R.string.rp_pin_on else R.string.rp_pin_off),
+                    AppToast.LENGTH_SHORT
+                ).show()
+            }
+        }
         chatRecyclerView.apply {
             adapter = chatAdapter
             layoutManager = this@ChatFragment.layoutManager
@@ -5711,7 +5721,10 @@ $cleanContent
             }
             add(RpCharacterPanel.Tile(R.string.rp_panel_persona, R.drawable.rp_ic_persona, preview = personaName.ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
             add(RpCharacterPanel.Tile(R.string.rp_panel_style, R.drawable.ic_sliders) { pushRp(RpSettingsFragment.newInstance()) })
-            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, R.drawable.rp_ic_book) { pushRp(RpLorebookLibraryFragment.newInstance()) })
+            val pinnedId = if (character != null && !llm) sharedPreferencesHelper.getRpLorebookId(character.id) else null
+            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, R.drawable.rp_ic_book, on = pinnedId != null) {
+                menuButton.post { showRpLorePicker(if (llm) null else character?.id) }
+            })
             if (character != null && !llm) {
                 add(RpCharacterPanel.Tile(R.string.rp_panel_edit, R.drawable.ic_edit) { pushRp(RpCharacterEditFragment.newInstance(character.id)) })
                 add(RpCharacterPanel.Tile(R.string.rp_panel_new_chat, R.drawable.ic_new_chat, header = true) { startRpWith(character) })
@@ -5719,6 +5732,52 @@ $cleanContent
             add(RpCharacterPanel.Tile(R.string.rp_panel_switch, R.drawable.rp_ic_characters, header = true) { menuButton.post { showCharacterPopover() } })
         }
         RpCharacterPanel.show(this, if (llm) null else character, title, subtitle, tiles)
+    }
+
+    /** Lore tile: pin a book to this character, or open the library when there is nothing to pin. */
+    private fun showRpLorePicker(characterId: Long?) {
+        if (characterId == null) {
+            pushRp(RpLorebookLibraryFragment.newInstance())
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val books = viewModel.getRpRepository().getAllLorebooksOnce()
+            if (view == null) return@launch
+            if (books.isEmpty()) {
+                pushRp(RpLorebookLibraryFragment.newInstance())
+                return@launch
+            }
+            val pinned = sharedPreferencesHelper.getRpLorebookId(characterId)
+            val active = books.firstOrNull { it.isActive }
+            val rows = buildList {
+                add(
+                    PickerPopover.Row(
+                        title = getString(R.string.rp_lore_use_active),
+                        subtitle = active?.name ?: getString(R.string.rp_ui_lore_none),
+                        iconRes = R.drawable.rp_ic_book,
+                        selected = pinned == null
+                    ) { sharedPreferencesHelper.saveRpLorebookId(characterId, null) }
+                )
+                books.forEach { book ->
+                    add(
+                        PickerPopover.Row(
+                            title = book.name,
+                            subtitle = if (book.isActive) getString(R.string.rp_lore_active_badge) else null,
+                            iconRes = R.drawable.rp_ic_book,
+                            selected = book.id == pinned
+                        ) { sharedPreferencesHelper.saveRpLorebookId(characterId, book.id) }
+                    )
+                }
+            }
+            val footer = listOf(
+                PickerPopover.Row(
+                    title = getString(R.string.rp_lore_edit),
+                    iconRes = R.drawable.ic_edit,
+                    onClick = { pushRp(RpLorebookLibraryFragment.newInstance()) }
+                )
+            )
+            newPopover()?.show(getString(R.string.rp_panel_lore), rows, footer)
+        }
     }
 
     private fun layoutLabel(layout: String) = when (layout) {

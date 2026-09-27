@@ -1111,6 +1111,16 @@ class SharedPreferencesHelper(context: Context) {
     }
     private fun rpMemoryKey(characterId: Long?) = "rp_memory_" + (characterId?.toString() ?: "llm")
 
+    /** Lorebook pinned to one character. Null means "use whichever book is active". */
+    fun getRpLorebookId(characterId: Long): Long? {
+        val id = mainPrefs.getLong("rp_lorebook_$characterId", -1L)
+        return if (id < 0) null else id
+    }
+    fun saveRpLorebookId(characterId: Long, lorebookId: Long?) = mainPrefs.edit {
+        if (lorebookId == null || lorebookId < 0) remove("rp_lorebook_$characterId")
+        else putLong("rp_lorebook_$characterId", lorebookId)
+    }
+
     /** RP chat layout per character: [RP_LAYOUT_CLASSIC], [RP_LAYOUT_BUBBLES] or [RP_LAYOUT_BOOK]. */
     fun getRpLayout(characterId: Long?): String =
         mainPrefs.getString("rp_layout_" + (characterId?.toString() ?: "llm"), RP_LAYOUT_CLASSIC) ?: RP_LAYOUT_CLASSIC
@@ -1192,6 +1202,21 @@ class SharedPreferencesHelper(context: Context) {
 
     fun clearRpSwipeJson(sessionId: Long) {
         mainPrefs.edit { remove("$KEY_RP_SWIPE_PREFIX$sessionId") }
+    }
+
+    /** Texts of RP lines the user pinned, so they survive a reload. The message row itself has no pin column. */
+    fun getRpPinKeys(sessionId: Long): Set<String> {
+        val raw = mainPrefs.getString("rp_pins_$sessionId", null) ?: return emptySet()
+        return try {
+            json.decodeFromString<Set<String>>(raw)
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
+    fun saveRpPinKeys(sessionId: Long, keys: Set<String>) = mainPrefs.edit {
+        if (keys.isEmpty()) remove("rp_pins_$sessionId")
+        else putString("rp_pins_$sessionId", json.encodeToString(keys))
     }
 
     fun getRpPendingInstruct(): String? = mainPrefs.getString(KEY_RP_PENDING_INSTRUCT, null)

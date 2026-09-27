@@ -16,6 +16,8 @@ Read `CLAUDE.md`, then `AGENTS.md` (code map, test gotchas) and `docs/backlog.md
   dump and `SHELL.md` are gone, still in history) and the store descriptions. `AGENTS.md` is new.
 
 ## Next
+- Lorebooks match the scene (`RpLore`). Text above the first `[keys: …]` line is always included. A block under that line is included only when the recent chat, the character's name, or the scenario mentions a key. A character can pin its own book from the Lore card.
+- Drop order: history goes first. Once it no longer fits, a long card keeps its first 4,000 characters (`RpApiMemory.definitionCap`). Long-press a Roleplay line to pin it; that line stays. A pin shows a small mark. `RpApiMemoryTest` and `RpPromptEngineTest` passed.
 - RP auto memory is done: after a reply, once the chat nears the API window (or 60 messages when
   memory is "All"), a quiet non-streamed call (`LlmService.completeOnce`) rewrites the character's
   Memory, at most every 6 messages. Switch in RP settings. The demo model answers it too. Voice/Layout/Wallpaper cards are done (RpVoiceDialog, ChatAdapter.rpLayout,

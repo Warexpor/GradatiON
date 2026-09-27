@@ -51,7 +51,7 @@ the state of work in progress in `docs/handoff.md`.
 
 ## Working with the user
 - She voice-dictates, so expect mis-transcriptions ("iOS Green" meant glass) and state how you read it.
-- Replies are short TLDRs with no emojis. Say what was verified and what still needs the phone.
+- Replies are the tightest TLDR that is still understandable. No emojis. Say what was verified and what still needs the phone.
 - She trusts your taste. For "make this better" with no specifics, pick the direction yourself, do it,
   and explain the why.
 - When context gets big, write `docs/handoff.md` and let a fresh session continue.
