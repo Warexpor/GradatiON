@@ -884,4 +884,53 @@ class CodeBridgeBackendTest {
             backend.close()
         }
     }
+    @Test
+    fun flushOutboxContinuesAfterAbortedSibling() = runBlocking {
+        // E1: cancel session A mid-flush must not orphan session B's queued prompt.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary("s1"))
+            backend.attach(summary("s2"))
+
+            transport.drop()
+            withTimeout(3_000) { backend.connection.first { it == ConnectionState.DISCONNECTED } }
+            delay(20)
+
+            backend.prompt("s1", "prompt-a-abort-me")
+            backend.prompt("s2", "prompt-b-must-flush")
+
+            // Reconnect: flush starts s1 (autoAnswer leaves session/prompt pending).
+            transport.restore()
+            withTimeout(5_000) {
+                while (transport.sent.none {
+                    it.contains("session/prompt") && it.contains("prompt-a-abort-me")
+                }) delay(5)
+            }
+
+            backend.cancel("s1")
+            withTimeout(5_000) {
+                while (transport.sent.none {
+                    it.contains("session/prompt") && it.contains("prompt-b-must-flush")
+                }) delay(10)
+            }
+            assertTrue(
+                "sibling outbox prompt must still flush after A aborted",
+                transport.sent.any {
+                    it.contains("session/prompt") && it.contains("prompt-b-must-flush")
+                },
+            )
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
 }

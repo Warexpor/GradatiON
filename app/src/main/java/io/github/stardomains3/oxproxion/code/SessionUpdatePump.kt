@@ -94,7 +94,10 @@ internal object CodeSessionFolder {
             }
             is CodeUpdate.TextChunk, is CodeUpdate.ImageChunk, is CodeUpdate.ToolPatch ->
                 if (suppressRunningFromChunks) state.running else true
-            is CodeUpdate.Upsert -> if (update.event is CodeEvent.UserPrompt) true else state.running
+            // E2: UserPrompt must not force running — Hub.prompt already sets it for live
+            // turns; session/load history replays user_message_chunk as UserPrompt and must
+            // leave idle sessions idle (TextChunk / SessionInfo still revive live turns).
+            is CodeUpdate.Upsert -> state.running
             is CodeUpdate.SessionInfo -> when (update.status) {
                 SessionStatus.RUNNING, SessionStatus.NEEDS_APPROVAL -> true
                 SessionStatus.IDLE, SessionStatus.ERROR -> false

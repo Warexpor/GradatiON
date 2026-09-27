@@ -51,6 +51,8 @@ class CodeHub private constructor(context: Context) {
     private val ignoreStaleCancelTurnDone = HashSet<String>()
     /** In-flight approval answers (M3); cleared on ApprovalAnswered or send failure. */
     private val answeringRequests = HashSet<String>()
+    /** Sessions currently running backend.attach (E3); blocks overlapping retries. */
+    private val attachingSessions = HashSet<String>()
     private val sessionDao: CodeSessionDao = AppDatabase.getDatabase(appContext).codeSessionDao()
     /** Latest session-index snapshot waiting for Room; null when idle. */
     private val pendingPersist = AtomicReference<List<CodeSessionEntity>?>(null)
@@ -117,6 +119,21 @@ class CodeHub private constructor(context: Context) {
         if (i >= 0) list[i] = host else list += host
         store.hosts = list
         _hosts.value = list
+        // E4: closing the backend aborts in-flight turns without a Hub TurnDone — clear
+        // Stop chrome so Send is not stuck after a host edit mid-turn.
+        var clearedRunning = false
+        _sessions.value = _sessions.value.mapValues { (id, st) ->
+            if (st.summary.hostId != host.id) st
+            else {
+                suppressRunningFromChunks.remove(id)
+                ignoreStaleCancelTurnDone.remove(id)
+                if (st.running) {
+                    clearedRunning = true
+                    st.copy(running = false)
+                } else st
+            }
+        }
+        if (clearedRunning) persistSessions()
         backends.remove(host.id)?.close()
         if (_activeHost.value == null || _activeHost.value?.id == host.id) selectHost(host.id)
     }
@@ -285,10 +302,23 @@ class CodeHub private constructor(context: Context) {
     fun attach(sessionId: String) {
         val s = _sessions.value[sessionId] ?: return
         if (s.attached) return
-        update(sessionId) { it.copy(attached = true) }
-        val host = _hosts.value.find { it.id == s.summary.hostId } ?: return
+        if (!attachingSessions.add(sessionId)) return
+        val host = _hosts.value.find { it.id == s.summary.hostId }
+        if (host == null) {
+            attachingSessions.remove(sessionId)
+            return
+        }
         s.summary.lastSeq?.let { backendFor(host).rememberLastSeq(sessionId, it) }
-        scope.launch { runCatching { backendFor(host).attach(s.summary) } }
+        // E3: only mark attached after a successful backend attach so a failed
+        // ensureReady / session/load can retry on the next open.
+        scope.launch {
+            try {
+                val ok = runCatching { backendFor(host).attach(s.summary) }.isSuccess
+                if (ok) update(sessionId) { it.copy(attached = true) }
+            } finally {
+                attachingSessions.remove(sessionId)
+            }
+        }
     }
 
     /** Starts a prompt when the session is idle; returns false for an overlapping prompt. */
@@ -404,9 +434,18 @@ class CodeHub private constructor(context: Context) {
     }
 
     fun setPermissionMode(sessionId: String, mode: PermissionMode) {
+        val prev = _sessions.value[sessionId]?.summary?.permissionMode ?: return
+        if (prev == mode) return
         update(sessionId) { it.copy(summary = it.summary.copy(permissionMode = mode)) }
         persistSessions()
-        withBackend(sessionId) { runCatching { it.setPermissionMode(sessionId, mode) } }
+        // E5: revert local mode when the wire set_mode fails so UI matches the bridge.
+        withBackend(sessionId) {
+            val ok = runCatching { it.setPermissionMode(sessionId, mode) }.isSuccess
+            if (!ok) {
+                update(sessionId) { it.copy(summary = it.summary.copy(permissionMode = prev)) }
+                persistSessions()
+            }
+        }
     }
 
     fun forget(sessionId: String) {
@@ -418,6 +457,7 @@ class CodeHub private constructor(context: Context) {
             // C1: do not leave cancel-suppress for a dropped id (wire-only cancel emits no TurnDone).
             suppressRunningFromChunks.remove(sessionId)
             ignoreStaleCancelTurnDone.remove(sessionId)
+            attachingSessions.remove(sessionId)
             val host = _hosts.value.find { it.id == s.summary.hostId }
             if (host != null) {
                 val backend = backendFor(host)

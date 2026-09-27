@@ -443,14 +443,20 @@ class BridgeBackend(
                 if (outbox.isEmpty()) null else outbox.first()
             } ?: break
             refreshKeepAlive()
-            val delivered = runCatching {
+            val result = runCatching {
                 promptMutex(next.sessionId).withLock {
                     deliverPrompt(next.sessionId, next.text, next.attachments)
                 }
-            }.getOrDefault(DeliverResult.Retry) == DeliverResult.Done
-            if (!delivered) break
-            synchronized(outboxLock) {
-                if (outbox.isNotEmpty() && outbox.first() == next) outbox.removeFirst()
+            }.getOrDefault(DeliverResult.Retry)
+            when (result) {
+                // E1: Done / Aborted — drop this head if still present and keep flushing
+                // siblings. Only Retry (pre-accept failure) waits for the next reconnect.
+                DeliverResult.Done, DeliverResult.Aborted -> {
+                    synchronized(outboxLock) {
+                        if (outbox.isNotEmpty() && outbox.first() == next) outbox.removeFirst()
+                    }
+                }
+                DeliverResult.Retry -> break
             }
         }
         refreshKeepAlive()

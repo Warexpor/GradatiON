@@ -131,6 +131,29 @@ class SessionUpdatePumpTest {
     }
 
     @Test
+    fun historicalUserPromptDoesNotForceRunning() {
+        // E2: session/load replays user_message_chunk as UserPrompt; must not flip idle → Stop.
+        var state = CodeSessionState(summary(), running = false)
+        state = CodeSessionFolder.apply(
+            state,
+            CodeUpdate.Upsert(CodeEvent.UserPrompt("user:1", 1L, "past prompt")),
+            now = 10L,
+        )
+        assertFalse(state.running)
+        assertTrue(state.events.any { it is CodeEvent.UserPrompt })
+        // Live agent activity still marks running.
+        state = CodeSessionFolder.apply(state, CodeUpdate.TextChunk("k", "hi"), now = 11L)
+        assertTrue(state.running)
+        // Hub.prompt already set running before local UserPrompt — Upsert must keep it.
+        state = CodeSessionFolder.apply(
+            state,
+            CodeUpdate.Upsert(CodeEvent.UserPrompt("user:2", 2L, "live")),
+            now = 12L,
+        )
+        assertTrue(state.running)
+    }
+
+    @Test
     fun naturalTurnDoneClearsRunningEvenWithoutSuppress() {
         val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))
         val result = foldSessionUpdates(
