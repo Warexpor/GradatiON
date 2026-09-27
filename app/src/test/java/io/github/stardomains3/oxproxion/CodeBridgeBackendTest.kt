@@ -76,6 +76,8 @@ class CodeBridgeBackendTest {
         var failPromptSendOnce = false
         /** When true, the next non-prompt send fails once (approval answer / cancel). */
         var failNextNonPromptSend = false
+        /** When true, the next session/cancel send fails once (R3 queue-full / drop). */
+        var failCancelSendOnce = false
         /**
          * AWAY-02: when set, non-prompt [send] counts down [nonPromptSendEntered] then blocks
          * until [holdNonPromptSend] reaches zero (so a second answer can race the in-flight set).
@@ -98,6 +100,11 @@ class CodeBridgeBackendTest {
             if (!open.get() || _state.value != ConnectionState.CONNECTED) return false
             if (failPromptSendOnce && frame.contains("session/prompt")) {
                 failPromptSendOnce = false
+                lastError = "Not connected"
+                return false
+            }
+            if (failCancelSendOnce && frame.contains("session/cancel")) {
+                failCancelSendOnce = false
                 lastError = "Not connected"
                 return false
             }
@@ -1192,5 +1199,214 @@ class CodeBridgeBackendTest {
             backend.close()
         }
     }
+
+    @Test
+    fun cancelSendFailureKeepsPendingWithoutFinalizing() = runBlocking {
+        // R3: session/cancel send false must not emit TurnDone/suppress as accepted.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            val promptJob = scope.launch { backend.prompt("s1", "live turn cancel fail") }
+            withTimeout(3_000) {
+                while (transport.sent.none {
+                    it.contains("session/prompt") && it.contains("live turn cancel fail")
+                }) delay(5)
+            }
+
+            transport.failCancelSendOnce = true
+            val cancelsBefore = transport.sent.count { it.contains("session/cancel") }
+            backend.cancel("s1")
+            promptJob.join()
+            delay(40)
+
+            assertEquals(
+                "failed cancel must not queue session/cancel",
+                cancelsBefore,
+                transport.sent.count { it.contains("session/cancel") },
+            )
+            assertFalse(
+                "must not finalize TurnDone(cancelled) when wire cancel was not accepted",
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TurnDone && u.stopReason == "cancelled"
+                },
+            )
+            assertTrue(
+                "warning notice surfaces queue failure",
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.Upsert &&
+                        u.event is io.github.stardomains3.oxproxion.code.CodeEvent.Notice &&
+                        (u.event as io.github.stardomains3.oxproxion.code.CodeEvent.Notice)
+                            .text.contains("did not reach host")
+                },
+            )
+            assertTrue(
+                "cancel-pending keeps keepAlive until wire cancel lands",
+                transport.keepAlive,
+            )
+
+            // Late agent activity must still pass (suppress not finalized).
+            transport.deliver(
+                """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":50},
+                "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"still-running"}}}}"""
+            )
+            delay(40)
+            assertTrue(
+                "agent chunk must not be swallowed before cancel is accepted",
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TextChunk && u.chunk.contains("still-running")
+                },
+            )
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun cancelPendingResendsAfterReconnectAndFinalizes() = runBlocking {
+        // R3: after failed cancel, reconnect flush resends session/cancel then TurnDone.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            val promptJob = scope.launch { backend.prompt("s1", "resend cancel after drop") }
+            withTimeout(3_000) {
+                while (transport.sent.none {
+                    it.contains("session/prompt") && it.contains("resend cancel after drop")
+                }) delay(5)
+            }
+
+            transport.failCancelSendOnce = true
+            backend.cancel("s1")
+            promptJob.join()
+            delay(30)
+            assertFalse(
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TurnDone && u.stopReason == "cancelled"
+                },
+            )
+
+            val cancelsBefore = transport.sent.count { it.contains("session/cancel") }
+            transport.drop()
+            delay(20)
+            transport.restore()
+            withTimeout(5_000) {
+                while (transport.sent.count { it.contains("session/cancel") } <= cancelsBefore) {
+                    delay(10)
+                }
+                while (collected.none {
+                    val u = it.update
+                    u is CodeUpdate.TurnDone && u.stopReason == "cancelled"
+                }) delay(10)
+            }
+            assertTrue(
+                "session/cancel resent after reconnect",
+                transport.sent.count { it.contains("session/cancel") } > cancelsBefore,
+            )
+            assertTrue(
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TurnDone && u.stopReason == "cancelled"
+                },
+            )
+            assertFalse(
+                "keepAlive clears after cancel pending finalized",
+                transport.keepAlive,
+            )
+
+            // Suppress now active — late chunk dropped.
+            transport.deliver(
+                """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":77},
+                "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"after-final"}}}}"""
+            )
+            delay(40)
+            assertFalse(
+                collected.any {
+                    val u = it.update
+                    u is CodeUpdate.TextChunk && u.chunk.contains("after-final")
+                },
+            )
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun cancelPendingRetriesWhileStillReady() = runBlocking {
+        // R3: queue-full while CONNECTED — scheduled flush retries without needing drop.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+
+            val promptJob = scope.launch { backend.prompt("s1", "retry cancel while ready") }
+            withTimeout(3_000) {
+                while (transport.sent.none {
+                    it.contains("session/prompt") && it.contains("retry cancel while ready")
+                }) delay(5)
+            }
+
+            transport.failCancelSendOnce = true
+            val cancelsBefore = transport.sent.count { it.contains("session/cancel") }
+            backend.cancel("s1")
+            promptJob.join()
+
+            withTimeout(5_000) {
+                while (transport.sent.count { it.contains("session/cancel") } <= cancelsBefore) {
+                    delay(20)
+                }
+                while (collected.none {
+                    val u = it.update
+                    u is CodeUpdate.TurnDone && u.stopReason == "cancelled"
+                }) delay(10)
+            }
+            assertTrue(transport.sent.count { it.contains("session/cancel") } > cancelsBefore)
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
 
 }

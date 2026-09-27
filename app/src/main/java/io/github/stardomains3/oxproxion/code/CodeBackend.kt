@@ -128,6 +128,13 @@ class BridgeBackend(
     private val promptMutexes = ConcurrentHashMap<String, Mutex>()
     /** In-flight permission answers (M3 / AWAY-02); key = sessionId + requestId. */
     private val answering = ConcurrentHashMap.newKeySet<String>()
+    /**
+     * R3: sessions whose session/cancel failed to queue (socket dropping / OkHttp full).
+     * Value = whether a successful resend should finalize suppress/TurnDone.
+     * Resent after ready/reconnect (and short ready retry); do not finalize until send succeeds.
+     */
+    private val cancelPending = ConcurrentHashMap<String, Boolean>()
+    private var cancelFlushJob: Job? = null
 
     private data class OutboxPrompt(
         val sessionId: String,
@@ -314,12 +321,15 @@ class BridgeBackend(
         handshakeFailCount = 0
         handshakeError = null
         ready.value = true
+        flushCancelPending()
         flushOutbox()
     }
 
     private fun refreshKeepAlive() {
         val pendingOutbox = synchronized(outboxLock) { outbox.isNotEmpty() }
-        transport.setKeepAliveForSession(runningSessions.isNotEmpty() || pendingOutbox)
+        transport.setKeepAliveForSession(
+            runningSessions.isNotEmpty() || pendingOutbox || cancelPending.isNotEmpty()
+        )
     }
 
     private fun failPending(msg: String) {
@@ -521,6 +531,7 @@ class BridgeBackend(
         attachments: List<PromptAttachment> = emptyList(),
     ): DeliverResult {
         val gen = deliverGen(sessionId)
+        cancelPending.remove(sessionId)
         suppressAgent.remove(sessionId)
         runningSessions.add(sessionId)
         refreshKeepAlive()
@@ -645,6 +656,7 @@ class BridgeBackend(
         // C1 / D1: after forget→detach, never re-seed suppressAgent / deliverGeneration
         // (would swallow a later session/load). Abort leftovers without suppress stamps.
         if (!attached.containsKey(sessionId)) {
+            cancelPending.remove(sessionId)
             inFlightPromptId.remove(sessionId)?.let { rpcId ->
                 pending.remove(rpcId)?.completeExceptionally(CancellationException("Cancelled"))
             }
@@ -654,24 +666,73 @@ class BridgeBackend(
             runCatching { transport.send(adapter.cancel(sessionId)) }
             return
         }
+        val hadWireTurn =
+            inFlightPromptId.containsKey(sessionId) || sessionId in runningSessions
         val locallyActive =
-            inFlightPromptId.containsKey(sessionId) ||
-            sessionId in runningSessions ||
+            hadWireTurn ||
             synchronized(outboxLock) { outbox.any { it.sessionId == sessionId } }
         if (!locallyActive) {
-            runCatching { transport.send(adapter.cancel(sessionId)) }
+            // Attached idle: best-effort wire cancel; retain pending if send fails (no TurnDone).
+            if (!sendCancelOrPending(sessionId, finalizeOnSuccess = false)) {
+                scheduleCancelFlush()
+            }
             return
         }
         // Abort in-flight deliverPrompt (flush or live turn) and drop queued prompts.
         bumpDeliverGen(sessionId)
-        suppressAgent.add(sessionId)
         inFlightPromptId.remove(sessionId)?.let { rpcId ->
             pending.remove(rpcId)?.completeExceptionally(CancellationException("Cancelled"))
         }
         synchronized(outboxLock) { outbox.removeAll { it.sessionId == sessionId } }
         runningSessions.remove(sessionId)
         refreshKeepAlive()
-        runCatching { transport.send(adapter.cancel(sessionId)) }
+        // R3: only finalize suppress/TurnDone when session/cancel is on the wire.
+        // Outbox-only (never left the device) may finalize locally even if send fails.
+        val sent = sendCancelOrPending(sessionId, finalizeOnSuccess = true)
+        if (sent) return
+        if (!hadWireTurn) {
+            cancelPending.remove(sessionId)
+            finalizeAcceptedCancel(sessionId)
+            return
+        }
+        // Live/in-flight turn: keep cancel-pending, do not suppress/TurnDone as accepted.
+        _updates.emit(
+            SessionUpdate(
+                sessionId,
+                CodeUpdate.Upsert(
+                    CodeEvent.Notice(
+                        "cancel-pending:${System.currentTimeMillis()}",
+                        System.currentTimeMillis(),
+                        "Stop did not reach host — retrying",
+                        NoticeLevel.WARNING
+                    )
+                )
+            )
+        )
+        scheduleCancelFlush()
+    }
+
+    /**
+     * Attempt session/cancel. On success remove pending and optionally finalize local Stop.
+     * On failure retain [cancelPending] with [finalizeOnSuccess] intent. Returns whether queued.
+     */
+    private suspend fun sendCancelOrPending(sessionId: String, finalizeOnSuccess: Boolean): Boolean {
+        val ok = runCatching { transport.send(adapter.cancel(sessionId)) }.getOrDefault(false)
+        if (ok) {
+            cancelPending.remove(sessionId)
+            if (finalizeOnSuccess) finalizeAcceptedCancel(sessionId)
+            refreshKeepAlive()
+            return true
+        }
+        // Sticky true: once a live-turn cancel needs finalize, later idle retries keep it.
+        cancelPending.merge(sessionId, finalizeOnSuccess) { prev, next -> prev || next }
+        refreshKeepAlive()
+        return false
+    }
+
+    /** Local Stop accepted only after wire cancel queued (or outbox-only local abort). */
+    private suspend fun finalizeAcceptedCancel(sessionId: String) {
+        suppressAgent.add(sessionId)
         _updates.emit(
             SessionUpdate(
                 sessionId,
@@ -688,6 +749,35 @@ class BridgeBackend(
         _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("cancelled")))
     }
 
+    /** Resend any cancel-pending intents; finalize each that queues successfully. */
+    private suspend fun flushCancelPending() {
+        val snap = cancelPending.entries.map { it.key to it.value }
+        if (snap.isEmpty()) return
+        for ((sessionId, finalize) in snap) {
+            if (!attached.containsKey(sessionId)) {
+                cancelPending.remove(sessionId)
+                continue
+            }
+            sendCancelOrPending(sessionId, finalizeOnSuccess = finalize)
+        }
+        refreshKeepAlive()
+    }
+
+    /** Bounded retry while still CONNECTED/ready (queue-full) in addition to reconnect flush. */
+    private fun scheduleCancelFlush() {
+        if (cancelFlushJob?.isActive == true) return
+        cancelFlushJob = scope.launch {
+            var attempt = 0
+            while (cancelPending.isNotEmpty() && attempt < 6) {
+                delay(150L * (1 shl attempt.coerceAtMost(3)))
+                if (lifecycle == null) return@launch
+                if (!ready.value) return@launch
+                flushCancelPending()
+                attempt++
+            }
+        }
+    }
+
     override suspend fun setPermissionMode(sessionId: String, mode: PermissionMode) {
         call({ adapter.setMode(it, sessionId, mode) })
     }
@@ -696,6 +786,7 @@ class BridgeBackend(
         attached.remove(sessionId)
         runningSessions.remove(sessionId)
         suppressAgent.remove(sessionId)
+        cancelPending.remove(sessionId)
         deliverGeneration.remove(sessionId)
         inFlightPromptId.remove(sessionId)?.let { rpcId ->
             pending.remove(rpcId)?.completeExceptionally(CancellationException("Detached"))
@@ -713,6 +804,8 @@ class BridgeBackend(
     override fun close() {
         handshakeRetry?.cancel()
         handshakeRetry = null
+        cancelFlushJob?.cancel()
+        cancelFlushJob = null
         lifecycle?.cancel()
         lifecycle = null
         reader?.cancel()
@@ -727,6 +820,7 @@ class BridgeBackend(
         deliverGeneration.clear()
         inFlightPromptId.clear()
         suppressAgent.clear()
+        cancelPending.clear()
         answering.clear()
         promptMutexes.clear()
         synchronized(outboxLock) { outbox.clear() }
