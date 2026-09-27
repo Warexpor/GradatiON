@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dev build label, so it can sit next to the release install. -->
+    <string name="app_name">GradatiON dev</string>
+</resources>

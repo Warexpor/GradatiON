@@ -42,6 +42,14 @@ android {
     // -Pgradation.storeFile=... -Pgradation.storePassword=... -Pgradation.keyAlias=... -Pgradation.keyPassword=...
     val releaseStoreFile = providers.gradleProperty("gradation.storeFile").orNull
     signingConfigs {
+        // Dev-only key, committed so every session signs dev APKs the same way and they
+        // install as updates. Standard public debug password; never use it for release.
+        create("dev") {
+            storeFile = file("dev.keystore")
+            storePassword = "android"
+            keyAlias = "gradation-dev"
+            keyPassword = "android"
+        }
         if (releaseStoreFile != null) {
             create("release") {
                 storeFile = file(releaseStoreFile)
@@ -66,6 +74,10 @@ android {
         }
         getByName("debug") {
             isDebuggable = true
+            // Separate .dev app so it installs next to the release build.
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            signingConfig = signingConfigs.getByName("dev")
             // Dev APK: arm64 phones + x86_64 emulators only (drops unused 32-bit ABIs).
             ndk {
                 abiFilters.clear()

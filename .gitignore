@@ -43,6 +43,7 @@ gradle.properties.local
 # Keystore files
 *.jks
 *.keystore
+!app/dev.keystore
 release.properties
 
 # Log files
