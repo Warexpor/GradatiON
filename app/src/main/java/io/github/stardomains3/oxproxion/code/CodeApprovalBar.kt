@@ -47,6 +47,30 @@ object CodeApprovalBar {
     fun findPending(events: List<CodeEvent>): CodeEvent.Approval? =
         events.firstOrNull { it is CodeEvent.Approval && it.chosen == null } as? CodeEvent.Approval
 
+    /** Unanswered approval requestIds in transcript order (may be more than one). */
+    fun pendingRequestIds(events: List<CodeEvent>): List<String> =
+        events.mapNotNull { event ->
+            val pending = event as? CodeEvent.Approval ?: return@mapNotNull null
+            if (pending.chosen != null) null else pending.requestId
+        }
+
+    /**
+     * Sync [announced] to the current pending set and return requestIds that were not yet
+     * announced (in [pendingIds] order). Prunes answered/gone ids so a later reuse can fire again.
+     */
+    fun announceNewPendingIds(
+        pendingIds: Collection<String>,
+        announced: MutableSet<String>,
+    ): List<String> {
+        announced.retainAll(pendingIds.toSet())
+        if (pendingIds.isEmpty()) return emptyList()
+        val fresh = ArrayList<String>()
+        for (id in pendingIds) {
+            if (announced.add(id)) fresh += id
+        }
+        return fresh
+    }
+
     /**
      * Approval to pin in the dock bar: the first unanswered whose row is outside the clear
      * viewport (or not yet in the adapter). Returns null when every pending intersects clear

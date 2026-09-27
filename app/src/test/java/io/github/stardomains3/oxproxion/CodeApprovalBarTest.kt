@@ -161,6 +161,53 @@ class CodeApprovalBarTest {
         )
     }
 
+    @Test fun pendingRequestIdsListsAllUnanswered() {
+        val events = listOf(
+            approval("a", chosen = ApprovalOption.Kind.ALLOW_ONCE),
+            approval("b"),
+            approval("c"),
+        )
+        assertEquals(listOf("b", "c"), CodeApprovalBar.pendingRequestIds(events))
+    }
+
+    @Test fun announceNewPendingIdsHapticsEachNewWhileFirstUnanswered() {
+        // APPROVAL-01: second pending while first unanswered must still be announced.
+        val announced = mutableSetOf<String>()
+        assertEquals(
+            listOf("a"),
+            CodeApprovalBar.announceNewPendingIds(listOf("a"), announced),
+        )
+        assertEquals(setOf("a"), announced)
+        assertEquals(
+            listOf("b"),
+            CodeApprovalBar.announceNewPendingIds(listOf("a", "b"), announced),
+        )
+        assertEquals(setOf("a", "b"), announced)
+        assertEquals(
+            emptyList<String>(),
+            CodeApprovalBar.announceNewPendingIds(listOf("a", "b"), announced),
+        )
+    }
+
+    @Test fun announceNewPendingIdsPrunesAnswered() {
+        val announced = mutableSetOf("a", "b")
+        assertEquals(
+            emptyList<String>(),
+            CodeApprovalBar.announceNewPendingIds(listOf("b"), announced),
+        )
+        assertEquals(setOf("b"), announced)
+        // Cleared when nothing pending so a later reuse of the same id can fire again.
+        assertEquals(
+            emptyList<String>(),
+            CodeApprovalBar.announceNewPendingIds(emptyList(), announced),
+        )
+        assertTrue(announced.isEmpty())
+        assertEquals(
+            listOf("b"),
+            CodeApprovalBar.announceNewPendingIds(listOf("b"), announced),
+        )
+    }
+
     @Test fun findPinnedPendingPinsFirstOffClear() {
         val events = listOf(
             approval("a", chosen = ApprovalOption.Kind.ALLOW_ONCE),

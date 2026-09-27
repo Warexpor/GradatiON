@@ -52,8 +52,8 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
     private var follow = true
     private lateinit var approvalBar: GlassTextView
     private lateinit var prefs: SharedPreferencesHelper
-    /** Last pending approval requestId we hapticked for (arrival only once per request). */
-    private var haptickedApprovalId: String? = null
+    /** Pending approval requestIds already announced with an arrival haptic (once per request). */
+    private val haptickedApprovalIds = mutableSetOf<String>()
     /** Pending approval we are currently pinning, if any. */
     private var pinnedApprovalId: String? = null
     /** Change-gates for [updateApprovalBar] — avoid per-frame text/visibility churn on scroll. */
@@ -228,8 +228,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         val streamingText = s.events.lastOrNull() is CodeEvent.AgentText && (s.events.last() as CodeEvent.AgentText).streaming
         val waiting = s.status == SessionStatus.NEEDS_APPROVAL
         if (s.running && !streamingText && !waiting) rows += TranscriptRow.Working
-        val pending = CodeApprovalBar.findPending(s.events)
-        maybeHapticApprovalArrival(pending)
+        maybeHapticApprovalArrival(s.events)
         adapter.submitList(rows) {
             if (follow && rows.isNotEmpty()) list.post { followEdge(rows.size - 1) }
             list.post {
@@ -292,16 +291,15 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         barBoundHarness = null
     }
 
-    private fun maybeHapticApprovalArrival(pending: CodeEvent.Approval?) {
-        val id = pending?.requestId
-        if (id == null) {
-            haptickedApprovalId = null
-            return
-        }
-        if (id == haptickedApprovalId) return
-        haptickedApprovalId = id
+    private fun maybeHapticApprovalArrival(events: List<CodeEvent>) {
+        val pendingIds = CodeApprovalBar.pendingRequestIds(events)
+        val fresh = CodeApprovalBar.announceNewPendingIds(pendingIds, haptickedApprovalIds)
+        if (fresh.isEmpty()) return
         if (!prefs.getHapticResponding()) return
-        view?.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+        // One arrival haptic per newly pending request (not only the first unanswered).
+        repeat(fresh.size) {
+            view?.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+        }
     }
 
     private fun scrollToPinnedApproval() {
