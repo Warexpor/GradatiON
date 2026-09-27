@@ -64,9 +64,6 @@ class CodeModeScreenshotTest {
 
     @Test fun codeOnboardDark() = withCode(demo = false) { a, _ -> snap(root(a), "code_onboard_dark") }
 
-    @Test @Config(qualifiers = CODE_LIGHT)
-    fun codeOnboardLight() = withCode(demo = false) { a, _ -> snap(root(a), "code_onboard_light") }
-
     @Test fun codeHomeEmptyDark() = withCode(seedSessions = false) { a, _ -> snap(root(a), "code_home_empty_dark") }
 
     @Test fun codeHomeDark() = withCode { a, _ ->
@@ -89,14 +86,6 @@ class CodeModeScreenshotTest {
         assertTrue("demo should be waiting on an approval",
             CodeHub.get(ctx).sessions.value[id]!!.events.any { it is CodeEvent.Approval && it.chosen == null })
         snap(root(a), "code_session_approval_dark")
-    }
-
-    @Test @Config(qualifiers = CODE_LIGHT)
-    fun codeSessionApprovalLight() = withCode { a, _ ->
-        val id = startDemo("Add a follow-system option to the theme setting")
-        push(a, CodeSessionFragment.newInstance(id))
-        idle(12)
-        snap(root(a), "code_session_approval_light")
     }
 
     @Test fun codeSessionDoneDark() = withCode { a, _ ->

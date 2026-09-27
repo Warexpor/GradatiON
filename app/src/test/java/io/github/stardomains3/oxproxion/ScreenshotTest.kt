@@ -45,6 +45,7 @@ class ScreenshotTest {
 
     @Before
     fun setUp() {
+        DemoModel.pace = 0.02f
         val ctx = ApplicationProvider.getApplicationContext<Application>()
         Settings.Global.putFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
         db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java).allowMainThreadQueries().build()
@@ -181,9 +182,6 @@ class ScreenshotTest {
 
     @Test fun chatEmptyDark() = withChat { a, _ -> snap(root(a), "chat_empty_dark") }
 
-    @Test @Config(qualifiers = LIGHT)
-    fun chatEmptyLight() = withChat { a, _ -> snap(root(a), "chat_empty_light") }
-
     @Test fun chatConversationDark() = withChat { a, _ ->
         seedConversation(a); idle(); snap(root(a), "chat_conversation_dark")
     }
@@ -264,14 +262,10 @@ class ScreenshotTest {
 
     @Test fun chatStreamingDark() = withChat { a, _ -> streamInto(a, "chat_streaming_dark") }
 
-    @Test @Config(qualifiers = LIGHT)
-    fun chatStreamingLight() = withChat { a, _ -> streamInto(a, "chat_streaming_light") }
-
-    @Test @Config(qualifiers = LIGHT)
-    fun controlsPanelConversationLight() = withChat { a, _ ->
+    @Test fun controlsPanelConversationDark() = withChat { a, _ ->
         seedConversation(a); idle()
         a.findViewById<View>(R.id.controlsButton).performClick(); idle()
-        snap(root(a), "controls_panel_conversation_light")
+        snap(root(a), "controls_panel_conversation_dark")
     }
 
     @Test fun controlsPanelDark() = withChat { a, _ ->
@@ -327,13 +321,6 @@ class ScreenshotTest {
             if (vh.itemView.findViewById<View>(R.id.iconEditt) != null) return i
         }
         return 0
-    }
-
-    @Test @Config(qualifiers = LIGHT)
-    fun historyLight() = withChat { a, _ ->
-        seedHistory()
-        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
-        snap(root(a), "history_light")
     }
 
     @Test fun modelPickerDark() = withChat { a, _ ->
@@ -468,19 +455,16 @@ class ScreenshotTest {
     fun rpHubLight() = rpScreen("rp_hub_light") { RpHubFragment() }
     @Test fun rpHubEmptyDark() = rpScreen("rp_hub_empty_dark", seed = false) { RpHubFragment() }
     @Test fun rpCharactersDark() = rpScreen("rp_characters_dark") { RpCharacterLibraryFragment.newInstance() }
-    @Test @Config(qualifiers = LIGHT)
-    fun rpCharactersLight() = rpScreen("rp_characters_light") { RpCharacterLibraryFragment.newInstance() }
+
     @Test fun rpCharactersEmptyDark() = rpScreen("rp_characters_empty_dark", seed = false) { RpCharacterLibraryFragment.newInstance() }
-    @Test @Config(qualifiers = LIGHT)
-    fun rpPersonaLight() = rpScreen("rp_persona_light") { RpPersonaFragment.newInstance() }
+
     @Test fun rpCharacterEditExistingDark() = withChat { a, _ ->
         seedRp()
         val id = runBlocking { db.rpDao().getAllCharactersOnce().first { it.name == "Mira Vance" }.id }
         pushFragment(a, RpCharacterEditFragment.newInstance(id)); settle()
         snap(root(a), "rp_character_edit_existing_dark")
     }
-    @Test @Config(qualifiers = LIGHT)
-    fun rpCharacterEditLight() = rpScreen("rp_character_edit_light", seed = false) { RpCharacterEditFragment.newInstance(0L) }
+
     @Test fun rpLorebooksDark() = withChat { a, _ -> pushFragment(a, RpLorebookLibraryFragment.newInstance()); snap(root(a), "rp_lorebooks_dark") }
     @Test fun rpPersonaDark() = rpScreen("rp_persona_dark") { RpPersonaFragment.newInstance() }
     @Test fun rpCharacterEditDark() = withChat { a, _ -> pushFragment(a, RpCharacterEditFragment.newInstance(0L)); snap(root(a), "rp_character_edit_dark") }
@@ -495,14 +479,10 @@ class ScreenshotTest {
     @Test fun presetEditDark() = withChat { a, _ -> pushFragment(a, PresetEditFragment.newInstance(null)); snap(root(a), "preset_edit_dark") }
     @Test fun editMessageDark() = withChat { a, _ -> pushFragment(a, EditMessageFragment.newInstance(0, "Can you explain how attention works?")); snap(root(a), "edit_message_dark") }
     @Test fun markdownViewerDark() = withChat { a, _ -> pushFragment(a, MarkdownViewerFragment.newInstance("# Notes\n\nSome **bold** text and `code`.\n\n- one\n- two", "Inter", "Qwen 3")); snap(root(a), "markdown_viewer_dark") }
-    @Test @Config(qualifiers = LIGHT)
-    fun presetsLight() = withChat { a, _ -> pushFragment(a, PresetsListFragment()); snap(root(a), "presets_light") }
-    @Test @Config(qualifiers = LIGHT)
-    fun promptsLight() = withChat { a, _ -> pushFragment(a, PromptLibraryFragment()); snap(root(a), "prompts_light") }
+
     @Test fun presetsDark() = withChat { a, _ -> pushFragment(a, PresetsListFragment()); snap(root(a), "presets_dark") }
     @Test fun systemMessagesDark() = withChat { a, _ -> pushFragment(a, SystemMessageLibraryFragment()); snap(root(a), "system_messages_dark") }
-    @Test @Config(qualifiers = LIGHT)
-    fun systemMessagesLight() = withChat { a, _ -> pushFragment(a, SystemMessageLibraryFragment()); snap(root(a), "system_messages_light") }
+
     @Test fun toolsDark() = withChat { a, _ -> pushFragment(a, ToolsFragment()); snap(root(a), "tools_dark") }
     @Test fun promptsDark() = withChat { a, _ -> pushFragment(a, PromptLibraryFragment()); snap(root(a), "prompts_dark") }
     @Test fun rpSettingsDark() = withChat { a, _ -> pushFragment(a, RpSettingsFragment()); snap(root(a), "rp_settings_dark") }
@@ -518,16 +498,9 @@ class ScreenshotTest {
         idle(); snapDialogCentered(a, "dialog_input_light")
     }
 
-
     @Test fun settingsModelsDark() = withChat { a, _ -> openSettingsRow(a, R.id.settingsRowModels); snap(root(a), "settings_models_dark") }
     @Test fun settingsDataDark() = withChat { a, _ -> openSettingsRow(a, R.id.settingsRowData); snap(root(a), "settings_data_dark") }
-    @Test @Config(qualifiers = LIGHT)
-    fun settingsAdvancedLight() = withChat { a, _ -> openSettingsRow(a, R.id.settingsRowAdvanced); snap(root(a), "settings_advanced_light") }
-    @Test @Config(qualifiers = LIGHT)
-    fun modelPickerLight() = withChat { a, _ ->
-        a.findViewById<View>(R.id.modelNameTextView).performClick(); idle()
-        snap(root(a), "model_picker_light")
-    }
+    @Test fun settingsAdvancedDark() = withChat { a, _ -> openSettingsRow(a, R.id.settingsRowAdvanced); snap(root(a), "settings_advanced_dark") }
 
     // ── Voice input ────────────────────────────────────────────────────────────────────
 
@@ -559,12 +532,6 @@ class ScreenshotTest {
     @Test fun chatDictatingDark() = withVoice { a, chat ->
         dictateInto(a, chat)
         snap(root(a), "chat_dictating_dark")
-    }
-
-    @Test @Config(qualifiers = LIGHT)
-    fun chatDictatingLight() = withVoice { a, chat ->
-        dictateInto(a, chat)
-        snap(root(a), "chat_dictating_light")
     }
 
     @Test fun chatTranscribingDark() = withVoice { a, chat ->
@@ -737,12 +704,11 @@ class ScreenshotTest {
         snap(root(a), "settings_voice_dark")
     }
 
-    @Test @Config(qualifiers = LIGHT)
-    fun settingsVoiceCloudLight() = withVoice { a, _ ->
+    @Test fun settingsVoiceCloudDark() = withVoice { a, _ ->
         SharedPreferencesHelper(a).setVoiceInputProvider(VoiceEngine.CLOUD.key)
         SharedPreferencesHelper(a).setVoiceInputModel("openai/whisper-1")
         openSettingsRow(a, R.id.settingsRowVoice)
-        snap(root(a), "settings_voice_cloud_light")
+        snap(root(a), "settings_voice_cloud_dark")
     }
 
     private fun openSettingsRow(a: MainActivity, rowId: Int) {
@@ -754,9 +720,8 @@ class ScreenshotTest {
     @Test fun lanDialogDark() = withChat { a, _ ->
         SaveLANDialogFragment().show(a.supportFragmentManager, "lan"); idle(); snapDialogCentered(a, "dialog_lan_dark")
     }
-    @Test @Config(qualifiers = LIGHT)
-    fun apiDialogLight() = withChat { a, _ ->
-        SaveApiDialogFragment().show(a.supportFragmentManager, "api"); idle(); snapDialogCentered(a, "dialog_api_light")
+    @Test fun apiDialogDark() = withChat { a, _ ->
+        SaveApiDialogFragment().show(a.supportFragmentManager, "api"); idle(); snapDialogCentered(a, "dialog_api_dark")
     }
     @Test fun timeoutDialogDark() = withChat { a, _ ->
         TimeoutDialogFragment().show(a.supportFragmentManager, "t"); idle(); snapDialogCentered(a, "dialog_timeout_dark")
@@ -858,12 +823,6 @@ class ScreenshotTest {
         openSettingsRow(a, R.id.settingsRowAppearance); settle(); snap(root(a), "settings_appearance_dark")
         SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
     }
-    @Test @Config(qualifiers = LIGHT)
-    fun settingsAppearanceLight() = withChat { a, _ ->
-        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.FLOW.key)
-        openSettingsRow(a, R.id.settingsRowAppearance); settle(); snap(root(a), "settings_appearance_light")
-        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
-    }
 
     /** Glass toggles on and off, one held down (thumb swells into a lens). */
     private fun toggles(a: MainActivity, name: String) {
@@ -884,8 +843,6 @@ class ScreenshotTest {
     }
 
     @Test fun settingsTogglesDark() = withChat { a, _ -> toggles(a, "settings_toggles_dark") }
-    @Test @Config(qualifiers = LIGHT)
-    fun settingsTogglesLight() = withChat { a, _ -> toggles(a, "settings_toggles_light") }
 
     /** Every background style (and Adaptive in both modes), each full-screen over the canvas. */
     private fun ambientGrid(a: MainActivity, name: String) {

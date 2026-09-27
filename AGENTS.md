@@ -27,7 +27,8 @@ upstream's and stays as it is.
 ```bash
 export ANDROID_HOME=/opt/android-sdk        # or wherever your SDK lives
 ./gradlew assembleDev                        # minified, dev-signed, .dev app id
-./gradlew testDebugUnitTest                  # the full suite, about 3 minutes
+./gradlew testDebugUnitTest -Pfast          # logic tests only (~310), skips the screenshot classes
+./gradlew testDebugUnitTest                  # everything (~410), about 2.5 minutes
 ./gradlew testDebugUnitTest --tests '*ScreenshotTest.rpConversationContinueDark'
 ```
 
@@ -47,6 +48,9 @@ export ANDROID_HOME=/opt/android-sdk        # or wherever your SDK lives
   the first frame, not mid-flight.
 - Robolectric reports a speech recognizer as available. Use `VoiceInput.deviceAvailableOverride`.
 - The demo stream runs on a real thread. Pump the looper in real time with `waitFor`.
+  `ScreenshotTest` sets `DemoModel.pace` near 0 so it doesn't wait on the fake typing.
+- Light-theme screenshots are kept to one per screen family (chat, glass, settings, RP hub,
+  dialogs, backgrounds, Code home). Add new ones in dark; showcase images are dark only.
 - A live `RecyclerView` follows the bottom edge. To check an off-screen row, bind it through the
   adapter (`onCreateViewHolder` and `onBindViewHolder`).
 - Vector paths must not use SVG compact arc flags. `HarnessIconsTest` guards this.

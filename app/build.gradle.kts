@@ -110,6 +110,11 @@ android {
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        unitTests.all { test ->
+            // `-Pfast`: logic tests only (~20 s). The screenshot classes are ~90% of the run;
+            // keep them for UI changes and before a push.
+            if (project.hasProperty("fast")) test.filter.excludeTestsMatching("*ScreenshotTest")
+        }
     }
     packaging {
         resources {

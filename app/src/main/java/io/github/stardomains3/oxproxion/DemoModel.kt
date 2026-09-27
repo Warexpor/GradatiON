@@ -44,6 +44,10 @@ object DemoModel {
 
     private val turn = AtomicInteger(0)
 
+    /** Multiplies every pause in the stream. Tests set it near 0 so they don't wait on theatre. */
+    @Volatile
+    var pace: Float = 1f
+
     /** Answers any request with a paced SSE stream picked from [reply]. */
     class StreamInterceptor(private val roleplay: () -> Boolean) : Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {
@@ -104,11 +108,11 @@ object DemoModel {
                 val n = rnd.nextInt(3, 14).coerceAtMost(text.length - i)
                 event(buildJsonObject { put(field, text.substring(i, i + n)) })
                 i += n
-                Thread.sleep(pause + rnd.nextLong(0, 30))
+                Thread.sleep(((pause + rnd.nextLong(0, 30)) * pace).toLong())
             }
         }
         try {
-            Thread.sleep(450) // time to first token
+            Thread.sleep((450 * pace).toLong()) // time to first token
             script.thinking?.let { stream(it, "reasoning", 22) }
             stream(script.text, "content", 32)
             event(buildJsonObject { }, finish = "stop")
