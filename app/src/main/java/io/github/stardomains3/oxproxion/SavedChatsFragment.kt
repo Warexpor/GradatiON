@@ -40,8 +40,8 @@ class SavedChatsFragment : Fragment() {
     private val isEmbedded: Boolean
         get() = arguments?.getBoolean(ARG_EMBEDDED) == true
 
-    private val viewModel: ChatViewModel by activityViewModels()
-    private val savedChatsViewModel: SavedChatsViewModel by viewModels()
+    private val viewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
+    private val savedChatsViewModel: SavedChatsViewModel by viewModels { AppViewModelFactory(requireActivity().application) }
     private lateinit var savedChatsAdapter: SavedChatsAdapter
     private lateinit var searchView: SearchView
     private lateinit var historyEmptyView: TextView

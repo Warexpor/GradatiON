@@ -53,7 +53,7 @@ class OpenRouterModelsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        viewModel = ViewModelProvider(requireActivity())[ChatViewModel::class.java]
+        viewModel = ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[ChatViewModel::class.java]
         sharedPreferencesHelper = SharedPreferencesHelper(requireContext())
 
         val toolbar = view.findViewById<MaterialToolbar>(R.id.toolbar)

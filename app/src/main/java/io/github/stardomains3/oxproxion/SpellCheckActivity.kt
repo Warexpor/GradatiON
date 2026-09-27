@@ -191,7 +191,7 @@ class SpellCheckActivity : AppCompatActivity() {
         window.attributes = params
 
         // 3. Initialize Logic
-        vm = ViewModelProvider(this)[ChatViewModel::class.java]
+        vm = ViewModelProvider(this, AppViewModelFactory(application))[ChatViewModel::class.java]
         handleIntent()
     }
 

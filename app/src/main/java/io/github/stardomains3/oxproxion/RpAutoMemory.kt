@@ -31,6 +31,13 @@ object RpAutoMemory {
         return lastRunAt == 0 || messageCount - lastRunAt >= EVERY
     }
 
+    /**
+     * Remember [messageCount] only after the note was saved. A failed rewrite keeps [previous]
+     * so the next reply can try again instead of waiting another [EVERY] messages.
+     */
+    fun watermarkAfter(previous: Int, messageCount: Int, saved: Boolean): Int =
+        if (saved) messageCount else previous
+
     /** "Name: text" lines, newest last, trimmed from the front to [TRANSCRIPT_CHARS]. */
     fun transcript(turns: List<Pair<String, String>>, charName: String, userName: String): String {
         val lines = turns.filter { it.second.isNotBlank() }.map { (role, text) ->

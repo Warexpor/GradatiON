@@ -57,7 +57,7 @@ class BotModelPickerFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        chatViewModel = ViewModelProvider(requireActivity())[ChatViewModel::class.java]
+        chatViewModel = ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[ChatViewModel::class.java]
         sharedPreferencesHelper = SharedPreferencesHelper(requireContext())
 
         val recyclerView = view.findViewById<RecyclerView>(R.id.recyclerViewModels)

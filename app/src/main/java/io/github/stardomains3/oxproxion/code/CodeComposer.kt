@@ -19,6 +19,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.LifecycleOwner
 import com.google.android.material.button.MaterialButton
+import io.github.stardomains3.oxproxion.AppViewModelFactory
 import io.github.stardomains3.oxproxion.ChatViewModel
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
@@ -407,7 +408,7 @@ class CodeComposer(
      * onViewCreated; the mic hides when Settings > Voice is off or the phone can't recognize speech.
      */
     fun enableVoice(fragment: Fragment) {
-        val vm = ViewModelProvider(fragment.requireActivity())[ChatViewModel::class.java]
+        val vm = ViewModelProvider(fragment.requireActivity(), AppViewModelFactory(fragment.requireActivity().application))[ChatViewModel::class.java]
         dictation = VoiceDictation(
             fragment = fragment,
             input = input,

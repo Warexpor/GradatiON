@@ -27,7 +27,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
     private val section: String
         get() = requireArguments().getString(ARG_SECTION) ?: SECTION_APPEARANCE
 
-    private val savedChatsViewModel: SavedChatsViewModel by viewModels()
+    private val savedChatsViewModel: SavedChatsViewModel by viewModels { AppViewModelFactory(requireActivity().application) }
 
     private var onPhotoPicked: ((Boolean) -> Unit)? = null
     private val pickBackgroundPhoto = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -108,7 +108,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
 
     private fun bindAllControls(view: View) {
         val prefs = SharedPreferencesHelper(requireContext())
-        val viewModel: ChatViewModel by activityViewModels()
+        val viewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
 
         val themeToggleGroup = view.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.themeToggleGroup)
         val inferenceParamsButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.inferenceParamsButton)

@@ -36,7 +36,7 @@ data class CodeSessionState(
  * Session index (summaries + lastSeq) is persisted in Room via [CodeSessionDao]; full transcript
  * blobs stay in memory for now.
  */
-class CodeHub private constructor(context: Context) {
+class CodeHub internal constructor(context: Context) {
 
     val store = CodeStore(context)
     private val appContext = context.applicationContext
@@ -610,24 +610,50 @@ class CodeHub private constructor(context: Context) {
         }
     }
 
+    internal fun releaseForTesting() {
+        updatePump.cancel()
+        backends.values.forEach { it.close() }
+    }
+
     companion object {
         private const val TAG = "CodeHub"
         /** Max wait for away Allow/Deny to reach the bridge before releasing goAsync (A2). */
         private const val AWAY_ANSWER_TIMEOUT_MS = 8_000L
 
-        @Volatile
-        private var instance: CodeHub? = null
+        private val byApp = java.util.Collections.synchronizedMap(
+            java.util.WeakHashMap<Context, CodeHub>()
+        )
 
-        /** Tests only: drop the singleton so the next [get] starts from fresh preferences. */
+        /** When set, [get] asks this instead of the per-application map. Tests install a fresh hub. */
+        @Volatile
+        private var installed: ((Context) -> CodeHub)? = null
+
+        /** Tests only: drop every hub so the next [get] starts clean for this process. */
         @androidx.annotation.VisibleForTesting
         fun resetForTesting() {
-            instance?.updatePump?.cancel()
-            instance?.backends?.values?.forEach { it.close() }
-            instance = null
+            installed = null
+            val hubs = byApp.values.toList()
+            byApp.clear()
+            hubs.forEach { it.releaseForTesting() }
         }
 
-        fun get(context: Context): CodeHub =
-            instance ?: synchronized(this) { instance ?: CodeHub(context.applicationContext).also { instance = it } }
+        /**
+         * Tests only: the next [get] calls [factory] instead of the per-application map.
+         * [resetForTesting] clears it.
+         */
+        @androidx.annotation.VisibleForTesting
+        fun installForTesting(factory: (Context) -> CodeHub) {
+            resetForTesting()
+            installed = factory
+        }
+
+        fun get(context: Context): CodeHub {
+            installed?.let { return it(context) }
+            val app = context.applicationContext
+            return byApp[app] ?: synchronized(byApp) {
+                byApp[app] ?: CodeHub(app).also { byApp[app] = it }
+            }
+        }
     }
 }
 

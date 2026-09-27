@@ -41,7 +41,7 @@ class PresetsListFragment : Fragment() {
             parentFragmentManager.popBackStack()
         }
 
-        viewModel = ViewModelProvider(requireActivity())[ChatViewModel::class.java]
+        viewModel = ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[ChatViewModel::class.java]
         repository = PresetRepository(requireContext())
 
         adapter = PresetAdapter(

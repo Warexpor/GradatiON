@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 
 class RpLorebookEditFragment : Fragment() {
 
-    private val chatViewModel: ChatViewModel by activityViewModels()
+    private val chatViewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
     private var lorebookId: Long = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {

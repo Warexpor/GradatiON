@@ -5,9 +5,8 @@ import androidx.lifecycle.ViewModelProvider
 /** Shared Robolectric hygiene for tests that launch activities. */
 object TestEnv {
     /**
-     * The default ViewModel factory caches the first Application it sees in a static. On a phone
-     * there is one Application per process; under Robolectric every test gets a new one, so a
-     * cached factory hands later ViewModels a stale Application (and its stale prefs). Clear it.
+     * Production code uses [AppViewModelFactory]. This still clears the framework factory's static
+     * Application, in case a test constructs a ViewModel without that factory.
      */
     fun resetViewModelFactory() {
         runCatching {

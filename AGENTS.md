@@ -39,8 +39,10 @@ export ANDROID_HOME=/opt/android-sdk        # or wherever your SDK lives
 
 ## Test gotchas
 
-- `CodeHub` is a singleton. `ScreenshotTest` resets it in `@After` and forces Chat mode in
-  `withChat`, or modes leak between tests.
+- `CodeHub.get` keeps one hub per Application. `ScreenshotTest` still calls `CodeHub.resetForTesting()`
+  in `@After` (and can `installForTesting`) so a later test does not see the previous hub.
+  Chat and saved-chat ViewModels are created with `AppViewModelFactory`, not the framework factory
+  that caches the first Application.
 - Roleplay state also leaks between tests (the active character, the RP model). A roleplay test
   should start its own chat (`startRpChatWithCharacter`) and pick its model after switching to
   the Roleplay tab.

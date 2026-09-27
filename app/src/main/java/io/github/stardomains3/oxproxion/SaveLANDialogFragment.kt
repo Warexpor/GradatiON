@@ -15,7 +15,7 @@ import androidx.core.graphics.drawable.toDrawable
 
 class SaveLANDialogFragment : DialogFragment() {
 
-    private val viewModel: ChatViewModel by activityViewModels()
+    private val viewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
 
     companion object {
         const val TAG = "SaveLANDialogFragment"

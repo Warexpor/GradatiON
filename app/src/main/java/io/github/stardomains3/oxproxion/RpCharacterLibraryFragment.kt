@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 
 class RpCharacterLibraryFragment : Fragment() {
 
-    private val chatViewModel: ChatViewModel by activityViewModels()
+    private val chatViewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
     private lateinit var adapter: RpCharacterAdapter
     private lateinit var prefs: SharedPreferencesHelper
     private lateinit var emptyView: View

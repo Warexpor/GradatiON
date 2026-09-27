@@ -14,7 +14,7 @@ import com.google.android.material.textfield.TextInputEditText
 
 class SaveBraveApiDialogFragment : DialogFragment() {
 
-    private val viewModel: ChatViewModel by activityViewModels()
+    private val viewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
 
     companion object {
         const val TAG = "SaveBraveApiDialogFragment"

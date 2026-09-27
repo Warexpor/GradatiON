@@ -198,7 +198,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var originalSendIcon: Drawable? = null
     private lateinit var webSearchButton: MaterialButton
     private lateinit var toolsButton: MaterialButton
-    private val viewModel: ChatViewModel by activityViewModels()
+    private val viewModel: ChatViewModel by activityViewModels {
+        AppViewModelFactory(requireActivity().application)
+    }
+    private val askMode = AskModeController()
+    private val rpMode = RpModeController()
     private lateinit var modelNameTextView: TextView
     private lateinit var modelNameShell: FrameLayout
     private lateinit var tabChat: TextView
@@ -1166,14 +1170,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             updateStreamToggleAppearance(isEnabled)
         }
 
-        viewModel.isWebSearchEnabled.observe(viewLifecycleOwner) { isEnabled ->
-            webSearchButton.isSelected = isEnabled
-            topWebSearchButton.isSelected = isEnabled
-        }
-        viewModel.isToolsEnabled.observe(viewLifecycleOwner) { isEnabled ->
-            toolsButton.isSelected = isEnabled
-            topToolsButton.isSelected = isEnabled
-        }
+        viewModel.isWebSearchEnabled.observe(viewLifecycleOwner) { reflectToolButtons() }
+        viewModel.isToolsEnabled.observe(viewLifecycleOwner) { reflectToolButtons() }
         viewModel.isExpandableInputEnabled.observe(viewLifecycleOwner) { isEnabled ->
             if (isEnabled) {
                 attachExpandableInputListeners()
@@ -5952,8 +5950,8 @@ $cleanContent
             chatAdapter.rpSpeakerAvatarUri = null
             chatAdapter.rpSpeakerAvatarFile = null
         }
+        reflectToolButtons()
         if (rp) {
-            viewModel.forceDisableToolsAndWebForRp()
             val hadAttachments = selectedImageBytes != null ||
                 selectedAudioBytes != null ||
                 pendingFiles.isNotEmpty()
@@ -5995,6 +5993,19 @@ $cleanContent
         }
         updateExtendedTopBarVisibility(sharedPreferencesHelper.getExtendedTopBarEnabled())
         updateComposerAccessoryVisibility()
+    }
+
+    /** Ask shows the saved tool prefs. Roleplay never does, and does not write them. */
+    private fun reflectToolButtons() {
+        if (!::webSearchButton.isInitialized || !::toolsButton.isInitialized) return
+        if (!::topWebSearchButton.isInitialized || !::topToolsButton.isInitialized) return
+        val chrome = if (viewModel.isRpMode()) rpMode else askMode
+        val web = chrome.webSearchSelected(viewModel.isWebSearchEnabled.value == true)
+        val tools = chrome.toolsSelected(viewModel.isToolsEnabled.value == true)
+        webSearchButton.isSelected = web
+        topWebSearchButton.isSelected = web
+        toolsButton.isSelected = tools
+        topToolsButton.isSelected = tools
     }
 
     /** Vision / transcription / image-gen chrome for attach + gen; forced off in RP. */

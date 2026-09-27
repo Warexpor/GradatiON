@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 class RpSettingsFragment : Fragment() {
 
     private lateinit var prefs: SharedPreferencesHelper
-    private val chatViewModel: ChatViewModel by activityViewModels()
+    private val chatViewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_rp_settings, container, false)

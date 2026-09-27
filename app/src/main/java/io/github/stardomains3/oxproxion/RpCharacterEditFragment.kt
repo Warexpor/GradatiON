@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 
 class RpCharacterEditFragment : Fragment() {
 
-    private val chatViewModel: ChatViewModel by activityViewModels()
+    private val chatViewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
     private var characterId: Long = 0
     private var pendingAvatarUri: Uri? = null
     private var clearAvatar = false

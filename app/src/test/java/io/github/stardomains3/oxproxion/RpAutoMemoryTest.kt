@@ -18,6 +18,12 @@ class RpAutoMemoryTest {
         assertTrue(RpAutoMemory.shouldUpdate(messageCount = 54, budget = Int.MAX_VALUE, lastRunAt = 0))
     }
 
+    @Test fun failedRewriteDoesNotSkipTheNextWindow() {
+        assertEquals(24, RpAutoMemory.watermarkAfter(previous = 24, messageCount = 30, saved = false))
+        assertEquals(30, RpAutoMemory.watermarkAfter(previous = 24, messageCount = 30, saved = true))
+        assertTrue(RpAutoMemory.shouldUpdate(messageCount = 30, budget = 30, lastRunAt = 24))
+    }
+
     @Test fun thenRefreshesEverySixMessages() {
         assertFalse(RpAutoMemory.shouldUpdate(messageCount = 28, budget = 30, lastRunAt = 24))
         assertTrue(RpAutoMemory.shouldUpdate(messageCount = 30, budget = 30, lastRunAt = 24))

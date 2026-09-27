@@ -21,7 +21,7 @@ import kotlinx.serialization.json.Json
 
 class RpHubFragment : Fragment() {
 
-    private val chatViewModel: ChatViewModel by activityViewModels()
+    private val chatViewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
     private val json = Json { ignoreUnknownKeys = true }
     private lateinit var prefs: SharedPreferencesHelper
     private var characters: List<RpCharacter> = emptyList()

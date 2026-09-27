@@ -120,12 +120,12 @@ class MainActivity : AppCompatActivity() {
         if (intent?.action in listOf(Intent.ACTION_ASSIST, Intent.ACTION_VOICE_COMMAND)) {
             val digitalAssistantPreset = findDigitalAssistantPreset()
             if (digitalAssistantPreset != null) {
-                val vm: ChatViewModel by viewModels()
+                val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
                 PresetManager.applyPreset(this, vm, digitalAssistantPreset)
                 vm.signalPresetApplied()
             }
         }
-        val vm: ChatViewModel by viewModels()
+        val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
         handlePresetIntent(intent)
         if (intent.getBooleanExtra("autosend", false)) {
             intent.getStringExtra("shared_text")?.let { text ->
@@ -211,7 +211,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val serviceIntent = Intent(this, ForegroundService::class.java)
             // Optionally pass initial title if needed
-           // val vm: ChatViewModel by viewModels()
+           // val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
            // val displayName = vm.getModelDisplayName(vm.activeChatModel.value ?: "Unknown Model")
            // serviceIntent.putExtra("initial_title", displayName)
             startService(serviceIntent)
@@ -242,7 +242,7 @@ class MainActivity : AppCompatActivity() {
 
         if (intent.action == Intent.ACTION_SEND && "text/plain" == intent.type && !intent.getBooleanExtra("autosend", false)) {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
-                val vm: ChatViewModel by viewModels()
+                val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
                 val sharedPreferencesHelper = SharedPreferencesHelper(this)
                 vm.consumeSharedText(text)
                 val systemMessageTitle = sharedPreferencesHelper.getSelectedSystemMessage().title
@@ -258,7 +258,7 @@ class MainActivity : AppCompatActivity() {
 
         /*  if (intent.getBooleanExtra("autosend", false)) {
               intent.getStringExtra("shared_text")?.let { text ->
-                  val vm: ChatViewModel by viewModels()
+                  val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
                   val sharedPreferencesHelper = SharedPreferencesHelper(this)
                   val clearChat = intent.getBooleanExtra("clear_chat", false)
                   if (clearChat) {
@@ -269,7 +269,7 @@ class MainActivity : AppCompatActivity() {
                   AppToast.makeText(this, "System: $systemMessageTitle", AppToast.LENGTH_SHORT).show()
               }
           }*/
-        val vm: ChatViewModel by viewModels()
+        val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
         if (intent.getBooleanExtra("autosend", false)) {
             intent.getStringExtra("shared_text")?.let { text ->
                 val clearChat = intent.getBooleanExtra("clear_chat", false)
@@ -290,7 +290,7 @@ class MainActivity : AppCompatActivity() {
         if (isAssistLaunch) {
             val digitalAssistantPreset = findDigitalAssistantPreset()
             if (digitalAssistantPreset != null) {
-                val vm: ChatViewModel by viewModels()
+                val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
                 PresetManager.applyPreset(this, vm, digitalAssistantPreset)
                 vm.signalPresetApplied()
             }
@@ -379,7 +379,7 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            val vm: ChatViewModel by viewModels()
+            val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
             val prefs = SharedPreferencesHelper(this)
 
             // 2. Validation (Model and System Message still exist)
@@ -439,7 +439,7 @@ class MainActivity : AppCompatActivity() {
                 conversationMode = conversationMode
             )
 
-            val vm: ChatViewModel by viewModels()
+            val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
             // --- VALIDATION ---
             val prefs = SharedPreferencesHelper(this)
             val allModels = (vm.getBuiltInModels() + prefs.getCustomModels()).distinctBy { it.apiIdentifier.lowercase() }

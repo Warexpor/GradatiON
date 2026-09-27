@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 
 class RpLorebookLibraryFragment : Fragment() {
 
-    private val chatViewModel: ChatViewModel by activityViewModels()
+    private val chatViewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
     private lateinit var emptyView: View
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {

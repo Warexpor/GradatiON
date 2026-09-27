@@ -43,7 +43,7 @@ class PresetEditFragment : Fragment() {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        viewModel = ViewModelProvider(requireActivity())[ChatViewModel::class.java]
+        viewModel = ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[ChatViewModel::class.java]
         prefs = SharedPreferencesHelper(requireContext())
 
         initViews(view)

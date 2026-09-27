@@ -25,7 +25,7 @@ class AssistantActivity : AppCompatActivity() {
     }
 
     private fun continueOnCreate() {
-        val vm: ChatViewModel by viewModels()
+        val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
         val repository = PresetRepository(this)
         val allPresets = repository.getAll()
 
@@ -88,7 +88,7 @@ class AssistantActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         stateSnapshot?.let { snapshot ->
-            val vm: ChatViewModel by viewModels()
+            val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
             PresetManager.restoreState(this, vm, snapshot)
         }
     }
