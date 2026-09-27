@@ -88,6 +88,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnPreDraw
 import androidx.core.view.isGone
+import androidx.core.view.drawToBitmap
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
@@ -842,18 +843,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.rpSwipeNav.observe(viewLifecycleOwner) { nav ->
             applyRpSwipeChrome(nav)
         }
-        val switchMode: (ChatMode) -> Unit = { target ->
-            val current = if (viewModel.isRpMode()) ChatMode.RP else ChatMode.ASK
-            if (target != current) {
-                if (viewModel.isAwaitingResponse.value == true) {
-                    AppToast.makeText(requireContext(), getString(R.string.rp_wait_for_reply), AppToast.LENGTH_SHORT).show()
-                } else {
-                    tabChat.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
-                    sharedPreferencesHelper.saveComposerDraft(current, chatEditText.text?.toString().orEmpty())
-                    viewModel.toggleChatMode()
-                }
-            }
-        }
         // Code mode (third tab, on by default, Settings > Modes turns it off) lives in its own package; see CodeModeHost.
         codeMode = io.github.stardomains3.oxproxion.code.CodeModeHost(this, view)
         codeMode.onTabsChanged = {
@@ -862,15 +851,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             tabRoleplay.isSelected = !codeMode.isActive && rp
             placeModeTabIndicator(animate = true)
         }
-        codeMode.tab.setOnClickListener {
-            if (!codeMode.isActive) {
-                it.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
-                hideKeyboard()
-                codeMode.activate()
-            }
+        // Tabs slide like the swipe: both pages side by side, never an empty frame between.
+        listOf(tabChat, tabRoleplay, codeMode.tab).forEach { tab ->
+            tab.setOnClickListener { pageToTab(tab) }
         }
-        tabChat.setOnClickListener { codeMode.deactivate(); switchMode(ChatMode.ASK) }
-        tabRoleplay.setOnClickListener { codeMode.deactivate(); switchMode(ChatMode.RP) }
         tabRoleplay.setOnLongClickListener {
             openRpHub()
             true
@@ -3953,6 +3937,181 @@ $cleanContent
      * History | Chat | Roleplay | Models: finger right goes one page left, finger left one page
      * right. Inside the open history, a leftward swipe drags it closed.
      */
+    // ── Mode pager ────────────────────────────────────────────────────────────────────────
+    // Chat, Roleplay and Code share one set of views, so the neighbour page can't be laid out
+    // beside the current one. Instead: snapshot the current page, switch to the next mode
+    // behind the snapshot, and slide the two side by side. Taps and swipes both use it.
+
+    private class Pager(val target: TextView, val origin: TextView, val direction: Int, val shot: ImageView, val w: Float)
+
+    private var pager: Pager? = null
+    private var pagerOrigin: TextView? = null
+    /** True from the first drag frame until the pages settle; the pager owns the underline. */
+    private var pagerBusy = false
+
+    private fun modeTabsInOrder(): List<TextView> = listOfNotNull(
+        tabChat,
+        tabRoleplay.takeIf { it.isVisible },
+        codeMode.tab.takeIf { it.isVisible }
+    )
+
+    private fun currentTab(): TextView = when {
+        codeMode.isActive -> codeMode.tab
+        viewModel.isRpMode() && tabRoleplay.isVisible -> tabRoleplay
+        else -> tabChat
+    }
+
+    /** The tab a drag in [direction] leads to (+1 = finger moving right = the tab to the left). */
+    private fun targetFrom(origin: TextView, direction: Int): TextView? {
+        val order = modeTabsInOrder()
+        val i = order.indexOf(origin).coerceAtLeast(0)
+        return order.getOrNull(if (direction > 0) i - 1 else i + 1)
+    }
+
+    /** The page layers that slide; the top bar and its tabs stay put. */
+    private fun modePages(): List<View> {
+        val root = view ?: return emptyList()
+        return listOfNotNull(
+            root.findViewById(R.id.chatFrameView),
+            root.findViewById(R.id.composerDock),
+            root.findViewById(R.id.composerFade),
+            root.findViewById(R.id.codeModeContainer)
+        ).filter { it.isVisible }
+    }
+
+    /** Switch now, no animation. False when blocked (a reply is still streaming). */
+    private fun switchToTab(tab: TextView): Boolean {
+        if (tab == codeMode.tab) {
+            if (!codeMode.isActive) { hideKeyboard(); codeMode.activate(animate = false) }
+            return true
+        }
+        val target = if (tab == tabRoleplay) ChatMode.RP else ChatMode.ASK
+        val current = if (viewModel.isRpMode()) ChatMode.RP else ChatMode.ASK
+        if (target != current && viewModel.isAwaitingResponse.value == true) {
+            GlassNotice.show(requireContext(), getString(R.string.rp_wait_for_reply))
+            return false
+        }
+        codeMode.deactivate()
+        if (target != current) {
+            sharedPreferencesHelper.saveComposerDraft(current, chatEditText.text?.toString().orEmpty())
+            viewModel.toggleChatMode()
+        }
+        return true
+    }
+
+    private fun openPager(target: TextView, direction: Int): Boolean {
+        val root = view ?: return false
+        val content = root.findViewById<FrameLayout>(R.id.rootLayout)
+        val topBar = root.findViewById<View>(R.id.topBarGlass)
+        if (content.width == 0) return false
+        val origin = currentTab()
+        pagerBusy = true
+        modePages().forEach { it.animate().cancel(); it.translationX = 0f; it.alpha = 1f }
+        // The top bar stays on screen above both pages, so leave it out of the picture.
+        val bar = topBar.visibility
+        topBar.visibility = View.INVISIBLE
+        val bmp = runCatching { content.drawToBitmap(Bitmap.Config.ARGB_8888) }.getOrNull()
+        topBar.visibility = bar
+        if (bmp == null) { pagerBusy = false; return false }
+        val shot = ImageView(requireContext()).apply {
+            setImageBitmap(bmp)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        content.addView(shot, content.indexOfChild(topBar),
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        // Lay it out now: it has to cover the page on this very frame, before the switch shows.
+        shot.measure(
+            View.MeasureSpec.makeMeasureSpec(content.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(content.height, View.MeasureSpec.EXACTLY)
+        )
+        shot.layout(0, 0, content.width, content.height)
+        if (!switchToTab(target)) {
+            content.removeView(shot)
+            bmp.recycle()
+            pagerBusy = false
+            return false
+        }
+        target.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+        pager = Pager(target, origin, direction, shot, content.width.toFloat())
+        movePager(0f)
+        return true
+    }
+
+    /** Old page (the snapshot) under the finger, the new one right beside it. */
+    private fun movePager(dx: Float) {
+        val p = pager ?: return
+        val w = p.w
+        p.shot.translationX = dx
+        modePages().forEach { it.animate().cancel(); it.translationX = dx - p.direction * w; it.alpha = 1f }
+        val from = indicatorXFor(p.origin)
+        val to = indicatorXFor(p.target)
+        if (from != null && to != null) {
+            val t = (abs(dx) / w).coerceIn(0f, 1f)
+            modeTabIndicator.animate().cancel()
+            modeTabIndicator.translationX = from + (to - from) * t
+        }
+    }
+
+    /** Finish the slide either way; on cancel the origin mode comes back behind the snapshot. */
+    private fun settlePager(commit: Boolean) {
+        val p = pager ?: return
+        pager = null
+        val w = p.w
+        val anim = Motion.areAnimationsEnabled(requireContext())
+        val shotTo = if (commit) p.direction * w else 0f
+        val pageTo = if (commit) 0f else -p.direction * w
+        val lineTo = indicatorXFor(if (commit) p.target else p.origin)
+        val done = {
+            if (!commit) switchToTab(p.origin)
+            modePages().forEach { it.translationX = 0f; it.alpha = 1f }
+            // Give an async mode reload a beat to draw before the snapshot goes.
+            p.shot.postDelayed({
+                (p.shot.parent as? ViewGroup)?.removeView(p.shot)
+                (p.shot.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle()
+                p.shot.setImageDrawable(null)
+            }, if (commit) 0L else 120L)
+            pagerBusy = false
+            pagerOrigin = null
+            placeModeTabIndicator(animate = false)
+        }
+        if (!anim) { done(); return }
+        val duration = 300L
+        p.shot.animate().translationX(shotTo).setDuration(duration).setInterpolator(Motion.iosOut)
+            .withEndAction { done() }.start()
+        modePages().forEach { it.animate().translationX(pageTo).setDuration(duration).setInterpolator(Motion.iosOut).start() }
+        if (lineTo != null) {
+            modeTabIndicator.animate().translationX(lineTo).setDuration(duration).setInterpolator(Motion.iosOut).start()
+        }
+    }
+
+    /** Drop an open pager without animating (direction flipped, or the drag went elsewhere). */
+    private fun dropPager() {
+        val p = pager ?: return
+        pager = null
+        switchToTab(p.origin)
+        modePages().forEach { it.translationX = 0f; it.alpha = 1f }
+        p.shot.postDelayed({
+            (p.shot.parent as? ViewGroup)?.removeView(p.shot)
+            p.shot.setImageDrawable(null)
+        }, 120L)
+        pagerBusy = false
+    }
+
+    /** Tab tap: the same side-by-side slide as a swipe, in the tabs' order. */
+    private fun pageToTab(tab: TextView) {
+        if (pager != null || pagerBusy) return
+        val from = currentTab()
+        if (tab == from) return
+        val order = modeTabsInOrder()
+        val direction = if (order.indexOf(tab) < order.indexOf(from)) 1 else -1
+        if (!Motion.areAnimationsEnabled(requireContext())) {
+            if (switchToTab(tab)) tab.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            placeModeTabIndicator(animate = false)
+            return
+        }
+        if (openPager(tab, direction)) settlePager(commit = true)
+    }
+
     private fun setupWideSwipes(root: View) {
         val d = resources.displayMetrics.density
         val content = root.findViewById<View>(R.id.rootLayout)
@@ -3976,49 +4135,17 @@ $cleanContent
                     !inside(topBar, x, y) && !inside(dock, x, y) &&
                     parentFragmentManager.backStackEntryCount == 0
 
-            // What the drag is heading to: a neighbouring tab, history (back past the first
-            // tab), or nothing (rubber band). Worked out on every move so reversing works.
-            fun tabsInOrder(): List<TextView> = listOfNotNull(
-                tabChat,
-                tabRoleplay.takeIf { it.isVisible },
-                codeMode.tab.takeIf { it.isVisible }
-            )
-            fun currentTab(): TextView = when {
-                codeMode.isActive -> codeMode.tab
-                viewModel.isRpMode() && tabRoleplay.isVisible -> tabRoleplay
-                else -> tabChat
-            }
-            fun targetFor(direction: Int): TextView? {
-                val order = tabsInOrder()
-                val i = order.indexOf(currentTab()).coerceAtLeast(0)
-                return order.getOrNull(if (direction > 0) i - 1 else i + 1)
-            }
-            // The page layers that slide; the top bar and its tabs stay put.
-            fun pages(): List<View> = listOfNotNull(
-                root.findViewById(R.id.chatFrameView),
-                root.findViewById(R.id.composerDock),
-                root.findViewById(R.id.composerFade),
-                root.findViewById(R.id.codeModeContainer)
-            ).filter { it.isVisible }
             var historyDrag = false
 
-            fun resetPages(animate: Boolean) {
-                pages().forEach { p ->
-                    if (animate) p.animate().translationX(0f).alpha(1f).setDuration(420).setInterpolator(Motion.spring).start()
-                    else { p.translationX = 0f; p.alpha = 1f }
-                }
-                content.animate().translationX(0f).setDuration(if (animate) 420 else 0).setInterpolator(Motion.spring).start()
-            }
-
             override fun onDrag(dx: Float) {
-                val w = content.width.coerceAtLeast(1).toFloat()
                 val direction = if (dx > 0) 1 else -1
-                val target = targetFor(direction)
+                if (pagerOrigin == null) pagerOrigin = currentTab()
+                val target = targetFrom(pagerOrigin ?: currentTab(), direction)
                 val toHistory = direction > 0 && target == null
                 if (toHistory != historyDrag) {
                     if (historyDrag) cancelHistoryDrag(animate = false)
                     historyDrag = toHistory
-                    if (toHistory) { hideKeyboard(); resetPages(animate = false); beginHistoryDrag() }
+                    if (toHistory) { hideKeyboard(); dropPager(); beginHistoryDrag() }
                 }
                 if (historyDrag) {
                     dragHistory(dx)
@@ -4026,73 +4153,47 @@ $cleanContent
                 }
                 if (target == null) {
                     // Nothing that way: lean a little and resist.
+                    dropPager()
                     val max = 36f * d
                     val lean = max * (dx / (abs(dx) + 5 * max)) * 3f
-                    pages().forEach { it.translationX = lean; it.alpha = 1f }
+                    modePages().forEach { it.translationX = lean; it.alpha = 1f }
                     return
                 }
-                // The page follows the finger; the tab underline slides toward the destination.
-                val progress = (abs(dx) / (w * 0.5f)).coerceIn(0f, 1f)
-                pages().forEach {
-                    it.animate().cancel()
-                    it.translationX = dx
-                    it.alpha = 1f - 0.4f * progress
+                if (pager?.target != target || pager?.direction != direction) {
+                    dropPager()
+                    if (!openPager(target, direction)) {
+                        // Switching is blocked (a reply is streaming): just lean.
+                        modePages().forEach { it.translationX = dx * 0.15f }
+                        return
+                    }
                 }
-                val from = indicatorXFor(currentTab())
-                val to = indicatorXFor(target)
-                if (from != null && to != null) {
-                    modeTabIndicator.animate().cancel()
-                    modeTabIndicator.translationX = from + (to - from) * progress
-                }
+                movePager(dx)
             }
 
             override fun onCommit(direction: Int) {
                 content.performHapticFeedback(android.view.HapticFeedbackConstants.GESTURE_END)
                 if (historyDrag) {
                     historyDrag = false
+                    pagerOrigin = null
                     settleHistoryDrag()
                     return
                 }
-                val target = targetFor(direction)
-                if (target == null) { onCancel(); return }
-                val w = content.width.toFloat()
-                val anim = Motion.areAnimationsEnabled(requireContext())
-                val out = pages()
-                if (!anim) {
-                    target.performClick()
-                    resetPages(animate = false)
-                    return
-                }
-                // Finish sliding out the way the finger went, switch, slide the new page in
-                // from the other side.
-                var remaining = out.size.coerceAtLeast(1)
-                val switchNow = {
-                    target.performClick()
-                    pages().forEach { p ->
-                        p.animate().cancel()
-                        p.translationX = -direction * w * 0.28f
-                        p.alpha = 0f
-                        p.animate().translationX(0f).alpha(1f).setDuration(380).setInterpolator(Motion.iosOut).start()
-                    }
-                    // Hidden layers (the old page) come back to rest for next time.
-                    out.filter { !it.isVisible }.forEach { it.translationX = 0f; it.alpha = 1f }
-                }
-                if (out.isEmpty()) { switchNow(); return }
-                out.forEach { p ->
-                    p.animate().translationX(direction * w).alpha(0f).setDuration(170)
-                        .setInterpolator(Motion.easeOut)
-                        .withEndAction { if (--remaining == 0) switchNow() }
-                        .start()
-                }
+                if (pager == null) { onCancel(); return }
+                settlePager(commit = true)
             }
 
             override fun onCancel() {
                 if (historyDrag) {
                     historyDrag = false
+                    pagerOrigin = null
                     cancelHistoryDrag(animate = true)
                     return
                 }
-                resetPages(animate = true)
+                if (pager != null) { settlePager(commit = false); return }
+                pagerOrigin = null
+                modePages().forEach { p ->
+                    p.animate().translationX(0f).alpha(1f).setDuration(420).setInterpolator(Motion.spring).start()
+                }
                 placeModeTabIndicator(animate = true)
             }
         }
@@ -5552,6 +5653,8 @@ $cleanContent
 
     private fun placeModeTabIndicator(animate: Boolean) {
         if (!::modeTabIndicator.isInitialized) return
+        // While a page is under the finger (or settling) the pager drives the underline.
+        if (pagerBusy) return
         val tab = when {
             ::codeMode.isInitialized && codeMode.isActive -> codeMode.tab
             tabRoleplay.isSelected -> tabRoleplay

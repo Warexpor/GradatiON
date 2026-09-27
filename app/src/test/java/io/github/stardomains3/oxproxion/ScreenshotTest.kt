@@ -51,7 +51,13 @@ class ScreenshotTest {
         AppDatabase.setInstanceForTesting(db)
         // Roleplay is opt-in now; these screens cover it, so switch it on (see ModesDefaultTest).
         SharedPreferencesHelper(ctx).setRoleplayEnabled(true)
+        // Tests that stop mid-swipe leave the peeked mode saved; always start on Chat.
+        SharedPreferencesHelper(ctx).saveChatMode(ChatMode.ASK)
     }
+
+    /** CodeHub is a process singleton: a test that ends on the Code tab must not start the next one there. */
+    @org.junit.After
+    fun tearDown() = io.github.stardomains3.oxproxion.code.CodeHub.resetForTesting()
 
     private fun snap(view: View, name: String) {
         val bmp = runCatching { renderHardware(view) }.getOrNull() ?: Bitmap.createBitmap(
@@ -113,6 +119,9 @@ class ScreenshotTest {
             idle()
             sc.onActivity { a ->
                 idle()
+                // Every screen starts on Chat, whatever mode an earlier test left behind.
+                val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+                if (vm.chatMode.value != ChatMode.ASK) { vm.setChatMode(ChatMode.ASK); idle() }
                 val chat = a.supportFragmentManager.findFragmentByTag("ChatFragment") as ChatFragment
                 block(a, chat)
             }
@@ -876,12 +885,44 @@ class ScreenshotTest {
         }
     }
 
+    private fun pagerShots(a: MainActivity): List<android.widget.ImageView> {
+        val content = a.findViewById<android.view.ViewGroup>(R.id.rootLayout)
+        return (0 until content.childCount).map { content.getChildAt(it) }.filterIsInstance<android.widget.ImageView>()
+    }
+
     @Test fun swipeMidDragDark() = withChat { a, chat ->
         val root = chat.requireView()
         drag(root, -root.width * 0.3f, release = false, stepMs = 40L)
+        // Side by side: the old page (a snapshot) under the finger, the next page right beside it.
+        val shot = pagerShots(a).single()
+        org.junit.Assert.assertEquals(-root.width * 0.3f, shot.translationX, root.width * 0.05f)
         val page = a.findViewById<View>(R.id.chatFrameView)
-        org.junit.Assert.assertTrue("page follows the finger", page.translationX < -root.width * 0.2f)
+        org.junit.Assert.assertEquals(root.width * 0.7f, page.translationX, root.width * 0.05f)
+        org.junit.Assert.assertTrue("next mode is already behind the snapshot", a.findViewById<View>(R.id.tabRoleplay).isSelected)
         snap(root(a), "swipe_mid_dark")
+    }
+
+    @Test fun swipeCancelComesBack() = withChat { a, chat ->
+        val root = chat.requireView()
+        drag(root, -root.width * 0.08f, release = true, stepMs = 120L)
+        idle()
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.tabChat).isSelected)
+        org.junit.Assert.assertTrue(pagerShots(a).isEmpty())
+        org.junit.Assert.assertEquals(0f, a.findViewById<View>(R.id.chatFrameView).translationX, 0.5f)
+    }
+
+    @Test fun tabTapSlidesWithoutGap() = withChat { a, _ ->
+        Settings.Global.putFloat(a.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+        a.findViewById<View>(R.id.tabRoleplay).performClick()
+        // First frame: the old page (snapshot) in place, the new one exactly a page to its right.
+        val shot = pagerShots(a).single()
+        val page = a.findViewById<View>(R.id.chatFrameView)
+        org.junit.Assert.assertEquals(0f, shot.translationX, 0.5f)
+        org.junit.Assert.assertEquals(page.width.toFloat(), page.translationX - shot.translationX, 2f)
+        idle()
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.tabRoleplay).isSelected)
+        org.junit.Assert.assertTrue(pagerShots(a).isEmpty())
+        org.junit.Assert.assertEquals(0f, page.translationX, 0.5f)
     }
 
     @Test fun swipeCommitsToNextTab() = withChat { a, chat ->

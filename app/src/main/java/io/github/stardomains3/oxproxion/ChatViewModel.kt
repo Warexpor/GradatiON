@@ -7738,8 +7738,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (_chatMode.value == mode) return
         val previous = _chatMode.value ?: ChatMode.ASK
         // Only park a real open session. Writing null would wipe a keepDraftId left by
-        // LLM-mismatch ephemeral greeting (currentSessionId == null).
-        if (currentSessionId != null) {
+        // LLM-mismatch ephemeral greeting (currentSessionId == null). While a previous switch is
+        // still loading, the open session belongs to the mode before [previous] (a swipe that
+        // peeks at a tab and comes back), so parking it would cross the drafts.
+        if (currentSessionId != null && sessionTransitionJob?.isActive != true) {
             sharedPreferencesHelper.saveRpDraftSessionId(previous, currentSessionId)
         }
         // Flip mode inside the transition so cancel+regen-restore still sees the previous mode.
