@@ -383,6 +383,13 @@ class AcpAdapter : HarnessAdapter {
         if (prev == null || seq > prev) lastSeqBySession[sessionId] = seq
     }
 
+    /** Drop resume cursor when the hub forgets a session (B2). */
+    fun clearLastSeq(sessionId: String) {
+        lastSeqBySession.remove(sessionId)
+        openText.remove(sessionId)
+        openThought.remove(sessionId)
+    }
+
     /**
      * Stable event key: prefer bridge `_meta.seq` (reconnect/resume safe). Tool/approval/plan keys
      * use ACP ids instead. Without seq (plain ACP / older fixtures), fall back to a local counter.

@@ -42,8 +42,13 @@ class CodeHub private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backends = HashMap<String, CodeBackend>()
-    /** Sessions cancelled locally until their queued TurnDone is folded. */
+    /** Sessions cancelled locally until their queued TurnDone is folded (blocks chunk revive). */
     private val suppressRunningFromChunks = HashSet<String>()
+    /**
+     * Sessions whose local cancel was superseded by a newer [prompt] (B1/H1).
+     * Only those ids ignore a queued TurnDone("cancelled"); natural ACP cancelled clears running.
+     */
+    private val ignoreStaleCancelTurnDone = HashSet<String>()
     /** In-flight approval answers (M3); cleared on ApprovalAnswered or send failure. */
     private val answeringRequests = HashSet<String>()
     private val sessionDao: CodeSessionDao = AppDatabase.getDatabase(appContext).codeSessionDao()
@@ -303,7 +308,11 @@ class CodeHub private constructor(context: Context) {
             }
         }
         if (!accepted) return false
-        // H1: this prompt owns the session now; a queued cancel TurnDone must not clear running.
+        // B1/H1: if a local cancel is still pending, mark its TurnDone stale so Stop→Send
+        // keeps running; natural cancelled (no stamp) still clears.
+        if (sessionId in suppressRunningFromChunks) {
+            ignoreStaleCancelTurnDone += sessionId
+        }
         suppressRunningFromChunks.remove(sessionId)
         withBackend(sessionId) { b -> b.prompt(sessionId, text, attachments) }
         return true
@@ -351,6 +360,19 @@ class CodeHub private constructor(context: Context) {
             onDone(false)
             return
         }
+        // B3: mirror in-UI answer — refuse missing / already-chosen; dismiss shade if answered.
+        val approval = s.events.filterIsInstance<CodeEvent.Approval>()
+            .find { it.requestId == requestId }
+        when {
+            approval == null -> {
+                onDone(false)
+                return
+            }
+            approval.chosen != null -> {
+                onDone(true) // already answered — cancel lingering shade
+                return
+            }
+        }
         if (!answeringRequests.add(requestId)) {
             onDone(false)
             return
@@ -372,7 +394,11 @@ class CodeHub private constructor(context: Context) {
     fun cancel(sessionId: String) {
         // Eager clear so Stop→Send is not rejected while pump still holds TurnDone.
         // Keep stale queued chunks from reviving running until that turn's done arrives.
-        if (_sessions.value.containsKey(sessionId)) suppressRunningFromChunks += sessionId
+        if (_sessions.value.containsKey(sessionId)) {
+            suppressRunningFromChunks += sessionId
+            // A fresh cancel invalidates any prior Stop→Send ignore stamp (B1).
+            ignoreStaleCancelTurnDone.remove(sessionId)
+        }
         update(sessionId) { it.copy(running = false) }
         withBackend(sessionId) { it.cancel(sessionId) }
     }
@@ -386,12 +412,16 @@ class CodeHub private constructor(context: Context) {
     fun forget(sessionId: String) {
         awayNotifier.cancelSession(sessionId) // A5
         // M2: stop an in-flight turn so keepalive / outbox do not outlive the row.
+        // B2: detach so reconnect does not session/load a forgotten id.
         val s = _sessions.value[sessionId]
         if (s != null) {
             suppressRunningFromChunks += sessionId
+            ignoreStaleCancelTurnDone.remove(sessionId)
             val host = _hosts.value.find { it.id == s.summary.hostId }
             if (host != null) {
-                scope.launch { runCatching { backendFor(host).cancel(sessionId) } }
+                val backend = backendFor(host)
+                backend.detach(sessionId)
+                scope.launch { runCatching { backend.cancel(sessionId) } }
             }
         }
         _sessions.value = _sessions.value - sessionId
@@ -428,10 +458,16 @@ class CodeHub private constructor(context: Context) {
             batch,
             liveSeqOf = { state, sid -> backends[state.summary.hostId]?.peekLastSeq(sid) },
             suppressRunningFromChunks = suppressRunningFromChunks,
+            ignoreStaleCancelTurnDone = ignoreStaleCancelTurnDone,
         )
         if (result.sessions != null) _sessions.value = result.sessions
-        // The guard is only for the cancelled turn; a later prompt starts normally.
-        batch.forEach { if (it.update is CodeUpdate.TurnDone) suppressRunningFromChunks.remove(it.sessionId) }
+        // Guards are only for the cancelled turn; a later prompt starts normally.
+        batch.forEach {
+            if (it.update is CodeUpdate.TurnDone) {
+                suppressRunningFromChunks.remove(it.sessionId)
+                ignoreStaleCancelTurnDone.remove(it.sessionId)
+            }
+        }
         // Local away notifs (§5.6): approval / turn finished while backgrounded + connected.
         for (su in batch) {
             if (su.update is CodeUpdate.ApprovalAnswered) {

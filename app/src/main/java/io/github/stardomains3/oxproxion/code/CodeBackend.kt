@@ -58,6 +58,11 @@ interface CodeBackend {
     suspend fun answer(sessionId: String, requestId: String, option: ApprovalOption?)
     suspend fun cancel(sessionId: String)
     suspend fun setPermissionMode(sessionId: String, mode: PermissionMode)
+    /**
+     * Drop local attach bookkeeping for [sessionId] (B2). Reconnect must not `session/load`
+     * a forgotten session. Default no-op (demo).
+     */
+    fun detach(sessionId: String) {}
     fun close()
 
     /** Pause transport reconnect while the app is backgrounded (no-op unless a bridge). */
@@ -586,6 +591,20 @@ class BridgeBackend(
 
     override suspend fun setPermissionMode(sessionId: String, mode: PermissionMode) {
         call({ adapter.setMode(it, sessionId, mode) })
+    }
+
+    override fun detach(sessionId: String) {
+        attached.remove(sessionId)
+        runningSessions.remove(sessionId)
+        suppressAgent.remove(sessionId)
+        deliverGeneration.remove(sessionId)
+        inFlightPromptId.remove(sessionId)?.let { rpcId ->
+            pending.remove(rpcId)?.completeExceptionally(CancellationException("Detached"))
+        }
+        promptMutexes.remove(sessionId)
+        synchronized(outboxLock) { outbox.removeAll { it.sessionId == sessionId } }
+        (adapter as? AcpAdapter)?.clearLastSeq(sessionId)
+        refreshKeepAlive()
     }
 
     override fun close() {

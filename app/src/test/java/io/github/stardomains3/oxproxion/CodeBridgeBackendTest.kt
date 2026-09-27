@@ -721,5 +721,49 @@ class CodeBridgeBackendTest {
         }
     }
 
+    @Test
+    fun detachRemovesAttachedSoReconnectSkipsLoad() = runBlocking {
+        // B2: forget → detach; reconnect must not session/load the forgotten id.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        adapter.decode(
+            """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":7},
+            "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"x"}}}}"""
+        )
+        assertEquals(7L, adapter.lastSeq("s1"))
+        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+            val loadsAfterAttach = transport.sent.count { it.contains("session/load") }
+            assertTrue(loadsAfterAttach >= 1)
 
+            backend.detach("s1")
+            assertEquals(null, adapter.lastSeq("s1"))
+
+            transport.drop()
+            delay(20)
+            val loadsBefore = transport.sent.count { it.contains("session/load") }
+            val initsBefore = transport.sent.count { it.contains("\"initialize\"") }
+            transport.restore()
+            // Wait for reconnect initialize to complete (ready + empty attached loop).
+            withTimeout(5_000) {
+                while (transport.sent.count { it.contains("\"initialize\"") } <= initsBefore) delay(10)
+                delay(100)
+            }
+            assertEquals(
+                "forgotten session must not be session/load-ed on reconnect",
+                loadsBefore,
+                transport.sent.count { it.contains("session/load") },
+            )
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
 }

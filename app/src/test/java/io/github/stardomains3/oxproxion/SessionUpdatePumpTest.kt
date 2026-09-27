@@ -91,19 +91,21 @@ class SessionUpdatePumpTest {
 
     @Test
     fun staleCancelTurnDoneAfterNewPromptKeepsRunning() {
-        // H1: prompt accepted → suppress cleared → queued cancel TurnDone must not clear running.
+        // H1/B1: prompt after cancel stamps ignoreStaleCancel → queued cancel TurnDone keeps running.
         val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))
         val result = foldSessionUpdates(
             sessions,
             listOf(SessionUpdate("s1", CodeUpdate.TurnDone("cancelled"))),
             now = 101L,
             suppressRunningFromChunks = emptySet(),
+            ignoreStaleCancelTurnDone = setOf("s1"),
         )
         assertTrue(result.sessions!!["s1"]!!.running)
     }
 
     @Test
     fun cancelTurnDoneWithSuppressClearsRunning() {
+        // Stop-only: suppress set, no ignore stamp → cancelled clears running.
         val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))
         val result = foldSessionUpdates(
             sessions,
@@ -115,12 +117,26 @@ class SessionUpdatePumpTest {
     }
 
     @Test
+    fun naturalCancelledTurnDoneClearsRunningWithoutIgnoreStamp() {
+        // B1: ACP session/prompt stopReason=="cancelled" with no local cancel stamp must clear.
+        val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))
+        val result = foldSessionUpdates(
+            sessions,
+            listOf(SessionUpdate("s1", CodeUpdate.TurnDone("cancelled"))),
+            now = 103L,
+            suppressRunningFromChunks = emptySet(),
+            ignoreStaleCancelTurnDone = emptySet(),
+        )
+        assertFalse(result.sessions!!["s1"]!!.running)
+    }
+
+    @Test
     fun naturalTurnDoneClearsRunningEvenWithoutSuppress() {
         val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))
         val result = foldSessionUpdates(
             sessions,
             listOf(SessionUpdate("s1", CodeUpdate.TurnDone("end_turn"))),
-            now = 103L,
+            now = 104L,
             suppressRunningFromChunks = emptySet(),
         )
         assertFalse(result.sessions!!["s1"]!!.running)

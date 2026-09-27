@@ -77,6 +77,8 @@ internal object CodeSessionFolder {
         now: Long = System.currentTimeMillis(),
         liveSeq: Long? = null,
         suppressRunningFromChunks: Boolean = false,
+        /** True when hub.prompt accepted after a local cancel — ignore that cancel's TurnDone. */
+        ignoreStaleCancelTurnDone: Boolean = false,
     ): CodeSessionState {
         // Slash-command list is session UI state, not transcript; keep fold side-effect free.
         if (update is CodeUpdate.AvailableCommands) {
@@ -84,10 +86,10 @@ internal object CodeSessionFolder {
         }
         val events = TranscriptReducer.apply(state.events, update, now)
         val running = when (update) {
-            // H1: stale cancel TurnDone after a newer prompt claimed the session must not
-            // clear running. Honor cancelled only while the cancel-suppress flag is still set.
+            // B1/H1: only a *stale* local-cancel TurnDone (superseded by a newer prompt) keeps
+            // running. Natural ACP stopReason=="cancelled" (no ignore stamp) clears running.
             is CodeUpdate.TurnDone -> when {
-                update.stopReason == "cancelled" && !suppressRunningFromChunks -> state.running
+                update.stopReason == "cancelled" && ignoreStaleCancelTurnDone -> state.running
                 else -> false
             }
             is CodeUpdate.TextChunk, is CodeUpdate.ImageChunk, is CodeUpdate.ToolPatch ->
@@ -144,6 +146,7 @@ internal fun foldSessionUpdates(
     now: Long = System.currentTimeMillis(),
     liveSeqOf: (CodeSessionState, String) -> Long? = { _, _ -> null },
     suppressRunningFromChunks: Set<String> = emptySet(),
+    ignoreStaleCancelTurnDone: Set<String> = emptySet(),
 ): SessionFoldResult {
     if (batch.isEmpty()) return SessionFoldResult(null, false)
     val touched = HashMap<String, CodeSessionState>()
@@ -156,6 +159,7 @@ internal fun foldSessionUpdates(
             now,
             liveSeqOf(cur, u.sessionId),
             suppressRunningFromChunks = u.sessionId in suppressRunningFromChunks,
+            ignoreStaleCancelTurnDone = u.sessionId in ignoreStaleCancelTurnDone,
         )
         if (CodeSessionFolder.needsPersist(u.update)) needsPersist = true
     }
