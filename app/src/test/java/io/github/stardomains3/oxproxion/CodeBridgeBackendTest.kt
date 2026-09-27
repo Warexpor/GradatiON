@@ -1026,7 +1026,8 @@ class CodeBridgeBackendTest {
             }
             assertTrue(promptsBeforeCancel >= 1)
             backend.cancel("s1")
-            backend.prompt("s1", text)
+            // prompt() awaits the full turn — run it in the background like other tests.
+            val promptJob = scope.launch { backend.prompt("s1", text) }
             withTimeout(5_000) {
                 while (transport.sent.count {
                     it.contains("session/prompt") && it.contains(text)
@@ -1038,6 +1039,8 @@ class CodeBridgeBackendTest {
                     it.contains("session/prompt") && it.contains(text)
                 } >= promptsBeforeCancel + 1,
             )
+            transport.replyToPending({ it == "session/prompt" }, """{"stopReason":"end_turn"}""")
+            withTimeout(3_000) { promptJob.join() }
         } finally {
             answers.cancel()
             backend.close()
