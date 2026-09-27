@@ -74,15 +74,21 @@ android {
         }
         getByName("debug") {
             isDebuggable = true
-            // Separate .dev app so it installs next to the release build.
-            applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
-            signingConfig = signingConfigs.getByName("dev")
             // Dev APK: arm64 phones + x86_64 emulators only (drops unused 32-bit ABIs).
             ndk {
                 abiFilters.clear()
                 abiFilters += listOf("arm64-v8a", "x86_64")
             }
+        }
+        // Dev APK for the phone: release-like R8 build (same keep rules) with real names kept,
+        // installed as a separate .dev app and signed with the committed dev key.
+        create("dev") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            signingConfig = signingConfigs.getByName("dev")
+            matchingFallbacks += listOf("release")
+            proguardFiles("proguard-dev.pro")
         }
     }
     buildFeatures {
