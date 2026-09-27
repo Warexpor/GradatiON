@@ -752,6 +752,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             // First autosave often mints the id after swipe alts were seeded in-memory only.
             persistRpSwipeState()
             persistRpPins(sessionId, messagesToSave)
+            draftRpFacts?.let {
+                sharedPreferencesHelper.saveRpFacts(sessionId, it)
+                draftRpFacts = null
+            }
             persistForkToPrefs()
         }
     }
@@ -920,6 +924,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             currentSessionId = sessionId
+            draftRpFacts = null
             _chatMessages.value = messages.map {
                 FlexibleMessage(
                     role = it.role,
@@ -4143,11 +4148,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /** Message count at the last memory upkeep, per chat (see [RpAutoMemory.shouldUpdate]). */
     private val rpMemoryRunAt = HashMap<Long, Int>()
     private var rpMemoryJob: Job? = null
+    /** Facts for a chat that does not have a session id yet (a new chat, before the first save). */
+    private var draftRpFacts: String? = null
+
+    fun currentRpFacts(): String {
+        draftRpFacts?.let { return it }
+        val id = currentSessionId ?: return ""
+        return sharedPreferencesHelper.getRpFacts(id)
+    }
+
+    fun saveCurrentRpFacts(text: String) {
+        val clean = text.trim()
+        val id = currentSessionId
+        if (id == null) {
+            draftRpFacts = clean
+        } else {
+            draftRpFacts = null
+            sharedPreferencesHelper.saveRpFacts(id, clean)
+        }
+    }
 
     /**
-     * After a finished RP reply: once the chat nears the API window, have the model fold the story
-     * so far into this character's Memory, in the background. Never blocks or touches the chat;
-     * any failure just leaves Memory as it was.
+     * After a finished RP reply: once the chat nears the API window, have the model rewrite this
+     * chat's Facts. The Memory note the user wrote is passed in as read-only and is not saved over.
      */
     private fun maybeUpdateRpMemory(latestReply: String) {
         if (!sharedPreferencesHelper.isRpAutoMemory() || rpMemoryJob?.isActive == true) return
@@ -4172,8 +4195,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         val charName = if (llm) getApplication<Application>().getString(R.string.rp_llm_speaker) else character!!.name
         val userName = sharedPreferencesHelper.getRpPersonaName().ifBlank { "User" }
-        val memory = sharedPreferencesHelper.getRpMemory(characterId)
-        val prompt = RpAutoMemory.prompt(charName, userName, memory, RpAutoMemory.transcript(turns, charName, userName))
+        val userMemory = sharedPreferencesHelper.getRpMemory(characterId)
+        val facts = currentRpFacts()
+        val prompt = RpAutoMemory.prompt(
+            charName, userName, userMemory, facts, RpAutoMemory.transcript(turns, charName, userName)
+        )
         val isLan = activeModelIsLan() && !demo
         val endpoint = if (isLan) sharedPreferencesHelper.getLanEndpoint()?.takeIf { it.isNotBlank() }?.let { "$it/v1/chat/completions" }
             else "https://openrouter.ai/api/v1/chat/completions"
@@ -4192,7 +4218,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
             val note = RpAutoMemory.clean(reply)
             // The user may have switched characters meanwhile; the note belongs to the one it was built for.
-            if (note != null) sharedPreferencesHelper.saveRpMemory(characterId, note)
+            if (note != null) saveCurrentRpFacts(note)
             rpMemoryRunAt[sessionKey] = RpAutoMemory.watermarkAfter(previousRun, turns.size, note != null)
         }
     }
@@ -4326,7 +4352,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         setChatMode(next)
     }
 
-    fun startRpChatWithCharacter(character: RpCharacter) {
+    fun startRpChatWithCharacter(character: RpCharacter, carryFacts: Boolean = false) {
+        val facts = if (carryFacts) currentRpFacts() else ""
         beginSessionTransition {
             val previous = _chatMode.value ?: ChatMode.ASK
             if (currentSessionId != null) {
@@ -4342,6 +4369,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             sharedPreferencesHelper.saveChatMode(ChatMode.RP)
             // Intentional Start chat replaces any parked keepDraftId with this greeting thread.
             clearOpenTranscript(clearDraft = true)
+            draftRpFacts = facts
             val greeting = rpDelegate.greetingMessage(character)
             _chatMessages.value = listOf(
                 FlexibleMessage(role = "assistant", content = JsonPrimitive(greeting))
@@ -4488,7 +4516,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     character = rpDelegate.getActiveCharacter(),
                     extraInstruction = parsed.reminder,
                     loreScan = rpLoreScan(parsed.userText),
-                    definitionCap = rpDefinitionCap()
+                    definitionCap = rpDefinitionCap(),
+                    facts = currentRpFacts()
                 )
                 if (epoch != sessionEpoch || !isRpMode()) {
                     _isAwaitingResponse.value = false
@@ -4591,7 +4620,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     character = rpDelegate.getActiveCharacter(),
                     extraInstruction = null,
                     loreScan = rpLoreScan(),
-                    definitionCap = rpDefinitionCap()
+                    definitionCap = rpDefinitionCap(),
+                    facts = currentRpFacts()
                 )
                 if (epoch != sessionEpoch || !isRpMode()) {
                     _isAwaitingResponse.value = false
@@ -4776,7 +4806,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val preserveParked = !persist &&
             currentSessionId == null &&
             sharedPreferencesHelper.getRpDraftSessionId(ChatMode.RP) != null
+        val facts = if (persist) currentRpFacts() else ""
         clearOpenTranscript(clearDraft = !preserveParked)
+        draftRpFacts = if (persist) facts else null
         _composerRestoreEvent.value = Event("")
         if (llm || charId == null) return
         val character = rpRepository.getCharacterById(charId) ?: return

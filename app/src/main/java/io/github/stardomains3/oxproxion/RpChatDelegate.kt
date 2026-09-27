@@ -20,7 +20,8 @@ class RpChatDelegate(
         character: RpCharacter?,
         extraInstruction: String? = null,
         loreScan: String = "",
-        definitionCap: Int? = null
+        definitionCap: Int? = null,
+        facts: String = ""
     ): String {
         val isLlm = prefs.isRpLlmMode()
         val lore = resolveLore(isLlm, character, loreScan)
@@ -41,6 +42,7 @@ class RpChatDelegate(
             showThoughts = prefs.isRpShowThoughts(),
             isLlm = isLlm,
             memory = prefs.getRpMemory(if (isLlm) null else character?.id),
+            facts = if (prefs.isRpAutoMemory()) facts else "",
             userName = prefs.getRpPersonaName(),
             definitionCap = definitionCap
         )

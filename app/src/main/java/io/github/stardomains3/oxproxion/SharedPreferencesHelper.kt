@@ -1219,6 +1219,12 @@ class SharedPreferencesHelper(context: Context) {
         else putString("rp_pins_$sessionId", json.encodeToString(keys))
     }
 
+    /** Facts the model keeps for one chat. Separate from the Memory note the user wrote. */
+    fun getRpFacts(sessionId: Long): String = mainPrefs.getString("rp_facts_$sessionId", "") ?: ""
+    fun saveRpFacts(sessionId: Long, text: String) = mainPrefs.edit {
+        if (text.isBlank()) remove("rp_facts_$sessionId") else putString("rp_facts_$sessionId", text.trim())
+    }
+
     fun getRpPendingInstruct(): String? = mainPrefs.getString(KEY_RP_PENDING_INSTRUCT, null)
     fun saveRpPendingInstruct(text: String?) {
         mainPrefs.edit {

@@ -75,9 +75,31 @@ class RpPromptEngineTest {
         assertTrue(prompt.contains("## Memory"))
         assertTrue(prompt.contains("Alex owes Mira a favor."))
         assertTrue(prompt.contains("is Alex."))
-        assertTrue("examples on their own lines", prompt.contains("\n  User: bye"))
+        assertTrue("examples on their own lines", prompt.contains("\n  Jordan: bye"))
         assertTrue(prompt.contains("Never speak, act or decide for the user"))
         assertFalse(prompt.contains("{{"))
+    }
+
+    @Test
+    fun exampleDialogUsesStandInNotTheRealUser() {
+        val char = RpCharacter(
+            id = 1, name = "Mira",
+            examplesJson = """[{"user":"{{user}} waves","char":"{{char}} waves back at {{random_user_2}}"}]"""
+        )
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = char, persona = "A pilot", lang = "en", lore = "", instruction = "",
+            thirdPerson = false, showThoughts = false, isLlm = false,
+            memory = "Keep the promise.", facts = "Others:\n- Dockmaster: runs the night pier",
+            userName = "Alex"
+        )
+        assertTrue(prompt.contains("is Alex."))
+        assertTrue(prompt.contains("## Memory"))
+        assertTrue(prompt.contains("Keep the promise."))
+        assertTrue(prompt.contains("Dockmaster: runs the night pier"))
+        assertTrue(prompt.contains("Jordan: Jordan waves"))
+        assertTrue(prompt.contains("Mira: Mira waves back at Riley"))
+        assertFalse(prompt.contains("Alex: Jordan"))
+        assertFalse(prompt.contains("Alex waves"))
     }
 
     @Test

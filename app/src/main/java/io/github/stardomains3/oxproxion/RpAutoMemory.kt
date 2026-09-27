@@ -54,17 +54,21 @@ object RpAutoMemory {
         return out.joinToString("\n")
     }
 
-    fun prompt(charName: String, userName: String, memory: String, transcript: String): String = buildString {
-        append("You keep the memory notes for an ongoing story between ")
+    fun prompt(charName: String, userName: String, userMemory: String, facts: String, transcript: String): String = buildString {
+        append("You keep the fact notes for an ongoing story between ")
         append(charName).append(" and ").append(userName).append(".\n\n")
-        append("Current memory:\n").append(memory.ifBlank { "(empty)" }).append("\n\n")
+        append("Memory the user wrote (already kept; do not repeat it and do not change it):\n")
+        append(userMemory.ifBlank { "(empty)" }).append("\n\n")
+        append("Current facts:\n").append(facts.ifBlank { "(empty)" }).append("\n\n")
         append("Recent story:\n```\n").append(transcript).append("\n```\n\n")
-        append("Rewrite the memory so it holds the facts the story needs later: names, relationships, ")
-        append("promises and debts, where things are, what happened that matters, and how ")
-        append(charName).append(" feels about ").append(userName).append(". ")
-        append("Keep facts from the current memory unless the story changed them. Drop small talk and scenery. ")
-        append("Write short plain lines starting with \"- \", at most 12 lines, no headings, no Markdown ")
-        append("beyond the dashes, no commentary. Reply with the lines only.")
+        append("Rewrite the facts so they hold what the story needs later. Use exactly these sections, ")
+        append("and omit a section if it has nothing:\n")
+        append("About you:\n- lines about ").append(userName).append("\n")
+        append("About the character:\n- lines about ").append(charName).append("\n")
+        append("Others:\n- Name: one fact about someone who is neither of them\n\n")
+        append("Keep facts that are still true. Drop small talk and scenery. ")
+        append("Write short plain lines starting with \"- \", at most 12 lines in all, no commentary. ")
+        append("Reply with the sections only.")
     }
 
     /** The model's reply as a memory note, or null when it isn't usable. */

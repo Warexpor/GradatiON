@@ -38,10 +38,12 @@ class RpAutoMemoryTest {
         assertTrue(t.lines().last().startsWith("Mira: "))
     }
 
-    @Test fun promptCarriesMemoryAndNames() {
-        val p = RpAutoMemory.prompt("Mira", "Sam", "- Owes Sam a favor", "Sam: hi")
-        assertTrue(p.contains("- Owes Sam a favor"))
-        assertTrue(p.contains("between Mira and Sam"))
+    @Test fun promptKeepsUserMemoryOutOfTheRewrite() {
+        val p = RpAutoMemory.prompt("Mira", "Sam", "Sam owes nothing", "- Dock is closed", "Sam: hi")
+        assertTrue(p.contains("Sam owes nothing"))
+        assertTrue(p.contains("do not change it"))
+        assertTrue(p.contains("- Dock is closed"))
+        assertTrue(p.contains("Others:"))
         assertTrue(p.contains("Sam: hi"))
     }
 

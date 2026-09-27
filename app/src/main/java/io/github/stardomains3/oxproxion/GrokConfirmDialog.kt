@@ -15,7 +15,9 @@ object GrokConfirmDialog {
         message: String,
         confirmText: String,
         onConfirm: () -> Unit,
-        destructive: Boolean = true
+        destructive: Boolean = true,
+        cancelText: String? = null,
+        onCancel: (() -> Unit)? = null
     ) {
         val context = fragment.requireContext()
         val dialog = GlassAlertDialogBuilder(
@@ -35,8 +37,11 @@ object GrokConfirmDialog {
             actionButton.background = ContextCompat.getDrawable(context, R.drawable.bg_glass_button)
         }
 
-        sheet.findViewById<MaterialButton>(R.id.confirmCancel).setOnClickListener {
+        val cancelButton = sheet.findViewById<MaterialButton>(R.id.confirmCancel)
+        if (cancelText != null) cancelButton.text = cancelText
+        cancelButton.setOnClickListener {
             dialog.dismiss()
+            onCancel?.invoke()
         }
         actionButton.setOnClickListener {
             dialog.dismiss()

@@ -26,12 +26,28 @@ object RpPromptEngine {
      * SillyTavern-style placeholders used by imported cards: {{char}}, {{user}} and the older
      * <BOT>/<USER>. Case-insensitive.
      */
+    private val standInNames = listOf("Alex", "Jordan", "Riley", "Casey", "Morgan", "Quinn")
+
+    /** A name that is not [avoid], so an example line is not this user. */
+    fun standInName(index: Int, avoid: String): String {
+        val pool = standInNames.filter { !it.equals(avoid, ignoreCase = true) }.ifEmpty { standInNames }
+        val n = index.coerceAtLeast(1)
+        return pool[(n - 1) % pool.size]
+    }
+
     fun expandMacros(text: String, charName: String, userName: String): String {
         if (text.isEmpty()) return text
-        return text
+        val withStandIns = Regex("""\{\{\s*random_user_(\d+)\s*}}""", RegexOption.IGNORE_CASE).replace(text) { match ->
+            standInName(match.groupValues[1].toIntOrNull() ?: 1, userName)
+        }
+        return withStandIns
             .replace(Regex("""\{\{\s*char\s*}}|<BOT>""", RegexOption.IGNORE_CASE), charName)
             .replace(Regex("""\{\{\s*user\s*}}|<USER>""", RegexOption.IGNORE_CASE), userName)
     }
+
+    /** Example dialogs: {{user}} is a stand-in, not the person in this chat. */
+    fun expandExampleMacros(text: String, charName: String, realUserName: String): String =
+        expandMacros(text, charName, standInName(1, realUserName))
 
     fun buildSystemPrompt(
         character: RpCharacter?,
@@ -43,6 +59,7 @@ object RpPromptEngine {
         showThoughts: Boolean,
         isLlm: Boolean,
         memory: String = "",
+        facts: String = "",
         userName: String = "",
         definitionCap: Int? = null
     ): String {
@@ -155,11 +172,14 @@ object RpPromptEngine {
                     if (char.scenario.isNotBlank()) append("\nScenario: ${macro(char.scenario)}")
                     val examples = parseExamples(char.examplesJson)
                     if (examples.isNotEmpty()) {
-                        append("\nExample dialogs:")
+                        val sampleUser = standInName(1, who)
+                        val charName = char.name
+                        append("\nExample dialogs (other conversations, not this one):")
                         examples.forEach { ex ->
                             if (ex.user.isNotBlank() || ex.char.isNotBlank()) {
-                                if (ex.user.isNotBlank()) append("\n  User: ${macro(ex.user)}")
-                                if (ex.char.isNotBlank()) append("\n  You: ${macro(ex.char)}")
+                                val say = { line: String -> expandExampleMacros(line, charName, who) }
+                                if (ex.user.isNotBlank()) append("\n  $sampleUser: ${say(ex.user)}")
+                                if (ex.char.isNotBlank()) append("\n  $charName: ${say(ex.char)}")
                             }
                         }
                     }
@@ -176,8 +196,12 @@ object RpPromptEngine {
         }
         val memoryText = memory.trim().take(MEMORY_MAX_CHARS)
         if (memoryText.isNotBlank()) {
-            // After the card and lore, so long chats keep what matters once old turns fall out of memory.
-            parts.add("\n## Memory (facts established in this story; keep them true)\n${macro(memoryText)}")
+            // Written by the user. Auto-rewrite is not allowed to replace this.
+            parts.add("\n## Memory (the user asked to keep this true)\n${macro(memoryText)}")
+        }
+        val factsText = facts.trim().take(MEMORY_MAX_CHARS)
+        if (factsText.isNotBlank()) {
+            parts.add("\n## Facts (from this story, including other people)\n${macro(factsText)}")
         }
         if (instruction.isNotBlank()) {
             parts.add("\nAdditional instruction: $instruction")

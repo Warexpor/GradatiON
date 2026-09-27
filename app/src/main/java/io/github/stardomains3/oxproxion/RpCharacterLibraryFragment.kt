@@ -113,21 +113,32 @@ class RpCharacterLibraryFragment : Fragment() {
     }
 
     private fun activateCharacter(character: RpCharacter) {
-        val proceed = {
-            chatViewModel.startRpChatWithCharacter(character)
+        val start = { carry: Boolean ->
+            chatViewModel.startRpChatWithCharacter(character, carry)
             popToChat()
         }
-        if (chatViewModel.rpStartChatNeedsConfirm()) {
+        if (chatViewModel.currentRpFacts().isNotBlank()) {
+            GrokConfirmDialog.show(
+                fragment = this,
+                title = getString(R.string.rp_facts_choice_title),
+                message = getString(R.string.rp_facts_choice_body),
+                confirmText = getString(R.string.rp_facts_carry),
+                onConfirm = { start(true) },
+                destructive = false,
+                cancelText = getString(R.string.rp_facts_fresh),
+                onCancel = { start(false) }
+            )
+        } else if (chatViewModel.rpStartChatNeedsConfirm()) {
             GrokConfirmDialog.show(
                 fragment = this,
                 title = getString(R.string.rp_new_chat_title),
                 message = getString(R.string.rp_new_chat_body, character.name),
                 confirmText = getString(R.string.rp_new_chat_confirm),
-                onConfirm = proceed,
+                onConfirm = { start(false) },
                 destructive = false
             )
         } else {
-            proceed()
+            start(false)
         }
     }
 

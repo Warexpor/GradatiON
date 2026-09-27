@@ -5693,7 +5693,9 @@ $cleanContent
         val hasMemory = memory.isNotBlank()
         val personaName = sharedPreferencesHelper.getRpPersonaName()
         val tiles = buildList {
-            add(RpCharacterPanel.Tile(R.string.rp_panel_memory, R.drawable.ic_memory, on = hasMemory, preview = memory.takeIf { hasMemory }) { editRpMemory(memoryId, title) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_memory, R.drawable.ic_memory, on = hasMemory || viewModel.currentRpFacts().isNotBlank(), preview = memory.takeIf { hasMemory } ?: viewModel.currentRpFacts().takeIf { it.isNotBlank() }) {
+                menuButton.post { showRpMemoryMenu(memoryId, title) }
+            })
             add(RpCharacterPanel.Tile(R.string.rp_panel_history, R.drawable.rp_ic_archive) { openHistoryPanel() })
             val voice = sharedPreferencesHelper.getRpVoice(memoryId)
             val tts = if (::textToSpeech.isInitialized) textToSpeech else null
@@ -5837,6 +5839,33 @@ $cleanContent
         }
     }
 
+    private fun showRpMemoryMenu(characterId: Long?, name: String) {
+        val rows = listOf(
+            PickerPopover.Row(
+                title = getString(R.string.rp_memory_note),
+                subtitle = getString(R.string.rp_memory_hint),
+                iconRes = R.drawable.ic_memory
+            ) { editRpMemory(characterId, name) },
+            PickerPopover.Row(
+                title = getString(R.string.rp_facts_title),
+                subtitle = getString(R.string.rp_facts_hint),
+                iconRes = R.drawable.ic_memory
+            ) { editRpFacts(name) }
+        )
+        newPopover()?.show(getString(R.string.rp_panel_memory), rows, emptyList())
+    }
+
+    private fun editRpFacts(name: String) {
+        GrokInputDialog.show(
+            fragment = this,
+            title = getString(R.string.rp_facts_title) + " · " + name,
+            hint = getString(R.string.rp_facts_hint),
+            initialText = viewModel.currentRpFacts(),
+            confirmText = getString(R.string.rp_memory_save),
+            multiline = true
+        ) { text -> viewModel.saveCurrentRpFacts(text) }
+    }
+
     private fun editRpMemory(characterId: Long?, name: String) {
         GrokInputDialog.show(
             fragment = this,
@@ -5859,18 +5888,29 @@ $cleanContent
     }
 
     private fun startRpWith(character: RpCharacter) {
-        val proceed = { viewModel.startRpChatWithCharacter(character) }
-        if (viewModel.rpStartChatNeedsConfirm()) {
+        val start = { carry: Boolean -> viewModel.startRpChatWithCharacter(character, carry) }
+        if (viewModel.currentRpFacts().isNotBlank()) {
+            GrokConfirmDialog.show(
+                fragment = this,
+                title = getString(R.string.rp_facts_choice_title),
+                message = getString(R.string.rp_facts_choice_body),
+                confirmText = getString(R.string.rp_facts_carry),
+                onConfirm = { start(true) },
+                destructive = false,
+                cancelText = getString(R.string.rp_facts_fresh),
+                onCancel = { start(false) }
+            )
+        } else if (viewModel.rpStartChatNeedsConfirm()) {
             GrokConfirmDialog.show(
                 fragment = this,
                 title = getString(R.string.rp_new_chat_title),
                 message = getString(R.string.rp_new_chat_body, character.name),
                 confirmText = getString(R.string.rp_new_chat_confirm),
-                onConfirm = proceed,
+                onConfirm = { start(false) },
                 destructive = false
             )
         } else {
-            proceed()
+            start(false)
         }
     }
 
