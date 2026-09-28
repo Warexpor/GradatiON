@@ -1,46 +1,59 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Model row: maker mark, name, one quiet line. The row in use sits on a soft fill with a check. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/modelRowRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="8dp"
-    android:background="@drawable/bg_model_picker_row"
+    android:background="@drawable/bg_model_row"
     android:clickable="true"
-    android:focusable="true"
-    android:foreground="?android:attr/selectableItemBackground">
+    android:focusable="true">
 
     <LinearLayout
         android:id="@+id/modelRowContent"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
+        android:minHeight="64dp"
         android:orientation="horizontal"
         android:paddingStart="12dp"
-        android:paddingTop="12dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="12dp">
+        android:paddingTop="10dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="10dp">
 
         <FrameLayout
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginEnd="12dp"
-            android:background="@drawable/bg_model_icon_circle">
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_model_mark">
 
             <ImageView
                 android:id="@+id/iconModelType"
                 android:layout_width="22dp"
                 android:layout_height="22dp"
                 android:layout_gravity="center"
-                app:srcCompat="@drawable/ic_vision"
+                android:importantForAccessibility="no"
                 app:tint="@color/xai_ink"
-                tools:ignore="ContentDescription" />
+                tools:src="@drawable/ic_brand_claude" />
+
+            <TextView
+                android:id="@+id/textModelMonogram"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:importantForAccessibility="no"
+                android:includeFontPadding="false"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp"
+                android:textFontWeight="700"
+                android:visibility="gone"
+                tools:text="B" />
         </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -53,7 +66,7 @@
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp"
                 android:textFontWeight="600"
-                tools:text="Grok 3 Mini" />
+                tools:text="Claude Sonnet 4" />
 
             <TextView
                 android:id="@+id/textModelSubtitle"
@@ -64,51 +77,19 @@
                 android:maxLines="1"
                 android:textColor="@color/xai_mute"
                 android:textSize="13sp"
-                tools:text="x-ai/grok-3-mini" />
-
-            <TextView
-                android:id="@+id/textModelBadges"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textColor="@color/xai_mute"
-                android:textSize="12sp"
-                android:visibility="gone"
-                tools:text="Free · Vision"
-                tools:visibility="visible" />
+                tools:text="Anthropic · Vision" />
         </LinearLayout>
 
-        <ImageView
-            android:id="@+id/iconModelSource"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:layout_marginStart="8dp"
-            android:contentDescription="@string/model_picker_source"
-            tools:src="@drawable/ic_lan2" />
-
+        <!-- Trailing mark: a check on the model in use, a plus in the catalogs. -->
         <ImageView
             android:id="@+id/iconSelected"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="4dp"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginStart="10dp"
             android:contentDescription="@string/model_picker_active"
-            android:padding="4dp"
             android:src="@drawable/ic_check"
             android:visibility="gone"
             app:tint="@color/xai_ink"
             tools:visibility="visible" />
-
-        <ImageView
-            android:id="@+id/iconEdit"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="2dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/model_picker_more"
-            android:padding="8dp"
-            android:src="@drawable/ic_more_vert"
-            app:tint="@color/xai_mute" />
     </LinearLayout>
 </FrameLayout>

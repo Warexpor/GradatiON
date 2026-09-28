@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.EditText
 import androidx.core.graphics.toColorInt
+import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -71,6 +72,10 @@ class EditModelDialogFragment : DialogFragment() {
             switchIsFree.isChecked = m.isFree
             builder.setTitle(R.string.edit_model_title)
         } ?: builder.setTitle(R.string.add_model_title)
+
+        // Cloud models are asked for reasoning whenever it's on; only local servers need telling.
+        switchReason.isVisible = switchLan.isChecked
+        switchLan.setOnCheckedChangeListener { _, lan -> switchReason.isVisible = lan }
 
         /* ----------  buttons  ---------- */
         builder.setView(view)

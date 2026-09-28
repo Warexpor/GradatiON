@@ -150,6 +150,8 @@ internal interface ChatStreamHost {
     var discardableRpAssistantInFlight: Boolean
     var toolCallsHandledForTurn: Boolean
     fun isReasoningModel(modelIdentifier: String?): Boolean
+    /** Worth asking for reasoning: known reasoning models, plus cloud models OpenRouter can ignore it on. */
+    fun canRequestReasoning(modelIdentifier: String?): Boolean = isReasoningModel(modelIdentifier)
     fun isImageGenerationModel(modelIdentifier: String?): Boolean
     fun isRpMode(): Boolean
     fun activeModelIsLan(): Boolean
@@ -202,6 +204,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
         set(value) { host.toolCallsHandledForTurn = value }
 
     private fun isReasoningModel(modelIdentifier: String?) = host.isReasoningModel(modelIdentifier)
+    private fun canRequestReasoning(modelIdentifier: String?) = host.canRequestReasoning(modelIdentifier)
     private fun isImageGenerationModel(modelIdentifier: String?) = host.isImageGenerationModel(modelIdentifier)
     private fun isRpMode() = host.isRpMode()
     private fun activeModelIsLan() = host.activeModelIsLan()
@@ -616,7 +619,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     ImageConfig(aspectRatio = aspectRatio)
                 } else null,
                 // === REASONING CONFIG ===
-                reasoning = if (_isReasoningEnabled.value == true && isReasoningModel(_activeChatModel.value)) {
+                reasoning = if (_isReasoningEnabled.value == true && canRequestReasoning(_activeChatModel.value)) {
                     if (sharedPreferencesHelper.getAdvancedReasoningEnabled()) {
                         Reasoning(
                             enabled = true,
@@ -1112,7 +1115,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     //logprobs = null,
                     //  usage = UsageRequest(include = true),
                     max_tokens = maxTokens,
-                    reasoning = if (_isReasoningEnabled.value == true && isReasoningModel(
+                    reasoning = if (_isReasoningEnabled.value == true && canRequestReasoning(
                             _activeChatModel.value
                         )
                     ) {

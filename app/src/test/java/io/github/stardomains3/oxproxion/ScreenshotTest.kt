@@ -310,7 +310,7 @@ class ScreenshotTest {
         val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
         val holder = rv.findViewHolderForAdapterPosition(1) as ChatAdapter.AssistantViewHolder
         // As bindTextOnly does for the live row: action icons wait until the reply lands.
-        holder.itemView.findViewById<View>(R.id.aiActionRow).visibility = View.GONE
+        holder.itemView.findViewById<View>(R.id.aiActionRow).visibility = View.INVISIBLE
         val full = """
             Dividing by **√d** keeps the dot products from growing with the key size.
 
@@ -572,7 +572,6 @@ class ScreenshotTest {
             "licenses_dark" to { LicenseListFragment() },
             "advanced_reasoning_dark" to { AdvancedReasoningFragment() },
             "lan_models_dark" to { LanModelsFragment() },
-            "openrouter_models_dark" to { OpenRouterModelsFragment() },
             "add_prompt_dark" to { AddEditPromptFragment() },
             "add_system_message_dark" to { AddEditSystemMessageFragment() },
             "preset_edit_dark" to { PresetEditFragment.newInstance(null) },
@@ -918,6 +917,31 @@ class ScreenshotTest {
         val footer = a.findViewById<android.view.ViewGroup>(R.id.popoverFooter)
         footer.getChildAt(0).performClick(); idle()
         snap(root(a), "manage_models_dark")
+        // Long-press a row: the options sheet names the model, then Edit / Open page / Remove.
+        val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recyclerViewModels)
+        val row = (0 until list.childCount).map { list.getChildAt(it) }.first {
+            it.findViewById<android.widget.TextView>(R.id.textModelName).text != "Free"
+        }
+        row.performLongClick(); idle()
+        snapDialog(a, "model_options_dark")
+        org.robolectric.shadows.ShadowDialog.getLatestDialog()?.dismiss(); idle()
+        // The add button's menu: catalog, local network, or by id.
+        a.findViewById<View>(R.id.modelPickerAdd).performClick(); idle()
+        snap(root(a), "models_add_menu_dark")
+    }
+
+    @Test fun openRouterCatalogDark() = withChat { a, _ ->
+        SharedPreferencesHelper(a).saveOpenRouterModels(listOf(
+            LlmModel("Anthropic: Claude Opus 4.1", "anthropic/claude-opus-4.1", isVisionCapable = true, isReasoningCapable = true, created = 5),
+            LlmModel("OpenAI: GPT-5", "openai/gpt-5", isVisionCapable = true, isReasoningCapable = true, created = 6),
+            LlmModel("Google: Gemini 2.5 Flash Image", "google/gemini-2.5-flash-image", isVisionCapable = true, isImageGenerationCapable = true, created = 4),
+            LlmModel("DeepSeek: V3.1 (free)", "deepseek/deepseek-chat-v3.1:free", isVisionCapable = false, created = 3),
+            LlmModel("Mistral: Magistral Medium", "mistralai/magistral-medium-2506", isVisionCapable = false, created = 2),
+            LlmModel("Qwen: Qwen3 Coder", "qwen/qwen3-coder", isVisionCapable = false, created = 1),
+            LlmModel("Sao10K: Euryale 70B", "sao10k/l3-euryale-70b", isVisionCapable = false, created = 0),
+        ))
+        pushFragment(a, OpenRouterModelsFragment())
+        snap(root(a), "openrouter_models_dark")
     }
 
     /** Regression: the grabber panel must follow a downward drag and dismiss on release. */
@@ -1227,6 +1251,21 @@ class ScreenshotTest {
         snap(root(a), "history_close_mid_dark")
     }
 
+    /** Mid-swipe the tab highlight is part way: neither tab is fully lit, neither fully dim. */
+    @Test fun tabHighlightFollowsTheSwipe() = withChat { a, chat ->
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        val root = chat.requireView()
+        drag(root, -root.width * 0.5f, release = false, stepMs = 40L)
+        val ink = androidx.core.content.ContextCompat.getColor(a, R.color.xai_ink)
+        val mute = androidx.core.content.ContextCompat.getColor(a, R.color.xai_mute)
+        val chatTab = a.findViewById<android.widget.TextView>(R.id.tabChat).currentTextColor
+        val rpTab = a.findViewById<android.widget.TextView>(R.id.tabRoleplay).currentTextColor
+        for (c in listOf(chatTab, rpTab)) {
+            org.junit.Assert.assertNotEquals(ink, c)
+            org.junit.Assert.assertNotEquals(mute, c)
+        }
+    }
+
     /** A cancelled swipe with animations on must leave every page (composer included) home. */
     @Test fun swipeCancelWithAnimationsLeavesPagesHome() = withChat { a, chat ->
         Settings.Global.putFloat(a.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
@@ -1291,10 +1330,27 @@ class ScreenshotTest {
         val vh = adapter.onCreateViewHolder(rv, ChatAdapter.VIEW_TYPE_ASSISTANT)
         adapter.replyInFlight = true
         adapter.onBindViewHolder(vh, last)
-        org.junit.Assert.assertEquals(View.GONE, vh.itemView.findViewById<View>(R.id.aiActionRow).visibility)
+        // Invisible, not gone: the row's space is held so the finished reply doesn't jump.
+        org.junit.Assert.assertEquals(View.INVISIBLE, vh.itemView.findViewById<View>(R.id.aiActionRow).visibility)
         adapter.replyInFlight = false
         adapter.onBindViewHolder(vh, last)
         org.junit.Assert.assertEquals(View.VISIBLE, vh.itemView.findViewById<View>(R.id.aiActionRow).visibility)
+    }
+
+    /** Thoughts stay folded while the reply streams, and the Thoughts tile hides them outright. */
+    @Test fun thinkingStaysFoldedWhileStreaming() = withChat { a, _ ->
+        seedConversation(a); idle()
+        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        val adapter = rv.adapter as ChatAdapter
+        val vh = adapter.onCreateViewHolder(rv, ChatAdapter.VIEW_TYPE_ASSISTANT) as ChatAdapter.AssistantViewHolder
+        val thinking = FlexibleMessage("assistant", JsonPrimitive(""), reasoning = "Scores grow with d, so scale them.")
+        vh.bindTextOnly(thinking)
+        org.junit.Assert.assertEquals(View.VISIBLE, vh.itemView.findViewById<View>(R.id.reasoningBlock).visibility)
+        org.junit.Assert.assertEquals(View.GONE, vh.itemView.findViewById<View>(R.id.reasoningTextView).visibility)
+        adapter.showThinking = false
+        vh.bindTextOnly(thinking)
+        org.junit.Assert.assertEquals(View.GONE, vh.itemView.findViewById<View>(R.id.reasoningBlock).visibility)
+        adapter.showThinking = true
     }
 
     @Test fun grainMigratesToDrift() {

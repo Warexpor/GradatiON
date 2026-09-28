@@ -14,7 +14,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.appbar.MaterialToolbar
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -58,36 +57,26 @@ class LanModelsFragment : Fragment() {
 
         viewModel = ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[ChatViewModel::class.java]
 
-        val toolbar = view.findViewById<MaterialToolbar>(R.id.toolbar)
         val provider = viewModel.getCurrentLanProvider()
         val title = when (provider) {
-            "lm_studio" -> "LM Studio Models"
-            "llama_cpp" -> "llama.cpp Models"
-            "mlx_lm" -> "MLX LM Models"
-            "ollama" -> "Ollama Models"
-            "omlx" -> "oMLX Models"
-            "nativ" -> "Nativ Models"
-            "hermes_agent" -> "Hermes Agent Model"
-            else -> "LAN Models"
+            "lm_studio" -> "LM Studio"
+            "llama_cpp" -> "llama.cpp"
+            "mlx_lm" -> "MLX LM"
+            "ollama" -> "Ollama"
+            "omlx" -> "oMLX"
+            "nativ" -> "Nativ"
+            "hermes_agent" -> "Hermes Agent"
+            else -> getString(R.string.model_lan_title)
         }
-        toolbar.title = title
+        view.findViewById<android.widget.TextView>(R.id.lanTitle).text = title
 
         // CANCEL BEFORE BACK
-        toolbar.setNavigationOnClickListener {
+        view.findViewById<View>(R.id.lanBack).setOnClickListener {
             viewModel.cancelCurrentRequest()
             parentFragmentManager.popBackStack()
         }
 
-        toolbar.setOnMenuItemClickListener { menuItem ->
-            when (menuItem.itemId) {
-                R.id.action_refresh_models -> {
-                    // NEW: Check permission before manual refresh
-                    checkLocalNetworkAndFetch()
-                    true
-                }
-                else -> false
-            }
-        }
+        view.findViewById<View>(R.id.lanRefresh).setOnClickListener { checkLocalNetworkAndFetch() }
 
         recyclerView = view.findViewById(R.id.recyclerViewLanModels)
         recyclerView.layoutManager = LinearLayoutManager(context)

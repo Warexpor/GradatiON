@@ -1211,7 +1211,23 @@
                         app:iconPadding="8dp"
                         app:iconGravity="textStart"
                         android:text="@string/control_web"
+                        android:visibility="gone"
                         app:icon="@drawable/ic_websearch" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/thoughtsButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:textSize="14sp"
+                        app:iconSize="20dp"
+                        app:iconPadding="8dp"
+                        app:iconGravity="textStart"
+                        android:contentDescription="@string/control_thoughts_a11y"
+                        android:text="@string/control_thoughts"
+                        app:icon="@drawable/ic_reasoning" />
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/streamButton"
                         style="@style/Widget.Gradation.ControlTile"

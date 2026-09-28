@@ -1393,12 +1393,15 @@
                     </LinearLayout>
 
                     <View
+                        android:visibility="gone"
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
                         android:layout_marginStart="16dp"
                         android:background="@color/xai_hairline" />
 
+                    <!-- Web search left the chat chrome, so its auto-off switch has nothing to act on. -->
                     <LinearLayout
+                        android:visibility="gone"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:gravity="center_vertical"

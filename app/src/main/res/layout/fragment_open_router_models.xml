@@ -1,196 +1,129 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- OpenRouter catalog: back | title | refresh, search, one line of chips, rows with a plus to add -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:fitsSystemWindows="true"
     android:background="@color/xai_canvas"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical"
     tools:context=".OpenRouterModelsFragment">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
-        android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        app:title="@string/openrouter_models_title"
-        app:titleTextColor="@color/xai_ink"
-        android:background="@color/xai_canvas"
-        app:navigationIcon="@drawable/is_backarrow"
-        app:navigationIconTint="@color/xai_ink"
-        app:menu="@menu/open_router_models_menu" />
-
     <LinearLayout
-        android:id="@+id/infoCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="16dp"
+        android:minHeight="60dp"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="8dp"
         android:paddingEnd="12dp"
-        android:paddingTop="12dp"
-        android:paddingBottom="12dp"
-        android:background="@color/xai_canvas">
+        android:paddingBottom="4dp">
+
+        <ImageButton
+            android:id="@+id/catalogBack"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_circle_tonal"
+            android:contentDescription="@string/cd_back"
+            android:padding="10dp"
+            android:src="@drawable/is_backarrow"
+            android:stateListAnimator="@animator/glass_press"
+            app:tint="@color/xai_ink" />
 
         <TextView
-            android:id="@+id/infoText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
             android:layout_weight="1"
-            android:layout_marginEnd="8dp"
-            android:text="@string/openrouter_models_info"
-            android:textColor="@color/xai_mute"
-            android:textSize="14sp" />
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/model_catalog_title"
+            android:textColor="@color/xai_ink"
+            android:textSize="24sp"
+            android:textFontWeight="700" />
 
-        <ImageView
-            android:id="@+id/closeInfoButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/cd_close"
-            app:tint="@color/xai_mute"
-            android:src="@drawable/ic_close" />
-
+        <ImageButton
+            android:id="@+id/catalogRefresh"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_circle_tonal"
+            android:contentDescription="@string/model_catalog_refresh"
+            android:padding="11dp"
+            android:src="@drawable/ic_refresh"
+            android:stateListAnimator="@animator/glass_press"
+            app:tint="@color/xai_ink" />
     </LinearLayout>
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingTop="8dp"
-        android:paddingStart="8dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/bg_history_search_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
         android:paddingEnd="8dp">
 
-        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
-            android:id="@+id/sortBar"
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_search_stroke"
+            app:tint="@color/xai_mute" />
+
+        <EditText
+            android:id="@+id/catalogSearchInput"
             android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="@string/grok_model_search_hint"
+            android:imeOptions="actionSearch"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textColor="@color/xai_ink"
+            android:textColorHint="@color/xai_mute"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:paddingStart="16dp"
+        android:paddingEnd="12dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/catalogFilterChips"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:singleSelection="true">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sortAlphabeticalButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/model_picker_sort_az"
-                app:backgroundTint="@color/toggle_background_selector"
-                app:strokeColor="@color/xai_hairline"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/sortDateButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/model_picker_sort_newest"
-                app:backgroundTint="@color/toggle_background_selector"
-                app:strokeColor="@color/xai_hairline"
-                style="?attr/materialButtonOutlinedStyle" />
-        </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
-
-        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
-            android:id="@+id/filterBar"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/sortBar"
-            android:layout_marginTop="8dp"
-            app:singleSelection="true">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/filterAllButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/model_picker_filter_all"
-                app:backgroundTint="@color/toggle_background_selector"
-                app:strokeColor="@color/xai_hairline"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/filterVisionButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/model_picker_filter_vision"
-                app:backgroundTint="@color/toggle_background_selector"
-                app:strokeColor="@color/xai_hairline"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/filterImageGenButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/model_picker_filter_image"
-                app:backgroundTint="@color/toggle_background_selector"
-                app:strokeColor="@color/xai_hairline"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/filterTranscriptionButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/model_picker_filter_transcribe"
-                app:backgroundTint="@color/toggle_background_selector"
-                app:strokeColor="@color/xai_hairline"
-                style="?attr/materialButtonOutlinedStyle" />
-        </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
-
-        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
-            android:id="@+id/costFilterBar"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/filterBar"
-            android:layout_marginTop="8dp"
-            app:singleSelection="true">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/costFilterAllButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/model_picker_filter_all"
-                app:backgroundTint="@color/toggle_background_selector"
-                app:strokeColor="@color/xai_hairline"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/costFilterFreeButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/model_picker_filter_free"
-                app:backgroundTint="@color/toggle_background_selector"
-                app:strokeColor="@color/xai_hairline"
-                style="?attr/materialButtonOutlinedStyle" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/costFilterPaidButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/model_picker_filter_paid"
-                app:backgroundTint="@color/toggle_background_selector"
-                app:strokeColor="@color/xai_hairline"
-                style="?attr/materialButtonOutlinedStyle" />
-        </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp" />
+    </HorizontalScrollView>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerViewOpenRouterModels"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:cacheColorHint="@android:color/transparent"
-        android:background="@color/xai_canvas"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:paddingStart="8dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="24dp"
+        android:scrollbars="none"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-        tools:listitem="@layout/list_item_open_router_model"
-        android:scrollbars="vertical"/>
+        tools:listitem="@layout/list_item_model" />
 
 </LinearLayout>

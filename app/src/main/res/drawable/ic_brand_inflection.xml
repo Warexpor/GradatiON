@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inflection mark (monochrome, tinted at use). Shape from LobeHub icons; the mark belongs to its owner. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M 8.341 24 c -.53 0 -.841 -.308 -.841 -.824 v -.271 c 0 -.514 .248 -.755 .708 -.926 l 1.025 -.343 c .708 -.271 .954 -.583 .954 -1.303 V 3.667 c 0 -.72 -.246 -1.029 -.954 -1.303 L 8.2 2.02 c -.46 -.171 -.701 -.408 -.701 -.926 V .824 C 7.5 .309 7.818 0 8.348 0 h 6.968 c .531 0 .85 .309 .85 .824 v .271 c 0 .514 -.249 .755 -.709 .926 l -1.031 .34 c -.743 .272 -.992 .583 -.992 1.303 v 16.664 c 0 .72 .249 1.028 .992 1.303 l 1.024 .342 c .46 .172 .708 .408 .708 .926 v .272 c 0 .515 -.318 .824 -.85 .824 L 8.342 24 z" />
+</vector>

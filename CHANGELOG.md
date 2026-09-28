@@ -3,6 +3,10 @@
 ## Unreleased — monochrome redesign
 
 ### Changed
+- Models: one clean list with each maker's mark (OpenAI, Claude, Gemini, Grok, DeepSeek, Llama, Qwen and 20+ more; a letter for the rest), the name, and one quiet line such as "Anthropic · Vision · Free". A single chip row sorts and filters. The plus opens the OpenRouter catalog, your local network, or add-by-id. Long-press a model to edit, open its page, or remove it. The OpenRouter and local-network screens share the same look, and the composer's model popover and Controls panel show the marks too.
+- Reasoning no longer depends on a per-model "reasoning" flag: any cloud model can be asked (OpenRouter ignores it where it doesn't apply). Only local models keep a "Thinks" switch, because their servers reject the parameter.
+- Controls panel: a Thoughts tile shows or hides thinking above replies. Web search left the chat chrome and was switched off once; presets can still turn it on.
+- Thinking stays folded while a reply streams, glints in gently, and opens on tap without a highlight. The finished reply's tools ease in left to right, and the view glides along with the streaming text instead of jumping a line at a time.
 - Roleplay no longer has a response-language setting. Replies follow the conversation instead of being forced into English, Russian, or Chinese.
 - Install id is `io.github.warexpor.gradation` (dev builds: `io.github.warexpor.gradation.dev`). Older `grokion` installs stay as they are and do not update into this id. Dev builds stay signed with the committed GradatiON Dev key.
 - Typography: Plus Jakarta Sans across the app, a serif-italic GradatiON wordmark in History, and larger semibold labels on big buttons and dialog actions. Back, chevron and close icons are redrawn as rounded iOS-style strokes.

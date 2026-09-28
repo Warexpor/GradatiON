@@ -319,7 +319,8 @@ class CodeComposer(
         if (models.isEmpty()) return
         pick(modelPill, context.getString(R.string.code_home_pick_model), models.map { m ->
             PickerPopover.Row(
-                title = m,
+                title = CodeModelSelection.listLabel(m),
+                subtitle = CodeModelSelection.listProvider(m),
                 selected = m == current,
                 onClick = { onPick(m) }
             )

@@ -123,7 +123,11 @@ class PresetEditFragment : Fragment() {
 
     private fun setupModelAutoComplete() {
         val allModels = getAllModels()
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, allModels.map { it.displayName })
+        val adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_dropdown_item_1line,
+            allModels.map { ModelNames.withoutProvider(it.displayName, it.apiIdentifier) },
+        )
         modelAutoComplete.setAdapter(adapter)
 
         // Use TextWatcher for immediate updates (like working EditPresetFragment)
@@ -134,7 +138,9 @@ class PresetEditFragment : Fragment() {
                 val selectedModelName = s?.toString()?.trim().orEmpty()
                 if (selectedModelName.isNotEmpty()) {
                     val allModels = getAllModels()
-                    val selectedModel = allModels.find { it.displayName == selectedModelName }
+                    val selectedModel = allModels.find {
+                        ModelNames.withoutProvider(it.displayName, it.apiIdentifier) == selectedModelName
+                    } ?: allModels.find { it.displayName == selectedModelName }
                     selectedModel?.let {
                         selectedModelIdentifier = it.apiIdentifier
                         updateSwitchVisibility()
@@ -155,7 +161,8 @@ class PresetEditFragment : Fragment() {
 
         // Set model text
         val allModels = getAllModels()
-        val modelDisplayName = allModels.find { it.apiIdentifier.equals(preset.modelIdentifier, ignoreCase = true) }?.displayName
+        val matched = allModels.find { it.apiIdentifier.equals(preset.modelIdentifier, ignoreCase = true) }
+        val modelDisplayName = matched?.let { ModelNames.withoutProvider(it.displayName, it.apiIdentifier) }
             ?: "Missing: ${preset.modelIdentifier}"
         modelAutoComplete.setText(modelDisplayName, false)
         selectedModelIdentifier = preset.modelIdentifier
@@ -181,7 +188,7 @@ class PresetEditFragment : Fragment() {
         val modelId = selectedModelIdentifier ?: return
 
         // --- Reasoning ---
-        val isReasoning = viewModel.isReasoningModel(modelId)
+        val isReasoning = viewModel.canRequestReasoning(modelId)
         // Reset if hidden
         if (!isReasoning) {
             reasoningSwitch.isChecked = false
@@ -200,7 +207,7 @@ class PresetEditFragment : Fragment() {
     }
     private fun updateReasoningVisibility() {
         val modelId = selectedModelIdentifier ?: return
-        val isReasoning = viewModel.isReasoningModel(modelId)
+        val isReasoning = viewModel.canRequestReasoning(modelId)
         reasoningSwitch.visibility = if (isReasoning) View.VISIBLE else View.GONE
     }
 
@@ -208,7 +215,7 @@ class PresetEditFragment : Fragment() {
         val builtIn = viewModel.getBuiltInModels()
         val custom = prefs.getCustomModels()
         return (builtIn + custom).distinctBy { it.apiIdentifier.lowercase() }
-            .sortedBy { it.displayName.lowercase() }
+            .sortedBy { ModelNames.withoutProvider(it.displayName, it.apiIdentifier).lowercase() }
     }
 
     private fun getAllSystemMessages(): List<SystemMessage> {
@@ -219,7 +226,9 @@ class PresetEditFragment : Fragment() {
 
     private fun getSelectedModel(): LlmModel? {
         val modelName = modelAutoComplete.text.toString().trim()
-        return getAllModels().find { it.displayName == modelName }
+        return getAllModels().find {
+            ModelNames.withoutProvider(it.displayName, it.apiIdentifier) == modelName
+        } ?: getAllModels().find { it.displayName == modelName }
     }
 
     private fun getSelectedSystemMessage(): SystemMessage? {

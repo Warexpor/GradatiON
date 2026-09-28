@@ -138,6 +138,9 @@ import kotlin.ranges.contains
 import kotlin.text.get
 import kotlin.text.set
 
+/** A mode switch's thread load lands within this; the empty-state mark treats it as the switch. */
+private const val MODE_LOAD_WINDOW_MS = 1500L
+
 interface OnKeyboardShortcutListener {
     fun handleKeyDown(keyCode: Int, event: KeyEvent?): Boolean
 }
@@ -943,7 +946,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             */
             if(hasMessages){
                 resetChatButton.icon.alpha = 255
-                if (emptyStateContainer.isVisible && emptyStateContainer.alpha > 0f && Motion.areAnimationsEnabled(requireContext())) {
+                // Right after a mode swipe the list is the other mode's thread landing, not a
+                // conversation starting: the mark just goes, or it swells on the new page.
+                val justSwitched = android.os.SystemClock.uptimeMillis() - modeSwitchedAt < MODE_LOAD_WINDOW_MS
+                if (!justSwitched && emptyStateContainer.isVisible && emptyStateContainer.alpha > 0f && Motion.areAnimationsEnabled(requireContext())) {
                     // The mark dissolves into the background as the conversation starts.
                     emptyStateContainer.animate().cancel()
                     emptyStateContainer.animate().alpha(0f).scaleX(1.06f).scaleY(1.06f)
@@ -980,12 +986,21 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             else
             {
                 resetChatButton.icon.alpha = 102
+                val wasHidden = !emptyStateContainer.isVisible
                 emptyStateContainer.animate().cancel()
                 emptyStateContainer.scaleX = 1f
                 emptyStateContainer.scaleY = 1f
                 emptyStateContainer.visibility = View.VISIBLE
                 bindEmptyState(viewModel.isRpMode())
-                emptyStateContainer.alpha = 1f
+                val landing = pager == null && wasHidden &&
+                    android.os.SystemClock.uptimeMillis() - modeSwitchedAt < MODE_LOAD_WINDOW_MS
+                if (landing && Motion.areAnimationsEnabled(requireContext())) {
+                    // An empty thread arriving after the slide settled fades in instead of popping.
+                    emptyStateContainer.alpha = 0f
+                    emptyStateContainer.animate().alpha(1f).setDuration(220).setInterpolator(Motion.easeOut).start()
+                } else {
+                    emptyStateContainer.alpha = 1f
+                }
             }
             if(sharedPreferencesHelper.getScrollersPreference()){
                 chatRecyclerView.post {
@@ -1689,9 +1704,29 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     /** iOS scroll-edge effect: the fade under the floating controls appears once content is beneath them. */
     private fun updateTopBarEdge() {
         val fade = view?.findViewById<View>(R.id.topBarGlass)?.background ?: return
+        // A page swipe blends the fade itself (applyPagerProgress); the list below is mid-switch.
+        if (pager != null) return
+        val a = edgeAlphaForList()
+        edgeAnimator?.cancel()
+        if (abs(fade.alpha - a) > 48 && Motion.areAnimationsEnabled(requireContext())) {
+            // A jump (a mode's list landing, a reload) eases over instead of blinking.
+            edgeAnimator = ValueAnimator.ofInt(fade.alpha, a).apply {
+                duration = 240
+                interpolator = Motion.easeOut
+                addUpdateListener { fade.alpha = it.animatedValue as Int }
+                start()
+            }
+        } else if (fade.alpha != a) {
+            fade.alpha = a
+        }
+    }
+
+    private var edgeAnimator: ValueAnimator? = null
+
+    /** Scroll-edge fade strength for the chat list as it sits now: full once 24dp is beneath the bar. */
+    private fun edgeAlphaForList(): Int {
         val under = chatRecyclerView.computeVerticalScrollOffset().toFloat()
-        val a = (255 * (under / (24f * resources.displayMetrics.density)).coerceIn(0f, 1f)).toInt()
-        if (fade.alpha != a) fade.alpha = a
+        return (255 * (under / (24f * resources.displayMetrics.density)).coerceIn(0f, 1f)).toInt()
     }
 
     private fun applyChromeInsets() {
@@ -1760,15 +1795,95 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     private fun followStreamingEdge() {
         if (!followStream || listDragging || followPending) return
-        followPending = true
-        chatRecyclerView.doOnPreDraw {
-            followPending = false
-            if (!followStream || listDragging) return@doOnPreDraw
-            val last = chatAdapter.itemCount - 1
-            val child = layoutManager.findViewByPosition(last) ?: return@doOnPreDraw
-            val limit = chatRecyclerView.height - chatRecyclerView.paddingBottom
-            val overflow = child.bottom - limit
-            if (overflow > 0) chatRecyclerView.scrollBy(0, overflow)
+        if (!Motion.areAnimationsEnabled(requireContext())) {
+            followPending = true
+            chatRecyclerView.doOnPreDraw {
+                followPending = false
+                val overflow = streamOverflow()
+                if (followStream && !listDragging && overflow > 0) chatRecyclerView.scrollBy(0, overflow)
+            }
+            return
+        }
+        if (followTicker == null) {
+            followLastFrameNs = 0L
+            followTicker = followFrame.also { android.view.Choreographer.getInstance().postFrameCallback(it) }
+        }
+    }
+
+    /** How far the last row's bottom sits below the composer's top edge, in px. */
+    private fun streamOverflow(): Int {
+        val last = chatAdapter.itemCount - 1
+        val child = layoutManager.findViewByPosition(last) ?: return 0
+        return child.bottom - (chatRecyclerView.height - chatRecyclerView.paddingBottom)
+    }
+
+    private var followTicker: android.view.Choreographer.FrameCallback? = null
+    private var followLastFrameNs = 0L
+    private var followCarry = 0f
+
+    /**
+     * Glides toward the growing edge instead of jumping a whole line per wrap: each frame
+     * covers a share of the remaining distance (time constant 50ms, ~90% in 110ms), so a new
+     * line reads as the page easing up. Stops once caught up or when the reader takes over.
+     */
+    private val followFrame = object : android.view.Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            if (view == null || !followStream || listDragging) {
+                followTicker = null
+                return
+            }
+            val overflow = streamOverflow()
+            if (overflow <= 0) {
+                followTicker = null
+                followCarry = 0f
+                return
+            }
+            val dtMs = if (followLastFrameNs == 0L) 16f
+                else ((frameTimeNanos - followLastFrameNs) / 1_000_000f).coerceIn(4f, 50f)
+            followLastFrameNs = frameTimeNanos
+            val share = 1f - kotlin.math.exp(-dtMs / 50f)
+            followCarry += overflow * share
+            val step = followCarry.toInt().coerceAtLeast(1).coerceAtMost(overflow)
+            followCarry = (followCarry - step).coerceAtLeast(0f)
+            chatRecyclerView.scrollBy(0, step)
+            android.view.Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+
+    private fun remainingBelow(): Int = chatRecyclerView.run {
+        computeVerticalScrollRange() - computeVerticalScrollOffset() - computeVerticalScrollExtent()
+    }
+
+    /**
+     * The scroll-down button: an eased glide rather than a cut. From far up, the list dips,
+     * cuts to a screen and a half short of the end, and glides the rest while it comes back.
+     */
+    private fun glideToBottom() {
+        val last = chatAdapter.itemCount - 1
+        if (last < 0) return
+        val rv = chatRecyclerView
+        if (!Motion.areAnimationsEnabled(requireContext()) || rv.height == 0) {
+            layoutManager.scrollToPositionWithOffset(last, -1000000)
+            return
+        }
+        followStream = true
+        rv.stopScroll()
+        val screen = rv.height
+        fun glide() {
+            val left = remainingBelow()
+            if (left <= 0) return
+            val ms = (380 + 180 * left / screen.toFloat()).toInt().coerceIn(380, 680)
+            rv.smoothScrollBy(0, left, Motion.iosOut, ms)
+        }
+        if (remainingBelow() > screen * 3) {
+            rv.animate().cancel()
+            rv.animate().alpha(0f).setDuration(110).setInterpolator(Motion.easeOut).withEndAction {
+                rv.scrollBy(0, remainingBelow() - (screen * 1.5f).toInt())
+                glide()
+                rv.animate().alpha(1f).setDuration(260).setInterpolator(Motion.easeOut).start()
+            }.start()
+        } else {
+            glide()
         }
     }
 
@@ -1970,6 +2085,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             layoutManager = this@ChatFragment.layoutManager
         }
         chatAdapter.onStreamVisualUpdate = { followStreamingEdge() }
+        chatAdapter.showThinking = sharedPreferencesHelper.isShowThinkingBlocks()
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 // Freeze the ambient field while the list moves: each frame re-blurs the glass.
@@ -2806,6 +2922,17 @@ $cleanContent
             }
         }
 
+        requireView().findViewById<MaterialButton>(R.id.thoughtsButton).let { thoughts ->
+            thoughts.isSelected = sharedPreferencesHelper.isShowThinkingBlocks()
+            thoughts.setOnClickListener {
+                val show = !sharedPreferencesHelper.isShowThinkingBlocks()
+                sharedPreferencesHelper.saveShowThinkingBlocks(show)
+                thoughts.isSelected = show
+                chatAdapter.showThinking = show
+                chatAdapter.notifyItemRangeChanged(0, chatAdapter.itemCount)
+            }
+        }
+
         reasoningButton.setOnClickListener {
             viewModel.toggleReasoning()
         }
@@ -2927,11 +3054,7 @@ $cleanContent
 
         scrollToBottomButton.setOnClickListener {
             chatRecyclerView.post {
-                val layoutManager = chatRecyclerView.layoutManager as LinearLayoutManager
-                val lastIndex = chatAdapter.itemCount - 1
-                if (lastIndex >= 0) {
-                    layoutManager.scrollToPositionWithOffset(lastIndex, -1000000)  // Bottom-align
-                }
+                glideToBottom()
                 updateScrollButtonsVisibility()
             }
         }
@@ -3444,7 +3567,11 @@ $cleanContent
         val model = viewModel.activeChatModel.value
         root.findViewById<TextView>(R.id.controlsModelName).text =
             model?.let { viewModel.getModelDisplayName(it) } ?: ""
-        val supported = viewModel.isReasoningModel(model)
+        root.findViewById<ImageView>(R.id.controlsModelIcon).setImageResource(
+            model?.let { ModelBrands.of(it)?.icon }
+                ?: if (viewModel.activeModelIsLan()) R.drawable.ic_lan else R.drawable.ic_cloudnew
+        )
+        val supported = viewModel.canRequestReasoning(model)
         val on = viewModel.isReasoningEnabled.value == true
         val budget = sharedPreferencesHelper.getReasoningMaxTokens()?.takeIf { it > 0 } != null
         val target = when {
@@ -4139,7 +4266,12 @@ $cleanContent
     // beside the current one. Instead: snapshot the current page, switch to the next mode
     // behind the snapshot, and slide the two side by side. Taps and swipes both use it.
 
-    private class Pager(val target: TextView, val origin: TextView, val direction: Int, val shot: ImageView, val w: Float)
+    private class Pager(
+        val target: TextView, val origin: TextView, val direction: Int, val shot: ImageView, val w: Float,
+        /** Scroll-edge fade of the page being left, so the dim under the tabs blends across. */
+        val edgeFrom: Int,
+        val tabColors: android.content.res.ColorStateList,
+    )
 
     private var pager: Pager? = null
     private var pagerOrigin: TextView? = null
@@ -4202,10 +4334,14 @@ $cleanContent
         codeMode.deactivate()
         if (target != current) {
             sharedPreferencesHelper.saveComposerDraft(current, chatEditText.text?.toString().orEmpty())
+            modeSwitchedAt = android.os.SystemClock.uptimeMillis()
             viewModel.toggleChatMode()
         }
         return true
     }
+
+    /** When Ask/RP last flipped; the next thread to load belongs to the switch, not to a new chat. */
+    private var modeSwitchedAt = 0L
 
     private fun openPager(target: TextView, direction: Int): Boolean {
         val root = view ?: return false
@@ -4213,6 +4349,7 @@ $cleanContent
         val topBar = root.findViewById<View>(R.id.topBarGlass)
         if (content.width == 0) return false
         val origin = currentTab()
+        val edgeFrom = topBar.background?.alpha ?: 0
         pagerBusy = true
         modePages().forEach { it.animate().cancel(); it.translationX = 0f; it.alpha = 1f }
         // The top bar stays on screen above both pages, so leave it out of the picture.
@@ -4240,9 +4377,32 @@ $cleanContent
             return false
         }
         target.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
-        pager = Pager(target, origin, direction, shot, content.width.toFloat())
+        edgeAnimator?.cancel()
+        pager = Pager(target, origin, direction, shot, content.width.toFloat(), edgeFrom, origin.textColors)
         movePager(0f)
         return true
+    }
+
+    /**
+     * How far the slide has come, 0 (old page) to 1 (new page): the tab highlight and the dim
+     * under the tabs move with it instead of flipping when the mode switches underneath.
+     */
+    private fun applyPagerProgress(p: Pager, t: Float) {
+        val k = t.coerceIn(0f, 1f)
+        val ink = ContextCompat.getColor(requireContext(), R.color.xai_ink)
+        val mute = ContextCompat.getColor(requireContext(), R.color.xai_mute)
+        val eval = android.animation.ArgbEvaluator()
+        p.origin.setTextColor(eval.evaluate(k, ink, mute) as Int)
+        p.target.setTextColor(eval.evaluate(k, mute, ink) as Int)
+        view?.findViewById<View>(R.id.topBarGlass)?.background?.alpha =
+            (p.edgeFrom + (edgeAlphaForList() - p.edgeFrom) * k).toInt()
+    }
+
+    /** Hand the tabs back to their selected-state colors and the fade back to the list. */
+    private fun releasePagerChrome(p: Pager) {
+        p.origin.setTextColor(p.tabColors)
+        p.target.setTextColor(p.tabColors)
+        updateTopBarEdge()
     }
 
     /**
@@ -4272,6 +4432,7 @@ $cleanContent
             modeTabIndicator.animate().cancel()
             modeTabIndicator.translationX = from + (to - from) * t
         }
+        applyPagerProgress(p, abs(dx) / w)
     }
 
     /**
@@ -4298,6 +4459,7 @@ $cleanContent
             pagerBusy = false
             pagerOrigin = null
             placeModeTabIndicator(animate = false)
+            releasePagerChrome(p)
         }
         if (!anim) { done(); return }
         // A released swipe carries its speed on in one spring shared by every layer, so the
@@ -4306,7 +4468,8 @@ $cleanContent
         val curve: android.animation.TimeInterpolator = fling ?: Motion.iosPush
         val duration = fling?.duration ?: 340L
         p.shot.animate().translationX(shotTo).setDuration(duration).setInterpolator(curve)
-            .withEndAction { done() }.start()
+            .setUpdateListener { applyPagerProgress(p, abs(p.shot.translationX) / w) }
+            .withEndAction { p.shot.animate().setUpdateListener(null); done() }.start()
         modePages().forEach { it.animate().translationX(pageTo).setDuration(duration).setInterpolator(curve).start() }
         if (lineTo != null) {
             modeTabIndicator.animate().translationX(lineTo).setDuration(duration).setInterpolator(curve).start()
@@ -4319,6 +4482,7 @@ $cleanContent
         pager = null
         switchToTab(p.origin)
         restModePages()
+        releasePagerChrome(p)
         p.shot.postDelayed({
             (p.shot.parent as? ViewGroup)?.removeView(p.shot)
             p.shot.setImageDrawable(null)
@@ -5446,15 +5610,13 @@ $cleanContent
             if (extendedEnabled) View.VISIBLE else View.GONE
 
         val model = viewModel.activeChatModel.value // Get current model (may be null on startup)
-        val isLan = viewModel.activeModelIsLan()
 
         val buttons = listOf(
             Triple(reasoningButton, topReasoningButton) {
-                model != null && viewModel.isReasoningModel(model)
+                model != null && viewModel.canRequestReasoning(model)
             },
-            Triple(webSearchButton, topWebSearchButton) {
-                !isLan && !viewModel.isRpMode()
-            },
+            // Web search left the chat chrome; presets can still switch it on.
+            Triple(webSearchButton, topWebSearchButton) { false },
             Triple(streamButton, topStreamButton) { true },
             //Triple(convoButton, topConvoButton) { true },
             Triple(toolsButton, topToolsButton) { !viewModel.isRpMode() },
@@ -5794,18 +5956,13 @@ $cleanContent
         val active = viewModel.activeChatModel.value
         val models = (viewModel.getBuiltInModels() + sharedPreferencesHelper.getCustomModels())
             .distinctBy { it.apiIdentifier }
-            .sortedBy { it.displayName.lowercase() }
+            .sortedBy { ModelNames.withoutProvider(it.displayName, it.apiIdentifier).lowercase() }
         val rows = models.map { m ->
             PickerPopover.Row(
-                title = m.displayName,
-                subtitle = modelSubtitle(m),
-                iconRes = when {
-                    m.isLANModel -> R.drawable.ic_lan
-                    m.isImageGenerationCapable -> R.drawable.ic_imgup
-                    m.isVisionCapable -> R.drawable.ic_vision
-                    m.isReasoningCapable -> R.drawable.ic_reasoning
-                    else -> R.drawable.ic_cloud
-                },
+                title = ModelNames.withoutProvider(m.displayName, m.apiIdentifier),
+                subtitle = ModelRow.subtitle(requireContext(), m),
+                iconRes = ModelBrands.of(m)?.icon ?: if (m.isLANModel) R.drawable.ic_lan else 0,
+                monogram = if (ModelBrands.of(m) == null && !m.isLANModel) ModelRow.monogramFor(m) else null,
                 selected = m.apiIdentifier == active,
                 onClick = { if (m.apiIdentifier != active) applyPickedModel(m.apiIdentifier) }
             )
@@ -5819,18 +5976,6 @@ $cleanContent
             )
         )
         newPopover()?.show(getString(R.string.popover_models_title), rows, footer)
-    }
-
-    private fun modelSubtitle(m: LlmModel): String {
-        val parts = ArrayList<String>()
-        parts += if (m.isLANModel) getString(R.string.popover_model_local)
-            else m.apiIdentifier.substringBefore('/', "").ifBlank { getString(R.string.popover_model_cloud) }
-        if (m.isReasoningCapable) parts += getString(R.string.popover_cap_reasoning)
-        if (m.isVisionCapable) parts += getString(R.string.popover_cap_vision)
-        if (m.isImageGenerationCapable) parts += getString(R.string.popover_cap_image)
-        if (m.isTranscription) parts += getString(R.string.popover_cap_audio)
-        if (m.isFree && !m.isLANModel) parts += getString(R.string.popover_cap_free)
-        return parts.joinToString(" · ")
     }
 
     /** RP pill: switch character in place, plus the roleplay home and the RP model. */

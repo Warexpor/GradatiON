@@ -131,6 +131,8 @@ class ChatAdapter(
     var currentSpeakingPosition = -1
     /** A reply is being generated: the last assistant row keeps its action icons hidden. */
     var replyInFlight = false
+    /** Show the model's thinking above replies; off hides the block entirely. */
+    var showThinking = true
     private var currentTypeface: Typeface = Typeface.DEFAULT
 
     // OPTIMIZATION: Conflated Channel for throttling updates
@@ -454,6 +456,8 @@ class ChatAdapter(
         const val VIEW_TYPE_ASSISTANT = 2
         const val VIEW_TYPE_THINKING = 3
         const val VIEW_TYPE_HIDDEN = 4
+        private const val REASONING_KEY_CHARS = 80
+        private const val ACTION_STAGGER_MS = 38L
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -871,6 +875,38 @@ class ChatAdapter(
             ShimmerText.stop(thinkingLabel)
         }
 
+        /** Items of the action row in reading order: the icons, then the fork navigator. */
+        private fun actionItems(row: View, visibleOnly: Boolean = true): List<View> {
+            val buttons = row.findViewById<ViewGroup>(R.id.aiActionButtons)
+            val icons = (0 until buttons.childCount).map { buttons.getChildAt(it) }
+            val rest = (row as ViewGroup).let { g -> (0 until g.childCount).map { g.getChildAt(it) } }
+                .filter { it !is android.widget.HorizontalScrollView }
+            return (icons + rest).filter { !visibleOnly || it.visibility == View.VISIBLE }
+        }
+
+        /** The finished reply's tools ease in one after another, left to right. */
+        private fun revealActions(row: View) {
+            val shift = -10f * row.resources.displayMetrics.density
+            actionItems(row).forEachIndexed { i, v ->
+                v.animate().cancel()
+                v.alpha = 0f
+                v.translationX = shift
+                v.animate().alpha(1f).translationX(0f)
+                    .setStartDelay(i * ACTION_STAGGER_MS)
+                    .setDuration(340)
+                    .setInterpolator(Motion.iosOut)
+                    .start()
+            }
+        }
+
+        private fun settleActions(row: View) {
+            actionItems(row, visibleOnly = false).forEach { v ->
+                v.animate().cancel()
+                v.alpha = 1f
+                v.translationX = 0f
+            }
+        }
+
         private fun bindThinkingState(isThinking: Boolean) {
             if (isThinking) {
                 thinkingRow.visibility = View.VISIBLE
@@ -947,11 +983,23 @@ class ChatAdapter(
             reasoningTextView.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
             reasoningTextView.alpha = 1f
             val reasoning = reasoningSource(message)
-            if (reasoning.isBlank()) {
+            if (reasoning.isBlank() || !showThinking) {
                 ShimmerText.stop(reasoningTitle)
+                reasoningBlock.animate().cancel()
+                reasoningBlock.alpha = 1f
+                reasoningBlock.translationY = 0f
                 reasoningBlock.visibility = View.GONE
                 reasoningTextView.visibility = View.GONE
                 return
+            }
+            if (reasoningBlock.visibility != View.VISIBLE && streaming && itemView.isAttachedToWindow &&
+                Motion.areAnimationsEnabled(itemView.context)
+            ) {
+                // The line glints in as the model starts thinking instead of popping.
+                reasoningBlock.alpha = 0f
+                reasoningBlock.translationY = -4f * itemView.resources.displayMetrics.density
+                reasoningBlock.animate().alpha(1f).translationY(0f)
+                    .setDuration(320).setInterpolator(Motion.iosOut).start()
             }
             reasoningBlock.visibility = View.VISIBLE
             val stillThinking = streaming && getMessageText(message.content).isBlank()
@@ -967,9 +1015,10 @@ class ChatAdapter(
             } else {
                 ShimmerText.stop(reasoningTitle)
             }
-            val key = "reasoning_${reasoning.hashCode()}"
-            // Expanded while streaming so the user can watch thoughts; collapse default after.
-            val defaultCollapsed = !streaming
+            // Keyed on the opening of the thoughts so the key holds while they stream in.
+            val key = "reasoning_${reasoning.take(REASONING_KEY_CHARS).hashCode()}"
+            // Folded, streaming or not: the reply is the point; a tap opens the thoughts.
+            val defaultCollapsed = true
             val collapsed = collapsedStates.getOrDefault(key, defaultCollapsed)
             reasoningTextView.text = reasoning
             reasoningTextView.visibility = if (collapsed) View.GONE else View.VISIBLE
@@ -1047,7 +1096,8 @@ class ChatAdapter(
 
         fun bindTextOnly(message: FlexibleMessage) {
             attachStreamRevealHolder(this)
-            itemView.findViewById<View>(R.id.aiActionRow).visibility = View.GONE
+            // Hold the row's space while streaming so the finished reply doesn't jump a step.
+            itemView.findViewById<View>(R.id.aiActionRow).visibility = View.INVISIBLE
             val text = getMessageText(message.content)
 
             if (ThinkingPlaceholder.matches(text) || text.isBlank()) {
@@ -1140,16 +1190,24 @@ class ChatAdapter(
             val actionRow = itemView.findViewById<View>(R.id.aiActionRow)
             val streamingHere = replyInFlight && position == messages.lastIndex
             val showActions = !isThinking && !streamingHere
-            actionRow.animate().cancel()
             if (showActions && actionRow.visibility != View.VISIBLE && itemView.isAttachedToWindow &&
                 Motion.areAnimationsEnabled(itemView.context)
             ) {
+                // Posted: the rest of bind still decides which icons this reply gets.
                 actionRow.alpha = 0f
                 actionRow.visibility = View.VISIBLE
-                actionRow.animate().alpha(1f).setDuration(220).setInterpolator(Motion.easeOut).start()
-            } else {
+                actionRow.post {
+                    actionRow.alpha = 1f
+                    revealActions(actionRow)
+                }
+            } else if (!showActions || actionRow.visibility != View.VISIBLE) {
                 actionRow.alpha = 1f
-                actionRow.visibility = if (showActions) View.VISIBLE else View.GONE
+                settleActions(actionRow)
+                actionRow.visibility = when {
+                    showActions -> View.VISIBLE
+                    streamingHere -> View.INVISIBLE
+                    else -> View.GONE
+                }
             }
 
             bindThinkingState(isThinking)

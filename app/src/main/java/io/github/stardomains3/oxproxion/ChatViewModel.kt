@@ -204,6 +204,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             .find { it.apiIdentifier == modelIdentifier }
         return fromOr?.isReasoningCapable ?: false
     }
+    /**
+     * Whether a reasoning request makes sense. OpenRouter drops the parameter on models that
+     * can't think, so any cloud model qualifies; local servers reject it, so they need the flag.
+     */
+    fun canRequestReasoning(modelIdentifier: String?): Boolean {
+        if (modelIdentifier == null) return false
+        return isReasoningModel(modelIdentifier) || !isLanModel(modelIdentifier)
+    }
     fun isTranscriptionModel(modelIdentifier: String?): Boolean {
         if (modelIdentifier == null) return false
         val customModels = sharedPreferencesHelper.getCustomModels()
@@ -603,6 +611,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _isScrollersEnabled.value = sharedPreferencesHelper.getScrollersPreference()
         _isVolumeScrollEnabled.value = sharedPreferencesHelper.getVolumeScrollEnabled()
         _isToolsEnabled.value = sharedPreferencesHelper.getToolsPreference()
+        sharedPreferencesHelper.retireWebSearchToggleOnce()
         _isWebSearchEnabled.value = sharedPreferencesHelper.getWebSearchBoolean()
         _isExtendedDockEnabled.value = sharedPreferencesHelper.getExtPreference()
         _isExtendedTopBarEnabled.value = sharedPreferencesHelper.getExtendedTopBarEnabled()
@@ -1837,6 +1846,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             get() = this@ChatViewModel.toolCallsHandledForTurn
             set(value) { this@ChatViewModel.toolCallsHandledForTurn = value }
         override fun isReasoningModel(modelIdentifier: String?) = this@ChatViewModel.isReasoningModel(modelIdentifier)
+        override fun canRequestReasoning(modelIdentifier: String?) = this@ChatViewModel.canRequestReasoning(modelIdentifier)
         override fun isImageGenerationModel(modelIdentifier: String?) = this@ChatViewModel.isImageGenerationModel(modelIdentifier)
         override fun isRpMode() = this@ChatViewModel.isRpMode()
         override fun activeModelIsLan() = this@ChatViewModel.activeModelIsLan()
@@ -2327,7 +2337,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val builtInModels = getBuiltInModels()
         val customModels = sharedPreferencesHelper.getCustomModels()
         val allModels = builtInModels + customModels
-        return allModels.find { it.apiIdentifier == apiIdentifier }?.displayName ?: apiIdentifier
+        val model = allModels.find { it.apiIdentifier == apiIdentifier }
+        return if (model != null) ModelNames.withoutProvider(model.displayName, model.apiIdentifier)
+        else ModelNames.idWithoutProvider(apiIdentifier)
     }
     fun consumeSharedText(text: String) {
         _sharedText.value = text
@@ -3114,7 +3126,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
     private fun applySort() {
         val sortedList = when (_sortOrder.value) {
-            SortOrder.ALPHABETICAL -> allOpenRouterModels.sortedBy { it.displayName.lowercase() }
+            SortOrder.ALPHABETICAL -> allOpenRouterModels.sortedBy {
+                ModelNames.withoutProvider(it.displayName, it.apiIdentifier).lowercase()
+            }
             SortOrder.BY_DATE -> allOpenRouterModels.sortedByDescending { it.created }
         }
         _openRouterModels.postValue(sortedList)

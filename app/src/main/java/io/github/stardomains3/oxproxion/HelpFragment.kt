@@ -186,13 +186,13 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
             *   **Ask / RP chip** — toggle between Ask and **GradatiON RP** (local SillyTavern-style roleplay). Long-press to open the **GradatiON RP hub** (characters, persona, lorebooks, settings, import/export).
             *   **Model chip** {{ic_tune}} — Ask: switch models. RP: shows active character / LLM / Characters; tap opens the character library, long-press opens models.
             *   **New chat** {{ic_new_chat}} — starts a fresh thread (current chat stays in History).
-            *   **Power tools row** (optional, Settings → Appearance) — reasoning, web search, stream, tools, presets and settings as icons under the top bar.
+            *   **Power tools row** (optional, Settings → Appearance) — reasoning, stream, tools, presets and settings as icons under the top bar.
 
             ### Composer
             *   **Send** {{ic_send}} / **Stop** {{ic_stop}}
             *   **Attach** {{ic_attachdoc}} — text files (Ask only). **Image** {{ic_imgup}} — vision models (camera long-press). Disabled in RP.
             *   **+** — attach menu (camera, photos, files, tools manager, and a review row while files are attached). In RP the control stays visible but dimmed (attachments off); long-press still spell-checks.
-            *   **Controls** {{ic_tune}} — the sliders button next to **+**. Opens the Controls panel: reasoning, web search, stream, read aloud, tools, presets, system message, settings, files, image, new chat, font and text size, plus chat export (copy, Markdown, HTML, EPUB, print, PDF) once the chat has messages. A filled tile means that feature is on.
+            *   **Controls** {{ic_tune}} — the sliders button next to **+**. Opens the Controls panel: reasoning, thoughts, stream, read aloud, tools, presets, system message, settings, files, image, new chat, font and text size, plus chat export (copy, Markdown, HTML, EPUB, print, PDF) once the chat has messages. A filled tile means that feature is on.
 
             ### Message actions
             Tap icons under a message to copy, share, speak, or edit. In **Ask**, edit/resend can fork the thread — use the `< n/m >` navigator to switch branches. In **RP**, editing a **user** message truncates without Ask forks; editing an **assistant** reply updates that bubble in place (and the active swipe alt). Use regenerate / instruct / swipe for new variants. Chat-level export (PDF/Markdown/copy) lives at the bottom of the Controls panel.
@@ -210,14 +210,14 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
             *   **Export / Import** — characters include avatar bytes; lorebooks as JSON. Import confirms before updating cards that already exist. Character / lore / persona editors confirm before discarding unsaved edits (toolbar **and** system Back).
             *   Send `_(Reminder: …)_` in a message for a one-shot scene note, or tap **Reminder** above the composer (reminder-only is fine).
             *   **Regenerate** {{ic_redo}} / **Instruct** on the last assistant reply after a user turn (scroll to the end of a long reply to reach the action row); **swipe** ‹ › for alternate replies.
-            *   Tools, web search, and attachments stay off in RP (composer **+** is dimmed). History lists Ask and RP separately. Stream can be toggled from the Reminder row.
+            *   Tools and attachments stay off in RP (composer **+** is dimmed). History lists Ask and RP separately. Stream can be toggled from the Reminder row.
 
             ---
 
             ## Overflow menu
 
-            *   **Reasoning** {{ic_reasoning}} — for supported models; long-press for advanced options.
-            *   **Web search** {{ic_websearch}} — one-shot for OpenRouter models (long-press for engine).
+            *   **Reasoning** {{ic_reasoning}} — Off to High; any cloud model can be asked, local models need "Thinks" in their edit sheet. Long-press for advanced options.
+            *   **Thoughts** {{ic_reasoning}} — show or hide the model's thinking above replies. It stays folded while the reply streams; tap it to open.
             *   **Stream** {{ic_stream}} — streaming on/off.
             *   **Tools** {{ic_tools}} — experimental; long-press to choose tools. Workspace: **Download/gradation** (legacy **grokion** / **oxproxion** still readable). [Re-select folder](action://reselect-folder) if tools cannot read files.
             *   **Presets** {{ic_presets}} — saved model/settings bundles; also a share target.

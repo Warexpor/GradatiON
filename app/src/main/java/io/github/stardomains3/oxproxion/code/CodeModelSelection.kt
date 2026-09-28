@@ -1,5 +1,7 @@
 package io.github.stardomains3.oxproxion.code
 
+import io.github.stardomains3.oxproxion.ModelNames
+
 /**
  * Pure helpers for the Code-mode model picker (plan §5.4.7).
  * Default is the first harness-reported model; empty list → no picker / null model.
@@ -18,6 +20,15 @@ object CodeModelSelection {
         if (current != null && current in models) return current
         return defaultModel(models)
     }
+
+    /**
+     * Name shown in the model list: the id with one leading provider segment removed.
+     * "anthropic/claude-sonnet-4" → "claude-sonnet-4"; "provider:opus" → "opus".
+     */
+    fun listLabel(model: String): String = ModelNames.idWithoutProvider(model)
+
+    /** Provider prefix [listLabel] removed, for the row subtitle. */
+    fun listProvider(model: String): String? = ModelNames.providerOf(model)
 
     /**
      * Compact label for the composer pill: last path / provider segment, ellipsized.

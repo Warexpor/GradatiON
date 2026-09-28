@@ -43,8 +43,7 @@
                 android:paddingStart="4dp"
                 android:paddingEnd="8dp"
                 android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/bg_press_svg">
+                android:focusable="true">
 
                 <TextView
                     android:id="@+id/reasoningTitle"
