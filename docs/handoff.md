@@ -1,4 +1,12 @@
-# Handoff (2026-09-28)
+# Handoff (2026-09-28, night)
+
+## RP polish branch `rp-polish` (latest)
+The user asked for a new branch and a full RP UX pass. Work lives on `rp-polish`, not `liquid-glass-redesign`.
+- Chat flow: swipe ‹ n/N › sits in the last reply's action row (it was hidden before). › never regenerates; the reroll button makes new alternates. Continue keeps alternates and stores the joined text. Blocked actions and view-model messages use GlassNotice. Editing a user message is non-destructive until send (edit bar, the edited bubble is highlighted, later rows are dimmed). Back in a thread goes to the RP home. Pin moved from long-press to the ⋮ menus (user rows got a ⋮). One New-chat path with the Facts question and no "replace?" confirm. Home delete removes every chat in a row.
+- Library: the hub is now "Library" (no hero card; Import / Export rows). Import takes Tavern v1/v2/v3 JSON and PNG cards. Persona has its own Name field. RP settings has subtitles; the lorebook switch is gone (an active book is on). "Open scene" (LLM mode) lives in the character picker. The character editor puts Advanced behind a fold and shows errors on the fields. Lorebooks get an Active switch and a key-syntax warning.
+- Phone still has to check: the edit-bar scroll and dimming, the swipe row, the file pickers (PNG cards), the panel's tile-to-popover handoff (it may flicker), and whether the top-bar glass hides rows scrolled under it.
+
+# Previous handoff (2026-09-28)
 
 ## RP redesign pass (latest)
 Dim crimson `delete_action`; `MessageMenu` replaces the reply ⋮ popover; RP home chats list (`RpChatsHome`, `RpChatSummaries`); character panel opens from the reply speaker line (composer pill hidden in RP); solid character panel; Continue is a hidden turn that extends the last reply in place (`continuationBase`, `RpContinuation`, adapter `continuingFrom` seeds the reveal). Full suite passed (485 tests). Phone still has to check: menu/chip feel, home swipe from Ask, Continue seam and fade, panel over a photo background.

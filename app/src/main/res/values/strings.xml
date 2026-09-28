@@ -251,7 +251,7 @@
     <string name="rp_discard_edits_confirm">Discard</string>
     <string name="rp_mode_chip_a11y">Chat or Roleplay mode. Long-press for the roleplay home</string>
     <string name="popover_open_scene">Open scene</string>
-    <string name="popover_open_scene_sub">No character. The model narrates.</string>
+    <string name="popover_open_scene_sub">The model narrates</string>
     <string name="rp_llm_chip">LLM</string>
     <string name="rp_history_empty">No roleplay chats yet</string>
     <string name="history_mode_ask">Chats</string>
