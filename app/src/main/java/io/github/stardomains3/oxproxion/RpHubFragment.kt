@@ -94,14 +94,11 @@ class RpHubFragment : Fragment() {
         setupRow(view, R.id.rpHubCharactersRow, R.drawable.rp_ic_characters, R.string.rp_characters_title) {
             push(RpCharacterLibraryFragment.newInstance())
         }
-        setupRow(view, R.id.rpHubPersonaRow, R.drawable.rp_ic_persona, R.string.rp_persona_title) {
-            push(RpPersonaFragment.newInstance())
-        }
         setupRow(view, R.id.rpHubLorebooksRow, R.drawable.rp_ic_book, R.string.rp_lorebooks_title) {
             push(RpLorebookLibraryFragment.newInstance())
         }
-        setupRow(view, R.id.rpHubSettingsRow, R.drawable.ic_sliders, R.string.rp_settings_title) {
-            push(RpSettingsFragment.newInstance())
+        setupRow(view, R.id.rpHubPersonaRow, R.drawable.rp_ic_persona, R.string.rp_persona_title) {
+            push(RpPersonaFragment.newInstance())
         }
         setupRow(view, R.id.rpHubImportRow, R.drawable.ic_import, R.string.rp_ui_import_title) { importer.pickAny() }
         setupRow(view, R.id.rpHubExportCharsRow, R.drawable.ic_export, R.string.rp_export_characters) { exportCharacters() }

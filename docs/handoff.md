@@ -1,5 +1,8 @@
 # Handoff (2026-09-28, night)
 
+## Navigation declutter (rp-polish, latest)
+One home per thing. RP settings is gone: its three switches (third person, inner thoughts, auto facts) are a "Roleplay" group in the controls sheet (RP mode only). The character panel lost its Settings tile and gained a model line in its header, the one place to change the RP model. Removed entries: RP-tab long-press, Settings > Advanced "GradatiON RP", picker footer "RP model", pill long-press in RP. Library stays on the composer + footer and the history nav. App Settings: Haptics and Keep screen on live in Appearance; OpenRouter transforms moved to Models; LAN is "Local server" with its endpoint under it; Advanced folds five rarely used chat-chrome switches under "More"; Code settings lost its duplicate Code tab switch. Phone still has to check: the controls sheet height in RP (the group scrolls with the More area), the panel-to-popover handoff for the model line.
+
 ## RP polish branch `rp-polish` (latest)
 The user asked for a new branch and a full RP UX pass. Work lives on `rp-polish`, not `liquid-glass-redesign`.
 - Chat flow: swipe ‹ n/N › sits in the last reply's action row (it was hidden before). › never regenerates; the reroll button makes new alternates. Continue keeps alternates and stores the joined text. Blocked actions and view-model messages use GlassNotice. Editing a user message is non-destructive until send (edit bar, the edited bubble is highlighted, later rows are dimmed). Back in a thread goes to the RP home. Pin moved from long-press to the ⋮ menus (user rows got a ⋮). One New-chat path with the Facts question and no "replace?" confirm. Home delete removes every chat in a row.

@@ -723,19 +723,81 @@ class ScreenshotTest {
             }
         }
     }
-    @Test fun rpSettingsDark() = withChat { a, _ ->
-        pushFragment(a, RpSettingsFragment()); idle()
-        // Every switch explains itself on one 13sp line, and the lorebook switch is gone.
-        for (id in listOf(R.id.rpThirdPersonSubtitle, R.id.rpShowThoughtsSubtitle, R.id.rpAutoMemorySubtitle)) {
-            val sub = a.findViewById<android.widget.TextView>(id)
+    /** The three RP switches live in the controls sheet, in Roleplay mode only, and each subtitle shows whole. */
+    @Test fun controlsPanelRoleplayDark() = withChat { a, _ ->
+        seedRp()
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        val prefs = SharedPreferencesHelper(a)
+        a.findViewById<View>(R.id.controlsButton).performClick(); idle()
+        org.junit.Assert.assertFalse("no Roleplay group in Chat", a.findViewById<View>(R.id.controlsRpGroup).isShown)
+        a.findViewById<View>(R.id.controlsButton).performClick(); idle()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        val mira = runBlocking { vm.getRpRepository().getAllCharactersOnce() }.first { it.name == "Mira Vance" }
+        vm.startRpChatWithCharacter(mira); settle()
+        a.findViewById<View>(R.id.controlsButton).performClick(); idle()
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.controlsRpGroup).isShown)
+        val group = a.findViewById<android.view.ViewGroup>(R.id.controlsRpGroup)
+        fun subtitles(v: View, out: MutableList<android.widget.TextView>) {
+            if (v is android.widget.TextView && v.textSize / a.resources.displayMetrics.scaledDensity in 12.9f..13.1f) out += v
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) subtitles(v.getChildAt(i), out)
+        }
+        val subs = mutableListOf<android.widget.TextView>().also { subtitles(group, it) }
+        org.junit.Assert.assertEquals("one 13sp line under each switch", 3, subs.size)
+        for (sub in subs) {
             val layout = sub.layout
             org.junit.Assert.assertNotNull("subtitle laid out", layout)
             val cut = (0 until layout.lineCount).sumOf { layout.getEllipsisCount(it) }
             org.junit.Assert.assertEquals("'${sub.text}' must show whole", 0, cut)
-            org.junit.Assert.assertTrue("subtitle is 13sp or more", sub.textSize / a.resources.displayMetrics.scaledDensity >= 12.9f)
         }
-        org.junit.Assert.assertEquals("Auto facts", a.findViewById<android.widget.TextView>(R.id.rpAutoMemoryTitle).text.toString())
-        snap(root(a), "rp_settings_dark")
+        // A tap on the row flips the pref; the switch only shows it.
+        val before = prefs.isRpAutoMemory()
+        a.findViewById<View>(R.id.controlsRpFactsRow).performClick(); idle()
+        org.junit.Assert.assertEquals(!before, prefs.isRpAutoMemory())
+        org.junit.Assert.assertEquals(!before, a.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.controlsRpFactsSwitch).isChecked)
+        a.findViewById<View>(R.id.controlsRpFactsRow).performClick(); idle()
+        snap(root(a), "controls_panel_roleplay_dark")
+        a.findViewById<View>(R.id.controlsButton).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
+    /** RP settings is gone: no Library row, no panel tile, and Settings has no GradatiON RP row. */
+    @Test fun rpDestinationsHaveOneHome() = withChat { a, _ ->
+        seedRp()
+        pushFragment(a, RpHubFragment()); settle()
+        org.junit.Assert.assertNull("no RP settings row", a.findViewById<View>(resId(a, "rpHubSettingsRow")))
+        val order = listOf(R.id.rpHubCharactersRow, R.id.rpHubLorebooksRow, R.id.rpHubPersonaRow, R.id.rpHubImportRow)
+            .map { a.findViewById<View>(it).let { r -> IntArray(2).also { l -> r.getLocationInWindow(l) }[1] } }
+        org.junit.Assert.assertEquals("Characters, Lorebooks, Persona, then Import", order.sorted(), order)
+        a.supportFragmentManager.popBackStackImmediate(); idle()
+        openSettingsRow(a, R.id.settingsRowAdvanced)
+        val advanced = a.supportFragmentManager.fragments.filterIsInstance<SettingsDetailFragment>().first().requireView()
+        org.junit.Assert.assertNull("no GradatiON RP row in Advanced", advanced.findViewById<View>(resId(a, "rpGradationButton")))
+    }
+
+    /** The character panel's header names the RP model; tapping it opens the model popover. */
+    @Test fun rpPanelHeaderChangesModel() = withChat { a, _ ->
+        seedRp()
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        vm.setModel(DemoModel.ID); idle()
+        val mira = runBlocking { vm.getRpRepository().getAllCharactersOnce() }.first { it.name == "Mira Vance" }
+        vm.startRpChatWithCharacter(mira); settle()
+        (a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView).adapter as ChatAdapter).onSpeakerClick!!.invoke(); settle()
+        val dialog = ShadowDialog.getLatestDialog()!!
+        val line = dialog.findViewById<android.widget.TextView>(R.id.rpPanelModelName)
+        org.junit.Assert.assertEquals(vm.getModelDisplayName(DemoModel.ID), line.text.toString())
+        org.junit.Assert.assertTrue("model line is at least 13sp", line.textSize / a.resources.displayMetrics.scaledDensity >= 12.9f)
+        org.junit.Assert.assertTrue("model line is at least 44dp tall", dialog.findViewById<View>(R.id.rpPanelModel).height >= 44 * a.resources.displayMetrics.density)
+        // Settings has no tile any more; the tiles are Memory, History, Voice, Layout, Wallpaper, Persona, Lore, Edit.
+        val grid = dialog.findViewById<android.view.ViewGroup>(R.id.rpPanelTiles)
+        val labels = (0 until grid.childCount).map { grid.getChildAt(it).contentDescription.toString().substringBefore(",") }
+        org.junit.Assert.assertFalse("no Settings tile: $labels", "Settings" in labels)
+        org.junit.Assert.assertTrue("Persona stays: $labels", "Persona" in labels)
+        snapDialog(a, "rp_character_panel_model_dark", sharp = true)
+        dialog.findViewById<View>(R.id.rpPanelModel).performClick(); settle()
+        org.junit.Assert.assertNotNull("model popover opened", a.findViewById<android.view.ViewGroup>(R.id.popoverRows))
+        snap(root(a), "rp_panel_model_popover_dark")
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
 
     @Test fun dialogsDark() = withChat { a, chat ->
@@ -769,6 +831,53 @@ class ScreenshotTest {
             snap(root(a), name)
             a.supportFragmentManager.popBackStackImmediate(); a.supportFragmentManager.popBackStackImmediate(); idle()
         }
+    }
+
+    private fun detailView(a: MainActivity) =
+        a.supportFragmentManager.fragments.filterIsInstance<SettingsDetailFragment>().first().requireView()
+
+    /** Haptics folded into Appearance, Keep screen on moved with it, and no Haptics row is left. */
+    @Test fun settingsAppearanceGroupsFeelDark() = withChat { a, _ ->
+        a.findViewById<View>(R.id.settingsButton).performClick(); idle()
+        val sf = a.supportFragmentManager.fragments.filterIsInstance<SettingsFragment>().first().requireView()
+        org.junit.Assert.assertNull("no Haptics row", sf.findViewById<View>(resId(a, "settingsRowHaptics")))
+        sf.findViewById<View>(R.id.settingsRowAppearance).performClick(); settle()
+        val d = detailView(a)
+        for (id in listOf(R.id.hapticButtonsSwitch, R.id.hapticRespondingSwitch, R.id.keepScreenOnSwitch)) {
+            org.junit.Assert.assertTrue("switch $id shows in Appearance", d.findViewById<View>(id).isShown)
+        }
+        d.findViewById<android.widget.ScrollView>(R.id.settingsDetailScroll)?.fullScroll(View.FOCUS_DOWN)
+        idle()
+        snap(root(a), "settings_appearance_feel_dark")
+    }
+
+    private fun resId(a: MainActivity, name: String) = a.resources.getIdentifier(name, "id", a.packageName)
+
+    /** Models: Local server shows its endpoint, trust TLS sits under it, and OpenRouter transforms came over from Advanced. */
+    @Test fun settingsModelsLocalServerDark() = withChat { a, _ ->
+        SharedPreferencesHelper(a).setLanEndpoint(null)
+        openSettingsRow(a, R.id.settingsRowModels); settle()
+        val d = detailView(a)
+        val sub = d.findViewById<android.widget.TextView>(R.id.lanSubtitle)
+        org.junit.Assert.assertEquals("Not set", sub.text.toString())
+        org.junit.Assert.assertTrue("subtitle is 13sp or more", sub.textSize / a.resources.displayMetrics.scaledDensity >= 12.9f)
+        fun top(id: Int) = IntArray(2).also { d.findViewById<View>(id).getLocationInWindow(it) }[1]
+        org.junit.Assert.assertTrue("trust TLS is right under Local server", top(R.id.lanRow) < top(R.id.trustSelfSignedLanSwitch))
+        org.junit.Assert.assertTrue("transforms is in Models", d.findViewById<View>(R.id.openRouterTransformsSwitch).isShown)
+        snap(root(a), "settings_models_local_server_dark")
+    }
+
+    /** Advanced: rarely used chat chrome hides under More until it is asked for. */
+    @Test fun settingsAdvancedMoreFoldDark() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowAdvanced); settle()
+        val d = detailView(a)
+        val folded = listOf(R.id.scrollButtonsSwitch, R.id.scrollProgressSwitch, R.id.volumeScrollSwitch, R.id.presetsExtendedSwitch, R.id.animateBarOnErrorSwitch)
+        folded.forEach { org.junit.Assert.assertFalse("switch $it starts folded", d.findViewById<View>(it).isShown) }
+        org.junit.Assert.assertFalse("transforms left Advanced", d.findViewById<View>(R.id.advancedSection).findViewById<View>(R.id.openRouterTransformsSwitch)?.isShown == true)
+        snap(root(a), "settings_advanced_dark")
+        d.findViewById<View>(R.id.advancedMoreHeader).performClick(); idle()
+        folded.forEach { org.junit.Assert.assertTrue("switch $it shows after More", d.findViewById<View>(it).isShown) }
+        snap(root(a), "settings_advanced_more_dark")
     }
 
     // ── Voice input ────────────────────────────────────────────────────────────────────

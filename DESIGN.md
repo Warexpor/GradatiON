@@ -114,7 +114,7 @@ status bar, and the bars are inset by hand (`setupEdgeToEdge`).
 
 **Composer.** A glass capsule holding the input, then a row with:
 - `+` for attachments in Chat, or scene tools in Roleplay.
-- The sliders button, which opens the chat settings sheet: model, reasoning, search, stream.
+- The sliders button, which opens the controls sheet: model, reasoning, stream, then a "More controls" fold. In Roleplay the sheet also carries a "Roleplay" group with three switches (third-person mode, inner thoughts, auto facts). They live nowhere else; third-person and thoughts grey out in Open scene, which has no card.
 - The model pill. In Roleplay it is gone: the character lives in a speaker line on each reply (portrait and name); tapping it opens the character panel.
 - The mic and send buttons.
 
@@ -151,8 +151,8 @@ and never auto-send, and there's no hold-to-talk. While listening:
 **Continue.** The » button on an empty Roleplay composer sends a hidden prompt (no bubble). The reply is sewn onto the end of the last message (`RpContinuation.join`) and eases in from where the text stopped.
 
 **Character panel.** An opaque sheet (`panel_solid`, tiles `panel_tile`) with:
-- A header: round avatar, name, a one-line description, and a Switch button.
-- A 3-column grid of titled cards: Memory, History, Persona, Style, Lore, Edit.
+- A header: round avatar, name, a one-line description, and a Switch button. Under the description sits the model line (13sp `xai_mute`, chevron): it names the model this chat replies with and opens the same model popover Chat uses. It is the one place to change the RP model.
+- A 3-column grid of titled cards: Memory, History, Voice, Layout, Wallpaper, Persona, Lore, Edit. There is no Settings card: the panel is everything about this chat and character, and behaviour switches sit in the controls sheet.
 - Cards show live content when there is some (the memory text, the persona name). Otherwise
   they show a large glyph in `xai_mute`.
 
@@ -170,7 +170,13 @@ and never auto-send, and there's no hold-to-talk. While listening:
 | Code | `code/CodeHomeFragment`, `code/CodeSessionFragment`, diff and tool-output screens |
 | History | `SavedChatsFragment`, embedded as a slide-over |
 | Settings | `SettingsFragment`, then `SettingsDetailFragment` sections |
-| Roleplay library | `RpHubFragment`, then characters, personas, lorebooks, RP settings |
+| Roleplay library | `RpHubFragment` (Characters, Lorebooks, Persona, then Import and Export), reached from the composer `+` footer and the history panel |
+
+**Settings.** Rows: Modes switches, Appearance, Voice, Advanced, Code, Models, Data.
+- Appearance ends with a "Haptics and screen" group (haptic switches and Keep screen on).
+- Models opens with Local server (its saved endpoint on a 13sp line, or "Not set"), then Trust self-signed TLS, then the OpenRouter key, transforms and the rest.
+- Advanced keeps the chat-chrome switches that matter and folds the rarely changed ones (scroll buttons, scroll progress, volume scroll, presets on chat, error border) under a closed "More".
+- The Code tab switch lives only in the Modes card.
 
 ## Checking a change
 

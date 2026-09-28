@@ -20,6 +20,7 @@
         app:titleTextColor="@color/xai_ink" />
 
     <ScrollView
+        android:id="@+id/settingsDetailScroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
@@ -337,20 +338,19 @@
                     </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
-            </LinearLayout>
 
-            <!-- Haptics -->
-            <LinearLayout
-                android:id="@+id/hapticsSection"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/settings_feel"
+                    android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
                     android:background="@drawable/bg_settings_card"
                     android:orientation="vertical"
                     android:paddingTop="4dp"
@@ -413,6 +413,38 @@
                             android:layout_height="wrap_content"
                             android:checked="true" />
                     </LinearLayout>
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginStart="16dp"
+                        android:background="@color/xai_hairline" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:minHeight="56dp"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_keep_screen_on"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/keepScreenOnSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="false" />
+                    </LinearLayout>
+
                 </LinearLayout>
             </LinearLayout>
 
@@ -655,25 +687,55 @@
                     android:paddingTop="4dp"
                     android:paddingBottom="4dp">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/lanButton"
-                        style="@style/Widget.Grokion.Button.Text"
+                    <!-- A row rather than a button: the saved endpoint shows under the name. -->
+                    <LinearLayout
+                        android:id="@+id/lanRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:gravity="start|center_vertical"
+                        android:background="@drawable/bg_press_svg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
                         android:minHeight="56dp"
+                        android:orientation="horizontal"
                         android:paddingStart="16dp"
+                        android:paddingTop="8dp"
                         android:paddingEnd="16dp"
-                        android:text="@string/settings_lan"
-                        android:textColor="@color/xai_ink"
-                        android:textSize="16sp"
-                        app:backgroundTint="@android:color/transparent"
-                        app:icon="@drawable/ic_lan"
-                        app:iconGravity="start"
-                        app:iconPadding="16dp"
-                        app:iconSize="22dp"
-                        app:iconTint="@color/xai_ink"
-                        app:rippleColor="@color/press_ripple_none" />
+                        android:paddingBottom="8dp">
+
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:contentDescription="@null"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_lan"
+                            app:tint="@color/xai_ink" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="16dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_lan"
+                                android:textColor="@color/xai_ink"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:id="@+id/lanSubtitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:ellipsize="middle"
+                                android:singleLine="true"
+                                android:textColor="@color/xai_mute"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+                    </LinearLayout>
 
                     <View
                         android:layout_width="match_parent"
@@ -737,6 +799,39 @@
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
                         android:layout_marginStart="54dp"
+                        android:background="@color/xai_hairline" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:minHeight="56dp"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_openrouter_transform"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/openRouterTransformsSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="false" />
+                    </LinearLayout>
+
+                    <View
+                        android:visibility="gone"
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginStart="16dp"
                         android:background="@color/xai_hairline" />
 
                     <com.google.android.material.button.MaterialButton
@@ -910,31 +1005,6 @@
                         app:iconTint="@color/xai_ink"
                         app:rippleColor="@color/press_ripple_none" />
 
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="54dp"
-                        android:background="@color/xai_hairline" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/rpGradationButton"
-                        style="@style/Widget.Grokion.Button.Text"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="start|center_vertical"
-                        android:minHeight="56dp"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="@string/settings_gradation_rp"
-                        android:textColor="@color/xai_ink"
-                        android:textSize="16sp"
-                        app:backgroundTint="@android:color/transparent"
-                        app:icon="@drawable/ic_gradation_mark"
-                        app:iconGravity="start"
-                        app:iconPadding="16dp"
-                        app:iconSize="22dp"
-                        app:iconTint="@color/xai_ink"
-                        app:rippleColor="@color/press_ripple_none" />
                 </LinearLayout>
 
                 <TextView
@@ -1185,6 +1255,84 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
+                            android:text="@string/settings_citations"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="16sp" 
+                            android:maxLines="2"
+                            android:ellipsize="end" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/showCitationsSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="false" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginStart="16dp"
+                        android:background="@color/xai_hairline" />
+
+                    <!-- Rarely changed chat chrome stays folded until asked for -->
+                    <LinearLayout
+                        android:id="@+id/advancedMoreHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_press_svg"
+                        android:clickable="true"
+                        android:contentDescription="@string/settings_more_expand"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:minHeight="56dp"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_more"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="16sp" />
+
+                        <ImageView
+                            android:id="@+id/advancedMoreChevron"
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:contentDescription="@null"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_expand_more"
+                            app:tint="@color/xai_mute" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/advancedMoreGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginStart="16dp"
+                            android:background="@color/xai_hairline" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:minHeight="56dp"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
                             android:text="@string/settings_scroll_buttons"
                             android:textColor="@color/xai_ink"
                             android:textSize="16sp" 
@@ -1203,7 +1351,6 @@
                         android:layout_height="1dp"
                         android:layout_marginStart="16dp"
                         android:background="@color/xai_hairline" />
-
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1236,7 +1383,6 @@
                         android:layout_height="1dp"
                         android:layout_marginStart="16dp"
                         android:background="@color/xai_hairline" />
-
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1268,7 +1414,6 @@
                         android:layout_height="1dp"
                         android:layout_marginStart="16dp"
                         android:background="@color/xai_hairline" />
-
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1300,7 +1445,6 @@
                         android:layout_height="1dp"
                         android:layout_marginStart="16dp"
                         android:background="@color/xai_hairline" />
-
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1328,76 +1472,7 @@
                             app:useMaterialThemeColors="true" />
                     </LinearLayout>
 
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="16dp"
-                        android:background="@color/xai_hairline" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:orientation="horizontal"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/settings_citations"
-                            android:textColor="@color/xai_ink"
-                            android:textSize="16sp" 
-                            android:maxLines="2"
-                            android:ellipsize="end" />
-
-                        <androidx.appcompat.widget.SwitchCompat
-                            android:id="@+id/showCitationsSwitch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checked="false" />
                     </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="16dp"
-                        android:background="@color/xai_hairline" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:orientation="horizontal"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/settings_openrouter_transform"
-                            android:textColor="@color/xai_ink"
-                            android:textSize="16sp" 
-                            android:maxLines="2"
-                            android:ellipsize="end" />
-
-                        <androidx.appcompat.widget.SwitchCompat
-                            android:id="@+id/openRouterTransformsSwitch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checked="false" />
-                    </LinearLayout>
-
-                    <View
-                        android:visibility="gone"
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="16dp"
-                        android:background="@color/xai_hairline" />
 
                     <!-- Web search left the chat chrome, so its auto-off switch has nothing to act on. -->
                     <LinearLayout
@@ -1565,38 +1640,6 @@
 
                         <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/copyOropenSwitch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:checked="false" />
-                    </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="16dp"
-                        android:background="@color/xai_hairline" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:orientation="horizontal"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/settings_keep_screen_on"
-                            android:textColor="@color/xai_ink"
-                            android:textSize="16sp" 
-                            android:maxLines="2"
-                            android:ellipsize="end" />
-
-                        <androidx.appcompat.widget.SwitchCompat
-                            android:id="@+id/keepScreenOnSwitch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:checked="false" />

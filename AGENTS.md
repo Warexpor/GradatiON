@@ -18,7 +18,7 @@ upstream's and stays as it is.
 | Backgrounds | `AmbientBackgroundView`, `BackgroundPhoto` |
 | Voice | `VoiceInput` (engine choice, device recognizer, cloud and local fallback), `VoiceDictation` (composer wiring, mic states), `VoiceWaveView` |
 | Demo | `DemoModel` (an OkHttp interceptor that streams scripted SSE through the real pipeline) and `code/DemoBackend` (a scripted agent session) |
-| Roleplay | `RpPromptEngine` (system prompt, macros, memory, craft rules), `RpChatDelegate` (reads prefs and the repo), `RpApiMemory` (history trimming), `RpCharacterPanel`, `Rp*Fragment` screens, `RpSwipe*` (alternate replies) |
+| Roleplay | `RpPromptEngine` (system prompt, macros, memory, craft rules), `RpChatDelegate` (reads prefs and the repo), `RpApiMemory` (history trimming), `RpCharacterPanel` (also the one place to change the RP model), `Rp*Fragment` screens (Library, characters, personas, lorebooks; the RP behaviour switches sit in ChatFragment's controls sheet), `RpSwipe*` (alternate replies) |
 | Code mode | `code/CodeHub` (singleton state), `CodeBackend` / `CodeTransport` / `AcpAdapter` (agent protocol), `CodeTranscriptAdapter` (transcript rows), `CodeSessionFragment`, `DiffView`, `code/store/CodeStore` (prefs) |
 | Settings | `SettingsFragment`, `SettingsDetailFragment`, `SharedPreferencesHelper` (every pref key) |
 

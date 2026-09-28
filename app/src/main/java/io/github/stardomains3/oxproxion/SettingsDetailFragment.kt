@@ -29,6 +29,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
 
     private val savedChatsViewModel: SavedChatsViewModel by viewModels { AppViewModelFactory(requireActivity().application) }
 
+    private var lanPrefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var onPhotoPicked: ((Boolean) -> Unit)? = null
     private val pickBackgroundPhoto = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         val ctx = context ?: return@registerForActivityResult
@@ -99,7 +100,6 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
     private fun sectionTitle(section: String): String = when (section) {
         SECTION_APPEARANCE -> getString(R.string.settings_section_appearance)
         SECTION_VOICE -> getString(R.string.settings_section_voice)
-        SECTION_HAPTICS -> getString(R.string.settings_section_haptics)
         SECTION_MODELS -> getString(R.string.settings_section_models)
         SECTION_ADVANCED -> getString(R.string.settings_section_advanced)
         SECTION_DATA -> getString(R.string.settings_section_data)
@@ -140,7 +140,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         val importHistoryButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.importHistoryButton)
         val exportHistoryButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.exportHistoryButton)
         val maxTokensButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.maxTokensButton)
-        val lanButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.lanButton)
+        val lanRow = view.findViewById<View>(R.id.lanRow)
         val trustSelfSignedLanSwitch = view.findViewById<SwitchCompat>(R.id.trustSelfSignedLanSwitch)
         val allowDestructiveToolsSwitch = view.findViewById<SwitchCompat>(R.id.allowDestructiveToolsSwitch)
         val openRouterTransformsSwitch = view.findViewById<SwitchCompat>(R.id.openRouterTransformsSwitch)
@@ -309,14 +309,6 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                 .addToBackStack(null)
                 .commit()
         }
-        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.rpGradationButton).setOnClickListener {
-            parentFragmentManager.beginTransaction()
-                .withGrokStackAnimations()
-                .hide(this)
-                .add(R.id.fragment_container, RpHubFragment.newInstance())
-                .addToBackStack(RpHubFragment.BACK_STACK_TAG)
-                .commit()
-        }
         advancedReasoningButton.setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .withGrokStackAnimations()
@@ -328,7 +320,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         maxTokensButton.setOnClickListener {
             MaxTokensDialogFragment().show(childFragmentManager, "MaxTokensDialogFragment")
         }
-        lanButton.setOnClickListener {
+        lanRow.setOnClickListener {
             SaveLANDialogFragment().show(childFragmentManager, SaveLANDialogFragment.TAG)
         }
         trustSelfSignedLanSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -361,6 +353,8 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         hapticRespondingSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.saveHapticResponding(isChecked)
         }
+        bindLanSubtitle(view, prefs)
+        bindMoreFold(view)
         bindThemePicker(view, prefs)
         bindBackgroundPicker(view, prefs)
         bindVoice(view, prefs)
@@ -390,6 +384,45 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         ).forEach { id ->
             view.findViewById<SwitchCompat>(id)?.applyGrokionSwitchStyle()
         }
+    }
+
+    /**
+     * Shows the saved local-server endpoint under the row. The dialog saves to the same prefs
+     * file, so a listener keeps the line current while the dialog closes over this screen.
+     */
+    private fun bindLanSubtitle(view: View, prefs: SharedPreferencesHelper) {
+        val subtitle = view.findViewById<TextView>(R.id.lanSubtitle)
+        fun refresh() {
+            subtitle.text = prefs.getLanEndpoint()?.takeIf { it.isNotBlank() } ?: getString(R.string.settings_lan_not_set)
+        }
+        refresh()
+        val mainPrefs = requireContext().getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, android.content.Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> refresh() }
+        mainPrefs.registerOnSharedPreferenceChangeListener(listener)
+        lanPrefsListener = listener
+    }
+
+    /** Seldom-changed chat chrome switches stay folded until asked for, like the character editor's Advanced. */
+    private fun bindMoreFold(view: View) {
+        val header = view.findViewById<View>(R.id.advancedMoreHeader)
+        val group = view.findViewById<View>(R.id.advancedMoreGroup)
+        val chevron = view.findViewById<android.widget.ImageView>(R.id.advancedMoreChevron)
+        fun setOpen(open: Boolean) {
+            group.isVisible = open
+            chevron.rotation = if (open) 180f else 0f
+            header.contentDescription = getString(if (open) R.string.settings_more_collapse else R.string.settings_more_expand)
+        }
+        setOpen(false)
+        header.setOnClickListener { setOpen(!group.isVisible) }
+    }
+
+    override fun onDestroyView() {
+        lanPrefsListener?.let {
+            context?.getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, android.content.Context.MODE_PRIVATE)
+                ?.unregisterOnSharedPreferenceChangeListener(it)
+        }
+        lanPrefsListener = null
+        super.onDestroyView()
     }
 
     /**
@@ -722,7 +755,6 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         val sectionRoots = mapOf(
             SECTION_APPEARANCE to R.id.appearanceSection,
             SECTION_VOICE to R.id.voiceSection,
-            SECTION_HAPTICS to R.id.hapticsSection,
             SECTION_MODELS to R.id.modelsSection,
             SECTION_ADVANCED to R.id.advancedSection,
             SECTION_DATA to R.id.dataSection
@@ -761,7 +793,6 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         const val ARG_SECTION = "section"
         const val SECTION_APPEARANCE = "appearance"
         const val SECTION_VOICE = "voice"
-        const val SECTION_HAPTICS = "haptics"
         const val SECTION_MODELS = "models"
         const val SECTION_ADVANCED = "advanced"
         const val SECTION_DATA = "data"

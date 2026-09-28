@@ -23,7 +23,7 @@ import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.launch
 
-/** Code mode settings: the tab toggle, away notifications, machines, default approval mode, setup notes. */
+/** Code mode settings: away notifications, machines, default approval mode, setup notes. */
 class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
 
     private lateinit var hub: CodeHub
@@ -45,13 +45,6 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         hub = CodeHub.get(requireContext())
         view.findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener { parentFragmentManager.popBackStack() }
-        view.findViewById<SwitchCompat>(R.id.codeShowTabSwitch).apply {
-            isChecked = hub.store.enabled
-            setOnCheckedChangeListener { _, on ->
-                hub.store.enabled = on
-                if (!on) hub.store.lastTabWasCode = false
-            }
-        }
         view.findViewById<SwitchCompat>(R.id.codeNotifyAwaySwitch).apply {
             isChecked = hub.store.notifyWhenAway
             setOnCheckedChangeListener { _, on ->

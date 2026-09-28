@@ -18,8 +18,9 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 
 /**
  * The RP character panel: opened from the character chip. A header with who you're talking to,
- * then a grid of tiles for everything about the scene (memory, history, persona, style,
- * lore, the card itself), so none of it needs a trip through Settings.
+ * a model line (the one place to change the RP model), then a grid of tiles for everything
+ * about the scene (memory, history, persona, style, lore, the card itself), so none of it
+ * needs a trip through Settings.
  *
  * Solid on purpose: it holds a lot of small text and sits over a busy transcript, so it is an
  * opaque sheet with an outline and tiles one step off it, not glass. The chat behind stays sharp.
@@ -39,7 +40,16 @@ object RpCharacterPanel {
         val onClick: () -> Unit
     )
 
-    fun show(fragment: Fragment, character: RpCharacter?, title: String, subtitle: String, tiles: List<Tile>): BottomSheetDialog {
+    fun show(
+        fragment: Fragment,
+        character: RpCharacter?,
+        title: String,
+        subtitle: String,
+        /** The model this chat replies with. The line under the description is the one place to change it. */
+        modelName: String,
+        onModel: () -> Unit,
+        tiles: List<Tile>
+    ): BottomSheetDialog {
         val ctx = fragment.requireContext()
         val dialog = BottomSheetDialog(ctx, R.style.ThemeOverlay_Grokion_BottomSheet_Sharp)
         val sheet = LayoutInflater.from(ctx).inflate(R.layout.sheet_rp_character, null)
@@ -50,6 +60,14 @@ object RpCharacterPanel {
         sheet.findViewById<TextView>(R.id.rpPanelSubtitle).apply {
             text = subtitle
             visibility = if (subtitle.isBlank()) View.GONE else View.VISIBLE
+        }
+        sheet.findViewById<TextView>(R.id.rpPanelModelName).text = modelName
+        sheet.findViewById<View>(R.id.rpPanelModel).apply {
+            contentDescription = ctx.getString(R.string.rp_panel_model_a11y, modelName)
+            setOnClickListener {
+                dialog.dismiss()
+                onModel()
+            }
         }
         val frame = sheet.findViewById<View>(R.id.rpPanelAvatarFrame)
         frame.background = solidShape(ctx, R.color.panel_tile, oval = true)

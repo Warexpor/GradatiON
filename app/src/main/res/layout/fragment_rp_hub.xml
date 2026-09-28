@@ -62,16 +62,6 @@
                     android:background="@color/xai_hairline" />
 
                 <include
-                    android:id="@+id/rpHubPersonaRow"
-                    layout="@layout/item_rp_hub_row" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginStart="54dp"
-                    android:background="@color/xai_hairline" />
-
-                <include
                     android:id="@+id/rpHubLorebooksRow"
                     layout="@layout/item_rp_hub_row" />
 
@@ -82,7 +72,7 @@
                     android:background="@color/xai_hairline" />
 
                 <include
-                    android:id="@+id/rpHubSettingsRow"
+                    android:id="@+id/rpHubPersonaRow"
                     layout="@layout/item_rp_hub_row" />
             </LinearLayout>
 

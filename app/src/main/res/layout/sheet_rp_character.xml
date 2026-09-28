@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- RP character panel: who you're talking to, and everything about the scene one tap away -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -74,6 +75,37 @@
                 android:maxLines="2"
                 android:textColor="@color/xai_mute"
                 android:textSize="14sp" />
+
+            <!-- Which model replies. Tapping opens the same model popover Chat uses. -->
+            <LinearLayout
+                android:id="@+id/rpPanelModel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_press_svg"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:minHeight="44dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/rpPanelModelName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/xai_mute"
+                    android:textSize="13sp" />
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="2dp"
+                    android:contentDescription="@null"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/xai_mute" />
+            </LinearLayout>
         </LinearLayout>
 
         <LinearLayout

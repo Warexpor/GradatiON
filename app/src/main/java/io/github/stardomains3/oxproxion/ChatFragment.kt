@@ -860,10 +860,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
         }
-        tabRoleplay.setOnLongClickListener {
-            openRpHub()
-            true
-        }
         tabRoleplay.contentDescription = getString(R.string.mode_tab_roleplay_a11y)
         refreshModeTabs()
         watchModeSwitches()
@@ -2738,11 +2734,6 @@ $cleanContent
         }
 
         modelNameTextView.setOnLongClickListener {
-            if (viewModel.isRpMode()) {
-                hideKeyboard()
-                openBotModelPicker()
-                return@setOnLongClickListener true
-            }
             try {
                 val intent = Intent(Intent.ACTION_VIEW, "https://openrouter.ai/models".toUri())
                 startActivity(intent)
@@ -3323,6 +3314,7 @@ $cleanContent
             hideKeyboard()
             showModelPopover()
         }
+        bindRpControls(view)
         val group = view.findViewById<GlassSegmentedGroup>(R.id.controlsEffortGroup)
         effortGroup = group
         group.addOnButtonCheckedListener { _, checkedId, isChecked ->
@@ -3385,10 +3377,57 @@ $cleanContent
         }
     }
 
+    private var rpControlsBinding = false
+
+    /**
+     * The three Roleplay behaviour switches. They used to sit on their own settings screen; here
+     * they are one tap from the chat they change. Whole row is the tap target, like Settings.
+     */
+    private fun bindRpControls(root: View) {
+        fun bind(rowId: Int, switchId: Int, save: (Boolean) -> Unit) {
+            val toggle = root.findViewById<androidx.appcompat.widget.SwitchCompat>(switchId)
+            toggle.applyGrokionSwitchStyle()
+            root.findViewById<View>(rowId).setOnClickListener {
+                if (!it.isEnabled || rpControlsBinding) return@setOnClickListener
+                toggle.isChecked = !toggle.isChecked
+                save(toggle.isChecked)
+            }
+        }
+        bind(R.id.controlsRpThirdPersonRow, R.id.controlsRpThirdPersonSwitch) { sharedPreferencesHelper.saveRpThirdPerson(it) }
+        bind(R.id.controlsRpThoughtsRow, R.id.controlsRpThoughtsSwitch) { sharedPreferencesHelper.saveRpShowThoughts(it) }
+        bind(R.id.controlsRpFactsRow, R.id.controlsRpFactsSwitch) { sharedPreferencesHelper.saveRpAutoMemory(it) }
+    }
+
+    /** Show the Roleplay group in Roleplay mode only, and mirror the saved switches into it. */
+    private fun updateRpControls(root: View) {
+        val group = root.findViewById<View>(R.id.controlsRpGroup) ?: return
+        val rp = viewModel.isRpMode()
+        group.isVisible = rp
+        if (!rp) return
+        rpControlsBinding = true
+        fun sync(rowId: Int, switchId: Int, on: Boolean, enabled: Boolean) {
+            root.findViewById<androidx.appcompat.widget.SwitchCompat>(switchId).apply {
+                isChecked = on
+                isEnabled = enabled
+            }
+            root.findViewById<View>(rowId).apply {
+                isEnabled = enabled
+                alpha = if (enabled) 1f else 0.45f
+            }
+        }
+        // Open scene has no character card, so third person and thoughts have nothing to act on.
+        val hasCharacter = !sharedPreferencesHelper.isRpLlmMode()
+        sync(R.id.controlsRpThirdPersonRow, R.id.controlsRpThirdPersonSwitch, sharedPreferencesHelper.isRpThirdPerson(), hasCharacter)
+        sync(R.id.controlsRpThoughtsRow, R.id.controlsRpThoughtsSwitch, sharedPreferencesHelper.isRpShowThoughts(), hasCharacter)
+        sync(R.id.controlsRpFactsRow, R.id.controlsRpFactsSwitch, sharedPreferencesHelper.isRpAutoMemory(), true)
+        rpControlsBinding = false
+    }
+
     /** Mirror model + reasoning state into the sheet's quick controls. */
     private fun updateQuickControls() {
         val group = effortGroup ?: return
         val root = view ?: return
+        updateRpControls(root)
         val model = viewModel.activeChatModel.value
         root.findViewById<TextView>(R.id.controlsModelName).text =
             model?.let { viewModel.getModelDisplayName(it) } ?: ""
@@ -3520,6 +3559,7 @@ $cleanContent
     private fun staggerPanelRows(d: Float) {
         val rows = listOfNotNull(
             headerContainer.findViewById<ViewGroup>(R.id.controlsQuick),
+            headerContainer.findViewById<ViewGroup>(R.id.controlsRpGroup)?.takeIf { it.isVisible },
             headerContainer.findViewById<ViewGroup>(R.id.buttonsContainer)?.takeIf { it.isVisible }
         ).flatMap { c -> (0 until c.childCount).map { c.getChildAt(it) } }
         var index = 0
@@ -5728,7 +5768,7 @@ $cleanContent
     }
 
     /** Grok-style model popover growing out of the composer pill; "Manage models" opens the full list. */
-    private fun showModelPopover() {
+    private fun showModelPopover(anchor: View = modelNameTextView) {
         val active = viewModel.activeChatModel.value
         val models = (viewModel.getBuiltInModels() + sharedPreferencesHelper.getCustomModels())
             .distinctBy { it.apiIdentifier }
@@ -5751,10 +5791,11 @@ $cleanContent
                 onClick = { openBotModelPicker() }
             )
         )
-        newPopover()?.show(getString(R.string.popover_models_title), rows, footer)
+        val popover = if (anchor === modelNameTextView) newPopover() else newPopover(anchor = anchor, onOpenChange = { })
+        popover?.show(getString(R.string.popover_models_title), rows, footer)
     }
 
-    /** RP pill: switch character in place, plus the roleplay home and the RP model. */
+    /** RP pill: switch character in place, plus the full character list. */
     private fun showCharacterPopover(anchor: View = newChatButton) {
         val repo = viewModel.getRpRepository()
         viewLifecycleOwner.lifecycleScope.launch {
@@ -5781,19 +5822,13 @@ $cleanContent
                     onClick = { startRpWith(c) }
                 )
             }
-            val model = viewModel.activeChatModel.value?.let { viewModel.getModelDisplayName(it) }
+            // The RP model is changed from the character panel's header, not from here.
             val footer = listOf(
                 PickerPopover.Row(
                     title = getString(R.string.popover_all_characters),
                     subtitle = getString(R.string.popover_all_characters_sub),
                     iconRes = R.drawable.ic_person,
                     onClick = { openRpCharacterLibrary() }
-                ),
-                PickerPopover.Row(
-                    title = getString(R.string.popover_rp_model),
-                    subtitle = model,
-                    iconRes = R.drawable.ic_tune,
-                    onClick = { openBotModelPicker() }
                 )
             )
             newPopover(anchor = anchor, edge = anchor, onOpenChange = { })
@@ -5876,7 +5911,6 @@ $cleanContent
                 })
             }
             add(RpCharacterPanel.Tile(R.string.rp_panel_persona, R.drawable.rp_ic_persona, preview = personaName.ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
-            add(RpCharacterPanel.Tile(R.string.rp_panel_settings, R.drawable.ic_sliders) { pushRp(RpSettingsFragment.newInstance()) })
             val pinnedId = if (character != null && !llm) sharedPreferencesHelper.getRpLorebookId(character.id) else null
             // The book a reply will really use: the character's pinned one, else the active book.
             val loreBook = books.firstOrNull { it.id == pinnedId } ?: books.firstOrNull { it.isActive }
@@ -5888,7 +5922,10 @@ $cleanContent
             }
             add(RpCharacterPanel.Tile(R.string.rp_panel_switch, R.drawable.rp_ic_characters, header = true) { menuButton.post { showCharacterPopover() } })
         }
-        RpCharacterPanel.show(this, if (llm) null else character, title, subtitle, tiles)
+        val activeModel = viewModel.activeChatModel.value
+        val modelName = activeModel?.let { viewModel.getModelDisplayName(it) } ?: getString(R.string.rp_panel_model_none)
+        // The pill is hidden in RP, so the popover grows from the + button instead.
+        RpCharacterPanel.show(this, if (llm) null else character, title, subtitle, modelName, { menuButton.post { showModelPopover(menuButton) } }, tiles)
     }
 
     /** Lore tile: pin a book to this character, or open the library when there is nothing to pin. */

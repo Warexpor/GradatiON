@@ -42,8 +42,6 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
             .setOnClickListener { openSection(SettingsDetailFragment.SECTION_APPEARANCE) }
         view.findViewById<View>(R.id.settingsRowVoice)
             .setOnClickListener { openSection(SettingsDetailFragment.SECTION_VOICE) }
-        view.findViewById<View>(R.id.settingsRowHaptics)
-            .setOnClickListener { openSection(SettingsDetailFragment.SECTION_HAPTICS) }
         view.findViewById<View>(R.id.settingsRowModels)
             .setOnClickListener { openSection(SettingsDetailFragment.SECTION_MODELS) }
         view.findViewById<View>(R.id.settingsRowAdvanced)
@@ -58,13 +56,5 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
                 .addToBackStack(null)
                 .commit()
         }
-    }
-
-    override fun onHiddenChanged(hidden: Boolean) {
-        super.onHiddenChanged(hidden)
-        if (hidden) return
-        // Code settings has its own switch for the same flag.
-        view?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsCodeSwitch)?.isChecked =
-            io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store.enabled
     }
 }
