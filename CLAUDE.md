@@ -56,3 +56,8 @@ the state of work in progress in `docs/handoff.md`.
 - She trusts your taste. For "make this better" with no specifics, pick the direction yourself, do it,
   and explain the why.
 - When context gets big, write `docs/handoff.md` and let a fresh session continue.
+
+Reply in TL;DR form: short, answer first, no long explanations unless asked.
+- Never add Claude attribution to git commits or PRs: no "Co-Authored-By: Claude" trailer, no "Generated with Claude Code" line.
+- Use the built-in Edit/Write/Read tools for file changes instead of Python scripts or shell workarounds, unless the tools can't handle it (binary files, big batch edits).
+- Act as an orchestrator: for big multi-step or parallelizable tasks, delegate the work to `worker` subagents (Sonnet, medium effort) without asking, run independent ones in parallel, and review their results before reporting. Handle quick, small tasks yourself.
