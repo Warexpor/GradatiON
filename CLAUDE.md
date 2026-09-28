@@ -51,6 +51,7 @@ the state of work in progress in `docs/handoff.md`.
 
 ## Working with the user
 - She voice-dictates, so expect mis-transcriptions ("iOS Green" meant glass) and state how you read it.
+- Work silently: no status updates or narration between tool calls ("Now I'll...", "Let me check..."). Only write text in the final reply, or when you need my input.
 - Replies are the tightest TLDR that is still understandable. No emojis. Say what was verified and what still needs the phone.
 - She trusts your taste. For "make this better" with no specifics, pick the direction yourself, do it,
   and explain the why.
