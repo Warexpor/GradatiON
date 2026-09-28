@@ -15,6 +15,7 @@ class LanModelsAdapter(
     private var models: List<LlmModel>,
     private val isLlamaCppProvider: Boolean,
     private val isModelInLibrary: (String) -> Boolean,
+    private val isModelSelected: (String) -> Boolean = { false },
     private val onItemClicked: (LlmModel) -> Unit,
     private val onEjectClicked: ((LlmModel) -> Unit)? = null,
     private val onLoadClicked: ((LlmModel) -> Unit)? = null
@@ -26,6 +27,8 @@ class LanModelsAdapter(
         models = newModels
         notifyDataSetChanged()
     }
+
+    fun currentCount() = models.size
 
     fun refreshAddedStates() {
         notifyDataSetChanged()
@@ -77,7 +80,14 @@ class LanModelsAdapter(
 
     private fun bindViewHolder(holder: ModelViewHolder, model: LlmModel, @Suppress("UNUSED_PARAMETER") payloads: List<Any>) {
         holder.modelId.text = model.apiIdentifier
-        holder.modelName.text = model.displayName
+        // The model in use says so in words; the check alone only means "added".
+        val inUse = isModelSelected(model.apiIdentifier)
+        val inUseLabel = holder.itemView.context.getString(R.string.lan_model_in_use)
+        holder.modelName.text = when {
+            !inUse -> model.displayName
+            model.displayName == model.apiIdentifier -> inUseLabel
+            else -> "$inUseLabel · ${model.displayName}"
+        }
         holder.modelIcon.setImageResource(ModelBrands.of(model)?.icon ?: R.drawable.ic_local_network)
 
         val isActivelyLoading = loadingModels.contains(model.apiIdentifier)

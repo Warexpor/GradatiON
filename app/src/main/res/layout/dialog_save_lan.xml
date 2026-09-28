@@ -18,24 +18,75 @@
             android:id="@+id/dialog_title_lan"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/save_lan_title"
+            android:text="@string/lan_sheet_title"
             android:textColor="@color/xai_ink"
-            android:textAppearance="@style/TextAppearance.Gradation.Headline"
-            android:layout_marginBottom="16dp" />
+            android:textAppearance="@style/TextAppearance.Gradation.Headline" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/save_lan_example"
-            android:textColor="@color/xai_mute"
-            android:textSize="12sp"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginTop="4dp"
+            android:text="@string/lan_sheet_sub"
+            android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
 
-        <!-- Edit field -->
-        <com.google.android.material.textfield.TextInputLayout
+        <!-- Server type: one tap picks the type and fills its usual port -->
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/save_lan_endpoint_hint"
+            android:layout_marginTop="16dp"
+            android:text="@string/lan_type_label"
+            android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp">
+
+            <TextView
+                android:id="@+id/chip_ollama"
+                style="@style/Widget.Gradation.ServerChip"
+                android:text="@string/save_lan_ollama" />
+
+            <TextView
+                android:id="@+id/chip_lm_studio"
+                style="@style/Widget.Gradation.ServerChip"
+                android:text="@string/save_lan_lm_studio" />
+
+            <TextView
+                android:id="@+id/chip_llama_cpp"
+                style="@style/Widget.Gradation.ServerChip"
+                android:text="@string/save_lan_llama_cpp" />
+
+            <TextView
+                android:id="@+id/chip_koboldcpp"
+                style="@style/Widget.Gradation.ServerChip"
+                android:text="@string/lan_type_koboldcpp" />
+
+            <TextView
+                android:id="@+id/chip_other"
+                style="@style/Widget.Gradation.ServerChip"
+                android:text="@string/lan_type_other" />
+
+            <androidx.constraintlayout.helper.widget.Flow
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:constraint_referenced_ids="chip_ollama,chip_lm_studio,chip_llama_cpp,chip_koboldcpp,chip_other"
+                app:flow_horizontalGap="8dp"
+                app:flow_horizontalStyle="packed"
+                app:flow_horizontalBias="0"
+                app:flow_verticalGap="8dp"
+                app:flow_wrapMode="chain"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/layout_lan_url"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="@string/lan_host_hint"
             app:hintTextColor="@color/xai_mute">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -49,118 +100,130 @@
                 android:singleLine="true" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Provider Selection Section -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/save_lan_select_provider"
+            android:layout_marginTop="6dp"
+            android:text="@string/lan_host_help"
+            android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
+
+        <!-- Advanced: key and context stay out of the way until needed -->
+        <TextView
+            android:id="@+id/lan_advanced_toggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:contentDescription="@string/lan_advanced_cd"
+            android:drawableEnd="@drawable/ic_expand_more"
+            android:drawableTint="@color/xai_mute"
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:text="@string/lan_advanced"
             android:textColor="@color/xai_ink"
-            android:textSize="14sp"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="8dp" />
+            android:textSize="15sp"
+            android:textFontWeight="600"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
 
         <LinearLayout
+            android:id="@+id/lan_advanced_group"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@drawable/bg_settings_card"
-            android:padding="12dp"
-            android:layout_marginBottom="16dp">
+            android:visibility="gone">
 
-            <CheckBox
-                android:id="@+id/checkbox_ollama"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/save_lan_ollama"
-                android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox"
-                android:layout_marginBottom="8dp" />
-
-            <CheckBox
-                android:id="@+id/checkbox_lm_studio"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/save_lan_lm_studio"
-                android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox"
-                android:layout_marginBottom="8dp" />
-
-            <CheckBox
-                android:id="@+id/checkbox_llama_cpp"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/save_lan_llama_cpp"
-                android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox"
-                android:layout_marginBottom="8dp" />
-
-            <!-- NEW: MLX LM Checkbox -->
-            <CheckBox
-                android:id="@+id/checkbox_mlx_lm"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/save_lan_mlx_lm"
-                android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox" />
-            <CheckBox
-                android:id="@+id/checkbox_hermes_agent"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/save_lan_hermes_agent"
-                android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox" />
-            <CheckBox
-                android:id="@+id/checkbox_olmx"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/save_lan_omlx"
-                android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox" />
-            <CheckBox
-                android:id="@+id/checkbox_nativ"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/save_lan_nativ"
-                android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox" />
-
-
-        </LinearLayout>
-
-        <!-- NEW: LAN API Key Section -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/save_lan_api_key_label"
-            android:textColor="@color/xai_ink"
-            android:textSize="14sp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp" />
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="@string/save_lan_enter_if_required"
-            app:hintTextColor="@color/xai_mute"
-            android:layout_marginBottom="16dp"
-            app:endIconMode="password_toggle">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/edit_text_lan_api_key"
+            <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textPassword"
-                android:importantForAutofill="no"
-                android:imeOptions="actionDone"
-                android:textColor="@color/xai_ink"
-                android:textSize="16sp"
-                android:singleLine="true" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:hint="@string/lan_api_key_hint"
+                app:hintTextColor="@color/xai_mute"
+                app:endIconMode="password_toggle">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/edit_text_lan_api_key"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textPassword"
+                    android:importantForAutofill="no"
+                    android:imeOptions="actionNext"
+                    android:textColor="@color/xai_ink"
+                    android:textSize="16sp"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="@string/lan_context_hint"
+                app:hintTextColor="@color/xai_mute">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/edit_text_lan_context"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:imeOptions="actionDone"
+                    android:textColor="@color/xai_ink"
+                    android:textSize="16sp"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/lan_context_help"
+                android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
+
+            <TextView
+                android:id="@+id/lan_context_ollama_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/lan_context_ollama"
+                android:textAppearance="@style/TextAppearance.Gradation.Footnote"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- One status line for the connection test -->
+        <TextView
+            android:id="@+id/lan_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textAppearance="@style/TextAppearance.Gradation.Footnote"
+            android:textColor="@color/xai_ink"
+            android:visibility="gone"
+            android:accessibilityLiveRegion="polite" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/button_test_lan"
+            style="@style/Widget.Gradation.Button.Tonal"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="12dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/lan_test" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/button_choose_models"
+            style="@style/Widget.Grokion.Button"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/lan_choose_models"
+            android:visibility="gone" />
 
         <!-- Buttons -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:orientation="horizontal"
             android:gravity="end">
 
@@ -168,21 +231,21 @@
                 android:id="@+id/button_cancel_lan"
                 style="@style/Widget.Gradation.Button.Tonal"
                 android:layout_width="0dp"
-            android:layout_weight="1"
+                android:layout_weight="1"
                 android:layout_height="48dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 android:text="@string/action_cancel" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_save_lan"
                 style="@style/Widget.Grokion.Button"
                 android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
                 android:layout_height="48dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 android:text="@string/action_save" />
         </LinearLayout>
     </LinearLayout>

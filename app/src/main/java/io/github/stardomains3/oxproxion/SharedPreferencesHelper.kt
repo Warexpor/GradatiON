@@ -76,6 +76,10 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_VOLUME_SCROLL = "volume_scroll_enabled"
         private const val KEY_ENABLED_TOOLS = "enabled_tools"
         private const val KEY_TOOLS_ENABLED = "tools_enabled_preference"
+        const val LAN_PROVIDER_KOBOLDCPP = "koboldcpp"
+        /** Any other server that speaks the OpenAI API. */
+        const val LAN_PROVIDER_OPENAI_COMPAT = "openai_compat"
+        private const val KEY_LAN_CONTEXT_SIZE = "lan_context_size"
         const val LAN_PROVIDER_OMLX = "omlx"
         const val LAN_PROVIDER_NATIV = "nativ"
 
@@ -126,7 +130,6 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_LAN_API_KEY_MIGRATED = "lan_api_key_migrated"
         private const val API_KEYS_PREFS_STORE = "ApiKeysPrefsStore"
         const val MAIN_PREFS = "MainAppPrefs"
-        private const val KEY_MODEL_NEW_CHAT = "modelvalenewchat"
         private const val KEY_CUSTOM_MODELS = "custom_models"
         private const val KEY_DEFAULT_MODELS_SEEDED = "default_models_seeded"
         private const val KEY_OLD_DEFAULTS_PRUNED = "old_default_models_pruned"
@@ -894,14 +897,38 @@ class SharedPreferencesHelper(context: Context) {
 
     // --- Model Preferences ---
 
-    fun savePreferenceModelnewchat(value: String) {
+    /** Remembers [value] for the mode the app is in; Chat and Roleplay each keep their own (see [ModelSlots]). */
+    fun savePreferenceModelnewchat(value: String) = savePreferenceModelFor(getChatMode(), value)
+
+    fun savePreferenceModelFor(mode: ChatMode, value: String) {
         mainPrefs.edit(commit = true) {
-            putString(KEY_MODEL_NEW_CHAT, value)
+            putString(ModelSlots.key(mode), value)
         }
     }
 
-    fun getPreferenceModelnew(): String {
-        return mainPrefs.getString(KEY_MODEL_NEW_CHAT, "openrouter/free").toString()
+    fun getPreferenceModelnew(): String = getPreferenceModelFor(getChatMode())
+
+    fun getPreferenceModelFor(mode: ChatMode): String =
+        ModelSlots.resolve(mode, { mainPrefs.getString(it, null) }, "openrouter/free")
+
+    /**
+     * Freezes [mode]'s slot at its current value. Without this a Roleplay that never picked would
+     * keep following Chat's later picks instead of starting from the model it had.
+     */
+    fun pinModelSlot(mode: ChatMode) {
+        val key = ModelSlots.key(mode)
+        if (mainPrefs.getString(key, null).isNullOrBlank()) {
+            mainPrefs.edit { putString(key, getPreferenceModelFor(mode)) }
+        }
+    }
+
+    // --- Local server context ---
+
+    /** 0 means "not set": use what the server reports, else [LanContextBudget.DEFAULT_CONTEXT]. */
+    fun getLanContextSize(): Int = mainPrefs.getInt(KEY_LAN_CONTEXT_SIZE, 0)
+
+    fun setLanContextSize(tokens: Int) = mainPrefs.edit {
+        if (tokens > 0) putInt(KEY_LAN_CONTEXT_SIZE, tokens) else remove(KEY_LAN_CONTEXT_SIZE)
     }
     fun getScrollersPreference(): Boolean {
         return mainPrefs.getBoolean(KEY_SCROLLERS_ENABLED, false)
@@ -1079,8 +1106,10 @@ class SharedPreferencesHelper(context: Context) {
         return if (key.isBlank()) "any-non-empty-string" else key
     }
     fun getLanEndpoint(): String? {
-        // May be null if the user never set a value
-        return mainPrefs.getString(KEY_LAN_ENDPOINT, null)
+        // May be null if the user never set a value. Older installs saved whatever was typed
+        // (trailing "/", "/v1", no scheme), and every caller appends "/v1/...", so clean it on read.
+        val saved = mainPrefs.getString(KEY_LAN_ENDPOINT, null) ?: return null
+        return LanEndpoints.normalize(saved, null) ?: saved
     }
     fun getLanProvider(): String {
         return mainPrefs.getString(LAN_PROVIDER_KEY, LAN_PROVIDER_OLLAMA) ?: LAN_PROVIDER_OLLAMA

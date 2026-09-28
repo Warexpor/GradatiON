@@ -56,20 +56,122 @@
             app:tint="@color/xai_ink" />
     </LinearLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:fadingEdgeLength="28dp"
-        android:requiresFadingEdge="vertical"
-        android:id="@+id/recyclerViewLanModels"
+    <!-- Which server this list comes from; tap to change it -->
+    <LinearLayout
+        android:id="@+id/lanServerRow"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:overScrollMode="never"
-        android:paddingStart="8dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="24dp"
-        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-        tools:listitem="@layout/list_item_lan_model"
-        android:scrollbars="none"/>
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/bg_settings_card"
+        android:clickable="true"
+        android:contentDescription="@string/lan_models_server_cd"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:minHeight="52dp"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_local_network"
+            app:tint="@color/xai_ink" />
+
+        <TextView
+            android:id="@+id/lanServerLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/xai_ink"
+            android:textSize="15sp"
+            android:textFontWeight="600"
+            tools:text="Ollama · 192.168.1.20:11434" />
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_edit"
+            app:tint="@color/xai_mute" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:fadingEdgeLength="28dp"
+            android:requiresFadingEdge="vertical"
+            android:id="@+id/recyclerViewLanModels"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:overScrollMode="never"
+            android:paddingStart="8dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="24dp"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:listitem="@layout/list_item_lan_model"
+            android:scrollbars="none"/>
+
+        <!-- Loading, empty and error all land here instead of a passing toast -->
+        <LinearLayout
+            android:id="@+id/lanState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingStart="32dp"
+            android:paddingEnd="32dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/lanProgress"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:indeterminateTint="@color/xai_mute" />
+
+            <TextView
+                android:id="@+id/lanStateText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:textColor="@color/xai_body"
+                android:textSize="15sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/lanRetry"
+                style="@style/Widget.Grokion.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginTop="16dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="160dp"
+                android:text="@string/lan_retry" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/lanEditServer"
+                style="@style/Widget.Gradation.Button.Tonal"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="160dp"
+                android:text="@string/lan_edit_server" />
+        </LinearLayout>
+    </FrameLayout>
 
 </LinearLayout>

@@ -40,6 +40,45 @@ object RpApiMemory {
     }
 
     /**
+     * Local models: keep the newest run of history that fits [tokenBudget]. Same priorities as
+     * [trimNonSystem] (latest turn and pinned lines always stay, then the greeting, then the
+     * newest history), but sized in tokens because a local window is fixed and small. Stops at
+     * the first line that doesn't fit so the kept history stays contiguous.
+     */
+    fun <T> trimToTokenBudget(
+        nonSystem: List<T>,
+        tokenBudget: Int,
+        tokensOf: (T) -> Int,
+        pinCharacterGreeting: Boolean,
+        isAssistant: (T) -> Boolean,
+        isPinned: (T) -> Boolean = { false }
+    ): List<T> {
+        if (nonSystem.isEmpty()) return emptyList()
+        val keep = sortedSetOf<Int>()
+        keep += nonSystem.lastIndex
+        nonSystem.forEachIndexed { i, message -> if (isPinned(message)) keep += i }
+        var used = keep.sumOf { tokensOf(nonSystem[it]) }
+        if (pinCharacterGreeting) {
+            val greeting = nonSystem.indexOfFirst(isAssistant)
+            if (greeting >= 0 && greeting !in keep) {
+                val cost = tokensOf(nonSystem[greeting])
+                if (used + cost <= tokenBudget) {
+                    keep += greeting
+                    used += cost
+                }
+            }
+        }
+        for (i in nonSystem.indices.reversed()) {
+            if (i in keep) continue
+            val cost = tokensOf(nonSystem[i])
+            if (used + cost > tokenBudget) break
+            keep += i
+            used += cost
+        }
+        return keep.map { nonSystem[it] }
+    }
+
+    /**
      * Null while the chat still fits in [historyBudget]: history is dropped before the card.
      * "All messages" never cuts the card.
      */

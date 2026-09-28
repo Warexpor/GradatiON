@@ -138,8 +138,24 @@ class BotModelPickerFragment : Fragment() {
         }
     }
 
-    // Push over this list: replace would also tear down the chat screen underneath and rebuild it on return.
+    /** No server saved yet: set one up first, then land on its model list. */
     private fun openLanModels() {
+        if (!sharedPreferencesHelper.getLanEndpoint().isNullOrBlank()) {
+            pushLanModels()
+            return
+        }
+        val fm = requireActivity().supportFragmentManager
+        val sheet = SaveLANDialogFragment()
+        // Tied to the sheet, so backing out of it leaves nothing listening.
+        fm.setFragmentResultListener(SaveLANDialogFragment.RESULT_SAVED, sheet) { _, result ->
+            // "Choose models" in the sheet already opened the list itself.
+            if (!result.getBoolean(SaveLANDialogFragment.EXTRA_OPENED_MODELS)) pushLanModels()
+        }
+        sheet.show(fm, SaveLANDialogFragment.TAG)
+    }
+
+    // Push over this list: replace would also tear down the chat screen underneath and rebuild it on return.
+    private fun pushLanModels() {
         parentFragmentManager.beginTransaction()
             .withGrokStackAnimations()
             .hide(this)

@@ -819,6 +819,33 @@ class ScreenshotTest {
             }
         }
     }
+    /** Local server sheet after a failed test and after a good one; no network, the result is fed in. */
+    @Test fun localServerSheetStatesDark() = withChat { a, _ ->
+        val sheet = SaveLANDialogFragment()
+        sheet.show(a.supportFragmentManager, "lan"); idle()
+        val failure = LanFailure(LanFailure.Kind.UNREACHABLE)
+        sheet.showProbeResult(LanFetchState.Failed(failure, LanErrors.message(a, failure)))
+        idle(); snapDialogCentered(a, "dialog_lan_failed_dark")
+        val models = (1..4).map {
+            LlmModel(displayName = "model-$it", apiIdentifier = "model-$it", isVisionCapable = false,
+                isImageGenerationCapable = false, isReasoningCapable = false, isLANModel = true)
+        }
+        sheet.showProbeResult(LanFetchState.Loaded(models))
+        idle(); snapDialogCentered(a, "dialog_lan_connected_dark")
+        org.junit.Assert.assertEquals(
+            "Connected · 4 models",
+            sheet.requireView().findViewById<android.widget.TextView>(R.id.lan_status).text.toString()
+        )
+    }
+
+    @Test fun lanModelsEmptyStateDark() = withChat { a, _ ->
+        // No server saved: the list explains itself instead of flashing a toast.
+        SharedPreferencesHelper(a).setLanEndpoint(null)
+        pushFragment(a, LanModelsFragment()); idle()
+        org.junit.Assert.assertTrue(a.findViewById<android.view.View>(R.id.lanState).visibility == android.view.View.VISIBLE)
+        snap(root(a), "lan_models_empty_dark")
+    }
+
     @Test @Config(qualifiers = LIGHT)
     fun inputDialogLight() = withChat { a, chat ->
         GrokInputDialog.show(chat, "Rename conversation", "Title", "Transformer attention", "Save", onConfirm = {})

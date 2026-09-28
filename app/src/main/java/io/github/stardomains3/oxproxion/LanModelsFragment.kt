@@ -6,9 +6,10 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -22,22 +23,22 @@ class LanModelsFragment : Fragment() {
     private lateinit var viewModel: ChatViewModel
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: LanModelsAdapter
+    private lateinit var stateGroup: View
+    private lateinit var stateText: TextView
+    private lateinit var progress: View
+    private lateinit var retryButton: View
+    private lateinit var editButton: View
+    private lateinit var serverLabel: TextView
     private var allModels: List<LlmModel> = emptyList()
 
-    // NEW: Permission Launcher for Android 17+ Local Network
+    // Android 17+ asks before the app talks to devices on the local network.
     private val localNetworkPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
-            // Permission granted! Proceed with fetching models.
             viewModel.startLanModelsFetch()
         } else {
-            // Permission denied. Explain to the user.
-            AppToast.makeText(
-                requireContext(),
-                "Local Network permission is required to fetch models from your LAN server.",
-                AppToast.LENGTH_LONG
-            ).show()
+            showState(getString(R.string.lan_permission_denied), loading = false)
         }
     }
 
@@ -57,18 +58,12 @@ class LanModelsFragment : Fragment() {
 
         viewModel = ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[ChatViewModel::class.java]
 
-        val provider = viewModel.getCurrentLanProvider()
-        val title = when (provider) {
-            "lm_studio" -> "LM Studio"
-            "llama_cpp" -> "llama.cpp"
-            "mlx_lm" -> "MLX LM"
-            "ollama" -> "Ollama"
-            "omlx" -> "oMLX"
-            "nativ" -> "Nativ"
-            "hermes_agent" -> "Hermes Agent"
-            else -> getString(R.string.model_lan_title)
-        }
-        view.findViewById<android.widget.TextView>(R.id.lanTitle).text = title
+        stateGroup = view.findViewById(R.id.lanState)
+        stateText = view.findViewById(R.id.lanStateText)
+        progress = view.findViewById(R.id.lanProgress)
+        retryButton = view.findViewById(R.id.lanRetry)
+        editButton = view.findViewById(R.id.lanEditServer)
+        serverLabel = view.findViewById(R.id.lanServerLabel)
 
         // CANCEL BEFORE BACK
         view.findViewById<View>(R.id.lanBack).setOnClickListener {
@@ -77,18 +72,23 @@ class LanModelsFragment : Fragment() {
         }
 
         view.findViewById<View>(R.id.lanRefresh).setOnClickListener { checkLocalNetworkAndFetch() }
+        retryButton.setOnClickListener { checkLocalNetworkAndFetch() }
+        view.findViewById<View>(R.id.lanServerRow).setOnClickListener { editServer() }
+        editButton.setOnClickListener { editServer() }
+        renderServerLabel()
 
         recyclerView = view.findViewById(R.id.recyclerViewLanModels)
         recyclerView.layoutManager = LinearLayoutManager(context)
 
-        // Pass provider to adapter to determine eject button visibility
-        val isLlamaCpp = provider == "llama_cpp"
+        // Eject/load only exist on llama.cpp's router mode
+        val isLlamaCpp = viewModel.getCurrentLanProvider() == SharedPreferencesHelper.LAN_PROVIDER_LLAMA_CPP
         adapter = LanModelsAdapter(
             models = emptyList(),
             isLlamaCppProvider = isLlamaCpp,
             isModelInLibrary = { id -> viewModel.modelExists(id) },
+            isModelSelected = { id -> viewModel.activeChatModel.value == id },
             onItemClicked = { model ->
-                addModel(model)
+                chooseModel(model)
             },
             onEjectClicked = if (isLlamaCpp) { model ->
                 unloadModel(model)
@@ -99,31 +99,26 @@ class LanModelsFragment : Fragment() {
         )
         recyclerView.adapter = adapter
 
-        // OBSERVE MODELS (REACTIVE)
-        viewModel.lanModels.observe(viewLifecycleOwner) { models ->
-            allModels = models.sortedBy { it.displayName.lowercase() }
-            adapter.updateModels(allModels)
-
-            // EMPTY TOAST
-            if (models.isEmpty()) {
-                val emptyMessage = when (provider) {
-                    "lm_studio" -> "No LM Studio models found.\nMake sure LM Studio is running and has models loaded."
-                    "llama_cpp" -> "No llama.cpp models found.\nMake sure llama.cpp server is running and has models loaded."
-                    "mlx_lm" -> "No MLX LM models found.\nMake sure MLX LM server is running and has models loaded."
-                    "ollama" -> "No Ollama models found.\nMake sure Ollama is installed and has models pulled."
-                    "omlx" -> "No oMLX models found.\nMake sure oMLX is installed and has models pulled."
-                    "nativ" -> "No Nativ models found.\nMake sure Nativ is installed and has models pulled."
-                    "hermes_agent" -> "No Hermes Agent models found.\nMake sure Hermes Agent server is running and has models loaded."
-                    else -> "No models found."
+        viewModel.lanFetchState.observe(viewLifecycleOwner) { state ->
+            when (state) {
+                LanFetchState.Loading -> {
+                    // A refresh keeps the current rows on screen; only an empty list shows the spinner.
+                    if (adapter.currentCount() == 0) showState(getString(R.string.lan_loading), loading = true)
                 }
-                AppToast.makeText(requireContext(), emptyMessage, AppToast.LENGTH_LONG).show()
-            }
-        }
-
-        // OBSERVE ERRORS
-        viewModel.toolUiEvent.observe(viewLifecycleOwner) { event ->
-            event.getContentIfNotHandled()?.let {
-                AppToast.makeText(requireContext(), it, AppToast.LENGTH_LONG).show()
+                is LanFetchState.Failed -> {
+                    allModels = emptyList()
+                    adapter.updateModels(allModels)
+                    showState(state.message, loading = false)
+                }
+                is LanFetchState.Loaded -> {
+                    allModels = state.models.sortedBy { it.displayName.lowercase() }
+                    adapter.updateModels(allModels)
+                    if (allModels.isEmpty()) {
+                        showState(getString(R.string.lan_models_empty), loading = false)
+                    } else {
+                        stateGroup.isVisible = false
+                    }
+                }
             }
         }
 
@@ -132,56 +127,93 @@ class LanModelsFragment : Fragment() {
                 adapter.refreshAddedStates()
             }
         }
+        viewModel.activeChatModel.observe(viewLifecycleOwner) { adapter.refreshAddedStates() }
+
+        // The sheet saved a different server: show it and look again.
+        requireActivity().supportFragmentManager.setFragmentResultListener(
+            SaveLANDialogFragment.RESULT_SAVED, viewLifecycleOwner
+        ) { _, _ ->
+            renderServerLabel()
+            checkLocalNetworkAndFetch()
+        }
 
         // START FETCH (with permission check)
         checkLocalNetworkAndFetch()
     }
 
-    // NEW: Optimized helper function to check permission before fetching
+    private fun renderServerLabel() {
+        val prefs = SharedPreferencesHelper(requireContext())
+        val endpoint = prefs.getLanEndpoint()
+        serverLabel.text = if (endpoint == null) {
+            getString(R.string.lan_no_server)
+        } else {
+            "${providerLabel(prefs.getLanProvider())} · ${LanEndpoints.hostLabel(endpoint)}"
+        }
+    }
+
+    private fun providerLabel(provider: String): String = when (provider) {
+        "lm_studio" -> "LM Studio"
+        "llama_cpp" -> "llama.cpp"
+        "mlx_lm" -> "MLX LM"
+        "ollama" -> "Ollama"
+        "omlx" -> "oMLX"
+        "nativ" -> "Nativ"
+        "hermes_agent" -> "Hermes Agent"
+        "koboldcpp" -> "KoboldCpp"
+        else -> getString(R.string.model_lan_title)
+    }
+
+    private fun editServer() {
+        SaveLANDialogFragment().show(requireActivity().supportFragmentManager, SaveLANDialogFragment.TAG)
+    }
+
+    /** Loading, empty and failed all share one centered block; [loading] swaps the buttons for a spinner. */
+    private fun showState(message: String, loading: Boolean) {
+        stateText.text = message
+        progress.isVisible = loading
+        retryButton.isVisible = !loading
+        editButton.isVisible = !loading
+        stateGroup.isVisible = true
+    }
+
     private fun checkLocalNetworkAndFetch() {
         // Android 17 (API 37) requires explicit local network permission
-        if (Build.VERSION.SDK_INT >= 37) {
-            if (ContextCompat.checkSelfPermission(
-                    requireContext(),
-                    "android.permission.ACCESS_LOCAL_NETWORK"
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                // Already granted, fetch normally
-                viewModel.startLanModelsFetch()
-            } else {
-                // Ask the user for permission
-                localNetworkPermissionLauncher.launch("android.permission.ACCESS_LOCAL_NETWORK")
-            }
+        if (Build.VERSION.SDK_INT >= 37 &&
+            ContextCompat.checkSelfPermission(
+                requireContext(),
+                "android.permission.ACCESS_LOCAL_NETWORK"
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            localNetworkPermissionLauncher.launch("android.permission.ACCESS_LOCAL_NETWORK")
         } else {
-            // Pre-Android 17, standard INTERNET permission is enough
             viewModel.startLanModelsFetch()
         }
     }
 
-    private fun addModel(model: LlmModel) {
-        if (viewModel.modelExists(model.apiIdentifier)) {
-            adapter.animateAdded(model.apiIdentifier)
-        } else {
-            viewModel.addCustomModel(model)
-            adapter.animateAdded(model.apiIdentifier)
-        }
+    /** One tap adds the model to the library and makes it the one in use. */
+    private fun chooseModel(model: LlmModel) {
+        viewModel.addCustomModel(model)
+        viewModel.setModel(model.apiIdentifier)
+        adapter.animateAdded(model.apiIdentifier)
+        adapter.refreshAddedStates()
+        GlassNotice.show(requireContext(), getString(R.string.lan_model_selected, model.apiIdentifier))
     }
+
     private fun loadModel(model: LlmModel) {
         // Show spinner for this model
         adapter.setLoadingState(model.apiIdentifier, true)
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                AppToast.makeText(context, "Loading model, please wait...", AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.lan_llama_loading))
                 val success = viewModel.loadLlamaCppModel(model)
                 if (success) {
-                    AppToast.makeText(context, "Loaded model: ${model.apiIdentifier}", AppToast.LENGTH_SHORT).show()
-
+                    GlassNotice.show(requireContext(), getString(R.string.lan_llama_loaded, model.apiIdentifier))
                 } else {
-                    AppToast.makeText(context, "Server returned unsuccessful load", AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.lan_llama_load_failed))
                 }
             } catch (e: Exception) {
-                AppToast.makeText(context, "Failed to load: ${e.message}", AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.lan_llama_load_error, e.message.orEmpty()))
             } finally {
                 kotlinx.coroutines.delay(1600.milliseconds)
                 // Hide spinner and fetch updated list
@@ -199,13 +231,12 @@ class LanModelsFragment : Fragment() {
             try {
                 val success = viewModel.unloadLlamaCppModel(model)
                 if (success) {
-                    AppToast.makeText(context, "Unloaded model: ${model.apiIdentifier}", AppToast.LENGTH_SHORT).show()
-
+                    GlassNotice.show(requireContext(), getString(R.string.lan_llama_unloaded, model.apiIdentifier))
                 } else {
-                    AppToast.makeText(context, "Server returned unsuccessful unload", AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.lan_llama_unload_failed))
                 }
             } catch (e: Exception) {
-                AppToast.makeText(context, "Failed to unload: ${e.message}", AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.lan_llama_unload_error, e.message.orEmpty()))
             } finally {
                 kotlinx.coroutines.delay(1600.milliseconds)
                 // Hide spinner and fetch updated list

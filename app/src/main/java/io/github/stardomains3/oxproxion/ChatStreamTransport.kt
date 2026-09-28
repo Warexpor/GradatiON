@@ -170,6 +170,13 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
         12_000
     }
 
+    /**
+     * Local windows are small and fixed: a reply may use at most a third of it, so a 12000 default
+     * can't squeeze the prompt (and the character card at its front) out.
+     */
+    private fun lanMaxTokens(model: String): Int =
+        LanContextBudget.cappedMaxTokens(configuredMaxTokens(), LanContextBudget.contextFor(sharedPreferencesHelper, model))
+
     /** Enabled sampling values. Disabled knobs stay unset so the provider default is used. */
     private fun ChatRequest.withSampling(): ChatRequest {
         val prefs = sharedPreferencesHelper
@@ -279,7 +286,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                 model = modelForRequest,
                 messages = messagesForApiRequest,
                 stream = true,
-                max_tokens = configuredMaxTokens(),
+                max_tokens = lanMaxTokens(modelForRequest),
                 think = ollamaThink(reasoningModel, lanProvider),
                 reasoningEffort = ollamaReasoningEffort(reasoningModel, lanProvider),
                 chatTemplateKwargs = lanThinkingKwargs(reasoningModel, lanProvider),
@@ -345,7 +352,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     think = ollamaThink(reasoningModel, lanProvider),
                     reasoningEffort = ollamaReasoningEffort(reasoningModel, lanProvider),
                     chatTemplateKwargs = lanThinkingKwargs(reasoningModel, lanProvider),
-                    max_tokens = configuredMaxTokens(),
+                    max_tokens = lanMaxTokens(modelForRequest),
                     tools = tools,
                     toolChoice = if (tools != null) "auto" else null,
                 ).withSampling()
@@ -403,8 +410,12 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
         if (sharedPreferencesHelper.getNotiPreference()) {
             sharedPreferencesHelper.saveLastAiResponseForChannel(2, message)
         }
-        throw Exception(message)
+        throw failedResponse(response.status.value, message)
     }
+
+    /** Keeps the status on a local server's failure so it can be explained (wrong server type, missing key). */
+    private fun failedResponse(status: Int, message: String): Exception =
+        if (activeModelIsLan()) LanHttpException(status, message) else Exception(message)
 
     /**
      * Lands a finished non-streaming completion. Local models sometimes wrap the
@@ -587,7 +598,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     } catch (_: Exception) {
                         "No details"
                     }
-                    throw Exception(parseOpenRouterError(errorBody))
+                    throw failedResponse(httpResponse.status.value, parseOpenRouterError(errorBody))
                 }
 
                 val channel = httpResponse.body<ByteReadChannel>()

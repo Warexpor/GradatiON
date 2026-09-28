@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Local server sheet -->
+    <string name="lan_sheet_title">Local server</string>
+    <string name="lan_sheet_sub">Ollama, LM Studio or llama.cpp running on a computer on the same Wi-Fi.</string>
+    <string name="lan_type_label">Server type</string>
+    <string name="lan_type_koboldcpp" translatable="false">KoboldCpp</string>
+    <string name="lan_type_other">Other</string>
+    <string name="lan_host_hint">Server address</string>
+    <string name="lan_host_help">The computer\'s IP, like 192.168.1.20. http:// and the port are added for you.</string>
+    <string name="lan_host_required">Enter the server\'s address</string>
+    <string name="lan_host_invalid">That address doesn\'t look right</string>
+    <string name="lan_advanced">Advanced</string>
+    <string name="lan_advanced_cd">Show or hide advanced settings</string>
+    <string name="lan_api_key_hint">API key (only if the server needs one)</string>
+    <string name="lan_context_hint">Context size (tokens)</string>
+    <string name="lan_context_help">How much the model can read at once. Leave empty to auto-detect, else 8192.</string>
+    <string name="lan_context_ollama">Ollama: also set OLLAMA_CONTEXT_LENGTH on the server.</string>
+    <string name="lan_test">Test connection</string>
+    <string name="lan_testing">Testing…</string>
+    <plurals name="lan_test_connected">
+        <item quantity="one">Connected · %d model</item>
+        <item quantity="other">Connected · %d models</item>
+    </plurals>
+    <string name="lan_test_no_models">Connected, but the server lists no models. Pull or load one there.</string>
+    <string name="lan_choose_models">Choose models</string>
+    <string name="lan_saved">Local server saved</string>
+    <string name="lan_key_save_failed">Couldn\'t store the API key (encryption error). Nothing was saved.</string>
+    <string name="lan_permission_denied">Allow Local Network access to reach servers on your Wi-Fi.</string>
+
+    <!-- Model list -->
+    <string name="lan_models_server_cd">Edit local server</string>
+    <string name="lan_models_empty">No models yet. Pull or load one on the server, then retry.</string>
+    <string name="lan_no_server">No local server is set up yet.</string>
+    <string name="lan_retry">Retry</string>
+    <string name="lan_edit_server">Edit server</string>
+    <string name="lan_loading">Looking for models…</string>
+    <string name="lan_model_selected">%1$s selected</string>
+    <string name="lan_model_in_use">In use</string>
+    <string name="lan_llama_loading">Loading model, please wait\u2026</string>
+    <string name="lan_llama_loaded">Loaded %1$s</string>
+    <string name="lan_llama_load_failed">The server couldn\'t load that model.</string>
+    <string name="lan_llama_load_error">Couldn\'t load: %1$s</string>
+    <string name="lan_llama_unloaded">Unloaded %1$s</string>
+    <string name="lan_llama_unload_failed">The server couldn\'t unload that model.</string>
+    <string name="lan_llama_unload_error">Couldn\'t unload: %1$s</string>
+
+    <!-- Errors, shared by the list fetch and chat -->
+    <string name="lan_err_unreachable">Can\'t reach the server. Is it running, listening on 0.0.0.0 (not 127.0.0.1), and on the same Wi-Fi?</string>
+    <string name="lan_err_timeout">The server didn\'t answer within %1$s. A big model may still be loading; raise the timeout in Settings if it needs longer.</string>
+    <string name="lan_err_unauthorized">The server needs an API key. Add it under Advanced in the Local server settings.</string>
+    <string name="lan_err_not_found">The server doesn\'t have that endpoint (404). Wrong server type? Check that it matches what\'s running.</string>
+    <string name="lan_err_model_not_found">The server doesn\'t have that model. Pull or load it there, or pick another.</string>
+    <string name="lan_err_server">The server hit an error (%1$d). Check its log.</string>
+    <string name="lan_err_http">The server answered with an error (%1$d).</string>
+    <string name="lan_err_tls">The secure connection failed. On your own network use http://, or trust self-signed certificates in Settings.</string>
+    <string name="lan_err_unknown">Something went wrong talking to the server.</string>
+    <string name="lan_duration_s">%1$d s</string>
+    <string name="lan_duration_min">%1$d min</string>
+
+    <!-- Sampling captions -->
+    <string name="inference_not_every_server">Not every server uses this (Ollama ignores it).</string>
+</resources>

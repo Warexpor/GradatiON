@@ -137,6 +137,12 @@
                     android:layout_height="wrap_content"
                     android:inputType="number" />
             </com.google.android.material.textfield.TextInputLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/inference_not_every_server"
+                android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -173,6 +179,12 @@
                     android:layout_height="wrap_content"
                     android:inputType="numberDecimal" />
             </com.google.android.material.textfield.TextInputLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/inference_not_every_server"
+                android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -209,6 +221,12 @@
                     android:layout_height="wrap_content"
                     android:inputType="numberDecimal" />
             </com.google.android.material.textfield.TextInputLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/inference_not_every_server"
+                android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
 
             <LinearLayout
                 android:layout_width="match_parent"

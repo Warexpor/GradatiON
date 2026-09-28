@@ -35,6 +35,7 @@ import com.google.openlocationcode.OpenLocationCode
 import io.github.stardomains3.oxproxion.BuildConfig
 import io.github.stardomains3.oxproxion.SharedPreferencesHelper.Companion.LAN_PROVIDER_LLAMA_CPP
 import io.github.stardomains3.oxproxion.SharedPreferencesHelper.Companion.LAN_PROVIDER_OLLAMA
+import kotlin.time.Duration.Companion.seconds
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
@@ -71,6 +72,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -448,6 +450,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val isScrollProgressEnabled: LiveData<Boolean> = _isScrollProgressEnabled
     private val _lanModels = MutableLiveData<List<LlmModel>>()
     val lanModels: LiveData<List<LlmModel>> = _lanModels
+    private val _lanFetchState = MutableLiveData<LanFetchState>()
+    val lanFetchState: LiveData<LanFetchState> = _lanFetchState
     private var lanFetchJob: Job? = null
 
     private fun isAssistantPlaceholder(message: FlexibleMessage): Boolean {
@@ -636,6 +640,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         lanHttpClient = createLanHttpClient()
         migrateOpenRouterModels()
         allOpenRouterModels = sharedPreferencesHelper.getOpenRouterModels()
+        // Chat and Roleplay each remember a model; the first run after the split starts both from the one in use.
+        sharedPreferencesHelper.pinModelSlot(ChatMode.ASK)
+        sharedPreferencesHelper.pinModelSlot(ChatMode.RP)
         _activeChatModel.value = sharedPreferencesHelper.getPreferenceModelnew()
         _isStreamingEnabled.value = sharedPreferencesHelper.getStreamingPreference()
         _isReasoningEnabled.value = sharedPreferencesHelper.getReasoningPreference()
@@ -663,7 +670,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setModel(model: String) {
         _activeChatModel.value = model
+        // Into the slot of the mode in use, so the other mode keeps its own pick.
+        sharedPreferencesHelper.savePreferenceModelFor(_chatMode.value ?: ChatMode.ASK, model)
         _modelPreferenceToSave.value = model
+    }
+
+    /** Switching Chat/Roleplay brings back the model that mode last used. */
+    private fun restoreModeModel(mode: ChatMode) {
+        val model = sharedPreferencesHelper.getPreferenceModelFor(mode)
+        if (_activeChatModel.value != model) _activeChatModel.value = model
     }
 
     fun getCurrentSessionId(): Long? = currentSessionId
@@ -1007,6 +1022,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 refreshActiveRpCharacter()
                 _activeChatModel.value = it.modelUsed
+                sharedPreferencesHelper.savePreferenceModelFor(loadedMode, it.modelUsed)
                 _modelPreferenceToSave.value = it.modelUsed
             }
             loadForkFromPrefs(sessionId)
@@ -1604,10 +1620,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val modelForRequest =
                     _activeChatModel.value ?: throw IllegalStateException("No active chat model")
                 if (activeModelIsLan()) {
+                    // Local windows are small: fit prompt + reply before sending, system prompt first.
+                    val fitted = fitLanContext(modelForRequest, messagesForApiRequest)
                     if (_isStreamingEnabled.value == true) {
-                        streamTransport.handleStreamedResponseLAN(modelForRequest, messagesForApiRequest, thinkingMessage)
+                        streamTransport.handleStreamedResponseLAN(modelForRequest, fitted, thinkingMessage)
                     } else {
-                        streamTransport.handleNonStreamedResponseLAN(modelForRequest, messagesForApiRequest, thinkingMessage)
+                        streamTransport.handleNonStreamedResponseLAN(modelForRequest, fitted, thinkingMessage)
                     }
                 } else {
                     // The demo model only speaks in streams.
@@ -1760,7 +1778,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             // Branch here to ensure tool-use follow-ups use the correct logic
             if (activeModelIsLan()) {
-                streamTransport.handleNonStreamedResponseLAN(modelForRequest, messages, toolThinkingMessage)
+                streamTransport.handleNonStreamedResponseLAN(
+                    modelForRequest, fitLanContext(modelForRequest, messages), toolThinkingMessage
+                )
             } else {
                 streamTransport.handleNonStreamedResponse(modelForRequest, messages, toolThinkingMessage)
             }
@@ -1854,10 +1874,30 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshLanHttpClient() {
+        // A different server or key may report a different window.
+        LanContextBudget.forgetDetected()
         lanHttpClient.close()
         lanHttpClient = createLanHttpClient()
     }
 
+
+    /** A local server that can't be reached, timed out or refused the key, in words the user can act on. */
+    private fun lanTransportMessage(e: Throwable): String? {
+        if (!activeModelIsLan() || e is ClientRequestException || e is ServerResponseException) return null
+        val failure = LanErrors.classify(e, timeoutSeconds = sharedPreferencesHelper.getTimeoutMinutes() * 60, body = e.message)
+        // Server-side 4xx/5xx text (context overflow, bad params) is more useful than a generic line.
+        if (failure.kind in setOf(LanFailure.Kind.OTHER, LanFailure.Kind.HTTP, LanFailure.Kind.SERVER_ERROR)) return null
+        return LanErrors.message(getApplication(), failure)
+    }
+
+    /** 401/403/404 from a local server: a key, wrong server type or missing model, not the raw body. */
+    private fun lanStatusMessage(status: Int, body: String?): String? {
+        if (!activeModelIsLan()) return null
+        val failure = LanErrors.fromStatus(status, body)
+        val actionable = failure.kind == LanFailure.Kind.UNAUTHORIZED ||
+            failure.kind == LanFailure.Kind.NOT_FOUND || failure.kind == LanFailure.Kind.MODEL_NOT_FOUND
+        return if (actionable) LanErrors.message(getApplication(), failure) else null
+    }
 
     private fun handleError(e: Throwable, thinkingMessage: FlexibleMessage?) {
         val wasRpRegen = pendingRpSwipeAppend
@@ -1876,7 +1916,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (wasRpRegen) {
             removeAssistantPlaceholder(thinkingMessage)
             restoreRpSwipeAltIfMissingAssistant()
-            val shortMsg = when (e) {
+            val shortMsg = lanTransportMessage(e) ?: when (e) {
                 is TimeoutCancellationException, is SocketTimeoutException ->
                     getApplication<Application>().getString(R.string.rp_regen_timeout)
                 is IOException ->
@@ -1888,14 +1928,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _toastUiEvent.postValue(Event(shortMsg))
             return
         }
-        val errorMsg = when (e) {
+        val errorMsg = lanTransportMessage(e)?.let { "**Error:**\n---\n$it" } ?: when (e) {
             is ClientRequestException -> {
                 // Handle in a coroutine scope
                 var errorText = "**Error:**\n---\nClient error: ${e.response.status}. Check your input."
                 viewModelScope.launch {
                     try {
                         val errorBody = e.response.bodyAsText()
-                        errorText = "**Error:**\n---\n${parseOpenRouterError(errorBody)}"
+                        errorText = "**Error:**\n---\n" +
+                            (lanStatusMessage(e.response.status.value, errorBody) ?: parseOpenRouterError(errorBody))
                     } catch (parseError: Exception) {
                         // Keep the default error text
                     }
@@ -1926,7 +1967,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 errorText // Return initial message for immediate display
             }
             is TimeoutCancellationException, is SocketTimeoutException ->
-                "**Error:**\n---\nRequest timed out after 90 seconds. Please try again."
+                "**Error:**\n---\nRequest timed out after ${
+                    LanErrors.duration(getApplication(), sharedPreferencesHelper.getTimeoutMinutes() * 60)
+                }. Please try again."
             is IOException -> "**Error:**\n---\nNetwork error: Check your connection."
             else -> """
             **Error:**
@@ -2971,61 +3014,67 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun activeModelIsDemo(): Boolean = DemoModel.isDemo(_activeChatModel.value)
 
-    private suspend fun fetchLanModels(provider: String): List<LlmModel> = when (provider) {
-        "llama_cpp" -> fetchOpenAiModelList(LanListAuth.NONE) { id, obj -> llamaCppModel(id, obj) }
-        "lm_studio", "mlx_lm" -> fetchOpenAiModelList(LanListAuth.NONE) { id, _ -> plainLanModel(id) }
-        "ollama" -> fetchOllamaModels()
-        "omlx" -> fetchOpenAiModelList(LanListAuth.PLACEHOLDER) { id, _ -> plainLanModel(id) }
-        "nativ" -> fetchOpenAiModelList(LanListAuth.IF_PRESENT) { id, _ -> plainLanModel(id) }
-        "hermes_agent" -> fetchOpenAiModelList(LanListAuth.PLACEHOLDER) { id, _ -> hermesLanModel(id) }
-        else -> emptyList()
+    private suspend fun fetchLanModels(server: LanServer): List<LlmModel> = when (server.provider) {
+        LAN_PROVIDER_LLAMA_CPP -> fetchOpenAiModelList(server) { id, obj -> llamaCppModel(id, obj) }
+        LAN_PROVIDER_OLLAMA -> fetchOllamaModels(server)
+        "hermes_agent" -> fetchOpenAiModelList(server) { id, _ -> hermesLanModel(id) }
+        // LM Studio, MLX LM, KoboldCpp, oMLX, Nativ and "other" all serve the same /v1/models list.
+        else -> fetchOpenAiModelList(server) { id, _ -> plainLanModel(id) }
+    }
+
+    /** The server saved in Settings, or null when none is set. */
+    fun savedLanServer(): LanServer? {
+        val endpoint = sharedPreferencesHelper.getLanEndpoint()?.takeIf { it.isNotBlank() } ?: return null
+        return LanServer(endpoint, sharedPreferencesHelper.getLanProvider(), sharedPreferencesHelper.getLanApiKey())
+    }
+
+    private val lanListTimeoutSeconds = 10
+
+    private fun lanFailed(e: Throwable): LanFetchState.Failed {
+        val failure = LanErrors.classify(e, timeoutSeconds = lanListTimeoutSeconds, timeoutMeansUnreachable = true)
+        val app = getApplication<Application>()
+        return LanFetchState.Failed(failure, LanErrors.message(app, failure, e.message))
+    }
+
+    /** One model-list request for [server]; used by the sheet's Test connection and by the list screen. */
+    suspend fun probeLanServer(server: LanServer): LanFetchState = try {
+        LanFetchState.Loaded(fetchLanModels(server))
+    } catch (e: CancellationException) {
+        if (e is TimeoutCancellationException) lanFailed(e) else throw e
+    } catch (e: Exception) {
+        lanFailed(e)
     }
 
     fun startLanModelsFetch() {
-        val provider = getCurrentLanProvider()
+        val server = savedLanServer()
         lanFetchJob?.cancel()
+        if (server == null) {
+            _lanFetchState.value = LanFetchState.Failed(
+                LanFailure(LanFailure.Kind.OTHER),
+                getApplication<Application>().getString(R.string.lan_no_server)
+            )
+            return
+        }
+        _lanFetchState.value = LanFetchState.Loading
         lanFetchJob = viewModelScope.launch {
-            try {
-                _lanModels.value = fetchLanModels(provider)
-            } catch (e: CancellationException) {
-                if (e is TimeoutCancellationException) {
-                    _lanModels.value = emptyList()
-                    _toastUiEvent.value = Event("LAN models timeout (10s, $provider). Check server/endpoint.")
-                }
-            } catch (e: Exception) {
-                _lanModels.value = emptyList()
-                _toastUiEvent.value = Event("LAN fetch failed ($provider): ${e.message}")
-            }
+            val state = probeLanServer(server)
+            _lanFetchState.value = state
+            _lanModels.value = (state as? LanFetchState.Loaded)?.models.orEmpty()
         }
     }
 
-    private enum class LanListAuth { NONE, IF_PRESENT, PLACEHOLDER }
-
-    /** OpenAI-compatible `/v1/models` list. Providers differ only in auth and how a row is labeled. */
+    /** OpenAI-compatible `/v1/models` list. Providers differ only in how a row is labeled. */
     private suspend fun fetchOpenAiModelList(
-        auth: LanListAuth,
+        server: LanServer,
         map: (String, JsonObject) -> LlmModel,
-    ): List<LlmModel> = withTimeout(10_000.milliseconds) {
+    ): List<LlmModel> = withTimeout(lanListTimeoutSeconds.seconds) {
         withContext(Dispatchers.IO) {
-            val lanEndpoint = sharedPreferencesHelper.getLanEndpoint()
-            if (lanEndpoint.isNullOrBlank()) {
-                throw IllegalStateException("LAN endpoint not configured. Please set it in settings.")
+            val response = lanHttpClient.get("${server.endpoint}/v1/models") {
+                timeout { requestTimeoutMillis = lanListTimeoutSeconds * 1000L }
+                // Servers started with --api-key reject a list without it; open ones ignore the header.
+                if (server.apiKey.isNotBlank()) header("Authorization", "Bearer ${server.apiKey}")
             }
-            val response = lanHttpClient.get("$lanEndpoint/v1/models") {
-                timeout { requestTimeoutMillis = 10000 }
-                when (auth) {
-                    LanListAuth.NONE -> Unit
-                    LanListAuth.IF_PRESENT -> {
-                        val apiKey = sharedPreferencesHelper.getLanApiKey()
-                        if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey")
-                    }
-                    LanListAuth.PLACEHOLDER ->
-                        header("Authorization", "Bearer ${sharedPreferencesHelper.getLanApiKeyForRequest()}")
-                }
-            }
-            if (!response.status.isSuccess()) {
-                throw Exception("Server returned ${response.status}: ${response.status.description}")
-            }
+            if (!response.status.isSuccess()) throw LanHttpException(response.status.value)
             val modelsArray = response.body<JsonObject>()["data"]?.jsonArray ?: return@withContext emptyList()
             modelsArray.mapNotNull { modelJson ->
                 try {
@@ -3039,28 +3088,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun plainLanModel(id: String) = LlmModel(
+    private fun plainLanModel(id: String, vision: Boolean = LanModelTraits.isVision(id)) = LlmModel(
         displayName = id,
         apiIdentifier = id,
-        isVisionCapable = false,
+        isVisionCapable = vision,
         isImageGenerationCapable = false,
-        isReasoningCapable = false,
+        isReasoningCapable = LanModelTraits.isReasoning(id),
         created = System.currentTimeMillis() / 1000,
         isFree = true,
         isLANModel = true,
     )
 
-    private fun hermesLanModel(id: String) = LlmModel(
-        displayName = id,
-        apiIdentifier = id,
-        isVisionCapable = id.contains("vision", ignoreCase = true) || id.contains("vl", ignoreCase = true),
-        isImageGenerationCapable = false,
-        isReasoningCapable = id.contains("reason", ignoreCase = true) ||
-            id.contains("thinking", ignoreCase = true) ||
+    private fun hermesLanModel(id: String) = plainLanModel(id).copy(
+        isVisionCapable = LanModelTraits.isVision(id) || id.contains("vl", ignoreCase = true),
+        isReasoningCapable = LanModelTraits.isReasoning(id) || id.contains("reason", ignoreCase = true) ||
             id.contains("r1", ignoreCase = true),
-        created = System.currentTimeMillis() / 1000,
-        isFree = true,
-        isLANModel = true,
     )
 
     private fun llamaCppModel(id: String, obj: JsonObject): LlmModel {
@@ -3068,39 +3110,112 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val isLoaded = description.equals("loaded", ignoreCase = true) ||
             (description.contains("loaded", ignoreCase = true) &&
                 !description.contains("unloaded", ignoreCase = true))
-        return LlmModel(
+        return plainLanModel(id).copy(
             displayName = if (description.isNotEmpty()) "$id - $description" else id,
-            apiIdentifier = id,
-            isVisionCapable = false,
-            isImageGenerationCapable = false,
-            isReasoningCapable = false,
-            created = System.currentTimeMillis() / 1000,
-            isFree = true,
-            isLANModel = true,
             isLoaded = isLoaded,
         )
     }
 
-    private suspend fun fetchOllamaModels(): List<LlmModel> = withTimeout(10_000.milliseconds) {
-        withContext(Dispatchers.IO) {
-            val lanEndpoint = sharedPreferencesHelper.getLanEndpoint()
-                ?: throw IllegalStateException("LAN endpoint not configured")
-            val response = lanHttpClient.get("$lanEndpoint/api/tags") {
-                timeout { requestTimeoutMillis = 10000 }
+    private suspend fun fetchOllamaModels(server: LanServer): List<LlmModel> =
+        withTimeout(lanListTimeoutSeconds.seconds) {
+            withContext(Dispatchers.IO) {
+                val response = lanHttpClient.get("${server.endpoint}/api/tags") {
+                    timeout { requestTimeoutMillis = lanListTimeoutSeconds * 1000L }
+                    if (server.apiKey.isNotBlank()) header("Authorization", "Bearer ${server.apiKey}")
+                }
+                if (!response.status.isSuccess()) throw LanHttpException(response.status.value)
+                val modelsArray = response.body<JsonObject>()["models"]?.jsonArray ?: return@withContext emptyList()
+                modelsArray.mapNotNull { modelJson ->
+                    try {
+                        val obj = modelJson.jsonObject
+                        val name = obj["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                        // /api/tags lists each model's families; a "clip" projector means it takes images.
+                        val families = obj["details"]?.jsonObject?.get("families")?.jsonArray
+                            ?.mapNotNull { it.jsonPrimitive.contentOrNull?.lowercase() }.orEmpty()
+                        plainLanModel(name, vision = LanModelTraits.isVision(name) || "clip" in families || "mllama" in families)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }.sortedBy { it.displayName.lowercase() }
             }
-            if (!response.status.isSuccess()) {
-                throw Exception("Failed to fetch LAN models: ${response.status}")
-            }
-            val modelsArray = response.body<JsonObject>()["models"]?.jsonArray ?: return@withContext emptyList()
-            modelsArray.mapNotNull { modelJson ->
+        }
+
+    /**
+     * The window the server will really use for [model], when it will say so cheaply. Null when it
+     * won't. Ollama reports the model's maximum, not the runtime window, so it is capped at the default.
+     */
+    private suspend fun detectLanContext(server: LanServer, model: String): Int? =
+        withTimeoutOrNull(3.seconds) {
+            withContext(Dispatchers.IO) {
                 try {
-                    val name = modelJson.jsonObject["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
-                    plainLanModel(name)
+                    val key = server.apiKey
+                    when (server.provider) {
+                        LAN_PROVIDER_LLAMA_CPP -> lanHttpClient.get("${server.endpoint}/props") {
+                            if (key.isNotBlank()) header("Authorization", "Bearer $key")
+                        }.body<JsonObject>()["default_generation_settings"]?.jsonObject
+                            ?.get("n_ctx")?.jsonPrimitive?.intOrNull
+
+                        SharedPreferencesHelper.LAN_PROVIDER_LM_STUDIO -> lanHttpClient
+                            .get("${server.endpoint}/api/v0/models") {
+                                if (key.isNotBlank()) header("Authorization", "Bearer $key")
+                            }
+                            .body<JsonObject>()["data"]?.jsonArray
+                            ?.map { it.jsonObject }
+                            ?.firstOrNull { it["id"]?.jsonPrimitive?.contentOrNull == model }
+                            ?.let { row ->
+                                row["loaded_context_length"]?.jsonPrimitive?.intOrNull
+                                    ?: row["max_context_length"]?.jsonPrimitive?.intOrNull
+                            }
+
+                        LAN_PROVIDER_OLLAMA -> lanHttpClient.post("${server.endpoint}/api/show") {
+                            if (key.isNotBlank()) header("Authorization", "Bearer $key")
+                            contentType(ContentType.Application.Json)
+                            setBody(mapOf("model" to model))
+                        }.body<JsonObject>()["model_info"]?.jsonObject
+                            ?.entries?.firstOrNull { it.key.endsWith(".context_length") }
+                            ?.value?.jsonPrimitive?.intOrNull
+                            ?.coerceAtMost(LanContextBudget.DEFAULT_CONTEXT)
+
+                        else -> null
+                    }?.takeIf { it > 0 }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) {
                     null
                 }
-            }.sortedBy { it.displayName.lowercase() }
+            }
         }
+
+    /**
+     * Trims what a local model is sent so system prompt + history + reply fit its window. Local
+     * servers silently cut the front of an over-long prompt, which is where the system prompt and
+     * character card live, so history goes first and system messages always stay.
+     */
+    private suspend fun fitLanContext(
+        modelId: String,
+        messages: List<FlexibleMessage>,
+    ): List<FlexibleMessage> {
+        val server = savedLanServer() ?: return messages
+        if (LanContextBudget.detectedFor(server.endpoint, modelId) == null) {
+            LanContextBudget.rememberDetected(server.endpoint, modelId, detectLanContext(server, modelId) ?: 0)
+        }
+        val context = LanContextBudget.contextFor(sharedPreferencesHelper, modelId)
+        val requested = sharedPreferencesHelper.getMaxTokens().toIntOrNull() ?: 12_000
+        val maxTokens = LanContextBudget.cappedMaxTokens(requested, context)
+        val system = messages.filter { it.role == "system" }
+        val rest = messages.filter { it.role != "system" }
+        val systemTokens = system.sumOf { LanContextBudget.tokensOf(it) }
+        val budget = LanContextBudget.historyBudget(context, maxTokens, systemTokens)
+        if (rest.sumOf { LanContextBudget.tokensOf(it) } <= budget) return messages
+        val kept = RpApiMemory.trimToTokenBudget(
+            nonSystem = rest,
+            tokenBudget = budget,
+            tokensOf = LanContextBudget::tokensOf,
+            pinCharacterGreeting = isRpMode() && !sharedPreferencesHelper.isRpLlmMode(),
+            isAssistant = { it.role == "assistant" },
+            isPinned = { it.pinned },
+        )
+        return system + kept
     }
 
     suspend fun loadLlamaCppModel(model: LlmModel): Boolean = llamaCppModelAction(model, "load")
@@ -3757,6 +3872,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         beginSessionTransition {
             _chatMode.value = mode
             sharedPreferencesHelper.saveChatMode(mode)
+            restoreModeModel(mode)
             if (mode == ChatMode.RP) {
                 refreshActiveRpCharacter()
                 restoreDraftOrNewChat(ChatMode.RP)
@@ -3828,6 +3944,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _rpChromeRefreshEvent.value = Event(Unit)
             _chatMode.value = ChatMode.RP
             sharedPreferencesHelper.saveChatMode(ChatMode.RP)
+            restoreModeModel(ChatMode.RP)
             // Intentional Start chat replaces any parked keepDraftId with this greeting thread.
             clearOpenTranscript(clearDraft = true)
             draftRpFacts = facts
@@ -3855,6 +3972,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             refreshActiveRpCharacter()
             _chatMode.value = ChatMode.RP
             sharedPreferencesHelper.saveChatMode(ChatMode.RP)
+            restoreModeModel(ChatMode.RP)
             val parkedId = sharedPreferencesHelper.getRpDraftSessionId(ChatMode.RP)
             val parked = parkedId?.let { repository.getSessionById(it) }
             if (parked != null && parked.isLlm) {
