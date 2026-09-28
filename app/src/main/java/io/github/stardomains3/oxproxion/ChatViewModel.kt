@@ -579,6 +579,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // Drop any instruct left by a killed mid-regen process.
         sharedPreferencesHelper.saveRpPendingInstruct(null)
         _chatMode.value = sharedPreferencesHelper.getChatMode()
+        viewModelScope.launch(Dispatchers.IO) { DemoCharacter.seedOnce(rpRepository, sharedPreferencesHelper) }
         sessionTransitionJob = viewModelScope.launch {
             refreshActiveRpCharacter()
             restoreDraftOrNewChat(_chatMode.value ?: ChatMode.ASK)

@@ -68,7 +68,7 @@ object ChatMarkdown {
 
     fun plugin(context: Context): AbstractMarkwonPlugin = Plugin(context.applicationContext)
 
-    /** The chip turns into "Copied" for feedback; no toast on top of it. */
+    /** The copy icon turns into a check for feedback; no toast on top of it. */
     fun copyCode(widget: View, code: String) {
         val clipboard = widget.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
@@ -171,7 +171,7 @@ object ChatMarkdown {
             val b = visitor.builder()
             val start = b.length
 
-            // Header row: ChatTextView paints the language label and the Copy chip centered in
+            // Header row: ChatTextView paints the language label and the copy icon centered in
             // it. The text here only sizes the row (a larger, invisible label) and keeps the
             // label selectable and tappable.
             val label = info.ifBlank { "code" }.lowercase()

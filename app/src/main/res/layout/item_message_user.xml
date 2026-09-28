@@ -57,7 +57,7 @@
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp"
                 android:lineSpacingMultiplier="1.36"
-                android:textIsSelectable="true"
+                android:textIsSelectable="false"
                 android:linksClickable="true"
                 android:textColorLink="@color/xai_link"
                 android:textColorHighlight="@color/xai_text_highlight"

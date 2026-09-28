@@ -3,6 +3,8 @@
 ## Unreleased — monochrome redesign
 
 ### Changed
+- Chat: a round jump-to-latest button rises above the composer once you've scrolled up; each mode keeps its scroll spot when you swipe away and back; the dim under the top bar is always on and a little denser. Reply tools fade in left to right, and the fold-long-answers and share buttons are gone. Code blocks are flat cards with a bare copy icon. Your own messages open their tools on the first tap, and the tools ease open and closed.
+- Models: new installs start with just Demo and the free OpenRouter router (older installs drop the untouched seed models, keeping edits and the one in use). A Local filter and a new local-network mark; the list fades under the filter row instead of cutting off.
 - Models: one clean list with each maker's mark (OpenAI, Claude, Gemini, Grok, DeepSeek, Llama, Qwen and 20+ more; a letter for the rest), the name, and one quiet line such as "Anthropic · Vision · Free". A single chip row sorts and filters. The plus opens the OpenRouter catalog, your local network, or add-by-id. Long-press a model to edit, open its page, or remove it. The OpenRouter and local-network screens share the same look, and the composer's model popover and Controls panel show the marks too.
 - Reasoning no longer depends on a per-model "reasoning" flag: any cloud model can be asked (OpenRouter ignores it where it doesn't apply). Only local models keep a "Thinks" switch, because their servers reject the parameter.
 - Controls panel: a Thoughts tile shows or hides thinking above replies. Web search left the chat chrome and was switched off once; presets can still turn it on.

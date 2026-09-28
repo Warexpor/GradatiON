@@ -34,9 +34,9 @@ object ModelRow {
 
     /** The maker's mark, or the maker's first letter when we have no mark for it. */
     fun bindMark(icon: ImageView, monogram: TextView, model: LlmModel) {
-        val brand = ModelBrands.of(model)
-        if (brand != null) {
-            icon.setImageResource(brand.icon)
+        val mark = ModelBrands.of(model)?.icon ?: if (model.isLANModel) R.drawable.ic_local_network else 0
+        if (mark != 0) {
+            icon.setImageResource(mark)
             icon.isVisible = true
             monogram.isVisible = false
         } else {
@@ -82,10 +82,12 @@ enum class ModelFilter(val label: Int) {
     FREE(R.string.model_picker_filter_free),
     VISION(R.string.model_picker_filter_vision),
     IMAGE(R.string.model_picker_filter_image),
-    AUDIO(R.string.model_picker_filter_transcribe);
+    AUDIO(R.string.model_picker_filter_transcribe),
+    LOCAL(R.string.model_picker_filter_local);
 
     fun matches(m: LlmModel) = when (this) {
         ALL -> true
+        LOCAL -> m.isLANModel
         FREE -> m.isFree
         VISION -> m.isVisionCapable
         IMAGE -> m.isImageGenerationCapable
@@ -96,6 +98,7 @@ enum class ModelFilter(val label: Int) {
         /** Reads the older type + price prefs, which stored the two separately. */
         fun fromPrefs(type: String?, cost: String?): ModelFilter = when {
             cost == "FREE" -> FREE
+            type == "LOCAL" -> LOCAL
             type == "VISION" -> VISION
             type == "IMAGE_GEN" -> IMAGE
             type == "TRANSCRIPTION" -> AUDIO
@@ -106,6 +109,7 @@ enum class ModelFilter(val label: Int) {
             VISION -> "VISION"
             IMAGE -> "IMAGE_GEN"
             AUDIO -> "TRANSCRIPTION"
+            LOCAL -> "LOCAL"
             else -> "ALL"
         }
 
@@ -121,6 +125,8 @@ class ModelFilterChips(
     private val container: LinearLayout,
     newestFirst: Boolean,
     selected: ModelFilter,
+    /** Which filters this list offers; the OpenRouter catalog has no local models. */
+    filters: List<ModelFilter> = ModelFilter.entries,
     private val onSort: (newestFirst: Boolean) -> Unit,
     private val onFilter: (ModelFilter) -> Unit,
 ) {
@@ -150,7 +156,7 @@ class ModelFilterChips(
             marginEnd = (10 * density).toInt()
             gravity = android.view.Gravity.CENTER_VERTICAL
         })
-        for (f in ModelFilter.entries) {
+        for (f in filters) {
             val c = chip(ctx.getString(f.label), 0)
             c.setOnClickListener {
                 if (current == f) return@setOnClickListener

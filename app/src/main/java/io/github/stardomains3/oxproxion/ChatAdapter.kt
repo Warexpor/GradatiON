@@ -131,6 +131,9 @@ class ChatAdapter(
     var currentSpeakingPosition = -1
     /** A reply is being generated: the last assistant row keeps its action icons hidden. */
     var replyInFlight = false
+    /** Opens a reply's ⋮ menu anchored to its button; the host owns the popover. */
+    var onMessageMenu: ((View, List<PickerPopover.Row>) -> Unit)? = null
+
     /** Show the model's thinking above replies; off hides the block entirely. */
     var showThinking = true
     private var currentTypeface: Typeface = Typeface.DEFAULT
@@ -274,7 +277,13 @@ class ChatAdapter(
         streamReveal.finishFast()
     }
 
+    /** A copy of what the list shows, so a mode's thread can be put back instantly. */
+    fun currentMessages(): List<FlexibleMessage> = messages.toList()
+
     fun setMessages(newMessages: List<FlexibleMessage>) {
+        // The same thread arriving again (a mode's reload after its cached copy was shown):
+        // nothing to redraw, and rebinding would replay the last reply's reveal.
+        if (!isUserApplyingEdit && newMessages.isNotEmpty() && newMessages == messages) return
         if (isUserApplyingEdit) {
             applyEditUpdate(newMessages)
             return // Stop here, don't run the rest
@@ -457,7 +466,7 @@ class ChatAdapter(
         const val VIEW_TYPE_THINKING = 3
         const val VIEW_TYPE_HIDDEN = 4
         private const val REASONING_KEY_CHARS = 80
-        private const val ACTION_STAGGER_MS = 38L
+        private const val ACTION_STAGGER_MS = 55L
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -624,41 +633,17 @@ class ChatAdapter(
         private var actionsMsgKey: String = ""
 
         private fun applyActionsVisibility(expanded: Boolean, animate: Boolean) {
-            buttonContainer.animate().cancel()
-            if (expanded) {
-                if (buttonContainer.visibility == View.VISIBLE && buttonContainer.alpha >= 0.99f) return
-                buttonContainer.visibility = View.VISIBLE
-                if (animate && Motion.areAnimationsEnabled(itemView.context)) {
-                    buttonContainer.alpha = 0f
-                    buttonContainer.translationY = -6f
-                    buttonContainer.animate()
-                        .alpha(1f)
-                        .translationY(0f)
-                        .setDuration(180L)
-                        .setInterpolator(Motion.easeOut)
-                        .start()
-                } else {
-                    buttonContainer.alpha = 1f
-                    buttonContainer.translationY = 0f
-                }
+            val running = buttonContainer.getTag(R.id.tag_visibility_animator) != null
+            if (!running && (buttonContainer.visibility == View.VISIBLE) == expanded) return
+            if (animate) {
+                // Height eases open, so the rows below glide instead of jumping a step.
+                animateDisclosure(buttonContainer, expand = expanded)
             } else {
-                if (buttonContainer.visibility != View.VISIBLE) return
-                if (animate && Motion.areAnimationsEnabled(itemView.context)) {
-                    buttonContainer.animate()
-                        .alpha(0f)
-                        .translationY(-6f)
-                        .setDuration(150L)
-                        .setInterpolator(Motion.easeOut)
-                        .withEndAction {
-                            buttonContainer.visibility = View.GONE
-                            buttonContainer.translationY = 0f
-                        }
-                        .start()
-                } else {
-                    buttonContainer.visibility = View.GONE
-                    buttonContainer.alpha = 0f
-                    buttonContainer.translationY = 0f
-                }
+                (buttonContainer.getTag(R.id.tag_visibility_animator) as? android.animation.Animator)?.cancel()
+                buttonContainer.alpha = 1f
+                buttonContainer.translationY = 0f
+                buttonContainer.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                buttonContainer.visibility = if (expanded) View.VISIBLE else View.GONE
             }
         }
 
@@ -832,6 +817,26 @@ class ChatAdapter(
         private val pngButton: ImageButton = itemView.findViewById(R.id.pngButton)
         val ttsButton: ImageButton = itemView.findViewById(R.id.ttsButton)
         private val regenerateButton: ImageButton = itemView.findViewById(R.id.regenerateButton)
+        private val moreActionsButton: ImageButton = itemView.findViewById(R.id.moreActionsButton)
+
+        /** ⋮ after Regenerate: Read aloud, Instruct (Roleplay's last reply) and Edit. */
+        private fun bindMoreActions(speakingHere: Boolean, canInstruct: Boolean) {
+            val ctx = itemView.context
+            val rows = buildList {
+                if (ttsAvailable) add(PickerPopover.Row(
+                    ctx.getString(if (speakingHere) R.string.msg_menu_stop_reading else R.string.msg_menu_read),
+                    iconRes = if (speakingHere) R.drawable.ic_msg_stop else R.drawable.ic_msg_speak,
+                ) { ttsButton.performClick() })
+                if (canInstruct) add(PickerPopover.Row(
+                    ctx.getString(R.string.msg_menu_instruct), ctx.getString(R.string.msg_menu_instruct_sub),
+                    R.drawable.ic_msg_instruct,
+                ) { instructButton.performClick() })
+                add(PickerPopover.Row(ctx.getString(R.string.msg_menu_edit), iconRes = R.drawable.ic_msg_edit) {
+                    editButton.performClick()
+                })
+            }
+            moreActionsButton.setOnClickListener { onMessageMenu?.invoke(moreActionsButton, rows) }
+        }
         private val instructButton: ImageButton = itemView.findViewById(R.id.instructButton)
         private val generatedImageView: ImageView = itemView.findViewById(R.id.generatedImageView)
         val messageContainer: ConstraintLayout = itemView.findViewById(R.id.messageContainer)
@@ -858,8 +863,6 @@ class ChatAdapter(
         private val rpSpeakerAvatar: ImageView = itemView.findViewById(R.id.rpSpeakerAvatar)
         private val rpSpeakerNameView: TextView = itemView.findViewById(R.id.rpSpeakerName)
         private var thinkingBarAnimators: List<ObjectAnimator>? = null
-        // Configuration for "Long Message" detection
-        private val CHAR_THRESHOLD = 350
 
         private val thinkingLabel: TextView = itemView.findViewById(R.id.thinkingLabel)
 
@@ -884,17 +887,16 @@ class ChatAdapter(
             return (icons + rest).filter { !visibleOnly || it.visibility == View.VISIBLE }
         }
 
-        /** The finished reply's tools ease in one after another, left to right. */
+        /** The finished reply's tools fade up out of nothing, one after another, left to right; nothing slides. */
         private fun revealActions(row: View) {
-            val shift = -10f * row.resources.displayMetrics.density
             actionItems(row).forEachIndexed { i, v ->
                 v.animate().cancel()
                 v.alpha = 0f
-                v.translationX = shift
-                v.animate().alpha(1f).translationX(0f)
+                v.translationX = 0f
+                v.animate().alpha(1f)
                     .setStartDelay(i * ACTION_STAGGER_MS)
-                    .setDuration(340)
-                    .setInterpolator(Motion.iosOut)
+                    .setDuration(300)
+                    .setInterpolator(Motion.easeOut)
                     .start()
             }
         }
@@ -1078,6 +1080,13 @@ class ChatAdapter(
         }
 
         fun renderStreamFrame(displayed: String) {
+            // Thinking is over once the answer itself shows: the label stops glinting and settles.
+            if (displayed.isNotBlank() && (reasoningTitle.getTag(R.id.tag_shimmer_animator) != null ||
+                    reasoningTitle.getTag(R.id.tag_shimmer_pending) == true)
+            ) {
+                ShimmerText.stop(reasoningTitle)
+                reasoningTitle.text = itemView.context.getString(R.string.thinking_label_idle)
+            }
             pulseAnimator?.cancel()
             pulseAnimator = null
             messageContainer.alpha = 1f
@@ -1148,40 +1157,18 @@ class ChatAdapter(
                 messageTextView.text = ""
             }
 
-            // --- NEW COLLAPSE LOGIC (INSTANT, NO POST DELAY) ---
-            if (text.length > CHAR_THRESHOLD) {
-                val msgKey = text.hashCode().toString()
-                val isCollapsed = collapsedStates.getOrDefault(msgKey, false) // Default Expanded (false)
-
-                applyCollapseState(isCollapsed)
-
-                collapseToggleButton.visibility = View.VISIBLE
-                collapseToggleButton.setImageResource(
-                    if (isCollapsed) R.drawable.ic_msg_expand else R.drawable.ic_msg_collapse
-                )
-
-                collapseToggleButton.setOnClickListener {
-                    val newState = !collapsedStates.getOrDefault(msgKey, false)
-                    collapsedStates[msgKey] = newState
-
-                    applyCollapseState(newState)
-                    collapseToggleButton.setImageResource(
-                        if (newState) R.drawable.ic_msg_expand else R.drawable.ic_msg_collapse
-                    )
-                    onCollapse()
-                }
-            } else {
-                messageTextView.maxLines = Int.MAX_VALUE
-                messageTextView.ellipsize = null
-                collapseToggleButton.visibility = View.GONE
-                collapseToggleButton.setOnClickListener(null)
-            }
-            // ---------------------------------------------------
+            // Replies always show in full; the fold-long-answers toggle is gone.
+            messageTextView.maxLines = Int.MAX_VALUE
+            messageTextView.ellipsize = null
+            collapseToggleButton.visibility = View.GONE
+            collapseToggleButton.setOnClickListener(null)
+            shareButton.visibility = View.GONE
 
             val reasoningText = reasoningSource(message).let { if (it.isBlank()) "" else "\n\n$it" }
 
             // 3. UI STATE LOGIC
-            ttsButton.visibility = if (ttsAvailable) View.VISIBLE else View.GONE
+            // Read aloud lives in the ⋮ menu now; the button only carries its actions.
+            ttsButton.visibility = View.GONE
 
             val isError = message.role == "assistant" && isRpErrorText(text)
 
@@ -1319,7 +1306,7 @@ class ChatAdapter(
                 position == lastAssistantIndex &&
                 lastAssistantIndex > lastUserIndex &&
                 !isThinking
-            instructButton.visibility = if (showRpActions) View.VISIBLE else View.GONE
+            instructButton.visibility = View.GONE
             regenerateButton.visibility = if (
                 position > 0 &&
                 position < messages.size &&
@@ -1372,6 +1359,10 @@ class ChatAdapter(
                 R.drawable.ic_msg_speak
             }
             ttsButton.setImageResource(iconRes)
+            bindMoreActions(
+                speakingHere = isSpeaking && position == currentPosition,
+                canInstruct = showRpActions,
+            )
 
             ttsButton.setOnClickListener {
                 val textToSpeak = messageTextView.text.toString()
@@ -1495,11 +1486,6 @@ class ChatAdapter(
             messageContainer.alpha = 1f
             messageContainer.clearAnimation()
             messageContainer.background = ContextCompat.getDrawable(itemView.context, R.drawable.bg_ai_message)
-        }
-
-        private fun applyCollapseState(isCollapsed: Boolean) {
-            messageTextView.maxLines = if (isCollapsed) 4 else Int.MAX_VALUE
-            messageTextView.ellipsize = if (isCollapsed) android.text.TextUtils.TruncateAt.END else null
         }
 
         private fun isRpErrorText(text: String): Boolean =

@@ -37,12 +37,12 @@ object RpPromptEngine {
 
     fun expandMacros(text: String, charName: String, userName: String): String {
         if (text.isEmpty()) return text
-        val withStandIns = Regex("""\{\{\s*random_user_(\d+)\s*}}""", RegexOption.IGNORE_CASE).replace(text) { match ->
+        val withStandIns = Regex("""\{\{\s*random_user_(\d+)\s*\}\}""", RegexOption.IGNORE_CASE).replace(text) { match ->
             standInName(match.groupValues[1].toIntOrNull() ?: 1, userName)
         }
         return withStandIns
-            .replace(Regex("""\{\{\s*char\s*}}|<BOT>""", RegexOption.IGNORE_CASE), charName)
-            .replace(Regex("""\{\{\s*user\s*}}|<USER>""", RegexOption.IGNORE_CASE), userName)
+            .replace(Regex("""\{\{\s*char\s*\}\}|<BOT>""", RegexOption.IGNORE_CASE), charName)
+            .replace(Regex("""\{\{\s*user\s*\}\}|<USER>""", RegexOption.IGNORE_CASE), userName)
     }
 
     /** Example dialogs: {{user}} is a stand-in, not the person in this chat. */

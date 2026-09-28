@@ -1337,6 +1337,21 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(View.VISIBLE, vh.itemView.findViewById<View>(R.id.aiActionRow).visibility)
     }
 
+    /** A reply's ⋮ opens a glass menu with Edit (and Read aloud / Instruct where they apply). */
+    @Test fun replyMoreMenuDark() = withChat { a, _ ->
+        seedConversation(a); idle()
+        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        val holder = rv.findViewHolderForAdapterPosition(1)!!
+        org.junit.Assert.assertEquals(View.GONE, holder.itemView.findViewById<View>(R.id.editButton).visibility)
+        holder.itemView.findViewById<View>(R.id.moreActionsButton).performClick(); idle()
+        val rows = a.findViewById<android.view.ViewGroup>(R.id.popoverRows)
+        val titles = (0 until rows.childCount).map {
+            rows.getChildAt(it).findViewById<android.widget.TextView>(R.id.popoverRowTitle).text.toString()
+        }
+        org.junit.Assert.assertTrue(titles.toString(), "Edit" in titles)
+        snap(root(a), "reply_menu_dark")
+    }
+
     /** Thoughts stay folded while the reply streams, and the Thoughts tile hides them outright. */
     @Test fun thinkingStaysFoldedWhileStreaming() = withChat { a, _ ->
         seedConversation(a); idle()

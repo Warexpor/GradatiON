@@ -256,17 +256,18 @@ object DemoModel {
         """.trimIndent()
     )
 
+    /** Vesna's scene ([DemoCharacter]): it picks up from her greeting over the map. */
     private val ROLEPLAY = listOf(
         Script(
             thinking = null,
             text = """
-                *The lantern flickers as she sets it on the table, the rain still dripping from her hood.*
+                *She turns the lantern so its light falls on a bend in the river, circled twice in red ink.*
 
-                "You're late," she says, not unkindly. "I was starting to think the river took you."
+                "Three boats went up past this point last week. One came back, empty, tied up neat as you like."
 
-                *She slides a folded map across the wood and taps a spot circled in red ink.*
+                *She slides the map toward you.*
 
-                "This is where it happened. Are you still in?"
+                "Nobody in town will say why. Are you still in?"
             """.trimIndent()
         ),
         Script(
@@ -277,6 +278,26 @@ object DemoModel {
                 "Good. Then we leave at first light. Bring the rope, and don't tell the innkeeper where we're going."
 
                 *Outside, thunder rolls over the hills like something waking up.*
+            """.trimIndent()
+        ),
+        Script(
+            thinking = null,
+            text = """
+                *By dawn the rain has thinned to mist. She steps into the boat first and holds it steady for you.*
+
+                "Keep your eyes on the left bank. The charts say there's nothing there."
+
+                *She pushes off. Somewhere upstream, a bell rings once and stops.*
+            """.trimIndent()
+        ),
+        Script(
+            thinking = null,
+            text = """
+                *She lifts a hand for quiet and lets the boat drift. On the bank, half hidden in the reeds, a stone stair runs down into the water.*
+
+                "That," she says softly, "is not on any map I've ever drawn."
+
+                *She looks at you.* "Your call. Up the stairs, or back to town and pretend we never saw it?"
             """.trimIndent()
         ),
     )

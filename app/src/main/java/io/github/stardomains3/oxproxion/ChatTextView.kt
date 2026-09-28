@@ -3,12 +3,9 @@ package io.github.stardomains3.oxproxion
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
-import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.os.SystemClock
 import android.text.Layout
@@ -21,7 +18,7 @@ import androidx.core.content.res.ResourcesCompat
 
 /**
  * Message text view that paints the rounded shapes behind [ChatMarkdown] code: a card with a
- * header row (language label on the left, a Copy chip with an icon on the right, a hairline
+ * header row (language label on the left, a bare copy icon on the right, a hairline
  * under both), and a pill behind inline code. Everything else is a plain TextView, so
  * selection and links behave exactly as before.
  */
@@ -33,7 +30,7 @@ class ChatTextView @JvmOverloads constructor(
 
     private val density = resources.displayMetrics.density
     private val scaled = resources.displayMetrics.scaledDensity
-    private val cardRadius = 14f * density
+    private val cardRadius = 12f * density
     private val pillRadius = 6f * density
     private val pillPadX = 3.5f * density
     private val rect = RectF()
@@ -58,48 +55,24 @@ class ChatTextView @JvmOverloads constructor(
         textSize = 12.5f * scaled
         typeface = runCatching { ResourcesCompat.getFont(context, R.font.jakarta_medium) }.getOrNull()
     }
-    private val copyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.xai_body)
-        // The chip is tappable, so it keeps the 13sp floor.
-        textSize = 13f * scaled
-        typeface = runCatching { ResourcesCompat.getFont(context, R.font.jakarta_medium) }.getOrNull()
-    }
-    private val copyLabel = context.getString(R.string.action_copy)
-    private val copiedLabel = context.getString(R.string.code_copied_chip)
     private val copyIcon: Drawable? = ContextCompat.getDrawable(context, R.drawable.ic_msg_copy)?.mutate()?.apply {
         setTint(ContextCompat.getColor(context, R.color.xai_body))
     }
     private val checkIcon: Drawable? = ContextCompat.getDrawable(context, R.drawable.ic_msg_check)?.mutate()?.apply {
         setTint(ContextCompat.getColor(context, R.color.xai_ink))
     }
-    private val sheenColor = ContextCompat.getColor(context, R.color.glass_sheen)
-    private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = density.coerceAtLeast(1f)
-    }
-    private val copyPillFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.glass_chat_action_tint)
-    }
     private val copyPillPressed = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = ContextCompat.getColor(context, R.color.popover_row_pressed)
     }
-    private val copyPillRim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = density.coerceAtLeast(1f)
-        color = ContextCompat.getColor(context, R.color.xai_hairline)
-    }
     private val capBounds = Rect()
-    private var shaderTop = Float.NaN
-    private var shaderWidth = -1f
 
-    /** Copy chips from the last draw (text-layout coordinates), with the code each copies. */
+    /** Copy icons' tap areas from the last draw (text-layout coordinates), with the code each copies. */
     private val chips = ArrayList<Pair<RectF, String>>()
     private var pressedChip = -1
     private var copiedCode: String? = null
     private var copiedUntil = 0L
 
-    /** Chip shows "Copied" with a check for a moment; called by the chip and the header span. */
+    /** The copy icon turns into a check for a moment; called by the icon and the header span. */
     fun showCopied(code: String) {
         copiedCode = code
         copiedUntil = SystemClock.uptimeMillis() + COPIED_MS
@@ -175,22 +148,13 @@ class ChatTextView @JvmOverloads constructor(
         }
         val width = layout.width.toFloat()
         rect.set(0f, top, width, bottom)
+        // Flat card: one fill and a hairline edge, no sheen or lit rim.
         canvas.drawRoundRect(rect, cardRadius, cardRadius, cardFill)
-        // Glass: a soft sheen across the top and a rim lit from above.
-        if (shaderTop != top || shaderWidth != width) {
-            shaderTop = top
-            shaderWidth = width
-            sheenPaint.shader = LinearGradient(0f, top, 0f, top + 34f * density,
-                sheenColor, Color.TRANSPARENT, Shader.TileMode.CLAMP)
-            rimPaint.shader = LinearGradient(0f, top, width * 0.35f, top + 60f * density,
-                Color.argb(Color.alpha(sheenColor) * 3 / 2, 255, 255, 255), cardStroke.color, Shader.TileMode.CLAMP)
-        }
-        canvas.drawRoundRect(rect, cardRadius, cardRadius, sheenPaint)
         val inset = cardStroke.strokeWidth / 2f
         rect.inset(inset, inset)
-        canvas.drawRoundRect(rect, cardRadius, cardRadius, rimPaint)
+        canvas.drawRoundRect(rect, cardRadius, cardRadius, cardStroke)
 
-        // Header row: the whole first line, spacing included, so label and chip sit centered.
+        // Header row: the whole first line, spacing included, so label and icon sit centered.
         val rowTop = layout.getLineTop(first).toFloat()
         val rowBottom = layout.getLineBottom(first).toFloat()
         val cy = (rowTop + rowBottom) / 2f
@@ -198,29 +162,22 @@ class ChatTextView @JvmOverloads constructor(
         labelPaint.getTextBounds("H", 0, 1, capBounds)
         canvas.drawText(marker.language, 14f * density, cy + capBounds.height() / 2f, labelPaint)
 
-        // Copy chip: glass capsule, icon then label, optically centered.
+        // Copy: just the icon, a check for a moment once copied; a soft disc while pressed.
         val copied = copiedCode == marker.code && SystemClock.uptimeMillis() < copiedUntil
-        val label = if (copied) copiedLabel else copyLabel
         val icon = if (copied) checkIcon else copyIcon
-        copyPaint.getTextBounds("H", 0, 1, capBounds)
-        val iconSize = 14f * density
-        val gap = 5f * density
-        val padX = 10f * density
-        val h = 26f * density
-        val chipW = padX + iconSize + gap + copyPaint.measureText(label) + padX
-        val right = width - 8f * density
-        rect.set(right - chipW, cy - h / 2f, right, cy + h / 2f)
+        val iconSize = 18f * density
+        val cx = width - 22f * density
+        val half = 15f * density
+        rect.set(cx - half, cy - half, cx + half, cy + half)
         val index = chips.size
-        canvas.drawRoundRect(rect, h / 2f, h / 2f, if (pressedChip == index) copyPillPressed else copyPillFill)
-        canvas.drawRoundRect(rect, h / 2f, h / 2f, copyPillRim)
+        if (pressedChip == index) canvas.drawOval(rect, copyPillPressed)
         chips += RectF(rect) to marker.code
         icon?.let {
-            val l = (rect.left + padX).toInt()
+            val l = (cx - iconSize / 2f).toInt()
             val t = (cy - iconSize / 2f).toInt()
             it.setBounds(l, t, l + iconSize.toInt(), t + iconSize.toInt())
             it.draw(canvas)
         }
-        canvas.drawText(label, rect.left + padX + iconSize + gap, cy + capBounds.height() / 2f, copyPaint)
     }
 
     private fun drawPill(canvas: Canvas, layout: Layout, text: Spanned, marker: Any) {

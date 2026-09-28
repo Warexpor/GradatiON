@@ -57,6 +57,8 @@
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
+        android:fadingEdgeLength="28dp"
+        android:requiresFadingEdge="vertical"
         android:id="@+id/recyclerViewLanModels"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

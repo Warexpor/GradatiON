@@ -58,7 +58,8 @@ class OpenRouterModelsFragment : Fragment() {
         chips = ModelFilterChips(
             view.findViewById<LinearLayout>(R.id.catalogFilterChips),
             newestFirst = viewModel.sortOrder.value == SortOrder.BY_DATE,
-            selected = currentFilter,
+            selected = currentFilter.takeIf { it != ModelFilter.LOCAL } ?: ModelFilter.ALL,
+            filters = ModelFilter.entries - ModelFilter.LOCAL,
             onSort = { newest -> viewModel.setSortOrder(if (newest) SortOrder.BY_DATE else SortOrder.ALPHABETICAL) },
             onFilter = { f ->
                 currentFilter = f

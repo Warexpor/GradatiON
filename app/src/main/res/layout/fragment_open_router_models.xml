@@ -113,6 +113,8 @@
     </HorizontalScrollView>
 
     <androidx.recyclerview.widget.RecyclerView
+        android:fadingEdgeLength="28dp"
+        android:requiresFadingEdge="vertical"
         android:id="@+id/recyclerViewOpenRouterModels"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

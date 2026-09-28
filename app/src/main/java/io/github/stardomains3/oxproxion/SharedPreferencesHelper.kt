@@ -131,6 +131,25 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_MODEL_VALE = "modelvale"
         private const val KEY_CUSTOM_MODELS = "custom_models"
         private const val KEY_DEFAULT_MODELS_SEEDED = "default_models_seeded"
+        private const val KEY_OLD_DEFAULTS_PRUNED = "old_default_models_pruned"
+        private const val KEY_DEMO_CHARACTER_SEEDED = "demo_character_seeded"
+        /** Name and id of each model older installs were seeded with. */
+        private val OLD_DEFAULT_MODELS = listOf(
+            "OpenAI: ChatGPT-4o" to "openai/chatgpt-4o-latest",
+            "MoonshotAI: Kimi K2" to "moonshotai/kimi-k2",
+            "xAI: Grok 3" to "x-ai/grok-3",
+            "Mistral: Mistral Medium 3" to "mistralai/mistral-medium-3",
+            "Deepseek: R1 0528" to "deepseek/deepseek-r1-0528",
+            "Deepseek: V3 0324" to "deepseek/deepseek-chat-v3-0324",
+            "Qwen: Qwen3 235B A22B Instruct 2507" to "qwen/qwen3-235b-a22b-2507",
+            "Baidu: ERNIE 4.5 300B A47B" to "baidu/ernie-4.5-300b-a47b",
+            "Google: Gemini 2.5 Flash" to "google/gemini-2.5-flash",
+            "Google: Gemini 2.5 Pro" to "google/gemini-2.5-pro",
+            "xAI: Grok 4" to "x-ai/grok-4",
+            "OpenAI: GPT-4.1" to "openai/gpt-4.1",
+            "Anthropic: Claude Sonnet 4" to "anthropic/claude-sonnet-4",
+            "Perplexity: Sonar Pro" to "perplexity/sonar-pro",
+        )
         private const val KEY_SELECTED_SYSTEM_MESSAGE = "selected_system_message"
         private const val KEY_CUSTOM_SYSTEM_MESSAGES = "custom_system_messages"
         private const val KEY_DEFAULT_SYSTEM_MESSAGES_SEEDED = "default_system_messages_seeded"
@@ -923,31 +942,30 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit { putString(KEY_CUSTOM_MODELS, jsonString) }
     }
 
+    /**
+     * New installs start with just the demo model (plus the built-in free router); people pick
+     * their own from the catalogs. Installs seeded with the old fourteen defaults lose the ones
+     * left exactly as seeded, except the model in use.
+     */
     fun seedDefaultModelsIfNeeded() {
         ensureDemoModel()
-        if (!mainPrefs.getBoolean(KEY_DEFAULT_MODELS_SEEDED, false)) {
-            val defaultModels = listOf(
-                LlmModel("OpenAI: ChatGPT-4o", "openai/chatgpt-4o-latest", true),
-                LlmModel("MoonshotAI: Kimi K2", "moonshotai/kimi-k2", false),
-                LlmModel("xAI: Grok 3", "x-ai/grok-3", false),
-                LlmModel("Mistral: Mistral Medium 3", "mistralai/mistral-medium-3", true),
-                LlmModel("Deepseek: R1 0528", "deepseek/deepseek-r1-0528", false),
-                LlmModel("Deepseek: V3 0324", "deepseek/deepseek-chat-v3-0324", false),
-                LlmModel("Qwen: Qwen3 235B A22B Instruct 2507", "qwen/qwen3-235b-a22b-2507", false),
-                LlmModel("Baidu: ERNIE 4.5 300B A47B", "baidu/ernie-4.5-300b-a47b", false),
-                LlmModel("Google: Gemini 2.5 Flash", "google/gemini-2.5-flash", true),
-                LlmModel("Google: Gemini 2.5 Pro", "google/gemini-2.5-pro", true),
-                LlmModel("xAI: Grok 4", "x-ai/grok-4", true),
-                LlmModel("OpenAI: GPT-4.1", "openai/gpt-4.1", true),
-                LlmModel("Anthropic: Claude Sonnet 4", "anthropic/claude-sonnet-4", true),
-                LlmModel("Perplexity: Sonar Pro", "perplexity/sonar-pro", false)
-            )
-            val customModels = getCustomModels()
-            customModels.addAll(defaultModels)
-            saveCustomModels(customModels)
-            mainPrefs.edit { putBoolean(KEY_DEFAULT_MODELS_SEEDED, true) }
+        if (mainPrefs.getBoolean(KEY_DEFAULT_MODELS_SEEDED, false) && !mainPrefs.getBoolean(KEY_OLD_DEFAULTS_PRUNED, false)) {
+            val active = getPreferenceModelnew()
+            val old = OLD_DEFAULT_MODELS.toSet()
+            val kept = getCustomModels().filterNot {
+                (it.displayName to it.apiIdentifier) in old && it.apiIdentifier != active
+            }
+            saveCustomModels(kept)
+        }
+        mainPrefs.edit {
+            putBoolean(KEY_DEFAULT_MODELS_SEEDED, true)
+            putBoolean(KEY_OLD_DEFAULTS_PRUNED, true)
         }
     }
+
+    /** The demo character went into the roleplay library once ([DemoCharacter]). */
+    fun isDemoCharacterSeeded(): Boolean = mainPrefs.getBoolean(KEY_DEMO_CHARACTER_SEEDED, false)
+    fun markDemoCharacterSeeded() = mainPrefs.edit { putBoolean(KEY_DEMO_CHARACTER_SEEDED, true) }
 
     /** The built-in demo model is always in the list (first), for new and existing installs. */
     private fun ensureDemoModel() {

@@ -932,6 +932,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         viewModel.chatMessages.observe(viewLifecycleOwner) { messages ->
             chatAdapter.setMessages(messages)
+            restoreListSpot()
+            chatRecyclerView.post { updateJumpToBottom() }
             updateSendButtonChrome()
             val hasMessages = messages.isNotEmpty()
             // STT disabled — watermark never used for hold-to-talk
@@ -1697,11 +1699,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         rpComposerExtras.addOnLayoutChangeListener(relayout)
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) = updateTopBarEdge()
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                updateTopBarEdge()
+                updateJumpToBottom()
+            }
         })
     }
 
-    /** iOS scroll-edge effect: the fade under the floating controls appears once content is beneath them. */
+    /** The dim under the floating controls; kept at full strength (see [edgeAlphaForList]). */
     private fun updateTopBarEdge() {
         val fade = view?.findViewById<View>(R.id.topBarGlass)?.background ?: return
         // A page swipe blends the fade itself (applyPagerProgress); the list below is mid-switch.
@@ -1723,11 +1728,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     private var edgeAnimator: ValueAnimator? = null
 
-    /** Scroll-edge fade strength for the chat list as it sits now: full once 24dp is beneath the bar. */
-    private fun edgeAlphaForList(): Int {
-        val under = chatRecyclerView.computeVerticalScrollOffset().toFloat()
-        return (255 * (under / (24f * resources.displayMetrics.density)).coerceIn(0f, 1f)).toInt()
-    }
+    /** The dim under the top bar stays on, empty page or not, so the tabs always read apart. */
+    private fun edgeAlphaForList(): Int = 255
 
     private fun applyChromeInsets() {
         val root = view ?: return
@@ -1759,7 +1761,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 bottom + (14 * d).toInt()
             )
             if (atBottom && grew > 0) chatRecyclerView.post { chatRecyclerView.scrollBy(0, grew) }
-            listOf(attachmentPreviewContainer, extBG, fontSizeControlsContainer).forEach { v ->
+            listOfNotNull(attachmentPreviewContainer, extBG, fontSizeControlsContainer, root.findViewById(R.id.jumpToBottomButton)).forEach { v ->
                 val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
                 val base = chromeBaseMargins.getOrPut(v) { lp.bottomMargin }
                 if (lp.bottomMargin != base + bottom) {
@@ -1847,6 +1849,31 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             followCarry = (followCarry - step).coerceAtLeast(0f)
             chatRecyclerView.scrollBy(0, step)
             android.view.Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+
+    private var jumpShown = false
+
+    /** The jump button rises in once the latest message is more than a short way below. */
+    private fun updateJumpToBottom() {
+        val b = view?.findViewById<View>(R.id.jumpToBottomButton) ?: return
+        val show = chatAdapter.itemCount > 0 && remainingBelow() > 160 * resources.displayMetrics.density
+        if (show == jumpShown) return
+        jumpShown = show
+        b.animate().cancel()
+        val lift = 8f * resources.displayMetrics.density
+        if (!Motion.areAnimationsEnabled(requireContext())) {
+            b.isVisible = show
+            b.alpha = if (show) 1f else 0f
+            return
+        }
+        if (show) {
+            b.isVisible = true
+            b.translationY = lift
+            b.animate().alpha(1f).translationY(0f).setDuration(260).setInterpolator(Motion.iosOut).start()
+        } else {
+            b.animate().alpha(0f).translationY(lift).setDuration(200).setInterpolator(Motion.easeOut)
+                .withEndAction { b.isVisible = false }.start()
         }
     }
 
@@ -1953,14 +1980,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 scrollChatToLatestEnd()
             },
             onInstructMessage = { _ ->
-                val input = com.google.android.material.textfield.TextInputEditText(requireContext())
-                input.hint = getString(R.string.rp_instruct_hint)
-                input.minLines = 2
-                val wrapper = com.google.android.material.textfield.TextInputLayout(requireContext()).apply {
-                    hint = getString(R.string.rp_instruct)
-                    addView(input)
-                    setPadding(48, 24, 48, 8)
-                }
+                // Title says "Instruct"; the field only needs its placeholder.
+                val wrapper = layoutInflater.inflate(R.layout.dialog_instruct, null)
+                val input = wrapper.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.instructInput)
                 val dialog = GlassAlertDialogBuilder(
                     requireContext(),
                     R.style.CustomMaterialAlertDialogTheme
@@ -2086,6 +2108,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         chatAdapter.onStreamVisualUpdate = { followStreamingEdge() }
         chatAdapter.showThinking = sharedPreferencesHelper.isShowThinkingBlocks()
+        chatAdapter.onMessageMenu = { anchor, rows ->
+            newPopover(anchor) { open -> anchor.isSelected = open }?.show(null, rows, modal = true)
+        }
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 // Freeze the ambient field while the list moves: each frame re-blurs the glass.
@@ -3052,6 +3077,8 @@ $cleanContent
             }
         }
 
+        requireView().findViewById<View>(R.id.jumpToBottomButton).setOnClickListener { glideToBottom() }
+
         scrollToBottomButton.setOnClickListener {
             chatRecyclerView.post {
                 glideToBottom()
@@ -3569,7 +3596,7 @@ $cleanContent
             model?.let { viewModel.getModelDisplayName(it) } ?: ""
         root.findViewById<ImageView>(R.id.controlsModelIcon).setImageResource(
             model?.let { ModelBrands.of(it)?.icon }
-                ?: if (viewModel.activeModelIsLan()) R.drawable.ic_lan else R.drawable.ic_cloudnew
+                ?: if (viewModel.activeModelIsLan()) R.drawable.ic_local_network else R.drawable.ic_cloudnew
         )
         val supported = viewModel.canRequestReasoning(model)
         val on = viewModel.isReasoningEnabled.value == true
@@ -4335,9 +4362,74 @@ $cleanContent
         if (target != current) {
             sharedPreferencesHelper.saveComposerDraft(current, chatEditText.text?.toString().orEmpty())
             modeSwitchedAt = android.os.SystemClock.uptimeMillis()
+            captureListSpot()?.let { modeSpots[current] = it }
+            modeThreads[current] = chatAdapter.currentMessages()
+            pendingSpot = modeSpots[target]
             viewModel.toggleChatMode()
+            showCachedThread(target)
         }
         return true
+    }
+
+    /** Each mode's thread as last shown, so swiping back paints it in the same frame. */
+    private val modeThreads = HashMap<ChatMode, List<FlexibleMessage>>()
+
+    /**
+     * Put the mode's last-seen thread and scroll spot on screen now, before its reload lands:
+     * the slide shows the right page, and the reload finds nothing to change.
+     */
+    private fun showCachedThread(mode: ChatMode) {
+        val cached = modeThreads[mode] ?: return
+        chatAdapter.setMessages(cached)
+        emptyStateContainer.animate().cancel()
+        emptyStateContainer.scaleX = 1f
+        emptyStateContainer.scaleY = 1f
+        emptyStateContainer.alpha = 1f
+        emptyStateContainer.isVisible = cached.isEmpty()
+        if (cached.isEmpty()) bindEmptyState(mode == ChatMode.RP)
+        val last = cached.lastIndex
+        if (last >= 0) {
+            val spot = modeSpots[mode]
+            if (spot == null || spot.atBottom || spot.position > last) {
+                layoutManager.scrollToPositionWithOffset(last, -1000000)
+            } else {
+                layoutManager.scrollToPositionWithOffset(spot.position, spot.offset)
+            }
+        }
+        pendingSpot = null
+    }
+
+    /** Where the reader was in a mode's thread, so swiping back lands on the same lines. */
+    private data class ListSpot(val sessionId: Long?, val position: Int, val offset: Int, val atBottom: Boolean)
+
+    private val modeSpots = HashMap<ChatMode, ListSpot>()
+    private var pendingSpot: ListSpot? = null
+
+    private fun captureListSpot(): ListSpot? {
+        if (chatAdapter.itemCount == 0) return null
+        val first = layoutManager.findFirstVisibleItemPosition()
+        if (first == RecyclerView.NO_POSITION) return null
+        val top = layoutManager.findViewByPosition(first)?.top ?: 0
+        return ListSpot(
+            viewModel.getCurrentSessionId(), first, top - chatRecyclerView.paddingTop,
+            atBottom = !chatRecyclerView.canScrollVertically(1)
+        )
+    }
+
+    /** The thread that just landed is the one we left: put the reader back where they were. */
+    private fun restoreListSpot() {
+        val spot = pendingSpot ?: return
+        if (android.os.SystemClock.uptimeMillis() - modeSwitchedAt > MODE_LOAD_WINDOW_MS) { pendingSpot = null; return }
+        if (spot.sessionId == null || spot.sessionId != viewModel.getCurrentSessionId()) return
+        pendingSpot = null
+        val last = chatAdapter.itemCount - 1
+        if (last < 0) return
+        // Straight away, not posted: the next layout lands on the spot, with no frame elsewhere.
+        if (spot.atBottom || spot.position > last) {
+            layoutManager.scrollToPositionWithOffset(last, -1000000)
+        } else {
+            layoutManager.scrollToPositionWithOffset(spot.position, spot.offset)
+        }
     }
 
     /** When Ask/RP last flipped; the next thread to load belongs to the switch, not to a new chat. */
@@ -5961,7 +6053,7 @@ $cleanContent
             PickerPopover.Row(
                 title = ModelNames.withoutProvider(m.displayName, m.apiIdentifier),
                 subtitle = ModelRow.subtitle(requireContext(), m),
-                iconRes = ModelBrands.of(m)?.icon ?: if (m.isLANModel) R.drawable.ic_lan else 0,
+                iconRes = ModelBrands.of(m)?.icon ?: if (m.isLANModel) R.drawable.ic_local_network else 0,
                 monogram = if (ModelBrands.of(m) == null && !m.isLANModel) ModelRow.monogramFor(m) else null,
                 selected = m.apiIdentifier == active,
                 onClick = { if (m.apiIdentifier != active) applyPickedModel(m.apiIdentifier) }

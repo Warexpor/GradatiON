@@ -263,6 +263,7 @@
                 app:tint="@color/xai_mute" />
 
             <ImageButton
+                android:visibility="gone"
                 android:id="@+id/shareButton"
                 android:layout_width="34dp"
                 android:layout_height="34dp"
@@ -273,6 +274,7 @@
                 app:tint="@color/xai_mute" />
 
             <ImageButton
+                android:visibility="gone"
                 android:id="@+id/ttsButton"
                 android:layout_width="34dp"
                 android:layout_height="34dp"
@@ -303,6 +305,17 @@
                 android:src="@drawable/ic_msg_regenerate"
                 app:tint="@color/xai_mute" />
 
+            <!-- Read aloud, Instruct and Edit live in this menu; their buttons stay hidden -->
+            <ImageButton
+                android:id="@+id/moreActionsButton"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_action_press"
+                android:contentDescription="@string/cd_more_actions"
+                android:padding="8dp"
+                android:src="@drawable/ic_msg_more"
+                app:tint="@color/xai_mute" />
+
             <ImageButton
                 android:id="@+id/editButton"
                 android:layout_width="34dp"
@@ -311,7 +324,7 @@
                 android:contentDescription="@string/cd_edit_message"
                 android:padding="8dp"
                 android:src="@drawable/ic_msg_edit"
-                android:visibility="visible"
+                android:visibility="gone"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
@@ -370,6 +383,7 @@
                 app:tint="@color/xai_mute" />
 
             <ImageButton
+                android:visibility="gone"
                 android:id="@+id/collapseToggleButton"
                 android:layout_width="34dp"
                 android:layout_height="34dp"
@@ -377,7 +391,6 @@
                 android:contentDescription="@string/cd_toggle_expand"
                 android:padding="8dp"
                 android:src="@drawable/ic_msg_expand"
-                android:visibility="visible"
                 app:tint="@color/xai_mute" />
             </LinearLayout>
             </HorizontalScrollView>

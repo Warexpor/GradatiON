@@ -55,6 +55,33 @@ class ModelBrandsTest {
         assertNull(ModelBrands.of("foo3bar"))
     }
 
+    @Test fun localFilterKeepsOnlyLanModels() {
+        val lan = LlmModel("qwen3:8b", "qwen3:8b", isVisionCapable = false, isLANModel = true)
+        val cloud = LlmModel("Qwen: Qwen3", "qwen/qwen3-8b", isVisionCapable = false)
+        assertEquals(listOf(lan), listOf(lan, cloud).filter { ModelFilter.LOCAL.matches(it) })
+        assertEquals(ModelFilter.LOCAL, ModelFilter.fromPrefs(ModelFilter.typePref(ModelFilter.LOCAL), "ALL"))
+    }
+
+    /** Old installs drop the untouched seed models, but keep edits, their own picks and the one in use. */
+    @Test fun oldSeededDefaultsArePruned() {
+        val ctx: Context = ApplicationProvider.getApplicationContext()
+        val prefs = SharedPreferencesHelper(ctx)
+        prefs.saveCustomModels(listOf(
+            DemoModel.model(),
+            LlmModel("OpenAI: GPT-4.1", "openai/gpt-4.1", true),
+            LlmModel("xAI: Grok 4", "x-ai/grok-4", true),
+            LlmModel("My Grok 3", "x-ai/grok-3", false),
+            LlmModel("Anthropic: Claude Opus 4.1", "anthropic/claude-opus-4.1", true),
+        ))
+        prefs.savePreferenceModelnewchat("x-ai/grok-4")
+        prefs.mainPrefs.edit().putBoolean("default_models_seeded", true).commit()
+        prefs.seedDefaultModelsIfNeeded()
+        assertEquals(
+            listOf(DemoModel.ID, "x-ai/grok-4", "x-ai/grok-3", "anthropic/claude-opus-4.1"),
+            prefs.getCustomModels().map { it.apiIdentifier }
+        )
+    }
+
     @Test fun filterReadsTheOldTwoPrefs() {
         assertEquals(ModelFilter.FREE, ModelFilter.fromPrefs("VISION", "FREE"))
         assertEquals(ModelFilter.VISION, ModelFilter.fromPrefs("VISION", "ALL"))

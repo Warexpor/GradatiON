@@ -125,7 +125,7 @@ class BotModelPickerFragment : Fragment() {
             ) { openOpenRouterModels() },
             PickerPopover.Row(
                 getString(R.string.model_add_lan), getString(R.string.model_add_lan_sub),
-                R.drawable.ic_lan2
+                R.drawable.ic_local_network
             ) { openLanModels() },
             PickerPopover.Row(
                 getString(R.string.model_add_custom), getString(R.string.model_add_custom_sub),
