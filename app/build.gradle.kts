@@ -22,8 +22,9 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        // Own id so Grokion is not treated as oxproxion (no false "update" prompts)
-        applicationId = "io.github.warexpor.grokion"
+        // Own id, separate from upstream oxproxion. Renamed off grokion; existing
+        // grokion installs do not update into this id.
+        applicationId = "io.github.warexpor.gradation"
         minSdk = 31
         targetSdk = 36
         versionCode = 242

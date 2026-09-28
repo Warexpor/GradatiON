@@ -16,9 +16,10 @@ the state of work in progress in `docs/handoff.md`.
 - Maven Central returns 429s, so route it through the Google mirror. Use the init script
   `~/.gradle/init.d/mirror.gradle`, with a repo named `gcsCentral` inserted at index 0.
 - compileSdk is 37, because okhttp 5.5 needs it. Install `platforms;android-37.0` and build-tools 36.0.0.
-- Build dev builds, not prod: run `./gradlew assembleDev`. The `.dev` applicationId suffix lets it install
-  next to the release app. It uses R8 with `proguard-dev.pro` (`-dontobfuscate`) and is signed with the
-  committed `app/dev.keystore` (alias `gradation-dev`, public dev password "android").
+- Build dev builds, not prod: run `./gradlew assembleDev`. applicationId is `io.github.warexpor.gradation`;
+  the `.dev` suffix installs next to the release app as `io.github.warexpor.gradation.dev`. It uses R8 with
+  `proguard-dev.pro` (`-dontobfuscate`) and is signed with the committed `app/dev.keystore` (alias
+  `gradation-dev`, CN=GradatiON Dev, public dev password "android").
 - The release key lives outside the repo, in `/mnt/project-files/releases/signing/` on the desktop only. Never
   put its password in the repo.
 - Always test the minified build. R8 once renamed the glass drawable class and crashed every menu in

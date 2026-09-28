@@ -55,6 +55,7 @@ class ScreenshotTest {
         SharedPreferencesHelper(ctx).setRoleplayEnabled(true)
         // Tests that stop mid-swipe leave the peeked mode saved; always start on Chat.
         SharedPreferencesHelper(ctx).saveChatMode(ChatMode.ASK)
+        SharedPreferencesHelper(ctx).saveChatMarkStyle(SharedPreferencesHelper.CHAT_MARK_LIQUID)
     }
 
     /** CodeHub is a process singleton: a test that ends on the Code tab must not start the next one there. */
@@ -191,6 +192,76 @@ class ScreenshotTest {
             snap(mark, "chat_empty_mark_${i + 1}_dark")
         }
         org.junit.Assert.assertTrue("the mark draws through the liquid shader", mark.isLiquid)
+    }
+
+    /**
+     * A page swipe snapshots the chat onto a software canvas. The mark has to stay liquid there;
+     * the flat vector is only the Plain setting.
+     */
+    @Test fun chatEmptyMarkStaysLiquidOnSoftwareCanvas() = withChat { a, _ ->
+        val mark = a.findViewById<LiquidMarkView>(R.id.centerWatermarkIcon)
+        mark.animTime = 6.1f
+        // Cache must be built off the draw path (HardwareRenderer mid-draw crashes on device).
+        val refresh = LiquidMarkView::class.java.getDeclaredMethod("refreshLastFrame").apply {
+            isAccessible = true
+        }
+        refresh.invoke(mark)
+        val soft = Bitmap.createBitmap(mark.width, mark.height, Bitmap.Config.ARGB_8888)
+        mark.draw(Canvas(soft))
+        org.junit.Assert.assertTrue("software snapshot keeps the liquid frame", opaqueSpread(soft) > 20)
+
+        mark.markStyle = LiquidMarkView.MarkStyle.PLAIN
+        val plain = Bitmap.createBitmap(mark.width, mark.height, Bitmap.Config.ARGB_8888)
+        mark.draw(Canvas(plain))
+        org.junit.Assert.assertTrue("plain is the flat vector", opaqueSpread(plain) < 12)
+
+        mark.markStyle = LiquidMarkView.MarkStyle.OFF
+        org.junit.Assert.assertEquals(View.GONE, mark.visibility)
+    }
+
+    @Test fun chatMarkSetting() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowAppearance)
+        a.findViewById<View>(R.id.chatMarkOff).performClick(); idle()
+        org.junit.Assert.assertEquals(SharedPreferencesHelper.CHAT_MARK_OFF, SharedPreferencesHelper(a).getChatMarkStyle())
+        a.supportFragmentManager.popBackStackImmediate(); a.supportFragmentManager.popBackStackImmediate(); idle()
+        val mark = a.findViewById<LiquidMarkView>(R.id.centerWatermarkIcon)
+        org.junit.Assert.assertEquals(View.GONE, mark.visibility)
+
+        openSettingsRow(a, R.id.settingsRowAppearance)
+        a.findViewById<View>(R.id.chatMarkPlain).performClick(); idle()
+        a.supportFragmentManager.popBackStackImmediate(); a.supportFragmentManager.popBackStackImmediate(); idle()
+        org.junit.Assert.assertEquals(View.VISIBLE, mark.visibility)
+        org.junit.Assert.assertEquals(LiquidMarkView.MarkStyle.PLAIN, mark.markStyle)
+
+        openSettingsRow(a, R.id.settingsRowAppearance)
+        a.findViewById<View>(R.id.chatMarkLiquid).performClick(); idle()
+        a.supportFragmentManager.popBackStackImmediate(); a.supportFragmentManager.popBackStackImmediate(); idle()
+        org.junit.Assert.assertEquals(LiquidMarkView.MarkStyle.LIQUID, mark.markStyle)
+        org.junit.Assert.assertEquals(View.VISIBLE, mark.visibility)
+    }
+
+    /** Spread of opaque reds. The liquid frame varies; the flat vector is one gray. */
+    private fun opaqueSpread(bmp: Bitmap): Int {
+        var n = 0
+        var min = 255
+        var max = 0
+        val step = 3
+        var y = 0
+        while (y < bmp.height) {
+            var x = 0
+            while (x < bmp.width) {
+                val c = bmp.getPixel(x, y)
+                if (android.graphics.Color.alpha(c) >= 240) {
+                    val r = android.graphics.Color.red(c)
+                    if (r < min) min = r
+                    if (r > max) max = r
+                    n++
+                }
+                x += step
+            }
+            y += step
+        }
+        return if (n < 20) 0 else max - min
     }
 
     @Test fun chatConversationDark() = withChat { a, _ ->
@@ -1056,6 +1127,37 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(root.width * 0.7f, page.translationX, root.width * 0.05f)
         org.junit.Assert.assertTrue("next mode is already behind the snapshot", a.findViewById<View>(R.id.tabRoleplay).isSelected)
         snap(root(a), "swipe_mid_dark")
+    }
+
+    /** Drift (and any live ambient) used to break the pager snapshot, so swipes did nothing. */
+    @Test fun swipeMidDragWithDriftBackground() = withChat { a, chat ->
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.DRIFT.key)
+        idle()
+        val ambient = a.findViewById<AmbientBackgroundView>(R.id.ambientBackground)
+        // Simulate a live AGSL frame that left RuntimeShader on the shared paint, then a
+        // software pager snapshot (drawToBitmap). That used to throw and cancel the swipe.
+        val paint = AmbientBackgroundView::class.java.getDeclaredField("fieldPaint").apply {
+            isAccessible = true
+        }.get(ambient) as android.graphics.Paint
+        paint.shader = android.graphics.RuntimeShader(
+            "uniform float2 res; half4 main(float2 p) { return half4(0.5, 0.5, 0.5, 0.1); }"
+        )
+        val soft = android.graphics.Bitmap.createBitmap(
+            ambient.width.coerceAtLeast(1), ambient.height.coerceAtLeast(1),
+            android.graphics.Bitmap.Config.ARGB_8888
+        )
+        ambient.draw(android.graphics.Canvas(soft))
+        soft.recycle()
+        org.junit.Assert.assertNull("AGSL must not stay on the paint after a software draw", paint.shader)
+
+        val root = chat.requireView()
+        drag(root, -root.width * 0.3f, release = false, stepMs = 40L)
+        org.junit.Assert.assertTrue(
+            "pager snapshot must succeed with a live ambient background",
+            pagerShots(a).isNotEmpty()
+        )
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.tabRoleplay).isSelected)
+        SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
     }
 
     @Test fun swipeCancelComesBack() = withChat { a, chat ->

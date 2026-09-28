@@ -7,10 +7,15 @@ import android.graphics.BitmapShader
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.HardwareRenderer
 import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.RenderNode
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
+import android.hardware.HardwareBuffer
+import android.media.ImageReader
 import android.os.Build
 import android.os.SystemClock
 import android.util.AttributeSet
@@ -18,6 +23,7 @@ import android.view.Choreographer
 import androidx.annotation.RequiresApi
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.widget.ImageViewCompat
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -35,13 +41,30 @@ import kotlin.math.roundToInt
  * It ticks at [FRAME_MS] only while shown; it holds a still frame with animations off or at
  * [GlassQuality.Level.SOLID], and stops entirely when hidden or detached. It sits inside the
  * chat's glass backdrop, so every frame also refreshes the glass sampling it, hence the low rate.
- * API 31-32, software canvases, or a driver that can't compile the shader draw the plain tinted drawable.
+ * API 31-32, or a driver that can't compile the shader, draws the plain tinted drawable.
+ * A software canvas (the mode pager's page snapshot) cannot run the shader, so it blits
+ * [lastFrame]: the latest hardware frame, copied off the draw path. The copy goes through a
+ * hardware bitmap. Reading Image planes here aborts the process on some GPUs (Samsung).
  */
 class LiquidMarkView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : AppCompatImageView(context, attrs, defStyleAttr) {
+
+    enum class MarkStyle { OFF, PLAIN, LIQUID }
+
+    /**
+     * Off hides the mark. Plain is the flat vector. Liquid is the moving glass (the default).
+     */
+    var markStyle: MarkStyle = MarkStyle.LIQUID
+        set(value) {
+            if (field == value) return
+            field = value
+            animated = value == MarkStyle.LIQUID
+            visibility = if (value == MarkStyle.OFF) GONE else VISIBLE
+            invalidate()
+        }
 
     /** False holds a single still frame. */
     var animated: Boolean = true
@@ -64,6 +87,10 @@ class LiquidMarkView @JvmOverloads constructor(
     private var ticking = false
     private var windowVisible = true
     private var lastTick = 0L
+    /** Latest liquid frame for software canvases (pager snapshot). Never built inside onDraw. */
+    private var lastFrame: Bitmap? = null
+    private var lastFrameTime = Float.NaN
+    private var cachePosted = false
 
     private val frame = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
@@ -81,6 +108,11 @@ class LiquidMarkView @JvmOverloads constructor(
         }
     }
 
+    private val cacheFrame = Runnable {
+        cachePosted = false
+        refreshLastFrame()
+    }
+
     init {
         GlassQuality.init(context)
     }
@@ -96,6 +128,11 @@ class LiquidMarkView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         stopTicking()
+        removeCallbacks(cacheFrame)
+        cachePosted = false
+        lastFrame?.recycle()
+        lastFrame = null
+        lastFrameTime = Float.NaN
         super.onDetachedFromWindow()
     }
 
@@ -130,6 +167,9 @@ class LiquidMarkView @JvmOverloads constructor(
         surfaceKey = ""
         maskMap = null
         heightMap = null
+        lastFrame?.recycle()
+        lastFrame = null
+        lastFrameTime = Float.NaN
     }
 
     private fun canAnimate(): Boolean =
@@ -153,9 +193,113 @@ class LiquidMarkView @JvmOverloads constructor(
     }
 
     override fun onDraw(canvas: Canvas) {
-        // Software canvases (the mode pager's page snapshot, dialog backdrops) throw on RuntimeShader.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && canvas.isHardwareAccelerated && drawLiquid(canvas)) return
+        if (markStyle != MarkStyle.LIQUID) {
+            super.onDraw(canvas)
+            return
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            super.onDraw(canvas)
+            return
+        }
+        // RuntimeShader only runs on a hardware canvas. Never spin up a HardwareRenderer here:
+        // the pager's drawToBitmap is software, and nested GPU work mid-draw crashes the process.
+        if (canvas.isHardwareAccelerated && drawLiquid(canvas)) {
+            scheduleCacheRefresh()
+            return
+        }
+        val cached = lastFrame
+        if (cached != null && !cached.isRecycled) {
+            canvas.drawBitmap(cached, 0f, 0f, null)
+            return
+        }
         super.onDraw(canvas)
+    }
+
+    private fun scheduleCacheRefresh() {
+        if (cachePosted || width == 0 || height == 0) return
+        // A swipe only needs a recent frame, not a readback on every tick.
+        if (lastFrame != null && abs(animTime - lastFrameTime) < 0.4f) return
+        cachePosted = true
+        post(cacheFrame)
+    }
+
+    /** Rasterize the current liquid frame off the draw path for software snapshots. */
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun refreshLastFrame() {
+        if (!isLiquid || markStyle != MarkStyle.LIQUID || width == 0 || height == 0) return
+        if (lastFrame != null && lastFrameTime == animTime) return
+        val frame = runCatching { rasterizeLiquid() }.getOrNull() ?: return
+        lastFrame?.recycle()
+        lastFrame = frame
+        lastFrameTime = animTime
+    }
+
+    /** The current liquid frame as a software bitmap, for canvases that cannot run the shader. */
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun rasterizeLiquid(): Bitmap? {
+        val w = width
+        val h = height
+        val node = RenderNode("liquid-mark")
+        node.setPosition(0, 0, w, h)
+        val recording = node.beginRecording()
+        val drew = drawLiquid(recording)
+        node.endRecording()
+        if (!drew) return null
+        // CPU_READ is required for a later plane fallback. GPU_SAMPLED lets us wrap the buffer
+        // as a bitmap. Plane lock aborts (not throws) on some Samsung GPUs, so that path is last.
+        val usage = HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or
+            HardwareBuffer.USAGE_GPU_COLOR_OUTPUT or
+            HardwareBuffer.USAGE_CPU_READ_OFTEN
+        val reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 1, usage)
+        val renderer = HardwareRenderer()
+        renderer.setContentRoot(node)
+        renderer.setSurface(reader.surface)
+        try {
+            renderer.createRenderRequest().setWaitForPresent(true).syncAndDraw()
+            val image = reader.acquireNextImage() ?: return null
+            try {
+                return bitmapFromImage(image, w, h)
+            } finally {
+                image.close()
+            }
+        } finally {
+            renderer.destroy()
+            reader.close()
+        }
+    }
+
+    /**
+     * Prefer wrapping the GPU buffer. [android.media.Image.getPlanes] calls NewDirectByteBuffer
+     * on the locked address and aborts the process when a driver returns a buffer it cannot map.
+     * Planes are only for hosts with no hardware buffer (unit tests).
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun bitmapFromImage(image: android.media.Image, w: Int, h: Int): Bitmap? {
+        val buffer = runCatching { image.hardwareBuffer }.getOrNull()
+        if (buffer != null) {
+            try {
+                val hw = Bitmap.wrapHardwareBuffer(buffer, null) ?: return null
+                try {
+                    val soft = hw.copy(Bitmap.Config.ARGB_8888, false) ?: return null
+                    return crop(soft, w, h)
+                } finally {
+                    hw.recycle()
+                }
+            } finally {
+                buffer.close()
+            }
+        }
+        val plane = image.planes[0]
+        val full = Bitmap.createBitmap(plane.rowStride / plane.pixelStride, h, Bitmap.Config.ARGB_8888)
+        full.copyPixelsFromBuffer(plane.buffer)
+        return crop(full, w, h)
+    }
+
+    private fun crop(full: Bitmap, w: Int, h: Int): Bitmap {
+        if (full.width == w && full.height == h) return full
+        return Bitmap.createBitmap(full, 0, 0, w.coerceAtMost(full.width), h.coerceAtMost(full.height)).also {
+            if (it !== full) full.recycle()
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
@@ -181,6 +325,7 @@ class LiquidMarkView @JvmOverloads constructor(
         s.setFloatUniform("slope", SLOPE * blurRadius() / step)
         paint.shader = s
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        paint.shader = null
         return true
     }
 

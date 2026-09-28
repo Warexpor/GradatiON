@@ -44,6 +44,11 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_THEME_MODE = "theme_mode"
         /** Ambient background style (AmbientBackgroundView.Style.key): off, grain, drift, flow, adaptive. */
         const val KEY_BACKGROUND_STYLE = "background_style"
+        /** Empty-chat app icon: off, plain (flat vector), or liquid (the moving glass, default). */
+        const val KEY_CHAT_MARK = "chat_mark_style"
+        const val CHAT_MARK_OFF = "off"
+        const val CHAT_MARK_PLAIN = "plain"
+        const val CHAT_MARK_LIQUID = "liquid"
         /** Roleplay tab on the main screen; off by default (Settings > Modes). */
         const val KEY_ROLEPLAY_ENABLED = "roleplay_enabled"
         const val THEME_SYSTEM = 0
@@ -633,6 +638,16 @@ class SharedPreferencesHelper(context: Context) {
 
     fun saveBackgroundStyle(key: String) {
         mainPrefs.edit { putString(KEY_BACKGROUND_STYLE, key) }
+    }
+
+    /** Empty-chat icon. Unknown values read as liquid, the shipped default. */
+    fun getChatMarkStyle(): String {
+        val saved = mainPrefs.getString(KEY_CHAT_MARK, CHAT_MARK_LIQUID) ?: CHAT_MARK_LIQUID
+        return if (saved == CHAT_MARK_OFF || saved == CHAT_MARK_PLAIN) saved else CHAT_MARK_LIQUID
+    }
+
+    fun saveChatMarkStyle(style: String) {
+        mainPrefs.edit { putString(KEY_CHAT_MARK, style) }
     }
     fun hasMigratedMaverick(): Boolean {
         return mainPrefs.getBoolean("migrated_maverick_to_openrouter", false)

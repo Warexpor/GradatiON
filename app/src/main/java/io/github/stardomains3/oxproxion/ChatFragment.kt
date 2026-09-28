@@ -262,7 +262,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var sharedPreferencesHelper: SharedPreferencesHelper
     private lateinit var attachmentPreviewContainer: View
     private lateinit var previewImageView: ImageView
-    private lateinit var centerWatermarkIcon: ImageView
+    private lateinit var centerWatermarkIcon: LiquidMarkView
     private lateinit var emptyStateContainer: FrameLayout
     private lateinit var removeAttachmentButton: ImageButton
     private lateinit var headerContainer: LinearLayout
@@ -547,6 +547,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         attachmentPreviewContainer = view.findViewById(R.id.attachmentPreviewContainer)
         previewImageView = view.findViewById(R.id.previewImageView)
         centerWatermarkIcon = view.findViewById(R.id.centerWatermarkIcon)
+        applyChatMark()
         emptyStateContainer = view.findViewById(R.id.emptyStateContainer)
         removeAttachmentButton = view.findViewById(R.id.removeAttachmentButton)
         headerContainer = view.findViewById(R.id.headerContainer)
@@ -4027,7 +4028,10 @@ $cleanContent
     private fun watchModeSwitches() {
         val prefs = sharedPreferencesHelper.mainPrefs
         val rp = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == SharedPreferencesHelper.KEY_ROLEPLAY_ENABLED) onModeSwitchChanged()
+            when (key) {
+                SharedPreferencesHelper.KEY_ROLEPLAY_ENABLED -> onModeSwitchChanged()
+                SharedPreferencesHelper.KEY_CHAT_MARK -> applyChatMark()
+            }
         }
         prefs.registerOnSharedPreferenceChangeListener(rp)
         roleplaySwitchWatcher = rp
@@ -4430,12 +4434,12 @@ $cleanContent
             }
         }
         (root as? SwipeNavLayout)?.apply {
-            // Easier than before: shorter pull commits, and a light flick is enough.
-            commitFraction = 0.22f
+            // Slightly lighter pull than before: about a sixth of the width commits.
+            commitFraction = 0.16f
         }
 
         val drawer = historyDrawerContainer as? SwipeNavLayout ?: return
-        drawer.commitFraction = 0.28f
+        drawer.commitFraction = 0.22f
         drawer.listener = object : SwipeNavLayout.Listener {
             override fun onDrag(dx: Float) {
                 cancelDrawerAnimation()
@@ -6118,7 +6122,17 @@ $cleanContent
         listOf(R.id.emptyGreeting, R.id.emptySubtitle, R.id.emptyAction, R.id.rpHero).forEach {
             root.findViewById<View>(it)?.visibility = View.GONE
         }
-        centerWatermarkIcon.visibility = View.VISIBLE
+        applyChatMark()
+    }
+
+    /** Empty-chat icon: off, the flat vector, or the liquid glass mark. */
+    private fun applyChatMark() {
+        if (!::centerWatermarkIcon.isInitialized) return
+        centerWatermarkIcon.markStyle = when (sharedPreferencesHelper.getChatMarkStyle()) {
+            SharedPreferencesHelper.CHAT_MARK_OFF -> LiquidMarkView.MarkStyle.OFF
+            SharedPreferencesHelper.CHAT_MARK_PLAIN -> LiquidMarkView.MarkStyle.PLAIN
+            else -> LiquidMarkView.MarkStyle.LIQUID
+        }
     }
 
     fun openRpHub() {

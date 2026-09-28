@@ -376,6 +376,10 @@
     <string name="notice_pdf_process_failed">Failed to process PDF: %1$s</string>
     <string name="notice_pdf_render_failed">Render failed: %1$s</string>
     <string name="settings_chat_text_size">Chat text</string>
+    <string name="settings_chat_mark">App icon</string>
+    <string name="settings_chat_mark_off">Off</string>
+    <string name="settings_chat_mark_plain">Plain</string>
+    <string name="settings_chat_mark_liquid">Liquid</string>
     <string name="text_size_s">S</string>
     <string name="text_size_m">M</string>
     <string name="text_size_l">L</string>

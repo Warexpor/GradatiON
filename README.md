@@ -7,7 +7,7 @@ monochrome interface made of iOS-style Liquid Glass. Fork of
 
 | | |
 |--|--|
-| **Package** | `io.github.warexpor.grokion` (kept so existing installs update) |
+| **Package** | `io.github.warexpor.gradation` |
 | **Android** | 12+ (min SDK 31, target 36) |
 | **License** | Apache 2.0 |
 
@@ -73,7 +73,7 @@ app before you add a key.
 ```bash
 git clone https://github.com/Warexpor/GradatiON.git
 cd GradatiON
-./gradlew assembleDev          # installs next to the release app as io.github.warexpor.grokion.dev
+./gradlew assembleDev          # installs next to the release app as io.github.warexpor.gradation.dev
 ./gradlew testDebugUnitTest    # unit tests and screenshots (app/build/screenshots)
 ```
 

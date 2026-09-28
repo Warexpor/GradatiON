@@ -3,6 +3,7 @@
 ## Unreleased — monochrome redesign
 
 ### Changed
+- Install id is `io.github.warexpor.gradation` (dev builds: `io.github.warexpor.gradation.dev`). Older `grokion` installs stay as they are and do not update into this id. Dev builds stay signed with the committed GradatiON Dev key.
 - Typography: Plus Jakarta Sans across the app, a serif-italic GradatiON wordmark in History, and larger semibold labels on big buttons and dialog actions. Back, chevron and close icons are redrawn as rounded iOS-style strokes.
 - Glass everywhere: every dialog, bottom sheet, context menu, dropdown and settings subpage now uses the liquid-glass style; toolbar back and action buttons are glass capsules that spring under the finger.
 - Palette one step dimmer and darker (dark base #111111, light #F1F1F1), still strictly neutral.

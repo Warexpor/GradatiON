@@ -237,6 +237,67 @@
                                 app:strokeColor="@color/xai_hairline" />
                         </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
                     </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginStart="16dp"
+                        android:background="@color/xai_hairline" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:minHeight="56dp"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_chat_mark"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="16sp" />
+
+                        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
+                            android:id="@+id/chatMarkGroup"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:contentDescription="@string/settings_chat_mark"
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/chatMarkOff"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_chat_mark_off"
+                                app:backgroundTint="@color/toggle_background_selector"
+                                app:strokeColor="@color/xai_hairline" />
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/chatMarkPlain"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_chat_mark_plain"
+                                app:backgroundTint="@color/toggle_background_selector"
+                                app:strokeColor="@color/xai_hairline" />
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/chatMarkLiquid"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_chat_mark_liquid"
+                                app:backgroundTint="@color/toggle_background_selector"
+                                app:strokeColor="@color/xai_hairline" />
+                        </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
+                    </LinearLayout>
                 </LinearLayout>
 
                 <TextView

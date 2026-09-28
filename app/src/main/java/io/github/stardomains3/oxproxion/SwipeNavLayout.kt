@@ -13,12 +13,12 @@ import kotlin.math.abs
  * FrameLayout that recognises deliberate, wide horizontal swipes anywhere on it (not just at an
  * edge) and hands them to [listener]. It is strict on purpose so it never fights scrolling,
  * text selection or taps:
- *  - the finger must travel mostly sideways (|dx| > 1.7 x |dy|) past twice the touch slop
+ *  - the finger must travel mostly sideways (|dx| > 1.5 x |dy|) past 1.5x the touch slop
  *    before the gesture is claimed, and must not have started as a vertical scroll;
  *  - a press held still for a long-press (selection handles, context menus) is never claimed;
  *  - the swipe commits when the release, projected ahead by its velocity, lands past
- *    [commitFraction] of the width, having travelled at least half that; a flick back the
- *    other way always cancels.
+ *    [commitFraction] of the width, having travelled at least a third of that; a flick back
+ *    the other way always cancels.
  * While claimed, [Listener.onDrag] reports the offset so the UI can follow the finger.
  */
 class SwipeNavLayout @JvmOverloads constructor(
@@ -68,10 +68,10 @@ class SwipeNavLayout @JvmOverloads constructor(
                 val dy = ev.y - downY
                 when {
                     abs(dy) > slop * 1.5f && abs(dy) >= abs(dx) -> state = REJECTED
-                    SystemClock.uptimeMillis() - downTime > longPress && abs(dx) < slop * 2 -> state = REJECTED
-                    abs(dx) > slop * 2 && abs(dx) > abs(dy) * 1.7f -> {
+                    SystemClock.uptimeMillis() - downTime > longPress && abs(dx) < slop * 1.5f -> state = REJECTED
+                    abs(dx) > slop * 1.5f && abs(dx) > abs(dy) * 1.5f -> {
                         state = DRAGGING
-                        downX = ev.x - (if (dx > 0) slop * 2f else -slop * 2f)
+                        downX = ev.x - (if (dx > 0) slop * 1.5f else -slop * 1.5f)
                         parent?.requestDisallowInterceptTouchEvent(true)
                         return true
                     }
@@ -112,10 +112,10 @@ class SwipeNavLayout @JvmOverloads constructor(
                 // Judge where the page is headed, not only where it is: a flick carries it on,
                 // and a flick back the other way means "never mind", however far it got.
                 val flungBack = abs(vx) > flingBack && (vx > 0) != (dx > 0)
-                // A flick still has to travel half the way, so a quick nudge never navigates.
+                // A flick still has to travel a bit, so a quick nudge never navigates.
                 val projected = dx + vx * PROJECTION_S
                 val commit = !flungBack && (projected > 0) == (dx > 0) &&
-                    abs(projected) > width * commitFraction && abs(dx) > width * commitFraction / 2f
+                    abs(projected) > width * commitFraction && abs(dx) > width * commitFraction / 3f
                 if (commit) l.onCommit(if (dx > 0) 1 else -1) else l.onCancel()
                 reset()
             }

@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
@@ -13,8 +14,8 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
-import android.os.SystemClock
 import android.util.AttributeSet
+import android.view.animation.AnimationUtils
 import androidx.appcompat.widget.SwitchCompat
 import org.xmlpull.v1.XmlPullParser
 import kotlin.math.abs
@@ -28,8 +29,8 @@ import kotlin.math.roundToInt
  * two-sided rim and a sheen catch the light. It never changes color, so a toggle reads by the
  * groove alone and nothing flashes.
  *
- * Whenever the pill is held, dragged or travelling it swells past the groove and magnifies
- * harder, then settles back on a spring once it stops. Neutral grays only.
+ * While a finger holds the pill it swells past the groove and magnifies harder, then settles
+ * back on a spring on release. Sliding never resizes it. Neutral grays only.
  *
  * Every switch in the app is a SwitchCompat on these two drawables, so they are all the same
  * size. SwitchCompat makes the thumb travel equal the thumb slot, so the geometry lives in the
@@ -219,16 +220,8 @@ class GlassSwitchThumbDrawable : Drawable() {
 
     private var pressed = false
     private var enabled = true
-    /** 0 = pill at rest, 1 = held: a wider lens that magnifies harder. */
-    private var hold = 0f
-    private var holdAnimator: ValueAnimator? = null
-    /** Same as [hold], driven by the pill moving (a tap's slide or a drag). */
-    private var motion = 0f
-    private var motionTarget = 0f
-    private var motionAnimator: ValueAnimator? = null
     private var lastLeft = Int.MIN_VALUE
     private var lastWidth = 0
-    private val settle = Runnable { animateMotion(0f) }
     /**
      * Where the pill is drawn. SwitchCompat slides the thumb on a short fixed curve; the pill
      * follows that on a soft spring of its own, so a tap lands with a little settle and a drag
@@ -236,7 +229,17 @@ class GlassSwitchThumbDrawable : Drawable() {
      */
     private var drawnX = Float.NaN
     private var drawnV = 0f
-    private var lastStepNs = 0L
+    /**
+     * The lens swell, 0 = pill at rest, 1 = held (wider, magnifying harder). Only a finger
+     * holding the pill swells it; sliding keeps it at rest size. It is a spring stepped with
+     * the position, so a quick press and release never restarts from rest.
+     */
+    private var swell = 0f
+    private var swellV = 0f
+    private var pressedAtMs = 0L
+    private var lastStepMs = 0L
+    private var resting = true
+    private val unitMatrix = Matrix()
     private var alphaMul = 255
 
     private val body = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -248,8 +251,6 @@ class GlassSwitchThumbDrawable : Drawable() {
     private val rect = RectF()
     private val sheenRect = RectF()
     private val shape = Path()
-    private var shaderKey = Float.NaN
-    private var shaderH = Float.NaN
 
     override fun inflate(r: Resources, parser: XmlPullParser, attrs: AttributeSet, theme: Resources.Theme?) {
         super.inflate(r, parser, attrs, theme)
@@ -282,7 +283,8 @@ class GlassSwitchThumbDrawable : Drawable() {
         if (e != enabled) { enabled = e; changed = true }
         if (p != pressed) {
             pressed = p
-            animateHold(if (p) 1f else 0f)
+            if (p) pressedAtMs = AnimationUtils.currentAnimationTimeMillis()
+            wake()
             changed = true
         }
         if (changed) invalidateSelf()
@@ -290,47 +292,73 @@ class GlassSwitchThumbDrawable : Drawable() {
     }
 
     override fun jumpToCurrentState() {
-        holdAnimator?.cancel()
-        motionAnimator?.cancel()
-        unscheduleSelf(settle)
-        hold = if (pressed) 1f else 0f
-        motion = 0f
-        motionTarget = 0f
         drawnX = Float.NaN
         drawnV = 0f
+        swell = if (pressed) 1f else 0f
+        swellV = 0f
+        resting = true
         invalidateSelf()
     }
 
-    /** Step the pill's spring toward the thumb slot's center; at most once per frame. */
+    /**
+     * Something just started the springs. Start their clock at the event, not at the last frame
+     * drawn (which may be long ago), so the first frame steps by the real time since the touch.
+     */
+    private fun wake() {
+        if (resting) lastStepMs = AnimationUtils.currentAnimationTimeMillis()
+        resting = false
+    }
+
+    /**
+     * A tap is pressed for a moment too, and a swell started then would peak mid-slide, so
+     * only a press that outlasts a tap counts as holding the pill.
+     */
+    private fun holding(now: Long) = pressed && now - pressedAtMs >= HOLD_DELAY_MS
+    private fun waitingForHold(now: Long) = pressed && now - pressedAtMs < HOLD_DELAY_MS
+
+    private fun lensTarget(now: Long) = if (holding(now)) 1f else 0f
+
+    /**
+     * Step the pill's position and swell springs; once per frame. Uses the frame's vsync time,
+     * not the moment this draw happens to run, so the steps are even and the motion does not
+     * shimmer.
+     */
     private fun follow() {
         val target = bounds.exactCenterX()
-        val now = System.nanoTime()
-        val dt = (now - lastStepNs) / 1e9f
+        val now = AnimationUtils.currentAnimationTimeMillis()
+        val dt = (now - lastStepMs) / 1000f
         if (drawnX.isNaN() || dt > 0.5f || !canAnimateOnScreen()) {
-            drawnX = target; drawnV = 0f; lastStepNs = now
+            drawnX = target; drawnV = 0f
+            swell = lensTarget(now); swellV = 0f
+            lastStepMs = now
+            resting = !waitingForHold(now)
+            if (!resting && canAnimateOnScreen()) invalidateSelf()
             return
         }
-        if (dt < 0.001f) return
-        lastStepNs = now
+        if (dt <= 0f) return
+        lastStepMs = now
+        val lensGoal = lensTarget(now)
         val omega = (2 * Math.PI / FOLLOW_RESPONSE_S).toFloat()
+        // Swelling pops slightly past full; relaxing is critically damped so it never dips
+        // below the resting size.
+        val swelling = lensGoal > swell
+        val lensOmega = (2 * Math.PI / if (swelling) SWELL_RESPONSE_S else RELAX_RESPONSE_S).toFloat()
+        val lensDamping = if (swelling) SWELL_DAMPING else 1f
         var left = dt
         while (left > 0f) {
             val h = minOf(left, 0.004f)
             drawnV += (-omega * omega * (drawnX - target) - 2f * FOLLOW_DAMPING * omega * drawnV) * h
             drawnX += drawnV * h
+            swellV += (-lensOmega * lensOmega * (swell - lensGoal) - 2f * lensDamping * lensOmega * swellV) * h
+            swell += swellV * h
             left -= h
         }
-        if (abs(drawnX - target) < 0.3f && abs(drawnV) < 4f * density) {
-            drawnX = target; drawnV = 0f
-            return
-        }
-        // Still travelling: draw again next frame, and hold the lens while it moves.
-        invalidateSelf()
-        if (abs(drawnV) > 60f * density) {
-            animateMotion(1f)
-            unscheduleSelf(settle)
-            scheduleSelf(settle, SystemClock.uptimeMillis() + SETTLE_MS)
-        }
+        val placed = abs(drawnX - target) < 0.3f && abs(drawnV) < 4f * density
+        if (placed) { drawnX = target; drawnV = 0f }
+        val swollen = abs(swell - lensGoal) < 0.002f && abs(swellV) < 0.02f
+        if (swollen) { swell = lensGoal; swellV = 0f }
+        resting = placed && swollen && !waitingForHold(now)
+        if (!resting) invalidateSelf()
     }
 
     /** How far along its travel the drawn pill is, 0 (off) to 1 (on), for [track]'s bounds. */
@@ -344,9 +372,8 @@ class GlassSwitchThumbDrawable : Drawable() {
     }
 
     /**
-     * SwitchCompat moves the thumb by re-setting its bounds every frame, and it cancels the
-     * pressed state once a drag starts. Watching the bounds move covers taps, drags and
-     * programmatic toggles alike; the lens holds while they keep moving.
+     * SwitchCompat moves the thumb by re-setting its bounds every frame. Watching the bounds
+     * move covers taps, drags and programmatic toggles alike, and starts the follow spring.
      */
     override fun onBoundsChange(bounds: Rect) {
         super.onBoundsChange(bounds)
@@ -354,38 +381,12 @@ class GlassSwitchThumbDrawable : Drawable() {
         lastLeft = bounds.left
         lastWidth = bounds.width()
         if (!moved || !canAnimateOnScreen()) return
-        animateMotion(1f)
-        unscheduleSelf(settle)
-        scheduleSelf(settle, SystemClock.uptimeMillis() + SETTLE_MS)
-    }
-
-    private fun animateHold(target: Float) {
-        holdAnimator?.cancel()
-        if (!canAnimateOnScreen()) { hold = target; return }
-        holdAnimator = ValueAnimator.ofFloat(hold, target).apply {
-            // Swells with a small pop, relaxes slowly: the lens reads as liquid, not a switch.
-            duration = if (target > 0f) 340L else 460L
-            interpolator = if (target > 0f) Motion.springBouncy else Motion.spring
-            addUpdateListener { hold = it.animatedValue as Float; invalidateSelf() }
-            start()
-        }
-    }
-
-    private fun animateMotion(target: Float) {
-        if (motionTarget == target && motionAnimator?.isRunning == true) return
-        motionTarget = target
-        motionAnimator?.cancel()
-        if (!canAnimateOnScreen()) { motion = target; invalidateSelf(); return }
-        motionAnimator = ValueAnimator.ofFloat(motion, target).apply {
-            duration = if (target > 0f) 280L else 480L
-            interpolator = if (target > 0f) Motion.springBouncy else Motion.spring
-            addUpdateListener { motion = it.animatedValue as Float; invalidateSelf() }
-            start()
-        }
+        wake()
+        invalidateSelf()
     }
 
     /** Up to a touch past 1: the swell's spring pops slightly beyond full size. */
-    private fun lens() = max(hold, motion * MOTION_LENS).coerceIn(0f, 1.1f)
+    private fun lens() = swell.coerceIn(0f, 1.1f)
 
     /** Where the pill is this frame, spilling past the groove but never past the view. */
     private fun lensRect(out: RectF): RectF {
@@ -412,38 +413,38 @@ class GlassSwitchThumbDrawable : Drawable() {
 
     override fun draw(canvas: Canvas) {
         if (bounds.isEmpty) return
-        val lens = lens()
         val mul = if (enabled) alphaMul else alphaMul * 55 / 100
         val path = lensShape()
+        val lens = lens()
         val h = rect.height()
         val r = h / 2f
 
-        if (shaderKey != rect.top || shaderH != h) {
-            body.shader = LinearGradient(
-                0f, rect.top, 0f, rect.bottom,
-                bodyTop, bodyBottom, Shader.TileMode.CLAMP
-            )
-            sheenPaint.shader = LinearGradient(
-                0f, rect.top, 0f, rect.top + h * 0.45f,
-                sheen, Color.TRANSPARENT, Shader.TileMode.CLAMP
-            )
+        // The pill changes size every frame while it swells, so its gradients are built once
+        // over a unit height and stretched onto it, instead of being reallocated per frame.
+        if (body.shader == null) {
+            body.shader = LinearGradient(0f, 0f, 0f, 1f, bodyTop, bodyBottom, Shader.TileMode.CLAMP)
+            sheenPaint.shader = LinearGradient(0f, 0f, 0f, 0.45f, sheen, Color.TRANSPARENT, Shader.TileMode.CLAMP)
             // A lens is lit on both sides: the light enters along the top and focuses along
             // the base, with the flanks nearly clear.
             edgePaint.shader = LinearGradient(
-                0f, rect.top, 0f, rect.bottom,
+                0f, 0f, 0f, 1f,
                 intArrayOf(lensEdge, Color.TRANSPARENT, Color.TRANSPARENT, lensEdge),
                 floatArrayOf(0f, 0.38f, 0.62f, 1f),
                 Shader.TileMode.CLAMP
             )
             rimPaint.shader = LinearGradient(
-                0f, rect.top, 0f, rect.bottom,
+                0f, 0f, 0f, 1f,
                 intArrayOf(rimLight, rimMid, rimBottom),
                 floatArrayOf(0f, 0.5f, 1f),
                 Shader.TileMode.CLAMP
             )
-            shaderKey = rect.top
-            shaderH = h
         }
+        unitMatrix.setScale(1f, h)
+        unitMatrix.postTranslate(0f, rect.top)
+        body.shader.setLocalMatrix(unitMatrix)
+        sheenPaint.shader.setLocalMatrix(unitMatrix)
+        edgePaint.shader.setLocalMatrix(unitMatrix)
+        rimPaint.shader.setLocalMatrix(unitMatrix)
 
         // Shadow outside the pill only; inside, it would cloud the lens.
         shadowPaint.alpha = mul
@@ -503,10 +504,12 @@ class GlassSwitchThumbDrawable : Drawable() {
         /** Full magnification of a held lens, and the share of it the pill keeps at rest. */
         const val MAGNIFY = 0.22f
         const val REST_MAGNIFY = 0.6f
-        /** A tap's slide swells the lens a little less than a finger holding it. */
-        const val MOTION_LENS = 0.85f
-        /** How long the pill must sit still before the lens settles back. */
-        const val SETTLE_MS = 90L
+        /** How long a press must last before the pill swells; shorter presses are taps. */
+        const val HOLD_DELAY_MS = 150L
+        /** The swell spring: a quick pop when it grows, a slower unforced relax when it shrinks. */
+        const val SWELL_RESPONSE_S = 0.3f
+        const val SWELL_DAMPING = 0.62f
+        const val RELAX_RESPONSE_S = 0.4f
         /** The pill's follow spring: period in seconds, and a damping that leaves a soft settle. */
         const val FOLLOW_RESPONSE_S = 0.26f
         const val FOLLOW_DAMPING = 0.72f

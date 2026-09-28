@@ -390,6 +390,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         bindBackgroundPicker(view, prefs)
         bindVoice(view, prefs)
         bindChatTextSize(view, prefs)
+        bindChatMark(view, prefs)
 
         listOf(
             R.id.scrollButtonsSwitch,
@@ -503,6 +504,20 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                 isChecked = pref.second
                 setOnCheckedChangeListener { _, on -> BackgroundPhoto.setOption(ctx, pref.first, on) }
             }
+        }
+    }
+
+    /** Appearance > App icon: off, the flat vector, or the liquid glass mark. */
+    private fun bindChatMark(view: View, prefs: SharedPreferencesHelper) {
+        val group = view.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.chatMarkGroup)
+        val styles = listOf(
+            R.id.chatMarkOff to SharedPreferencesHelper.CHAT_MARK_OFF,
+            R.id.chatMarkPlain to SharedPreferencesHelper.CHAT_MARK_PLAIN,
+            R.id.chatMarkLiquid to SharedPreferencesHelper.CHAT_MARK_LIQUID
+        )
+        group.check(styles.firstOrNull { it.second == prefs.getChatMarkStyle() }?.first ?: R.id.chatMarkLiquid)
+        group.addOnButtonCheckedListener { _, id, checked ->
+            if (checked) styles.firstOrNull { it.first == id }?.let { prefs.saveChatMarkStyle(it.second) }
         }
     }
 

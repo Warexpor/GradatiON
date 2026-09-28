@@ -406,6 +406,9 @@ class AmbientBackgroundView @JvmOverloads constructor(
             rc.drawRect(0f, 0f, fw.toFloat(), fh.toFloat(), fieldPaint)
         } finally {
             node.endRecording()
+            // Drop the AGSL from the shared paint: a later software draw (pager snapshot)
+            // would throw if this RuntimeShader were still attached.
+            fieldPaint.shader = null
         }
         canvas.save()
         canvas.scale(width / fw.toFloat(), height / fh.toFloat())
@@ -438,6 +441,8 @@ class AmbientBackgroundView @JvmOverloads constructor(
             staticField = it
             staticFieldKey = key
         }
+        // Never leave an AGSL on this paint across frames (see drawFieldAgsl).
+        fieldPaint.shader = null
         canvas.save()
         canvas.scale(width / fw.toFloat(), height / fh.toFloat())
         canvas.drawBitmap(bmp, 0f, 0f, fieldPaint)
