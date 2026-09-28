@@ -90,6 +90,23 @@ class ChatAdapter(
             // Only the last reply carries the control, so only that row needs to rebind.
             if (isRpMode && messages.isNotEmpty()) notifyItemChanged(messages.lastIndex)
         }
+    /**
+     * Roleplay: the user line being edited. It reads as selected and every row after it dims,
+     * because those are the replies that go when the edit is sent.
+     */
+    var rpEditIndex: Int? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            if (messages.isNotEmpty()) notifyItemRangeChanged(0, messages.size, PAYLOAD_EDIT_STATE)
+        }
+
+    private fun applyEditState(holder: RecyclerView.ViewHolder, position: Int) {
+        val edit = rpEditIndex.takeIf { isRpMode }
+        holder.itemView.alpha = if (edit != null && position > edit) 0.4f else 1f
+        if (holder is UserViewHolder) holder.showEditing(edit == position)
+    }
+
     /** Tap on a Roleplay reply's speaker line (portrait and name): the character panel. */
     var onSpeakerClick: (() -> Unit)? = null
 
@@ -496,6 +513,7 @@ class ChatAdapter(
     // --- VIEW HOLDER LOGIC ---
 
     companion object {
+        private const val PAYLOAD_EDIT_STATE = "EDIT_STATE"
         const val VIEW_TYPE_USER = 1
         const val VIEW_TYPE_ASSISTANT = 2
         const val VIEW_TYPE_THINKING = 3
@@ -588,6 +606,10 @@ class ChatAdapter(
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int, payloads: MutableList<Any>) {
         if (payloads.isNotEmpty()) {
+            if (payloads.first() == PAYLOAD_EDIT_STATE) {
+                applyEditState(holder, position)
+                return
+            }
             if (payloads.first() == "STREAMING" && holder is AssistantViewHolder) {
                 attachStreamRevealHolder(holder)
                 holder.bindTextOnly(messages[position])
@@ -609,6 +631,7 @@ class ChatAdapter(
             is UserViewHolder -> holder.bind(message)
             is AssistantViewHolder -> holder.bind(message, position, isSpeaking, currentSpeakingPosition)
         }
+        applyEditState(holder, position)
     }
 
     override fun getItemCount(): Int = messages.size
@@ -721,6 +744,11 @@ class ChatAdapter(
             val next = !userActionsExpanded.contains(actionsMsgKey)
             if (next) userActionsExpanded.add(actionsMsgKey) else userActionsExpanded.remove(actionsMsgKey)
             applyActionsVisibility(next, animate = true)
+        }
+
+        /** The bubble being edited gets a brighter fill and a gray hairline (neutral, no accent). */
+        fun showEditing(on: Boolean) {
+            messageContainer.setBackgroundResource(if (on) R.drawable.bg_user_message_editing else R.drawable.bg_user_message)
         }
 
         fun bind(message: FlexibleMessage) {
@@ -910,6 +938,7 @@ class ChatAdapter(
             }
             moreActionsButton.setOnClickListener { onMessageMenu?.invoke(moreActionsButton, rows) }
         }
+        private val actionButtons: View = itemView.findViewById(R.id.aiActionButtons)
         private val rpSwipeNavRow: View = itemView.findViewById(R.id.rpSwipeNavRow)
         private val rpSwipePrev: ImageButton = itemView.findViewById(R.id.rpSwipePrev)
         private val rpSwipeNext: ImageButton = itemView.findViewById(R.id.rpSwipeNext)
@@ -917,6 +946,10 @@ class ChatAdapter(
 
         /** ‹ n/N › between copy and regenerate: shown only on the last reply, and only with 2+ alternates. */
         private fun bindRpSwipeNav(show: Boolean) {
+            // The 44dp arrows would make the last reply's row ~10dp taller than the rest and shove the text
+            // when they appear. Every RP row reserves that height instead, so nothing moves.
+            val d = itemView.resources.displayMetrics.density
+            actionButtons.minimumHeight = if (isRpMode) (46 * d).toInt() else 0
             val nav = rpSwipeNav
             if (!show || nav == null || nav.total < 2) {
                 rpSwipeNavRow.visibility = View.GONE

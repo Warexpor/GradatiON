@@ -43,114 +43,10 @@
                 android:textAppearance="@style/TextAppearance.Gradation.Footnote"
                 android:textSize="15sp" />
 
-            <!-- Hero: who you are talking to right now -->
             <LinearLayout
-                android:id="@+id/rpHubHero"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:background="@drawable/rp_bg_card"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <FrameLayout
-                        android:layout_width="72dp"
-                        android:layout_height="72dp">
-
-                        <com.google.android.material.imageview.ShapeableImageView
-                            android:id="@+id/rpHubHeroAvatar"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:background="@drawable/rp_bg_monogram"
-                            android:contentDescription="@string/rp_character_avatar"
-                            android:scaleType="centerCrop"
-                            app:shapeAppearanceOverlay="@style/XaiShapePill" />
-
-                        <TextView
-                            android:id="@+id/rpHubHeroMonogram"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:gravity="center"
-                            android:importantForAccessibility="no"
-                            android:textColor="@color/xai_mute"
-                            android:textFontWeight="600"
-                            android:textSize="28sp" />
-
-                        <ImageView
-                            android:id="@+id/rpHubHeroGlyph"
-                            android:layout_width="36dp"
-                            android:layout_height="36dp"
-                            android:layout_gravity="center"
-                            android:contentDescription="@null"
-                            android:importantForAccessibility="no"
-                            android:visibility="gone"
-                            app:tint="@color/xai_mute" />
-                    </FrameLayout>
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/rpHubHeroLabel"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/rp_ui_hub_current"
-                            android:textAppearance="@style/TextAppearance.Gradation.SectionHeader"
-                            android:textSize="13sp" />
-
-                        <TextView
-                            android:id="@+id/rpHubHeroName"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:ellipsize="end"
-                            android:maxLines="1"
-                            android:textAppearance="@style/TextAppearance.Gradation.Title" />
-
-                        <TextView
-                            android:id="@+id/rpHubHeroTagline"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:ellipsize="end"
-                            android:maxLines="2"
-                            android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rpHubContinueButton"
-                    style="@style/Widget.Grokion.Button"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="16dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="@string/rp_ui_continue" />
-            </LinearLayout>
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_marginTop="24dp"
-                android:layout_marginBottom="8dp"
-                android:text="@string/rp_hub_section_library"
-                android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
                 android:background="@drawable/rp_bg_card"
                 android:clipToOutline="true"
                 android:orientation="vertical">
@@ -190,91 +86,38 @@
                     layout="@layout/item_rp_hub_row" />
             </LinearLayout>
 
-            <!-- Backup: secondary, collapsed until asked for -->
+            <!-- Import and export: plain rows, one card, always visible -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
-                android:animateLayoutChanges="true"
                 android:background="@drawable/rp_bg_card"
                 android:clipToOutline="true"
                 android:orientation="vertical">
 
                 <include
-                    android:id="@+id/rpHubBackupRow"
+                    android:id="@+id/rpHubImportRow"
                     layout="@layout/item_rp_hub_row" />
 
-                <LinearLayout
-                    android:id="@+id/rpHubBackupOptions"
+                <View
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
+                    android:layout_height="1dp"
+                    android:layout_marginStart="54dp"
+                    android:background="@color/xai_hairline" />
 
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="54dp"
-                        android:background="@color/xai_hairline" />
+                <include
+                    android:id="@+id/rpHubExportCharsRow"
+                    layout="@layout/item_rp_hub_row" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/rpHubExportCharsButton"
-                        style="@style/Widget.Grokion.Button.SettingsRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/rp_export_characters"
-                        android:textSize="15sp"
-                        app:icon="@drawable/ic_export"
-                        app:iconTint="@color/xai_mute" />
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginStart="54dp"
+                    android:background="@color/xai_hairline" />
 
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="54dp"
-                        android:background="@color/xai_hairline" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/rpHubImportCharsButton"
-                        style="@style/Widget.Grokion.Button.SettingsRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/rp_import_characters"
-                        android:textSize="15sp"
-                        app:icon="@drawable/ic_import"
-                        app:iconTint="@color/xai_mute" />
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="54dp"
-                        android:background="@color/xai_hairline" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/rpHubExportLoreButton"
-                        style="@style/Widget.Grokion.Button.SettingsRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/rp_export_lorebooks"
-                        android:textSize="15sp"
-                        app:icon="@drawable/ic_export"
-                        app:iconTint="@color/xai_mute" />
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="54dp"
-                        android:background="@color/xai_hairline" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/rpHubImportLoreButton"
-                        style="@style/Widget.Grokion.Button.SettingsRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/rp_import_lorebooks"
-                        android:textSize="15sp"
-                        app:icon="@drawable/ic_import"
-                        app:iconTint="@color/xai_mute" />
-                </LinearLayout>
+                <include
+                    android:id="@+id/rpHubExportLoreRow"
+                    layout="@layout/item_rp_hub_row" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

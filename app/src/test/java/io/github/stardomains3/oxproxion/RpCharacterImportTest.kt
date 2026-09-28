@@ -133,4 +133,15 @@ class RpCharacterImportTest {
     @Test fun signatureCheck() {
         assertTrue(RpCharacterImport.isPng(pngWith(textChunk("a", "b"))))
     }
+
+    /** One Import picker: content, not the file name, decides characters vs lorebooks. */
+    @Test fun importDetectsLorebookBackups() {
+        val lore = """{"lorebooks":[{"name":"World","content":"x","isActive":true}]}""".toByteArray()
+        val chars = """{"characters":[{"name":"Mira"}]}""".toByteArray()
+        val tavern = """{"spec":"chara_card_v2","data":{"name":"Mira"}}""".toByteArray()
+        org.junit.Assert.assertTrue(RpImportFlow.isLorebookBackup(lore))
+        org.junit.Assert.assertFalse(RpImportFlow.isLorebookBackup(chars))
+        org.junit.Assert.assertFalse(RpImportFlow.isLorebookBackup(tavern))
+        org.junit.Assert.assertFalse(RpImportFlow.isLorebookBackup("not json".toByteArray()))
+    }
 }

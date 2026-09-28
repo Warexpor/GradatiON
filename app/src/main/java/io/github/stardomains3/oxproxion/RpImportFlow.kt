@@ -26,43 +26,7 @@ class RpImportFlow(
         val uri = result.data?.data ?: return@registerForActivityResult
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val incoming = withContext(Dispatchers.IO) {
-                    fragment.requireContext().contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        ?.let { RpCharacterImport.parse(it) }
-                }
-                if (incoming == null) {
-                    GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_not_card))
-                    return@launch
-                }
-                if (incoming.isEmpty()) {
-                    GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_empty))
-                    return@launch
-                }
-                val backup = RpCharacterBackup(incoming)
-                val matches = RpImportRules.matchingCharacters(
-                    incoming,
-                    viewModel().getRpRepository().getAllCharactersOnce()
-                )
-                if (matches.isEmpty()) {
-                    applyCharacterBackup(backup, keepBoth = false)
-                    return@launch
-                }
-                // Replace updates the ones named here; Keep both adds the import next to them.
-                // Tapping outside the dialog changes nothing.
-                GrokConfirmDialog.show(
-                    fragment = fragment,
-                    title = fragment.getString(R.string.rp_import_overwrite_title),
-                    message = fragment.getString(R.string.rp_import_overwrite_chars, matches.joinToString(", ") { it.name }),
-                    confirmText = fragment.getString(R.string.rp_import_replace),
-                    onConfirm = {
-                        fragment.viewLifecycleOwner.lifecycleScope.launch { applyCharacterBackup(backup, keepBoth = false) }
-                    },
-                    destructive = false,
-                    cancelText = fragment.getString(R.string.rp_import_keep_both),
-                    onCancel = {
-                        fragment.viewLifecycleOwner.lifecycleScope.launch { applyCharacterBackup(backup, keepBoth = true) }
-                    }
-                )
+                importCharacterBytes(readBytes(uri))
             } catch (_: Exception) {
                 GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_not_card))
             }
@@ -74,36 +38,95 @@ class RpImportFlow(
         val uri = result.data?.data ?: return@registerForActivityResult
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val text = fragment.requireContext().contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
-                    ?: run {
-                        GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_failed))
-                        return@launch
-                    }
-                val backup = json.decodeFromString(RpLorebookBackup.serializer(), text)
-                if (backup.lorebooks.isEmpty()) {
-                    GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_empty))
+                val bytes = readBytes(uri) ?: run {
+                    GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_failed))
                     return@launch
                 }
-                val repo = viewModel().getRpRepository()
-                val existingNames = repo.getAllLorebooksOnce().map { it.name }
-                val clashing = backup.lorebooks.filter { ex -> existingNames.any { it.equals(ex.name, ignoreCase = true) } }
-                if (clashing.isNotEmpty()) {
-                    GrokConfirmDialog.show(
-                        fragment = fragment,
-                        title = fragment.getString(R.string.rp_import_lore_clash_title),
-                        message = fragment.getString(R.string.rp_import_lore_clash, clashing.joinToString(", ") { it.name }),
-                        confirmText = fragment.getString(R.string.rp_import_confirm),
-                        onConfirm = {
-                            fragment.viewLifecycleOwner.lifecycleScope.launch { applyLoreBackup(backup) }
-                        },
-                        destructive = false
-                    )
-                } else {
-                    applyLoreBackup(backup)
-                }
+                importLorebookText(bytes.toString(Charsets.UTF_8))
             } catch (_: Exception) {
                 GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_failed))
             }
+        }
+    }
+
+    /** One picker for everything: the file's content decides between characters, a Tavern card and a lorebook backup. */
+    private val anyLauncher = fragment.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        val uri = result.data?.data ?: return@registerForActivityResult
+        fragment.viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val bytes = readBytes(uri)
+                if (bytes != null && isLorebookBackup(bytes)) importLorebookText(bytes.toString(Charsets.UTF_8))
+                else importCharacterBytes(bytes)
+            } catch (_: Exception) {
+                GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_not_card))
+            }
+        }
+    }
+
+    private suspend fun readBytes(uri: android.net.Uri): ByteArray? = withContext(Dispatchers.IO) {
+        fragment.requireContext().contentResolver.openInputStream(uri)?.use { it.readBytes() }
+    }
+
+    private suspend fun importCharacterBytes(bytes: ByteArray?) {
+        val incoming = bytes?.let { RpCharacterImport.parse(it) }
+        if (incoming == null) {
+            GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_not_card))
+            return
+        }
+        if (incoming.isEmpty()) {
+            GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_empty))
+            return
+        }
+        val backup = RpCharacterBackup(incoming)
+        val matches = RpImportRules.matchingCharacters(
+            incoming,
+            viewModel().getRpRepository().getAllCharactersOnce()
+        )
+        if (matches.isEmpty()) {
+            applyCharacterBackup(backup, keepBoth = false)
+            return
+        }
+        // Replace updates the ones named here; Keep both adds the import next to them.
+        // Tapping outside the dialog changes nothing.
+        GrokConfirmDialog.show(
+            fragment = fragment,
+            title = fragment.getString(R.string.rp_import_overwrite_title),
+            message = fragment.getString(R.string.rp_import_overwrite_chars, matches.joinToString(", ") { it.name }),
+            confirmText = fragment.getString(R.string.rp_import_replace),
+            onConfirm = {
+                fragment.viewLifecycleOwner.lifecycleScope.launch { applyCharacterBackup(backup, keepBoth = false) }
+            },
+            destructive = false,
+            cancelText = fragment.getString(R.string.rp_import_keep_both),
+            onCancel = {
+                fragment.viewLifecycleOwner.lifecycleScope.launch { applyCharacterBackup(backup, keepBoth = true) }
+            }
+        )
+    }
+
+    private suspend fun importLorebookText(text: String) {
+        val backup = json.decodeFromString(RpLorebookBackup.serializer(), text)
+        if (backup.lorebooks.isEmpty()) {
+            GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.rp_import_empty))
+            return
+        }
+        val repo = viewModel().getRpRepository()
+        val existingNames = repo.getAllLorebooksOnce().map { it.name }
+        val clashing = backup.lorebooks.filter { ex -> existingNames.any { it.equals(ex.name, ignoreCase = true) } }
+        if (clashing.isNotEmpty()) {
+            GrokConfirmDialog.show(
+                fragment = fragment,
+                title = fragment.getString(R.string.rp_import_lore_clash_title),
+                message = fragment.getString(R.string.rp_import_lore_clash, clashing.joinToString(", ") { it.name }),
+                confirmText = fragment.getString(R.string.rp_import_confirm),
+                onConfirm = {
+                    fragment.viewLifecycleOwner.lifecycleScope.launch { applyLoreBackup(backup) }
+                },
+                destructive = false
+            )
+        } else {
+            applyLoreBackup(backup)
         }
     }
 
@@ -204,10 +227,33 @@ class RpImportFlow(
         })
     }
 
+    /** Characters, Tavern cards and lorebook backups through one picker. */
+    fun pickAny() {
+        anyLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf("application/json", "image/png", "text/plain", "application/octet-stream")
+            )
+        })
+    }
+
     fun pickLorebooks() {
         loreLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "application/json"
         })
+    }
+
+    companion object {
+        /** A lorebook backup is a JSON object with a `lorebooks` list; everything else goes to the character parser. */
+        fun isLorebookBackup(bytes: ByteArray): Boolean {
+            if (RpCharacterImport.isPng(bytes)) return false
+            val root = try {
+                Json.parseToJsonElement(bytes.toString(Charsets.UTF_8).removePrefix("\uFEFF").trim())
+            } catch (_: Exception) { return false }
+            return root is kotlinx.serialization.json.JsonObject && "lorebooks" in root && "characters" !in root
+        }
     }
 }

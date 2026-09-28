@@ -558,8 +558,18 @@ class ScreenshotTest {
         pushFragment(a, RpHubFragment()); settle()
         val row = a.findViewById<View>(R.id.rpHubPersonaRow)
         org.junit.Assert.assertEquals("Sam", row.findViewById<android.widget.TextView>(R.id.rpHubRowValue).text.toString())
-        val label = a.findViewById<android.widget.TextView>(R.id.rpHubHeroLabel)
-        org.junit.Assert.assertTrue("hero label is 13sp or more", label.textSize / a.resources.displayMetrics.scaledDensity >= 12.9f)
+        // No hero card (the chats home already shows where you left off); backup is three plain rows.
+        val toolbar = a.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+        org.junit.Assert.assertEquals("Library", toolbar.title.toString())
+        for ((id, title) in listOf(
+            R.id.rpHubImportRow to "Import",
+            R.id.rpHubExportCharsRow to "Export characters",
+            R.id.rpHubExportLoreRow to "Export lorebooks",
+        )) {
+            val r = a.findViewById<View>(id)
+            org.junit.Assert.assertEquals(title, r.findViewById<android.widget.TextView>(R.id.rpHubRowTitle).text.toString())
+            org.junit.Assert.assertTrue("$title is at least 44dp tall", r.height >= 44 * a.resources.displayMetrics.density)
+        }
     }
 
     @Test fun rpEmptyScreensDark() = withChat { a, _ ->
@@ -716,7 +726,7 @@ class ScreenshotTest {
     @Test fun rpSettingsDark() = withChat { a, _ ->
         pushFragment(a, RpSettingsFragment()); idle()
         // Every switch explains itself on one 13sp line, and the lorebook switch is gone.
-        for (id in listOf(R.id.rpThirdPersonSubtitle, R.id.rpShowThoughtsSubtitle, R.id.rpAutoMemorySubtitle, R.id.rpLlmModeSubtitle)) {
+        for (id in listOf(R.id.rpThirdPersonSubtitle, R.id.rpShowThoughtsSubtitle, R.id.rpAutoMemorySubtitle)) {
             val sub = a.findViewById<android.widget.TextView>(id)
             val layout = sub.layout
             org.junit.Assert.assertNotNull("subtitle laid out", layout)
@@ -973,6 +983,34 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(View.GONE, home.visibility)
     }
 
+    /** Open scene sits in the character picker, shows as current while on, and a character pick leaves it. */
+    @Test fun rpCharacterPickerOpenScene() = withChat { a, _ ->
+        seedRp(); seedRpChats()
+        val prefs = SharedPreferencesHelper(a)
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        a.findViewById<View>(R.id.newChatButton).performClick(); settle()
+        fun titles() = (0 until 12).mapNotNull { a.findViewById<android.view.ViewGroup>(R.id.popoverRows)?.getChildAt(it) }
+            .mapNotNull { it.findViewById<android.widget.TextView>(R.id.popoverRowTitle)?.text?.toString() }
+        org.junit.Assert.assertEquals("Open scene", titles().first())
+        snap(root(a), "rp_picker_open_scene_dark")
+        val rows = a.findViewById<android.view.ViewGroup>(R.id.popoverRows)
+        rows.getChildAt(0).performClick(); settle()
+        // The open thread has content, so switching in asks first.
+        val ask = ShadowDialog.getLatestDialog()
+        org.junit.Assert.assertFalse("waits for the confirm", prefs.isRpLlmMode())
+        org.junit.Assert.assertEquals("Start an open scene?", ask!!.findViewById<android.widget.TextView>(R.id.confirmTitle).text.toString())
+        ask.findViewById<View>(R.id.confirmAction).performClick(); settle()
+        org.junit.Assert.assertTrue(prefs.isRpLlmMode())
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        a.findViewById<View>(R.id.newChatButton).performClick(); settle()
+        org.junit.Assert.assertTrue("current while on", a.findViewById<android.view.ViewGroup>(R.id.popoverRows).getChildAt(0)
+            .findViewById<View>(R.id.popoverRowCheck)?.isShown == true)
+        snap(root(a), "rp_picker_open_scene_current_dark")
+        a.findViewById<android.view.ViewGroup>(R.id.popoverRows).getChildAt(1).performClick(); settle()
+        org.junit.Assert.assertFalse("picking a character leaves open scene", prefs.isRpLlmMode())
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
     /** A chat's ⋮ on the list: new chat, edit the character, delete (set apart, in the dim red). */
     @Test fun rpHomeMenuDark() = withChat { a, _ ->
         seedRp(); seedRpChats()
@@ -1064,6 +1102,19 @@ class ScreenshotTest {
         (a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView).adapter as ChatAdapter).onSpeakerClick!!.invoke(); settle()
         snapDialog(a, "rp_character_panel_dark", sharp = true)
         ShadowDialog.getLatestDialog()?.dismiss(); idle()
+        // A blank wallpaper file is no wallpaper: the tile keeps its glyph and the pick action.
+        wp.outputStream().use { }
+        (a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView).adapter as ChatAdapter).onSpeakerClick!!.invoke(); settle()
+        snapDialog(a, "rp_character_panel_no_wallpaper_dark", sharp = true)
+        ShadowDialog.getLatestDialog()?.dismiss(); idle()
+        wp.outputStream().use { out ->
+            Bitmap.createBitmap(400, 700, Bitmap.Config.ARGB_8888).apply {
+                val c = Canvas(this)
+                val paint = android.graphics.Paint()
+                paint.shader = android.graphics.LinearGradient(0f, 0f, 400f, 700f, 0xFF505050.toInt(), 0xFF1A1A1A.toInt(), android.graphics.Shader.TileMode.CLAMP)
+                c.drawRect(0f, 0f, 400f, 700f, paint)
+            }.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        }
         // Re-apply RP chrome (the panel reads prefs; the chat reads them on mode change).
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
@@ -1154,6 +1205,15 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(messagesBefore.size, vm.chatMessages.value.orEmpty().size)
         org.junit.Assert.assertEquals("I shake the rain off and sit down across from her.", input.text.toString())
         org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.rpEditBar).visibility)
+        // The edited bubble reads as selected, the replies after it dim, and nothing is hidden behind the bar.
+        val editIndex = vm.rpEditIndex.value!!
+        val bar = a.findViewById<View>(R.id.rpEditBar)
+        val rowsNow = (0 until list.childCount).map { list.getChildAt(it) }
+        val alphas = rowsNow.map { list.getChildAdapterPosition(it) to it.alpha }
+        org.junit.Assert.assertTrue("rows after the edit dim: $alphas", alphas.filter { it.first > editIndex }.all { it.second < 0.5f })
+        org.junit.Assert.assertTrue("rows up to the edit stay full: $alphas", alphas.filter { it.first <= editIndex }.all { it.second == 1f })
+        val lastBottom = list.getChildAt(list.childCount - 1).bottom
+        org.junit.Assert.assertTrue("last row (bottom=$lastBottom) clears the bar (top=${bar.top})", lastBottom <= bar.top + 2)
         snap(root(a), "rp_edit_in_progress_dark")
 
         // Cancel: composer empty, thread untouched.

@@ -75,6 +75,8 @@
     <color name="grad_panel_bottom">#FF171717</color>
     <color name="grad_bubble_top">#FF292929</color>
     <color name="grad_bubble_bottom">#FF202020</color>
+    <color name="grad_bubble_edit_top">#FF383838</color>
+    <color name="grad_bubble_edit_bottom">#FF2E2E2E</color>
     <color name="grad_send_top">#FFF4F4F4</color>
     <color name="grad_send_bottom">#FFCBCBCB</color>
     <color name="grad_chip_top">#FF1E1E1E</color>

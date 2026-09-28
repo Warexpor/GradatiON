@@ -194,59 +194,6 @@
                         android:contentDescription="@string/rp_auto_memory"
                         android:focusable="false" />
                 </LinearLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/xai_hairline" />
-
-                <!-- The row is the tap target; the switch just shows the state. -->
-                <LinearLayout
-                    android:id="@+id/rpLlmModeRow"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_press_svg"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical"
-                    android:minHeight="64dp"
-                    android:orientation="horizontal"
-                    android:paddingTop="10dp"
-                    android:paddingBottom="10dp">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/rpLlmModeTitle"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/rp_llm_mode"
-                            android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/rpLlmModeSubtitle"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:text="@string/rp_llm_mode_sub"
-                            android:textColor="@color/xai_mute"
-                            android:textSize="13sp" />
-                    </LinearLayout>
-
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/rpLlmModeSwitch"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:clickable="false"
-                        android:contentDescription="@string/rp_llm_mode"
-                        android:focusable="false" />
-                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

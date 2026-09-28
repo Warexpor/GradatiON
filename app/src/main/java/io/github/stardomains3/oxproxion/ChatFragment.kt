@@ -836,6 +836,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         viewModel.rpEditIndex.observe(viewLifecycleOwner) { index ->
             rpEditBar.visibility = if (index != null) View.VISIBLE else View.GONE
+            chatAdapter.rpEditIndex = index
             // The edit ended without a send (session change, delete): drop the text it loaded, if untouched.
             if (index == null && rpEditOriginal != null) cancelRpEdit(clearComposer = false)
         }
@@ -1614,14 +1615,22 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         root.post {
             if (view == null) return@post
             val d = resources.displayMetrics.density
-            val atBottom = !chatRecyclerView.canScrollVertically(1)
+            // The transcript's end counts as "at the bottom" whenever the last row is on screen, even a
+            // little under the old chrome: it has to ride up with a bar or a taller composer, not hide behind it.
+            val lastBottom = layoutManager.findViewByPosition(chatAdapter.itemCount - 1)?.bottom
+            val atBottom = !chatRecyclerView.canScrollVertically(1) ||
+                (lastBottom != null && lastBottom <= chatRecyclerView.height)
             chatRecyclerView.setPadding(
                 chatRecyclerView.paddingLeft,
                 top + (8 * d).toInt(),
                 chatRecyclerView.paddingRight,
                 bottom + (14 * d).toInt()
             )
-            if (atBottom && grew > 0) chatRecyclerView.post { chatRecyclerView.scrollBy(0, grew) }
+            if (atBottom && grew > 0) {
+                val newEdge = chatRecyclerView.height - (bottom + (14 * d).toInt())
+                val lift = if (lastBottom != null) (lastBottom - newEdge).coerceAtLeast(0) else grew
+                chatRecyclerView.post { chatRecyclerView.scrollBy(0, lift) }
+            }
             listOfNotNull(attachmentPreviewContainer, extBG, fontSizeControlsContainer, root.findViewById(R.id.jumpToBottomButton)).forEach { v ->
                 val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
                 val base = chromeBaseMargins.getOrPut(v) { lp.bottomMargin }
@@ -5753,7 +5762,15 @@ $cleanContent
             if (view == null) return@launch
             val activeId = viewModel.activeRpCharacter.value?.id
             val ctx = requireContext()
-            val rows = chars.map { c ->
+            // Open scene is a way to start, not a setting: it sits with the characters and shows as current while on.
+            val openScene = PickerPopover.Row(
+                title = getString(R.string.popover_open_scene),
+                subtitle = getString(R.string.popover_open_scene_sub),
+                iconRes = R.drawable.ic_gradation_mark,
+                selected = sharedPreferencesHelper.isRpLlmMode(),
+                onClick = { startRpOpenScene() }
+            )
+            val rows = listOf(openScene) + chars.map { c ->
                 val file = RpAvatarStorage.avatarFile(ctx, c.id)
                 PickerPopover.Row(
                     title = c.name,
@@ -5784,14 +5801,44 @@ $cleanContent
         }
     }
 
+    /** Open scene (LLM mode, no character card). Switching in from a chat with content asks first; picking a character switches back out. */
+    private fun startRpOpenScene() {
+        val start = {
+            closeRpHome()
+            viewModel.startRpLlmChat()
+        }
+        if (!sharedPreferencesHelper.isRpLlmMode() && viewModel.isRpMode() && viewModel.rpChatHasContent()) {
+            GrokConfirmDialog.show(
+                fragment = this,
+                title = getString(R.string.rp_llm_wipe_title),
+                message = getString(R.string.rp_llm_wipe_body),
+                confirmText = getString(R.string.rp_new_chat_confirm),
+                onConfirm = { start() },
+                destructive = false
+            )
+        } else {
+            start()
+        }
+    }
+
     /** Speaker line: the panel for the active character, or the picker when there's none yet. */
     private fun showRpCharacterPanel() {
-        val llm = sharedPreferencesHelper.isRpLlmMode()
-        val character = viewModel.activeRpCharacter.value
-        if (character == null && !llm) {
+        if (viewModel.activeRpCharacter.value == null && !sharedPreferencesHelper.isRpLlmMode()) {
             showCharacterPopover()
             return
         }
+        // The Lore tile previews the book by name, which lives in the database.
+        viewLifecycleOwner.lifecycleScope.launch {
+            val books = viewModel.getRpRepository().getAllLorebooksOnce()
+            if (view == null) return@launch
+            showRpCharacterPanel(books)
+        }
+    }
+
+    private fun showRpCharacterPanel(books: List<RpLorebook>) {
+        val llm = sharedPreferencesHelper.isRpLlmMode()
+        val character = viewModel.activeRpCharacter.value
+        if (character == null && !llm) return
         val memoryId = if (llm) null else character?.id
         val title = if (llm) getString(R.string.rp_llm_speaker) else character!!.name
         val subtitle = if (llm) "" else character!!.personality.ifBlank { character.scenario }
@@ -5812,7 +5859,7 @@ $cleanContent
             )
             val voiceName = RpVoiceDialog.label(this@ChatFragment, tts, voice.name)
             val voiceLabel = if (voiceName == null && tweaks.isEmpty()) null
-                else (listOf(voiceName ?: getString(R.string.rp_voice_default)) + tweaks).joinToString(" · ")
+                else (listOf(voiceName ?: getString(R.string.rp_voice_default)) + tweaks).joinToString(" ·\u00A0")
             add(RpCharacterPanel.Tile(R.string.rp_panel_voice, R.drawable.ic_volume_up, on = voiceLabel != null, preview = voiceLabel) {
                 RpVoiceDialog.show(this@ChatFragment, title, tts, voice) { sharedPreferencesHelper.saveRpVoice(memoryId, it) }
             })
@@ -5822,16 +5869,18 @@ $cleanContent
             })
             if (character != null && !llm) {
                 val slot = BackgroundPhoto.slotForCharacter(character.id)
-                val wallpaper = BackgroundPhoto.file(requireContext(), slot).takeIf { it.isFile }
+                val wallpaper = BackgroundPhoto.file(requireContext(), slot).takeIf { it.isFile && it.length() > 0L }
                 add(RpCharacterPanel.Tile(R.string.rp_panel_wallpaper, R.drawable.ic_gallery, on = wallpaper != null, image = wallpaper) {
                     if (wallpaper == null) pickRpWallpaperFor(character.id)
                     else menuButton.post { showRpWallpaperMenu(character) }
                 })
             }
             add(RpCharacterPanel.Tile(R.string.rp_panel_persona, R.drawable.rp_ic_persona, preview = personaName.ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
-            add(RpCharacterPanel.Tile(R.string.rp_panel_style, R.drawable.ic_sliders) { pushRp(RpSettingsFragment.newInstance()) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_settings, R.drawable.ic_sliders) { pushRp(RpSettingsFragment.newInstance()) })
             val pinnedId = if (character != null && !llm) sharedPreferencesHelper.getRpLorebookId(character.id) else null
-            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, R.drawable.rp_ic_book, on = pinnedId != null) {
+            // The book a reply will really use: the character's pinned one, else the active book.
+            val loreBook = books.firstOrNull { it.id == pinnedId } ?: books.firstOrNull { it.isActive }
+            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, R.drawable.rp_ic_book, on = pinnedId != null, preview = loreBook?.name) {
                 menuButton.post { showRpLorePicker(if (llm) null else character?.id) }
             })
             if (character != null && !llm) {

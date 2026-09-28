@@ -2,21 +2,11 @@
 <!-- RP screens (hub, character library, editors). Kept apart from strings.xml on purpose. -->
 <resources>
     <!-- Hub -->
-    <string name="rp_ui_hub_intro">Chat with characters you create. Everything stays on this device.</string>
-    <string name="rp_ui_hub_current">Current character</string>
-    <string name="rp_ui_hub_llm_title">LLM mode</string>
-    <string name="rp_ui_hub_llm_body">Roleplay without a character card. Turn it off in RP settings.</string>
-    <string name="rp_ui_hub_none_title">No character yet</string>
-    <string name="rp_ui_hub_none_body">Pick one from your library, or create your first.</string>
-    <string name="rp_ui_continue">Continue chat</string>
-    <string name="rp_ui_browse">Browse characters</string>
-    <string name="rp_ui_backup_title">Backup and restore</string>
-    <string name="rp_ui_backup_value">JSON</string>
+    <string name="rp_ui_hub_intro">Everything stays on this device.</string>
+    <string name="rp_ui_import_title">Import</string>
     <string name="rp_ui_persona_unset">Not set</string>
     <string name="rp_ui_persona_set">Set</string>
     <string name="rp_ui_lore_none">None active</string>
-    <string name="rp_ui_expand">Show backup options</string>
-    <string name="rp_ui_collapse">Hide backup options</string>
 
     <!-- Character library -->
     <string name="rp_ui_library_hint">Tap to chat. Press and hold for more.</string>
