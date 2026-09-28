@@ -48,7 +48,7 @@ Color resources live in `values/colors.xml` and `values-night/colors.xml`. Code 
 Build surfaces from `GlassDrawable` (`sheet()`, `control()`, or a custom radius) and the
 `Glass*Layout` hosts in `Glass.kt`.
 - Selected state crossfades to a brighter tint (`selectedTint`). It never inverts into a solid slab.
-- `GlassSwitch` is a 60×28 recessed glass groove with a 36×24 frosted glass pill. The pill never changes color; the groove says on or off. Held, dragged or sliding, the pill swells past the groove into a clear lens and springs back when it stops.
+- `GlassSwitch` is a 60×28 recessed glass groove with a 36×24 pill of clear glass that magnifies the groove under it (a lens, not frost). The pill never changes color; the groove says on or off. Held, dragged or sliding, it swells past the groove, magnifies harder, and springs back when it stops.
 - `GlassNotice` is the one allowed interruption: a pill under the top bar that explains why an action did nothing.
   - Toasts are silenced app-wide (`AppToast` is a no-op), so use `GlassNotice` whenever silence would read as a broken button.
 

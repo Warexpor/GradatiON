@@ -71,8 +71,10 @@ All 19 items from the owner's list, 452 tests pass, `assembleDev` built.
   (`CodeComposer.permissionIcon`) in the popover, the pill and Code settings.
 - Voice: the mic check no longer swells; `VoiceWaveView` runs ~30fps while listening and glides.
 - Switches: every screen is a SwitchCompat (MaterialSwitch sized differently). Redesigned after
-  iOS 26: 60x28 groove, 36x24 frosted pill that becomes a clear lens while held, dragged or
-  sliding (the thumb watches its own bounds move, since SwitchCompat cancels pressed on drag).
-  Geometry lives in the track's side padding (`GlassSwitchTrackDrawable.getPadding`).
+  iOS 26 (the owner picked "clear lens" from five mockups): 60x28 groove, 36x24 clear pill
+  that redraws the groove magnified inside itself (the track clips the pill out so fills don't
+  stack). It swells and magnifies harder while held, dragged or sliding (the thumb watches its
+  own bounds move, since SwitchCompat cancels pressed on drag). Geometry lives in the track's
+  side padding (`GlassSwitchTrackDrawable.getPadding`).
 - Photo background blur is about 2.4x softer.
 Phone: every motion above, the Controls sheet under the nav bar, blur cost on an older phone.

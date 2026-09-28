@@ -15,18 +15,20 @@ import android.graphics.Shader
 import android.graphics.drawable.Drawable
 import android.os.SystemClock
 import android.util.AttributeSet
+import androidx.appcompat.widget.SwitchCompat
 import org.xmlpull.v1.XmlPullParser
 import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
  * Liquid-glass toggle, after the iOS 26 switch: a 60x28 recessed glass groove (a faint wash
- * when off, a dense neutral fill when on) carrying a frosted 36x24 glass pill. The pill never
- * changes color, so a toggle reads by the groove alone and nothing flashes.
+ * when off, a dense neutral fill when on) carrying a 36x24 pill of clear glass. The pill is a
+ * lens: it redraws the groove under it magnified, so the groove's edges bend inside it, and a
+ * two-sided rim and a sheen catch the light. It never changes color, so a toggle reads by the
+ * groove alone and nothing flashes.
  *
- * Whenever the pill is held, dragged or travelling it swells past the groove into a clear lens:
- * the frost drains out, the groove shows through, and a two-sided rim catches the light. It
- * settles back into frosted glass on a spring once it stops. Neutral grays only.
+ * Whenever the pill is held, dragged or travelling it swells past the groove and magnifies
+ * harder, then settles back on a spring once it stops. Neutral grays only.
  *
  * Every switch in the app is a SwitchCompat on these two drawables, so they are all the same
  * size. SwitchCompat makes the thumb travel equal the thumb slot, so the geometry lives in the
@@ -132,8 +134,21 @@ class GlassSwitchTrackDrawable : Drawable() {
     }
 
     override fun draw(canvas: Canvas) {
+        if (bounds.isEmpty) return
+        // The lens redraws the groove magnified inside itself; leave that area to it so the
+        // translucent fills are not stacked twice. SwitchCompat sets the thumb's bounds for
+        // the frame before it draws the track, so the lens is already where it will be drawn.
+        val thumb = (callback as? SwitchCompat)?.thumbDrawable as? GlassSwitchThumbDrawable
+        if (thumb == null) { drawGroove(canvas); return }
+        canvas.save()
+        canvas.clipOutPath(thumb.lensShape())
+        drawGroove(canvas)
+        canvas.restore()
+    }
+
+    /** The groove alone, also drawn scaled up inside the thumb's lens. */
+    internal fun drawGroove(canvas: Canvas) {
         val b = bounds
-        if (b.isEmpty) return
         val h = TRACK_H_DP * density
         // Center a groove of the track height inside the taller switch bounds.
         val top = b.exactCenterY() - h / 2f
@@ -192,15 +207,15 @@ class GlassSwitchThumbDrawable : Drawable() {
     private var bodyBottom = 0
     private var sheen = 0
     private var rimLight = 0
-    private var rimDark = 0
+    private var rimMid = 0
+    private var rimBottom = 0
     private var lensTint = 0
     private var lensEdge = 0
     private var shadow = 0
 
     private var pressed = false
     private var enabled = true
-    private var checked = false
-    /** 0 = frosted pill at rest, 1 = held: a wide, clear lens. */
+    /** 0 = pill at rest, 1 = held: a wider lens that magnifies harder. */
     private var hold = 0f
     private var holdAnimator: ValueAnimator? = null
     /** Same as [hold], driven by the pill moving (a tap's slide or a drag). */
@@ -231,15 +246,16 @@ class GlassSwitchThumbDrawable : Drawable() {
         bodyBottom = r.color(R.color.switch_bead_bottom, theme)
         sheen = r.color(R.color.switch_bead_sheen, theme)
         rimLight = r.color(R.color.switch_bead_rim_light, theme)
-        rimDark = r.color(R.color.switch_bead_rim_dark, theme)
+        rimMid = r.color(R.color.switch_bead_rim_mid, theme)
+        rimBottom = r.color(R.color.switch_bead_rim_bottom, theme)
         lensTint = r.color(R.color.switch_lens_tint, theme)
         lensEdge = r.color(R.color.switch_lens_edge, theme)
         shadow = r.color(R.color.switch_thumb_shadow, theme)
-        rimPaint.strokeWidth = max(1f, density * 0.75f)
-        edgePaint.strokeWidth = 1.75f * density
+        rimPaint.strokeWidth = max(1f, density * 0.4f)
+        edgePaint.strokeWidth = 0.6f * density
         tintPaint.color = lensTint
         shadowPaint.color = Color.TRANSPARENT
-        shadowPaint.setShadowLayer(3f * density, 0f, 1.25f * density, shadow)
+        shadowPaint.setShadowLayer(1.6f * density, 0f, 0.6f * density, shadow)
     }
 
     override fun getIntrinsicWidth() = (GlassSwitchTrackDrawable.TRAVEL_DP * density).roundToInt()
@@ -250,10 +266,8 @@ class GlassSwitchThumbDrawable : Drawable() {
     override fun onStateChange(state: IntArray): Boolean {
         val p = state.has(android.R.attr.state_pressed)
         val e = state.has(android.R.attr.state_enabled)
-        val c = state.has(android.R.attr.state_checked)
         var changed = false
         if (e != enabled) { enabled = e; changed = true }
-        if (c != checked) { checked = c; changed = true }
         if (p != pressed) {
             pressed = p
             animateHold(if (p) 1f else 0f)
@@ -313,22 +327,36 @@ class GlassSwitchThumbDrawable : Drawable() {
         }
     }
 
-    override fun draw(canvas: Canvas) {
-        val b = bounds
-        if (b.isEmpty) return
-        val lens = max(hold, motion * MOTION_LENS).coerceIn(0f, 1.1f)
-        val mul = if (enabled) alphaMul else alphaMul * 55 / 100
+    private fun lens() = max(hold, motion * MOTION_LENS).coerceIn(0f, 1f)
 
+    /** Where the pill is this frame, spilling past the groove but never past the view. */
+    private fun lensRect(out: RectF): RectF {
+        val b = bounds
+        val lens = lens()
         val w = (PILL_W_DP + LENS_GROW_W_DP * lens) * density
         val h = (PILL_H_DP + LENS_GROW_H_DP * lens) * density
         var cx = b.exactCenterX()
-        // The lens may spill past the groove but never past the view, which would clip it.
         (callback as? android.view.View)?.let { v ->
             val edge = 0.75f * density
             cx = cx.coerceIn(edge + w / 2f, max(edge + w / 2f, v.width - edge - w / 2f))
         }
         val cy = b.exactCenterY()
-        rect.set(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f)
+        return out.apply { set(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f) }
+    }
+
+    /** The pill's outline; the track leaves this area for the lens to draw. */
+    internal fun lensShape(): Path {
+        lensRect(rect)
+        val r = rect.height() / 2f
+        return shape.apply { rewind(); addRoundRect(rect, r, r, Path.Direction.CW) }
+    }
+
+    override fun draw(canvas: Canvas) {
+        if (bounds.isEmpty) return
+        val lens = lens()
+        val mul = if (enabled) alphaMul else alphaMul * 55 / 100
+        val path = lensShape()
+        val h = rect.height()
         val r = h / 2f
 
         if (shaderKey != rect.top || shaderH != h) {
@@ -337,7 +365,7 @@ class GlassSwitchThumbDrawable : Drawable() {
                 bodyTop, bodyBottom, Shader.TileMode.CLAMP
             )
             sheenPaint.shader = LinearGradient(
-                0f, rect.top, 0f, rect.top + h * 0.5f,
+                0f, rect.top, 0f, rect.top + h * 0.45f,
                 sheen, Color.TRANSPARENT, Shader.TileMode.CLAMP
             )
             // A lens is lit on both sides: the light enters along the top and focuses along
@@ -350,43 +378,48 @@ class GlassSwitchThumbDrawable : Drawable() {
             )
             rimPaint.shader = LinearGradient(
                 0f, rect.top, 0f, rect.bottom,
-                intArrayOf(rimLight, rimDark, rimDark),
-                floatArrayOf(0f, 0.45f, 1f),
+                intArrayOf(rimLight, rimMid, rimBottom),
+                floatArrayOf(0f, 0.5f, 1f),
                 Shader.TileMode.CLAMP
             )
             shaderKey = rect.top
             shaderH = h
         }
 
-        val clear = lens.coerceAtMost(1f)
-        // As a lens the frost drains out and the shadow thins, so the groove reads through.
-        // The shadow is clipped to outside the pill, or it would darken the clear lens.
-        shadowPaint.alpha = (mul * (1f - 0.55f * clear)).roundToInt()
-        shape.rewind()
-        shape.addRoundRect(rect, r, r, Path.Direction.CW)
+        // Shadow outside the pill only; inside, it would cloud the lens.
+        shadowPaint.alpha = mul
         canvas.save()
-        canvas.clipOutPath(shape)
+        canvas.clipOutPath(path)
         canvas.drawRoundRect(rect, r, r, shadowPaint)
         canvas.restore()
-        body.alpha = (mul * (1f - 0.88f * clear)).roundToInt()
+
+        // The lens: the groove under the pill, magnified about the pill's center. Held, it
+        // magnifies harder.
+        val track = (callback as? SwitchCompat)?.trackDrawable as? GlassSwitchTrackDrawable
+        if (track != null) {
+            val k = 1f + MAGNIFY * (REST_MAGNIFY + (1f - REST_MAGNIFY) * lens)
+            canvas.save()
+            canvas.clipPath(path)
+            canvas.scale(k, k, rect.centerX(), rect.centerY())
+            track.drawGroove(canvas)
+            canvas.restore()
+        }
+
+        body.alpha = mul
         canvas.drawRoundRect(rect, r, r, body)
-        if (clear > 0f) {
-            tintPaint.alpha = (Color.alpha(lensTint) * clear * mul / 255).roundToInt()
-            canvas.drawRoundRect(rect, r, r, tintPaint)
-        }
+        tintPaint.alpha = Color.alpha(lensTint) * mul / 255
+        canvas.drawRoundRect(rect, r, r, tintPaint)
 
-        sheenRect.set(rect.left + r * 0.45f, rect.top + 1.25f * density, rect.right - r * 0.45f, rect.top + h * 0.52f)
+        val ei = edgePaint.strokeWidth / 2f + edgePaint.strokeWidth
+        rect.inset(ei, ei)
+        edgePaint.alpha = mul
+        canvas.drawRoundRect(rect, r - ei, r - ei, edgePaint)
+        rect.inset(-ei, -ei)
+
+        sheenRect.set(rect.left + h * 0.25f, rect.top + 0.5f * density, rect.right - h * 0.25f, rect.top + h * 0.45f)
         val sr = sheenRect.height() / 2f
-        sheenPaint.alpha = (mul * (1f - 0.5f * clear)).roundToInt()
+        sheenPaint.alpha = mul
         canvas.drawRoundRect(sheenRect, sr, sr, sheenPaint)
-
-        if (clear > 0f) {
-            val ei = edgePaint.strokeWidth / 2f + rimPaint.strokeWidth
-            rect.inset(ei, ei)
-            edgePaint.alpha = (mul * clear).roundToInt()
-            canvas.drawRoundRect(rect, r - ei, r - ei, edgePaint)
-            rect.inset(-ei, -ei)
-        }
 
         rimPaint.alpha = mul
         val ri = rimPaint.strokeWidth / 2f
@@ -408,6 +441,9 @@ class GlassSwitchThumbDrawable : Drawable() {
         const val LENS_GROW_H_DP = 10f
         /** Height of the thumb bounds: room for the lens and its shadow. */
         const val THUMB_H_DP = 40f
+        /** Full magnification of a held lens, and the share of it the pill keeps at rest. */
+        const val MAGNIFY = 0.22f
+        const val REST_MAGNIFY = 0.6f
         /** A tap's slide swells the lens a little less than a finger holding it. */
         const val MOTION_LENS = 0.85f
         /** How long the pill must sit still before the lens settles back. */
