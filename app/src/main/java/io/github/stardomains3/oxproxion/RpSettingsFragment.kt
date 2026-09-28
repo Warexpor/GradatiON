@@ -4,8 +4,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
-import android.widget.Spinner
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
@@ -139,24 +137,6 @@ class RpSettingsFragment : Fragment() {
                 }
             }
         }
-
-        val langCodes = listOf("en", "ru", "zh")
-        val langLabels = listOf(
-            getString(R.string.rp_lang_en),
-            getString(R.string.rp_lang_ru),
-            getString(R.string.rp_lang_zh)
-        )
-        val spinner = view.findViewById<Spinner>(R.id.rpLangSpinner)
-        spinner.adapter = ArrayAdapter(requireContext(), R.layout.item_rp_spinner, langLabels).apply {
-            setDropDownViewResource(R.layout.item_rp_spinner)
-        }
-        spinner.setSelection(langCodes.indexOf(prefs.getRpLang()).coerceAtLeast(0))
-        spinner.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, v: View?, position: Int, id: Long) {
-                prefs.saveRpLang(langCodes[position])
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-        })
     }
 
     companion object {

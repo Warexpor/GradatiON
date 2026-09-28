@@ -314,6 +314,7 @@ class GlassMaterial(
             MotionEvent.ACTION_DOWN -> {
                 touchX = event.x
                 touchY = event.y
+                PressRoom.open(host, max(host.width, host.height) * (PRESS_SCALE - 1f) / 2f + 4f * density)
                 animatePress(1f)
             }
             MotionEvent.ACTION_MOVE -> {
@@ -635,6 +636,36 @@ class GlassMaterial(
             }
         }
     }
+}
+
+/**
+ * Pressed glass swells past its own bounds. Parents clip to their padding by default, which
+ * sliced the top and bottom off buttons sitting in padded rows, so a press opens just enough
+ * ancestors for the swell to show. Scrolling containers keep their clip: their padding is
+ * where content scrolls out of sight.
+ */
+internal object PressRoom {
+    fun open(view: View, grow: Float) {
+        var l = view.left - grow
+        var t = view.top - grow
+        var r = view.right + grow
+        var b = view.bottom + grow
+        var child = view
+        repeat(MAX_DEPTH) {
+            val p = child.parent as? ViewGroup ?: return
+            if (p is androidx.core.view.ScrollingView || p is android.widget.ScrollView ||
+                p is android.widget.HorizontalScrollView || p is android.widget.AbsListView
+            ) return
+            if (l >= p.paddingLeft && t >= p.paddingTop && r <= p.width - p.paddingRight && b <= p.height - p.paddingBottom) return
+            if (p.clipToPadding) p.clipToPadding = false
+            if (l >= 0f && t >= 0f && r <= p.width && b <= p.height) return
+            if (p.clipChildren) p.clipChildren = false
+            l += p.left; t += p.top; r += p.left; b += p.top
+            child = p
+        }
+    }
+
+    private const val MAX_DEPTH = 4
 }
 
 class GlassFrameLayout @JvmOverloads constructor(

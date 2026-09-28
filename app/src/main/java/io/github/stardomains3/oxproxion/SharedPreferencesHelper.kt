@@ -155,7 +155,6 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_RP_LORE_ENABLED = "rp_lore_enabled"
         private const val KEY_RP_THIRD_PERSON = "rp_third_person"
         private const val KEY_RP_SHOW_THOUGHTS = "rp_show_thoughts"
-        private const val KEY_RP_LANG = "rp_lang"
         private const val KEY_RP_LLM_MODE = "rp_llm_mode"
         private const val KEY_RP_DRAFT_SESSION_ASK = "rp_draft_session_ask"
         private const val KEY_RP_DRAFT_SESSION_RP = "rp_draft_session_rp"
@@ -1180,9 +1179,6 @@ class SharedPreferencesHelper(context: Context) {
 
     fun isRpShowThoughts(): Boolean = mainPrefs.getBoolean(KEY_RP_SHOW_THOUGHTS, false)
     fun saveRpShowThoughts(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_SHOW_THOUGHTS, enabled) }
-
-    fun getRpLang(): String = mainPrefs.getString(KEY_RP_LANG, "en") ?: "en"
-    fun saveRpLang(lang: String) = mainPrefs.edit { putString(KEY_RP_LANG, lang) }
 
     fun isRpLlmMode(): Boolean = mainPrefs.getBoolean(KEY_RP_LLM_MODE, false)
     fun saveRpLlmMode(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_LLM_MODE, enabled) }

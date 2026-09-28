@@ -7,15 +7,10 @@ import android.graphics.BitmapShader
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.HardwareRenderer
 import android.graphics.Paint
-import android.graphics.PixelFormat
-import android.graphics.RenderNode
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
-import android.hardware.HardwareBuffer
-import android.media.ImageReader
 import android.os.Build
 import android.os.SystemClock
 import android.util.AttributeSet
@@ -42,9 +37,8 @@ import kotlin.math.roundToInt
  * [GlassQuality.Level.SOLID], and stops entirely when hidden or detached. It sits inside the
  * chat's glass backdrop, so every frame also refreshes the glass sampling it, hence the low rate.
  * API 31-32, or a driver that can't compile the shader, draws the plain tinted drawable.
- * A software canvas (the mode pager's page snapshot) cannot run the shader, so it blits
- * [lastFrame]: the latest hardware frame, copied off the draw path. The copy goes through a
- * hardware bitmap. Reading Image planes here aborts the process on some GPUs (Samsung).
+ * A software canvas (the pager's fallback snapshot) cannot run the shader, so it blits
+ * [lastFrame]: the latest hardware frame, copied off the draw path by [HardwareRaster].
  */
 class LiquidMarkView @JvmOverloads constructor(
     context: Context,
@@ -237,69 +231,10 @@ class LiquidMarkView @JvmOverloads constructor(
     /** The current liquid frame as a software bitmap, for canvases that cannot run the shader. */
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun rasterizeLiquid(): Bitmap? {
-        val w = width
-        val h = height
-        val node = RenderNode("liquid-mark")
-        node.setPosition(0, 0, w, h)
-        val recording = node.beginRecording()
-        val drew = drawLiquid(recording)
-        node.endRecording()
-        if (!drew) return null
-        // CPU_READ is required for a later plane fallback. GPU_SAMPLED lets us wrap the buffer
-        // as a bitmap. Plane lock aborts (not throws) on some Samsung GPUs, so that path is last.
-        val usage = HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or
-            HardwareBuffer.USAGE_GPU_COLOR_OUTPUT or
-            HardwareBuffer.USAGE_CPU_READ_OFTEN
-        val reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 1, usage)
-        val renderer = HardwareRenderer()
-        renderer.setContentRoot(node)
-        renderer.setSurface(reader.surface)
-        try {
-            renderer.createRenderRequest().setWaitForPresent(true).syncAndDraw()
-            val image = reader.acquireNextImage() ?: return null
-            try {
-                return bitmapFromImage(image, w, h)
-            } finally {
-                image.close()
-            }
-        } finally {
-            renderer.destroy()
-            reader.close()
-        }
-    }
-
-    /**
-     * Prefer wrapping the GPU buffer. [android.media.Image.getPlanes] calls NewDirectByteBuffer
-     * on the locked address and aborts the process when a driver returns a buffer it cannot map.
-     * Planes are only for hosts with no hardware buffer (unit tests).
-     */
-    @RequiresApi(Build.VERSION_CODES.Q)
-    private fun bitmapFromImage(image: android.media.Image, w: Int, h: Int): Bitmap? {
-        val buffer = runCatching { image.hardwareBuffer }.getOrNull()
-        if (buffer != null) {
-            try {
-                val hw = Bitmap.wrapHardwareBuffer(buffer, null) ?: return null
-                try {
-                    val soft = hw.copy(Bitmap.Config.ARGB_8888, false) ?: return null
-                    return crop(soft, w, h)
-                } finally {
-                    hw.recycle()
-                }
-            } finally {
-                buffer.close()
-            }
-        }
-        val plane = image.planes[0]
-        val full = Bitmap.createBitmap(plane.rowStride / plane.pixelStride, h, Bitmap.Config.ARGB_8888)
-        full.copyPixelsFromBuffer(plane.buffer)
-        return crop(full, w, h)
-    }
-
-    private fun crop(full: Bitmap, w: Int, h: Int): Bitmap {
-        if (full.width == w && full.height == h) return full
-        return Bitmap.createBitmap(full, 0, 0, w.coerceAtMost(full.width), h.coerceAtMost(full.height)).also {
-            if (it !== full) full.recycle()
-        }
+        var drew = false
+        val frame = HardwareRaster.render(width, height, software = true) { drew = drawLiquid(it) }
+        if (!drew) { frame?.recycle(); return null }
+        return frame
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)

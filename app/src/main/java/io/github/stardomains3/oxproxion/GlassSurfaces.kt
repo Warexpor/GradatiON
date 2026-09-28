@@ -209,7 +209,14 @@ class GlassDrawable() : Drawable() {
         if (!isStateful) return false
         var changed = false
         val p = interactive && state.contains(android.R.attr.state_pressed)
-        if (p != pressed) { pressed = p; changed = true }
+        if (p != pressed) {
+            pressed = p
+            changed = true
+            val host = callback as? View
+            if (p && host?.stateListAnimator != null) {
+                PressRoom.open(host, max(host.width, host.height) * (ANIMATOR_PRESS_SCALE - 1f) / 2f + 2f * density)
+            }
+        }
         // Views always report state_enabled while enabled; an empty set means "no state yet".
         val en = state.isEmpty() || state.contains(android.R.attr.state_enabled)
         if (en != enabled) { enabled = en; changed = true }
@@ -278,6 +285,9 @@ class GlassDrawable() : Drawable() {
         Color.argb((Color.alpha(c) * f).toInt(), Color.red(c), Color.green(c), Color.blue(c))
 
     companion object {
+        /** Peak scale in `animator/glass_press.xml`. */
+        private const val ANIMATOR_PRESS_SCALE = 1.08f
+
         fun sheet(context: Context, topOnly: Boolean = false): GlassDrawable =
             GlassDrawable(
                 context,

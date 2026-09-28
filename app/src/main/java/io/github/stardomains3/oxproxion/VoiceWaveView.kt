@@ -17,7 +17,7 @@ import kotlin.math.sin
  * its moment, fading out toward the older edge. The newest bar follows the live level every
  * frame and the strip slides continuously between bars, so it answers the voice at once instead
  * of stepping. While a recording is being transcribed the bars settle into a slow travelling
- * ripple. ~30fps while listening, ~15fps for the ripple, nothing while hidden.
+ * ripple. Up to 60fps while listening, ~15fps for the ripple, nothing while hidden.
  */
 class VoiceWaveView @JvmOverloads constructor(
     context: Context,
@@ -144,13 +144,14 @@ class VoiceWaveView @JvmOverloads constructor(
     }
 
     companion object {
-        /** ~30fps while the voice drives it: a level meter that lags reads as sluggish. */
-        private const val FRAME_LISTEN_MS = 33L
+        /** Up to 60fps while listening: the strip glides, and at 30fps the glide visibly steps. */
+        private const val FRAME_LISTEN_MS = 16L
         /** ~15fps for the transcribing ripple, which only needs to look alive. */
         private const val FRAME_WORK_MS = 66L
-        /** The strip moves one bar every 60ms (about 17 bars a second). */
-        private const val SHIFT_MS = 60f
-        private const val ATTACK = 0.75f
-        private const val RELEASE = 0.32f
+        /** The strip moves one bar every 120ms (about 8 bars a second), an unhurried drift. */
+        private const val SHIFT_MS = 120f
+        /** Per-16ms follow rates: rises within ~100ms, eases down over ~250ms. */
+        private const val ATTACK = 0.22f
+        private const val RELEASE = 0.09f
     }
 }

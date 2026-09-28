@@ -9,4 +9,14 @@
     <item name="tag_glass_decorated" type="id" />
     <item name="tag_glass_button" type="id" />
     <item name="tag_popover_layer" type="id" />
+    <item name="btnThemeSystem" type="id" />
+    <item name="btnThemeLight" type="id" />
+    <item name="btnThemeDark" type="id" />
+    <item name="chatTextS" type="id" />
+    <item name="chatTextM" type="id" />
+    <item name="chatTextL" type="id" />
+    <item name="chatTextXL" type="id" />
+    <item name="chatMarkOff" type="id" />
+    <item name="chatMarkPlain" type="id" />
+    <item name="chatMarkLiquid" type="id" />
 </resources>

@@ -116,30 +116,6 @@
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />
             </LinearLayout>
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="8dp"
-                android:text="@string/rp_language"
-                android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_settings_card"
-                android:orientation="vertical"
-                android:padding="8dp">
-
-                <Spinner
-                    android:id="@+id/rpLangSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:contentDescription="@string/rp_language" />
-            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

@@ -35,7 +35,6 @@ class RpChatDelegate(
         return RpPromptEngine.buildSystemPrompt(
             character = if (isLlm) null else character,
             persona = prefs.getRpPersona(),
-            lang = prefs.getRpLang(),
             lore = lore,
             instruction = instruction,
             thirdPerson = prefs.isRpThirdPerson(),

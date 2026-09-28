@@ -27,8 +27,8 @@ upstream's and stays as it is.
 ```bash
 export ANDROID_HOME=/opt/android-sdk        # or wherever your SDK lives
 ./gradlew assembleDev                        # minified, dev-signed, .dev app id
-./gradlew testDebugUnitTest -Pfast          # logic tests only (~310), skips the screenshot classes
-./gradlew testDebugUnitTest                  # everything (~410), about 2.5 minutes
+./gradlew testDebugUnitTest -Pfast          # logic tests only (~350), skips the screenshot classes
+./gradlew testDebugUnitTest                  # everything (~430), about 1.5 minutes
 ./gradlew testDebugUnitTest --tests '*ScreenshotTest.rpConversationContinueDark'
 ```
 

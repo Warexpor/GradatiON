@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One choice in Settings > Appearance (Theme, Chat text, App icon): a picture of the choice in
+     a rounded frame, ringed when selected, with its name underneath. Same look as the
+     background tiles. The swatch's content and height are set in SettingsDetailFragment. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:layout_marginStart="4dp"
+    android:layout_marginEnd="4dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:stateListAnimator="@animator/press_scale">
+
+    <FrameLayout
+        android:id="@+id/choiceSwatch"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:background="@drawable/bg_background_tile"
+        android:clipToOutline="true"
+        android:duplicateParentState="true"
+        android:foreground="@drawable/bg_background_tile_ring" />
+
+    <TextView
+        android:id="@+id/choiceLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:duplicateParentState="true"
+        android:ellipsize="end"
+        android:gravity="center_horizontal"
+        android:maxLines="1"
+        android:textColor="@color/toggle_icon_top"
+        android:textFontWeight="500"
+        android:textSize="13sp" />
+</LinearLayout>

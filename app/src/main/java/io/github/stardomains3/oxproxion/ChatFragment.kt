@@ -4218,7 +4218,7 @@ $cleanContent
         // The top bar stays on screen above both pages, so leave it out of the picture.
         val bar = topBar.visibility
         topBar.visibility = View.INVISIBLE
-        val bmp = runCatching { content.drawToBitmap(Bitmap.Config.ARGB_8888) }.getOrNull()
+        val bmp = snapshotPage(content)
         topBar.visibility = bar
         if (bmp == null) { pagerBusy = false; return false }
         val shot = ImageView(requireContext()).apply {
@@ -4243,6 +4243,20 @@ $cleanContent
         pager = Pager(target, origin, direction, shot, content.width.toFloat())
         movePager(0f)
         return true
+    }
+
+    /**
+     * The page as it looks on screen. Drawn through the GPU so the composer's glass edge, the
+     * liquid mark and the ambient field come out as they are; a software canvas drops them
+     * (the glow went missing mid-swipe) and is only the fallback.
+     */
+    private fun snapshotPage(content: View): Bitmap? {
+        if (content.isHardwareAccelerated) {
+            runCatching {
+                HardwareRaster.render(content.width, content.height, software = false) { content.draw(it) }
+            }.getOrNull()?.let { return it }
+        }
+        return runCatching { content.drawToBitmap(Bitmap.Config.ARGB_8888) }.getOrNull()
     }
 
     /** Old page (the snapshot) under the finger, the new one right beside it. */

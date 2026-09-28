@@ -110,7 +110,6 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         val prefs = SharedPreferencesHelper(requireContext())
         val viewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
 
-        val themeToggleGroup = view.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.themeToggleGroup)
         val inferenceParamsButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.inferenceParamsButton)
         val chatMemoryButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.chatMemoryButton)
         val toolsButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.toolsButton)
@@ -152,12 +151,6 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         notificationsSwitch.isChecked = prefs.getNotiPreference()
         val memoryCount = prefs.getChatMemoryCount()
         chatMemoryButton.text = if (memoryCount == Int.MAX_VALUE) "All messages" else "$memoryCount messages"
-        val savedMode = prefs.getThemeMode()
-        when (savedMode) {
-            SharedPreferencesHelper.THEME_LIGHT -> themeToggleGroup.check(R.id.btnThemeLight)
-            SharedPreferencesHelper.THEME_DARK -> themeToggleGroup.check(R.id.btnThemeDark)
-            else -> themeToggleGroup.check(R.id.btnThemeSystem)
-        }
         keepScreenOnSwitch.isChecked = prefs.getKeepScreenOnPreference()
         copyOrDismissSwitch.isChecked = prefs.getUseCopyButton2()
         animateBarOnErrorSwitch.isChecked = prefs.getAnimateBarOnError()
@@ -223,25 +216,6 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         }
         openRouterTransformsSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.saveOpenRouterTransformsEnabled(isChecked)
-        }
-        themeToggleGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (isChecked) {
-                val mode = when (checkedId) {
-                    R.id.btnThemeLight -> SharedPreferencesHelper.THEME_LIGHT
-                    R.id.btnThemeDark -> SharedPreferencesHelper.THEME_DARK
-                    else -> SharedPreferencesHelper.THEME_SYSTEM
-                }
-                prefs.saveThemeMode(mode)
-                val appMode = when (mode) {
-                    SharedPreferencesHelper.THEME_LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
-                    SharedPreferencesHelper.THEME_DARK -> AppCompatDelegate.MODE_NIGHT_YES
-                    else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                }
-                if (AppCompatDelegate.getDefaultNightMode() != appMode) {
-                    // Reveal the new appearance from the tapped segment.
-                    ThemeTransition.apply(requireActivity(), view.findViewById(checkedId), appMode)
-                }
-            }
         }
         showCitationsSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.saveShowCitations(isChecked)
@@ -387,6 +361,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         hapticRespondingSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.saveHapticResponding(isChecked)
         }
+        bindThemePicker(view, prefs)
         bindBackgroundPicker(view, prefs)
         bindVoice(view, prefs)
         bindChatTextSize(view, prefs)
@@ -507,29 +482,145 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         }
     }
 
-    /** Appearance > App icon: off, the flat vector, or the liquid glass mark. */
-    private fun bindChatMark(view: View, prefs: SharedPreferencesHelper) {
-        val group = view.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.chatMarkGroup)
-        val styles = listOf(
-            R.id.chatMarkOff to SharedPreferencesHelper.CHAT_MARK_OFF,
-            R.id.chatMarkPlain to SharedPreferencesHelper.CHAT_MARK_PLAIN,
-            R.id.chatMarkLiquid to SharedPreferencesHelper.CHAT_MARK_LIQUID
-        )
-        group.check(styles.firstOrNull { it.second == prefs.getChatMarkStyle() }?.first ?: R.id.chatMarkLiquid)
-        group.addOnButtonCheckedListener { _, id, checked ->
-            if (checked) styles.firstOrNull { it.first == id }?.let { prefs.saveChatMarkStyle(it.second) }
+    /** One option in a tile picker: its view id, its name, and what drawing it takes. */
+    private class Choice<T>(val id: Int, val label: Int, val value: T)
+
+    /**
+     * Fills [picker] with one tile per choice, the same tiles as the background picker: [draw]
+     * puts a picture of the choice in each [swatchDp]-tall swatch, and the selected tile is
+     * ringed. Tapping a tile selects it and calls [onPick]. Returns a function that selects a
+     * value without calling [onPick].
+     */
+    private fun <T> bindTilePicker(
+        picker: android.widget.LinearLayout,
+        section: Int,
+        choices: List<Choice<T>>,
+        swatchDp: Int,
+        draw: (Choice<T>, android.widget.FrameLayout) -> Unit,
+        onSelected: (Choice<T>, Boolean) -> Unit = { _, _ -> },
+        onPick: (Choice<T>, View) -> Unit
+    ): (T) -> Unit {
+        val d = resources.displayMetrics.density
+        val tiles = choices.map { choice ->
+            layoutInflater.inflate(R.layout.item_choice_tile, picker, false).apply {
+                id = choice.id
+                findViewById<TextView>(R.id.choiceLabel).setText(choice.label)
+                contentDescription = getString(R.string.cd_choice, getString(section), getString(choice.label))
+                val swatch = findViewById<android.widget.FrameLayout>(R.id.choiceSwatch)
+                swatch.layoutParams.height = (swatchDp * d).toInt()
+                draw(choice, swatch)
+                picker.addView(this)
+            }
         }
+        fun select(value: T) = choices.forEachIndexed { i, c ->
+            tiles[i].isSelected = c.value == value
+            onSelected(c, c.value == value)
+        }
+        choices.forEachIndexed { i, c ->
+            tiles[i].setOnClickListener {
+                if (tiles[i].isSelected) return@setOnClickListener
+                select(c.value)
+                onPick(c, tiles[i])
+            }
+        }
+        return ::select
     }
 
-    /** Appearance > Chat text: S/M/L/XL presets over the chat scale (the old +/- steps were 5%). */
-    private fun bindChatTextSize(view: View, prefs: SharedPreferencesHelper) {
-        val group = view.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.chatTextSizeGroup)
-        val sizes = listOf(R.id.chatTextS to 90, R.id.chatTextM to 100, R.id.chatTextL to 115, R.id.chatTextXL to 130)
-        val current = prefs.getFontSizeCh()
-        group.check(sizes.minByOrNull { kotlin.math.abs(it.second - current) }!!.first)
-        group.addOnButtonCheckedListener { _, id, checked ->
-            if (checked) sizes.firstOrNull { it.first == id }?.let { prefs.saveFontSizeCh(it.second) }
+    /** Appearance > Theme: System, Light or Dark, each tile a tiny chat in that theme. */
+    private fun bindThemePicker(view: View, prefs: SharedPreferencesHelper) {
+        val picker = view.findViewById<android.widget.LinearLayout>(R.id.themePicker) ?: return
+        val choices = listOf(
+            Choice(R.id.btnThemeSystem, R.string.settings_theme_system, SharedPreferencesHelper.THEME_SYSTEM),
+            Choice(R.id.btnThemeLight, R.string.settings_theme_light, SharedPreferencesHelper.THEME_LIGHT),
+            Choice(R.id.btnThemeDark, R.string.settings_theme_dark, SharedPreferencesHelper.THEME_DARK)
+        )
+        val select = bindTilePicker(picker, R.string.settings_theme, choices, 104,
+            draw = { c, swatch ->
+                swatch.addView(ThemePreviewView(requireContext()).apply {
+                    mode = when (c.value) {
+                        SharedPreferencesHelper.THEME_LIGHT -> ThemePreviewView.Mode.LIGHT
+                        SharedPreferencesHelper.THEME_DARK -> ThemePreviewView.Mode.DARK
+                        else -> ThemePreviewView.Mode.SYSTEM
+                    }
+                })
+            }
+        ) { c, tile ->
+            prefs.saveThemeMode(c.value)
+            val appMode = when (c.value) {
+                SharedPreferencesHelper.THEME_LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+                SharedPreferencesHelper.THEME_DARK -> AppCompatDelegate.MODE_NIGHT_YES
+                else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            }
+            // Reveal the new appearance from the tapped tile.
+            if (AppCompatDelegate.getDefaultNightMode() != appMode) ThemeTransition.apply(requireActivity(), tile, appMode)
         }
+        val saved = prefs.getThemeMode()
+        select(if (choices.any { it.value == saved }) saved else SharedPreferencesHelper.THEME_SYSTEM)
+    }
+
+    /**
+     * Appearance > App icon: off, the flat vector, or the liquid glass mark. The Liquid tile runs
+     * the real glass shader, but only while it is the selected one.
+     */
+    private fun bindChatMark(view: View, prefs: SharedPreferencesHelper) {
+        val picker = view.findViewById<android.widget.LinearLayout>(R.id.chatMarkPicker) ?: return
+        val choices = listOf(
+            Choice(R.id.chatMarkOff, R.string.settings_chat_mark_off, SharedPreferencesHelper.CHAT_MARK_OFF),
+            Choice(R.id.chatMarkPlain, R.string.settings_chat_mark_plain, SharedPreferencesHelper.CHAT_MARK_PLAIN),
+            Choice(R.id.chatMarkLiquid, R.string.settings_chat_mark_liquid, SharedPreferencesHelper.CHAT_MARK_LIQUID)
+        )
+        val marks = HashMap<String, LiquidMarkView>()
+        val d = resources.displayMetrics.density
+        val select = bindTilePicker(picker, R.string.settings_chat_mark, choices, 76,
+            draw = { c, swatch ->
+                val mark = LiquidMarkView(requireContext()).apply {
+                    setImageResource(R.drawable.ic_gradation_mark)
+                    androidx.core.widget.ImageViewCompat.setImageTintList(
+                        this, android.content.res.ColorStateList.valueOf(requireContext().getColor(R.color.xai_mute))
+                    )
+                    scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    if (c.value == SharedPreferencesHelper.CHAT_MARK_LIQUID) {
+                        animated = false
+                    } else {
+                        markStyle = LiquidMarkView.MarkStyle.PLAIN
+                        // Off shows the mark as a faint ghost: the spot it would fill stays empty.
+                        if (c.value == SharedPreferencesHelper.CHAT_MARK_OFF) alpha = 0.16f
+                    }
+                }
+                marks[c.value] = mark
+                swatch.addView(mark, android.widget.FrameLayout.LayoutParams(
+                    (40 * d).toInt(), (40 * d).toInt(), android.view.Gravity.CENTER
+                ))
+            },
+            onSelected = { c, on -> if (c.value == SharedPreferencesHelper.CHAT_MARK_LIQUID) marks[c.value]?.animated = on }
+        ) { c, _ -> prefs.saveChatMarkStyle(c.value) }
+        val saved = prefs.getChatMarkStyle()
+        select(if (choices.any { it.value == saved }) saved else SharedPreferencesHelper.CHAT_MARK_LIQUID)
+    }
+
+    /** Appearance > Chat text: four presets over the chat scale, each tile an "Aa" at that size. */
+    private fun bindChatTextSize(view: View, prefs: SharedPreferencesHelper) {
+        val picker = view.findViewById<android.widget.LinearLayout>(R.id.chatTextSizePicker) ?: return
+        val choices = listOf(
+            Choice(R.id.chatTextS, R.string.text_size_s, 90),
+            Choice(R.id.chatTextM, R.string.text_size_m, 100),
+            Choice(R.id.chatTextL, R.string.text_size_l, 115),
+            Choice(R.id.chatTextXL, R.string.text_size_xl, 130)
+        )
+        val select = bindTilePicker(picker, R.string.settings_chat_text_size, choices, 64,
+            draw = { c, swatch ->
+                swatch.addView(TextView(requireContext()).apply {
+                    setText(R.string.text_size_sample)
+                    textSize = SAMPLE_TEXT_SP * c.value / 100f
+                    setTextColor(requireContext().getColor(R.color.xai_ink))
+                    gravity = android.view.Gravity.CENTER
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                })
+            }
+        ) { c, _ -> prefs.saveFontSizeCh(c.value) }
+        val current = prefs.getFontSizeCh()
+        select(choices.minByOrNull { kotlin.math.abs(it.value - current) }!!.value)
     }
 
     /** Settings > Voice: on/off, which engine turns speech into text, and the model/key for Cloud/Grok/Local. */
@@ -665,6 +756,8 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
     }
 
     companion object {
+        /** Size of the Chat text tiles' "Aa" at 100%; the tiles scale it like the chat. */
+        private const val SAMPLE_TEXT_SP = 18f
         const val ARG_SECTION = "section"
         const val SECTION_APPEARANCE = "appearance"
         const val SECTION_VOICE = "voice"

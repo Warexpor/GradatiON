@@ -46,7 +46,6 @@ class SavedChatsFragment : Fragment() {
     private lateinit var searchView: SearchView
     private lateinit var historyEmptyView: TextView
     private lateinit var historyEmptyContainer: View
-    private lateinit var historyModeLabel: TextView
     private lateinit var prefs: SharedPreferencesHelper
     private var allSessions: List<ChatSession> = emptyList()
     private var sessionsLiveData: androidx.lifecycle.LiveData<List<ChatSession>>? = null
@@ -62,13 +61,11 @@ class SavedChatsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        view.findViewById<TextView>(R.id.historyTitle)?.text = Wordmark.build(requireContext())
         prefs = SharedPreferencesHelper(requireContext())
 
         val recyclerView = view.findViewById<RecyclerView>(R.id.savedChatsRecyclerView)
         historyEmptyView = view.findViewById(R.id.historyEmptyView)
         historyEmptyContainer = view.findViewById(R.id.historyEmptyContainer)
-        historyModeLabel = view.findViewById(R.id.historyModeLabel)
         searchView = view.findViewById(R.id.historySearchView)
 
         val closeButton = view.findViewById<ImageButton>(R.id.historyCloseButton)
@@ -166,9 +163,6 @@ class SavedChatsFragment : Fragment() {
         }
 
         viewModel.chatMode.observe(viewLifecycleOwner) { mode ->
-            historyModeLabel.text = getString(
-                if (mode == ChatMode.RP) R.string.history_mode_rp else R.string.history_mode_ask
-            )
             sessionsLiveData?.removeObserver(sessionsObserver)
             sessionsLiveData = savedChatsViewModel.sessionsForMode(mode)
             sessionsLiveData?.observe(viewLifecycleOwner, sessionsObserver)
@@ -208,8 +202,10 @@ class SavedChatsFragment : Fragment() {
                     pinned.forEach { add(HistoryListItem.Session(it, pinned = true)) }
                 }
                 if (rest.isNotEmpty()) {
-                    // Grok parity: single "Conversations" section (not day buckets)
-                    add(HistoryListItem.Header(getString(R.string.grok_history_conversations_title)))
+                    // One section, named for the mode (the header has no subtitle line).
+                    add(HistoryListItem.Header(getString(
+                        if (mode == ChatMode.RP) R.string.history_mode_rp else R.string.history_mode_ask
+                    )))
                     rest.forEach { add(HistoryListItem.Session(it, pinned = false)) }
                 }
             }
@@ -218,15 +214,11 @@ class SavedChatsFragment : Fragment() {
             val empty = filtered.isEmpty()
             historyEmptyContainer.isVisible = empty
             view?.findViewById<RecyclerView>(R.id.savedChatsRecyclerView)?.isVisible = !empty
-            historyEmptyView.text = if (query.isBlank()) {
-                if (mode == ChatMode.RP) {
-                    "${getString(R.string.rp_history_empty)}\n\n${getString(R.string.rp_history_empty_text)}"
-                } else {
-                    "${getString(R.string.grok_history_empty_title)}\n\n${getString(R.string.grok_history_empty_text)}"
-                }
-            } else {
-                "${getString(R.string.grok_history_search_empty_title)}\n\n${getString(R.string.grok_history_search_empty_text)}"
-            }
+            historyEmptyView.setText(when {
+                query.isNotBlank() -> R.string.grok_history_search_empty_title
+                mode == ChatMode.RP -> R.string.rp_history_empty
+                else -> R.string.grok_history_empty_title
+            })
         }
     }
 

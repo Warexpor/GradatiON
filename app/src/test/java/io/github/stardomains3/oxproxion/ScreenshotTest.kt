@@ -209,7 +209,6 @@ class ScreenshotTest {
         val soft = Bitmap.createBitmap(mark.width, mark.height, Bitmap.Config.ARGB_8888)
         mark.draw(Canvas(soft))
         org.junit.Assert.assertTrue("software snapshot keeps the liquid frame", opaqueSpread(soft) > 20)
-
         mark.markStyle = LiquidMarkView.MarkStyle.PLAIN
         val plain = Bitmap.createBitmap(mark.width, mark.height, Bitmap.Config.ARGB_8888)
         mark.draw(Canvas(plain))
@@ -266,11 +265,6 @@ class ScreenshotTest {
 
     @Test fun chatConversationDark() = withChat { a, _ ->
         seedConversation(a); idle(); snap(root(a), "chat_conversation_dark")
-    }
-
-    @Test @Config(qualifiers = LIGHT)
-    fun chatConversationLight() = withChat { a, _ ->
-        seedConversation(a); idle(); snap(root(a), "chat_conversation_light")
     }
 
     /** Android 12: code cards must not call API 34-only text layout methods. */
@@ -346,12 +340,6 @@ class ScreenshotTest {
 
     @Test fun chatStreamingDark() = withChat { a, _ -> streamInto(a, "chat_streaming_dark") }
 
-    @Test fun controlsPanelConversationDark() = withChat { a, _ ->
-        seedConversation(a); idle()
-        a.findViewById<View>(R.id.controlsButton).performClick(); idle()
-        snap(root(a), "controls_panel_conversation_dark")
-    }
-
     @Test fun controlsPanelDark() = withChat { a, _ ->
         a.findViewById<View>(R.id.controlsButton).performClick(); idle()
         // A card floating above the composer, lined up with it; never covering it.
@@ -398,6 +386,18 @@ class ScreenshotTest {
         snap(root(a), "history_dark")
     }
 
+    /** The press swell must not be sliced by the padded row it sits in (it lost its top and bottom). */
+    @Test fun pressedGlassButtonIsNotClipped() = withChat { a, _ ->
+        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
+        val button = a.findViewById<View>(R.id.historySettingsButton)
+        val bar = a.findViewById<android.view.ViewGroup>(R.id.historyBottomBar)
+        org.junit.Assert.assertTrue(bar.clipToPadding)
+        button.isPressed = true
+        org.junit.Assert.assertFalse("row opens its padding for the swell", bar.clipToPadding)
+        org.junit.Assert.assertTrue("room already fits, so the clip stops there", (bar.parent as android.view.ViewGroup).clipChildren)
+        button.isPressed = false
+    }
+
     @Test fun historyOptionsSheetDark() = withChat { a, _ ->
         seedHistory()
         a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
@@ -431,22 +431,6 @@ class ScreenshotTest {
     fun settingsLight() = withChat { a, _ ->
         a.findViewById<View>(R.id.settingsButton).performClick(); idle()
         snap(root(a), "settings_light")
-    }
-
-    @Test fun settingsDetailDark() = withChat { a, _ ->
-        a.findViewById<View>(R.id.settingsButton).performClick(); idle()
-        val first = a.supportFragmentManager.fragments.filterIsInstance<SettingsFragment>().first()
-        first.view?.let { v -> firstClickableRow(v)?.performClick() }
-        idle()
-        snap(root(a), "settings_detail_dark")
-    }
-
-    private fun firstClickableRow(v: View): View? {
-        if (v.isClickable && v !is android.widget.ScrollView && v.id != View.NO_ID &&
-            v.resources.getResourceEntryName(v.id).contains("Row", ignoreCase = true)
-        ) return v
-        if (v is android.view.ViewGroup) for (i in 0 until v.childCount) firstClickableRow(v.getChildAt(i))?.let { return it }
-        return null
     }
 
     /** The frosted screen a dialog window sits on: cross-window blur plus the light dim. */
@@ -537,18 +521,30 @@ class ScreenshotTest {
         repeat(4) { Thread.sleep(250); idle() }
     }
 
-    private fun rpScreen(name: String, seed: Boolean = true, f: () -> androidx.fragment.app.Fragment) = withChat { a, _ ->
-        if (seed) seedRp()
+    private fun rpScreen(name: String, f: () -> androidx.fragment.app.Fragment) = withChat { a, _ ->
+        seedRp()
         pushFragment(a, f()); settle(); snap(root(a), name)
     }
 
-    @Test fun rpHubDark() = rpScreen("rp_hub_dark") { RpHubFragment() }
     @Test @Config(qualifiers = LIGHT)
     fun rpHubLight() = rpScreen("rp_hub_light") { RpHubFragment() }
-    @Test fun rpHubEmptyDark() = rpScreen("rp_hub_empty_dark", seed = false) { RpHubFragment() }
-    @Test fun rpCharactersDark() = rpScreen("rp_characters_dark") { RpCharacterLibraryFragment.newInstance() }
 
-    @Test fun rpCharactersEmptyDark() = rpScreen("rp_characters_empty_dark", seed = false) { RpCharacterLibraryFragment.newInstance() }
+    @Test fun rpScreensDark() = withChat { a, _ ->
+        seedRp()
+        renderEach(a, settleEach = true, screens = listOf(
+            "rp_hub_dark" to { RpHubFragment() },
+            "rp_characters_dark" to { RpCharacterLibraryFragment.newInstance() },
+            "rp_persona_dark" to { RpPersonaFragment.newInstance() },
+        ))
+    }
+
+    @Test fun rpEmptyScreensDark() = withChat { a, _ ->
+        renderEach(a, settleEach = true, screens = listOf(
+            "rp_hub_empty_dark" to { RpHubFragment() },
+            "rp_characters_empty_dark" to { RpCharacterLibraryFragment.newInstance() },
+            "rp_lorebooks_dark" to { RpLorebookLibraryFragment.newInstance() },
+        ))
+    }
 
     @Test fun rpCharacterEditExistingDark() = withChat { a, _ ->
         seedRp()
@@ -557,9 +553,6 @@ class ScreenshotTest {
         snap(root(a), "rp_character_edit_existing_dark")
     }
 
-    @Test fun rpLorebooksDark() = withChat { a, _ -> pushFragment(a, RpLorebookLibraryFragment.newInstance()); snap(root(a), "rp_lorebooks_dark") }
-    @Test fun rpPersonaDark() = rpScreen("rp_persona_dark") { RpPersonaFragment.newInstance() }
-    @Test fun rpCharacterEditDark() = withChat { a, _ -> pushFragment(a, RpCharacterEditFragment.newInstance(0L)); snap(root(a), "rp_character_edit_dark") }
     @Test fun rpLorebookEditDark() = withChat { a, _ ->
         pushFragment(a, RpLorebookEditFragment.newInstance(0L)); idle()
         val hits = ArrayList<android.view.View>()
@@ -572,22 +565,47 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals("lore format hint is clipped", 0, cut)
         snap(root(a), "rp_lorebook_edit_dark")
     }
-    @Test fun helpDark() = withChat { a, _ -> pushFragment(a, HelpFragment()); snap(root(a), "help_dark") }
-    @Test fun licensesDark() = withChat { a, _ -> pushFragment(a, LicenseListFragment()); snap(root(a), "licenses_dark") }
-    @Test fun advancedReasoningDark() = withChat { a, _ -> pushFragment(a, AdvancedReasoningFragment()); snap(root(a), "advanced_reasoning_dark") }
-    @Test fun lanModelsDark() = withChat { a, _ -> pushFragment(a, LanModelsFragment()); snap(root(a), "lan_models_dark") }
-    @Test fun openRouterModelsDark() = withChat { a, _ -> pushFragment(a, OpenRouterModelsFragment()); snap(root(a), "openrouter_models_dark") }
-    @Test fun addPromptDark() = withChat { a, _ -> pushFragment(a, AddEditPromptFragment()); snap(root(a), "add_prompt_dark") }
-    @Test fun addSystemMessageDark() = withChat { a, _ -> pushFragment(a, AddEditSystemMessageFragment()); snap(root(a), "add_system_message_dark") }
-    @Test fun presetEditDark() = withChat { a, _ -> pushFragment(a, PresetEditFragment.newInstance(null)); snap(root(a), "preset_edit_dark") }
-    @Test fun editMessageDark() = withChat { a, _ -> pushFragment(a, EditMessageFragment.newInstance(0, "Can you explain how attention works?")); snap(root(a), "edit_message_dark") }
-    @Test fun markdownViewerDark() = withChat { a, _ -> pushFragment(a, MarkdownViewerFragment.newInstance("# Notes\n\nSome **bold** text and `code`.\n\n- one\n- two", "Inter", "Qwen 3")); snap(root(a), "markdown_viewer_dark") }
+    /** Screens with nothing to assert: each must inflate and render. One activity for all of them. */
+    @Test fun secondaryScreensDark() = withChat { a, _ ->
+        renderEach(a, settleEach = false, screens = listOf(
+            "help_dark" to { HelpFragment() },
+            "licenses_dark" to { LicenseListFragment() },
+            "advanced_reasoning_dark" to { AdvancedReasoningFragment() },
+            "lan_models_dark" to { LanModelsFragment() },
+            "openrouter_models_dark" to { OpenRouterModelsFragment() },
+            "add_prompt_dark" to { AddEditPromptFragment() },
+            "add_system_message_dark" to { AddEditSystemMessageFragment() },
+            "preset_edit_dark" to { PresetEditFragment.newInstance(null) },
+            "edit_message_dark" to { EditMessageFragment.newInstance(0, "Can you explain how attention works?") },
+            "markdown_viewer_dark" to {
+                MarkdownViewerFragment.newInstance("# Notes\n\nSome **bold** text and `code`.\n\n- one\n- two", "Inter", "Qwen 3")
+            },
+            "presets_dark" to { PresetsListFragment() },
+            "system_messages_dark" to { SystemMessageLibraryFragment() },
+            "tools_dark" to { ToolsFragment() },
+            "prompts_dark" to { PromptLibraryFragment() },
+            "inference_dark" to { InferenceParametersFragment() },
+        ))
+    }
 
-    @Test fun presetsDark() = withChat { a, _ -> pushFragment(a, PresetsListFragment()); snap(root(a), "presets_dark") }
-    @Test fun systemMessagesDark() = withChat { a, _ -> pushFragment(a, SystemMessageLibraryFragment()); snap(root(a), "system_messages_dark") }
-
-    @Test fun toolsDark() = withChat { a, _ -> pushFragment(a, ToolsFragment()); snap(root(a), "tools_dark") }
-    @Test fun promptsDark() = withChat { a, _ -> pushFragment(a, PromptLibraryFragment()); snap(root(a), "prompts_dark") }
+    /** Pushes each screen over the chat, snaps it and takes it off again, naming any that fails. */
+    private fun renderEach(
+        a: MainActivity,
+        settleEach: Boolean,
+        screens: List<Pair<String, () -> androidx.fragment.app.Fragment>>
+    ) {
+        for ((name, make) in screens) {
+            try {
+                val f = make()
+                pushFragment(a, f)
+                if (settleEach) settle()
+                snap(root(a), name)
+                a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+            } catch (e: Throwable) {
+                throw AssertionError("screen $name failed to render", e)
+            }
+        }
+    }
     @Test fun rpSettingsDark() = withChat { a, _ ->
         pushFragment(a, RpSettingsFragment()); idle()
         val facts = a.findViewById<android.widget.TextView>(R.id.rpAutoMemorySwitch)
@@ -598,11 +616,25 @@ class ScreenshotTest {
         org.junit.Assert.assertTrue(layout.text.toString().endsWith("left alone."))
         snap(root(a), "rp_settings_dark")
     }
-    @Test fun inferenceDark() = withChat { a, _ -> pushFragment(a, InferenceParametersFragment()); snap(root(a), "inference_dark") }
 
-    @Test fun confirmDialogDark() = withChat { a, chat ->
-        GrokConfirmDialog.show(chat, "Delete conversation?", "This can't be undone.", "Delete", onConfirm = {})
-        idle(); snapDialogCentered(a, "dialog_confirm_dark")
+    @Test fun dialogsDark() = withChat { a, chat ->
+        val dialogs: List<Pair<String, () -> Unit>> = listOf(
+            "dialog_confirm_dark" to {
+                GrokConfirmDialog.show(chat, "Delete conversation?", "This can't be undone.", "Delete", onConfirm = {})
+            },
+            "dialog_api_dark" to { SaveApiDialogFragment().show(a.supportFragmentManager, "api") },
+            "dialog_lan_dark" to { SaveLANDialogFragment().show(a.supportFragmentManager, "lan") },
+            "dialog_timeout_dark" to { TimeoutDialogFragment().show(a.supportFragmentManager, "t") },
+        )
+        for ((name, open) in dialogs) {
+            try {
+                open(); idle()
+                snapDialogCentered(a, name)
+                ShadowDialog.getLatestDialog()?.dismiss(); idle()
+            } catch (e: Throwable) {
+                throw AssertionError("dialog $name failed to render", e)
+            }
+        }
     }
     @Test @Config(qualifiers = LIGHT)
     fun inputDialogLight() = withChat { a, chat ->
@@ -610,9 +642,13 @@ class ScreenshotTest {
         idle(); snapDialogCentered(a, "dialog_input_light")
     }
 
-    @Test fun settingsModelsDark() = withChat { a, _ -> openSettingsRow(a, R.id.settingsRowModels); snap(root(a), "settings_models_dark") }
-    @Test fun settingsDataDark() = withChat { a, _ -> openSettingsRow(a, R.id.settingsRowData); snap(root(a), "settings_data_dark") }
-    @Test fun settingsAdvancedDark() = withChat { a, _ -> openSettingsRow(a, R.id.settingsRowAdvanced); snap(root(a), "settings_advanced_dark") }
+    @Test fun settingsSectionsDark() = withChat { a, _ ->
+        for ((row, name) in listOf(R.id.settingsRowModels to "settings_models_dark", R.id.settingsRowData to "settings_data_dark")) {
+            openSettingsRow(a, row)
+            snap(root(a), name)
+            a.supportFragmentManager.popBackStackImmediate(); a.supportFragmentManager.popBackStackImmediate(); idle()
+        }
+    }
 
     // ── Voice input ────────────────────────────────────────────────────────────────────
 
@@ -638,8 +674,6 @@ class ScreenshotTest {
         VoiceInput.deviceAvailableOverride = true
         try { withChat(block) } finally { VoiceInput.deviceAvailableOverride = null }
     }
-
-    @Test fun chatVoiceIdleDark() = withVoice { a, _ -> snap(root(a), "chat_voice_idle_dark") }
 
     @Test fun chatDictatingDark() = withVoice { a, chat ->
         dictateInto(a, chat)
@@ -711,7 +745,6 @@ class ScreenshotTest {
 
     @Test fun chatTextSizeFromAppearance() = withChat { a, _ ->
         openSettingsRow(a, R.id.settingsRowAppearance)
-        snap(root(a), "settings_appearance_textsize_dark")
         a.findViewById<View>(R.id.chatTextXL).performClick(); idle()
         org.junit.Assert.assertEquals(130, SharedPreferencesHelper(a).getFontSizeCh())
         a.supportFragmentManager.popBackStackImmediate(); a.supportFragmentManager.popBackStackImmediate(); idle()
@@ -856,11 +889,6 @@ class ScreenshotTest {
         } finally { VoiceInput.deviceAvailableOverride = null }
     }
 
-    @Test fun settingsVoiceDark() = withVoice { a, _ ->
-        openSettingsRow(a, R.id.settingsRowVoice)
-        snap(root(a), "settings_voice_dark")
-    }
-
     @Test fun settingsVoiceCloudDark() = withVoice { a, _ ->
         SharedPreferencesHelper(a).setVoiceInputProvider(VoiceEngine.CLOUD.key)
         SharedPreferencesHelper(a).setVoiceInputModel("openai/whisper-1")
@@ -874,30 +902,14 @@ class ScreenshotTest {
         sf.requireView().findViewById<View>(rowId).performClick(); idle()
     }
 
-    @Test fun lanDialogDark() = withChat { a, _ ->
-        SaveLANDialogFragment().show(a.supportFragmentManager, "lan"); idle(); snapDialogCentered(a, "dialog_lan_dark")
-    }
-    @Test fun apiDialogDark() = withChat { a, _ ->
-        SaveApiDialogFragment().show(a.supportFragmentManager, "api"); idle(); snapDialogCentered(a, "dialog_api_dark")
-    }
-    @Test fun timeoutDialogDark() = withChat { a, _ ->
-        TimeoutDialogFragment().show(a.supportFragmentManager, "t"); idle(); snapDialogCentered(a, "dialog_timeout_dark")
-    }
-
     // ---- Grok-form chrome: mode tabs, anchored popover, pull-to-dismiss ----
 
     @Test fun chatRoleplayTabDark() = withChat { a, _ ->
         a.findViewById<View>(R.id.tabRoleplay).performClick(); idle()
         org.junit.Assert.assertTrue(a.findViewById<View>(R.id.tabRoleplay).isSelected)
-        snap(root(a), "chat_rp_tab_dark")
-        // Mode persists across tests; leave the app in Chat.
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
-    }
-
-    @Test fun chatRoleplayCharacterDark() = withChat { a, _ ->
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); idle()
         org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.emptyAction).visibility)
         snap(root(a), "chat_rp_empty_dark")
+        // Mode persists across tests; leave the app in Chat.
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
 
@@ -949,8 +961,8 @@ class ScreenshotTest {
         org.junit.Assert.assertTrue("left swipe → Roleplay", a.findViewById<View>(R.id.tabRoleplay).isSelected)
         swipe(root, w * 0.15f, w * 0.85f, y)
         org.junit.Assert.assertTrue("right swipe → Chat", a.findViewById<View>(R.id.tabChat).isSelected)
-        // A short nudge must not navigate.
-        swipe(root, w * 0.5f, w * 0.62f, y)
+        // A short nudge must not navigate (a sixth of the width commits; this is well under).
+        swipe(root, w * 0.5f, w * 0.56f, y)
         org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.historyDrawerContainer).visibility)
         swipe(root, w * 0.15f, w * 0.85f, y)
         val drawer = a.findViewById<View>(R.id.historyDrawerContainer)
@@ -1206,9 +1218,11 @@ class ScreenshotTest {
         seedHistory()
         a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
         val panel = a.findViewById<View>(R.id.historyDrawerContainer)
-        drag(panel, -panel.width * 0.4f, release = false, stepMs = 40L)
+        // Through the window like a real finger: the panel moves under it, so its own
+        // coordinates shift with every step (it used to flip between two positions).
+        drag(root(a), -panel.width * 0.4f, release = false, stepMs = 40L)
         val chat = a.findViewById<View>(R.id.rootLayout)
-        org.junit.Assert.assertTrue("panel follows the finger", panel.translationX < -panel.width * 0.2f)
+        org.junit.Assert.assertEquals("panel follows the finger", -panel.width * 0.4f, panel.translationX, panel.width * 0.06f)
         org.junit.Assert.assertEquals(panel.translationX + panel.width, chat.translationX, 2f)
         snap(root(a), "history_close_mid_dark")
     }

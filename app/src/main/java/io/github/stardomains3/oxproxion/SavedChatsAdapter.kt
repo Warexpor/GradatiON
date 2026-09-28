@@ -79,6 +79,13 @@ class SavedChatsAdapter(
                 onOverflowClick(session, overflowButton)
                 true
             }
+            // The row has no visible menu button, so name the long-press for TalkBack.
+            androidx.core.view.ViewCompat.replaceAccessibilityAction(
+                itemView,
+                androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_LONG_CLICK,
+                itemView.context.getString(R.string.grok_history_more),
+                null
+            )
             overflowButton.setOnClickListener {
                 val session = currentSession ?: return@setOnClickListener
                 onOverflowClick(session, overflowButton)

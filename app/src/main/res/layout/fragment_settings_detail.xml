@@ -104,201 +104,59 @@
                     android:text="@string/settings_theme"
                     android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
+                <!-- System / Light / Dark tiles, each a tiny chat in that theme, built in SettingsDetailFragment -->
                 <LinearLayout
+                    android:id="@+id/themePicker"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_settings_card"
-                    android:orientation="vertical"
-                    android:paddingTop="4dp"
-                    android:paddingBottom="4dp">
+                    android:orientation="horizontal"
+                    android:paddingStart="10dp"
+                    android:paddingTop="12dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="12dp" />
 
-                    <LinearLayout
-                        android:id="@+id/themeModeRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:orientation="horizontal"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/settings_chat_text_size"
+                    android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/settings_theme_mode"
-                            android:maxLines="1"
-                            android:ellipsize="end"
-                            android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
+                <!-- Small / Default / Large / Larger, each an "Aa" at that size, built in SettingsDetailFragment -->
+                <LinearLayout
+                    android:id="@+id/chatTextSizePicker"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_settings_card"
+                    android:orientation="horizontal"
+                    android:paddingStart="10dp"
+                    android:paddingTop="12dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="12dp" />
 
-                        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
-                                android:id="@+id/themeToggleGroup"
-                                android:layout_marginStart="12dp"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                app:selectionRequired="true"
-                                app:singleSelection="true">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/settings_chat_mark"
+                    android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btnThemeSystem"
-                                    style="?attr/materialButtonOutlinedStyle"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/settings_theme_system"
-                                    app:backgroundTint="@color/toggle_background_selector"
-                                    app:strokeColor="@color/xai_hairline" />
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btnThemeLight"
-                                    style="?attr/materialButtonOutlinedStyle"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/settings_theme_light"
-                                    app:backgroundTint="@color/toggle_background_selector"
-                                    app:strokeColor="@color/xai_hairline" />
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btnThemeDark"
-                                    style="?attr/materialButtonOutlinedStyle"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/settings_theme_dark"
-                                    app:backgroundTint="@color/toggle_background_selector"
-                                    app:strokeColor="@color/xai_hairline" />
-                            </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
-                    </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="16dp"
-                        android:background="@color/xai_hairline" />
-
-                    <!-- Chat text size: scales message text (Chat, Roleplay) -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:orientation="horizontal"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/settings_chat_text_size"
-                            android:maxLines="1"
-                            android:ellipsize="end"
-                            android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
-
-                        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
-                            android:id="@+id/chatTextSizeGroup"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            app:selectionRequired="true"
-                            app:singleSelection="true">
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/chatTextS"
-                                style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/text_size_s"
-                                app:backgroundTint="@color/toggle_background_selector"
-                                app:strokeColor="@color/xai_hairline" />
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/chatTextM"
-                                style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/text_size_m"
-                                app:backgroundTint="@color/toggle_background_selector"
-                                app:strokeColor="@color/xai_hairline" />
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/chatTextL"
-                                style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/text_size_l"
-                                app:backgroundTint="@color/toggle_background_selector"
-                                app:strokeColor="@color/xai_hairline" />
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/chatTextXL"
-                                style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/text_size_xl"
-                                app:backgroundTint="@color/toggle_background_selector"
-                                app:strokeColor="@color/xai_hairline" />
-                        </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
-                    </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginStart="16dp"
-                        android:background="@color/xai_hairline" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:orientation="horizontal"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/settings_chat_mark"
-                            android:maxLines="1"
-                            android:ellipsize="end"
-                            android:textColor="@color/xai_ink"
-                            android:textSize="16sp" />
-
-                        <io.github.stardomains3.oxproxion.GlassSegmentedGroup
-                            android:id="@+id/chatMarkGroup"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:contentDescription="@string/settings_chat_mark"
-                            app:selectionRequired="true"
-                            app:singleSelection="true">
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/chatMarkOff"
-                                style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_chat_mark_off"
-                                app:backgroundTint="@color/toggle_background_selector"
-                                app:strokeColor="@color/xai_hairline" />
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/chatMarkPlain"
-                                style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_chat_mark_plain"
-                                app:backgroundTint="@color/toggle_background_selector"
-                                app:strokeColor="@color/xai_hairline" />
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/chatMarkLiquid"
-                                style="?attr/materialButtonOutlinedStyle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_chat_mark_liquid"
-                                app:backgroundTint="@color/toggle_background_selector"
-                                app:strokeColor="@color/xai_hairline" />
-                        </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
-                    </LinearLayout>
-                </LinearLayout>
+                <!-- Off / Plain / Liquid tiles showing the empty-chat mark, built in SettingsDetailFragment -->
+                <LinearLayout
+                    android:id="@+id/chatMarkPicker"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_settings_card"
+                    android:orientation="horizontal"
+                    android:paddingStart="10dp"
+                    android:paddingTop="12dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="12dp" />
 
                 <TextView
                     android:layout_width="match_parent"

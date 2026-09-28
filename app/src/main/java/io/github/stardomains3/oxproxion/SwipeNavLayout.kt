@@ -20,6 +20,8 @@ import kotlin.math.abs
  *    [commitFraction] of the width, having travelled at least a third of that; a flick back
  *    the other way always cancels.
  * While claimed, [Listener.onDrag] reports the offset so the UI can follow the finger.
+ * Distances are measured on screen, not in this view's coordinates: the history drawer moves
+ * itself under the finger, and local coordinates would shift with it every step.
  */
 class SwipeNavLayout @JvmOverloads constructor(
     context: Context,
@@ -57,21 +59,21 @@ class SwipeNavLayout @JvmOverloads constructor(
         val l = listener ?: return false
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                downX = ev.x; downY = ev.y; downTime = SystemClock.uptimeMillis()
+                downX = ev.rawX; downY = ev.rawY; downTime = SystemClock.uptimeMillis()
                 state = if (l.canStart(ev.x, ev.y)) UNDECIDED else REJECTED
-                velocity?.recycle(); velocity = VelocityTracker.obtain().also { it.addMovement(ev) }
+                velocity?.recycle(); velocity = VelocityTracker.obtain().also { track(it, ev) }
             }
             MotionEvent.ACTION_MOVE -> {
-                velocity?.addMovement(ev)
+                velocity?.let { track(it, ev) }
                 if (state != UNDECIDED) return state == DRAGGING
-                val dx = ev.x - downX
-                val dy = ev.y - downY
+                val dx = ev.rawX - downX
+                val dy = ev.rawY - downY
                 when {
                     abs(dy) > slop * 1.5f && abs(dy) >= abs(dx) -> state = REJECTED
                     SystemClock.uptimeMillis() - downTime > longPress && abs(dx) < slop * 1.5f -> state = REJECTED
                     abs(dx) > slop * 1.5f && abs(dx) > abs(dy) * 1.5f -> {
                         state = DRAGGING
-                        downX = ev.x - (if (dx > 0) slop * 1.5f else -slop * 1.5f)
+                        downX = ev.rawX - (if (dx > 0) slop * 1.5f else -slop * 1.5f)
                         parent?.requestDisallowInterceptTouchEvent(true)
                         return true
                     }
@@ -90,7 +92,7 @@ class SwipeNavLayout @JvmOverloads constructor(
             val cancel = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL }
             super.onTouchEvent(cancel)
             cancel.recycle()
-            listener?.onDrag(event.x - downX)
+            listener?.onDrag(event.rawX - downX)
             return true
         }
         if (state != DRAGGING) {
@@ -101,8 +103,8 @@ class SwipeNavLayout @JvmOverloads constructor(
             return handled || undecided
         }
         val l = listener ?: return false
-        velocity?.addMovement(event)
-        val dx = event.x - downX
+        velocity?.let { track(it, event) }
+        val dx = event.rawX - downX
         when (event.actionMasked) {
             MotionEvent.ACTION_MOVE -> l.onDrag(dx)
             MotionEvent.ACTION_UP -> {
@@ -122,6 +124,14 @@ class SwipeNavLayout @JvmOverloads constructor(
             MotionEvent.ACTION_CANCEL -> { releaseVelocity = 0f; l.onCancel(); reset() }
         }
         return true
+    }
+
+    /** Feeds [e] to [tracker] in screen coordinates, for the same reason as the distances. */
+    private fun track(tracker: VelocityTracker, e: MotionEvent) {
+        val screen = MotionEvent.obtain(e)
+        screen.setLocation(e.rawX, e.rawY)
+        tracker.addMovement(screen)
+        screen.recycle()
     }
 
     private fun reset() {

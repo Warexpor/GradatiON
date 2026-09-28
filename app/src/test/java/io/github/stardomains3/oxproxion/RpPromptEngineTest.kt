@@ -11,7 +11,6 @@ class RpPromptEngineTest {
         val prompt = RpPromptEngine.buildSystemPrompt(
             character = null,
             persona = "",
-            lang = "en",
             lore = "",
             instruction = "",
             thirdPerson = true,
@@ -28,7 +27,6 @@ class RpPromptEngineTest {
         val prompt = RpPromptEngine.buildSystemPrompt(
             character = char,
             persona = "Alex",
-            lang = "en",
             lore = "",
             instruction = "",
             thirdPerson = false,
@@ -67,7 +65,7 @@ class RpPromptEngineTest {
         val char = RpCharacter(id = 1, name = "Mira", scenario = "{{user}} walks into {{char}}'s garage.",
             examplesJson = """[{"user":"hi","char":"*nods*"},{"user":"bye","char":"later"}]""")
         val prompt = RpPromptEngine.buildSystemPrompt(
-            character = char, persona = "A pilot", lang = "en", lore = "", instruction = "",
+            character = char, persona = "A pilot", lore = "", instruction = "",
             thirdPerson = false, showThoughts = false, isLlm = false,
             memory = "{{user}} owes {{char}} a favor.", userName = "Alex"
         )
@@ -87,7 +85,7 @@ class RpPromptEngineTest {
             examplesJson = """[{"user":"{{user}} waves","char":"{{char}} waves back at {{random_user_2}}"}]"""
         )
         val prompt = RpPromptEngine.buildSystemPrompt(
-            character = char, persona = "A pilot", lang = "en", lore = "", instruction = "",
+            character = char, persona = "A pilot", lore = "", instruction = "",
             thirdPerson = false, showThoughts = false, isLlm = false,
             memory = "Keep the promise.", facts = "Others:\n- Dockmaster: runs the night pier",
             userName = "Alex"
@@ -105,7 +103,7 @@ class RpPromptEngineTest {
     @Test
     fun buildSystemPrompt_blankMemoryAddsNoSection() {
         val prompt = RpPromptEngine.buildSystemPrompt(
-            character = RpCharacter(id = 1, name = "Mira"), persona = "", lang = "en", lore = "",
+            character = RpCharacter(id = 1, name = "Mira"), persona = "", lore = "",
             instruction = "", thirdPerson = false, showThoughts = false, isLlm = false, memory = "  "
         )
         assertFalse(prompt.contains("## Memory"))
@@ -116,7 +114,7 @@ class RpPromptEngineTest {
         val card = "HEAD stays.\n" + "x".repeat(200)
         val prompt = RpPromptEngine.buildSystemPrompt(
             character = RpCharacter(id = 1, name = "Mira", prompt = card),
-            persona = "", lang = "en", lore = "", instruction = "",
+            persona = "", lore = "", instruction = "",
             thirdPerson = false, showThoughts = false, isLlm = false,
             definitionCap = 40
         )
