@@ -69,7 +69,34 @@ object RpChatSummaries {
         return rp.filter { groupKey(it) == key }.map { it.id }
     }
 
-    /** A stored message as one line of plain text: markdown marks and line breaks folded away. */
+    /** A preview split into plain text and the spans that were *actions* in the reply. */
+    data class StyledPreview(val text: String, val actions: List<IntRange>)
+
+    private val actionSpan = Regex("""\*([^*]+)\*""")
+
+    /**
+     * [previewOf] keeps single asterisks around actions. Without them the stripped action runs
+     * straight into the dialogue ("sighs and grabs a wrench Fine."), so the row italicises them.
+     */
+    fun styledPreview(preview: String): StyledPreview {
+        val out = StringBuilder()
+        val actions = ArrayList<IntRange>()
+        var last = 0
+        for (m in actionSpan.findAll(preview)) {
+            out.append(preview.substring(last, m.range.first).replace("*", ""))
+            val start = out.length
+            out.append(m.groupValues[1].trim())
+            if (out.length > start) actions += start until out.length
+            last = m.range.last + 1
+        }
+        out.append(preview.substring(last).replace("*", ""))
+        return StyledPreview(out.toString(), actions)
+    }
+
+    /**
+     * A stored message as one line of text: markdown marks and line breaks folded away. An
+     * *action* keeps its single asterisks so [styledPreview] can set it apart from the dialogue.
+     */
     fun previewOf(storedContent: String): String {
         val element = try { json.parseToJsonElement(storedContent) } catch (_: Exception) { JsonPrimitive(storedContent) }
         val text = when (element) {
@@ -80,7 +107,7 @@ object RpChatSummaries {
             }.orEmpty()
             else -> ""
         }
-        return text.replace(Regex("[*_#>`~]"), "").replace(Regex("\\s+"), " ").trim()
+        return text.replace("**", "").replace(Regex("[_#>`~]"), "").replace(Regex("\\s+"), " ").trim()
     }
 
     private const val LLM_KEY = -1L

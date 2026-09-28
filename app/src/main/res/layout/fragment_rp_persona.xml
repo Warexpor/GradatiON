@@ -56,8 +56,27 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
+            android:hint="@string/rp_persona_name_hint"
+            app:boxBackgroundColor="@color/xai_cell"
+            app:helperText="@string/rp_persona_name_helper"
+            app:helperTextEnabled="true">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/rpPersonaNameInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textCapWords"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
             android:hint="@string/rp_persona_hint"
-            app:boxBackgroundColor="@color/xai_cell">
+            app:boxBackgroundColor="@color/xai_cell"
+            app:helperText="@string/rp_persona_helper"
+            app:helperTextEnabled="true">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/rpPersonaInput"

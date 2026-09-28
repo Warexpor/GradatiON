@@ -60,7 +60,7 @@
             android:text="@string/rp_character_active_badge"
             android:textColor="@color/xai_ink"
             android:textFontWeight="600"
-            android:textSize="12sp"
+            android:textSize="13sp"
             android:visibility="gone"
             app:drawableStartCompat="@drawable/rp_ic_dot"
             app:layout_constraintStart_toStartOf="@id/rpCharacterAvatar"

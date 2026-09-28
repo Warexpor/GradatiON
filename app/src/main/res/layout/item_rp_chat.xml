@@ -48,16 +48,42 @@
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/rpChatName"
+        <!-- The chat count sits right after the name and gives way to it on long names -->
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:fontFamily="@font/app_sans"
-            android:singleLine="true"
-            android:textColor="@color/xai_ink"
-            android:textFontWeight="700"
-            android:textSize="17sp" />
+            android:layout_height="wrap_content">
+
+            <TextView
+                android:id="@+id/rpChatName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="@font/app_sans"
+                android:singleLine="true"
+                android:textColor="@color/xai_ink"
+                android:textFontWeight="700"
+                android:textSize="17sp"
+                app:layout_constrainedWidth="true"
+                app:layout_constraintEnd_toStartOf="@id/rpChatCount"
+                app:layout_constraintHorizontal_bias="0"
+                app:layout_constraintHorizontal_chainStyle="packed"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/rpChatCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="@font/app_sans"
+                android:singleLine="true"
+                android:textColor="@color/xai_mute"
+                android:textSize="13sp"
+                android:visibility="gone"
+                app:layout_constraintBaseline_toBaselineOf="@id/rpChatName"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@id/rpChatName" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <TextView
             android:id="@+id/rpChatPreview"

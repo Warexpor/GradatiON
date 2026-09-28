@@ -15,6 +15,7 @@ import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.launch
 
 class RpCharacterEditFragment : Fragment() {
@@ -69,12 +70,33 @@ class RpCharacterEditFragment : Fragment() {
         val promptInput = view.findViewById<TextInputEditText>(R.id.rpPromptInput)
         val examplesInput = view.findViewById<TextInputEditText>(R.id.rpExamplesInput)
         val saveButton = view.findViewById<MaterialButton>(R.id.saveRpCharacterButton)
+        val nameLayout = view.findViewById<TextInputLayout>(R.id.rpNameLayout)
+        val examplesLayout = view.findViewById<TextInputLayout>(R.id.rpExamplesLayout)
+        val advancedGroup = view.findViewById<View>(R.id.rpAdvancedGroup)
+        val advancedHeader = view.findViewById<View>(R.id.rpAdvancedHeader)
+        val advancedChevron = view.findViewById<ImageView>(R.id.rpAdvancedChevron)
+        val textInputs = listOf(
+            nameInput, personalityInput, scenarioInput, greetingInput, styleInput,
+            instructionInput, examplesInput, promptInput
+        )
         showAvatar(null)
         nameInput.doAfterTextChanged { text ->
             currentName = text?.toString().orEmpty()
             avatarMonogram.text = RpAvatars.initial(currentName)
             syncPlaceholder()
+            nameLayout.error = null
         }
+        examplesInput.doAfterTextChanged { examplesLayout.error = null }
+
+        fun setAdvancedOpen(open: Boolean) {
+            advancedGroup.visibility = if (open) View.VISIBLE else View.GONE
+            advancedChevron.rotation = if (open) 180f else 0f
+            advancedHeader.contentDescription = getString(
+                if (open) R.string.rp_ui_advanced_collapse else R.string.rp_ui_advanced_expand
+            )
+        }
+        setAdvancedOpen(false)
+        advancedHeader.setOnClickListener { setAdvancedOpen(advancedGroup.visibility != View.VISIBLE) }
 
         var baseline = CharacterEditSnapshot()
         fun currentSnapshot() = CharacterEditSnapshot(
@@ -111,17 +133,16 @@ class RpCharacterEditFragment : Fragment() {
         )
 
         if (characterId > 0) {
+            // The fields fill in asynchronously. Locked until then, so typing can't be overwritten
+            // and the baseline below is the loaded card, not the empty form.
             saveButton.isEnabled = false
+            textInputs.forEach { it.isEnabled = false }
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
                     val char = chatViewModel.getRpRepository().getCharacterById(characterId)
                     if (!isAdded) return@launch
                     if (char == null) {
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_character_gone),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_character_gone))
                         parentFragmentManager.popBackStack()
                         return@launch
                     }
@@ -139,8 +160,16 @@ class RpCharacterEditFragment : Fragment() {
                             showAvatar(RpAvatarStorage.avatarFile(requireContext(), char.id))
                     }
                     baseline = currentSnapshot().copy(avatarChanged = false)
+                    if (listOf(char.instruction, char.prompt).any { it.isNotBlank() } ||
+                        examplesInput.text?.isNotBlank() == true
+                    ) {
+                        setAdvancedOpen(true)
+                    }
                 } finally {
-                    if (isAdded) saveButton.isEnabled = true
+                    if (isAdded) {
+                        textInputs.forEach { it.isEnabled = true }
+                        saveButton.isEnabled = true
+                    }
                 }
             }
         } else {
@@ -159,7 +188,17 @@ class RpCharacterEditFragment : Fragment() {
             if (!saveButton.isEnabled) return@setOnClickListener
             val name = nameInput.text?.toString()?.trim().orEmpty()
             if (name.isBlank()) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_name_required), AppToast.LENGTH_SHORT).show()
+                nameLayout.error = getString(R.string.rp_name_required)
+                nameInput.requestFocus()
+                return@setOnClickListener
+            }
+            val examplesRaw = examplesInput.text?.toString().orEmpty()
+            val parsedExamples = rpDelegate.parseExamplesFromEdit(examplesRaw)
+            if (examplesRaw.isNotBlank() && parsedExamples.isEmpty()) {
+                // The field lives in the folded Advanced section: open it so the error is visible.
+                setAdvancedOpen(true)
+                examplesLayout.error = getString(R.string.rp_examples_format_invalid)
+                examplesInput.requestFocus()
                 return@setOnClickListener
             }
             saveButton.isEnabled = false
@@ -169,25 +208,8 @@ class RpCharacterEditFragment : Fragment() {
                     val existing = if (characterId > 0) repo.getCharacterById(characterId) else null
                     if (characterId > 0 && existing == null) {
                         if (isAdded) {
-                            AppToast.makeText(
-                                requireContext(),
-                                getString(R.string.rp_character_gone),
-                                AppToast.LENGTH_SHORT
-                            ).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_character_gone))
                             parentFragmentManager.popBackStack()
-                        }
-                        return@launch
-                    }
-                    val examplesRaw = examplesInput.text?.toString().orEmpty()
-                    val parsedExamples = rpDelegate.parseExamplesFromEdit(examplesRaw)
-                    if (examplesRaw.isNotBlank() && parsedExamples.isEmpty()) {
-                        if (isAdded) {
-                            AppToast.makeText(
-                                requireContext(),
-                                getString(R.string.rp_examples_format_invalid),
-                                AppToast.LENGTH_LONG
-                            ).show()
-                            saveButton.isEnabled = true
                         }
                         return@launch
                     }
@@ -222,11 +244,7 @@ class RpCharacterEditFragment : Fragment() {
                                 repo.saveCharacter(c.copy(photoUri = saved))
                             }
                         } else if (isAdded) {
-                            AppToast.makeText(
-                                requireContext(),
-                                getString(R.string.rp_avatar_save_failed),
-                                AppToast.LENGTH_LONG
-                            ).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_avatar_save_failed))
                             saveButton.isEnabled = true
                             return@launch
                         }
@@ -241,11 +259,7 @@ class RpCharacterEditFragment : Fragment() {
                 } catch (_: Exception) {
                     if (isAdded) {
                         saveButton.isEnabled = true
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_save_failed),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_save_failed))
                     }
                 }
             }

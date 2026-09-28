@@ -4,12 +4,15 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.widget.SwitchCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.launch
 
 class RpLorebookEditFragment : Fragment() {
@@ -35,11 +38,31 @@ class RpLorebookEditFragment : Fragment() {
         val nameInput = view.findViewById<TextInputEditText>(R.id.rpLoreNameInput)
         val contentInput = view.findViewById<TextInputEditText>(R.id.rpLoreContentInput)
         val saveButton = view.findViewById<MaterialButton>(R.id.saveRpLorebookButton)
+        val nameLayout = view.findViewById<TextInputLayout>(R.id.rpLoreNameLayout)
+        val contentLayout = view.findViewById<TextInputLayout>(R.id.rpLoreContentLayout)
+        val activeSwitch = view.findViewById<SwitchCompat>(R.id.rpLoreActiveSwitch)
+        val inputs = listOf(nameInput, contentInput)
         var baseline = LoreEditSnapshot()
+
+        // The tap target is the whole row; the switch only shows the state.
+        view.findViewById<View>(R.id.rpLoreActiveRow).setOnClickListener {
+            if (saveButton.isEnabled) activeSwitch.toggle()
+        }
+        // Warn, never block: a broken [keys: line still saves, it just reads as plain text.
+        fun checkKeyLines() {
+            val bad = RpLore.malformedKeyLines(contentInput.text?.toString().orEmpty())
+            contentLayout.error = if (bad.isEmpty()) null else getString(
+                R.string.rp_lore_bad_keys,
+                bad.take(3).joinToString(", ")
+            )
+        }
+        nameInput.doAfterTextChanged { nameLayout.error = null }
+        contentInput.doAfterTextChanged { checkKeyLines() }
 
         fun currentSnapshot() = LoreEditSnapshot(
             name = nameInput.text?.toString().orEmpty(),
-            content = contentInput.text?.toString().orEmpty()
+            content = contentInput.text?.toString().orEmpty(),
+            active = activeSwitch.isChecked
         )
         fun navigateUp() {
             if (currentSnapshot() == baseline) {
@@ -63,36 +86,51 @@ class RpLorebookEditFragment : Fragment() {
             }
         )
 
+        // Inputs stay locked until the book is read, so the baseline is the loaded book and typing
+        // can't be overwritten by the load.
+        saveButton.isEnabled = false
+        inputs.forEach { it.isEnabled = false }
         if (lorebookId > 0) {
-            saveButton.isEnabled = false
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
                     val book = chatViewModel.getRpRepository().getLorebookById(lorebookId)
                     if (!isAdded) return@launch
                     if (book == null) {
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_lorebook_gone),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_lorebook_gone))
                         parentFragmentManager.popBackStack()
                         return@launch
                     }
                     nameInput.setText(book.name)
                     contentInput.setText(book.content)
+                    activeSwitch.isChecked = book.isActive
                     baseline = currentSnapshot()
                 } finally {
-                    if (isAdded) saveButton.isEnabled = true
+                    if (isAdded) {
+                        inputs.forEach { it.isEnabled = true }
+                        saveButton.isEnabled = true
+                    }
                 }
             }
         } else {
-            baseline = currentSnapshot()
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    // The first book is the one you'll want in use; later ones start off.
+                    activeSwitch.isChecked = chatViewModel.getRpRepository().getAllLorebooksOnce().isEmpty()
+                    baseline = currentSnapshot()
+                } finally {
+                    if (isAdded) {
+                        inputs.forEach { it.isEnabled = true }
+                        saveButton.isEnabled = true
+                    }
+                }
+            }
         }
         saveButton.setOnClickListener {
             if (!saveButton.isEnabled) return@setOnClickListener
             val name = nameInput.text?.toString()?.trim().orEmpty()
             if (name.isBlank()) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_name_required), AppToast.LENGTH_SHORT).show()
+                nameLayout.error = getString(R.string.rp_name_required)
+                nameInput.requestFocus()
                 return@setOnClickListener
             }
             saveButton.isEnabled = false
@@ -102,43 +140,23 @@ class RpLorebookEditFragment : Fragment() {
                     val existing = if (lorebookId > 0) repo.getLorebookById(lorebookId) else null
                     if (lorebookId > 0 && existing == null) {
                         if (isAdded) {
-                            AppToast.makeText(
-                                requireContext(),
-                                getString(R.string.rp_lorebook_gone),
-                                AppToast.LENGTH_SHORT
-                            ).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_lorebook_gone))
                             parentFragmentManager.popBackStack()
                         }
                         return@launch
                     }
-                    val wasEmpty = lorebookId == 0L && repo.getAllLorebooksOnce().isEmpty()
                     val savedId = repo.saveLorebook(
                         (existing ?: RpLorebook(name = name)).copy(
                             name = name,
                             content = contentInput.text?.toString().orEmpty()
                         )
                     )
-                    if (wasEmpty) {
-                        repo.setActiveLorebook(savedId)
-                        if (isAdded) {
-                            val prefs = SharedPreferencesHelper(requireContext())
-                            val msg = if (prefs.isRpLoreEnabled()) {
-                                getString(R.string.rp_lore_activated)
-                            } else {
-                                getString(R.string.rp_lore_activated_disabled)
-                            }
-                            AppToast.makeText(requireContext(), msg, AppToast.LENGTH_LONG).show()
-                        }
-                    }
+                    repo.setLorebookActive(savedId, activeSwitch.isChecked)
                     if (isAdded) parentFragmentManager.popBackStack()
                 } catch (_: Exception) {
                     if (isAdded) {
                         saveButton.isEnabled = true
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_save_failed),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_save_failed))
                     }
                 }
             }
@@ -147,7 +165,8 @@ class RpLorebookEditFragment : Fragment() {
 
     private data class LoreEditSnapshot(
         val name: String = "",
-        val content: String = ""
+        val content: String = "",
+        val active: Boolean = false
     )
 
     companion object {

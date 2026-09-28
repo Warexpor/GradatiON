@@ -86,6 +86,23 @@ class RpLoreTest {
     }
 
     @Test
+    fun malformedKeyLines_flagsBrokenHeadersOnly() {
+        val text = """
+            Always on.
+            [keys: docks, harbor]
+            fine
+            [keys: docks
+            broken: no closing bracket
+            [Keys: harbor]
+            [keys:]
+            [keys: , ]
+            [notes: not ours, so ignored]
+        """.trimIndent()
+        assertEquals(listOf(4, 6, 7, 8), RpLore.malformedKeyLines(text))
+        assertEquals(emptyList<Int>(), RpLore.malformedKeyLines("plain prose only"))
+    }
+
+    @Test
     fun scanKeepsTheNewestPart() {
         val old = "docks ".repeat(2_000)
         val scan = RpLore.scanOf(listOf(old, "only the locket remains"))

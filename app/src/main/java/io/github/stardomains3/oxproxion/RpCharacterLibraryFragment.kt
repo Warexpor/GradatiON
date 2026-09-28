@@ -18,6 +18,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
@@ -30,6 +31,7 @@ class RpCharacterLibraryFragment : Fragment() {
     private lateinit var adapter: RpCharacterAdapter
     private lateinit var prefs: SharedPreferencesHelper
     private lateinit var emptyView: View
+    private val importer = RpImportFlow(this) { chatViewModel }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_rp_character_library, container, false)
@@ -39,6 +41,9 @@ class RpCharacterLibraryFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         prefs = SharedPreferencesHelper(requireContext())
         emptyView = view.findViewById(R.id.rpCharacterEmpty)
+        emptyView.findViewById<ImageView>(R.id.rpEmptyIcon).setImageResource(R.drawable.ic_person)
+        emptyView.findViewById<TextView>(R.id.rpEmptyTitle).setText(R.string.rp_ui_empty_title)
+        emptyView.findViewById<TextView>(R.id.rpEmptyBody).setText(R.string.rp_ui_empty_body)
         view.findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener {
             parentFragmentManager.popBackStack()
         }
@@ -69,20 +74,12 @@ class RpCharacterLibraryFragment : Fragment() {
                             prefs.saveRpActiveCharacterId(null)
                             chatViewModel.refreshActiveRpCharacter()
                             if (prefs.isRpLlmMode()) {
-                                AppToast.makeText(
-                                    requireContext(),
-                                    getString(R.string.rp_character_deleted_parked),
-                                    AppToast.LENGTH_SHORT
-                                ).show()
+                                GlassNotice.show(requireContext(), getString(R.string.rp_character_deleted_parked))
                             } else {
                                 if (chatViewModel.isRpMode()) {
                                     chatViewModel.startNewChat()
                                 }
-                                AppToast.makeText(
-                                    requireContext(),
-                                    getString(R.string.rp_character_deleted_active),
-                                    AppToast.LENGTH_SHORT
-                                ).show()
+                                GlassNotice.show(requireContext(), getString(R.string.rp_character_deleted_active))
                             }
                         }
                     }
@@ -99,7 +96,8 @@ class RpCharacterLibraryFragment : Fragment() {
         recycler.adapter = adapter
         EmptyState.bind(recycler, emptyView)
         val hint = view.findViewById<View>(R.id.rpCharacterHint)
-        view.findViewById<MaterialButton>(R.id.addRpCharacterButton).setOnClickListener {
+        val addButton = view.findViewById<MaterialButton>(R.id.addRpCharacterButton)
+        val addCharacter = {
             parentFragmentManager.beginTransaction()
                 .withGrokStackAnimations()
                 .hide(this)
@@ -107,10 +105,15 @@ class RpCharacterLibraryFragment : Fragment() {
                 .addToBackStack(null)
                 .commit()
         }
+        addButton.setOnClickListener { addCharacter() }
+        emptyView.findViewById<View>(R.id.rpEmptyCreate).setOnClickListener { addCharacter() }
+        emptyView.findViewById<View>(R.id.rpEmptyImport).setOnClickListener { importer.pickCharacters() }
         chatViewModel.getRpRepository().allCharacters.observe(viewLifecycleOwner) { chars ->
             val list = chars.orEmpty()
             adapter.submit(list, prefs.getRpActiveCharacterId())
             hint.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
+            // The empty state carries its own Create button.
+            addButton.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
         }
     }
 
@@ -130,16 +133,8 @@ class RpCharacterLibraryFragment : Fragment() {
                 cancelText = getString(R.string.rp_facts_fresh),
                 onCancel = { start(false) }
             )
-        } else if (chatViewModel.rpStartChatNeedsConfirm()) {
-            GrokConfirmDialog.show(
-                fragment = this,
-                title = getString(R.string.rp_new_chat_title),
-                message = getString(R.string.rp_new_chat_body, character.name),
-                confirmText = getString(R.string.rp_new_chat_confirm),
-                onConfirm = { start(false) },
-                destructive = false
-            )
         } else {
+            // No "replace this chat?" check: the chat being left is already saved in History.
             start(false)
         }
     }
@@ -192,9 +187,18 @@ class RpCharacterLibraryFragment : Fragment() {
         }
 
         fun submit(list: List<RpCharacter>, activeId: Long?) {
+            val old = items
+            val oldActive = activeCharacterId
             items = list
             activeCharacterId = activeId
-            notifyDataSetChanged()
+            // Only the rows that changed rebind, so the grid doesn't flash on every edit.
+            DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                override fun getOldListSize() = old.size
+                override fun getNewListSize() = list.size
+                override fun areItemsTheSame(o: Int, n: Int) = old[o].id == list[n].id
+                override fun areContentsTheSame(o: Int, n: Int) =
+                    old[o] == list[n] && (old[o].id == oldActive) == (list[n].id == activeId)
+            }).dispatchUpdatesTo(this)
         }
 
         override fun getItemId(position: Int): Long = items[position].id

@@ -102,7 +102,7 @@
                 android:id="@+id/pickAvatarButton"
                 style="@style/Widget.Grokion.Button.Text"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
+                android:layout_height="44dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:minWidth="0dp"
@@ -115,7 +115,7 @@
                 android:id="@+id/clearAvatarButton"
                 style="@style/Widget.Grokion.Button.Text"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
+                android:layout_height="44dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:minWidth="0dp"
@@ -127,19 +127,11 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="8dp"
-            android:text="@string/rp_ui_section_identity"
-            android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
-
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/rpNameLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="24dp"
             android:hint="@string/rp_field_name"
             app:boxBackgroundColor="@color/xai_cell">
 
@@ -147,15 +139,57 @@
                 android:id="@+id/rpNameInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textCapWords" />
+                android:inputType="textCapWords"
+                android:maxLines="1" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/rpPersonalityLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:hint="@string/rp_field_personality"
+            app:boxBackgroundColor="@color/xai_cell"
+            app:helperText="@string/rp_helper_personality"
+            app:helperTextEnabled="true">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/rpPersonalityInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textMultiLine|textCapSentences"
+                android:gravity="top"
+                android:minLines="4" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/rpScenarioLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:hint="@string/rp_field_scenario"
+            app:boxBackgroundColor="@color/xai_cell"
+            app:helperText="@string/rp_helper_scenario"
+            app:helperTextEnabled="true">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/rpScenarioInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textMultiLine|textCapSentences"
+                android:gravity="top"
+                android:minLines="3" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/rpGreetingLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
             android:hint="@string/rp_field_greeting"
-            app:boxBackgroundColor="@color/xai_cell">
+            app:boxBackgroundColor="@color/xai_cell"
+            app:helperText="@string/rp_helper_greeting"
+            app:helperTextEnabled="true">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/rpGreetingInput"
@@ -166,47 +200,15 @@
                 android:minLines="3" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginEnd="16dp"
-            android:text="@string/rp_ui_identity_footer"
-            android:textAppearance="@style/TextAppearance.Gradation.Footnote"
-            android:textSize="12sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginTop="24dp"
-            android:layout_marginBottom="8dp"
-            android:text="@string/rp_ui_section_character"
-            android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
-
         <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:hint="@string/rp_field_personality"
-            app:boxBackgroundColor="@color/xai_cell">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/rpPersonalityInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textMultiLine|textCapSentences"
-                android:gravity="top"
-                android:minLines="3" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/rpStyleLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
             android:hint="@string/rp_field_style"
-            app:boxBackgroundColor="@color/xai_cell">
+            app:boxBackgroundColor="@color/xai_cell"
+            app:helperText="@string/rp_helper_style"
+            app:helperTextEnabled="true">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/rpStyleInput"
@@ -217,88 +219,105 @@
                 android:minLines="2" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.textfield.TextInputLayout
+        <!-- Advanced: seldom needed, so it stays folded until asked for -->
+        <LinearLayout
+            android:id="@+id/rpAdvancedHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:hint="@string/rp_field_scenario"
-            app:boxBackgroundColor="@color/xai_cell">
+            android:layout_marginTop="20dp"
+            android:background="@drawable/bg_press_svg"
+            android:clickable="true"
+            android:contentDescription="@string/rp_ui_advanced_expand"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/rpScenarioInput"
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/rp_ui_section_advanced"
+                android:textAppearance="@style/TextAppearance.Gradation.SectionHeader"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:id="@+id/rpAdvancedChevron"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:contentDescription="@null"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_expand_more"
+                app:tint="@color/xai_mute" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/rpAdvancedGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/rpInstructionLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textMultiLine|textCapSentences"
-                android:gravity="top"
-                android:minLines="2" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:layout_marginTop="6dp"
+                android:hint="@string/rp_field_instruction"
+                app:boxBackgroundColor="@color/xai_cell"
+                app:helperText="@string/rp_helper_instruction"
+                app:helperTextEnabled="true">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginTop="24dp"
-            android:layout_marginBottom="8dp"
-            android:text="@string/rp_ui_section_advanced"
-            android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/rpInstructionInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:gravity="top"
+                    android:minLines="2" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:hint="@string/rp_field_instruction"
-            app:boxBackgroundColor="@color/xai_cell">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/rpInstructionInput"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/rpExamplesLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textMultiLine|textCapSentences"
-                android:gravity="top"
-                android:minLines="2" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:layout_marginTop="14dp"
+                android:hint="@string/rp_field_examples"
+                app:boxBackgroundColor="@color/xai_cell"
+                app:helperText="@string/rp_helper_examples"
+                app:helperTextEnabled="true">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:hint="@string/rp_field_examples"
-            app:boxBackgroundColor="@color/xai_cell">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/rpExamplesInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:gravity="top"
+                    android:minLines="4" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/rpExamplesInput"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/rpPromptLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="textMultiLine|textCapSentences"
-                android:gravity="top"
-                android:minLines="4" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:layout_marginTop="14dp"
+                android:hint="@string/rp_field_prompt_override"
+                app:boxBackgroundColor="@color/xai_cell"
+                app:helperText="@string/rp_helper_prompt_override"
+                app:helperTextEnabled="true">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:hint="@string/rp_field_prompt_override"
-            app:boxBackgroundColor="@color/xai_cell">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/rpPromptInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:gravity="top"
+                    android:minLines="3" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/rpPromptInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textMultiLine|textCapSentences"
-                android:gravity="top"
-                android:minLines="3" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginEnd="16dp"
-            android:text="@string/rp_ui_advanced_footer"
-            android:textAppearance="@style/TextAppearance.Gradation.Footnote"
-            android:textSize="12sp" />
+        </LinearLayout>
 
     </LinearLayout>
     </ScrollView>

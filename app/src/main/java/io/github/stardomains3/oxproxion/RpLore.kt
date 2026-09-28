@@ -34,6 +34,18 @@ object RpLore {
         return out
     }
 
+    /**
+     * 1-based numbers of lines that look like a `[keys: …]` header but are not one: no closing
+     * bracket, no colon, another capitalisation, or no keys. The parser reads those as plain
+     * text (or as always-on lore), which is rarely what the writer meant.
+     */
+    fun malformedKeyLines(content: String): List<Int> =
+        content.lines().mapIndexedNotNull { i, line ->
+            if (!line.trim().startsWith("[keys", ignoreCase = true)) return@mapIndexedNotNull null
+            val keys = header.find(line)?.groupValues?.get(1).orEmpty()
+            if (keys.split(',').any { it.isNotBlank() }) null else i + 1
+        }
+
     /** Newest part of the scene, so a long chat does not keep ancient mentions alive. */
     fun scanOf(parts: List<String>, maxChars: Int = SCAN_CHARS): String {
         val text = parts.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")

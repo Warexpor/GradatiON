@@ -52,7 +52,7 @@ class RpChatDelegate(
      * A pin that points at a deleted book falls back to the active one.
      */
     private suspend fun resolveLore(isLlm: Boolean, character: RpCharacter?, scan: String): String {
-        if (!prefs.isRpLoreEnabled()) return ""
+        rpRepository.retireLoreSwitch(prefs)
         val pinned = if (!isLlm && character != null) prefs.getRpLorebookId(character.id) else null
         val book = if (pinned != null) {
             rpRepository.getLorebookById(pinned) ?: rpRepository.getActiveLorebook()

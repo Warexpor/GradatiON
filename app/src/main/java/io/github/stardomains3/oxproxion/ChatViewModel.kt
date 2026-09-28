@@ -1988,18 +1988,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } == true)
 
     /**
-     * Whether Start chat should confirm before replacing an existing RP thread.
-     * Covers open RP content and a parked RP draft (Ask or empty RP after LLM wipe).
-     */
-    fun rpStartChatNeedsConfirm(): Boolean {
-        if (rpChatHasContent()) return true
-        val draftId = sharedPreferencesHelper.getRpDraftSessionId(ChatMode.RP) ?: return false
-        // Empty open RP that already is the draft pointer — nothing valuable to replace.
-        if (isRpMode() && draftId == currentSessionId) return false
-        return true
-    }
-
-    /**
      * Stash messages from [startIndex] as the alternate branch, then truncate.
      * One fork per chat: restoring swaps the active tail with the stash.
      */

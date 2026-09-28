@@ -507,6 +507,10 @@
         <item name="boxCornerRadiusBottomStart">14dp</item>
         <item name="boxCornerRadiusBottomEnd">14dp</item>
         <item name="boxBackgroundColor">@color/xai_canvas_soft</item>
+        <!-- Helper and error lines default to 12sp; nothing readable goes under 13 -->
+        <item name="helperTextTextAppearance">@style/TextAppearance.Gradation.Footnote</item>
+        <item name="errorTextAppearance">@style/TextAppearance.Gradation.Footnote</item>
+        <item name="errorTextColor">@color/xai_error</item>
     </style>
 
     <!-- Brand wordmark (history header) -->
