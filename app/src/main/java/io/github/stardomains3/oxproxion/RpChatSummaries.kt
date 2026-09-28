@@ -38,7 +38,7 @@ object RpChatSummaries {
         val byId = characters.associateBy { it.id }
         return sessions
             .filter { it.chatMode() == ChatMode.RP }
-            .groupBy { if (it.isLlm) LLM_KEY else it.characterId ?: ORPHAN_KEY - it.id }
+            .groupBy(::groupKey)
             .values
             .map { group ->
                 val newest = group.maxBy { it.timestamp }
@@ -58,6 +58,15 @@ object RpChatSummaries {
                 )
             }
             .sortedByDescending { it.timestamp }
+    }
+
+    private fun groupKey(s: ChatSession): Long = if (s.isLlm) LLM_KEY else s.characterId ?: ORPHAN_KEY - s.id
+
+    /** Every RP chat that shares a row with [sessionId]: the ones a row's delete has to take together. */
+    fun sessionIdsInRowOf(sessions: List<ChatSession>, sessionId: Long): List<Long> {
+        val rp = sessions.filter { it.chatMode() == ChatMode.RP }
+        val key = rp.firstOrNull { it.id == sessionId }?.let(::groupKey) ?: return listOf(sessionId)
+        return rp.filter { groupKey(it) == key }.map { it.id }
     }
 
     /** A stored message as one line of plain text: markdown marks and line breaks folded away. */

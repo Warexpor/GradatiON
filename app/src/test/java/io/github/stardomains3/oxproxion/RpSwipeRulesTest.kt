@@ -81,4 +81,26 @@ class RpSwipeRulesTest {
         assertEquals(listOf("a", "edited"), alts)
         assertEquals(1, index)
     }
+
+    @Test
+    fun continueGrowsOnlyTheSelectedAlternate() {
+        val (alts, index) = RpSwipeRules.replaceSelected(listOf("a", "b", "c"), 1, "b and more")
+        assertEquals(listOf("a", "b and more", "c"), alts)
+        assertEquals(1, index)
+    }
+
+    @Test
+    fun continueSeedsAlternatesWhenThereAreNone() {
+        val (alts, index) = RpSwipeRules.replaceSelected(emptyList(), 0, "whole")
+        assertEquals(listOf("whole"), alts)
+        assertEquals(0, index)
+    }
+
+    @Test
+    fun nextStopsAtTheLastAlternate() {
+        assertTrue(RpSwipeRules.canStepNext(0, 3))
+        assertTrue(RpSwipeRules.canStepNext(1, 3))
+        assertFalse(RpSwipeRules.canStepNext(2, 3))
+        assertFalse(RpSwipeRules.canStepNext(0, 1))
+    }
 }

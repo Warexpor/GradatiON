@@ -44,6 +44,9 @@ object DemoModel {
 
     private val turn = AtomicInteger(0)
 
+    /** Tests replay the script from its first line, so one test's replies never shift the next one's. */
+    fun resetForTesting() = turn.set(0)
+
     /** Multiplies every pause in the stream. Tests set it near 0 so they don't wait on theatre. */
     @Volatile
     var pace: Float = 1f

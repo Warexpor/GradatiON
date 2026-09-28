@@ -679,9 +679,9 @@
             android:orientation="vertical"
             android:gravity="bottom">
 
-        <!-- RP extras: Reminder insert + swipe alternate replies -->
+        <!-- RP edit in progress: the line's text sits in the composer and nothing is removed until it is sent. -->
         <LinearLayout
-            android:id="@+id/rpComposerExtras"
+            android:id="@+id/rpEditBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
@@ -692,94 +692,32 @@
             android:paddingBottom="2dp"
             android:visibility="gone">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/rpReminderButton"
-                style="@style/Widget.Gradation.Button.Tonal"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:minHeight="36dp"
-                android:minWidth="0dp"
-                android:maxWidth="140dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:textSize="13sp"
-                android:contentDescription="@string/rp_insert_reminder_a11y"
-                android:text="@string/rp_insert_reminder" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/rpStreamButton"
-                style="@style/Widget.Gradation.TopToggle"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:layout_marginStart="6dp"
-                android:contentDescription="@string/toggle_streaming"
-                app:icon="@drawable/ic_stream" />
-
-            <View
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
             <LinearLayout
-                android:id="@+id/rpSwipeBar"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
                 android:background="@drawable/bg_model_chip"
-                android:visibility="gone">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rpSwipePrevButton"
-                    style="@style/Widget.Grokion.Button.Text"
-                    android:layout_width="36dp"
-                    android:layout_height="32dp"
-                    android:contentDescription="@string/rp_swipe_prev"
-                    android:insetLeft="0dp"
-                    android:insetTop="0dp"
-                    android:insetRight="0dp"
-                    android:insetBottom="0dp"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
-                    app:icon="@drawable/ic_chevron_left"
-                    app:iconGravity="textStart"
-                    app:iconPadding="0dp"
-                    app:iconSize="18dp"
-                    app:iconTint="@color/xai_ink" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <TextView
-                    android:id="@+id/rpSwipeCounter"
+                    android:id="@+id/rpEditLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:paddingStart="4dp"
-                    android:paddingEnd="4dp"
-                    android:textColor="@color/xai_ink"
+                    android:paddingStart="14dp"
+                    android:text="@string/rp_edit_banner"
+                    android:textColor="@color/xai_mute"
                     android:textFontWeight="500"
                     android:textSize="13sp" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rpSwipeNextButton"
-                    style="@style/Widget.Grokion.Button.Text"
-                    android:layout_width="36dp"
-                    android:layout_height="32dp"
-                    android:contentDescription="@string/rp_swipe_next"
-                    android:insetLeft="0dp"
-                    android:insetTop="0dp"
-                    android:insetRight="0dp"
-                    android:insetBottom="0dp"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="0dp"
-                    app:icon="@drawable/ic_chevron_right"
-                    app:iconGravity="textStart"
-                    app:iconPadding="0dp"
-                    app:iconSize="18dp"
-                    app:iconTint="@color/xai_ink" />
+                <ImageButton
+                    android:id="@+id/rpEditCancel"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_action_press"
+                    android:contentDescription="@string/rp_edit_cancel"
+                    android:padding="15dp"
+                    android:src="@drawable/ic_close_x"
+                    app:tint="@color/xai_mute" />
             </LinearLayout>
         </LinearLayout>
 

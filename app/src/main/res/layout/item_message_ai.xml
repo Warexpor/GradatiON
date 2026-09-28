@@ -284,23 +284,53 @@
                 android:src="@drawable/ic_msg_speak"
                 app:tint="@color/xai_mute" />
 
-            <ImageButton
-                android:id="@+id/instructButton"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:background="@drawable/bg_action_press"
-                android:contentDescription="@string/rp_instruct"
-                android:padding="8dp"
-                android:src="@drawable/ic_msg_instruct"
-                android:visibility="gone"
-                app:tint="@color/xai_mute" />
+            <!-- Roleplay alternates: ‹ n/N › on the last reply, only with two or more. 44dp hit areas. -->
+            <LinearLayout
+                android:id="@+id/rpSwipeNavRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageButton
+                    android:id="@+id/rpSwipePrev"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_action_press"
+                    android:contentDescription="@string/rp_swipe_prev"
+                    android:padding="13dp"
+                    android:src="@drawable/ic_msg_chevron_left"
+                    app:tint="@color/xai_mute" />
+
+                <TextView
+                    android:id="@+id/rpSwipeCounter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="28dp"
+                    android:gravity="center"
+                    android:textColor="@color/xai_mute"
+                    android:textFontWeight="500"
+                    android:textSize="13sp"
+                    tools:text="2/3" />
+
+                <ImageButton
+                    android:id="@+id/rpSwipeNext"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_action_press"
+                    android:contentDescription="@string/rp_swipe_next"
+                    android:padding="13dp"
+                    android:src="@drawable/ic_msg_chevron_right"
+                    app:tint="@color/xai_mute" />
+            </LinearLayout>
 
             <ImageButton
                 android:id="@+id/regenerateButton"
                 android:layout_width="34dp"
                 android:layout_height="34dp"
                 android:background="@drawable/bg_action_press"
-                android:contentDescription="@string/rp_regenerate"
+                android:contentDescription="@string/cd_regenerate"
                 android:padding="8dp"
                 android:src="@drawable/ic_msg_regenerate"
                 app:tint="@color/xai_mute" />

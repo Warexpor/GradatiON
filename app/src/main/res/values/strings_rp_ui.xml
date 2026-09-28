@@ -46,6 +46,9 @@
     <string name="rp_home_menu_new">New chat</string>
     <string name="rp_home_menu_edit">Edit character</string>
     <string name="rp_home_menu_delete">Delete chat</string>
+    <string name="rp_home_menu_delete_all">Delete all chats</string>
+    <string name="rp_home_delete_all_title">Delete all %1$d chats with %2$s?</string>
+    <string name="rp_home_delete_all_body">Every conversation with this character is removed for good.</string>
     <string name="rp_home_delete_title">Delete this chat?</string>
     <string name="rp_home_delete_body">Your conversation with %1$s is removed for good.</string>
     <string name="rp_home_you">You: %1$s</string>

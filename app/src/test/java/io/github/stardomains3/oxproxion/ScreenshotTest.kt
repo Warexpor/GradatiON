@@ -46,6 +46,7 @@ class ScreenshotTest {
     @Before
     fun setUp() {
         DemoModel.pace = 0.02f
+        DemoModel.resetForTesting()
         TestEnv.resetViewModelFactory()
         val ctx = ApplicationProvider.getApplicationContext<Application>()
         Settings.Global.putFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
@@ -871,7 +872,7 @@ class ScreenshotTest {
         val labels = (0 until card.childCount).mapNotNull {
             card.getChildAt(it).findViewById<android.widget.TextView>(R.id.messageMenuLabel)?.text?.toString()
         }
-        org.junit.Assert.assertEquals(listOf("New chat", "Edit character", "Delete chat"), labels)
+        org.junit.Assert.assertEquals(listOf("New chat", "Edit character", "Delete all chats"), labels)
         snap(root(a), "rp_home_menu_dark")
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
@@ -962,6 +963,105 @@ class ScreenshotTest {
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
 
+    /**
+     * The last RP reply carries its own ‹ n/N › between copy and regenerate. Continue keeps the
+     * alternates, and a user line's ⋮ (Edit, Pin, Delete from here) edits without deleting anything
+     * until the edit is sent.
+     */
+    @Test fun rpSwipeAndEditDark() = withChat { a, _ ->
+        seedRp()
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        vm.setModel(DemoModel.ID); idle()
+        val mira = runBlocking { vm.getRpRepository().getAllCharactersOnce() }.first { it.name == "Mira Vance" }
+        vm.startRpChatWithCharacter(mira); settle()
+        val input = a.findViewById<android.widget.EditText>(R.id.chatEditText)
+        val send = a.findViewById<View>(R.id.sendChatButton)
+        val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        fun replies() = vm.chatMessages.value.orEmpty().count { it.role == "assistant" }
+        fun settled() = vm.isAwaitingResponse.value == false
+        input.setText("I shake the rain off and sit down across from her.")
+        send.performClick()
+        waitFor(30_000) { settled() && vm.chatMessages.value.orEmpty().lastOrNull()?.role == "assistant" && replies() >= 2 }
+        idle()
+        // One reply so far: no alternates, so no ‹ n/N ›.
+        fun lastRow(): View = list.getChildAt(list.childCount - 1)
+        org.junit.Assert.assertEquals(View.GONE, lastRow().findViewById<View>(R.id.rpSwipeNavRow).visibility)
+        // Regenerate twice: three alternates, the newest showing.
+        repeat(2) {
+            val before = vm.rpSwipeNav.value?.total ?: 1
+            org.junit.Assert.assertTrue(vm.regenerateLastRpReply())
+            waitFor(30_000) { settled() && (vm.rpSwipeNav.value?.total ?: 0) > before }
+            idle()
+        }
+        org.junit.Assert.assertEquals(3, vm.rpSwipeNav.value?.total)
+        // At the last alternate › is dim and does nothing: it never spends a generation.
+        org.junit.Assert.assertFalse(vm.rpSwipeNav.value!!.canNext)
+        val countBefore = vm.chatMessages.value.orEmpty().size
+        vm.swipeRpNext(); idle()
+        org.junit.Assert.assertFalse(vm.isAwaitingResponse.value == true)
+        org.junit.Assert.assertEquals(countBefore, vm.chatMessages.value.orEmpty().size)
+        vm.swipeRpPrev(); idle(); settle()
+        org.junit.Assert.assertEquals(2, vm.rpSwipeNav.value?.index)
+        val nav = lastRow().findViewById<View>(R.id.rpSwipeNavRow)
+        org.junit.Assert.assertEquals(View.VISIBLE, nav.visibility)
+        org.junit.Assert.assertEquals("2/3", nav.findViewById<android.widget.TextView>(R.id.rpSwipeCounter).text.toString())
+        org.junit.Assert.assertTrue(nav.findViewById<View>(R.id.rpSwipeNext).isEnabled)
+        snap(root(a), "rp_swipe_alternates_dark")
+
+        // Continue grows the alternate being viewed; the others survive.
+        val beforeText = vm.getMessageText(vm.chatMessages.value.orEmpty().last().content)
+        org.junit.Assert.assertTrue(vm.continueRpStory())
+        waitFor(30_000) { settled() && vm.getMessageText(vm.chatMessages.value.orEmpty().last().content).length > beforeText.length }
+        idle()
+        org.junit.Assert.assertEquals("alternates kept through Continue", 3, vm.rpSwipeNav.value?.total)
+        org.junit.Assert.assertEquals(2, vm.rpSwipeNav.value?.index)
+        vm.swipeRpPrev(); idle()
+        vm.swipeRpNext(); idle()
+        org.junit.Assert.assertTrue("the grown text is what the alternate holds",
+            vm.getMessageText(vm.chatMessages.value.orEmpty().last().content).length > beforeText.length)
+        settle()
+
+        // The user line's ⋮.
+        fun userRow(): View = (0 until list.childCount).map { list.getChildAt(it) }
+            .first { it.findViewById<View>(R.id.copyButtonuser) != null }
+        userRow().findViewById<View>(R.id.moreActionsButton).performClick(); idle()
+        var card: View = a.findViewById<View>(R.id.messageMenuLabel)
+        while (card !is GlassLinearLayout) card = card.parent as View
+        val labels = (0 until card.childCount).mapNotNull {
+            card.getChildAt(it).findViewById<android.widget.TextView>(R.id.messageMenuLabel)?.text?.toString()
+        }
+        org.junit.Assert.assertEquals(listOf("Edit", "Pin line", "Delete from here"), labels)
+        org.junit.Assert.assertEquals(View.GONE, userRow().findViewById<View>(R.id.editButton).visibility)
+        snap(root(a), "rp_user_menu_dark")
+
+        // Edit: the text moves to the composer, and the tail stays until the edit is sent.
+        val messagesBefore = vm.chatMessages.value.orEmpty()
+        (0 until card.childCount).map { card.getChildAt(it) }
+            .first { it.findViewById<android.widget.TextView>(R.id.messageMenuLabel)?.text == "Edit" }.performClick(); idle(); settle()
+        org.junit.Assert.assertEquals(messagesBefore.size, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals("I shake the rain off and sit down across from her.", input.text.toString())
+        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.rpEditBar).visibility)
+        snap(root(a), "rp_edit_in_progress_dark")
+
+        // Cancel: composer empty, thread untouched.
+        a.findViewById<View>(R.id.rpEditCancel).performClick(); idle()
+        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.rpEditBar).visibility)
+        org.junit.Assert.assertEquals("", input.text.toString())
+        org.junit.Assert.assertEquals(messagesBefore.size, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals(3, vm.rpSwipeNav.value?.total)
+
+        // Edit again and send: now the tail is replaced.
+        org.junit.Assert.assertTrue(vm.beginRpEdit(messagesBefore.indexOfFirst { it.role == "user" }))
+        input.setText("I stay in the doorway instead."); send.performClick()
+        waitFor(30_000) { settled() && vm.chatMessages.value.orEmpty().let { it.size == 3 && it.last().role == "assistant" } }
+        idle()
+        val after = vm.chatMessages.value.orEmpty()
+        org.junit.Assert.assertEquals("I stay in the doorway instead.", vm.getMessageText(after[1].content))
+        org.junit.Assert.assertNull(vm.rpEditIndex.value)
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
     @Test fun demoModelStreamsWithoutKey() = withChat { a, _ ->
         val vm = ViewModelProvider(a)[ChatViewModel::class.java]
         org.junit.Assert.assertTrue("demo is in the model list",
@@ -973,7 +1073,7 @@ class ScreenshotTest {
         idle()
         val reply = vm.chatMessages.value.orEmpty().last()
         org.junit.Assert.assertEquals("assistant", reply.role)
-        org.junit.Assert.assertTrue(vm.getMessageText(reply.content).contains("demo model"))
+        org.junit.Assert.assertTrue("reply: ${vm.getMessageText(reply.content).take(200)}", vm.getMessageText(reply.content).contains("demo model"))
         org.junit.Assert.assertFalse("thinking came through", reply.reasoning.isNullOrBlank())
         snap(root(a), "chat_demo_reply_dark")
     }

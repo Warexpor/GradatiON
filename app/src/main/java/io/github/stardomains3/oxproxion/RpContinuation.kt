@@ -29,4 +29,11 @@ object RpContinuation {
         if (first in CLOSERS || last in OPENERS) return base + addition
         return "$base $addition"
     }
+
+    /**
+     * The whole reply after a Continue: [base] and [addition] sewn, then run through the reply
+     * cleaner. The bubble and the swipe alternate both use this, so they never drift apart.
+     */
+    fun sew(base: String, addition: String, clean: (String) -> String): String =
+        clean(join(base, addition))
 }

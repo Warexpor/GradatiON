@@ -41,4 +41,9 @@ class RpContinuationTest {
         assert("exactly where it ends" in d)
         assert("mid-sentence" in d)
     }
+
+    @Test fun sewingRunsTheCleanerOverTheWholeReply() {
+        val out = RpContinuation.sew("She waits.", "<think>hm</think>Then nods.", RpReplyCleaner::clean)
+        assertEquals("She waits. Then nods.", out)
+    }
 }

@@ -58,4 +58,20 @@ object RpSwipeRules {
         val next = alts + currentText
         return next to next.lastIndex
     }
+
+    /**
+     * A Continue grew the reply the user was looking at: that alternate becomes [text] and the
+     * others stay. With no alternates yet, [text] seeds the list.
+     */
+    fun replaceSelected(alts: List<String>, selectedIndex: Int, text: String): Pair<List<String>, Int> {
+        if (alts.isEmpty()) return listOf(text) to 0
+        val index = selectedIndex.coerceIn(0, alts.lastIndex)
+        return alts.toMutableList().also { it[index] = text } to index
+    }
+
+    /**
+     * › steps to the next stored alternate. On the last one it does nothing: a new alternate
+     * only ever comes from Regenerate, so an arrow never silently costs a generation.
+     */
+    fun canStepNext(selectedIndex: Int, total: Int): Boolean = selectedIndex < total - 1
 }

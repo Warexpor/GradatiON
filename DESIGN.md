@@ -133,7 +133,8 @@ and never auto-send, and there's no hold-to-talk. While listening:
 - User turns are glass bubbles on the right.
 - Assistant replies have no bubble.
 - Reasoning folds into a "Thinking" row.
-- Roleplay adds a speaker line (avatar and name) and swipe navigation between alternate replies.
+- Roleplay adds a speaker line (avatar and name). The last reply's action row carries `‹ n/N ›` between copy and regenerate when it has two or more alternates; › stops at the last one, and only regenerate makes a new alternate.
+- Roleplay lines pin and edit from their ⋮ (long-press stays text selection). Editing a user line loads it into the composer and removes nothing until it is sent.
 
 **Code transcript.**
 - Each tool call is one line: a kind glyph, the verb in semibold, and a mono argument, with a
@@ -143,7 +144,7 @@ and never auto-send, and there's no hold-to-talk. While listening:
 - The session menu switches between Normal view (folded) and Thinking view (every thought and
   output open).
 
-**Roleplay home.** The Roleplay tab opens on a chats list (`RpChatsHome`): one row per character with the newest chat's last line, time and chat count. New chats start from the top bar button. A row's ⋮ offers New chat, Edit character and Delete chat. Tapping the Roleplay tab again inside a chat returns to it; the composer and chip step aside while it shows.
+**Roleplay home.** The Roleplay tab opens on a chats list (`RpChatsHome`): one row per character with the newest chat's last line, time and chat count. New chats start from the top bar button. A row's ⋮ offers New chat, Edit character and Delete chat (Delete all chats when the row groups several). Back inside a thread returns to this list. Tapping the Roleplay tab again inside a chat returns to it; the composer and chip step aside while it shows.
 
 **Message menu.** The ⋮ on a reply opens `MessageMenu`, a compact context card: label left, icon right, hairlines between rows, destructive rows set apart in the dim red. It is not `PickerPopover`, which stays the composer's picker.
 

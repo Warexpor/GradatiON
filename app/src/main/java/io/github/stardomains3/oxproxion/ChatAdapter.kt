@@ -77,8 +77,19 @@ class ChatAdapter(
             if (messages.isNotEmpty()) notifyDataSetChanged()
         }
 
-    /** Roleplay: long-press a line to keep it when history is trimmed. */
+    /** Roleplay: pin a line (from its ⋮ menu) to keep it when history is trimmed. */
     var onTogglePin: ((Int) -> Unit)? = null
+    /** Roleplay: ‹ and › on the last reply's action row step through its alternates. */
+    var onSwipePrev: (() -> Unit)? = null
+    var onSwipeNext: (() -> Unit)? = null
+    /** Where the last reply sits among its alternates; null or a single one means no ‹ n/N › at all. */
+    var rpSwipeNav: ChatViewModel.RpSwipeNav? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            // Only the last reply carries the control, so only that row needs to rebind.
+            if (isRpMode && messages.isNotEmpty()) notifyItemChanged(messages.lastIndex)
+        }
     /** Tap on a Roleplay reply's speaker line (portrait and name): the character panel. */
     var onSpeakerClick: (() -> Unit)? = null
 
@@ -657,28 +668,24 @@ class ChatAdapter(
     private fun View.marginStartCompat() = (layoutParams as? ViewGroup.MarginLayoutParams)?.marginStart ?: 0
     private fun View.marginEndCompat() = (layoutParams as? ViewGroup.MarginLayoutParams)?.marginEnd ?: 0
 
-    /** A small pin on the line. Only Roleplay installs the long-press, so Ask can still select text. */
-    private fun TextView.bindRpPin(pinned: Boolean, onLongPress: () -> Unit) {
-        if (!isRpMode) {
+    /** A small pin on a kept line. Pinning itself lives in the ⋮ menu, so long-press stays text selection. */
+    private fun TextView.bindRpPinMark(pinned: Boolean) {
+        if (!isRpMode || !pinned) {
             setCompoundDrawablesRelative(null, null, null, null)
-            setOnLongClickListener(null)
             return
         }
-        if (pinned) {
-            val icon = ContextCompat.getDrawable(context, R.drawable.ic_pin)?.mutate()
-            val px = (14 * resources.displayMetrics.density).toInt()
-            icon?.setBounds(0, 0, px, px)
-            icon?.setTint(ContextCompat.getColor(context, R.color.xai_mute))
-            setCompoundDrawablesRelative(icon, null, null, null)
-            compoundDrawablePadding = (6 * resources.displayMetrics.density).toInt()
-        } else {
-            setCompoundDrawablesRelative(null, null, null, null)
-        }
-        setOnLongClickListener {
-            onLongPress()
-            true
-        }
+        val icon = ContextCompat.getDrawable(context, R.drawable.ic_pin)?.mutate()
+        val px = (14 * resources.displayMetrics.density).toInt()
+        icon?.setBounds(0, 0, px, px)
+        icon?.setTint(ContextCompat.getColor(context, R.color.xai_mute))
+        setCompoundDrawablesRelative(icon, null, null, null)
+        compoundDrawablePadding = (6 * resources.displayMetrics.density).toInt()
     }
+
+    private fun pinMenuItem(context: Context, pinned: Boolean, position: Int) = MessageMenu.Item(
+        context.getString(if (pinned) R.string.msg_menu_unpin else R.string.msg_menu_pin),
+        R.drawable.ic_pin
+    ) { onTogglePin?.invoke(position) }
 
     // --- VIEW HOLDERS ---
 
@@ -687,10 +694,10 @@ class ChatAdapter(
         private val messageContainer: ConstraintLayout = itemView.findViewById(R.id.messageContainer)
         private val buttonContainer: LinearLayout = itemView.findViewById(R.id.buttonContainer)
         private val copyButtonuser: ImageButton = itemView.findViewById(R.id.copyButtonuser)
-        private val resendButton: ImageButton = itemView.findViewById(R.id.resendButton)
         private val editButton: ImageButton = itemView.findViewById(R.id.editButton)
         private val imageView: ImageView = itemView.findViewById(R.id.userImageView)
         private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
+        private val moreActionsButton: ImageButton = itemView.findViewById(R.id.moreActionsButton)
         private val collapseToggleButton: ImageButton = itemView.findViewById(R.id.collapseToggleButton)
         private var actionsMsgKey: String = ""
 
@@ -830,16 +837,39 @@ class ChatAdapter(
                 AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_raw_md_copied), AppToast.LENGTH_SHORT).show()
                 true
             }
-            messageTextView.bindRpPin(message.pinned) { onTogglePin?.invoke(bindingAdapterPosition) }
+            messageTextView.bindRpPinMark(message.pinned)
             editButton.setOnClickListener {
                 if (rawUserContent.isNotBlank()) {
                     onEditMessage(bindingAdapterPosition, rawUserContent)
                 }
             }
-            // Regenerated from AI row now; keep listener no-op for ID stability
-            resendButton.setOnClickListener(null)
             deleteButton.setOnClickListener {
                 onDeleteMessage(bindingAdapterPosition)
+            }
+            // Roleplay folds edit, pin and delete into one ⋮ like the reply has, beside copy.
+            val rpMenu = isRpMode && message.role == "user"
+            editButton.visibility = if (rpMenu) View.GONE else View.VISIBLE
+            deleteButton.visibility = if (rpMenu) View.GONE else View.VISIBLE
+            moreActionsButton.visibility = if (rpMenu) View.VISIBLE else View.GONE
+            if (rpMenu) {
+                val ctx = itemView.context
+                val pinned = message.pinned
+                moreActionsButton.setOnClickListener {
+                    val position = bindingAdapterPosition
+                    if (position < 0) return@setOnClickListener
+                    val rows = listOf(
+                        MessageMenu.Item(ctx.getString(R.string.msg_menu_edit), R.drawable.ic_msg_edit) {
+                            if (rawUserContent.isNotBlank()) onEditMessage(position, rawUserContent)
+                        },
+                        pinMenuItem(ctx, pinned, position),
+                        MessageMenu.Item(ctx.getString(R.string.msg_menu_delete_from_here), R.drawable.ic_msg_delete, destructive = true) {
+                            onDeleteMessage(position)
+                        }
+                    )
+                    onMessageMenu?.invoke(moreActionsButton, rows)
+                }
+            } else {
+                moreActionsButton.setOnClickListener(null)
             }
         }
     }
@@ -862,7 +892,7 @@ class ChatAdapter(
         private val moreActionsButton: ImageButton = itemView.findViewById(R.id.moreActionsButton)
 
         /** ⋮ after Regenerate: Read aloud, Instruct (Roleplay's last reply) and Edit. */
-        private fun bindMoreActions(speakingHere: Boolean, canInstruct: Boolean) {
+        private fun bindMoreActions(speakingHere: Boolean, canInstruct: Boolean, pinnable: Boolean, pinned: Boolean) {
             val ctx = itemView.context
             val rows = buildList {
                 if (ttsAvailable) add(MessageMenu.Item(
@@ -870,15 +900,38 @@ class ChatAdapter(
                     if (speakingHere) R.drawable.ic_msg_stop else R.drawable.ic_msg_speak,
                 ) { ttsButton.performClick() })
                 if (canInstruct) add(MessageMenu.Item(ctx.getString(R.string.msg_menu_instruct), R.drawable.ic_msg_instruct) {
-                    instructButton.performClick()
+                    val pos = bindingAdapterPosition
+                    if (pos in messages.indices) onInstructMessage(pos)
                 })
                 add(MessageMenu.Item(ctx.getString(R.string.msg_menu_edit), R.drawable.ic_msg_edit) {
                     editButton.performClick()
                 })
+                if (pinnable) add(pinMenuItem(ctx, pinned, bindingAdapterPosition))
             }
             moreActionsButton.setOnClickListener { onMessageMenu?.invoke(moreActionsButton, rows) }
         }
-        private val instructButton: ImageButton = itemView.findViewById(R.id.instructButton)
+        private val rpSwipeNavRow: View = itemView.findViewById(R.id.rpSwipeNavRow)
+        private val rpSwipePrev: ImageButton = itemView.findViewById(R.id.rpSwipePrev)
+        private val rpSwipeNext: ImageButton = itemView.findViewById(R.id.rpSwipeNext)
+        private val rpSwipeCounter: TextView = itemView.findViewById(R.id.rpSwipeCounter)
+
+        /** ‹ n/N › between copy and regenerate: shown only on the last reply, and only with 2+ alternates. */
+        private fun bindRpSwipeNav(show: Boolean) {
+            val nav = rpSwipeNav
+            if (!show || nav == null || nav.total < 2) {
+                rpSwipeNavRow.visibility = View.GONE
+                return
+            }
+            rpSwipeNavRow.visibility = View.VISIBLE
+            rpSwipeCounter.text = itemView.context.getString(R.string.rp_swipe_counter, nav.index, nav.total)
+            // The ends dim instead of vanishing so the counter never jumps sideways.
+            rpSwipePrev.isEnabled = nav.canPrev
+            rpSwipePrev.alpha = if (nav.canPrev) 1f else 0.35f
+            rpSwipeNext.isEnabled = nav.canNext
+            rpSwipeNext.alpha = if (nav.canNext) 1f else 0.35f
+            rpSwipePrev.setOnClickListener { onSwipePrev?.invoke() }
+            rpSwipeNext.setOnClickListener { onSwipeNext?.invoke() }
+        }
         private val generatedImageView: ImageView = itemView.findViewById(R.id.generatedImageView)
         val messageContainer: ConstraintLayout = itemView.findViewById(R.id.messageContainer)
         private var pulseAnimator: ObjectAnimator? = null
@@ -1368,11 +1421,6 @@ class ChatAdapter(
                     onRedoMessage(pos - 1, prev.content)
                 }
             }
-            instructButton.setOnClickListener {
-                val pos = bindingAdapterPosition
-                if (pos < 0 || pos >= messages.size) return@setOnClickListener
-                onInstructMessage(pos)
-            }
             val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" }
             val lastUserIndex = messages.indexOfLast { it.role == "user" }
             val hasUserTurn = lastUserIndex >= 0
@@ -1383,7 +1431,7 @@ class ChatAdapter(
                 position == lastAssistantIndex &&
                 lastAssistantIndex > lastUserIndex &&
                 !isThinking
-            instructButton.visibility = View.GONE
+            bindRpSwipeNav(showRpActions)
             regenerateButton.visibility = if (
                 position > 0 &&
                 position < messages.size &&
@@ -1407,7 +1455,7 @@ class ChatAdapter(
                 AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_raw_md_copied), AppToast.LENGTH_SHORT).show()
                 true
             }
-            messageTextView.bindRpPin(message.pinned) { onTogglePin?.invoke(bindingAdapterPosition) }
+            messageTextView.bindRpPinMark(message.pinned)
 
             shareButton.setOnClickListener {
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -1439,6 +1487,8 @@ class ChatAdapter(
             bindMoreActions(
                 speakingHere = isSpeaking && position == currentPosition,
                 canInstruct = showRpActions,
+                pinnable = isRpMode && !isThinking,
+                pinned = message.pinned,
             )
 
             ttsButton.setOnClickListener {

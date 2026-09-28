@@ -235,13 +235,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var copyChatButton: MaterialButton
     private lateinit var buttonsRow2: LinearLayout
     private lateinit var chatInputContainer: LinearLayout
-    private lateinit var rpComposerExtras: LinearLayout
-    private lateinit var rpReminderButton: MaterialButton
-    private lateinit var rpStreamButton: MaterialButton
-    private lateinit var rpSwipeBar: LinearLayout
-    private lateinit var rpSwipePrevButton: MaterialButton
-    private lateinit var rpSwipeNextButton: MaterialButton
-    private lateinit var rpSwipeCounter: TextView
+    private lateinit var rpEditBar: View
+    /** The composer text an RP edit started from, so backing out can drop it if it was left untouched. */
+    private var rpEditOriginal: String? = null
     private lateinit var expandedButtonContainer: LinearLayout
     private lateinit var leftButtonContainer: LinearLayout
     private lateinit var rightButtonContainer: LinearLayout
@@ -456,17 +452,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         printButton =   view.findViewById(R.id.printButton)
         buttonsRow2 = view.findViewById(R.id.buttonsRow2)
         chatInputContainer = view.findViewById(R.id.chatInputContainer)
-        rpComposerExtras = view.findViewById(R.id.rpComposerExtras)
-        rpReminderButton = view.findViewById(R.id.rpReminderButton)
-        rpStreamButton = view.findViewById(R.id.rpStreamButton)
-        rpSwipeBar = view.findViewById(R.id.rpSwipeBar)
-        rpSwipePrevButton = view.findViewById(R.id.rpSwipePrevButton)
-        rpSwipeNextButton = view.findViewById(R.id.rpSwipeNextButton)
-        rpSwipeCounter = view.findViewById(R.id.rpSwipeCounter)
-        rpSwipePrevButton.setOnClickListener { viewModel.swipeRpPrev() }
-        rpSwipeNextButton.setOnClickListener { viewModel.swipeRpNext() }
-        rpReminderButton.setOnClickListener { insertRpReminderTemplate() }
-        rpStreamButton.setOnClickListener { streamButton.performClick() }
+        rpEditBar = view.findViewById(R.id.rpEditBar)
+        view.findViewById<View>(R.id.rpEditCancel).setOnClickListener { cancelRpEdit(clearComposer = true) }
         viewModel.hasChatFork.observe(viewLifecycleOwner) {
             if (::chatAdapter.isInitialized) {
                 chatAdapter.notifyDataSetChanged()
@@ -709,8 +696,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         // Compact glass controls keep their size; their hit areas grow to 44dp.
         TouchTargets.expand(
             view.findViewById(R.id.composerDock),
-            menuButton, controlsButton, modelNameTextView, speechButton, sendChatButton,
-            rpReminderButton, rpStreamButton, rpSwipePrevButton, rpSwipeNextButton
+            menuButton, controlsButton, modelNameTextView, speechButton, sendChatButton
         )
         TouchTargets.expand(view.findViewById(R.id.extBG), scrollToTopButton, scrollToBottomButton, presetsButton2)
         TouchTargets.expand(removeAttachmentButton.parent as ViewGroup, removeAttachmentButton)
@@ -719,6 +705,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         chatEditText.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                // Emptying the composer is how an RP edit is abandoned; the tail was never removed.
+                if (s.isNullOrEmpty() && viewModel.rpEditIndex.value != null) cancelRpEdit(clearComposer = false)
                 if (headerContainer.isVisible && count > 0) { // Hide on first character input (touch on key)
                     hideMenu()
                     // Optional: chatEditText.removeTextChangedListener(this) // Remove after first hide
@@ -844,7 +832,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             event.getContentIfNotHandled()?.let { updateRpChrome() }
         }
         viewModel.rpSwipeNav.observe(viewLifecycleOwner) { nav ->
-            applyRpSwipeChrome(nav)
+            chatAdapter.rpSwipeNav = nav.takeIf { viewModel.isRpMode() }
+        }
+        viewModel.rpEditIndex.observe(viewLifecycleOwner) { index ->
+            rpEditBar.visibility = if (index != null) View.VISIBLE else View.GONE
+            // The edit ended without a send (session change, delete): drop the text it loaded, if untouched.
+            if (index == null && rpEditOriginal != null) cancelRpEdit(clearComposer = false)
         }
         // Code mode (third tab, on by default, Settings > Modes turns it off) lives in its own package; see CodeModeHost.
         codeMode = io.github.stardomains3.oxproxion.code.CodeModeHost(this, view)
@@ -1019,7 +1012,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 // Autosave always on: persist with LLM title when streaming completes
                 viewModel.autoSaveChat()
             }
-            applyRpSwipeChrome(viewModel.rpSwipeNav.value)
             sendChatButton.isEnabled = true
             val materialButton = sendChatButton
             val morphMs = resources.getInteger(R.integer.motion_send_morph).toLong()
@@ -1133,14 +1125,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         // --- Credits Observer ---
         viewModel.creditsResult.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { resultMessage ->
-                AppToast.makeText(requireContext(), resultMessage, AppToast.LENGTH_LONG).show()
+                // Toasts are silenced app-wide; these messages say why nothing happened.
+                GlassNotice.show(requireContext(), resultMessage)
             }
         }
 
         viewModel.isStreamingEnabled.observe(viewLifecycleOwner) { isEnabled ->
             streamButton.isSelected = isEnabled
             topStreamButton.isSelected = isEnabled
-            if (::rpStreamButton.isInitialized) rpStreamButton.isSelected = isEnabled
             updateStreamToggleAppearance(isEnabled)
         }
 
@@ -1562,7 +1554,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         chatInputContainer.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             if (headerContainer.isVisible) headerContainer.post { placeControlsCard() }
         }
-        rpComposerExtras.addOnLayoutChangeListener(relayout)
+        rpEditBar.addOnLayoutChangeListener(relayout)
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 updateTopBarEdge()
@@ -1832,16 +1824,18 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 selectedImageMime = null
                 attachmentPreviewContainer.visibility = View.GONE
                 viewModel.setPendingUserImageUri(null)
-                if (viewModel.isRpMode()) {
-                    viewModel.truncateForRpEdit(position)
+                val rp = viewModel.isRpMode()
+                // Roleplay removes nothing yet: the tail goes only when this edit is sent.
+                if (rp && !viewModel.beginRpEdit(position)) {
+                    // Not a user line any more; nothing to edit.
                 } else {
-                    viewModel.stashAndTruncateFrom(position, anchorAssistantIndex = -1)
+                    if (rp) rpEditOriginal = text else viewModel.stashAndTruncateFrom(position, anchorAssistantIndex = -1)
+                    chatEditText.setText(text)
+                    chatEditText.setSelection(text.length)
+                    hideMenu()
+                    chatEditText.showKeyboard()
+                    if (!rp) viewModel.autoSaveChat()
                 }
-                chatEditText.setText(text)
-                chatEditText.setSelection(text.length)
-                hideMenu()
-                chatEditText.showKeyboard()
-                viewModel.autoSaveChat()
             },
             onRedoMessage = { position, _ ->
                 if (viewModel.isRpMode()) {
@@ -1969,13 +1963,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         chatAdapter.onTogglePin = { index ->
             val pinned = viewModel.toggleMessagePin(index)
             if (pinned != null) {
-                AppToast.makeText(
-                    requireContext(),
-                    getString(if (pinned) R.string.rp_pin_on else R.string.rp_pin_off),
-                    AppToast.LENGTH_SHORT
-                ).show()
+                GlassNotice.show(requireContext(), getString(if (pinned) R.string.rp_pin_on else R.string.rp_pin_off))
             }
         }
+        chatAdapter.onSwipePrev = { viewModel.swipeRpPrev() }
+        chatAdapter.onSwipeNext = { viewModel.swipeRpNext() }
         chatRecyclerView.apply {
             adapter = chatAdapter
             layoutManager = this@ChatFragment.layoutManager
@@ -2051,8 +2043,24 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         notificationManager.cancel(2)
 
     }
+    /** Back out of an RP edit: the tail was never touched. The composer is emptied unless the user has been rewriting it. */
+    private fun cancelRpEdit(clearComposer: Boolean) {
+        val original = rpEditOriginal
+        rpEditOriginal = null
+        viewModel.cancelRpEdit()
+        if (original != null && (clearComposer || chatEditText.text?.toString() == original)) {
+            chatEditText.setText("")
+        }
+    }
+
     private fun performNewChat() {
         if (viewModel.chatMessages.value.isNullOrEmpty()) return
+        val rpCharacter = viewModel.activeRpCharacter.value
+        if (viewModel.isRpMode() && rpCharacter != null && !sharedPreferencesHelper.isRpLlmMode()) {
+            // Same road as every other Roleplay "new chat": the Facts question, and a typed draft stays.
+            startRpWith(rpCharacter, keepDraft = true)
+            return
+        }
         viewModel.startFreshChatForCurrentMode()
         chatEditText.setText("")
         chatEditText.text.clear()
@@ -2211,16 +2219,17 @@ $cleanContent
                     // RP: validate before clearing the composer so character-gate failures keep the draft.
                     if (viewModel.isRpMode()) {
                         if (!viewModel.canSendRpMessage()) {
-                            AppToast.makeText(requireContext(), getString(R.string.rp_select_character), AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_select_character))
                             return@setOnClickListener
                         }
                         if (viewModel.isAwaitingResponse.value == true) {
-                            AppToast.makeText(requireContext(), getString(R.string.rp_wait_for_reply), AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_wait_for_reply))
                             return@setOnClickListener
                         }
                         if (!viewModel.sendRpUserMessage(substitutedPrompt)) {
                             return@setOnClickListener
                         }
+                        rpEditOriginal = null
                         chatEditText.setText("")
                         chatEditText.text.clear()
                         return@setOnClickListener
@@ -2324,10 +2333,6 @@ $cleanContent
                 .addToBackStack(null)
                 .commit()
         }
-        resetChatButton.setOnLongClickListener {
-            performNewChat()
-            true
-        }
         resetChatButton.setOnClickListener {
             performNewChat()
         }
@@ -2363,9 +2368,6 @@ $cleanContent
             if (codeMode.isActive) return@setOnClickListener codeMode.onNewPressed()
             if (rpHome?.isShown == true) return@setOnClickListener showCharacterPopover(newChatButton)
             resetChatButton.performClick()
-        }
-        newChatButton.setOnLongClickListener {
-            resetChatButton.performLongClick()
         }
         topWebSearchButton.setOnLongClickListener {
             showWebSearchEngineDialog()
@@ -3604,15 +3606,8 @@ $cleanContent
         rows += PickerPopover.Row(getString(R.string.rp_plus_reminder), getString(R.string.rp_plus_reminder_sub), R.drawable.ic_nav_prompts) {
             insertRpReminderTemplate()
         }
-        val streaming = streamButton.isSelected
-        rows += PickerPopover.Row(
-            getString(R.string.rp_plus_stream),
-            getString(if (streaming) R.string.rp_plus_stream_on else R.string.rp_plus_stream_off),
-            R.drawable.ic_stream,
-            selected = streaming
-        ) { streamButton.performClick() }
         val footer = listOf(
-            PickerPopover.Row(getString(R.string.drawer_nav_roleplay), getString(R.string.rp_plus_home_sub), R.drawable.ic_nav_characters) { openRpHub() }
+            PickerPopover.Row(getString(R.string.rp_plus_library), getString(R.string.rp_plus_home_sub), R.drawable.ic_nav_characters) { openRpHub() }
         )
         setAttachPlusOpen(true)
         newPopover(menuButton) { open -> if (!open) setAttachPlusOpen(false) }?.show(
@@ -3889,9 +3884,6 @@ $cleanContent
     private fun updateStreamToggleAppearance(isEnabled: Boolean) {
         streamButton.isSelected = isEnabled
         topStreamButton.isSelected = isEnabled
-        if (::rpStreamButton.isInitialized) {
-            rpStreamButton.isSelected = isEnabled
-        }
     }
 
     private fun updateReasoningButtonAppearance() {
@@ -4379,7 +4371,7 @@ $cleanContent
          */
         fun bottomBarTop(): Float? {
             val bars = listOfNotNull(
-                dock, rpComposerExtras, attachmentPreviewContainer,
+                dock, rpEditBar, attachmentPreviewContainer,
                 root.findViewById<View>(R.id.codeHomeComposer)
             ).filter { it.isShown && it.height > 0 }
             if (bars.isEmpty()) return null
@@ -4785,6 +4777,11 @@ $cleanContent
         } else if (menuClosedByTouch) {
             menuClosedByTouch = false  // Reset immediately
             return true  // Consume to prevent app hide (menu already closed by touch)
+        }
+        // Inside a Roleplay thread, back goes up to the chats list; only from the list does it leave.
+        if (viewModel.isRpMode() && !rpHomeOpen) {
+            openRpHome()
+            return true
         }
         return false  // Allow normal back (e.g., exit app)
     }
@@ -5622,6 +5619,7 @@ $cleanContent
     /** Back to the chats list. */
     fun openRpHome() {
         if (!viewModel.isRpMode()) return
+        cancelRpEdit(clearComposer = true)
         rpHomeOpen = true
         updateRpHome()
     }
@@ -5647,17 +5645,25 @@ $cleanContent
                     viewModel.startRpLlmChat()
                 })
             }
-            add(MessageMenu.Item(getString(R.string.rp_home_menu_delete), R.drawable.ic_msg_delete, destructive = true) {
+            // A row stands for every chat with that character, so its delete takes all of them;
+            // deleting only the newest would just surface the next one in the same row.
+            val doomed = RpChatSummaries.sessionIdsInRowOf(rpHomeSessions, row.sessionId)
+            val many = doomed.size > 1
+            add(MessageMenu.Item(getString(if (many) R.string.rp_home_menu_delete_all else R.string.rp_home_menu_delete), R.drawable.ic_msg_delete, destructive = true) {
                 GrokConfirmDialog.show(
                     fragment = this@ChatFragment,
-                    title = getString(R.string.rp_home_delete_title),
-                    message = getString(R.string.rp_home_delete_body, row.name),
+                    title = if (many) getString(R.string.rp_home_delete_all_title, doomed.size, row.name)
+                        else getString(R.string.rp_home_delete_title),
+                    message = if (many) getString(R.string.rp_home_delete_all_body)
+                        else getString(R.string.rp_home_delete_body, row.name),
                     confirmText = getString(R.string.rp_menu_delete),
                     onConfirm = {
-                        sharedPreferencesHelper.setSessionPinned(row.sessionId, false)
-                        viewModel.notifySessionDeleted(row.sessionId)
-                        ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[SavedChatsViewModel::class.java]
-                            .deleteSession(row.sessionId)
+                        val savedChats = ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[SavedChatsViewModel::class.java]
+                        doomed.forEach { id ->
+                            sharedPreferencesHelper.setSessionPinned(id, false)
+                            viewModel.notifySessionDeleted(id)
+                            savedChats.deleteSession(id)
+                        }
                     }
                 )
             })
@@ -5755,7 +5761,7 @@ $cleanContent
                     avatar = file.takeIf { it.exists() },
                     monogram = c.name.trim().take(1).uppercase().ifEmpty { "?" },
                     selected = c.id == activeId,
-                    onClick = { if (c.id != activeId) startRpWith(c) }
+                    onClick = { startRpWith(c) }
                 )
             }
             val model = viewModel.activeChatModel.value?.let { viewModel.getModelDisplayName(it) }
@@ -5987,10 +5993,11 @@ $cleanContent
             .commit()
     }
 
-    private fun startRpWith(character: RpCharacter) {
+    private fun startRpWith(character: RpCharacter, keepDraft: Boolean = false) {
+        // The chat being left is already saved in History, so starting a new one needs no confirm.
         val start = { carry: Boolean ->
             closeRpHome()
-            viewModel.startRpChatWithCharacter(character, carry)
+            viewModel.startRpChatWithCharacter(character, carry, keepDraft)
         }
         if (viewModel.currentRpFacts().isNotBlank()) {
             GrokConfirmDialog.show(
@@ -6002,15 +6009,6 @@ $cleanContent
                 destructive = false,
                 cancelText = getString(R.string.rp_facts_fresh),
                 onCancel = { start(false) }
-            )
-        } else if (viewModel.rpStartChatNeedsConfirm()) {
-            GrokConfirmDialog.show(
-                fragment = this,
-                title = getString(R.string.rp_new_chat_title),
-                message = getString(R.string.rp_new_chat_body, character.name),
-                confirmText = getString(R.string.rp_new_chat_confirm),
-                onConfirm = { start(false) },
-                destructive = false
             )
         } else {
             start(false)
@@ -6108,20 +6106,6 @@ $cleanContent
         indicatorPlaced = true
     }
 
-    private fun applyRpSwipeChrome(nav: ChatViewModel.RpSwipeNav?) {
-        if (!::rpSwipeBar.isInitialized) return
-        if (nav == null || !viewModel.isRpMode()) {
-            rpSwipeBar.visibility = View.GONE
-            return
-        }
-        val awaiting = viewModel.isAwaitingResponse.value == true
-        rpSwipeBar.visibility = View.VISIBLE
-        rpSwipeCounter.text = "${nav.index}/${nav.total}"
-        // Keep bar visible during regen so the index stays readable, but block interaction.
-        rpSwipePrevButton.isEnabled = nav.canPrev && !awaiting
-        rpSwipeNextButton.isEnabled = nav.canNext && !awaiting
-    }
-
     private fun updateRpChrome() {
         val rp = viewModel.isRpMode()
         chatAdapter.isRpMode = rp
@@ -6136,11 +6120,8 @@ $cleanContent
         menuButton.contentDescription = getString(
             if (rp) R.string.rp_plus_a11y else R.string.attach_content_description
         )
-        // Reminder / streaming live in the + menu now; the loose chip row is gone.
-        rpComposerExtras.visibility = View.GONE
-        if (!rp) {
-            rpSwipeBar.visibility = View.GONE
-        }
+        if (!rp) viewModel.cancelRpEdit()
+        chatAdapter.rpSwipeNav = viewModel.rpSwipeNav.value.takeIf { rp }
         updateSendButtonChrome()
         val activeChar = viewModel.activeRpCharacter.value
         val llm = sharedPreferencesHelper.isRpLlmMode()

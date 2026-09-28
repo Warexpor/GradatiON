@@ -345,6 +345,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _rpSwipeNav = MutableLiveData<RpSwipeNav?>()
     val rpSwipeNav: LiveData<RpSwipeNav?> = _rpSwipeNav
 
+    /**
+     * Roleplay: the index of the user line being edited, else null. The tail after it stays in
+     * the thread until the edit is sent, so backing out loses nothing.
+     */
+    private val _rpEditIndex = MutableLiveData<Int?>(null)
+    val rpEditIndex: LiveData<Int?> = _rpEditIndex
+
     data class RpSwipeNav(
         val index: Int,
         val total: Int,
@@ -487,7 +494,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _toastUiEvent.postValue(Event(text.removePrefix("**Error:**").trim().trimStart('-').trim().ifBlank { text }))
             return piece.copy(content = JsonPrimitive(base))
         }
-        return piece.copy(content = JsonPrimitive(RpContinuation.join(base, text)))
+        return piece.copy(content = JsonPrimitive(RpContinuation.sew(base, text, rpDelegate::cleanReply)))
     }
 
     private fun removeAssistantPlaceholder(thinkingMessage: FlexibleMessage?) {
@@ -665,6 +672,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun beginSessionTransition(block: suspend () -> Unit): Job {
         // Restore mid-regen first so a truncated hole isn't autosaved into the old session.
         cancelCurrentRequest(restoreSwipeAlt = true)
+        _rpEditIndex.value = null
         sessionEpoch++
         sessionTransitionJob?.cancel()
         val job = viewModelScope.launch { block() }
@@ -1442,6 +1450,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         newList[position] = updatedMessage
         _chatMessages.value = newList
         syncRpSwipeAltAfterAssistantEdit(position, newContent)
+        // Pins are keyed by role and text, so an edited pinned line needs its key re-cut.
+        if (isRpMode() && updatedMessage.pinned) currentSessionId?.let { persistRpPins(it, newList) }
         autoSaveChat()
     }
 
@@ -2026,16 +2036,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (index < 0 || index >= current.size) return
         current.subList(index, current.size).clear()
         _chatMessages.value = current
+        _rpEditIndex.value = null
         syncRpSwipeAfterTranscriptChange()
         autoSaveChat()
     }
 
+    /** Start editing the RP user line at [index]. Nothing is removed until [sendRpUserMessage] sends it. */
+    fun beginRpEdit(index: Int): Boolean {
+        val msg = _chatMessages.value?.getOrNull(index) ?: return false
+        if (!isRpMode() || msg.role != "user") return false
+        _rpEditIndex.value = index
+        return true
+    }
+
+    fun cancelRpEdit() {
+        if (_rpEditIndex.value != null) _rpEditIndex.value = null
+    }
+
     /** Truncate for RP user-edit without creating an Ask-mode fork or leaving stale swipe state. */
-    fun truncateForRpEdit(startIndex: Int) {
+    private fun truncateForRpEdit(startIndex: Int) {
         truncateWithoutFork(startIndex)
         clearForkMemory()
         clearRpSwipeMemory()
-        currentSessionId?.let { rpSwipeStore.clear(it) }
+        currentSessionId?.let {
+            rpSwipeStore.clear(it)
+            persistRpPins(it, _chatMessages.value.orEmpty())
+        }
         autoSaveChat()
     }
 
@@ -3664,7 +3690,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return cleaned
         }
         maybeUpdateRpMemory(cleaned)
-        if (pendingRpSwipeAppend) {
+        val base = continuationBase
+        if (base != null) {
+            // Continue grew the reply on screen, so the alternate being viewed grows with it.
+            // The others stay: a Continue must not throw away the user's swipes.
+            val (alts, index) = RpSwipeRules.replaceSelected(
+                rpSwipeState.alts,
+                rpSwipeState.index,
+                RpContinuation.sew(base, cleaned, rpDelegate::cleanReply)
+            )
+            rpSwipeState = RpSwipeState(alts = alts, index = index)
+            persistRpSwipeState()
+            updateRpSwipeNav()
+        } else if (pendingRpSwipeAppend) {
             pendingRpSwipeAppend = false
             appendRpSwipeAlt(cleaned)
         } else if (rpSwipeState.alts.isEmpty()) {
@@ -3786,7 +3824,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         setChatMode(next)
     }
 
-    fun startRpChatWithCharacter(character: RpCharacter, carryFacts: Boolean = false) {
+    fun startRpChatWithCharacter(character: RpCharacter, carryFacts: Boolean = false, keepDraft: Boolean = false) {
         _rpThreadOpenedEvent.value = Event(Unit)
         val facts = if (carryFacts) currentRpFacts() else ""
         beginSessionTransition {
@@ -3810,8 +3848,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 FlexibleMessage(role = "assistant", content = JsonPrimitive(greeting))
             )
             autoSaveChat()
-            // Drop leftover composer text from the previous thread.
-            _composerRestoreEvent.value = Event("")
+            // Drop leftover composer text from the previous thread, unless the user typed it for this one.
+            if (!keepDraft) _composerRestoreEvent.value = Event("")
         }
     }
 
@@ -3911,6 +3949,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun continueRpStory(): Boolean = sendRpUserMessage("", continueBeat = true)
 
     fun sendRpUserMessage(rawText: String, messageInstruct: String? = null, continueBeat: Boolean = false): Boolean {
+        val editFrom = _rpEditIndex.value
         val parsed = rpDelegate.parseSendText(rawText).let {
             if (!continueBeat) it
             else it.copy(reminder = listOfNotNull(RpPromptEngine.CONTINUE_DIRECTION, it.reminder).joinToString("\n"))
@@ -3930,6 +3969,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (_isAwaitingResponse.value == true) {
             _toastUiEvent.postValue(Event(app.getString(R.string.rp_wait_for_reply)))
             return false
+        }
+        // An edit takes effect only now: the line and everything after it are replaced by this send.
+        if (editFrom != null) {
+            _rpEditIndex.value = null
+            if (_chatMessages.value?.getOrNull(editFrom)?.role == "user") truncateForRpEdit(editFrom)
         }
         _isAwaitingResponse.value = true
         val epoch = sessionEpoch
@@ -3963,7 +4007,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (!sendUserMessage(
                         JsonPrimitive(userText),
                         systemPrompt,
-                        clearRpSwipeOnStart = true,
+                        clearRpSwipeOnStart = !continueBeat,
                         continueInPlace = continueBeat
                     )
                 ) {
@@ -4028,9 +4072,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
             return false
         }
-        _toastUiEvent.postValue(
-            Event(getApplication<Application>().getString(R.string.rp_regen_started))
-        )
         // Block Ask↔RP before truncate + async prompt build.
         _isAwaitingResponse.value = true
         val epoch = sessionEpoch
@@ -4139,14 +4180,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun swipeRpNext() {
         if (!canInteractWithRpSwipe()) return
-        if (rpSwipeState.alts.isEmpty()) {
-            regenerateLastRpReply()
-            return
-        }
-        if (rpSwipeState.index < rpSwipeState.alts.lastIndex) {
+        // Past the last alternate there is nothing to show; Regenerate is the only way to make one.
+        if (RpSwipeRules.canStepNext(rpSwipeState.index, rpSwipeState.alts.size)) {
             applyRpSwipeIndex(rpSwipeState.index + 1)
-        } else {
-            regenerateLastRpReply()
         }
     }
 
@@ -4203,7 +4239,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 index = rpSwipeState.index + 1,
                 total = rpSwipeState.alts.size,
                 canPrev = rpSwipeState.index > 0,
-                canNext = true
+                canNext = RpSwipeRules.canStepNext(rpSwipeState.index, rpSwipeState.alts.size)
             )
         )
     }
