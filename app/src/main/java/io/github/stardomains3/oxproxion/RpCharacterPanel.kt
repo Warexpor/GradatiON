@@ -112,7 +112,12 @@ object RpCharacterPanel {
                 }
             }, LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt()).apply { marginStart = (6 * d).toInt() })
         }
-        tiles.filterNot { it.header }.forEach { t ->
+        val cards = tiles.filterNot { it.header }
+        // A short last row would leave a hole; the last card stretches over the empty columns instead.
+        val cols = grid.columnCount.coerceAtLeast(1)
+        val shortBy = (cols - cards.size % cols) % cols
+        val lastSpan = 1 + shortBy
+        cards.forEachIndexed { i, t ->
             // A titled glass card (c.ai layout, our glass): name top-left, a quiet preview or a
             // large glyph bottom-right.
             val card = android.widget.FrameLayout(ctx).apply {
@@ -164,7 +169,7 @@ object RpCharacterPanel {
             }
             grid.addView(card, GridLayout.LayoutParams(
                 GridLayout.spec(GridLayout.UNDEFINED),
-                GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                GridLayout.spec(GridLayout.UNDEFINED, if (i == cards.lastIndex) lastSpan else 1, 1f)
             ).apply {
                 width = 0
                 height = (104 * d).toInt()
