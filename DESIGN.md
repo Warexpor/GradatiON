@@ -114,7 +114,7 @@ status bar, and the bars are inset by hand (`setupEdgeToEdge`).
 **Composer.** A glass capsule holding the input, then a row with:
 - `+` for attachments in Chat, or scene tools in Roleplay.
 - The sliders button, which opens the chat settings sheet: model, reasoning, search, stream.
-- The model pill, which in Roleplay is the character pill.
+- The model pill. In Roleplay it is gone: the character lives in a header chip under the tabs (portrait, name, chevron). Tap opens the character panel, long-press the RP model.
 - The mic and send buttons.
 
 The send button changes with context:
@@ -142,7 +142,13 @@ and never auto-send, and there's no hold-to-talk. While listening:
 - The session menu switches between Normal view (folded) and Thinking view (every thought and
   output open).
 
-**Character panel.** A glass sheet with:
+**Roleplay home.** The Roleplay tab opens on a chats list (`RpChatsHome`): a strip of characters to start with, then one row per character with the newest chat's last line, time and chat count. A row's ⋮ offers New chat, Edit character and Delete chat. Tapping the Roleplay tab again inside a chat returns to it; the composer and chip step aside while it shows.
+
+**Message menu.** The ⋮ on a reply opens `MessageMenu`, a compact context card: label left, icon right, hairlines between rows, destructive rows set apart in the dim red. It is not `PickerPopover`, which stays the composer's picker.
+
+**Continue.** The » button on an empty Roleplay composer sends a hidden prompt (no bubble). The reply is sewn onto the end of the last message (`RpContinuation.join`) and eases in from where the text stopped.
+
+**Character panel.** An opaque sheet (`panel_solid`, tiles `panel_tile`) with:
 - A header: round avatar, name, a one-line description, and New chat and Switch as round glass buttons.
 - A 3-column grid of titled cards: Memory, History, Persona, Style, Lore, Edit.
 - Cards show live content when there is some (the memory text, the persona name). Otherwise

@@ -88,6 +88,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -116,6 +117,7 @@ import io.noties.markwon.syntax.SyntaxHighlightPlugin
 import io.noties.prism4j.Prism4j
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -200,6 +202,17 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private val askMode = AskModeController()
     private val rpMode = RpModeController()
     private lateinit var modelNameTextView: TextView
+    private lateinit var rpCharacterChip: View
+    /** Roleplay's landing screen; see [RpChatsHome]. */
+    private var rpHome: RpChatsHome? = null
+    private var rpHomeOpen = false
+    /** Set when a thread was opened on purpose, so the mode change that follows doesn't put the home over it. */
+    private var rpHomeSuppressed = false
+    private var rpHomeSessions: List<ChatSession> = emptyList()
+    private var rpHomeCharacters: List<RpCharacter> = emptyList()
+    private var rpHomeRefresh: Job? = null
+    private var rpHomeHidComposer = false
+    private var lastSeenChatMode: ChatMode? = null
     private lateinit var modelNameShell: FrameLayout
     private lateinit var tabChat: TextView
     private lateinit var tabRoleplay: TextView
@@ -483,6 +496,18 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         attachmentButton = view.findViewById(R.id.attachmentButton)
         buttonsContainer = view.findViewById(R.id.buttonsContainer)
         modelNameTextView = view.findViewById(R.id.modelNameTextView)
+        rpCharacterChip = view.findViewById(R.id.rpCharacterChip)
+        setupRpHome(view, savedInstanceState)
+        // The chip hangs under the tab row, whatever height the row has (the power-tools row can join it).
+        view.findViewById<View>(R.id.topBarLayout).addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            (rpCharacterChip.layoutParams as FrameLayout.LayoutParams).let { lp ->
+                val wanted = v.height - (2 * resources.displayMetrics.density).toInt()
+                if (lp.topMargin != wanted) {
+                    lp.topMargin = wanted
+                    rpCharacterChip.layoutParams = lp
+                }
+            }
+        }
         modelNameShell = view.findViewById(R.id.modelNameShell)
         tabChat = view.findViewById(R.id.tabChat)
         tabRoleplay = view.findViewById(R.id.tabRoleplay)
@@ -804,6 +829,16 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
         var appliedComposerMode: ChatMode? = null
         viewModel.chatMode.observe(viewLifecycleOwner) { mode ->
+            val nowRp = mode == ChatMode.RP
+            if (nowRp && lastSeenChatMode != ChatMode.RP) {
+                // The Roleplay tab opens on the chats list, unless a thread was just opened on purpose.
+                rpHomeOpen = !rpHomeSuppressed
+                rpHomeSuppressed = false
+            } else if (!nowRp) {
+                rpHomeOpen = false
+                rpHomeSuppressed = false
+            }
+            lastSeenChatMode = mode
             updateRpChrome()
             val next = mode ?: ChatMode.ASK
             ambientBackground?.mode = next
@@ -833,7 +868,15 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         // Tabs slide like the swipe: both pages side by side, never an empty frame between.
         listOf(tabChat, tabRoleplay, codeMode.tab).forEach { tab ->
-            tab.setOnClickListener { pageToTab(tab) }
+            tab.setOnClickListener {
+                // The Roleplay tab, tapped while you're in a chat, goes back to the chats list.
+                if (tab === tabRoleplay && viewModel.isRpMode() && !codeMode.isActive && pager == null) {
+                    hideKeyboard()
+                    openRpHome()
+                } else {
+                    pageToTab(tab)
+                }
+            }
         }
         tabRoleplay.setOnLongClickListener {
             openRpHub()
@@ -877,6 +920,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             presetsButton.isVisible = !isPresetsOnChatScreen && !isTopBarEnabled
         }
         viewModel.chatMessages.observe(viewLifecycleOwner) { messages ->
+            chatAdapter.continuingFrom = viewModel.continuationText
             chatAdapter.setMessages(messages)
             restoreListSpot()
             chatRecyclerView.post { updateJumpToBottom() }
@@ -1954,11 +1998,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         chatAdapter.onStreamVisualUpdate = { followStreamingEdge() }
         chatAdapter.showThinking = sharedPreferencesHelper.isShowThinkingBlocks()
-        chatAdapter.onMessageMenu = { anchor, rows ->
-            // Hug the ⋮ itself — not the composer bar the other pickers hang from.
-            newPopover(anchor, edge = anchor) { open -> anchor.isSelected = open }
-                ?.show(null, rows, modal = true)
-        }
+        chatAdapter.onMessageMenu = { anchor, items -> showMessageMenu(anchor, items) }
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 // Freeze the ambient field while the list moves: each frame re-blurs the glass.
@@ -2282,6 +2322,15 @@ $cleanContent
             hideKeyboard()
             if (viewModel.isRpMode()) showRpCharacterPanel() else showModelPopover()
         }
+        rpCharacterChip.setOnClickListener {
+            hideKeyboard()
+            showRpCharacterPanel()
+        }
+        rpCharacterChip.setOnLongClickListener {
+            hideKeyboard()
+            openBotModelPicker()
+            true
+        }
 
         systemMessageButton.setOnClickListener {
             hideKeyboard()
@@ -2329,6 +2378,7 @@ $cleanContent
         }
         newChatButton.setOnClickListener {
             if (codeMode.isActive) return@setOnClickListener codeMode.onNewPressed()
+            if (rpHome?.isShown == true) return@setOnClickListener showCharacterPopover(newChatButton)
             resetChatButton.performClick()
         }
         newChatButton.setOnLongClickListener {
@@ -2918,7 +2968,8 @@ $cleanContent
             input = chatEditText,
             micButton = speechButton,
             wave = requireView().findViewById(R.id.voiceWave),
-            swapOut = listOf(modelNameTextView),
+            // In Roleplay the pill is gone for good (the character chip replaced it): leave it be.
+            swapOut = { if (viewModel.isRpMode()) emptyList() else listOf(modelNameTextView) },
         ) { bytes, format, name -> viewModel.transcribeAudioForInput(bytes, format, name) }
 
         clearButton.setOnClickListener {
@@ -5515,7 +5566,153 @@ $cleanContent
         }
     }
 
+
+    // ── Roleplay home ──────────────────────────────────────────────────────────────────────
+
+    private fun setupRpHome(root: View, savedInstanceState: Bundle?) {
+        val homeRoot = root.findViewById<View>(R.id.rpHome)
+        rpHome = RpChatsHome(
+            homeRoot,
+            onOpen = { row ->
+                viewModel.loadChat(row.sessionId)
+                closeRpHome()
+            },
+            onStart = { character -> startRpWith(character) },
+            onBrowse = { openRpCharacterLibrary() },
+            onMenu = { anchor, row -> showRpHomeMenu(anchor, row) }
+        )
+        rpHomeOpen = savedInstanceState?.getBoolean(STATE_RP_HOME) ?: viewModel.isRpMode()
+        lastSeenChatMode = if (viewModel.isRpMode()) ChatMode.RP else null
+        // Keep the first row clear of the floating bar, whatever height it has.
+        val topGlass = root.findViewById<View>(R.id.topBarGlass)
+        topGlass.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> rpHome?.setTopInset(v.height) }
+        val savedChats = ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[SavedChatsViewModel::class.java]
+        savedChats.sessionsForMode(ChatMode.RP).observe(viewLifecycleOwner) { sessions ->
+            rpHomeSessions = sessions.orEmpty()
+            refreshRpHome()
+        }
+        viewModel.getRpRepository().allCharacters.observe(viewLifecycleOwner) { chars ->
+            rpHomeCharacters = chars.orEmpty()
+            refreshRpHome()
+        }
+        viewModel.rpThreadOpenedEvent.observe(viewLifecycleOwner) { event ->
+            if (event.getContentIfNotHandled() != null) {
+                rpHomeSuppressed = true
+                closeRpHome()
+            }
+        }
+    }
+
+    /** Roleplay's chats list: one row per character, with the last line of the newest chat. */
+    private fun refreshRpHome() {
+        val home = rpHome ?: return
+        val sessions = rpHomeSessions
+        val characters = rpHomeCharacters
+        rpHomeRefresh?.cancel()
+        rpHomeRefresh = viewLifecycleOwner.lifecycleScope.launch {
+            val dao = AppDatabase.getDatabase(requireContext().applicationContext).chatDao()
+            val llm = getString(R.string.rp_llm_speaker)
+            val none = getString(R.string.rp_home_no_preview)
+            val heads = RpChatSummaries.build(sessions, characters, emptyMap(), llm, none)
+            val previews = heads.associate { row ->
+                val last = dao.getLastMessage(row.sessionId)
+                val text = last?.let { RpChatSummaries.previewOf(it.content) }.orEmpty()
+                row.sessionId to if (last?.role == "user" && text.isNotBlank()) getString(R.string.rp_home_you, text) else text
+            }
+            home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none), characters)
+            updateRpHome()
+        }
+    }
+
+    /** Whether the home shows follows the mode and [rpHomeOpen]; the composer steps aside while it does. */
+    private fun updateRpHome() {
+        val root = view ?: return
+        val show = rpHomeOpen && viewModel.isRpMode() && !codeMode.isActive
+        rpHome?.show(show)
+        // Only undo what the home did itself: Code mode hides the same composer for its own reasons.
+        if (show != rpHomeHidComposer) {
+            rpHomeHidComposer = show
+            val state = if (show) View.GONE else View.VISIBLE
+            root.findViewById<View>(R.id.composerDock)?.visibility = state
+            root.findViewById<View>(R.id.composerFade)?.visibility = state
+        }
+        if (::rpCharacterChip.isInitialized && viewModel.isRpMode()) {
+            rpCharacterChip.visibility = if (show) View.GONE else View.VISIBLE
+        }
+    }
+
+    /** Back to the chats list. */
+    fun openRpHome() {
+        if (!viewModel.isRpMode()) return
+        rpHomeOpen = true
+        updateRpHome()
+    }
+
+    /** A thread is open: the composer and transcript take over from the list. */
+    fun closeRpHome() {
+        if (!rpHomeOpen) return
+        rpHomeOpen = false
+        updateRpHome()
+    }
+
+    /** The ⋮ on a chats-list row: start over with that character, edit it, or delete the chat. */
+    private fun showRpHomeMenu(anchor: View, row: RpChatSummary) {
+        val root = view as? FrameLayout ?: return
+        messageMenu?.dismiss(animated = false)
+        val items = buildList {
+            if (row.character != null) {
+                add(MessageMenu.Item(getString(R.string.rp_home_menu_new), R.drawable.ic_new_chat) { startRpWith(row.character) })
+                add(MessageMenu.Item(getString(R.string.rp_home_menu_edit), R.drawable.ic_msg_edit) { pushRp(RpCharacterEditFragment.newInstance(row.character.id)) })
+            } else if (row.isLlm) {
+                add(MessageMenu.Item(getString(R.string.rp_home_menu_new), R.drawable.ic_new_chat) {
+                    closeRpHome()
+                    viewModel.startRpLlmChat()
+                })
+            }
+            add(MessageMenu.Item(getString(R.string.rp_home_menu_delete), R.drawable.ic_msg_delete, destructive = true) {
+                GrokConfirmDialog.show(
+                    fragment = this@ChatFragment,
+                    title = getString(R.string.rp_home_delete_title),
+                    message = getString(R.string.rp_home_delete_body, row.name),
+                    confirmText = getString(R.string.rp_menu_delete),
+                    onConfirm = {
+                        sharedPreferencesHelper.setSessionPinned(row.sessionId, false)
+                        viewModel.notifySessionDeleted(row.sessionId)
+                        ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[SavedChatsViewModel::class.java]
+                            .deleteSession(row.sessionId)
+                    }
+                )
+            })
+        }
+        messageMenu = MessageMenu(root, anchor, root.findViewById(R.id.chatBackdrop)).also { m ->
+            m.onDismiss = { if (messageMenu === m) messageMenu = null }
+            m.show(items, viewLifecycleOwner)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_RP_HOME, rpHomeOpen)
+    }
+
     private var pickerPopover: PickerPopover? = null
+    private var messageMenu: MessageMenu? = null
+
+    /** The ⋮ on a reply. A second tap on the same ⋮ folds it. */
+    private fun showMessageMenu(anchor: View, items: List<MessageMenu.Item>) {
+        val root = view as? FrameLayout ?: return
+        if (messageMenu?.isOpenOn(anchor) == true) {
+            messageMenu?.dismiss()
+            return
+        }
+        pickerPopover?.dismiss(animated = false)
+        messageMenu?.dismiss(animated = false)
+        anchor.isSelected = true
+        messageMenu = MessageMenu(root, anchor, root.findViewById(R.id.chatBackdrop)).also { m ->
+            m.onDismiss = { anchor.isSelected = false; if (messageMenu === m) messageMenu = null }
+            m.show(items, viewLifecycleOwner)
+        }
+    }
 
     private fun newPopover(
         anchor: View = modelNameTextView,
@@ -5565,7 +5762,7 @@ $cleanContent
     }
 
     /** RP pill: switch character in place, plus the roleplay home and the RP model. */
-    private fun showCharacterPopover() {
+    private fun showCharacterPopover(anchor: View = rpCharacterChip) {
         val repo = viewModel.getRpRepository()
         viewLifecycleOwner.lifecycleScope.launch {
             val chars = repo.getAllCharactersOnce().sortedByDescending { it.updatedAt }
@@ -5598,11 +5795,42 @@ $cleanContent
                     onClick = { openBotModelPicker() }
                 )
             )
-            newPopover()?.show(getString(R.string.popover_characters_title), rows, footer)
+            newPopover(anchor = anchor, edge = anchor, onOpenChange = { })
+                ?.show(getString(R.string.popover_characters_title), rows, footer)
         }
     }
 
-    /** Character pill: the panel for the active character, or the picker when there's none yet. */
+    /** The header chip in Roleplay: the character's portrait and name, or "LLM" / "Characters" when there is none. */
+    private fun bindRpCharacterChip(character: RpCharacter?, llm: Boolean) {
+        val root = view ?: return
+        // The composer pill is Ask's model picker; Roleplay's entry point lives up here now.
+        modelNameTextView.visibility = View.GONE
+        rpCharacterChip.visibility = if (rpHomeOpen) View.GONE else View.VISIBLE
+        val frame = root.findViewById<View>(R.id.rpChipAvatarFrame)
+        val avatar = root.findViewById<ImageView>(R.id.rpChipAvatar)
+        val mono = root.findViewById<TextView>(R.id.rpChipMonogram)
+        val name = root.findViewById<TextView>(R.id.rpChipName)
+        when {
+            llm -> {
+                frame.visibility = View.GONE
+                name.setText(R.string.rp_llm_chip)
+                rpCharacterChip.contentDescription = getString(R.string.rp_model_chip_a11y_llm)
+            }
+            character != null -> {
+                frame.visibility = View.VISIBLE
+                RpAvatars.bind(avatar, mono, character)
+                name.text = character.name
+                rpCharacterChip.contentDescription = getString(R.string.rp_model_chip_a11y_character, character.name)
+            }
+            else -> {
+                frame.visibility = View.GONE
+                name.setText(R.string.rp_characters_title)
+                rpCharacterChip.contentDescription = getString(R.string.rp_model_chip_a11y_empty)
+            }
+        }
+    }
+
+    /** Character chip: the panel for the active character, or the picker when there's none yet. */
     private fun showRpCharacterPanel() {
         val llm = sharedPreferencesHelper.isRpLlmMode()
         val character = viewModel.activeRpCharacter.value
@@ -5813,7 +6041,10 @@ $cleanContent
     }
 
     private fun startRpWith(character: RpCharacter) {
-        val start = { carry: Boolean -> viewModel.startRpChatWithCharacter(character, carry) }
+        val start = { carry: Boolean ->
+            closeRpHome()
+            viewModel.startRpChatWithCharacter(character, carry)
+        }
         if (viewModel.currentRpFacts().isNotBlank()) {
             GrokConfirmDialog.show(
                 fragment = this,
@@ -6008,6 +6239,7 @@ $cleanContent
             topPresetsButton.visibility = View.GONE
             presetsButton2.visibility = View.GONE
             val charName = activeChar?.name
+            bindRpCharacterChip(activeChar, llm)
             modelNameTextView.text = when {
                 llm -> getString(R.string.rp_llm_chip)
                 !charName.isNullOrBlank() -> charName
@@ -6020,6 +6252,8 @@ $cleanContent
             }
             applyRpComposerHint()
         } else {
+            rpCharacterChip.visibility = View.GONE
+            modelNameTextView.visibility = View.VISIBLE
             viewModel.activeChatModel.value?.let { modelNameTextView.text = viewModel.getModelDisplayName(it) }
             chatEditText.hint = getString(R.string.grok_composer_hint)
             applyModelCapabilityChrome(viewModel.activeChatModel.value)
@@ -6027,6 +6261,7 @@ $cleanContent
         }
         updateExtendedTopBarVisibility(sharedPreferencesHelper.getExtendedTopBarEnabled())
         updateComposerAccessoryVisibility()
+        updateRpHome()
     }
 
     /** Ask shows the saved tool prefs. Roleplay never does, and does not write them. */
@@ -6259,3 +6494,5 @@ $cleanContent
         }
     }
 }
+
+private const val STATE_RP_HOME = "rp_home_open"

@@ -805,6 +805,90 @@ class ScreenshotTest {
         }
     }
 
+    /** Chats with a few characters, oldest last, so the Roleplay home has rows to show. */
+    private fun seedRpChats() = runBlocking {
+        val dao = db.chatDao()
+        val chars = db.rpDao().getAllCharactersOnce().associateBy { it.name }
+        fun chat(name: String, hoursAgo: Long, vararg lines: Pair<String, String>) {
+            val id = chars.getValue(name).id
+            runBlocking {
+                dao.insertSessionAndMessages(
+                    ChatSession(
+                        title = name, modelUsed = "openrouter/free", mode = ChatMode.RP.storageValue, characterId = id,
+                        timestamp = System.currentTimeMillis() - hoursAgo * 3600_000L
+                    ),
+                    lines.map { (role, text) -> ChatMessage(sessionId = 0, role = role, content = JsonPrimitive(text).toString()) }
+                )
+            }
+        }
+        chat("Mira Vance", 1, "assistant" to "*wipes her hands* You again?", "user" to "The coupling is still leaking.", "assistant" to "*sighs and grabs a wrench* Fine. Show me.")
+        chat("Mira Vance", 30, "assistant" to "*wipes her hands* You again?", "user" to "Long story.")
+        chat("Professor Hale", 5, "assistant" to "Ah, you have come at last. Sit, sit. Have I ever told you about the Vell empire?", "user" to "Not yet.")
+        chat("Kestrel", 26, "assistant" to "It never stops raining in this city. *lights a cigarette*", "user" to "I need a detective.")
+        chat("Ondine", 80, "assistant" to "Ask me again when the tide turns.")
+    }
+
+    /** The Roleplay tab opens on the chats list: characters to start with, then a row per character. */
+    @Test fun rpHomeDark() = withChat { a, _ ->
+        seedRp(); seedRpChats()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        val home = a.findViewById<View>(R.id.rpHome)
+        org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
+        // Composer and chip step aside; the tabs stay.
+        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.composerDock).visibility)
+        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.rpCharacterChip).visibility)
+        val rows = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
+        // Mira has two chats but one row.
+        org.junit.Assert.assertEquals(4, rows.adapter!!.itemCount)
+        snap(root(a), "rp_home_dark")
+
+        // Opening a row resumes that chat: the list goes, the composer and the chip come back.
+        rows.findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
+        org.junit.Assert.assertEquals(View.GONE, home.visibility)
+        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.composerDock).visibility)
+        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.rpCharacterChip).visibility)
+        org.junit.Assert.assertEquals("Mira Vance", a.findViewById<android.widget.TextView>(R.id.rpChipName).text.toString())
+        snap(root(a), "rp_thread_chip_dark")
+
+        // The Roleplay tab, tapped again inside a chat, goes back to the list.
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        org.junit.Assert.assertEquals(View.GONE, home.visibility)
+    }
+
+    /** A chat's ⋮ on the list: new chat, edit the character, delete (set apart, in the dim red). */
+    @Test fun rpHomeMenuDark() = withChat { a, _ ->
+        seedRp(); seedRpChats()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        val rows = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
+        rows.findViewHolderForAdapterPosition(0)!!.itemView.findViewById<View>(R.id.rpChatMore).performClick(); idle()
+        var card: View = a.findViewById<View>(R.id.messageMenuLabel)
+        while (card !is GlassLinearLayout) card = card.parent as View
+        val labels = (0 until card.childCount).mapNotNull {
+            card.getChildAt(it).findViewById<android.widget.TextView>(R.id.messageMenuLabel)?.text?.toString()
+        }
+        org.junit.Assert.assertEquals(listOf("New chat", "Edit character", "Delete chat"), labels)
+        snap(root(a), "rp_home_menu_dark")
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
+    @Test fun rpHomeEmptyDark() = withChat { a, _ ->
+        seedRp()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.rpHomeEmpty).visibility)
+        snap(root(a), "rp_home_empty_dark")
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
+    @Test @Config(qualifiers = LIGHT)
+    fun rpHomeLight() = withChat { a, _ ->
+        seedRp(); seedRpChats()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        snap(root(a), "rp_home_light")
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
     /** RP with the demo model: a character reply, then Continue on an empty composer takes the next beat. */
     @Test fun rpConversationContinueDark() = withChat { a, _ ->
         seedRp()
@@ -825,13 +909,22 @@ class ScreenshotTest {
             "await=${vm.isAwaitingResponse.value} roles=${vm.chatMessages.value.orEmpty().map { it.role }}", vm.canContinueRpStory())
         org.junit.Assert.assertEquals("empty composer offers Continue",
             a.getString(R.string.rp_continue), send.contentDescription)
-        val before = vm.chatMessages.value.orEmpty().size
+        val beforeMsgs = vm.chatMessages.value.orEmpty()
+        val before = beforeMsgs.size
+        val beforeText = vm.getMessageText(beforeMsgs.last().content)
         send.performClick()
-        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().size >= before + 2 }
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.getMessageText(vm.chatMessages.value.orEmpty().last().content).length > beforeText.length }
         idle()
         val msgs = vm.chatMessages.value.orEmpty()
-        org.junit.Assert.assertEquals(a.getString(R.string.rp_reminder_continue), vm.getMessageText(msgs[msgs.size - 2].content))
+        // Continue is a hidden turn: no bubble for the prompt, and no new reply bubble either.
+        // The words land at the end of the last reply.
+        org.junit.Assert.assertEquals(before, msgs.size)
         org.junit.Assert.assertEquals("assistant", msgs.last().role)
+        val afterText = vm.getMessageText(msgs.last().content)
+        org.junit.Assert.assertTrue("kept what was there: $afterText", afterText.startsWith(beforeText))
+        org.junit.Assert.assertTrue(afterText.length > beforeText.length)
+        org.junit.Assert.assertTrue(msgs.none { vm.getMessageText(it.content) == a.getString(R.string.rp_continue_prompt) })
+        org.junit.Assert.assertNull("nothing left to extend once the turn is over", vm.continuationText)
         snap(root(a), "rp_conversation_dark")
         SharedPreferencesHelper(a).saveRpMemory(mira.id, "Owes Sam a favor from the Kessel run. Hates the innkeeper.")
         // Top of a chat with messages: no stray rule under the tabs (the old scroll-progress bar).
@@ -850,7 +943,11 @@ class ScreenshotTest {
         }
         SharedPreferencesHelper(a).saveRpLayout(mira.id, SharedPreferencesHelper.RP_LAYOUT_BUBBLES)
         SharedPreferencesHelper(a).saveRpVoice(mira.id, SharedPreferencesHelper.RpVoice(null, 0.8f, 1f))
-        a.findViewById<View>(R.id.modelNameTextView).performClick(); settle()
+        // Roleplay's entry point is the header chip; the composer pill is Ask's model picker.
+        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.modelNameTextView).visibility)
+        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.rpCharacterChip).visibility)
+        org.junit.Assert.assertEquals("Mira Vance", a.findViewById<android.widget.TextView>(R.id.rpChipName).text.toString())
+        a.findViewById<View>(R.id.rpCharacterChip).performClick(); settle()
         snapDialog(a, "rp_character_panel_dark")
         ShadowDialog.getLatestDialog()?.dismiss(); idle()
         // Re-apply RP chrome (the panel reads prefs; the chat reads them on mode change).
@@ -1337,7 +1434,7 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(View.VISIBLE, vh.itemView.findViewById<View>(R.id.aiActionRow).visibility)
     }
 
-    /** A reply's ⋮ opens a glass menu with Edit (and Read aloud / Instruct where they apply). */
+    /** A reply's ⋮ opens a compact context menu with Edit (and Read aloud / Instruct where they apply). */
     @Test fun replyMoreMenuDark() = withChat { a, _ ->
         seedConversation(a); idle()
         val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
@@ -1345,13 +1442,13 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(View.GONE, holder.itemView.findViewById<View>(R.id.editButton).visibility)
         val more = holder.itemView.findViewById<View>(R.id.moreActionsButton)
         more.performClick(); idle()
-        val rows = a.findViewById<android.view.ViewGroup>(R.id.popoverRows)
-        val titles = (0 until rows.childCount).map {
-            rows.getChildAt(it).findViewById<android.widget.TextView>(R.id.popoverRowTitle).text.toString()
+        // The card is the glass layout the labels sit in. Hug the ⋮, not the composer.
+        var card: View = a.findViewById<View>(R.id.messageMenuLabel)
+        while (card !is GlassLinearLayout) card = card.parent as View
+        val labels = (0 until card.childCount).mapNotNull {
+            card.getChildAt(it).findViewById<android.widget.TextView>(R.id.messageMenuLabel)?.text?.toString()
         }
-        org.junit.Assert.assertTrue(titles.toString(), "Edit" in titles)
-        // popoverRows → NestedScrollView → glass card. Hug the ⋮, not the composer.
-        val card = rows.parent.parent as View
+        org.junit.Assert.assertTrue(labels.toString(), "Edit" in labels)
         val composer = a.findViewById<View>(R.id.chatInputContainer)
         org.junit.Assert.assertTrue(
             "menu width ${card.width} should be under the composer (${composer.width})",
@@ -1359,11 +1456,9 @@ class ScreenshotTest {
         )
         val moreLoc = IntArray(2).also { more.getLocationOnScreen(it) }
         val cardLoc = IntArray(2).also { card.getLocationOnScreen(it) }
-        val moreCenterX = moreLoc[0] + more.width / 2
-        val cardCenterX = cardLoc[0] + card.width / 2
         org.junit.Assert.assertTrue(
-            "menu should sit near the ⋮ (more=$moreCenterX card=$cardCenterX)",
-            kotlin.math.abs(moreCenterX - cardCenterX) < card.width
+            "menu should open from the ⋮ (more=${moreLoc[0]} card=${cardLoc[0]})",
+            kotlin.math.abs(moreLoc[0] - cardLoc[0]) <= card.width
         )
         snap(root(a), "reply_menu_dark")
     }

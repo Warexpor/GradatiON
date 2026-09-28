@@ -17,9 +17,12 @@ import androidx.fragment.app.Fragment
 import com.google.android.material.bottomsheet.BottomSheetDialog
 
 /**
- * The RP character panel: opened from the character pill. A header with who you're talking to,
- * then a grid of glass tiles for everything about the scene (memory, history, persona, style,
+ * The RP character panel: opened from the character chip. A header with who you're talking to,
+ * then a grid of tiles for everything about the scene (memory, history, persona, style,
  * lore, the card itself), so none of it needs a trip through Settings.
+ *
+ * Solid on purpose: it holds a lot of small text and sits over a busy transcript, so it is an
+ * opaque sheet with tiles one step off it, not glass. The screen behind it is still frosted.
  */
 object RpCharacterPanel {
 
@@ -40,7 +43,6 @@ object RpCharacterPanel {
         val ctx = fragment.requireContext()
         val dialog = BottomSheetDialog(ctx, R.style.ThemeOverlay_Grokion_BottomSheet)
         val sheet = LayoutInflater.from(ctx).inflate(R.layout.sheet_rp_character, null)
-        sheet.background = GlassDrawable.sheet(ctx, topOnly = true)
         val d = ctx.resources.displayMetrics.density
 
         sheet.findViewById<TextView>(R.id.rpPanelName).text = title
@@ -49,7 +51,7 @@ object RpCharacterPanel {
             visibility = if (subtitle.isBlank()) View.GONE else View.VISIBLE
         }
         val frame = sheet.findViewById<View>(R.id.rpPanelAvatarFrame)
-        frame.background = GlassDrawable.control(ctx, 56f)
+        frame.background = solidShape(ctx, R.color.panel_tile, oval = true)
         frame.outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) = outline.setOval(0, 0, view.width, view.height)
         }
@@ -81,7 +83,7 @@ object RpCharacterPanel {
                 imageTintList = android.content.res.ColorStateList.valueOf(ink)
                 val pad = (12 * d).toInt()
                 setPadding(pad, pad, pad, pad)
-                background = GlassDrawable.control(ctx, 44f)
+                background = pressable(ctx, R.color.panel_tile, radiusPx = 24 * d)
                 contentDescription = ctx.getString(t.label)
                 isClickable = true
                 isFocusable = true
@@ -95,12 +97,7 @@ object RpCharacterPanel {
             // A titled glass card (c.ai layout, our glass): name top-left, a quiet preview or a
             // large glyph bottom-right.
             val card = android.widget.FrameLayout(ctx).apply {
-                background = GlassDrawable(ctx, ContextCompat.getColor(ctx, R.color.glass_control_tint), 22 * d)
-                    .also {
-                        it.interactive = true
-                        it.selectedTint = ContextCompat.getColor(ctx, R.color.glass_control_solid_tint)
-                    }
-                isSelected = t.on
+                background = pressable(ctx, if (t.on) R.color.panel_tile_on else R.color.panel_tile, radiusPx = 22 * d)
                 isClickable = true
                 isFocusable = true
                 contentDescription = listOfNotNull(ctx.getString(t.label), t.preview).joinToString(", ")
@@ -161,8 +158,38 @@ object RpCharacterPanel {
         dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
         dialog.behavior.skipCollapsed = true
         dialog.show()
-        GlassChrome.glassDialog(dialog)
+        dialog.window?.let { GlassDialogs.frost(it) }
+        dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { container ->
+            container.background = solidSheet(ctx)
+            container.backgroundTintList = null
+        }
         return dialog
+    }
+
+    private fun solidShape(ctx: android.content.Context, color: Int, oval: Boolean = false, radiusPx: Float = 0f) =
+        android.graphics.drawable.GradientDrawable().apply {
+            shape = if (oval) android.graphics.drawable.GradientDrawable.OVAL else android.graphics.drawable.GradientDrawable.RECTANGLE
+            setColor(ContextCompat.getColor(ctx, color))
+            if (!oval) cornerRadius = radiusPx
+        }
+
+    /** A solid fill with a tonal flash on press. */
+    private fun pressable(ctx: android.content.Context, color: Int, radiusPx: Float): android.graphics.drawable.Drawable {
+        val fill = solidShape(ctx, color, radiusPx = radiusPx)
+        val mask = solidShape(ctx, android.R.color.white, radiusPx = radiusPx)
+        return android.graphics.drawable.RippleDrawable(
+            android.content.res.ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.popover_row_pressed)), fill, mask
+        )
+    }
+
+    /** The opaque sheet: rounded on top, a hairline edge, no transparency. */
+    private fun solidSheet(ctx: android.content.Context): android.graphics.drawable.Drawable {
+        val r = ctx.resources.getDimension(R.dimen.glass_sheet_radius)
+        return android.graphics.drawable.GradientDrawable().apply {
+            setColor(ContextCompat.getColor(ctx, R.color.panel_solid))
+            cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+            setStroke(ctx.resources.displayMetrics.density.toInt().coerceAtLeast(1), ContextCompat.getColor(ctx, R.color.xai_hairline))
+        }
     }
 
     /** Crop [src] around its center to [aspect] (width / height), so a rounded thumbnail isn't squashed. */

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A row of the Roleplay chats list: portrait, name and last line, when, and a menu. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_press_svg"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:minHeight="76dp"
+    android:orientation="horizontal"
+    android:paddingStart="12dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="2dp"
+    android:paddingBottom="8dp">
+
+    <FrameLayout
+        android:layout_width="54dp"
+        android:layout_height="54dp">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/rpChatAvatar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/rp_bg_monogram"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop"
+            app:shapeAppearanceOverlay="@style/XaiShapePill" />
+
+        <TextView
+            android:id="@+id/rpChatMonogram"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fontFamily="@font/app_sans"
+            android:gravity="center"
+            android:importantForAccessibility="no"
+            android:textColor="@color/xai_mute"
+            android:textFontWeight="600"
+            android:textSize="22sp" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/rpChatName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="@font/app_sans"
+            android:singleLine="true"
+            android:textColor="@color/xai_ink"
+            android:textFontWeight="700"
+            android:textSize="17sp" />
+
+        <TextView
+            android:id="@+id/rpChatPreview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/app_sans"
+            android:maxLines="2"
+            android:textColor="@color/xai_mute"
+            android:textSize="14.5sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/rpChatWhen"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:fontFamily="@font/app_sans"
+        android:gravity="end"
+        android:textColor="@color/xai_mute"
+        android:textSize="13sp" />
+
+    <ImageButton
+        android:id="@+id/rpChatMore"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:background="@null"
+        android:contentDescription="@string/rp_menu_edit"
+        android:padding="12dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_more_vert"
+        app:tint="@color/xai_mute" />
+</LinearLayout>

@@ -8,11 +8,16 @@ object RpPromptEngine {
     private const val LORE_MAX_CHARS = 12_000
     private const val MEMORY_MAX_CHARS = 4_000
 
-    /** Instruction for a "continue" beat: the character moves the scene on without the user. */
+    /**
+     * Instruction for a "continue" beat. The reply is appended to your last message in the same
+     * bubble, so it has to start where that message ends.
+     */
     const val CONTINUE_DIRECTION =
-        "The user wants the story to move on without them. Write the next beat yourself: a new " +
-            "development, action or line of dialogue that pushes the scene forward. Don't repeat or " +
-            "summarize what already happened, and don't speak or act for the user."
+        "The user tapped Continue. Carry on your last message seamlessly from exactly where it ends: " +
+            "if it stops mid-sentence, finish that sentence first; otherwise take the scene one step " +
+            "further with a new action, detail or line of dialogue. Write only the continuation. Don't " +
+            "repeat, rephrase or summarize anything already written, don't restate its last words, " +
+            "don't greet, and never speak, act or decide for the user."
 
     /** Scene-craft rules shared by every character reply. */
     private const val CRAFT =

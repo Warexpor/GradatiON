@@ -31,8 +31,8 @@
     <color name="xai_row_selected">#FF242424</color>
     <color name="xai_text_highlight">#FF434343</color>
     <color name="xai_error">#FFF0F0F0</color>
-    <!-- Delete actions only. User call: these are red, like diff deletions. -->
-    <color name="delete_action">#FFF85149</color>
+    <!-- Delete actions only. User call: red, but a dim crimson (cool hue, low value) so it never reads orange or loud. -->
+    <color name="delete_action">#FFC4555F</color>
     <color name="xai_success">#FFC8C8C8</color>
     <color name="xai_progress">#FF8A8A8A</color>
     <color name="xai_link">#FFECECEC</color>
@@ -103,6 +103,13 @@
     <color name="glass_popover_tint">#E61F1F1F</color>
     <color name="popover_row_selected">#14FFFFFF</color>
     <color name="popover_row_pressed">#1FFFFFFF</color>
+    <!-- Message ⋮ menu (MessageMenu): denser than the composer pickers, plus the band before destructive rows -->
+    <color name="glass_menu_tint">#F21F1F1F</color>
+    <color name="menu_group_gap">#1AFFFFFF</color>
+    <!-- Character panel: an opaque sheet, not glass. Tiles sit one step off the sheet. -->
+    <color name="panel_solid">#FF1B1B1B</color>
+    <color name="panel_tile">#FF272727</color>
+    <color name="panel_tile_on">#FF313131</color>
     <color name="popover_scrim">#4D000000</color>
     <color name="empty_mark">#FF333333</color>
     <color name="glass_chat_action_tint">#8C222222</color>

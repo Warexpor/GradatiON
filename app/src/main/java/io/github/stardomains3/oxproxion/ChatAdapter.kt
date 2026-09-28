@@ -135,7 +135,7 @@ class ChatAdapter(
     /** A reply is being generated: the last assistant row keeps its action icons hidden. */
     var replyInFlight = false
     /** Opens a reply's ⋮ menu anchored to its button; the host owns the popover. */
-    var onMessageMenu: ((View, List<PickerPopover.Row>) -> Unit)? = null
+    var onMessageMenu: ((View, List<MessageMenu.Item>) -> Unit)? = null
 
     /** Show the model's thinking above replies; off hides the block entirely. */
     var showThinking = true
@@ -188,6 +188,24 @@ class ChatAdapter(
     private val fadeTimes = ArrayList<Long>()
     private var lastRenderedLen = 0
 
+    /**
+     * Set while a reply grows in place (Roleplay's Continue): the text it started from. The first
+     * streamed update seeds the reveal with it, so that text stays put and only the new words
+     * ease in, rather than the whole reply replaying from its first letter.
+     */
+    var continuingFrom: String? = null
+
+    private fun seedContinuation(previous: String) {
+        streamReveal.seed(previous)
+        streamMarkdown.reset()
+        fadeStarts.clear()
+        fadeTimes.clear()
+        // Prime the incremental parser and the fade bookkeeping with what is already shown.
+        val shown = streamMarkdown.render(previous)
+        ChatMarkdown.polish(shown)
+        lastRenderedLen = shown.length
+    }
+
     private fun resetStreamRender() {
         streamReveal.reset()
         streamMarkdown.reset()
@@ -233,6 +251,10 @@ class ChatAdapter(
                     messages[messages.size - 1] = newMessage
                     val text = getMessageText(newMessage.content)
                     if (!ThinkingPlaceholder.matches(text) && text.isNotBlank()) {
+                        val from = continuingFrom
+                        if (from != null && from.isNotBlank() && streamReveal.displayed().isEmpty() && text.startsWith(from)) {
+                            seedContinuation(from)
+                        }
                         streamReveal.setTarget(text)
                     }
                     // Holder already painting via Choreographer — skip notify. Rebind+markwon
@@ -841,15 +863,14 @@ class ChatAdapter(
         private fun bindMoreActions(speakingHere: Boolean, canInstruct: Boolean) {
             val ctx = itemView.context
             val rows = buildList {
-                if (ttsAvailable) add(PickerPopover.Row(
+                if (ttsAvailable) add(MessageMenu.Item(
                     ctx.getString(if (speakingHere) R.string.msg_menu_stop_reading else R.string.msg_menu_read),
-                    iconRes = if (speakingHere) R.drawable.ic_msg_stop else R.drawable.ic_msg_speak,
+                    if (speakingHere) R.drawable.ic_msg_stop else R.drawable.ic_msg_speak,
                 ) { ttsButton.performClick() })
-                if (canInstruct) add(PickerPopover.Row(
-                    ctx.getString(R.string.msg_menu_instruct), ctx.getString(R.string.msg_menu_instruct_sub),
-                    R.drawable.ic_msg_instruct,
-                ) { instructButton.performClick() })
-                add(PickerPopover.Row(ctx.getString(R.string.msg_menu_edit), iconRes = R.drawable.ic_msg_edit) {
+                if (canInstruct) add(MessageMenu.Item(ctx.getString(R.string.msg_menu_instruct), R.drawable.ic_msg_instruct) {
+                    instructButton.performClick()
+                })
+                add(MessageMenu.Item(ctx.getString(R.string.msg_menu_edit), R.drawable.ic_msg_edit) {
                     editButton.performClick()
                 })
             }

@@ -336,7 +336,10 @@ class RpHubFragment : Fragment() {
         val fm = parentFragmentManager
         fm.popBackStackImmediate(BACK_STACK_TAG, FragmentManager.POP_BACK_STACK_INCLUSIVE)
         fm.popBackStackImmediate("settings", FragmentManager.POP_BACK_STACK_INCLUSIVE)
-        fm.fragments.filterIsInstance<ChatFragment>().firstOrNull()?.closeHistoryPanel(animated = false)
+        fm.fragments.filterIsInstance<ChatFragment>().firstOrNull()?.let {
+            it.closeHistoryPanel(animated = false)
+            it.closeRpHome()
+        }
     }
 
     private fun push(target: Fragment) {

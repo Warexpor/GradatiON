@@ -434,7 +434,7 @@ class CodeComposer(
             input = input,
             micButton = mic,
             wave = root.findViewById(R.id.codeComposerVoiceWave),
-            swapOut = listOf(root.findViewById(R.id.codeComposerPills)),
+            swapOut = { listOf(root.findViewById(R.id.codeComposerPills)) },
         ) { bytes, format, name -> vm.transcribeAudioForInput(bytes, format, name) }
     }
 

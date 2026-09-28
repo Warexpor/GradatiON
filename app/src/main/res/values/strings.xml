@@ -515,10 +515,11 @@
     <string name="control_thoughts">Thoughts</string>
     <string name="cd_jump_to_bottom">Jump to the latest message</string>
     <string name="cd_more_actions">More actions</string>
+    <!-- Hidden turn behind Roleplay's Continue button: the user never sees it, the model does. -->
+    <string name="rp_continue_prompt">Continue your last message from exactly where it stopped. Write only what comes next.</string>
     <string name="msg_menu_read">Read aloud</string>
     <string name="msg_menu_stop_reading">Stop reading</string>
     <string name="msg_menu_instruct">Instruct</string>
-    <string name="msg_menu_instruct_sub">Tell the next reply how to change</string>
     <string name="msg_menu_edit">Edit</string>
     <string name="control_thoughts_a11y">Show the model\'s thinking above replies</string>
     <string name="controls_model">Model</string>

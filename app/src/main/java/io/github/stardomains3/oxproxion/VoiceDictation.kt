@@ -29,7 +29,8 @@ class VoiceDictation(
     private val input: EditText,
     private val micButton: MaterialButton,
     private val wave: VoiceWaveView,
-    private val swapOut: List<View>,
+    /** Asked each time the wave shows or hides, so a view that is hidden on purpose stays hidden. */
+    private val swapOut: () -> List<View>,
     transcribe: suspend (ByteArray, String, String) -> Result<String>,
 ) : VoiceInput.Listener {
 
@@ -218,8 +219,9 @@ class VoiceDictation(
     // ── Chrome ──────────────────────────────────────────────────────────────────────────
 
     private fun showWave(show: Boolean) {
-        val outViews = if (show) swapOut else listOf(wave)
-        val inViews = if (show) listOf(wave) else swapOut
+        val pill = swapOut()
+        val outViews = if (show) pill else listOf(wave)
+        val inViews = if (show) listOf(wave) else pill
         outViews.forEach { v ->
             v.animate().cancel()
             if (!animate) { v.visibility = View.GONE; return@forEach }

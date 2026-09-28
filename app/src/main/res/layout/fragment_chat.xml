@@ -359,6 +359,9 @@
             android:layout_height="match_parent"
             android:visibility="gone" />
 
+        <!-- Roleplay home: chats per character, shown when the Roleplay tab opens (see RpChatsHome) -->
+        <include layout="@layout/view_rp_home" />
+
         <!-- ── Top bar: history | mode · model | new chat, as floating liquid-glass controls
              (iOS 26). No bar: the transcript dissolves under a scroll-edge fade that appears
              once content is beneath it. ── -->
@@ -653,6 +656,73 @@
                 </LinearLayout>
             </HorizontalScrollView>
         </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- Roleplay only: who you are talking to, under the tabs (c.ai's header). Tap for the
+             character panel, long-press for the RP model. Its top margin follows the tab row. -->
+        <LinearLayout
+            android:id="@+id/rpCharacterChip"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="58dp"
+            android:background="@drawable/bg_model_pill"
+            android:clickable="true"
+            android:contentDescription="@string/rp_model_chip_a11y_empty"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="5dp"
+            android:paddingEnd="8dp"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/rpChipAvatarFrame"
+                android:layout_width="26dp"
+                android:layout_height="26dp">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/rpChipAvatar"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/rp_bg_monogram"
+                    android:contentDescription="@null"
+                    android:importantForAccessibility="no"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearanceOverlay="@style/XaiShapePill" />
+
+                <TextView
+                    android:id="@+id/rpChipMonogram"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:importantForAccessibility="no"
+                    android:textColor="@color/xai_mute"
+                    android:textFontWeight="600"
+                    android:textSize="13sp" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/rpChipName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:ellipsize="end"
+                android:fontFamily="@font/app_sans"
+                android:maxWidth="200dp"
+                android:singleLine="true"
+                android:textColor="@color/xai_ink"
+                android:textFontWeight="600"
+                android:textSize="15sp"
+                tools:text="Vesna" />
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginStart="2dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_expand_more"
+                app:tint="@color/xai_body" />
+        </LinearLayout>
         </FrameLayout>
 
         <!-- Soft fade so the transcript dissolves around the floating composer -->

@@ -13,6 +13,8 @@ class ChatRepository(private val chatDao: ChatDao) {
         return chatDao.getMessagesForSession(sessionId)
     }
 
+    suspend fun getLastMessage(sessionId: Long): ChatMessage? = chatDao.getLastMessage(sessionId)
+
     suspend fun getSessionById(sessionId: Long): ChatSession? {
         return chatDao.getSessionById(sessionId)
     }
