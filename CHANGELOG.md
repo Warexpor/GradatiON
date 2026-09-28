@@ -2,6 +2,11 @@
 
 ## Unreleased — monochrome redesign
 
+### Fixed
+- Jump-to-latest sits on the left, just above the composer (above the fade, not under it).
+- Mode tabs: inactive labels use the quieter tertiary gray and lighten toward ink as you swipe.
+- A reply's ⋮ menu grows out of the dots as a compact card, not a full-width strip above the input.
+
 ### Changed
 - Chat: a round jump-to-latest button rises above the composer once you've scrolled up; each mode keeps its scroll spot when you swipe away and back; the dim under the top bar is always on and a little denser. Reply tools fade in left to right, and the fold-long-answers and share buttons are gone. Code blocks are flat cards with a bare copy icon. Your own messages open their tools on the first tap, and the tools ease open and closed.
 - Models: new installs start with just Demo and the free OpenRouter router (older installs drop the untouched seed models, keeping edits and the one in use). A Local filter and a new local-network mark; the list fades under the filter row instead of cutting off.

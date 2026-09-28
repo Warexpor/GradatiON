@@ -2109,7 +2109,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         chatAdapter.onStreamVisualUpdate = { followStreamingEdge() }
         chatAdapter.showThinking = sharedPreferencesHelper.isShowThinkingBlocks()
         chatAdapter.onMessageMenu = { anchor, rows ->
-            newPopover(anchor) { open -> anchor.isSelected = open }?.show(null, rows, modal = true)
+            // Hug the ⋮ itself — not the composer bar the other pickers hang from.
+            newPopover(anchor, edge = anchor) { open -> anchor.isSelected = open }
+                ?.show(null, rows, modal = true)
         }
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -4333,6 +4335,7 @@ $cleanContent
             root.findViewById(R.id.chatFrameView),
             root.findViewById(R.id.composerDock),
             root.findViewById(R.id.composerFade),
+            root.findViewById(R.id.jumpToBottomButton),
             root.findViewById(R.id.codeModeContainer)
         )
     }
@@ -4476,16 +4479,17 @@ $cleanContent
     }
 
     /**
-     * How far the slide has come, 0 (old page) to 1 (new page): the tab highlight and the dim
-     * under the tabs move with it instead of flipping when the mode switches underneath.
+     * How far the slide has come, 0 (old page) to 1 (new page): inactive tabs sit on tertiary
+     * and lighten toward ink with the finger, so the page you're leaving fades and the one
+     * you're entering brightens in lockstep with the underline.
      */
     private fun applyPagerProgress(p: Pager, t: Float) {
         val k = t.coerceIn(0f, 1f)
         val ink = ContextCompat.getColor(requireContext(), R.color.xai_ink)
-        val mute = ContextCompat.getColor(requireContext(), R.color.xai_mute)
+        val dim = ContextCompat.getColor(requireContext(), R.color.xai_tertiary)
         val eval = android.animation.ArgbEvaluator()
-        p.origin.setTextColor(eval.evaluate(k, ink, mute) as Int)
-        p.target.setTextColor(eval.evaluate(k, mute, ink) as Int)
+        p.origin.setTextColor(eval.evaluate(k, ink, dim) as Int)
+        p.target.setTextColor(eval.evaluate(k, dim, ink) as Int)
         view?.findViewById<View>(R.id.topBarGlass)?.background?.alpha =
             (p.edgeFrom + (edgeAlphaForList() - p.edgeFrom) * k).toInt()
     }
@@ -6027,6 +6031,8 @@ $cleanContent
 
     private fun newPopover(
         anchor: View = modelNameTextView,
+        /** Surface the card clears; defaults to the composer. Pass [anchor] to hug a mid-list control. */
+        edge: View = chatInputContainer,
         onOpenChange: (Boolean) -> Unit = { open -> modelNameTextView.isSelected = open }
     ): PickerPopover? {
         val root = view as? FrameLayout ?: return null
@@ -6036,7 +6042,7 @@ $cleanContent
             return null
         }
         pickerPopover?.dismiss(animated = false)
-        return PickerPopover(root, anchor, root.findViewById(R.id.chatBackdrop), chatInputContainer).also { p ->
+        return PickerPopover(root, anchor, root.findViewById(R.id.chatBackdrop), edge).also { p ->
             pickerPopover = p
             onOpenChange(true)
             p.onDismiss = { onOpenChange(false); if (pickerPopover === p) pickerPopover = null }

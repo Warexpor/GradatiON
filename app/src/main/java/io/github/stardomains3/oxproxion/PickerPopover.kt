@@ -109,12 +109,13 @@ class PickerPopover(
         val ey = edgeLoc[1] - hostLoc[1]
         val ex = edgeLoc[0] - hostLoc[0]
         val gutter = (12 * density).toInt()
+        val hugAnchor = edge === anchor
         // With an edge (composer) the card spans it edge to edge, so it lines up on both sides;
-        // a bare anchor keeps the compact 340dp card.
-        val width = if (edge !== anchor) {
+        // a bare mid-list anchor (⋮) keeps a tight card that grows out of the control.
+        val width = if (!hugAnchor) {
             minOf(edge.width, host.width - 2 * gutter, (560 * density).toInt())
         } else {
-            minOf(host.width - 2 * gutter, (340 * density).toInt())
+            minOf(host.width - 2 * gutter, (240 * density).toInt())
         }
         // Measured against the space the keyboard leaves: a composer riding the keyboard sits
         // mid-screen but is still a bottom bar, and the card belongs above it.
@@ -125,7 +126,12 @@ class PickerPopover(
         val topInset = ViewCompat.getRootWindowInsets(host)?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
         val room = if (above) ey - gap - topInset - gutter - (56 * density).toInt() else host.height - (ey + edge.height + gap) - gutter
         val maxHeight = room.coerceAtMost((560 * density).toInt()).coerceAtLeast((160 * density).toInt())
-        val left = (if (edge !== anchor) ex else ax - (8 * density).toInt()).coerceIn(gutter, host.width - width - gutter)
+        // Hug-anchor: center the card on the control; composer cards span the edge.
+        val left = if (!hugAnchor) {
+            ex.coerceIn(gutter, host.width - width - gutter)
+        } else {
+            (ax + anchor.width / 2 - width / 2).coerceIn(gutter, host.width - width - gutter)
+        }
         val ay = ey
 
         val lp = FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT)

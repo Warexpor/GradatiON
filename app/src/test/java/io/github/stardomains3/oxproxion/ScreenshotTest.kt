@@ -1343,12 +1343,28 @@ class ScreenshotTest {
         val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
         val holder = rv.findViewHolderForAdapterPosition(1)!!
         org.junit.Assert.assertEquals(View.GONE, holder.itemView.findViewById<View>(R.id.editButton).visibility)
-        holder.itemView.findViewById<View>(R.id.moreActionsButton).performClick(); idle()
+        val more = holder.itemView.findViewById<View>(R.id.moreActionsButton)
+        more.performClick(); idle()
         val rows = a.findViewById<android.view.ViewGroup>(R.id.popoverRows)
         val titles = (0 until rows.childCount).map {
             rows.getChildAt(it).findViewById<android.widget.TextView>(R.id.popoverRowTitle).text.toString()
         }
         org.junit.Assert.assertTrue(titles.toString(), "Edit" in titles)
+        // popoverRows → NestedScrollView → glass card. Hug the ⋮, not the composer.
+        val card = rows.parent.parent as View
+        val composer = a.findViewById<View>(R.id.chatInputContainer)
+        org.junit.Assert.assertTrue(
+            "menu width ${card.width} should be under the composer (${composer.width})",
+            card.width > 0 && card.width < composer.width - 40
+        )
+        val moreLoc = IntArray(2).also { more.getLocationOnScreen(it) }
+        val cardLoc = IntArray(2).also { card.getLocationOnScreen(it) }
+        val moreCenterX = moreLoc[0] + more.width / 2
+        val cardCenterX = cardLoc[0] + card.width / 2
+        org.junit.Assert.assertTrue(
+            "menu should sit near the ⋮ (more=$moreCenterX card=$cardCenterX)",
+            kotlin.math.abs(moreCenterX - cardCenterX) < card.width
+        )
         snap(root(a), "reply_menu_dark")
     }
 
