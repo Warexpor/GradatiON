@@ -23,6 +23,8 @@
     <string name="rp_ui_empty_title">Create your first character</string>
     <string name="rp_ui_empty_body">Give them a name, a greeting and a personality. Then just start talking.</string>
     <string name="rp_ui_more_options">More options for %1$s</string>
+    <string name="rp_ui_empty_create">Create</string>
+    <string name="rp_ui_empty_import">Import</string>
     <string name="rp_ui_no_description">No description yet</string>
     <string name="rp_ui_character_card_a11y">%1$s. Double tap to start chatting.</string>
 
@@ -30,15 +32,13 @@
     <string name="rp_ui_change_photo">Change photo</string>
     <string name="rp_ui_add_photo">Add photo</string>
     <string name="rp_ui_remove_photo">Remove</string>
-    <string name="rp_ui_section_identity">Identity</string>
-    <string name="rp_ui_section_character">Character</string>
     <string name="rp_ui_section_advanced">Advanced</string>
-    <string name="rp_ui_identity_footer">The greeting is the first message of every new chat.</string>
-    <string name="rp_ui_advanced_footer">Optional. The prompt override replaces the whole generated prompt.</string>
+    <string name="rp_ui_advanced_expand">Show advanced fields</string>
+    <string name="rp_ui_advanced_collapse">Hide advanced fields</string>
 
     <!-- Persona -->
     <string name="rp_ui_persona_intro">How characters see you. Used in every RP chat.</string>
-    <string name="rp_ui_section_you">You</string>
+    <string name="rp_ui_section_you">Persona</string>
     <!-- Roleplay home: the chats list you land on -->
     <string name="rp_home_chats">Chats</string>
     <string name="rp_home_empty">No chats yet. Tap the new chat button to pick a character.</string>

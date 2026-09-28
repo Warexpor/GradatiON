@@ -44,6 +44,22 @@ class RpRepository(private val rpDao: RpDao) {
         }
     }
 
+    /** Run once per install: an old "Use active lorebook" = off becomes "no book active". */
+    suspend fun retireLoreSwitch(prefs: SharedPreferencesHelper) {
+        if (prefs.takeRpLoreSwitchWasOff()) rpDao.deactivateAllLorebooks()
+    }
+
+    /** Make [id] the active book, or with [active] false clear the active book if it is this one. */
+    suspend fun setLorebookActive(id: Long, active: Boolean) {
+        if (active) {
+            setActiveLorebook(id)
+        } else {
+            rpDao.getLorebookById(id)?.takeIf { it.isActive }?.let {
+                rpDao.updateLorebook(it.copy(isActive = false, updatedAt = System.currentTimeMillis()))
+            }
+        }
+    }
+
     suspend fun deleteLorebook(id: Long) {
         // Do not auto-promote another book — that silently changes the RP prompt.
         // User must Set active explicitly (or import path may activate the first book).

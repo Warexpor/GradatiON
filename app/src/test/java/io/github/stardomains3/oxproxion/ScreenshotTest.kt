@@ -517,9 +517,15 @@ class ScreenshotTest {
         file.parentFile?.mkdirs()
         file.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
         dao.insertLorebook(RpLorebook(name = "Outer Rim", content = "Ports, pirates and old wars.", isActive = true))
+        dao.insertLorebook(RpLorebook(name = "Ashfall", content = "Always on.\n[keys: ash, volcano]\nThe mountain wakes every decade."))
         val prefs = SharedPreferencesHelper(ctx)
         prefs.saveRpActiveCharacterId(if (withActive) ids[0] else null)
-        prefs.saveRpPersona("Sam, a courier with a bad sense of direction.")
+        prefs.saveRpPersona("A courier with a bad sense of direction.")
+        prefs.saveRpPersonaName("Sam")
+        prefs.saveRpPersonaPresets(listOf(
+            RpPersonaPreset("Sam the courier", "A courier with a bad sense of direction.", "Sam"),
+            RpPersonaPreset("Detective", "A tired detective with a soft spot for strays.", "Jo"),
+        ))
     }
 
     /** Room LiveData and Coil decode on real background threads; give them a moment. */
@@ -541,7 +547,18 @@ class ScreenshotTest {
             "rp_hub_dark" to { RpHubFragment() },
             "rp_characters_dark" to { RpCharacterLibraryFragment.newInstance() },
             "rp_persona_dark" to { RpPersonaFragment.newInstance() },
+            "rp_lorebooks_filled_dark" to { RpLorebookLibraryFragment.newInstance() },
         ))
+    }
+
+    /** The hub row shows the persona's name; the lorebook and character libraries hold real rows. */
+    @Test fun rpHubShowsPersonaName() = withChat { a, _ ->
+        seedRp()
+        pushFragment(a, RpHubFragment()); settle()
+        val row = a.findViewById<View>(R.id.rpHubPersonaRow)
+        org.junit.Assert.assertEquals("Sam", row.findViewById<android.widget.TextView>(R.id.rpHubRowValue).text.toString())
+        val label = a.findViewById<android.widget.TextView>(R.id.rpHubHeroLabel)
+        org.junit.Assert.assertTrue("hero label is 13sp or more", label.textSize / a.resources.displayMetrics.scaledDensity >= 12.9f)
     }
 
     @Test fun rpEmptyScreensDark() = withChat { a, _ ->
@@ -552,25 +569,109 @@ class ScreenshotTest {
         ))
     }
 
+    /** Both libraries answer "nothing here yet" the same way, with Create and Import. */
+    @Test fun rpEmptyLibrariesOfferCreateAndImport() = withChat { a, _ ->
+        for (make in listOf<() -> androidx.fragment.app.Fragment>(
+            { RpCharacterLibraryFragment.newInstance() }, { RpLorebookLibraryFragment.newInstance() }
+        )) {
+            val f = make()
+            pushFragment(a, f); settle()
+            val empty = f.requireView().findViewById<View>(R.id.rpEmptyCreate).parent as View
+            org.junit.Assert.assertEquals(View.VISIBLE, (empty.parent as View).visibility)
+            org.junit.Assert.assertEquals("Create", f.requireView().findViewById<android.widget.TextView>(R.id.rpEmptyCreate).text.toString())
+            org.junit.Assert.assertEquals("Import", f.requireView().findViewById<android.widget.TextView>(R.id.rpEmptyImport).text.toString())
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+    }
+
     @Test fun rpCharacterEditExistingDark() = withChat { a, _ ->
         seedRp()
         val id = runBlocking { db.rpDao().getAllCharactersOnce().first { it.name == "Mira Vance" }.id }
-        pushFragment(a, RpCharacterEditFragment.newInstance(id)); settle()
+        val f = RpCharacterEditFragment.newInstance(id)
+        pushFragment(a, f); settle()
+        val v = f.requireView()
+        // Loaded: the fields are live again, and Advanced is folded because this card has nothing in it.
+        org.junit.Assert.assertTrue(v.findViewById<View>(R.id.rpNameInput).isEnabled)
+        org.junit.Assert.assertEquals("Mira Vance", v.findViewById<android.widget.EditText>(R.id.rpNameInput).text.toString())
+        org.junit.Assert.assertEquals(View.GONE, v.findViewById<View>(R.id.rpAdvancedGroup).visibility)
         snap(root(a), "rp_character_edit_existing_dark")
     }
 
+    /** Field order is Name, Personality, Scenario, Greeting, Style; the required-name error sits on the field. */
+    @Test fun rpCharacterEditNewDark() = withChat { a, _ ->
+        val f = RpCharacterEditFragment.newInstance(0)
+        pushFragment(a, f); settle()
+        val v = f.requireView()
+        fun top(id: Int): Int {
+            val loc = IntArray(2); v.findViewById<View>(id).getLocationOnScreen(loc); return loc[1]
+        }
+        val order = listOf(R.id.rpNameLayout, R.id.rpPersonalityLayout, R.id.rpScenarioLayout, R.id.rpGreetingLayout, R.id.rpStyleLayout)
+        org.junit.Assert.assertEquals(order.map { top(it) }.sorted(), order.map { top(it) })
+        org.junit.Assert.assertEquals(View.GONE, v.findViewById<View>(R.id.rpAdvancedGroup).visibility)
+        v.findViewById<View>(R.id.saveRpCharacterButton).performClick(); idle()
+        val name = v.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.rpNameLayout)
+        org.junit.Assert.assertEquals("Name is required", name.error?.toString())
+        org.junit.Assert.assertTrue(v.findViewById<View>(R.id.rpNameInput).hasFocus())
+        snap(root(a), "rp_character_edit_new_error_dark")
+    }
+
+    /** A bad examples block opens Advanced and puts the message on the field instead of a toast. */
+    @Test fun rpCharacterEditExamplesErrorDark() = withChat { a, _ ->
+        val f = RpCharacterEditFragment.newInstance(0)
+        pushFragment(a, f); settle()
+        val v = f.requireView()
+        v.findViewById<android.widget.EditText>(R.id.rpNameInput).setText("Test")
+        v.findViewById<android.widget.EditText>(R.id.rpExamplesInput).setText("hello there, no markers")
+        v.findViewById<View>(R.id.saveRpCharacterButton).performClick(); idle()
+        org.junit.Assert.assertEquals(View.VISIBLE, v.findViewById<View>(R.id.rpAdvancedGroup).visibility)
+        val layout = v.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.rpExamplesLayout)
+        org.junit.Assert.assertNotNull(layout.error)
+        snap(root(a), "rp_character_edit_examples_error_dark")
+    }
+
+    @Test fun rpPersonaHasNameField() = withChat { a, _ ->
+        seedRp()
+        val f = RpPersonaFragment.newInstance()
+        pushFragment(a, f); idle()
+        val v = f.requireView()
+        org.junit.Assert.assertEquals("Sam", v.findViewById<android.widget.EditText>(R.id.rpPersonaNameInput).text.toString())
+        org.junit.Assert.assertEquals("A courier with a bad sense of direction.", v.findViewById<android.widget.EditText>(R.id.rpPersonaInput).text.toString())
+        v.findViewById<android.widget.EditText>(R.id.rpPersonaNameInput).setText("Samantha")
+        v.findViewById<View>(R.id.saveRpPersonaButton).performClick(); idle()
+        org.junit.Assert.assertEquals("Samantha", SharedPreferencesHelper(a).getRpPersonaName())
+    }
+
     @Test fun rpLorebookEditDark() = withChat { a, _ ->
-        pushFragment(a, RpLorebookEditFragment.newInstance(0L)); idle()
-        val hits = ArrayList<android.view.View>()
-        a.findViewById<android.view.ViewGroup>(android.R.id.content)
-            .findViewsWithText(hits, "phrase] blocks", android.view.View.FIND_VIEWS_WITH_TEXT)
+        val f = RpLorebookEditFragment.newInstance(0L)
+        pushFragment(a, f); settle()
+        val v = f.requireView()
+        val hits = ArrayList<View>()
+        v.findViewsWithText(hits, "[keys: docks, harbor]", View.FIND_VIEWS_WITH_TEXT)
         val help = hits.filterIsInstance<android.widget.TextView>().first()
         val layout = help.layout
         org.junit.Assert.assertNotNull(layout)
         val cut = (0 until layout.lineCount).sumOf { layout.getEllipsisCount(it) }
         org.junit.Assert.assertEquals("lore format hint is clipped", 0, cut)
+        // The first book is active by default; the switch is there and on.
+        org.junit.Assert.assertTrue(v.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.rpLoreActiveSwitch).isChecked)
         snap(root(a), "rp_lorebook_edit_dark")
     }
+
+    @Test fun rpLorebookEditWarnsOnBrokenKeysDark() = withChat { a, _ ->
+        seedRp()
+        val id = runBlocking { db.rpDao().getAllLorebooksOnce().first { it.name == "Ashfall" }.id }
+        val f = RpLorebookEditFragment.newInstance(id)
+        pushFragment(a, f); settle()
+        val v = f.requireView()
+        val layout = v.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.rpLoreContentLayout)
+        org.junit.Assert.assertNull(layout.error)
+        org.junit.Assert.assertFalse(v.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.rpLoreActiveSwitch).isChecked)
+        v.findViewById<android.widget.EditText>(R.id.rpLoreContentInput).setText("Always on.\n[keys: ash, volcano\nThe mountain wakes.")
+        idle()
+        org.junit.Assert.assertTrue(layout.error.toString().contains("2"))
+        snap(root(a), "rp_lorebook_edit_warning_dark")
+    }
+
     /** Screens with nothing to assert: each must inflate and render. One activity for all of them. */
     @Test fun secondaryScreensDark() = withChat { a, _ ->
         renderEach(a, settleEach = false, screens = listOf(
@@ -613,12 +714,16 @@ class ScreenshotTest {
     }
     @Test fun rpSettingsDark() = withChat { a, _ ->
         pushFragment(a, RpSettingsFragment()); idle()
-        val facts = a.findViewById<android.widget.TextView>(R.id.rpAutoMemorySwitch)
-        val layout = facts.layout
-        org.junit.Assert.assertNotNull("facts switch laid out", layout)
-        val cut = (0 until layout.lineCount).sumOf { layout.getEllipsisCount(it) }
-        org.junit.Assert.assertEquals("facts row must show the whole sentence", 0, cut)
-        org.junit.Assert.assertTrue(layout.text.toString().endsWith("left alone."))
+        // Every switch explains itself on one 13sp line, and the lorebook switch is gone.
+        for (id in listOf(R.id.rpThirdPersonSubtitle, R.id.rpShowThoughtsSubtitle, R.id.rpAutoMemorySubtitle, R.id.rpLlmModeSubtitle)) {
+            val sub = a.findViewById<android.widget.TextView>(id)
+            val layout = sub.layout
+            org.junit.Assert.assertNotNull("subtitle laid out", layout)
+            val cut = (0 until layout.lineCount).sumOf { layout.getEllipsisCount(it) }
+            org.junit.Assert.assertEquals("'${sub.text}' must show whole", 0, cut)
+            org.junit.Assert.assertTrue("subtitle is 13sp or more", sub.textSize / a.resources.displayMetrics.scaledDensity >= 12.9f)
+        }
+        org.junit.Assert.assertEquals("Auto facts", a.findViewById<android.widget.TextView>(R.id.rpAutoMemoryTitle).text.toString())
         snap(root(a), "rp_settings_dark")
     }
 
@@ -845,6 +950,13 @@ class ScreenshotTest {
         val rows = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
         // Mira has two chats but one row.
         org.junit.Assert.assertEquals(4, rows.adapter!!.itemCount)
+        // The count sits beside the name, not in the time cell, and the action in the last line is italic.
+        val mira = rows.findViewHolderForAdapterPosition(0)!!.itemView
+        org.junit.Assert.assertEquals("2 chats", mira.findViewById<android.widget.TextView>(R.id.rpChatCount).text.toString())
+        org.junit.Assert.assertFalse(mira.findViewById<android.widget.TextView>(R.id.rpChatWhen).text.contains("chats"))
+        val line = mira.findViewById<android.widget.TextView>(R.id.rpChatPreview).text as android.text.Spanned
+        org.junit.Assert.assertEquals("sighs and grabs a wrench Fine. Show me.", line.toString())
+        org.junit.Assert.assertEquals(1, line.getSpans(0, line.length, android.text.style.StyleSpan::class.java).size)
         snap(root(a), "rp_home_dark")
 
         // Opening a row resumes that chat: the list goes, the composer and the chip come back.

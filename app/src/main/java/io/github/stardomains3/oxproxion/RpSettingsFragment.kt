@@ -26,40 +26,43 @@ class RpSettingsFragment : Fragment() {
         view.findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener {
             parentFragmentManager.popBackStack()
         }
-        view.findViewById<SwitchCompat>(R.id.rpLoreEnabledSwitch).apply {
-            isChecked = prefs.isRpLoreEnabled()
-            setOnCheckedChangeListener { _, checked -> prefs.saveRpLoreEnabled(checked) }
+        // The whole row is the tap target; the switch beside it only shows the state.
+        fun bindRow(rowId: Int, switchId: Int, on: Boolean, onChange: (Boolean) -> Unit): SwitchCompat {
+            val toggle = view.findViewById<SwitchCompat>(switchId)
+            toggle.isChecked = on
+            view.findViewById<View>(rowId).setOnClickListener {
+                if (!it.isEnabled) return@setOnClickListener
+                toggle.isChecked = !toggle.isChecked
+                onChange(toggle.isChecked)
+            }
+            return toggle
         }
-        val thirdPersonSwitch = view.findViewById<SwitchCompat>(R.id.rpThirdPersonSwitch)
-        thirdPersonSwitch.isChecked = prefs.isRpThirdPerson()
-        thirdPersonSwitch.setOnCheckedChangeListener { _, checked -> prefs.saveRpThirdPerson(checked) }
-
-        view.findViewById<SwitchCompat>(R.id.rpAutoMemorySwitch).apply {
-            isChecked = prefs.isRpAutoMemory()
-            setOnCheckedChangeListener { _, checked -> prefs.saveRpAutoMemory(checked) }
+        val thirdPersonSwitch = bindRow(R.id.rpThirdPersonRow, R.id.rpThirdPersonSwitch, prefs.isRpThirdPerson()) {
+            prefs.saveRpThirdPerson(it)
         }
-
-        val showThoughtsSwitch = view.findViewById<SwitchCompat>(R.id.rpShowThoughtsSwitch)
-        showThoughtsSwitch.isChecked = prefs.isRpShowThoughts()
-        showThoughtsSwitch.setOnCheckedChangeListener { _, checked -> prefs.saveRpShowThoughts(checked) }
+        bindRow(R.id.rpAutoMemoryRow, R.id.rpAutoMemorySwitch, prefs.isRpAutoMemory()) { prefs.saveRpAutoMemory(it) }
+        val showThoughtsSwitch = bindRow(R.id.rpShowThoughtsRow, R.id.rpShowThoughtsSwitch, prefs.isRpShowThoughts()) {
+            prefs.saveRpShowThoughts(it)
+        }
 
         fun syncLlmGatedSwitches(llmOn: Boolean) {
             // Third-person / thoughts only affect character RP prompts.
-            thirdPersonSwitch.isEnabled = !llmOn
-            showThoughtsSwitch.isEnabled = !llmOn
-            thirdPersonSwitch.alpha = if (llmOn) 0.45f else 1f
-            showThoughtsSwitch.alpha = if (llmOn) 0.45f else 1f
+            for ((row, toggle) in listOf(
+                R.id.rpThirdPersonRow to thirdPersonSwitch,
+                R.id.rpShowThoughtsRow to showThoughtsSwitch
+            )) {
+                view.findViewById<View>(row).isEnabled = !llmOn
+                view.findViewById<View>(row).alpha = if (llmOn) 0.45f else 1f
+                toggle.isEnabled = !llmOn
+            }
         }
         syncLlmGatedSwitches(prefs.isRpLlmMode())
 
         val llmSwitch = view.findViewById<SwitchCompat>(R.id.rpLlmModeSwitch)
         llmSwitch.isChecked = prefs.isRpLlmMode()
-        llmSwitch.setOnCheckedChangeListener { button, checked ->
-            if (!button.isPressed) {
-                prefs.saveRpLlmMode(checked)
-                syncLlmGatedSwitches(checked)
-                return@setOnCheckedChangeListener
-            }
+        // Flipping LLM mode can wipe the running chat, so the switch only moves once that is settled.
+        fun requestLlmMode(checked: Boolean) {
+            val button = llmSwitch
             if (checked && chatViewModel.isRpMode() && chatViewModel.rpChatHasContent()) {
                 button.isChecked = false
                 GrokConfirmDialog.show(
@@ -75,7 +78,7 @@ class RpSettingsFragment : Fragment() {
                     },
                     destructive = false
                 )
-                return@setOnCheckedChangeListener
+                return
             }
             if (!checked && chatViewModel.isRpMode() && chatViewModel.rpChatHasContent()) {
                 button.isChecked = true
@@ -92,11 +95,7 @@ class RpSettingsFragment : Fragment() {
                             chatViewModel.refreshActiveRpCharacter()
                             if (!isAdded) return@launch
                             if (prefs.getRpActiveCharacterId() == null) {
-                                AppToast.makeText(
-                                    requireContext(),
-                                    getString(R.string.rp_select_character),
-                                    AppToast.LENGTH_SHORT
-                                ).show()
+                                GlassNotice.show(requireContext(), getString(R.string.rp_select_character))
                                 chatViewModel.startNewChat()
                             } else {
                                 chatViewModel.startNewRpChatKeepingCharacter()
@@ -105,8 +104,9 @@ class RpSettingsFragment : Fragment() {
                     },
                     destructive = false
                 )
-                return@setOnCheckedChangeListener
+                return
             }
+            button.isChecked = checked
             prefs.saveRpLlmMode(checked)
             syncLlmGatedSwitches(checked)
             if (checked) {
@@ -123,11 +123,7 @@ class RpSettingsFragment : Fragment() {
                     chatViewModel.refreshActiveRpCharacter()
                     if (!isAdded) return@launch
                     if (prefs.getRpActiveCharacterId() == null) {
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_select_character),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_select_character))
                         if (chatViewModel.isRpMode()) {
                             chatViewModel.startNewChat()
                         }
@@ -137,6 +133,7 @@ class RpSettingsFragment : Fragment() {
                 }
             }
         }
+        view.findViewById<View>(R.id.rpLlmModeRow).setOnClickListener { requestLlmMode(!llmSwitch.isChecked) }
     }
 
     companion object {

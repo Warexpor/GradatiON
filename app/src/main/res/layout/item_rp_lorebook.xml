@@ -8,10 +8,16 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@drawable/bg_press_svg"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:minHeight="64dp"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="12dp"
-        android:gravity="center_vertical">
+        android:paddingStart="16dp"
+        android:paddingEnd="8dp"
+        android:paddingVertical="6dp"
+        android:id="@+id/rpLorebookRow">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -36,7 +42,7 @@
                 android:layout_marginTop="2dp"
                 android:text="@string/rp_lore_active_badge"
                 android:textColor="@color/xai_ink"
-                android:textSize="12sp"
+                android:textSize="13sp"
                 android:visibility="gone" />
         </LinearLayout>
 
@@ -44,8 +50,10 @@
             android:id="@+id/rpLorebookActivateButton"
             style="@style/Widget.Grokion.Button.Text"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
+            android:layout_height="44dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="44dp"
             android:maxWidth="120dp"
             android:ellipsize="end"
             android:maxLines="1"
@@ -55,8 +63,10 @@
             android:id="@+id/rpLorebookDeleteButton"
             style="@style/Widget.Grokion.Button.Text"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
+            android:layout_height="44dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="44dp"
             android:maxWidth="100dp"
             android:ellipsize="end"
             android:maxLines="1"

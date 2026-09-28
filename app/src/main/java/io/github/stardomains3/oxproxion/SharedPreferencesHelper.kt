@@ -171,7 +171,10 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_RP_ACTIVE_CHARACTER_ID = "rp_active_character_id"
         private const val KEY_RP_PERSONA = "rp_persona"
         private const val KEY_RP_PERSONA_PRESETS = "rp_persona_presets"
+        private const val KEY_RP_PERSONA_NAME = "rp_persona_name"
+        // Retired "Use active lorebook" switch: only read once, to honour an "off" that was set.
         private const val KEY_RP_LORE_ENABLED = "rp_lore_enabled"
+        private const val KEY_RP_LORE_SWITCH_RETIRED = "rp_lore_switch_retired"
         private const val KEY_RP_THIRD_PERSON = "rp_third_person"
         private const val KEY_RP_SHOW_THOUGHTS = "rp_show_thoughts"
         private const val KEY_SHOW_THINKING_BLOCKS = "show_thinking_blocks"
@@ -1178,15 +1181,32 @@ class SharedPreferencesHelper(context: Context) {
     fun isRpAutoMemory(): Boolean = mainPrefs.getBoolean("rp_auto_memory", true)
     fun saveRpAutoMemory(on: Boolean) = mainPrefs.edit { putBoolean("rp_auto_memory", on) }
 
-    /** Name of the persona preset currently in use, if the persona text came from one. */
+    /**
+     * The name characters and `{{user}}` use for you. Saved on its own; until it has been saved once,
+     * fall back to the preset whose text matches the persona, which is how the name used to be found.
+     */
     fun getRpPersonaName(): String {
+        if (mainPrefs.contains(KEY_RP_PERSONA_NAME)) return mainPrefs.getString(KEY_RP_PERSONA_NAME, "").orEmpty().trim()
         val persona = getRpPersona().trim()
         if (persona.isEmpty()) return ""
         return getRpPersonaPresets().firstOrNull { it.description.trim() == persona }?.name.orEmpty()
     }
+    fun saveRpPersonaName(name: String) = mainPrefs.edit { putString(KEY_RP_PERSONA_NAME, name.trim()) }
 
-    fun isRpLoreEnabled(): Boolean = mainPrefs.getBoolean(KEY_RP_LORE_ENABLED, true)
-    fun saveRpLoreEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_LORE_ENABLED, enabled) }
+    /**
+     * The "Use active lorebook" switch is gone: an active book is used, "None active" is off.
+     * True once, when the switch had been left off, so the caller clears the active book to keep
+     * that prompt lore-free.
+     */
+    fun takeRpLoreSwitchWasOff(): Boolean {
+        if (mainPrefs.getBoolean(KEY_RP_LORE_SWITCH_RETIRED, false)) return false
+        val wasOff = !mainPrefs.getBoolean(KEY_RP_LORE_ENABLED, true)
+        mainPrefs.edit {
+            putBoolean(KEY_RP_LORE_SWITCH_RETIRED, true)
+            remove(KEY_RP_LORE_ENABLED)
+        }
+        return wasOff
+    }
 
     fun isRpThirdPerson(): Boolean = mainPrefs.getBoolean(KEY_RP_THIRD_PERSON, false)
     fun saveRpThirdPerson(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_THIRD_PERSON, enabled) }

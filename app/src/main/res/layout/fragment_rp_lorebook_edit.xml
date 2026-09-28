@@ -26,48 +26,102 @@
         android:paddingEnd="16dp"
         android:paddingBottom="16dp">
 
-        <LinearLayout
+        <!-- Scrolls so the helper and error lines under the text field are never pushed off screen -->
+        <ScrollView
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:layout_marginTop="8dp"
+            android:fillViewport="true"
+            android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:background="@drawable/bg_settings_card"
             android:orientation="vertical"
             android:padding="12dp">
 
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/rpLoreNameLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="@string/rp_field_name">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/rpLoreNameInput"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
+                    android:layout_height="wrap_content"
+                    android:inputType="textCapWords"
+                    android:maxLines="1" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/rpLoreContentLayout"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="@string/rp_field_lore">
+                android:hint="@string/rp_field_lore"
+                app:helperText="@string/rp_field_lore_content"
+                app:helperTextEnabled="true">
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/rpLoreContentInput"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:gravity="top" />
+                    android:layout_height="wrap_content"
+                    android:inputType="textMultiLine|textCapSentences"
+                    android:gravity="top"
+                    android:minLines="10" />
             </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
+        </ScrollView>
 
-        <TextView
+        <!-- Any book can be made the active one from here; clearing it means no lore. -->
+        <LinearLayout
+            android:id="@+id/rpLoreActiveRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginEnd="4dp"
-            android:text="@string/rp_field_lore_content"
-            android:textColor="@color/xai_mute"
-            android:textSize="13sp" />
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_settings_card"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:minHeight="64dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/rp_lore_active_badge"
+                    android:textColor="@color/xai_ink"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/rp_lore_active_sub"
+                    android:textColor="@color/xai_mute"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/rpLoreActiveSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:clickable="false"
+                android:contentDescription="@string/rp_lore_active_badge"
+                android:focusable="false" />
+        </LinearLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/saveRpLorebookButton"

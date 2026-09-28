@@ -5,13 +5,13 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:fitsSystemWindows="true"
-    android:background="@color/xai_canvas">
+    android:background="@color/xai_grouped">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="@color/xai_canvas"
+        android:background="@color/xai_grouped"
         app:navigationIcon="@drawable/is_backarrow"
         app:navigationContentDescription="@string/cd_navigate_up"
         app:navigationIconTint="@color/xai_ink"
@@ -24,32 +24,13 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <FrameLayout
+    <include
         android:id="@+id/rpLorebookEmpty"
+        layout="@layout/include_rp_empty"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:visibility="gone">
-
-        <ImageView
-            android:layout_width="220dp"
-            android:layout_height="220dp"
-            android:layout_gravity="center"
-            android:alpha="0.12"
-            android:contentDescription="@null"
-            android:importantForAccessibility="no"
-            android:src="@drawable/ic_gradation_mark"
-            app:tint="@color/xai_ink" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:padding="24dp"
-            android:text="@string/rp_lorebooks_empty"
-            android:textColor="@color/xai_mute"
-            android:textSize="15sp" />
-    </FrameLayout>
+        android:visibility="gone" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/addRpLorebookButton"
