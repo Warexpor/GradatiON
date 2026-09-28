@@ -732,7 +732,15 @@
     <string name="dialog_attached_files">Attached Files (%1$d)</string>
     <string name="dialog_enable_disable_tools">Enable / Disable Tools</string>
     <string name="dialog_web_search_engine">Web Search Engine</string>
+    <string name="web_search_engine_default">Default (Native if available, fallback Exa)</string>
+    <string name="web_search_engine_native">Native (Provider\'s built-in search)</string>
+    <string name="web_search_engine_exa">Exa (Always use Exa search)</string>
+    <string name="web_search_engine_firecrawl">Firecrawl (Always use Firecrawl search. Uses your BYOK credits)</string>
+    <string name="web_search_engine_parallel">Parallel (Always use Parallel search)</string>
     <string name="dialog_search_context_size">Search Context Size</string>
+    <string name="web_search_context_low">Low (Minimal context, basic queries)</string>
+    <string name="web_search_context_medium">Medium (Moderate context, general queries)</string>
+    <string name="web_search_context_high">High (Extensive context, detailed research)</string>
     <string name="dialog_max_search_results">Max Search Results\n(Higher values increase costs)</string>
     <string name="spell_title">AI Grammar Fix</string>
     <string name="spell_consulting">Consulting AI...</string>

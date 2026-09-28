@@ -211,11 +211,6 @@ data class CompletionTokensDetails(
     val reasoning_tokens: Int
 )
 @Serializable
-data class ImageData(
-    val url: String
-    // APIs can also return b64_json or revised_prompt, but we only need the URL
-)
-@Serializable
 data class Tool(
     val type: String,
     val function: FunctionTool? = null

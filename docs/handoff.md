@@ -1,7 +1,21 @@
-# Handoff (2026-09-27)
+# Handoff (2026-09-28)
 
-Read `CLAUDE.md`, then `AGENTS.md` (code map, test gotchas) and `docs/backlog.md`. Branch
-`liquid-glass-redesign`. The full suite (426 tests) passed at b9789d9. Dev APK `GradatiON-dev-b9789d9.apk` was sent to the user.
+Read `CLAUDE.md`, then `AGENTS.md` and `docs/backlog.md`. Branch `liquid-glass-redesign`.
+
+## Codebase pass (2026-09-28, stopped)
+Same-job copies in the chat path were folded. The three chat files stayed one file each. Fast unit tests passed (`testDebugUnitTest -Pfast --offline`). Not a release build, and the screenshot suite was not re-run.
+
+- One SSE reader and one non-stream delivery. Sampling is `ChatRequest.withSampling()`. Citations stay on a tool-call reply. A fatal finish reason returns before image download.
+- OpenAI-compatible LAN model lists share `fetchOpenAiModelList`. Ollama stays separate.
+- Send and resend share the endpoint choice and the network turn. Read and open share one workspace lookup. Text and image downloads share one MediaStore write each.
+- An old OpenRouter cache with no reasoning flags refetches once (`open_router_reasoning_migrated`). A later list whose first model is not reasoning stays.
+- Dead code removed along the way: old EPUB writer, unused Brave search, disabled speech-to-text leftovers, unused prefs, and the one-line stream wrappers.
+
+`ChatFragment`, `ChatViewModel`, and `ChatToolRuntime` are still long. Shrinking them further means a split. `ChatStreamHost` and `ChatToolHost` still forward one-line calls; that is the boundary of the existing split.
+
+## Previous handoff (2026-09-27)
+
+The full suite (426 tests) passed at b9789d9. Dev APK `GradatiON-dev-b9789d9.apk` was sent to the user.
 
 ## Done this session
 - K1: Code transcript tool calls are single quiet lines. The session menu toggles Normal/Thinking

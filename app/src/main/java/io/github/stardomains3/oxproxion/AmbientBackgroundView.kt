@@ -17,7 +17,7 @@ import android.util.AttributeSet
 import android.view.Choreographer
 import android.view.View
 import androidx.annotation.RequiresApi
-import java.util.Calendar
+import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.exp
@@ -150,6 +150,12 @@ class AmbientBackgroundView @JvmOverloads constructor(
     private val fieldPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val photoPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val washPaint = Paint()
+    private var horizonShader: Shader? = null
+    private var horizonKey = Long.MIN_VALUE
+    private var tintShader: Shader? = null
+    private var tintKey = Long.MIN_VALUE
+    private var canvasColor = 0
+    private var canvasColorNight = -1
     private var ticking = false
     private var windowVisible = true
     private var animTime = 7.5f // seconds of animation; starts mid-flow so the first frame isn't bland
@@ -183,7 +189,8 @@ class AmbientBackgroundView @JvmOverloads constructor(
             val now = SystemClock.uptimeMillis()
             if (canAnimate()) {
                 animTime += min(0.25f, (now - lastTick) / 1000f) * tuning.speed
-                if (tunedAtHour != Calendar.getInstance().get(Calendar.HOUR_OF_DAY) && prefOrOverride() == Style.ADAPTIVE) retune()
+                // Local hour without allocating a Calendar on every frame.
+                if (tunedAtHour != localHourOfDay() && prefOrOverride() == Style.ADAPTIVE) retune()
                 invalidate()
                 lastTick = now
                 Choreographer.getInstance().postFrameCallbackDelayed(this, tuning.frameMs)
@@ -263,7 +270,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
     private fun prefOrOverride(): Style = styleOverride ?: if (activeSlot() != null) Style.PHOTO else prefStyle
 
     private fun retune() {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val hour = localHourOfDay()
         tunedAtHour = hour
         tuning = tune(prefOrOverride(), mode, isNight(), hour, intensity, photoOptions, wallpaperLuma)
         if (tuning.style == Style.OFF) {
@@ -320,17 +327,34 @@ class AmbientBackgroundView @JvmOverloads constructor(
 
     /** ADAPTIVE: a soft neutral light from the top (bright wallpaper) or shade at the bottom. */
     private fun drawHorizon(canvas: Canvas, strength: Float) {
+        val night = isNight()
         val a = (abs(strength) * 255).roundToInt().coerceIn(0, 255)
-        val tone = if (isNight()) Color.WHITE else Color.BLACK
-        val c = Color.argb(a, Color.red(tone), Color.green(tone), Color.blue(tone))
-        val h = height.toFloat()
-        washPaint.shader = if (strength > 0f) {
-            LinearGradient(0f, 0f, 0f, h * 0.7f, c, Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        } else {
-            LinearGradient(0f, h * 0.3f, 0f, h, Color.TRANSPARENT, c, Shader.TileMode.CLAMP)
+        val h = height
+        val dir = if (strength > 0f) 1L else 0L
+        val key = (h.toLong() shl 32) xor (a.toLong() shl 8) xor dir xor (if (night) 2L else 0L)
+        if (key != horizonKey) {
+            val tone = if (night) Color.WHITE else Color.BLACK
+            val c = Color.argb(a, Color.red(tone), Color.green(tone), Color.blue(tone))
+            val hf = h.toFloat()
+            horizonShader = if (strength > 0f) {
+                LinearGradient(0f, 0f, 0f, hf * 0.7f, c, Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            } else {
+                LinearGradient(0f, hf * 0.3f, 0f, hf, Color.TRANSPARENT, c, Shader.TileMode.CLAMP)
+            }
+            horizonKey = key
         }
-        canvas.drawRect(0f, 0f, width.toFloat(), h, washPaint)
+        washPaint.shader = horizonShader
+        canvas.drawRect(0f, 0f, width.toFloat(), h.toFloat(), washPaint)
         washPaint.shader = null
+    }
+
+    private fun canvasTone(): Int {
+        val night = if (isNight()) 1 else 0
+        if (night != canvasColorNight) {
+            canvasColorNight = night
+            canvasColor = context.getColor(R.color.xai_canvas)
+        }
+        return canvasColor
     }
 
     private fun photoKeyNow(): String =
@@ -354,7 +378,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
 
     private fun drawPhoto(canvas: Canvas) {
         val opts = photoOptions
-        val canvasColor = context.getColor(R.color.xai_canvas)
+        val canvasColor = canvasTone()
         requestPhoto()
         val bmp = photo
         if (bmp != null) {
@@ -371,16 +395,21 @@ class AmbientBackgroundView @JvmOverloads constructor(
         }
         // Tint: canvas-toned fades behind the top bar and the composer.
         if (opts.tint) {
-            val h = height.toFloat()
-            val solid = Color.argb(170, Color.red(canvasColor), Color.green(canvasColor), Color.blue(canvasColor))
-            washPaint.shader = LinearGradient(
-                0f, 0f, 0f, h,
-                intArrayOf(solid, Color.TRANSPARENT, Color.TRANSPARENT, solid),
-                floatArrayOf(0f, 0.22f, 0.62f, 1f),
-                Shader.TileMode.CLAMP
-            )
+            val key = (width.toLong() shl 32) xor height.toLong() xor canvasColor.toLong()
+            if (key != tintKey) {
+                val h = height.toFloat()
+                val solid = Color.argb(170, Color.red(canvasColor), Color.green(canvasColor), Color.blue(canvasColor))
+                tintShader = LinearGradient(
+                    0f, 0f, 0f, h,
+                    intArrayOf(solid, Color.TRANSPARENT, Color.TRANSPARENT, solid),
+                    floatArrayOf(0f, 0.22f, 0.62f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+                tintKey = key
+            }
+            washPaint.shader = tintShader
             washPaint.alpha = 255
-            canvas.drawRect(0f, 0f, width.toFloat(), h, washPaint)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), washPaint)
             washPaint.shader = null
         }
     }
@@ -639,4 +668,12 @@ class AmbientBackgroundView @JvmOverloads constructor(
             return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
         }
     }
+}
+
+/** Local hour 0..23. Same result as Calendar.HOUR_OF_DAY, without allocating a Calendar. */
+internal fun localHourOfDay(nowMs: Long = System.currentTimeMillis()): Int {
+    val offset = TimeZone.getDefault().getOffset(nowMs)
+    var hour = ((nowMs + offset) / 3_600_000L) % 24L
+    if (hour < 0) hour += 24
+    return hour.toInt()
 }

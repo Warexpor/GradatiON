@@ -224,6 +224,7 @@ class GlassMaterial(
     private var lastDy = Int.MIN_VALUE
     private var searched = false
     private var effectLevel: GlassQuality.Level? = null
+    private var softBmp: Bitmap? = null
 
     // Touch state
     private var touchX = 0f
@@ -297,6 +298,8 @@ class GlassMaterial(
         pressAnimator?.cancel()
         press = 0f
         searched = false
+        softBmp?.recycle()
+        softBmp = null
     }
 
     private fun findSource() {
@@ -490,7 +493,12 @@ class GlassMaterial(
         val scale = SOFTWARE_SCALE
         val bw = max(1, (w * scale).roundToInt())
         val bh = max(1, (h * scale).roundToInt())
-        val bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+        var bmp = softBmp
+        if (bmp == null || bmp.width != bw || bmp.height != bh) {
+            bmp?.recycle()
+            bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+            softBmp = bmp
+        }
         val c = Canvas(bmp)
         c.drawColor(backdropColor)
         c.scale(scale, scale)
@@ -500,7 +508,6 @@ class GlassMaterial(
         boxBlur(bmp, radius)
         rect.set(0f, 0f, w.toFloat(), h.toFloat())
         canvas.drawBitmap(bmp, null, rect, bitmapPaint)
-        bmp.recycle()
     }
 
     private fun drawGlow(canvas: Canvas, w: Int, h: Int) {
@@ -600,14 +607,24 @@ class GlassMaterial(
         fun boxBlur(bmp: Bitmap, radius: Int) {
             val w = bmp.width
             val h = bmp.height
-            val px = IntArray(w * h)
+            val n = w * h
+            val px = blurBuf(pxScratch, n)
+            val tmp = blurBuf(tmpScratch, n)
             bmp.getPixels(px, 0, w, 0, 0, w, h)
-            val tmp = IntArray(w * h)
             repeat(3) {
                 blurPass(px, tmp, w, h, radius, horizontal = true)
                 blurPass(tmp, px, w, h, radius, horizontal = false)
             }
             bmp.setPixels(px, 0, w, 0, 0, w, h)
+        }
+
+        private val pxScratch = ThreadLocal<IntArray>()
+        private val tmpScratch = ThreadLocal<IntArray>()
+
+        private fun blurBuf(slot: ThreadLocal<IntArray>, n: Int): IntArray {
+            val cur = slot.get()
+            if (cur != null && cur.size >= n) return cur
+            return IntArray(n).also { slot.set(it) }
         }
 
         fun blurPass(src: IntArray, dst: IntArray, w: Int, h: Int, r: Int, horizontal: Boolean) {

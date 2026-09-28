@@ -57,6 +57,9 @@ class DiffView @JvmOverloads constructor(
     private val markerW = text.measureText("+") + 8 * d
     private var contentW = 0f
     private val clip = Rect()
+    private val ellipsis = StringBuilder()
+    /** Tab-expanded line text, built when [lines] changes so drawing does not allocate. */
+    private var drawn = emptyList<String>()
 
     var maxLines: Int = 0
         set(value) { field = value; requestLayout(); invalidate() }
@@ -64,9 +67,14 @@ class DiffView @JvmOverloads constructor(
     var lines: List<DiffLine> = emptyList()
         set(value) {
             field = value
+            val expanded = ArrayList<String>(value.size)
+            for (line in value) {
+                expanded.add(if ('\t' in line.text) line.text.replace("\t", "    ") else line.text)
+            }
+            drawn = expanded
             val maxNo = value.maxOfOrNull { max(it.oldNo ?: 0, it.newNo ?: 0) } ?: 0
             gutterW = gutter.measureText(maxNo.toString().padStart(2, '8')) + 10 * d
-            contentW = if (wrapWidth) 0f else value.maxOfOrNull { text.measureText(it.text) } ?: 0f
+            contentW = if (wrapWidth) 0f else drawn.maxOfOrNull { text.measureText(it) } ?: 0f
             requestLayout()
             invalidate()
         }
@@ -118,11 +126,18 @@ class DiffView @JvmOverloads constructor(
                 else -> Unit
             }
             val p = text
-            val s = l.text.replace("\t", "    ")
+            val s = drawn[i]
             if (wrapWidth) {
                 val room = w - xText - padH
                 val n = p.breakText(s, true, room, null)
-                canvas.drawText(if (n < s.length) s.substring(0, max(0, n - 1)) + "…" else s, xText, by, p)
+                if (n < s.length) {
+                    ellipsis.setLength(0)
+                    ellipsis.append(s, 0, max(0, n - 1))
+                    ellipsis.append('…')
+                    canvas.drawText(ellipsis, 0, ellipsis.length, xText, by, p)
+                } else {
+                    canvas.drawText(s, xText, by, p)
+                }
             } else {
                 canvas.drawText(s, xText, by, p)
             }

@@ -201,14 +201,6 @@ class PresetEditFragment : Fragment() {
             webSearchSwitch.isChecked = false
         }
         webSearchSwitch.visibility = if (isLan) View.GONE else View.VISIBLE
-
-        // Reset if hidden
-
-    }
-    private fun updateReasoningVisibility() {
-        val modelId = selectedModelIdentifier ?: return
-        val isReasoning = viewModel.canRequestReasoning(modelId)
-        reasoningSwitch.visibility = if (isReasoning) View.VISIBLE else View.GONE
     }
 
     private fun getAllModels(): List<LlmModel> {

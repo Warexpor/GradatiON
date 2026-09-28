@@ -2,14 +2,11 @@ package io.github.stardomains3.oxproxion
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.os.Environment
 import android.print.PrintAttributes
 import android.print.PrintManager
-import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -17,16 +14,11 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.doOnDetach
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import androidx.core.net.toUri
 
 class MarkdownViewerFragment : Fragment() {
     companion object {
@@ -134,35 +126,6 @@ class MarkdownViewerFragment : Fragment() {
         }
     }
 
-    // ... (Rest of your Save/Print functions remain the same) ...
-
-    private fun saveHtmlToDownloads() {
-        if (currentHtml.isEmpty()) return
-        val filename = "chat-${System.currentTimeMillis()}.html"
-        val context = requireContext()
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "text/html")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                }
-                val resolver = context.contentResolver
-                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                    ?: throw Exception("MediaStore insert failed")
-                resolver.openOutputStream(uri)?.use { out ->
-                    out.write(currentHtml.toByteArray())
-                } ?: throw Exception("Cannot open output stream")
-                withContext(Dispatchers.Main) {
-                    AppToast.makeText(context, "✅ Saved to Downloads: $filename", AppToast.LENGTH_LONG).show()
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    AppToast.makeText(context, "❌ Save failed: ${e.message}", AppToast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
     private fun increaseFont() {
         currentFontSize = minOf(200, currentFontSize + 5)  // Increase by 5% (max 200%)
         webView?.settings?.textZoom = currentFontSize

@@ -98,7 +98,10 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         )
         list.layoutManager = LinearLayoutManager(requireContext()).apply { stackFromEnd = false }
         adapter.verbose = hub.store.showThinking
+        list.setHasFixedSize(true)
+        list.setItemViewCacheSize(8)
         list.adapter = adapter
+        sessionTopFade = view.findViewById<View>(R.id.codeSessionTop).background
         list.itemAnimator = androidx.recyclerview.widget.DefaultItemAnimator().apply {
             supportsChangeAnimations = false
             addDuration = 220
@@ -111,7 +114,12 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
 
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
                 updateTopEdge()
-                updateApprovalBar()
+                val state = hub.sessions.value[sessionId]
+                if (state !== approvalScanState) {
+                    approvalScanState = state
+                    approvalScanPending = state?.events?.any { it is CodeEvent.Approval && it.chosen == null } == true
+                }
+                if (approvalScanPending) updateApprovalBar(state)
             }
         })
 
@@ -193,6 +201,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
     override fun onDestroyView() {
         // Recycle the rows so their per-row work (the "Working" sweep, stream fades) stops.
         list.adapter = null
+        sessionTopFade = null
         super.onDestroyView()
     }
 
@@ -378,8 +387,12 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         if (remaining > 0) list.smoothScrollBy(0, remaining)
     }
 
+    private var sessionTopFade: android.graphics.drawable.Drawable? = null
+    private var approvalScanState: CodeSessionState? = null
+    private var approvalScanPending = true
+
     private fun updateTopEdge() {
-        val fade = view?.findViewById<View>(R.id.codeSessionTop)?.background ?: return
+        val fade = sessionTopFade ?: return
         val under = list.computeVerticalScrollOffset().toFloat()
         val a = (255 * (under / (24f * resources.displayMetrics.density)).coerceIn(0f, 1f)).toInt()
         if (fade.alpha != a) fade.alpha = a

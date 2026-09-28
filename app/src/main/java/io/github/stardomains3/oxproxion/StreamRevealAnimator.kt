@@ -56,8 +56,11 @@ class StreamRevealAnimator(
 
     fun setTarget(text: String) {
         if (text == target) return
-        if (!text.startsWith(target.take(shown.coerceAtMost(target.length)))) {
-            shown = longestCommonPrefixLen(target.take(shown), text)
+        // regionMatches avoids copying the shown prefix on every token; the common case is
+        // the reply only growing, and that path used to allocate a string each time.
+        val held = shown.coerceAtMost(target.length)
+        if (held > 0 && !text.regionMatches(0, target, 0, held)) {
+            shown = longestCommonPrefixLen(target, text, held)
         }
         target = text
         if (shown > target.length) shown = target.length
@@ -119,8 +122,8 @@ class StreamRevealAnimator(
         return if (nextBreak in index until index + 12) nextBreak + 1 else index
     }
 
-    private fun longestCommonPrefixLen(a: String, b: String): Int {
-        val n = minOf(a.length, b.length)
+    private fun longestCommonPrefixLen(a: String, b: String, limit: Int = minOf(a.length, b.length)): Int {
+        val n = minOf(limit, a.length, b.length)
         var i = 0
         while (i < n && a[i] == b[i]) i++
         return i

@@ -16,6 +16,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import androidx.core.content.edit
+import androidx.core.net.toUri
 
 class SharedPreferencesHelper(context: Context) {
 
@@ -35,7 +36,6 @@ class SharedPreferencesHelper(context: Context) {
         this.timeoutListener = listener
     }
     companion object {
-        private const val KEY_WATERMARK_STT_ENABLED = "watermark_stt_enabled"
 
         private const val KEY_VOICE_INPUT_MODEL = "voice_input_model"
         private const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // VoiceEngine keys: device, cloud, grok, lan, off
@@ -70,7 +70,6 @@ class SharedPreferencesHelper(context: Context) {
 
         const val LAN_PROVIDER_HERMES_AGENT = "hermes_agent"  // NEW - Hermes Agent provider
         private const val KEY_AUTO_BACK = "auto_back_enabled"
-        private const val KEY_AUTO_SAVE_CHATS = "auto_save_chats"
         private const val KEY_CHAT_FORK_PREFIX = "chat_fork_"
         private const val KEY_CHAT_FORK_INDEX_PREFIX = "chat_fork_idx_"
         private const val KEY_CHAT_FORK_ANCHOR_PREFIX = "chat_fork_anchor_"
@@ -128,7 +127,6 @@ class SharedPreferencesHelper(context: Context) {
         private const val API_KEYS_PREFS_STORE = "ApiKeysPrefsStore"
         const val MAIN_PREFS = "MainAppPrefs"
         private const val KEY_MODEL_NEW_CHAT = "modelvalenewchat"
-        private const val KEY_MODEL_VALE = "modelvale"
         private const val KEY_CUSTOM_MODELS = "custom_models"
         private const val KEY_DEFAULT_MODELS_SEEDED = "default_models_seeded"
         private const val KEY_OLD_DEFAULTS_PRUNED = "old_default_models_pruned"
@@ -156,11 +154,12 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_STREAMING_ENABLED = "streaming_enabled"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val KEY_OPEN_ROUTER_MODELS = "open_router_models"
+        /** One-shot. Old caches had no reasoning flag, so every model read as not reasoning. */
+        private const val KEY_OPEN_ROUTER_REASONING_MIGRATED = "open_router_reasoning_migrated"
         private const val KEY_NOTI_ENABLED = "noti_enabled"
         private const val KEY_EXT_ENABLED = "ext_enabled"
         private const val KEY_EXT_ENABLED2 = "ext_enabled2"
         private const val KEY_REASONING_ENABLED = "reasoning_enabled"
-        private const val KEY_INFO_BAR_DISMISSED = "info_bar_dismissed"
         private const val KEY_SORT_ORDER = "sort_order"
         private const val KEY_MAX_TOKENS = "max_tokens"
         private const val KEY_DEFAULT_SYSTEM_MESSAGE = "default_system_message"
@@ -340,6 +339,10 @@ class SharedPreferencesHelper(context: Context) {
     fun clearOpenRouterModels() {
         mainPrefs.edit { remove(KEY_OPEN_ROUTER_MODELS) }
     }
+    fun getOpenRouterReasoningMigrated(): Boolean =
+        mainPrefs.getBoolean(KEY_OPEN_ROUTER_REASONING_MIGRATED, false)
+    fun saveOpenRouterReasoningMigrated() =
+        mainPrefs.edit { putBoolean(KEY_OPEN_ROUTER_REASONING_MIGRATED, true) }
     fun saveBiometricEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_BIOMETRIC_ENABLED, enabled) }
     fun getBiometricEnabled(): Boolean = mainPrefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
 
@@ -484,6 +487,15 @@ class SharedPreferencesHelper(context: Context) {
     fun getSafFolderUri(): String? {
         return mainPrefs.getString(SAF_FOLDER_URI, null)
     }
+
+    /** True when the saved tree URI still has read access. */
+    fun hasWorkspaceGrant(): Boolean {
+        val uriString = getSafFolderUri() ?: return false
+        val treeUri = uriString.toUri()
+        return appContext.contentResolver.persistedUriPermissions.any {
+            it.uri == treeUri && it.isReadPermission
+        }
+    }
     fun saveTimeoutMinutes(minutes: Int) {
         mainPrefs.edit { putInt(KEY_TIMEOUT_MINUTES, minutes) }
         // Notify the listener if it exists
@@ -505,14 +517,6 @@ class SharedPreferencesHelper(context: Context) {
     }
     fun getAutoBack(): Boolean {
         return mainPrefs.getBoolean(KEY_AUTO_BACK, false)
-    }
-    fun saveAutoBack(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_AUTO_BACK, enabled) }
-    }
-    /** Always-on; preference key retained only for migration compatibility. */
-    fun getAutoSaveChats(): Boolean = true
-    fun saveAutoSaveChats(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_AUTO_SAVE_CHATS, true) }
     }
 
     /** Stashed alternate message tree for one-chat forks (JSON list of FlexibleMessage). */
@@ -541,9 +545,6 @@ class SharedPreferencesHelper(context: Context) {
         }
     }
 
-    fun setOpenRouterInfoDismissed(dismissed: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_INFO_BAR_DISMISSED, dismissed) }
-    }
     fun saveExpandableInput(enabled: Boolean) {
         mainPrefs.edit { putBoolean(KEY_EXPANDABLE_INPUT, enabled) }
     }
@@ -552,9 +553,6 @@ class SharedPreferencesHelper(context: Context) {
         // Defaulting to FALSE or TRUE based on what you prefer.
         // I set it to false so it's opt-in, change to true if you want it on by default.
         return mainPrefs.getBoolean(KEY_EXPANDABLE_INPUT, false)
-    }
-    fun hasDismissedOpenRouterInfo(): Boolean {
-        return mainPrefs.getBoolean(KEY_INFO_BAR_DISMISSED, false)
     }
 
     fun saveOpenRouterModels(models: List<LlmModel>) {
@@ -732,11 +730,6 @@ class SharedPreferencesHelper(context: Context) {
     fun saveKeepScreenOnPreference(enabled: Boolean) {
         mainPrefs.edit { putBoolean(KEY_KEEP_SCREEN_ON, enabled) }
     }
-    fun getWatermarkSttEnabled(): Boolean = mainPrefs.getBoolean(KEY_WATERMARK_STT_ENABLED, false)
-
-    fun saveWatermarkSttEnabled(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_WATERMARK_STT_ENABLED, enabled) }
-    }
 
     fun getKeepScreenOnPreference(): Boolean {
         return mainPrefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
@@ -770,8 +763,6 @@ class SharedPreferencesHelper(context: Context) {
     fun saveBotPickerCostFilter(cost: String) = mainPrefs.edit { putString("bot_picker_cost_filter", cost) }
     fun getBotPickerCostFilter(): String = mainPrefs.getString("bot_picker_cost_filter", "ALL") ?: "ALL"
 
-    fun saveBotPickerSourceFilter(source: String) = mainPrefs.edit { putString("bot_picker_source_filter", source) }
-    fun getBotPickerSourceFilter(): String = mainPrefs.getString("bot_picker_source_filter", "ALL") ?: "ALL"
     fun getGeminiAspectRatio(): String? = mainPrefs.getString("gemini_aspect_ratio", null)
 
     fun saveGeminiAspectRatio(ratio: String) {
@@ -915,9 +906,6 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit {
             putBoolean(KEY_SCROLLERS_ENABLED, isEnabled)
         }
-    }
-    fun getPreferenceModel(): String? {
-        return mainPrefs.getString(KEY_MODEL_VALE, "mistralai/mistral-medium-3")
     }
     fun saveMaxTokens(value: String) {
         mainPrefs.edit(commit = true) {

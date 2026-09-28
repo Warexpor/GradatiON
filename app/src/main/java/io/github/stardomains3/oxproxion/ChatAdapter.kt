@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Typeface
+import android.text.Spanned
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Environment
@@ -125,6 +126,8 @@ class ChatAdapter(
     private val userActionsExpanded = mutableSetOf<String>()
     // The "Baked" Cache for Markdown CharSequences
     private val renderCache = HashMap<FlexibleMessage, CharSequence>()
+    /** Parsed user bubbles, keyed by the exact markdown shown. Scrolling rebinds; it should not re-parse. */
+    private val userRenderCache = HashMap<String, Spanned>()
 
     private val noCopyFactory = NoCopySpannableFactory.getInstance()
     var isSpeaking = false
@@ -246,6 +249,7 @@ class ChatAdapter(
 
     fun clearCache() {
         renderCache.clear()
+        userRenderCache.clear()
         collapsedStates.clear()
         resetStreamRender()
         streamRevealBoundHolder = null
@@ -303,14 +307,15 @@ class ChatAdapter(
 
         // PERFECT CASE: Only 1 new message added
         if (messages.size == newMessages.size - 1 &&
-            messages == newMessages.dropLast(1)) {
+            sameMessages(messages, newMessages, messages.size)) {
             addMessage(newMessages.last())
             return
         }
 
-        // STREAMING CASE: Same size, only last message content changed
-        if (messages.size == newMessages.size &&
-            messages.dropLast(1) == newMessages.dropLast(1)) {
+        // STREAMING CASE: Same size, only last message content changed.
+        // Identity first: a stream copies the list but keeps the earlier message objects.
+        if (messages.size == newMessages.size && messages.isNotEmpty() &&
+            sameMessages(messages, newMessages, messages.size - 1)) {
             updateLastMessage(newMessages.last())
             return
         }
@@ -434,13 +439,8 @@ class ChatAdapter(
         return renderedContent
     }
 
-    private fun ensureTableSpacing(md: String): String {
-        val pattern = Regex(
-            """(^[\t >]*([-+*]|\d+\.)\s+(?:\\\$\\\[ ?[ xX]?\\]\\\s+)?[^\n]*)\n(?=\|)""",
-            RegexOption.MULTILINE
-        )
-        return md.replace(pattern) { "${it.value}\n\n" }
-    }
+    private fun ensureTableSpacing(md: String): String =
+        md.replace(TABLE_AFTER_ITEM) { "${it.value}\n\n" }
 
     /** Strip legacy ``` fences / --- separators from stored reasoning for the dedicated UI. */
     private fun normalizeReasoning(raw: String?): String {
@@ -451,7 +451,7 @@ class ChatAdapter(
             val close = s.lastIndexOf("```")
             if (close >= 0) s = s.substring(0, close)
         }
-        s = s.replace(Regex("""\n*-{3,}\n*$"""), "").trim()
+        s = s.replace(TRAILING_RULE, "").trim()
         return s
     }
 
@@ -467,6 +467,44 @@ class ChatAdapter(
         const val VIEW_TYPE_HIDDEN = 4
         private const val REASONING_KEY_CHARS = 80
         private const val ACTION_STAGGER_MS = 55L
+        private val TABLE_AFTER_ITEM = Regex(
+            """(^[\t >]*([-+*]|\d+\.)\s+(?:\\\$\\\[ ?[ xX]?\\]\\\s+)?[^\n]*)\n(?=\|)""",
+            RegexOption.MULTILINE
+        )
+        private val TRAILING_RULE = Regex("""\n*-{3,}\n*$""")
+    }
+
+    /**
+     * User rows rebind on every scroll. Parsing markdown there is the slow part; the spannable
+     * for a given string does not change until the cache is cleared.
+     */
+    private fun setCachedUserMarkdown(view: TextView, markdown: String) {
+        val cached = userRenderCache[markdown]
+        if (cached != null) {
+            markwon.setParsedMarkdown(view, cached)
+            return
+        }
+        try {
+            val rendered = markwon.toMarkdown(markdown)
+            userRenderCache[markdown] = rendered
+            markwon.setParsedMarkdown(view, rendered)
+        } catch (e: RuntimeException) {
+            if (e.message?.contains("Prism4j") == true || e.message?.contains("entry nodes") == true) {
+                view.text = markdown
+            } else {
+                throw e
+            }
+        }
+    }
+
+    /** Prefix equality. Same instance counts; a copied-but-equal message still matches. */
+    private fun sameMessages(a: List<FlexibleMessage>, b: List<FlexibleMessage>, n: Int): Boolean {
+        for (i in 0 until n) {
+            val x = a[i]
+            val y = b[i]
+            if (x !== y && x != y) return false
+        }
+        return true
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -696,15 +734,7 @@ class ChatAdapter(
                         rawUserContent
                     }
 
-                    try {
-                        markwon.setMarkdown(messageTextView, displayContent)
-                    } catch (e: RuntimeException) {
-                        if (e.message?.contains("Prism4j") == true || e.message?.contains("entry nodes") == true) {
-                            messageTextView.text = displayContent
-                        } else {
-                            throw e
-                        }
-                    }
+                    setCachedUserMarkdown(messageTextView, displayContent)
 
                     collapseToggleButton.visibility = View.VISIBLE
                     collapseToggleButton.setImageResource(
@@ -716,26 +746,10 @@ class ChatAdapter(
                         onCollapse()
                     }
                 } else {
-                    try {
-                        markwon.setMarkdown(messageTextView, rawUserContent)
-                    } catch (e: RuntimeException) {
-                        if (e.message?.contains("Prism4j") == true || e.message?.contains("entry nodes") == true) {
-                            messageTextView.text = rawUserContent
-                        } else {
-                            throw e
-                        }
-                    }
+                    setCachedUserMarkdown(messageTextView, rawUserContent)
                 }
             } else {
-                try {
-                    markwon.setMarkdown(messageTextView, rawUserContent)
-                } catch (e: RuntimeException) {
-                    if (e.message?.contains("Prism4j") == true || e.message?.contains("entry nodes") == true) {
-                        messageTextView.text = rawUserContent
-                    } else {
-                        throw e
-                    }
-                }
+                setCachedUserMarkdown(messageTextView, rawUserContent)
             }
 
             // ... (Image and Button logic) ...
@@ -743,11 +757,15 @@ class ChatAdapter(
             if (!imageUriStr.isNullOrEmpty()) {
                 try {
                     val userImageUri = imageUriStr.toUri()
-                    val request = ImageRequest.Builder(itemView.context)
-                        .data(userImageUri)
-                        .target(imageView)
-                        .build()
-                    itemView.context.imageLoader.enqueue(request)
+                    // Rebinding the same row while scrolling already has this bitmap.
+                    if (imageView.getTag(R.id.userImageView) != imageUriStr || imageView.drawable == null) {
+                        imageView.setTag(R.id.userImageView, imageUriStr)
+                        val request = ImageRequest.Builder(itemView.context)
+                            .data(userImageUri)
+                            .target(imageView)
+                            .build()
+                        itemView.context.imageLoader.enqueue(request)
+                    }
                     imageView.visibility = View.VISIBLE
                     imageView.setOnClickListener {
                         try {

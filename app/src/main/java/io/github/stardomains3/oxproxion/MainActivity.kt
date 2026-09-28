@@ -206,28 +206,6 @@ class MainActivity : AppCompatActivity() {
         }
         // on 31/32 the permission doesn’t exist, notifications are enabled by default
     }
-    /*private fun startForegroundService() {
-        if (ForegroundService.isRunningForeground) return  // Guard to prevent restarts
-        try {
-            val serviceIntent = Intent(this, ForegroundService::class.java)
-            // Optionally pass initial title if needed
-           // val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
-           // val displayName = vm.getModelDisplayName(vm.activeChatModel.value ?: "Unknown Model")
-           // serviceIntent.putExtra("initial_title", displayName)
-            startService(serviceIntent)
-        } catch (e: Exception) {
-           // Log.e("MainActivity", "Failed to start foreground service", e)
-        }
-    }*/
-
-    /*private fun startForegroundService() {
-        try {
-            val serviceIntent = Intent(this, ForegroundService::class.java)
-            startService(serviceIntent)
-        } catch (e: Exception) {
-            Log.e("ChatFragment", "Failed to start foreground service", e)
-        }
-    }*/
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -294,9 +272,6 @@ class MainActivity : AppCompatActivity() {
                 PresetManager.applyPreset(this, vm, digitalAssistantPreset)
                 vm.signalPresetApplied()
             }
-            val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container) as? ChatFragment
-            // STT disabled
-            // fragment?.startSpeechRecognitionSafely()
         }
     }
 
@@ -417,71 +392,4 @@ class MainActivity : AppCompatActivity() {
             intent.removeExtra("apply_preset")
         }
     }
-   /* private fun handlePresetIntent(intent: Intent) {
-        if (intent.getBooleanExtra("apply_preset", false)) {
-            val presetId = intent.getStringExtra("preset_id") ?: return
-            val presetTitle = intent.getStringExtra("preset_title") ?: return
-            val presetModel = intent.getStringExtra("preset_model") ?: return
-            val systemMessageTitle = intent.getStringExtra("preset_system_message_title") ?: return
-            val systemMessagePrompt = intent.getStringExtra("preset_system_message_prompt") ?: return
-            val systemMessageIsDefault = intent.getBooleanExtra("preset_system_message_is_default", false)
-            val streaming = intent.getBooleanExtra("preset_streaming", false)
-            val reasoning = intent.getBooleanExtra("preset_reasoning", false)
-            val conversationMode = intent.getBooleanExtra("preset_conversation_mode", false)
-            val systemMessage = SystemMessage(systemMessageTitle, systemMessagePrompt, isDefault = systemMessageIsDefault)
-            val preset = Preset(
-                id = presetId,
-                title = presetTitle,
-                modelIdentifier = presetModel,
-                systemMessage = systemMessage,
-                streaming = streaming,
-                reasoning = reasoning,
-                conversationMode = conversationMode
-            )
-
-            val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
-            // --- VALIDATION ---
-            val prefs = SharedPreferencesHelper(this)
-            val allModels = (vm.getBuiltInModels() + prefs.getCustomModels()).distinctBy { it.apiIdentifier.lowercase() }
-            if (allModels.none { it.apiIdentifier.equals(preset.modelIdentifier, ignoreCase = true) }) {
-                AppToast.makeText(this, "Preset not applied: Model \"${preset.modelIdentifier}\" no longer exists.", AppToast.LENGTH_LONG).show()
-                return
-            }
-
-            val allMessages = listOf(prefs.getDefaultSystemMessage()) + prefs.getCustomSystemMessages()
-            if (allMessages.none { it.title == preset.systemMessage.title && it.prompt == preset.systemMessage.prompt }) {
-                AppToast.makeText(this, "Preset not applied: System message \"${preset.systemMessage.title}\" no longer exists.", AppToast.LENGTH_LONG).show()
-                return
-            }
-            // --- END VALIDATION ---
-
-
-            PresetManager.applyPreset(this, vm, preset)
-          /*  if (ForegroundService.isRunningForeground && prefs.getNotiPreference()) {
-                val displayName = vm.getModelDisplayName(preset.title)
-                ForegroundService.updateNotificationStatusSilently(displayName, "Preset Applied")
-            }*/
-            vm.signalPresetApplied()
-            //AppToast.makeText(this, "Preset Applied: ${preset.title}", AppToast.LENGTH_SHORT).show()
-
-            val sharedText = intent.getStringExtra("shared_text")
-            if (sharedText != null) {
-                val clearChat = intent.getBooleanExtra("clear_chat", false)
-                if (clearChat) {
-                    vm.startNewChat()
-                }
-
-                if (intent.getBooleanExtra("autosend_preset", false)) {
-                    vm.consumeSharedTextautosend(sharedText)
-                } else if (intent.getBooleanExtra("input_only_preset", false)) {
-                    vm.consumeSharedText(sharedText)
-                }
-            }
-            // Clear the preset flag to prevent re-applying on config change
-            intent.removeExtra("apply_preset")
-        }
-    }*/
-
-
-
 }

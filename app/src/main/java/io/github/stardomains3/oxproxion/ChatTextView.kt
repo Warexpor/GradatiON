@@ -67,7 +67,12 @@ class ChatTextView @JvmOverloads constructor(
     private val capBounds = Rect()
 
     /** Copy icons' tap areas from the last draw (text-layout coordinates), with the code each copies. */
-    private val chips = ArrayList<Pair<RectF, String>>()
+    private class CopyChip {
+        val rect = RectF()
+        var code: String = ""
+    }
+    private val chips = ArrayList<CopyChip>(4)
+    private var chipCount = 0
     private var pressedChip = -1
     private var copiedCode: String? = null
     private var copiedUntil = 0L
@@ -83,7 +88,7 @@ class ChatTextView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         val spanned = text as? Spanned
         val layout = layout
-        chips.clear()
+        chipCount = 0
         if (spanned != null && layout != null) {
             val blocks = spanned.getSpans(0, spanned.length, ChatMarkdown.CodeBlockMarker::class.java)
             val inlines = spanned.getSpans(0, spanned.length, ChatMarkdown.InlineCodeMarker::class.java)
@@ -104,25 +109,39 @@ class ChatTextView @JvmOverloads constructor(
         val y = event.y - totalPaddingTop + scrollY
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                pressedChip = chips.indexOfFirst { (r, _) -> hit(r, x, y) }
+                pressedChip = indexOfChip(x, y)
                 if (pressedChip >= 0) { invalidate(); return true }
             }
             MotionEvent.ACTION_MOVE -> if (pressedChip >= 0) {
-                if (!hit(chips.getOrNull(pressedChip)?.first, x, y)) { pressedChip = -1; invalidate() }
+                if (!hit(chipAt(pressedChip)?.rect, x, y)) { pressedChip = -1; invalidate() }
                 return true
             }
             MotionEvent.ACTION_UP -> if (pressedChip >= 0) {
-                val chip = chips.getOrNull(pressedChip)
+                val chip = chipAt(pressedChip)
                 pressedChip = -1
-                if (chip != null && hit(chip.first, x, y)) {
-                    ChatMarkdown.copyCode(this, chip.second)
-                    showCopied(chip.second)
+                if (chip != null && hit(chip.rect, x, y)) {
+                    ChatMarkdown.copyCode(this, chip.code)
+                    showCopied(chip.code)
                 } else invalidate()
                 return true
             }
             MotionEvent.ACTION_CANCEL -> if (pressedChip >= 0) { pressedChip = -1; invalidate(); return true }
         }
         return super.onTouchEvent(event)
+    }
+
+    private fun chipAt(index: Int): CopyChip? = if (index in 0 until chipCount) chips[index] else null
+
+    private fun indexOfChip(x: Float, y: Float): Int {
+        for (i in 0 until chipCount) if (hit(chips[i].rect, x, y)) return i
+        return -1
+    }
+
+    private fun takeChip(src: RectF, code: String): Int {
+        val chip = if (chipCount < chips.size) chips[chipCount] else CopyChip().also { chips.add(it) }
+        chip.rect.set(src)
+        chip.code = code
+        return chipCount.also { chipCount++ }
     }
 
     /** Chips are small; take a few dp of slop around them. */
@@ -169,9 +188,8 @@ class ChatTextView @JvmOverloads constructor(
         val cx = width - 22f * density
         val half = 15f * density
         rect.set(cx - half, cy - half, cx + half, cy + half)
-        val index = chips.size
+        val index = takeChip(rect, marker.code)
         if (pressedChip == index) canvas.drawOval(rect, copyPillPressed)
-        chips += RectF(rect) to marker.code
         icon?.let {
             val l = (cx - iconSize / 2f).toInt()
             val t = (cy - iconSize / 2f).toInt()

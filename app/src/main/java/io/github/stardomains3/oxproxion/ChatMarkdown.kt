@@ -81,11 +81,15 @@ object ChatMarkdown {
      */
     fun polish(text: Spannable, gapScale: Float = GAP_SCALE) {
         val codeRanges = text.getSpans(0, text.length, CodeBlockMarker::class.java)
-            .map { text.getSpanStart(it) to text.getSpanEnd(it) }
         var i = text.indexOf("\n\n")
         while (i >= 0 && i + 1 < text.length) {
             val gap = i + 1
-            val inCode = codeRanges.any { (s, e) -> gap in s until e }
+            var inCode = false
+            for (marker in codeRanges) {
+                val s = text.getSpanStart(marker)
+                val e = text.getSpanEnd(marker)
+                if (gap in s until e) { inCode = true; break }
+            }
             if (!inCode && text.getSpans(gap, gap + 1, GapSpan::class.java).isEmpty()) {
                 text.setSpan(GapSpan(gapScale), gap, gap + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }

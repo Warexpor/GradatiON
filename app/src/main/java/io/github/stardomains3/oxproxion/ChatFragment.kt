@@ -28,7 +28,6 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.pdf.PdfRenderer
 import android.media.AudioManager
-import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -40,7 +39,6 @@ import android.os.StrictMode
 import android.print.PrintManager
 import android.provider.MediaStore
 import android.provider.Settings
-import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.text.method.LinkMovementMethod
@@ -51,7 +49,6 @@ import android.util.TypedValue
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -62,7 +59,6 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
@@ -70,7 +66,6 @@ import android.widget.ImageView
 import coil.load
 import android.widget.LinearLayout
 import android.widget.PopupWindow
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
@@ -147,7 +142,6 @@ interface OnKeyboardShortcutListener {
 class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListener, HistoryPanelHost {
    // private var isFontUpdate = false
     private var menuClosedByTouch = false
-    private lateinit var speechLauncher: ActivityResultLauncher<Intent>
     private lateinit var textToSpeech: TextToSpeech
 
     /** Character whose wallpaper the photo picker is choosing (set just before launching it). */
@@ -187,7 +181,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var selectedAudioBytes: ByteArray? = null
     private var selectedAudioFormat: String? = null
     private var doVolScroll: Boolean = false
-    private var fromWater: Boolean = false
     private lateinit var plusButton: MaterialButton
     private lateinit var btnDecreaseFont: MaterialButton
     private lateinit var btnIncreaseFont: MaterialButton
@@ -270,13 +263,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var removeAttachmentButton: ImageButton
     private lateinit var headerContainer: LinearLayout
     private var overlayView: View? = null
-    private lateinit var permissionLauncher: ActivityResultLauncher<String>
     private lateinit var cameraLauncher: ActivityResultLauncher<Intent>
     private var currentCameraUri: Uri? = null
     private lateinit var cameraPermissionLauncher: ActivityResultLauncher<String>
     private lateinit var localNetworkPermissionLauncher: ActivityResultLauncher<String>
-    private lateinit var locationPermissionLauncher: ActivityResultLauncher<String>
-    private lateinit var notificationPolicyLauncher: ActivityResultLauncher<Intent>
     private lateinit var galleryPicker: ActivityResultLauncher<PickVisualMediaRequest>
     private lateinit var legacyGalleryPicker: ActivityResultLauncher<Array<String>>
     private lateinit var folderPickerLauncher: ActivityResultLauncher<Uri?>
@@ -288,12 +278,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val content: String,
         val size: Long
     )
-    private var isScrollersEnabled = false     // 🔥 Cache → NO prefs/VM in onScroll
+    private var isScrollersEnabled = false
     private var isScrollProgressEnabled = false
     private var lastContentLength = 0
-    private var mediaRecorder: MediaRecorder? = null
-    private var voiceRecordFile: File? = null
-    private var isRecording = false
     private lateinit var textFilePicker: ActivityResultLauncher<String>
     private val pendingFiles = mutableListOf<AttachedFile>()
     private val MAX_FILE_SIZE = 3 * 1024 * 1024 // 3MB total
@@ -302,33 +289,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         sharedPreferencesHelper = SharedPreferencesHelper(requireContext())
-        speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            // STT disabled
-            /*
-            if (result.resultCode == Activity.RESULT_OK) {
-                val data = result.data
-                val results = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                if (!results.isNullOrEmpty()) {
-                    val recognizedText = results[0]
-                    chatEditText.setText(recognizedText)
-                    chatEditText.setSelection(chatEditText.text.length)
-                    if (sharedPreferencesHelper.getConversationModeEnabled()) {
-                        sendChatButton.performClick()
-                    }
-                }
-            }
-            */
-        }
-        permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            // STT disabled — mic permission was only used for voice input
-            /*
-            if (isGranted) {
-                startSpeechRecognition()
-            } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_mic_permission), AppToast.LENGTH_SHORT).show()
-            }
-            */
-        }
         cameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
                 launchCamera()
@@ -346,20 +306,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 AppToast.makeText(requireContext(), getString(R.string.toast_lan_permission), AppToast.LENGTH_LONG).show()
                 // Optional: Revert model selection to a cloud model
             }
-        }
-        locationPermissionLauncher = registerForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { isGranted: Boolean ->
-            if (!isGranted) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_location_permission), AppToast.LENGTH_SHORT).show()
-            }
-        }
-
-        notificationPolicyLauncher = registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-        ) { result ->
-            // You could re-check the permission here and update the UI if necessary,
-            // but usually, the user just grants it in Settings and comes back.
         }
 
         cameraLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -735,7 +681,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             // Chat look: code cards, inline code pills, calmer headings (painted by ChatTextView).
             .usePlugin(ChatMarkdown.plugin(requireContext()))
             .build()
-        // 🔥 Cache formatters (init once)
+        // Formatters are created once; scrolling must not allocate them.
         dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
         datetimeFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).apply {
@@ -766,7 +712,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
             override fun afterTextChanged(s: android.text.Editable?) {
-                updateButtonVisibility()
+                updateComposerAccessoryVisibility()
                 updateSendButtonChrome()
             }
         })
@@ -936,16 +882,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             chatRecyclerView.post { updateJumpToBottom() }
             updateSendButtonChrome()
             val hasMessages = messages.isNotEmpty()
-            // STT disabled — watermark never used for hold-to-talk
             centerWatermarkIcon.isClickable = false
-            /*
-            val isFeatureEnabled = sharedPreferencesHelper.getWatermarkSttEnabled()
-            if (hasMessages || !isFeatureEnabled) {
-                centerWatermarkIcon.isClickable = false
-            } else {
-                centerWatermarkIcon.isClickable = true
-            }
-            */
             if(hasMessages){
                 resetChatButton.icon.alpha = 255
                 // Right after a mode swipe the list is the other mode's thread landing, not a
@@ -1130,42 +1067,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
 
-           /* if (!isAwaiting && viewModel.shouldAutoOffWebSearch()) {
-                viewModel.resetWebSearchAutoOff()
-                if (viewModel.isWebSearchEnabled.value == true) {
-                    viewModel.toggleWebSearch()  // Turn it off
-                    AppToast.makeText(requireContext(), getString(R.string.toast_web_search_auto_off), AppToast.LENGTH_SHORT).show()
-                }
-            }*/
-            if (!isAwaiting //&& viewModel.shouldAutoOffWebSearch()
-                &&
+            if (!isAwaiting &&
                 sharedPreferencesHelper.getDisableWebSearchAfterSend() &&
                 viewModel.isWebSearchEnabled.value == true) {
                 viewModel._isWebSearchEnabled.value = false
                 sharedPreferencesHelper.saveWebSearchEnabled(false)
-                //   viewModel.resetWebSearchAutoOff()
-                // viewModel.toggleWebSearch() // Turn it off
                 AppToast.makeText(requireContext(), getString(R.string.toast_web_search_auto_off), AppToast.LENGTH_SHORT).show()
             }
-           /* if (isAwaiting) {
-                if (areAnimationsEnabled(requireContext())) {
-                    // Stop any existing animation first
-                    // (materialButton.icon as? Animatable)?.stop()
-
-                    // Set and start new animated drawable
-                    val avd = AnimatedVectorDrawableCompat.create(requireContext(), R.drawable.avd_rotating_arc)
-                    materialButton.icon = avd
-                    avd?.start()
-                }
-                else {
-                    // Fallback: show static arc or different icon when animations are off
-                    materialButton.setIconResource(R.drawable.ic_stop) // or another static indicator
-                }
-            } else {
-                // Stop animation and reset to original icon
-                (materialButton.icon as? Animatable)?.stop()
-                materialButton.icon = originalSendIcon
-            }*/
         }
 
         viewModel.modelPreferenceToSave.observe(viewLifecycleOwner) { model ->
@@ -1321,75 +1229,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     .show()
             }
         }
-       /* viewModel.toolUiEvent.observe(viewLifecycleOwner) { event ->
-            event.getContentIfNotHandled()?.let { message ->
-
-                val fossifyPackage = "org.fossify.filemanager"
-                val packageManager = requireContext().packageManager
-
-                // 1. Check if app is installed
-                val isInstalled = try {
-                    packageManager.getPackageInfo(fossifyPackage, 0)
-                    true
-                } catch (e: PackageManager.NameNotFoundException) {
-                    false
-                }
-
-                if (isInstalled) {
-                    // 2. App found: Show Snackbar with Action
-                    Snackbar.make(requireView(), message, Snackbar.LENGTH_LONG)
-                        .setAction(R.string.action_open_folder) {
-                            val path = WorkspacePaths.workspaceDirForRead()
-                            //val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                            val intent = Intent(Intent.ACTION_VIEW)
-                            intent.setPackage(fossifyPackage)
-                            intent.setDataAndType("file://${path.absolutePath}".toUri(), "resource/folder")
-                           // intent.setDataAndType(Uri.fromFile(path), "resource/folder")
-
-                            // --- THIS IS THE FIX ---
-                            // This forces the app to open in its own stack/window
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            // Optional: Clears the file manager if it was already open, so it refreshes to this folder
-                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            // -----------------------
-
-                            // Disable StrictMode check for file:// URI
-                            try {
-                                val m = StrictMode::class.java.getMethod("disableDeathOnFileUriExposure")
-                                m.invoke(null)
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
-
-                            startActivity(intent)
-                        }
-                        .show()
-                } else {
-                    // 3. App not found: Just show the Toast
-                    AppToast.makeText(requireContext(), message, AppToast.LENGTH_SHORT).show()
-                }
-            }
-        }*/
         viewModel.presetAppliedEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let {
                 updateSystemMessageButtonState()
                 convoButton.isSelected = sharedPreferencesHelper.getConversationModeEnabled()
             }
         }
-        /*viewModel.scrollToBottomEvent.observe(viewLifecycleOwner) { event ->
-            event.getContentIfNotHandled()?.let {
-                if (chatAdapter.itemCount > 0) {
-                    chatRecyclerView.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
-                        override fun onPreDraw(): Boolean {
-                            chatRecyclerView.viewTreeObserver.removeOnPreDrawListener(this)
-                            val position = chatAdapter.itemCount - 1
-                            layoutManager.scrollToPositionWithOffset(position, -12)
-                            return true
-                        }
-                    })
-                }
-            }
-        }*/
         viewModel.scrollToBottomEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let {
                 // Grok-style: do not yank the camera when the stream finishes.
@@ -1404,19 +1249,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
         }
-        // STT disabled
-        /*
-        val shouldStartStt = arguments?.getBoolean("start_stt_on_launch", false) ?: false
-        if (shouldStartStt) {
-            arguments?.remove("start_stt_on_launch")
-            hideKeyboard()
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            } else {
-                startSpeechRecognition()
-            }
-        }
-        */
         val selectedFontName = sharedPreferencesHelper.getSelectedFont()
         val typeface = AppFonts.resolveSelectable(requireContext(), selectedFontName)
         chatEditText.typeface = typeface ?: Typeface.DEFAULT
@@ -1687,6 +1519,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val backdrop = root.findViewById<GlassBackdropLayout>(R.id.chatBackdrop)
         val topGlass = root.findViewById<View>(R.id.topBarGlass)
         topGlass.background?.mutate()?.alpha = 0
+        topBarFade = topGlass.background
         (chatInputContainer as? GlassLinearLayout)?.glass?.source = backdrop
         (headerContainer as? GlassLinearLayout)?.glass?.source = backdrop
         val relayout = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyChromeInsets() }
@@ -1706,9 +1539,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         })
     }
 
+    private var topBarFade: android.graphics.drawable.Drawable? = null
+
     /** The dim under the floating controls; kept at full strength (see [edgeAlphaForList]). */
     private fun updateTopBarEdge() {
-        val fade = view?.findViewById<View>(R.id.topBarGlass)?.background ?: return
+        val fade = topBarFade
+            ?: view?.findViewById<View>(R.id.topBarGlass)?.background?.also { topBarFade = it }
+            ?: return
         // A page swipe blends the fade itself (applyPagerProgress); the list below is mid-switch.
         if (pager != null) return
         val a = edgeAlphaForList()
@@ -1853,10 +1690,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     }
 
     private var jumpShown = false
+    private var jumpButton: View? = null
 
     /** The jump button rises in once the latest message is more than a short way below. */
     private fun updateJumpToBottom() {
-        val b = view?.findViewById<View>(R.id.jumpToBottomButton) ?: return
+        val b = jumpButton ?: view?.findViewById<View>(R.id.jumpToBottomButton)?.also { jumpButton = it } ?: return
         val show = chatAdapter.itemCount > 0 && remainingBelow() > 160 * resources.displayMetrics.density
         if (show == jumpShown) return
         jumpShown = show
@@ -1994,7 +1832,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     .create()
                 dialog.setOnShowListener {
                     dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                        hideKeyboardFrom(input)
+                        requireContext().hideKeyboard(input)
                         val text = input.text?.toString()?.trim().orEmpty()
                         if (text.isBlank()) {
                             dialog.dismiss()
@@ -2105,6 +1943,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         chatRecyclerView.apply {
             adapter = chatAdapter
             layoutManager = this@ChatFragment.layoutManager
+            // The list is match_parent; its own size does not depend on message rows.
+            // Skipping that check keeps a streaming rebind from requesting a full layout.
+            setHasFixedSize(true)
+            setItemViewCacheSize(8)
         }
         chatAdapter.onStreamVisualUpdate = { followStreamingEdge() }
         chatAdapter.showThinking = sharedPreferencesHelper.isShowThinkingBlocks()
@@ -2134,13 +1976,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 if (isScrollProgressEnabled) {
                     updateScrollProgress()
                 }
-                if(isScrollersEnabled)
-                    chatRecyclerView.post {  // Keep post for layout safety
-                        val canScrollUp = chatRecyclerView.canScrollVertically(-1)
-                        val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                        scrollToTopButton.setShownAnimated(canScrollUp)
-                        scrollToBottomButton.setShownAnimated(canScrollDown)
-                    }
+                if (isScrollersEnabled) refreshScrollButtons()
             }
         })
 
@@ -2164,14 +2000,15 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     }
     override fun onDestroyView() {
         ambientBackground = null
+        topBarFade = null
+        jumpButton = null
+        scrollerCanUp = null
+        scrollerCanDown = null
         pickerPopover?.dismiss(animated = false)
         if (::textToSpeech.isInitialized) {
             textToSpeech.stop()
             textToSpeech.shutdown()
         }
-        mediaRecorder?.release()
-        mediaRecorder = null
-        voiceRecordFile?.delete()
         super.onDestroyView()
     }
 
@@ -2221,20 +2058,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             showWebSearchEngineDialog()
             true
         }
-       /* toolsButton.setOnLongClickListener {
-            if (!hasFolderPermission()) {
-                val folderPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "oxproxion")
-                if (!folderPath.exists()) folderPath.mkdirs()
-                AppToast.makeText(requireContext(), getString(R.string.toast_gradation_folder), AppToast.LENGTH_LONG).show()
-                folderPickerLauncher.launch(null)
-            } else {
-                val folderPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "oxproxion")
-                if (!folderPath.exists()) folderPath.mkdirs()
-                hideMenu()
-                showToolsSelectionDialog()
-            }
-            true   // consume the long‑click
-        }*/
 
         toolsButton.setOnLongClickListener {
             // Simply open the ToolsFragment
@@ -2252,7 +2075,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
 
         toolsButton.setOnClickListener {
-            if (!hasFolderPermission()) {
+            if (!sharedPreferencesHelper.hasWorkspaceGrant()) {
                 WorkspacePaths.ensureWorkspaceExists()
                 AppToast.makeText(requireContext(), getString(R.string.toast_gradation_folder), AppToast.LENGTH_LONG).show()
                 folderPickerLauncher.launch(null)
@@ -2353,17 +2176,6 @@ $cleanContent
                 val substitutedSystemPrompt = substituteVariables(systemMessage.prompt)//#subpromptcode
                 //if (prompt.isNotBlank() || selectedImageBytes != null) { //#subpromptcode replaced
                 if (substitutedPrompt.isNotBlank() || selectedImageBytes != null) { //#subpromptcode
-                    /* if (!ForegroundService.isRunningForeground) {
-                         ChatServiceGate.shouldRunService = true
-                         startForegroundService()
-                     }*/
-
-                  /*  if (ForegroundService.isRunningForeground && sharedPreferencesHelper.getNotiPreference()) {
-                        val apiIdentifier = viewModel.activeChatModel.value ?: "Unknown Model"
-                        val displayName = viewModel.getModelDisplayName(apiIdentifier)
-                        ForegroundService.updateNotificationStatusSilently(displayName, "Prompt sent. Awaiting Response.")
-                    }*/
-
                     // RP: validate before clearing the composer so character-gate failures keep the draft.
                     if (viewModel.isRpMode()) {
                         if (!viewModel.canSendRpMessage()) {
@@ -2483,49 +2295,6 @@ $cleanContent
         resetChatButton.setOnClickListener {
             performNewChat()
         }
-        // STT disabled — watermark hold-to-talk
-        centerWatermarkIcon.setOnTouchListener { _, _ -> false }
-        /*
-        centerWatermarkIcon.setOnTouchListener { v, event ->
-            val isFeatureEnabled = sharedPreferencesHelper.getWatermarkSttEnabled()
-            val isChatEmpty = viewModel.chatMessages.value.isNullOrEmpty()
-
-            if (!isFeatureEnabled || !isChatEmpty) {
-                return@setOnTouchListener false
-            }
-
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    } else {
-                        startVoiceRecording()
-                        fromWater = true
-                        v.animate()
-                            .scaleX(2.6f)
-                            .scaleY(2.6f)
-                            .setDuration(300)
-                            .start()
-                    }
-                    true
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (isRecording) {
-                        stopVoiceRecording()
-                    }
-                    v.animate()
-                        .scaleX(1f)
-                        .scaleY(1f)
-                        .setDuration(300)
-                        .start()
-                    true
-                }
-                else -> false
-            }
-        }
-        */
-
-        // IMPORTANT: Remove the OnLongClickListener to prevent conflict with OnTouchListener
         centerWatermarkIcon.setOnLongClickListener { true }
         topReasoningButton.setOnClickListener { reasoningButton.performClick() }
         topWebSearchButton.setOnClickListener { webSearchButton.performClick() }
@@ -3172,11 +2941,6 @@ $cleanContent
         imm?.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
-    private fun hideKeyboardFrom(target: View) {
-        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-        imm?.hideSoftInputFromWindow(target.windowToken, 0)
-    }
-
     private fun restoreAttachPlusIcon() {
         menuButton.setIconResource(R.drawable.ic_attach_plus)
         menuButton.isSelected = false
@@ -3225,9 +2989,6 @@ $cleanContent
         dictation?.refresh()
     }
 
-    private fun updateButtonVisibility() {
-        updateComposerAccessoryVisibility()
-    }
     private fun processAudioUri(uri: Uri) {
         if (discardAttachmentIfRp()) return
         lifecycleScope.launch {
@@ -3321,38 +3082,24 @@ $cleanContent
 
     private fun speakText(text: String, position: Int) {
         applyReadAloudVoice()
-        if (isSpeaking) {
-            if (position == currentSpeakingPosition) {
-                // Stop current speech
-                textToSpeech.stop()
-                onSpeechFinished()
-            } else {
-                // Stop old and start new
-                textToSpeech.stop()
-                onSpeechFinished()
-                // Start new
-                isSpeaking = true
-                currentSpeakingPosition = position
-                chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
-                // flashissue: Update icon directly if holder is attached, else notify
-                updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
-                val safeText = text.take(3900)
-                if (safeText.length < text.length) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
-                }
-                textToSpeech.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, "tts_utterance")
-            }
-        } else {
-            isSpeaking = true
-            currentSpeakingPosition = position
-            chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
-            updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
-            val safeText = text.take(3900)
-            if (safeText.length < text.length) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
-            }
-            textToSpeech.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, "tts_utterance")
+        if (isSpeaking && position == currentSpeakingPosition) {
+            textToSpeech.stop()
+            onSpeechFinished()
+            return
         }
+        if (isSpeaking) {
+            textToSpeech.stop()
+            onSpeechFinished()
+        }
+        isSpeaking = true
+        currentSpeakingPosition = position
+        chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
+        updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
+        val safeText = text.take(3900)
+        if (safeText.length < text.length) {
+            AppToast.makeText(requireContext(), getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
+        }
+        textToSpeech.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, "tts_utterance")
     }
     private fun showSaveFileDialog(content: String) {
         val dialogView = layoutInflater.inflate(R.layout.dialog_save_file, null)
@@ -3964,19 +3711,13 @@ $cleanContent
         }
     }
 
-    private fun scrollToPreviousScreen() {
-        chatRecyclerView.post {
-            val height = chatRecyclerView.height
-            chatRecyclerView.smoothScrollBy(0, -height)
-            updateScrollButtonsVisibility()
-            //AppToast.makeText(requireContext(), "Scrolled up one screen", AppToast.LENGTH_SHORT).show()
-        }
-    }
+    private fun scrollToPreviousScreen() = scrollByScreen(-1)
 
-    private fun scrollToNextScreen() {
+    private fun scrollToNextScreen() = scrollByScreen(1)
+
+    private fun scrollByScreen(direction: Int) {
         chatRecyclerView.post {
-            val height = chatRecyclerView.height
-            chatRecyclerView.smoothScrollBy(0, height)
+            chatRecyclerView.smoothScrollBy(0, direction * chatRecyclerView.height)
             updateScrollButtonsVisibility()
         }
     }
@@ -3991,11 +3732,6 @@ $cleanContent
         }
     }
 
-    private fun formatModelName(modelString: String): String {
-        return modelString.substringAfterLast("/")
-            .substringBefore("@")
-            .substringBefore(":")
-    }
     private fun setupTextFilePicker() {
         attachmentButton.setOnClickListener {
             if (viewModel.isRpMode()) {
@@ -4080,38 +3816,6 @@ $cleanContent
 
     }
 
-    private fun startSpeechRecognition() {
-        // STT disabled
-        /*
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
-        try {
-            speechLauncher.launch(intent)
-        } catch (e: Exception) {
-            GlassNotice.show(requireContext(), getString(R.string.toast_speech_not_supported))
-        }
-        */
-    }
-    private fun startForegroundService() {
-        try {
-            val serviceIntent = Intent(requireContext(), ForegroundService::class.java)
-            val displayName = viewModel.getModelDisplayName(viewModel.activeChatModel.value ?: "Unknown Model")
-            serviceIntent.putExtra("initial_title", displayName)
-            requireContext().startService(serviceIntent)
-        } catch (e: Exception) {
-            // silently ignore — foreground service start is best-effort
-        }
-    }
-
-    private fun stopForegroundService() {
-        try {
-            ForegroundService.stopService()
-        } catch (e: Exception) {
-        }
-    }
     private fun updateModelSourceIndicator() {
         if (viewModel.isRpMode()) {
             // RP chrome owns the chip label + a11y (character / LLM / Characters).
@@ -5057,17 +4761,6 @@ $cleanContent
             GlassNotice.show(requireContext(), getString(R.string.toast_could_not_create_image))
         }
     }
-    fun startSpeechRecognitionSafely() {
-        // STT disabled
-        /*
-        hideKeyboard()
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        } else {
-            startSpeechRecognition()
-        }
-        */
-    }
     private fun processPdfUri(pdfUri: Uri) {
         if (discardAttachmentIfRp()) return
         lifecycleScope.launch {
@@ -5442,222 +5135,83 @@ $cleanContent
         // Apply dim amount of 0.8f
         dialog.window?.let { GlassDialogs.frost(it) }
     }
-    private fun showToolsSelectionDialog() {
-        // 1️⃣ Load current state from SharedPreferences
-        val enabledTools = sharedPreferencesHelper.getEnabledTools()
-        val hasStoredPrefs = sharedPreferencesHelper.hasEnabledToolsStored()
-
-        // 2️⃣ Compute effective enabled set for display
-        val effectiveEnabledSet = if (!hasStoredPrefs) {
-            emptySet()
-        } else {
-            enabledTools
-        }
-
-        // 3️⃣ Get ALL items
-        val allItems = ToolItem.getAllToolItems(effectiveEnabledSet)
-
-        // --- NEW LOGIC: FILTERING ---
-        // 4️⃣ Check if Brave API key exists
-        val braveApiKey = sharedPreferencesHelper.getApiKeyFromPrefs("brave_search_api_key")
-        val hasBraveKey = braveApiKey.isNotEmpty()
-
-        // 5️⃣ Filter the list: Keep everything UNLESS it's brave_search and we don't have a key
-        val filteredItems = allItems.filter { item ->
-            if (item.name == "brave_search" || item.name == "brave_news" || item.name == "find_nearby_places") {
-                hasBraveKey // Only keep Brave tools if key exists
-            } else {
-                true // Keep all other tools
-            }
-        }
-        // ----------------------------
-
-        // 6️⃣ Create a mutable copy of the FILTERED list
-        val mutableItems = filteredItems.toMutableList()
-
-        // 7️⃣ Create the dialog
-        val dialog = GlassAlertDialogBuilder(requireContext(),
-            R.style.CustomMaterialAlertDialogTheme
-        )
-            .setTitle(R.string.dialog_enable_disable_tools)
-            .setNegativeButton(R.string.action_cancel, null)
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                // Note: We map from the mutableItems which is already filtered
-                val newEnabledSet = mutableItems
-                    .filter { it.isEnabled }
-                    .map { it.name }
-                    .toSet()
-                sharedPreferencesHelper.saveEnabledTools(newEnabledSet)
-            }
-            .create()
-
-        val scrollView = ScrollView(requireContext()).apply {
-            setPadding(1.dpToPx(), 1.dpToPx(), 1.dpToPx(), 1.dpToPx())
-        }
-        val container = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-
-        // 8️⃣ Loop through the FILTERED list
-        for ((index, item) in mutableItems.withIndex()) {
-            val row = LayoutInflater.from(requireContext()).inflate(
-                R.layout.item_tool_toggle,
-                container,
-                false
-            )
-
-            val checkBox = row.findViewById<CheckBox>(R.id.checkbox_tool)
-            val titleTv = row.findViewById<TextView>(R.id.text_tool_title)
-            val descTv = row.findViewById<TextView>(R.id.text_tool_desc)
-
-            titleTv.text = item.displayName
-            descTv.text = item.description
-            checkBox.isChecked = item.isEnabled
-
-            val stableIndex = index
-
-            // Row click
-            row.setOnClickListener {
-                val currentItem = mutableItems[stableIndex]
-                val newState = !currentItem.isEnabled
-
-                // --- INTERCEPT: set_sound_mode ---
-                if (currentItem.name == "set_sound_mode" && newState) {
-                    val notificationManager = requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-                    // Check if we already have permission
-                    if (!notificationManager.isNotificationPolicyAccessGranted) {
-                        // Permission not granted, open settings
-                        val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                        // Using the launcher defined in onCreate
-                        notificationPolicyLauncher.launch(intent)
-                        return@setOnClickListener // Stop here, don't toggle checkbox yet
-                    }
-                }
-                // ---------------------------------
-
-                // --- INTERCEPT: get_location ---
-                if (currentItem.name == "get_location" && newState) {
-                    val hasPermission = ContextCompat.checkSelfPermission(
-                        requireContext(),
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (!hasPermission) {
-                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                        return@setOnClickListener
-                    }
-                }
-                // -------------------------------
-
-                // Normal toggle behavior
-                mutableItems[stableIndex] = currentItem.copy(isEnabled = newState)
-                checkBox.isChecked = newState
-            }
-
-            // Checkbox click
-            checkBox.setOnCheckedChangeListener { _, isChecked ->
-                mutableItems[stableIndex] = mutableItems[stableIndex].copy(isEnabled = isChecked)
-            }
-
-            val layoutParams = row.layoutParams as LinearLayout.LayoutParams
-            layoutParams.bottomMargin = 1.dpToPx()
-            row.layoutParams = layoutParams
-
-            container.addView(row)
-        }
-
-        scrollView.addView(container)
-        dialog.setView(scrollView)
-        dialog.window?.let { GlassDialogs.frost(it) }
-        dialog.show()
-
-        val titleView = dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)
-        titleView?.paintFlags = titleView.paintFlags.or(Paint.UNDERLINE_TEXT_FLAG)
-    }
-
-
     private fun showWebSearchEngineDialog() {
-        val engines = listOf(
-            "default" to "Default (Native if available, fallback Exa)",
-            "native" to "Native (Provider's built-in search)",
-            "exa" to "Exa (Always use Exa search)",
-            "firecrawl" to "Firecrawl (Always use Firecrawl search. Uses your BYOK credits)",
-            "parallel" to "Parallel (Always use Parallel search)"
-        )
-
-        val currentEngine = sharedPreferencesHelper.getWebSearchEngine()
-        var selectedEngine = currentEngine
-
-        GlassAlertDialogBuilder(requireContext(),
-            R.style.CustomMaterialAlertDialogTheme
-        )
-            .setTitle(R.string.dialog_web_search_engine)
-            .setSingleChoiceItems(
-                engines.map { it.second }.toTypedArray(),
-                engines.indexOfFirst { it.first == currentEngine }.takeIf { it >= 0 } ?: 0
-            ) { _, which ->
-                selectedEngine = engines[which].first
-            }
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                sharedPreferencesHelper.saveWebSearchEngine(selectedEngine)
-                showWebSearchContextSizeDialog()
-            }
-            .setNegativeButton(R.string.action_cancel, null)
-            .show()
+        pickOne(
+            title = R.string.dialog_web_search_engine,
+            items = listOf("default", "native", "exa", "firecrawl", "parallel"),
+            labels = intArrayOf(
+                R.string.web_search_engine_default,
+                R.string.web_search_engine_native,
+                R.string.web_search_engine_exa,
+                R.string.web_search_engine_firecrawl,
+                R.string.web_search_engine_parallel,
+            ),
+            current = sharedPreferencesHelper.getWebSearchEngine(),
+            fallbackIndex = 0,
+        ) { engine ->
+            sharedPreferencesHelper.saveWebSearchEngine(engine)
+            showWebSearchContextSizeDialog()
+        }
     }
 
-    // NEW: Dialog for Context Size
     private fun showWebSearchContextSizeDialog() {
-        val sizes = listOf(
-            "low" to "Low (Minimal context, basic queries)",
-            "medium" to "Medium (Moderate context, general queries)",
-            "high" to "High (Extensive context, detailed research)"
-        )
-
-        val currentSize = sharedPreferencesHelper.getWebSearchContextSize()
-        var selectedSize = currentSize
-
-        GlassAlertDialogBuilder(requireContext(),
-            R.style.CustomMaterialAlertDialogTheme
-        )
-            .setTitle(R.string.dialog_search_context_size)
-            .setSingleChoiceItems(
-                sizes.map { it.second }.toTypedArray(),
-                sizes.indexOfFirst { it.first == currentSize }.takeIf { it >= 0 } ?: 1 // Default to medium
-            ) { _, which ->
-                selectedSize = sizes[which].first
-            }
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                sharedPreferencesHelper.saveWebSearchContextSize(selectedSize)
-                showWebSearchMaxResultsDialog()
-            }
-            .setNegativeButton(R.string.action_cancel, null)
-            .show()
+        pickOne(
+            title = R.string.dialog_search_context_size,
+            items = listOf("low", "medium", "high"),
+            labels = intArrayOf(
+                R.string.web_search_context_low,
+                R.string.web_search_context_medium,
+                R.string.web_search_context_high,
+            ),
+            current = sharedPreferencesHelper.getWebSearchContextSize(),
+            fallbackIndex = 1,
+        ) { size ->
+            sharedPreferencesHelper.saveWebSearchContextSize(size)
+            showWebSearchMaxResultsDialog()
+        }
     }
+
     private fun showWebSearchMaxResultsDialog() {
-        // Generate list 1 to 20
         val options = (1..20).toList()
-        val optionsStrings = options.map { it.toString() }.toTypedArray()
+        pickOne(
+            title = R.string.dialog_max_search_results,
+            items = options,
+            labels = options.map { it.toString() }.toTypedArray(),
+            currentIndex = options.indexOf(sharedPreferencesHelper.getWebSearchMaxResults()).takeIf { it >= 0 } ?: 4,
+        ) { count ->
+            sharedPreferencesHelper.saveWebSearchMaxResults(count)
+        }
+    }
 
-        val currentMax = sharedPreferencesHelper.getWebSearchMaxResults()
-        var selectedMax = currentMax
-
-        GlassAlertDialogBuilder(requireContext(),
-            R.style.CustomMaterialAlertDialogTheme
+    private fun <T> pickOne(
+        title: Int,
+        items: List<T>,
+        labels: IntArray,
+        current: String,
+        fallbackIndex: Int,
+        onSave: (T) -> Unit,
+    ) {
+        pickOne(
+            title = title,
+            items = items,
+            labels = labels.map { getString(it) }.toTypedArray(),
+            currentIndex = items.indexOfFirst { it.toString() == current }.takeIf { it >= 0 } ?: fallbackIndex,
+            onSave = onSave,
         )
-            // Combine the title and the message here
-            .setTitle(R.string.dialog_max_search_results)
-            .setSingleChoiceItems(
-                optionsStrings,
-                options.indexOf(currentMax).takeIf { it >= 0 } ?: 4 // Index 4 is '5'
-            ) { _, which ->
-                selectedMax = options[which]
-            }
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                // Final save step
-                sharedPreferencesHelper.saveWebSearchMaxResults(selectedMax)
-            }
+    }
+
+    private fun <T> pickOne(
+        title: Int,
+        items: List<T>,
+        labels: Array<String>,
+        currentIndex: Int,
+        onSave: (T) -> Unit,
+    ) {
+        var selected = items[currentIndex]
+        GlassAlertDialogBuilder(requireContext(), R.style.CustomMaterialAlertDialogTheme)
+            .setTitle(title)
+            .setSingleChoiceItems(labels, currentIndex) { _, which -> selected = items[which] }
+            .setPositiveButton(R.string.action_save) { _, _ -> onSave(selected) }
             .setNegativeButton(R.string.action_cancel, null)
             .show()
     }
@@ -5676,6 +5230,22 @@ $cleanContent
             addUpdateListener { setTextColor(it.animatedValue as Int) }
             start()
         }
+    private var scrollerCanUp: Boolean? = null
+    private var scrollerCanDown: Boolean? = null
+
+    /** Scroll-button visibility. onScrolled already has a laid-out list, so no posted runnable per pixel. */
+    private fun refreshScrollButtons() {
+        val up = chatRecyclerView.canScrollVertically(-1)
+        val down = chatRecyclerView.canScrollVertically(1)
+        if (up == scrollerCanUp && down == scrollerCanDown) return
+        scrollerCanUp = up
+        scrollerCanDown = down
+        scrollToTopButton.setShownAnimated(up)
+        scrollToBottomButton.setShownAnimated(down)
+    }
+
+    private var progressArmedAt = 0L
+
     private val hideScrollProgress = Runnable {
         if (!Motion.areAnimationsEnabled(requireContext())) { progressBar.alpha = 0f; return@Runnable }
         progressBar.animate().alpha(0f).setDuration(280).setInterpolator(Motion.easeOut).start()
@@ -5691,10 +5261,17 @@ $cleanContent
             progressBar.visibility = View.VISIBLE
             progressBar.scaleX = progress
             // Like an iOS scroll indicator: there while you move, gone once you stop.
-            progressBar.removeCallbacks(hideScrollProgress)
-            progressBar.animate().cancel()
-            progressBar.alpha = 0.6f
-            progressBar.postDelayed(hideScrollProgress, 700)
+            // Reschedule the hide at most every 50ms so a fling does not post a callback per pixel.
+            if (progressBar.alpha < 0.59f) {
+                progressBar.animate().cancel()
+                progressBar.alpha = 0.6f
+            }
+            val now = android.os.SystemClock.uptimeMillis()
+            if (now - progressArmedAt >= 50L) {
+                progressArmedAt = now
+                progressBar.removeCallbacks(hideScrollProgress)
+                progressBar.postDelayed(hideScrollProgress, 700)
+            }
         } else {
             progressBar.visibility = View.GONE
         }
@@ -5873,113 +5450,6 @@ $cleanContent
         }
     }
     @SuppressLint("MissingPermission")
-    private fun startVoiceRecording() {
-        // STT disabled
-        return
-        /*
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            return
-        }
-
-        try {
-            voiceRecordFile = File(requireContext().cacheDir, "voice_input_${System.currentTimeMillis()}.opus")
-
-            mediaRecorder = MediaRecorder(requireContext()).apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.OGG)
-                setOutputFile(voiceRecordFile!!.absolutePath)
-                setAudioEncoder(MediaRecorder.AudioEncoder.OPUS)
-                setAudioSamplingRate(16000)
-                setAudioEncodingBitRate(32000)
-                //setAudioBitRate(32000)
-                prepare()
-                start()
-            }
-
-            isRecording = true
-            speechButton.setIconResource(R.drawable.ic_stop_circle) // Red mic or recording indicator
-            speechButton.isSelected = true
-            AppToast.makeText(requireContext(), getString(R.string.toast_recording), AppToast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            GlassNotice.show(requireContext(), getString(R.string.toast_recording_failed, e.message ?: ""))
-            voiceRecordFile?.delete()
-            voiceRecordFile = null
-        }
-        */
-    }
-
-    private fun stopVoiceRecording() {
-        // STT disabled
-        return
-        /*
-        try {
-            mediaRecorder?.apply {
-                stop()
-                release()
-            }
-            mediaRecorder = null
-            isRecording = false
-            speechButton.setIconResource(R.drawable.ic_mic) // Original mic icon
-            speechButton.isSelected = false
-
-            voiceRecordFile?.let { file ->
-                if (file.exists() && file.length() > 0) {
-                    processVoiceRecording(file)
-                } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_recording_empty), AppToast.LENGTH_SHORT).show()
-                    file.delete()
-                }
-            }
-        } catch (e: Exception) {
-            isRecording = false
-            speechButton.setIconResource(R.drawable.ic_mic)
-            speechButton.isSelected = false
-        }
-        */
-    }
-
-    private fun processVoiceRecording(file: File) {
-        // STT disabled
-        file.delete()
-        return
-        /*
-        lifecycleScope.launch {
-            try {
-                val audioBytes = withContext(Dispatchers.IO) {
-                    file.readBytes()
-                }
-
-                if(!fromWater) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_transcribing), AppToast.LENGTH_SHORT).show()
-                }
-                val transcribedText = viewModel.transcribeAudioForInput(
-                    audioBytes = audioBytes,
-                    audioFormat = "opus",
-                    fileName = file.name
-                )
-
-                if (!transcribedText.isNullOrBlank()) {
-                    if(fromWater){
-                        val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Transcribed Text", transcribedText)
-                        clipboard.setPrimaryClip(clip)}
-                    chatEditText.setText(transcribedText)
-                    chatEditText.setSelection(transcribedText.length)
-                    // AppToast.makeText(requireContext(), "Transcription complete", AppToast.LENGTH_SHORT).show()
-                } else {
-                    GlassNotice.show(requireContext(), getString(R.string.toast_transcription_failed))
-                }
-            } catch (e: Exception) {
-                GlassNotice.show(requireContext(), getString(R.string.toast_error_generic, e.message ?: ""))
-            } finally {
-                file.delete()
-                voiceRecordFile = null
-                fromWater = false
-            }
-        }
-        */
-    }
     private fun insertRpReminderTemplate() {
         val prefix = "_(Reminder: "
         val template = "_(Reminder: )_"
@@ -6605,7 +6075,7 @@ $cleanContent
     }
 
     private fun substituteVariables(input: String): String {
-        if (!input.contains("{{ox")) return input  // 🔥 EARLY EXIT: Instant if no vars (99% cases)
+        if (!input.contains("{{ox")) return input
 
         val now = Date()
         return input.replace(Regex("""\{\{ox(\w+)\}\}""")) { match ->
@@ -6769,13 +6239,5 @@ $cleanContent
 
             loadDataWithBaseURL(null, fullHtml, "text/html", "UTF-8", null)
         }
-    }
-    private fun hasFolderPermission(): Boolean {
-        val uriString = sharedPreferencesHelper.getSafFolderUri() ?: return false
-
-        // Verify the permission is actually still held by the OS
-        val treeUri = uriString.toUri()
-        val persistedUriPermissions = requireContext().contentResolver.persistedUriPermissions
-        return persistedUriPermissions.any { it.uri == treeUri && it.isReadPermission }
     }
 }
