@@ -37,9 +37,11 @@ the state of work in progress in `docs/handoff.md`.
 
 ## Design rules
 - Only pure neutral grays, with R, G and B equal. Dark base #111111, light is a dimmed off-white. No blue tint,
-  no solid white buttons, nothing glowy. No red or green, even for delete and error states.
-  Exception (user call): code syntax highlighting and diffs keep their colors (git green/red).
-- iOS Liquid Glass on every surface. Lens edge on Android 13+, plain blur on 12, and a solid frosted fill
+  no solid white buttons, nothing glowy, no red or green for errors.
+  Exceptions (user calls): delete actions use the dim crimson `delete_action`; code syntax highlighting and
+  diffs keep their colors (git green/red).
+- iOS Liquid Glass on every surface except the RP character panel, which is an opaque outlined sheet (user call).
+  Lens edge on Android 13+, plain blur on 12, and a solid frosted fill
   on battery saver or low-RAM phones.
 - Performance is a hard rule: few blur layers, animations pause offscreen, and backgrounds run at 12 to 15fps.
 - Plus Jakarta Sans for the UI and Michroma for the wordmark. Nothing tappable under 13sp. Fix text
@@ -51,7 +53,7 @@ the state of work in progress in `docs/handoff.md`.
 
 ## Working with the user
 - She voice-dictates, so expect mis-transcriptions ("iOS Green" meant glass) and state how you read it.
-- Work silently: no status updates or narration between tool calls ("Now I'll...", "Let me check..."). Only write text in the final reply, or when you need my input.
+- Skip play-by-play between tool calls ("Now I'll...", "Let me check..."). Write text in the final reply, when you need my input, or when something unexpected changes the plan.
 - Replies are the tightest TLDR that is still understandable. No emojis. Say what was verified and what still needs the phone.
 - She trusts your taste. For "make this better" with no specifics, pick the direction yourself, do it,
   and explain the why.
@@ -60,4 +62,4 @@ the state of work in progress in `docs/handoff.md`.
 Reply in TL;DR form: short, answer first, no long explanations unless asked.
 - Never add Claude attribution to git commits or PRs: no "Co-Authored-By: Claude" trailer, no "Generated with Claude Code" line.
 - Use the built-in Edit/Write/Read tools for file changes instead of Python scripts or shell workarounds, unless the tools can't handle it (binary files, big batch edits).
-- Act as an orchestrator: for big multi-step or parallelizable tasks, delegate the work to `worker` subagents (Sonnet 5.5, medium effort) without asking, run independent ones in parallel, and review their results before reporting. Handle quick, small tasks yourself.
+- Act as an orchestrator: for big multi-step or parallelizable tasks, delegate the work to `worker` subagents without asking, run independent ones in parallel, and review their results before reporting. Handle quick, small tasks yourself.

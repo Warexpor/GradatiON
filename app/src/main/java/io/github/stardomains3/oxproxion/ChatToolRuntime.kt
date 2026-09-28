@@ -132,7 +132,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 type = "function",
                 function = FunctionTool(
                     name = "make_file",
-                    description = "Creates a text file (e.g., .txt, .md, .html, .json) and saves it to the Download/gradation workspace. Content should be plain text or structured text. **Important:** Use RAW, UNESCAPED content in the 'content' parameter - it gets written directly to disk as-is via OutputStream. No HTML entities, no escaping needed. Only use when the user specifically asks for a file to be made.",
+                    description = "Creates a text file (e.g., .txt, .md, .html, .json) and saves it to the Download/gradation workspace. Content should be plain text or structured text. Content is written to disk byte-for-byte, so pass raw, unescaped text (no HTML entities). Use when the user asks for a file to be created.",
                     parameters = buildJsonObject {
                         put("type", "object")
                         putJsonObject("properties") {
@@ -489,7 +489,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 type = "function",
                 function = FunctionTool(
                     name = "set_alarm",
-                    description = "Sets an alarm for a specific time. Uses 24-hour format (hour 0-23). IMPORTANT: If the user does not explicitly specify AM or PM (or morning/afternoon/evening), you MUST ask them to clarify before calling this tool. For example, if they say 'set alarm for 7:10' or 'set alarm for 7', ask 'Would you like that for 7:10 AM or 7:10 PM?' and wait for their response. Only call this tool once the time is unambiguous.",
+                    description = "Sets an alarm at a 24-hour time (hour 0-23, minute 0-59). A wrong alarm is worse than a question, so if the user gave no AM/PM or time of day, ask which they mean before calling.",
                     parameters = buildJsonObject {
                         put("type", "object")
                         putJsonObject("properties") {
@@ -612,11 +612,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 type = "function",
                 function = FunctionTool(
                     name = "add_calendar_event",
-                    description = "Adds an event to the user's calendar. Provide a title and start date/time; the AI will populate optional fields like location, description, all-day status, and end time as needed (e.g., default end to 1 hour after start for timed events, or next day for all-day). Dates/times should be in ISO 8601 format (e.g., '2023-10-05T14:30:00' for Oct 5, 2023 at 2:30 PM). Current time/date this was sent is: ${
-                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(
-                            Date()
-                        )
-                    }",
+                    description = "Adds an event to the user's calendar. Provide a title and start date/time; the AI will populate optional fields like location, description, all-day status, and end time as needed (e.g., default end to 1 hour after start for timed events, or next day for all-day). Dates/times should be in ISO 8601 format (e.g., '2023-10-05T14:30:00' for Oct 5, 2023 at 2:30 PM). Call get_current_datetime first when the event is relative to now (\"tomorrow\", \"in 2 hours\").",
                     parameters = buildJsonObject {
                         put("type", "object")
                         putJsonObject("properties") {
@@ -714,7 +710,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 type = "function",
                 function = FunctionTool(
                     name = "edit_file",
-                    description = "Overwrites an existing file in the Download/gradation workspace with new content. Use this when the user wants to update, modify, or edit an existing file. IMPORTANT: You must provide the COMPLETE new content of the file, not just the changes. The entire file will be replaced.",
+                    description = "Overwrites an existing file in the Download/gradation workspace with new content. Use this when the user wants to update, modify, or edit an existing file. The whole file is replaced, so pass its complete new content, not a diff.",
                     parameters = buildJsonObject {
                         put("type", "object")
                         putJsonObject("properties") {
@@ -766,7 +762,10 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
         if (!hasStoredPrefs) return emptyList()
 
-        val enabledToolNames = ToolItem.effectiveEnabledTools(sharedPreferencesHelper.getEnabledTools())
+        val enabled = ToolItem.effectiveEnabledTools(sharedPreferencesHelper.getEnabledTools())
+        // The calendar tool needs "now" to resolve relative dates. The clock lives in its own tool, not a
+        // timestamp in the description, so the tools array stays byte-identical and cacheable across turns.
+        val enabledToolNames = if ("add_calendar_event" in enabled) enabled + "get_current_datetime" else enabled
         return allTools.filter { tool ->
             tool.function?.name in enabledToolNames
         }

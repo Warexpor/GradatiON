@@ -7,10 +7,11 @@ Grok-derived token extraction and `SHELL.md`, which are both still in git histor
 ## Principles
 
 1. **Monochrome.** (hard) Use only pure neutral grays, with R, G and B equal. There's no accent
-   hue, no blue tint, no red or green for errors or deletes, no solid white buttons and nothing
-   glowy.
+   hue, no blue tint, no red or green for errors, no solid white buttons and nothing glowy.
+   - Exception: delete actions use the dim crimson `delete_action`, never an orange-leaning red.
    - Exception: code syntax highlighting and diffs keep their colors (git green and red).
 2. **Liquid Glass everywhere.** Dialogs, sheets, menus, pills, toggles and bars are all glass.
+   The one exception is the RP character panel, an opaque outlined sheet.
    Nothing is a flat card sitting on a flat page.
 3. **Quiet by default.** Chrome recedes and content leads. Status appears only when it carries
    meaning: a spinner while working, a mark only on failure.
@@ -149,7 +150,7 @@ and never auto-send, and there's no hold-to-talk. While listening:
 **Continue.** The » button on an empty Roleplay composer sends a hidden prompt (no bubble). The reply is sewn onto the end of the last message (`RpContinuation.join`) and eases in from where the text stopped.
 
 **Character panel.** An opaque sheet (`panel_solid`, tiles `panel_tile`) with:
-- A header: round avatar, name, a one-line description, and New chat and Switch as round glass buttons.
+- A header: round avatar, name, a one-line description, and a Switch button.
 - A 3-column grid of titled cards: Memory, History, Persona, Style, Lore, Edit.
 - Cards show live content when there is some (the memory text, the persona name). Otherwise
   they show a large glyph in `xai_mute`.
