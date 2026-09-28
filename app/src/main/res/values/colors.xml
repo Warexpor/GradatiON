@@ -104,12 +104,12 @@
     <color name="glass_popover_tint">#E8EEEEEE</color>
     <color name="popover_row_selected">#14000000</color>
     <color name="popover_row_pressed">#1F000000</color>
-    <!-- Message ⋮ menu (MessageMenu): denser than the composer pickers, plus the band before destructive rows -->
+    <!-- Message ⋮ menu (MessageMenu): denser than the composer pickers -->
     <color name="glass_menu_tint">#F2EEEEEE</color>
-    <color name="menu_group_gap">#12000000</color>
     <!-- Character panel: an opaque sheet, not glass. Tiles sit one step off the sheet. -->
     <color name="panel_solid">#FFF2F2F2</color>
     <color name="panel_tile">#FFE5E5E5</color>
+    <color name="panel_edge">#4D000000</color>
     <color name="panel_tile_on">#FFD9D9D9</color>
     <color name="popover_scrim">#26000000</color>
     <color name="empty_mark">#FFC6C6C6</color>

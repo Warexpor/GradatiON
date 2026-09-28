@@ -556,6 +556,12 @@
         <item name="android:navigationBarColor">@color/xai_canvas_card</item>
     </style>
 
+    <!-- Sheets that are opaque cards (the character panel): dim the screen, never blur it -->
+    <style name="ThemeOverlay.Grokion.BottomSheet.Sharp" parent="ThemeOverlay.Grokion.BottomSheet">
+        <item name="android:windowBlurBehindEnabled">false</item>
+        <item name="android:backgroundDimAmount">0.5</item>
+    </style>
+
     <!-- iOS alert motion for dialog windows -->
     <style name="Animation.Gradation.Dialog" parent="@android:style/Animation.Dialog">
         <item name="android:windowEnterAnimation">@anim/dialog_enter</item>

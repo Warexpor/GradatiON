@@ -447,10 +447,16 @@ class ScreenshotTest {
         return bg
     }
 
-    private fun snapDialog(a: MainActivity, name: String) {
+    /** [sharp]: the dialog dims the screen but does not blur it (the opaque character panel). */
+    private fun snapDialog(a: MainActivity, name: String, sharp: Boolean = false) {
         val d: Dialog? = ShadowDialog.getLatestDialog()
         if (d == null) { snap(root(a), name); return }
-        val bg = frostedBackdrop(a)
+        val bg = if (sharp) {
+            val r = root(a)
+            Bitmap.createBitmap(r.width, r.height, Bitmap.Config.ARGB_8888).also { b ->
+                Canvas(b).apply { r.draw(this); drawColor(0x80000000.toInt()) }
+            }
+        } else frostedBackdrop(a)
         val c = Canvas(bg)
         val dv = d.window!!.decorView
         c.save(); c.translate(0f, (bg.height - dv.height).toFloat().coerceAtLeast(0f))
@@ -836,7 +842,6 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
         // Composer and chip step aside; the tabs stay.
         org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.composerDock).visibility)
-        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.rpCharacterChip).visibility)
         val rows = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
         // Mira has two chats but one row.
         org.junit.Assert.assertEquals(4, rows.adapter!!.itemCount)
@@ -846,9 +851,7 @@ class ScreenshotTest {
         rows.findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
         org.junit.Assert.assertEquals(View.GONE, home.visibility)
         org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.composerDock).visibility)
-        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.rpCharacterChip).visibility)
-        org.junit.Assert.assertEquals("Mira Vance", a.findViewById<android.widget.TextView>(R.id.rpChipName).text.toString())
-        snap(root(a), "rp_thread_chip_dark")
+        snap(root(a), "rp_thread_dark")
 
         // The Roleplay tab, tapped again inside a chat, goes back to the list.
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
@@ -943,12 +946,10 @@ class ScreenshotTest {
         }
         SharedPreferencesHelper(a).saveRpLayout(mira.id, SharedPreferencesHelper.RP_LAYOUT_BUBBLES)
         SharedPreferencesHelper(a).saveRpVoice(mira.id, SharedPreferencesHelper.RpVoice(null, 0.8f, 1f))
-        // Roleplay's entry point is the header chip; the composer pill is Ask's model picker.
+        // The panel opens from the character's speaker line; the composer pill is Ask's model picker.
         org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.modelNameTextView).visibility)
-        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.rpCharacterChip).visibility)
-        org.junit.Assert.assertEquals("Mira Vance", a.findViewById<android.widget.TextView>(R.id.rpChipName).text.toString())
-        a.findViewById<View>(R.id.rpCharacterChip).performClick(); settle()
-        snapDialog(a, "rp_character_panel_dark")
+        (a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView).adapter as ChatAdapter).onSpeakerClick!!.invoke(); settle()
+        snapDialog(a, "rp_character_panel_dark", sharp = true)
         ShadowDialog.getLatestDialog()?.dismiss(); idle()
         // Re-apply RP chrome (the panel reads prefs; the chat reads them on mode change).
         a.findViewById<View>(R.id.tabChat).performClick(); idle()

@@ -202,7 +202,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private val askMode = AskModeController()
     private val rpMode = RpModeController()
     private lateinit var modelNameTextView: TextView
-    private lateinit var rpCharacterChip: View
     /** Roleplay's landing screen; see [RpChatsHome]. */
     private var rpHome: RpChatsHome? = null
     private var rpHomeOpen = false
@@ -496,18 +495,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         attachmentButton = view.findViewById(R.id.attachmentButton)
         buttonsContainer = view.findViewById(R.id.buttonsContainer)
         modelNameTextView = view.findViewById(R.id.modelNameTextView)
-        rpCharacterChip = view.findViewById(R.id.rpCharacterChip)
         setupRpHome(view, savedInstanceState)
-        // The chip hangs under the tab row, whatever height the row has (the power-tools row can join it).
-        view.findViewById<View>(R.id.topBarLayout).addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-            (rpCharacterChip.layoutParams as FrameLayout.LayoutParams).let { lp ->
-                val wanted = v.height - (2 * resources.displayMetrics.density).toInt()
-                if (lp.topMargin != wanted) {
-                    lp.topMargin = wanted
-                    rpCharacterChip.layoutParams = lp
-                }
-            }
-        }
         modelNameShell = view.findViewById(R.id.modelNameShell)
         tabChat = view.findViewById(R.id.tabChat)
         tabRoleplay = view.findViewById(R.id.tabRoleplay)
@@ -2322,14 +2310,9 @@ $cleanContent
             hideKeyboard()
             if (viewModel.isRpMode()) showRpCharacterPanel() else showModelPopover()
         }
-        rpCharacterChip.setOnClickListener {
+        chatAdapter.onSpeakerClick = {
             hideKeyboard()
             showRpCharacterPanel()
-        }
-        rpCharacterChip.setOnLongClickListener {
-            hideKeyboard()
-            openBotModelPicker()
-            true
         }
 
         systemMessageButton.setOnClickListener {
@@ -5577,8 +5560,6 @@ $cleanContent
                 viewModel.loadChat(row.sessionId)
                 closeRpHome()
             },
-            onStart = { character -> startRpWith(character) },
-            onBrowse = { openRpCharacterLibrary() },
             onMenu = { anchor, row -> showRpHomeMenu(anchor, row) }
         )
         rpHomeOpen = savedInstanceState?.getBoolean(STATE_RP_HOME) ?: viewModel.isRpMode()
@@ -5619,7 +5600,7 @@ $cleanContent
                 val text = last?.let { RpChatSummaries.previewOf(it.content) }.orEmpty()
                 row.sessionId to if (last?.role == "user" && text.isNotBlank()) getString(R.string.rp_home_you, text) else text
             }
-            home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none), characters)
+            home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none))
             updateRpHome()
         }
     }
@@ -5635,9 +5616,6 @@ $cleanContent
             val state = if (show) View.GONE else View.VISIBLE
             root.findViewById<View>(R.id.composerDock)?.visibility = state
             root.findViewById<View>(R.id.composerFade)?.visibility = state
-        }
-        if (::rpCharacterChip.isInitialized && viewModel.isRpMode()) {
-            rpCharacterChip.visibility = if (show) View.GONE else View.VISIBLE
         }
     }
 
@@ -5762,7 +5740,7 @@ $cleanContent
     }
 
     /** RP pill: switch character in place, plus the roleplay home and the RP model. */
-    private fun showCharacterPopover(anchor: View = rpCharacterChip) {
+    private fun showCharacterPopover(anchor: View = newChatButton) {
         val repo = viewModel.getRpRepository()
         viewLifecycleOwner.lifecycleScope.launch {
             val chars = repo.getAllCharactersOnce().sortedByDescending { it.updatedAt }
@@ -5800,37 +5778,7 @@ $cleanContent
         }
     }
 
-    /** The header chip in Roleplay: the character's portrait and name, or "LLM" / "Characters" when there is none. */
-    private fun bindRpCharacterChip(character: RpCharacter?, llm: Boolean) {
-        val root = view ?: return
-        // The composer pill is Ask's model picker; Roleplay's entry point lives up here now.
-        modelNameTextView.visibility = View.GONE
-        rpCharacterChip.visibility = if (rpHomeOpen) View.GONE else View.VISIBLE
-        val frame = root.findViewById<View>(R.id.rpChipAvatarFrame)
-        val avatar = root.findViewById<ImageView>(R.id.rpChipAvatar)
-        val mono = root.findViewById<TextView>(R.id.rpChipMonogram)
-        val name = root.findViewById<TextView>(R.id.rpChipName)
-        when {
-            llm -> {
-                frame.visibility = View.GONE
-                name.setText(R.string.rp_llm_chip)
-                rpCharacterChip.contentDescription = getString(R.string.rp_model_chip_a11y_llm)
-            }
-            character != null -> {
-                frame.visibility = View.VISIBLE
-                RpAvatars.bind(avatar, mono, character)
-                name.text = character.name
-                rpCharacterChip.contentDescription = getString(R.string.rp_model_chip_a11y_character, character.name)
-            }
-            else -> {
-                frame.visibility = View.GONE
-                name.setText(R.string.rp_characters_title)
-                rpCharacterChip.contentDescription = getString(R.string.rp_model_chip_a11y_empty)
-            }
-        }
-    }
-
-    /** Character chip: the panel for the active character, or the picker when there's none yet. */
+    /** Speaker line: the panel for the active character, or the picker when there's none yet. */
     private fun showRpCharacterPanel() {
         val llm = sharedPreferencesHelper.isRpLlmMode()
         val character = viewModel.activeRpCharacter.value
@@ -5882,7 +5830,6 @@ $cleanContent
             })
             if (character != null && !llm) {
                 add(RpCharacterPanel.Tile(R.string.rp_panel_edit, R.drawable.ic_edit) { pushRp(RpCharacterEditFragment.newInstance(character.id)) })
-                add(RpCharacterPanel.Tile(R.string.rp_panel_new_chat, R.drawable.ic_new_chat, header = true) { startRpWith(character) })
             }
             add(RpCharacterPanel.Tile(R.string.rp_panel_switch, R.drawable.rp_ic_characters, header = true) { menuButton.post { showCharacterPopover() } })
         }
@@ -6239,7 +6186,7 @@ $cleanContent
             topPresetsButton.visibility = View.GONE
             presetsButton2.visibility = View.GONE
             val charName = activeChar?.name
-            bindRpCharacterChip(activeChar, llm)
+            modelNameTextView.visibility = View.GONE
             modelNameTextView.text = when {
                 llm -> getString(R.string.rp_llm_chip)
                 !charName.isNullOrBlank() -> charName
@@ -6252,7 +6199,6 @@ $cleanContent
             }
             applyRpComposerHint()
         } else {
-            rpCharacterChip.visibility = View.GONE
             modelNameTextView.visibility = View.VISIBLE
             viewModel.activeChatModel.value?.let { modelNameTextView.text = viewModel.getModelDisplayName(it) }
             chatEditText.hint = getString(R.string.grok_composer_hint)

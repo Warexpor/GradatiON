@@ -22,7 +22,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
  * lore, the card itself), so none of it needs a trip through Settings.
  *
  * Solid on purpose: it holds a lot of small text and sits over a busy transcript, so it is an
- * opaque sheet with tiles one step off it, not glass. The screen behind it is still frosted.
+ * opaque sheet with an outline and tiles one step off it, not glass. The chat behind stays sharp.
  */
 object RpCharacterPanel {
 
@@ -41,9 +41,10 @@ object RpCharacterPanel {
 
     fun show(fragment: Fragment, character: RpCharacter?, title: String, subtitle: String, tiles: List<Tile>): BottomSheetDialog {
         val ctx = fragment.requireContext()
-        val dialog = BottomSheetDialog(ctx, R.style.ThemeOverlay_Grokion_BottomSheet)
+        val dialog = BottomSheetDialog(ctx, R.style.ThemeOverlay_Grokion_BottomSheet_Sharp)
         val sheet = LayoutInflater.from(ctx).inflate(R.layout.sheet_rp_character, null)
         val d = ctx.resources.displayMetrics.density
+        sheet.background = solidSheet(ctx)
 
         sheet.findViewById<TextView>(R.id.rpPanelName).text = title
         sheet.findViewById<TextView>(R.id.rpPanelSubtitle).apply {
@@ -158,9 +159,8 @@ object RpCharacterPanel {
         dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
         dialog.behavior.skipCollapsed = true
         dialog.show()
-        dialog.window?.let { GlassDialogs.frost(it) }
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { container ->
-            container.background = solidSheet(ctx)
+            container.background = null
             container.backgroundTintList = null
         }
         return dialog
@@ -188,7 +188,7 @@ object RpCharacterPanel {
         return android.graphics.drawable.GradientDrawable().apply {
             setColor(ContextCompat.getColor(ctx, R.color.panel_solid))
             cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
-            setStroke(ctx.resources.displayMetrics.density.toInt().coerceAtLeast(1), ContextCompat.getColor(ctx, R.color.xai_hairline))
+            setStroke((1.5f * ctx.resources.displayMetrics.density).toInt().coerceAtLeast(1), ContextCompat.getColor(ctx, R.color.panel_edge))
         }
     }
 

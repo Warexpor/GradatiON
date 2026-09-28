@@ -40,10 +40,8 @@
     <string name="rp_ui_persona_intro">How characters see you. Used in every RP chat.</string>
     <string name="rp_ui_section_you">You</string>
     <!-- Roleplay home: the chats list you land on -->
-    <string name="rp_home_start">Start a chat</string>
     <string name="rp_home_chats">Chats</string>
-    <string name="rp_home_empty">No chats yet. Pick a character above to begin.</string>
-    <string name="rp_home_all">All</string>
+    <string name="rp_home_empty">No chats yet. Tap the new chat button to pick a character.</string>
     <string name="rp_home_chat_count">%1$d chats</string>
     <string name="rp_home_menu_new">New chat</string>
     <string name="rp_home_menu_edit">Edit character</string>

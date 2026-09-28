@@ -79,6 +79,8 @@ class ChatAdapter(
 
     /** Roleplay: long-press a line to keep it when history is trimmed. */
     var onTogglePin: ((Int) -> Unit)? = null
+    /** Tap on a Roleplay reply's speaker line (portrait and name): the character panel. */
+    var onSpeakerClick: (() -> Unit)? = null
 
     /** Shown above assistant bubbles in RP when a character is active. */
     /** RP layout ([SharedPreferencesHelper.RP_LAYOUT_CLASSIC] and friends) for the active character. */
@@ -898,7 +900,9 @@ class ChatAdapter(
         private val forkPrev: ImageButton = itemView.findViewById(R.id.forkPrev)
         private val forkNext: ImageButton = itemView.findViewById(R.id.forkNext)
         private val forkLabel: TextView = itemView.findViewById(R.id.forkLabel)
-        private val rpSpeakerHeader: View = itemView.findViewById(R.id.rpSpeakerHeader)
+        private val rpSpeakerHeader: View = itemView.findViewById<View>(R.id.rpSpeakerHeader).also {
+            it.setOnClickListener { onSpeakerClick?.invoke() }
+        }
         private val rpSpeakerAvatar: ImageView = itemView.findViewById(R.id.rpSpeakerAvatar)
         private val rpSpeakerNameView: TextView = itemView.findViewById(R.id.rpSpeakerName)
         private var thinkingBarAnimators: List<ObjectAnimator>? = null

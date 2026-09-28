@@ -18,8 +18,7 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 
 /**
  * The ⋮ menu on a message. A compact context menu in the iOS 26 mould: one label per row with
- * its icon on the trailing side, hairlines between rows, and destructive rows set apart in
- * their own group at the bottom. It is deliberately not [PickerPopover] (the composer's picker,
+ * its icon on the trailing side, hairlines between rows, and destructive rows last, in the delete red. It is deliberately not [PickerPopover] (the composer's picker,
  * icon-first with subtitles), so a message's menu never reads as a second composer bar.
  *
  * The card opens from the ⋮: its leading edge lines up with the control when there is room,
@@ -33,7 +32,7 @@ class MessageMenu(
     class Item(
         val label: CharSequence,
         @DrawableRes val icon: Int,
-        /** Set apart at the bottom, in the delete red. */
+        /** Goes last, in the delete red. */
         val destructive: Boolean = false,
         val onClick: () -> Unit
     )
@@ -73,8 +72,7 @@ class MessageMenu(
             rowViews += bindRow(inflater, cardView, item)
         }
         destructive.forEachIndexed { i, item ->
-            if (i == 0 && normal.isNotEmpty()) cardView.addView(groupGap(inflater, cardView))
-            else if (i > 0) cardView.addView(hairline(inflater, cardView))
+            if (i > 0 || normal.isNotEmpty()) cardView.addView(hairline(inflater, cardView))
             rowViews += bindRow(inflater, cardView, item)
         }
 
@@ -172,9 +170,6 @@ class MessageMenu(
 
     private fun hairline(inflater: LayoutInflater, parent: ViewGroup): View =
         inflater.inflate(R.layout.item_message_menu_divider, parent, false)
-
-    private fun groupGap(inflater: LayoutInflater, parent: ViewGroup): View =
-        inflater.inflate(R.layout.item_message_menu_gap, parent, false)
 
     fun dismiss(animated: Boolean = true) {
         val c = card ?: return
