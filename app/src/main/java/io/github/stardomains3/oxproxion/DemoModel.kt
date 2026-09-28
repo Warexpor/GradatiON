@@ -256,48 +256,50 @@ object DemoModel {
         """.trimIndent()
     )
 
-    /** Vesna's scene ([DemoCharacter]): it picks up from her greeting over the map. */
+    /** Vesna's scene ([DemoCharacter]): picks up from her quiet greeting by the window. */
     private val ROLEPLAY = listOf(
         Script(
             thinking = null,
             text = """
-                *She turns the lantern so its light falls on a bend in the river, circled twice in red ink.*
+                *She watches the rain a moment longer, then the glass of it on the pane.*
 
-                "Three boats went up past this point last week. One came back, empty, tied up neat as you like."
+                "I almost left before you arrived. I do that, sometimes."
 
-                *She slides the map toward you.*
+                *A small turn of her head. Enough to find you in the dark.*
 
-                "Nobody in town will say why. Are you still in?"
+                "Stay. Tell me why you came."
             """.trimIndent()
         ),
         Script(
             thinking = null,
             text = """
-                *A slow smile. She leans back, the chair creaking under her.*
+                *Something eases in her shoulders. Not quite a smile.*
 
-                "Good. Then we leave at first light. Bring the rope, and don't tell the innkeeper where we're going."
+                "Good. Most people fill the quiet. You don't."
 
-                *Outside, thunder rolls over the hills like something waking up.*
+                *Outside, thunder rolls far off, soft as a held breath.*
+
+                "There is a place I go when the weather turns like this. Will you walk with me?"
             """.trimIndent()
         ),
         Script(
             thinking = null,
             text = """
-                *By dawn the rain has thinned to mist. She steps into the boat first and holds it steady for you.*
+                *By the door the rain has thinned to mist. She steps out first and waits.*
 
-                "Keep your eyes on the left bank. The charts say there's nothing there."
+                "Keep close. The path is easy to miss."
 
-                *She pushes off. Somewhere upstream, a bell rings once and stops.*
+                *Her voice stays low.* "I will not explain everything. Only what you ask."
             """.trimIndent()
         ),
         Script(
             thinking = null,
             text = """
-                *She lifts a hand for quiet and lets the boat drift. On the bank, half hidden in the reeds, a stone stair runs down into the water.*
+                *She stops where the road forgets itself — a pale gap in the trees, nothing marked.*
 
-                "That," she says softly, "is not on any map I've ever drawn."
+                "This is as far as I bring anyone," she says softly.
 
-                *She looks at you.* "Your call. Up the stairs, or back to town and pretend we never saw it?"
+                *She looks at you, then away.* "In with me, or back, and we never speak of it?"
             """.trimIndent()
         ),
     )

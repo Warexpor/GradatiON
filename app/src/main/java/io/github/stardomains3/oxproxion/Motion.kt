@@ -66,16 +66,20 @@ object Motion {
             val v = if (abs(distance) < 1f) 0f else velocity / abs(distance)
             v0 = v.coerceIn(-omega, if (damping >= 0.999f) omega * 0.9f else omega * 1.5f)
             damped = if (damping < 0.999f) omega * kotlin.math.sqrt(1f - damping * damping) else 0f
-            // Run until what is left of the travel is under half a percent, so the final
-            // snap to the target is invisible.
+            // Run until less than half a pixel is left, then one more frame. A fraction of
+            // the distance (half a percent) is still several pixels on a full page, and the
+            // page is still moving when that cutoff hits: the clamp to the target reads as
+            // a hitch when the page locks in.
+            val leftover = if (abs(distance) < 1f) 1f else 0.35f / abs(distance)
             val b = if (damped > 0f) (damping * omega - v0) / damped else 0f
             var s = 0f
             while (s < 0.9f) {
                 s += 0.005f
                 val decay = kotlin.math.exp(-damping * omega * s)
                 val left = if (damped > 0f) decay * kotlin.math.sqrt(1f + b * b) else decay * (1f + abs(omega - v0) * s)
-                if (left < 0.005f) break
+                if (left < leftover) break
             }
+            s += 0.016f
             duration = (s * 1000f).toLong().coerceIn(160L, 900L)
         }
 

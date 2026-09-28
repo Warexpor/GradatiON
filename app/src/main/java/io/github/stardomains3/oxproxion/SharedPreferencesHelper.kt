@@ -131,6 +131,7 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_DEFAULT_MODELS_SEEDED = "default_models_seeded"
         private const val KEY_OLD_DEFAULTS_PRUNED = "old_default_models_pruned"
         private const val KEY_DEMO_CHARACTER_SEEDED = "demo_character_seeded"
+        private const val KEY_DEMO_CHARACTER_AVATAR_REV = "demo_character_avatar_rev"
         /** Name and id of each model older installs were seeded with. */
         private val OLD_DEFAULT_MODELS = listOf(
             "OpenAI: ChatGPT-4o" to "openai/chatgpt-4o-latest",
@@ -954,6 +955,11 @@ class SharedPreferencesHelper(context: Context) {
     /** The demo character went into the roleplay library once ([DemoCharacter]). */
     fun isDemoCharacterSeeded(): Boolean = mainPrefs.getBoolean(KEY_DEMO_CHARACTER_SEEDED, false)
     fun markDemoCharacterSeeded() = mainPrefs.edit { putBoolean(KEY_DEMO_CHARACTER_SEEDED, true) }
+
+    /** Packaged Vesna avatar revision already written ([DemoCharacter.STOCK_AVATAR_REVISION]). */
+    fun demoCharacterAvatarRevision(): Int = mainPrefs.getInt(KEY_DEMO_CHARACTER_AVATAR_REV, 0)
+    fun setDemoCharacterAvatarRevision(revision: Int) =
+        mainPrefs.edit { putInt(KEY_DEMO_CHARACTER_AVATAR_REV, revision) }
 
     /** The built-in demo model is always in the list (first), for new and existing installs. */
     private fun ensureDemoModel() {

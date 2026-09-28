@@ -974,6 +974,48 @@ class ChatAdapter(
             }
         }
 
+        /**
+         * Bubbles keep the classic header (avatar + name above), just with a larger mark and
+         * more air before the bubble. Gap must live on the bubble's topMargin — ConstraintLayout
+         * ignores the header's bottomMargin when the header has no bottom constraint.
+         */
+        private fun applyRpBubbleLayout(bubble: Boolean) {
+            val d = itemView.resources.displayMetrics.density
+            val headerLp = rpSpeakerHeader.layoutParams as ConstraintLayout.LayoutParams
+            val msgLp = messageContainer.layoutParams as ConstraintLayout.LayoutParams
+            val actionRow = itemView.findViewById<View>(R.id.aiActionRow)
+            val actionLp = actionRow.layoutParams as ConstraintLayout.LayoutParams
+
+            rpSpeakerNameView.visibility = View.VISIBLE
+            val avatarEdge = ((if (bubble) 40 else 36) * d).toInt()
+            val avatarLp = rpSpeakerAvatar.layoutParams
+            if (avatarLp.width != avatarEdge || avatarLp.height != avatarEdge) {
+                avatarLp.width = avatarEdge
+                avatarLp.height = avatarEdge
+                rpSpeakerAvatar.layoutParams = avatarLp
+            }
+
+            headerLp.width = 0
+            headerLp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+            headerLp.bottomMargin = 0
+
+            msgLp.width = if (bubble) ViewGroup.LayoutParams.WRAP_CONTENT else 0
+            msgLp.constrainedWidth = bubble
+            msgLp.startToEnd = ConstraintLayout.LayoutParams.UNSET
+            msgLp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+            msgLp.topToTop = ConstraintLayout.LayoutParams.UNSET
+            msgLp.topToBottom = R.id.rpSpeakerHeader
+            msgLp.topMargin = (6 * d).toInt()
+            msgLp.marginStart = 0
+            msgLp.horizontalBias = 0f
+
+            actionLp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+
+            rpSpeakerHeader.layoutParams = headerLp
+            messageContainer.layoutParams = msgLp
+            actionRow.layoutParams = actionLp
+        }
+
         private fun bindForkNavigator(position: Int) {
             if (isRpMode) {
                 forkNavigator.visibility = View.GONE
@@ -1220,23 +1262,15 @@ class ChatAdapter(
 
             messageContainer.setBackgroundResource(R.drawable.bg_ai_message)
             val d = itemView.resources.displayMetrics.density
-            if (isRpMode && rpLayout == SharedPreferencesHelper.RP_LAYOUT_BUBBLES && !isThinking) {
+            val bubble = isRpMode && rpLayout == SharedPreferencesHelper.RP_LAYOUT_BUBBLES && !isThinking
+            if (bubble) {
                 messageContainer.setBackgroundResource(R.drawable.bg_rp_bubble)
                 messageContainer.setPadding((14 * d).toInt(), (10 * d).toInt(), (14 * d).toInt(), (10 * d).toInt())
             } else {
                 val p = (4 * d).toInt()
                 messageContainer.setPadding(p, p, p, p)
             }
-            (messageContainer.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams)?.let { lp ->
-                // Bubbles hug their text; the flat layouts use the full column.
-                val bubble = isRpMode && rpLayout == SharedPreferencesHelper.RP_LAYOUT_BUBBLES
-                val w = if (bubble) ViewGroup.LayoutParams.WRAP_CONTENT else 0
-                if (lp.width != w || lp.constrainedWidth != bubble) {
-                    lp.width = w
-                    lp.constrainedWidth = bubble
-                    messageContainer.layoutParams = lp
-                }
-            }
+            applyRpBubbleLayout(bubble)
             if (isError) {
                 messageTextView.setTextColor(ContextCompat.getColor(itemView.context, R.color.xai_error))
             } else {

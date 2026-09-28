@@ -33,8 +33,11 @@ class MotionFlingTest {
             val f = Motion.Fling(distance = 1080f, velocity = v, response = 0.38f)
             assertEquals(0f, f.getInterpolation(0f), 1e-4f)
             assertEquals(1f, f.getInterpolation(1f), 0f)
-            // What is left just before the end is under 1% of the travel.
-            assertEquals("v=$v", 1f, f.getInterpolation(0.999f), 0.01f)
+            // One frame before the end the page is already within half a pixel,
+            // so clamping to the target does not hitch.
+            val frame = 16f / f.duration
+            val leftPx = (1f - f.getInterpolation(1f - frame)) * 1080f
+            assertTrue("v=$v left=${leftPx}px", leftPx < 0.5f)
         }
     }
 

@@ -587,7 +587,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         sharedPreferencesHelper.saveComposerDraft(ChatMode.ASK, "")
         sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, "")
         _chatMode.value = sharedPreferencesHelper.getChatMode()
-        viewModelScope.launch(Dispatchers.IO) { DemoCharacter.seedOnce(rpRepository, sharedPreferencesHelper) }
+        viewModelScope.launch(Dispatchers.IO) {
+            DemoCharacter.seedOnce(rpRepository, sharedPreferencesHelper, getApplication())
+        }
         sessionTransitionJob = viewModelScope.launch {
             refreshActiveRpCharacter()
             restoreDraftOrNewChat(_chatMode.value ?: ChatMode.ASK)

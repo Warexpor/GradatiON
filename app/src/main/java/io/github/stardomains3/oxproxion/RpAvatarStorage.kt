@@ -39,6 +39,17 @@ object RpAvatarStorage {
         }
     }
 
+    /** Decode a packaged drawable/raw resource and write the usual JPEG avatar. */
+    fun saveFromResource(context: Context, resId: Int, characterId: Long): String? {
+        return try {
+            val bytes = context.resources.openRawResource(resId).use { it.readBytes() }
+            val bitmap = decodeSampled(bytes) ?: return null
+            writeJpeg(bitmap, characterId, context)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun encodeAvatarBase64(context: Context, characterId: Long): String? {
         val file = avatarFile(context, characterId)
         if (!file.exists() || file.length() == 0L) return null
