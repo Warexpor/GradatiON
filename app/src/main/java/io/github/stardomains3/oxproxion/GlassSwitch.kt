@@ -17,6 +17,7 @@ import android.os.SystemClock
 import android.util.AttributeSet
 import androidx.appcompat.widget.SwitchCompat
 import org.xmlpull.v1.XmlPullParser
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -155,6 +156,9 @@ class GlassSwitchTrackDrawable : Drawable() {
         rect.set(b.left.toFloat(), top, b.right.toFloat(), top + h)
         val r = h / 2f
         val mul = if (enabled) alphaMul else alphaMul * 40 / 100
+        // The fill follows the pill, so it fills as the pill is dragged or springs across.
+        val progress = ((callback as? SwitchCompat)?.thumbDrawable as? GlassSwitchThumbDrawable)
+            ?.travelFraction(b) ?: progress
 
         fill.color = lerpColor(offTint, onTint, progress)
         fill.alpha = fill.alpha * mul / 255
@@ -225,6 +229,14 @@ class GlassSwitchThumbDrawable : Drawable() {
     private var lastLeft = Int.MIN_VALUE
     private var lastWidth = 0
     private val settle = Runnable { animateMotion(0f) }
+    /**
+     * Where the pill is drawn. SwitchCompat slides the thumb on a short fixed curve; the pill
+     * follows that on a soft spring of its own, so a tap lands with a little settle and a drag
+     * trails the finger slightly, like something with weight.
+     */
+    private var drawnX = Float.NaN
+    private var drawnV = 0f
+    private var lastStepNs = 0L
     private var alphaMul = 255
 
     private val body = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -284,7 +296,51 @@ class GlassSwitchThumbDrawable : Drawable() {
         hold = if (pressed) 1f else 0f
         motion = 0f
         motionTarget = 0f
+        drawnX = Float.NaN
+        drawnV = 0f
         invalidateSelf()
+    }
+
+    /** Step the pill's spring toward the thumb slot's center; at most once per frame. */
+    private fun follow() {
+        val target = bounds.exactCenterX()
+        val now = System.nanoTime()
+        val dt = (now - lastStepNs) / 1e9f
+        if (drawnX.isNaN() || dt > 0.5f || !canAnimateOnScreen()) {
+            drawnX = target; drawnV = 0f; lastStepNs = now
+            return
+        }
+        if (dt < 0.001f) return
+        lastStepNs = now
+        val omega = (2 * Math.PI / FOLLOW_RESPONSE_S).toFloat()
+        var left = dt
+        while (left > 0f) {
+            val h = minOf(left, 0.004f)
+            drawnV += (-omega * omega * (drawnX - target) - 2f * FOLLOW_DAMPING * omega * drawnV) * h
+            drawnX += drawnV * h
+            left -= h
+        }
+        if (abs(drawnX - target) < 0.3f && abs(drawnV) < 4f * density) {
+            drawnX = target; drawnV = 0f
+            return
+        }
+        // Still travelling: draw again next frame, and hold the lens while it moves.
+        invalidateSelf()
+        if (abs(drawnV) > 60f * density) {
+            animateMotion(1f)
+            unscheduleSelf(settle)
+            scheduleSelf(settle, SystemClock.uptimeMillis() + SETTLE_MS)
+        }
+    }
+
+    /** How far along its travel the drawn pill is, 0 (off) to 1 (on), for [track]'s bounds. */
+    internal fun travelFraction(track: Rect): Float? {
+        if (drawnX.isNaN()) return null
+        val half = GlassSwitchTrackDrawable.SIDE_PAD_DP * density + GlassSwitchTrackDrawable.TRAVEL_DP * density / 2f
+        val min = track.left + half
+        val max = track.right - half
+        if (max <= min) return null
+        return ((drawnX - min) / (max - min)).coerceIn(0f, 1f)
     }
 
     /**
@@ -307,8 +363,9 @@ class GlassSwitchThumbDrawable : Drawable() {
         holdAnimator?.cancel()
         if (!canAnimateOnScreen()) { hold = target; return }
         holdAnimator = ValueAnimator.ofFloat(hold, target).apply {
-            duration = if (target > 0f) 200L else 380L
-            interpolator = if (target > 0f) Motion.iosOut else Motion.spring
+            // Swells with a small pop, relaxes slowly: the lens reads as liquid, not a switch.
+            duration = if (target > 0f) 340L else 460L
+            interpolator = if (target > 0f) Motion.springBouncy else Motion.spring
             addUpdateListener { hold = it.animatedValue as Float; invalidateSelf() }
             start()
         }
@@ -320,14 +377,15 @@ class GlassSwitchThumbDrawable : Drawable() {
         motionAnimator?.cancel()
         if (!canAnimateOnScreen()) { motion = target; invalidateSelf(); return }
         motionAnimator = ValueAnimator.ofFloat(motion, target).apply {
-            duration = if (target > 0f) 160L else 420L
-            interpolator = if (target > 0f) Motion.iosOut else Motion.spring
+            duration = if (target > 0f) 280L else 480L
+            interpolator = if (target > 0f) Motion.springBouncy else Motion.spring
             addUpdateListener { motion = it.animatedValue as Float; invalidateSelf() }
             start()
         }
     }
 
-    private fun lens() = max(hold, motion * MOTION_LENS).coerceIn(0f, 1f)
+    /** Up to a touch past 1: the swell's spring pops slightly beyond full size. */
+    private fun lens() = max(hold, motion * MOTION_LENS).coerceIn(0f, 1.1f)
 
     /** Where the pill is this frame, spilling past the groove but never past the view. */
     private fun lensRect(out: RectF): RectF {
@@ -335,7 +393,7 @@ class GlassSwitchThumbDrawable : Drawable() {
         val lens = lens()
         val w = (PILL_W_DP + LENS_GROW_W_DP * lens) * density
         val h = (PILL_H_DP + LENS_GROW_H_DP * lens) * density
-        var cx = b.exactCenterX()
+        var cx = if (drawnX.isNaN()) b.exactCenterX() else drawnX
         (callback as? android.view.View)?.let { v ->
             val edge = 0.75f * density
             cx = cx.coerceIn(edge + w / 2f, max(edge + w / 2f, v.width - edge - w / 2f))
@@ -346,6 +404,7 @@ class GlassSwitchThumbDrawable : Drawable() {
 
     /** The pill's outline; the track leaves this area for the lens to draw. */
     internal fun lensShape(): Path {
+        follow()
         lensRect(rect)
         val r = rect.height() / 2f
         return shape.apply { rewind(); addRoundRect(rect, r, r, Path.Direction.CW) }
@@ -448,5 +507,8 @@ class GlassSwitchThumbDrawable : Drawable() {
         const val MOTION_LENS = 0.85f
         /** How long the pill must sit still before the lens settles back. */
         const val SETTLE_MS = 90L
+        /** The pill's follow spring: period in seconds, and a damping that leaves a soft settle. */
+        const val FOLLOW_RESPONSE_S = 0.26f
+        const val FOLLOW_DAMPING = 0.72f
     }
 }

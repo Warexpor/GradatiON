@@ -70,6 +70,11 @@ All 19 items from the owner's list, 452 tests pass, `assembleDev` built.
 - Code: gear on Code home removed (top-left opens the same screen). Approval modes have icons
   (`CodeComposer.permissionIcon`) in the popover, the pill and Code settings.
 - Voice: the mic check no longer swells; `VoiceWaveView` runs ~30fps while listening and glides.
+- Motion pass: gesture settles carry the release velocity (`Motion.Fling`), shared per group of
+  layers. Mode pager, history open/close/cancel (chat no longer drifts off the panel edge on
+  cancel), sheet drag-back and Code session swipe-back use it. Swipe commit is projection
+  based with a flick-back cancel. Toggle pill spring-follows, groove fill follows the pill.
+  Phone: feel of all of these; the pager's first-frame snapshot may still hitch on old phones.
 - Switches: every screen is a SwitchCompat (MaterialSwitch sized differently). Redesigned after
   iOS 26 (the owner picked "clear lens" from five mockups): 60x28 groove, 36x24 clear pill
   that redraws the groove magnified inside itself (the track clips the pill out so fills don't

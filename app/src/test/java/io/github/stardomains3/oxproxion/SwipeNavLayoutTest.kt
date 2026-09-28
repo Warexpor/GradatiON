@@ -18,6 +18,8 @@ import org.robolectric.annotation.Config
 @Config(application = ScreenshotApp::class, sdk = [35])
 class SwipeNavLayoutTest {
 
+    private companion object { var gestures = 0 }
+
     private fun build(clickable: Boolean, withChild: Boolean): Pair<SwipeNavLayout, MutableList<Int>> {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         val commits = mutableListOf<Int>()
@@ -36,13 +38,30 @@ class SwipeNavLayoutTest {
         return l to commits
     }
 
-    private fun swipe(v: View, fromX: Float, toX: Float) {
+    /**
+     * Plays [points] (ms since down, x) as one gesture. The clock is advanced with each event
+     * so Robolectric's velocity tracker sees the same timeline as the events.
+     */
+    private fun gesture(v: View, points: List<Pair<Long, Float>>) {
+        // Robolectric's velocity tracker keeps state across tests that reuse the same event
+        // times (every test's clock starts at the same value); start each gesture later.
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(10L * ++gestures))
         val t0 = android.os.SystemClock.uptimeMillis()
-        fun ev(action: Int, x: Float, dt: Long) = MotionEvent.obtain(t0, t0 + dt, action, x, 900f, 0)
-        v.dispatchTouchEvent(ev(MotionEvent.ACTION_DOWN, fromX, 0))
-        for (k in 1..8) v.dispatchTouchEvent(ev(MotionEvent.ACTION_MOVE, fromX + (toX - fromX) * k / 8f, 20L * k))
-        v.dispatchTouchEvent(ev(MotionEvent.ACTION_UP, toX, 200))
+        var last = 0L
+        points.forEachIndexed { i, (dt, x) ->
+            org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(dt - last))
+            last = dt
+            val action = when (i) {
+                0 -> MotionEvent.ACTION_DOWN
+                points.lastIndex -> MotionEvent.ACTION_UP
+                else -> MotionEvent.ACTION_MOVE
+            }
+            v.dispatchTouchEvent(MotionEvent.obtain(t0, t0 + dt, action, x, 900f, 0))
+        }
     }
+
+    private fun swipe(v: View, fromX: Float, toX: Float) = gesture(v,
+        listOf(0L to fromX) + (1..8).map { k -> 20L * k to fromX + (toX - fromX) * k / 8f } + listOf(200L to toX))
 
     @Test fun leftSwipeCommitsOnEmptyClickableLayout() {
         val (l, commits) = build(clickable = true, withChild = false)
@@ -66,5 +85,21 @@ class SwipeNavLayoutTest {
         val (l, commits) = build(clickable = true, withChild = false)
         swipe(l, 500f, 620f)
         assertEquals(emptyList<Int>(), commits)
+    }
+
+    /** Far across, then flicked back toward the start: the user changed their mind. */
+    @Test fun flickBackCancelsEvenWhenFar() {
+        val (l, commits) = build(clickable = true, withChild = false)
+        // Out to 950, then back to 550: still past the commit line when let go.
+        gesture(l, listOf(0L to 50f) + (1..8).map { k -> 20L * k to 50f + 900f * k / 8f } +
+            (1..20).map { k -> 160L + 10L * k to 950f - 20f * k } + listOf(365L to 550f))
+        assertEquals("v=${l.releaseVelocity}", emptyList<Int>(), commits)
+    }
+
+    /** A short but quick flick is projected ahead past the line, so it commits. */
+    @Test fun shortFastFlickCommits() {
+        val (l, commits) = build(clickable = true, withChild = false)
+        gesture(l, listOf(0L to 700f) + (1..6).map { k -> 8L * k to 700f - 250f * k / 6f } + listOf(50L to 450f))
+        assertEquals("v=${l.releaseVelocity}", listOf(-1), commits)
     }
 }

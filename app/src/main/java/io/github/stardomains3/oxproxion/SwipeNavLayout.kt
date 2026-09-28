@@ -16,7 +16,9 @@ import kotlin.math.abs
  *  - the finger must travel mostly sideways (|dx| > 1.7 x |dy|) past twice the touch slop
  *    before the gesture is claimed, and must not have started as a vertical scroll;
  *  - a press held still for a long-press (selection handles, context menus) is never claimed;
- *  - the swipe commits only past [commitFraction] of the width, or a fast fling past half that.
+ *  - the swipe commits when the release, projected ahead by its velocity, lands past
+ *    [commitFraction] of the width, having travelled at least half that; a flick back the
+ *    other way always cancels.
  * While claimed, [Listener.onDrag] reports the offset so the UI can follow the finger.
  */
 class SwipeNavLayout @JvmOverloads constructor(
@@ -35,10 +37,16 @@ class SwipeNavLayout @JvmOverloads constructor(
 
     var listener: Listener? = null
     var commitFraction = 0.34f
+    /**
+     * Horizontal finger velocity (px/s, + = rightward) at the release that led to the current
+     * [Listener.onCommit] or [Listener.onCancel], so the settle can carry it on.
+     */
+    var releaseVelocity = 0f
+        private set
 
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private val longPress = ViewConfiguration.getLongPressTimeout().toLong()
-    private val flingMin = ViewConfiguration.get(context).scaledMinimumFlingVelocity * 8f
+    private val flingBack = ViewConfiguration.get(context).scaledMinimumFlingVelocity * 6f
     private var downX = 0f
     private var downY = 0f
     private var downTime = 0L
@@ -100,12 +108,18 @@ class SwipeNavLayout @JvmOverloads constructor(
             MotionEvent.ACTION_UP -> {
                 velocity?.computeCurrentVelocity(1000)
                 val vx = velocity?.xVelocity ?: 0f
-                val far = abs(dx) > width * commitFraction
-                val flung = abs(vx) > flingMin && abs(dx) > width * commitFraction / 2f && (vx > 0) == (dx > 0)
-                if (far || flung) l.onCommit(if (dx > 0) 1 else -1) else l.onCancel()
+                releaseVelocity = vx
+                // Judge where the page is headed, not only where it is: a flick carries it on,
+                // and a flick back the other way means "never mind", however far it got.
+                val flungBack = abs(vx) > flingBack && (vx > 0) != (dx > 0)
+                // A flick still has to travel half the way, so a quick nudge never navigates.
+                val projected = dx + vx * PROJECTION_S
+                val commit = !flungBack && (projected > 0) == (dx > 0) &&
+                    abs(projected) > width * commitFraction && abs(dx) > width * commitFraction / 2f
+                if (commit) l.onCommit(if (dx > 0) 1 else -1) else l.onCancel()
                 reset()
             }
-            MotionEvent.ACTION_CANCEL -> { l.onCancel(); reset() }
+            MotionEvent.ACTION_CANCEL -> { releaseVelocity = 0f; l.onCancel(); reset() }
         }
         return true
     }
@@ -120,5 +134,7 @@ class SwipeNavLayout @JvmOverloads constructor(
         const val UNDECIDED = 1
         const val REJECTED = 2
         const val DRAGGING = 3
+        /** How far ahead a release is projected: roughly where a flick would coast to. */
+        const val PROJECTION_S = 0.16f
     }
 }

@@ -175,7 +175,8 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                 if (direction > 0) close() else onCancel()
             }
             override fun onCancel() {
-                frame.animate().translationX(0f).setDuration(380).setInterpolator(Motion.spring).start()
+                val fling = Motion.flingX(frame, 0f, (view as SwipeNavLayout).releaseVelocity, response = 0.38f)
+                frame.animate().translationX(0f).setDuration(fling.duration).setInterpolator(fling).start()
             }
         }
 

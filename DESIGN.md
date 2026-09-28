@@ -84,8 +84,16 @@ Curves live in `Motion.kt`:
 | `iosPush` | Screens pushing over |
 | `easeOut` | Fades |
 | `spring` / `springBouncy` | Knobs, the send pop, the mic swell |
+| `Fling` | Anything a finger lets go of: pages, the history panel, sheets, springing back |
 
 Behavior:
+- A released gesture never restarts from zero speed. `Motion.Fling` starts at the finger's
+  velocity (`SwipeNavLayout.releaseVelocity`) and every layer that moves together shares one
+  instance, so pinned layers stay pinned. Pages use damping 1 (no overshoot); rubber bands
+  and sheets get a little give. A swipe commits by where the release is headed (projected
+  ahead by its speed), and a flick back always cancels.
+- The toggle pill follows `SwitchCompat`'s slide on its own soft spring, and the groove's fill
+  follows the pill.
 - The mode pager snapshots the page, switches modes behind the snapshot, and slides both
   together, so the gap is never visible. Taps and swipes share this path.
 - Stack animations keep the outgoing screen opaque, and screens opened from History push in.

@@ -4256,8 +4256,11 @@ $cleanContent
         }
     }
 
-    /** Finish the slide either way; on cancel the origin mode comes back behind the snapshot. */
-    private fun settlePager(commit: Boolean) {
+    /**
+     * Finish the slide either way; on cancel the origin mode comes back behind the snapshot.
+     * [velocity] is the finger's release speed (px/s); a tab tap has none.
+     */
+    private fun settlePager(commit: Boolean, velocity: Float? = null) {
         val p = pager ?: return
         pager = null
         val w = p.w
@@ -4279,12 +4282,16 @@ $cleanContent
             placeModeTabIndicator(animate = false)
         }
         if (!anim) { done(); return }
-        val duration = 300L
-        p.shot.animate().translationX(shotTo).setDuration(duration).setInterpolator(Motion.iosOut)
+        // A released swipe carries its speed on in one spring shared by every layer, so the
+        // pages stay edge to edge. A tap has no speed to carry and uses the push curve.
+        val fling = velocity?.let { Motion.flingX(p.shot, shotTo, it, response = 0.38f) }
+        val curve: android.animation.TimeInterpolator = fling ?: Motion.iosPush
+        val duration = fling?.duration ?: 340L
+        p.shot.animate().translationX(shotTo).setDuration(duration).setInterpolator(curve)
             .withEndAction { done() }.start()
-        modePages().forEach { it.animate().translationX(pageTo).setDuration(duration).setInterpolator(Motion.iosOut).start() }
+        modePages().forEach { it.animate().translationX(pageTo).setDuration(duration).setInterpolator(curve).start() }
         if (lineTo != null) {
-            modeTabIndicator.animate().translationX(lineTo).setDuration(duration).setInterpolator(Motion.iosOut).start()
+            modeTabIndicator.animate().translationX(lineTo).setDuration(duration).setInterpolator(curve).start()
         }
     }
 
@@ -4388,29 +4395,36 @@ $cleanContent
                 movePager(dx)
             }
 
+            private fun releaseVelocity() = (root as? SwipeNavLayout)?.releaseVelocity ?: 0f
+
             override fun onCommit(direction: Int) {
                 content.performHapticFeedback(android.view.HapticFeedbackConstants.GESTURE_END)
                 if (historyDrag) {
                     historyDrag = false
                     pagerOrigin = null
-                    settleHistoryDrag()
+                    settleHistoryDrag(releaseVelocity())
                     return
                 }
                 if (pager == null) { onCancel(); return }
-                settlePager(commit = true)
+                settlePager(commit = true, velocity = releaseVelocity())
             }
 
             override fun onCancel() {
+                val v = releaseVelocity()
                 if (historyDrag) {
                     historyDrag = false
                     pagerOrigin = null
-                    cancelHistoryDrag(animate = true)
+                    cancelHistoryDrag(animate = true, velocity = v)
                     return
                 }
-                if (pager != null) { settlePager(commit = false); return }
+                if (pager != null) { settlePager(commit = false, velocity = v); return }
                 pagerOrigin = null
-                modePages().forEach { p ->
-                    p.animate().translationX(0f).alpha(1f).setDuration(420).setInterpolator(Motion.spring).start()
+                modePages().firstOrNull()?.let { first ->
+                    // Springs back from a lean; a little give suits a rubber band.
+                    val fling = Motion.Fling(-first.translationX, v * -kotlin.math.sign(first.translationX), response = 0.36f, damping = 0.8f)
+                    modePages().forEach { p ->
+                        p.animate().translationX(0f).alpha(1f).setDuration(fling.duration).setInterpolator(fling).start()
+                    }
                 }
                 placeModeTabIndicator(animate = true)
             }
@@ -4433,14 +4447,13 @@ $cleanContent
             }
 
             override fun onCommit(direction: Int) {
-                if (direction < 0) closeHistoryPanel() else onCancel()
+                if (direction >= 0) { onCancel(); return }
+                if (!Motion.areAnimationsEnabled(requireContext())) { closeHistoryPanel(animated = false); return }
+                flingHistory(open = false, velocity = drawer.releaseVelocity) { closeHistoryPanel(animated = false) }
             }
 
             override fun onCancel() {
-                val w = drawer.width.coerceAtLeast(1).toFloat()
-                drawer.animate().translationX(0f).setDuration(380).setInterpolator(Motion.spring).start()
-                content.animate().translationX(historyChatOffset(0f, w)).setDuration(380).setInterpolator(Motion.spring).start()
-                historyDrawerScrim?.animate()?.alpha(0.35f)?.setDuration(200)?.start()
+                flingHistory(open = true, velocity = drawer.releaseVelocity) {}
             }
         }
     }
@@ -4627,21 +4640,29 @@ $cleanContent
         view?.findViewById<View>(R.id.rootLayout)?.translationX = historyChatOffset(x - w, w)
     }
 
-    private fun settleHistoryDrag() {
+    /**
+     * The panel, the chat pinned to its edge and the scrim, all on one spring from the release
+     * [velocity] (px/s, + = rightward), so the chat never drifts off the panel's edge.
+     */
+    private fun flingHistory(open: Boolean, velocity: Float, end: () -> Unit) {
         val panel = historyDrawerContainer ?: return
         val w = (view?.width ?: panel.width).coerceAtLeast(1).toFloat()
-        val ms = resources.getInteger(R.integer.motion_drawer).toLong()
-        historyDrawerScrim?.animate()?.alpha(0.35f)?.setDuration(ms)?.setInterpolator(Motion.iosOut)?.start()
-        panel.animate().translationX(0f).setDuration(ms).setInterpolator(Motion.iosOut)
-            .withEndAction { panel.setLayerType(View.LAYER_TYPE_NONE, null) }.start()
+        val fling = Motion.flingX(panel, if (open) 0f else -w, velocity, response = 0.38f)
+        historyDrawerScrim?.animate()?.alpha(if (open) 0.35f else 0f)?.setDuration(fling.duration)?.setInterpolator(fling)?.start()
         view?.findViewById<View>(R.id.rootLayout)?.animate()
-            ?.translationX(historyChatOffset(0f, w))?.setDuration(ms)?.setInterpolator(Motion.iosOut)?.start()
+            ?.translationX(historyChatOffset(if (open) 0f else -w, w))?.setDuration(fling.duration)?.setInterpolator(fling)?.start()
+        panel.animate().translationX(if (open) 0f else -w).setDuration(fling.duration).setInterpolator(fling)
+            .withEndAction(end).start()
     }
 
-    private fun cancelHistoryDrag(animate: Boolean) {
+    private fun settleHistoryDrag(velocity: Float = 0f) {
+        val panel = historyDrawerContainer ?: return
+        flingHistory(open = true, velocity = velocity) { panel.setLayerType(View.LAYER_TYPE_NONE, null) }
+    }
+
+    private fun cancelHistoryDrag(animate: Boolean, velocity: Float = 0f) {
         val panel = historyDrawerContainer ?: return
         val scrim = historyDrawerScrim
-        val w = (view?.width ?: panel.width).coerceAtLeast(1).toFloat()
         val root = view?.findViewById<View>(R.id.rootLayout)
         val done = {
             panel.visibility = View.GONE
@@ -4655,10 +4676,10 @@ $cleanContent
             done()
             return
         }
-        scrim?.animate()?.alpha(0f)?.setDuration(260)?.setInterpolator(Motion.iosOut)?.start()
-        root?.animate()?.translationX(0f)?.setDuration(420)?.setInterpolator(Motion.spring)?.start()
-        panel.animate().translationX(-w).setDuration(260).setInterpolator(Motion.iosOut)
-            .withEndAction { done() }.start()
+        flingHistory(open = false, velocity = velocity) {
+            root?.translationX = 0f
+            done()
+        }
     }
 
     private fun openHistoryPanel() {

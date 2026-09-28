@@ -6,6 +6,7 @@ import android.provider.Settings
 import android.view.View
 import android.view.animation.PathInterpolator
 import androidx.fragment.app.FragmentTransaction
+import kotlin.math.abs
 
 object Motion {
     val easeOut = PathInterpolator(0.2f, 0f, 0f, 1f)
@@ -36,6 +37,65 @@ object Motion {
             val phase = damped * t
             return 1f - decay * (kotlin.math.cos(phase) + (dampingRatio * stiffness / damped) * kotlin.math.sin(phase))
         }
+    }
+
+    /**
+     * A physical spring for settling whatever the finger just let go of. It starts at the
+     * release [velocity] (px/s, positive toward the target), so the hand-off from finger to
+     * animation has no seam: no stall, no sudden kick. Its duration comes out of the physics,
+     * so a hard flick lands sooner than a slow release. Give every layer that moves together
+     * the same instance (or equal ones) and they stay pinned to each other.
+     *
+     * [response] is the spring's period in seconds (lower is snappier); [damping] 1 never
+     * overshoots, which suits whole pages whose edges must not reveal what is beyond.
+     */
+    class Fling(
+        distance: Float,
+        velocity: Float,
+        response: Float = 0.42f,
+        private val damping: Float = 1f
+    ) : TimeInterpolator {
+        private val omega = (2 * Math.PI / response).toFloat()
+        private val v0: Float
+        private val damped: Float
+        val duration: Long
+
+        init {
+            // Velocity as a fraction of the distance per second. Capped so a flick never
+            // throws a critically damped page past its target.
+            val v = if (abs(distance) < 1f) 0f else velocity / abs(distance)
+            v0 = v.coerceIn(-omega, if (damping >= 0.999f) omega * 0.9f else omega * 1.5f)
+            damped = if (damping < 0.999f) omega * kotlin.math.sqrt(1f - damping * damping) else 0f
+            // Run until what is left of the travel is under half a percent, so the final
+            // snap to the target is invisible.
+            val b = if (damped > 0f) (damping * omega - v0) / damped else 0f
+            var s = 0f
+            while (s < 0.9f) {
+                s += 0.005f
+                val decay = kotlin.math.exp(-damping * omega * s)
+                val left = if (damped > 0f) decay * kotlin.math.sqrt(1f + b * b) else decay * (1f + abs(omega - v0) * s)
+                if (left < 0.005f) break
+            }
+            duration = (s * 1000f).toLong().coerceIn(160L, 900L)
+        }
+
+        override fun getInterpolation(t: Float): Float {
+            if (t >= 1f) return 1f
+            val s = t * duration / 1000f
+            val decay = kotlin.math.exp(-damping * omega * s)
+            return if (damping >= 0.999f) {
+                1f - decay * (1f + (omega - v0) * s)
+            } else {
+                val b = (damping * omega - v0) / damped
+                1f - decay * (kotlin.math.cos(damped * s) + b * kotlin.math.sin(damped * s))
+            }
+        }
+    }
+
+    /** [Fling] for a view's translationX, from where it is now to [to]. */
+    fun flingX(view: View, to: Float, velocity: Float, response: Float = 0.42f): Fling {
+        val d = to - view.translationX
+        return Fling(d, if (d == 0f) 0f else velocity * kotlin.math.sign(d), response)
     }
 
     fun areAnimationsEnabled(context: Context): Boolean {
