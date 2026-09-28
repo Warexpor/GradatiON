@@ -1,7 +1,7 @@
 ---
 name: worker
-description: Sonnet worker for delegated implementation, research and search tasks. Use for multi-step or parallelizable work handed off by the orchestrator.
-model: sonnet
+description: Sonnet 5.5 worker for delegated implementation, research and search tasks. Use for multi-step or parallelizable work handed off by the orchestrator.
+model: claude-sonnet-5-5
 effort: medium
 ---
 
