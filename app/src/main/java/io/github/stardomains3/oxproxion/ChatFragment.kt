@@ -1642,8 +1642,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val code = root.findViewById<View>(R.id.codeModeContainer)
         val barTop = topBar.paddingTop
         val dockBottom = dock.paddingBottom
-        val sheet = root.findViewById<View>(R.id.headerContainer)
-        val sheetBottom = sheet.paddingBottom
         frame.clipToPadding = false
         ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
@@ -1661,7 +1659,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
             dock.setPadding(dock.paddingLeft, dock.paddingTop, dock.paddingRight, dockBottom + bottom)
-            sheet.setPadding(sheet.paddingLeft, sheet.paddingTop, sheet.paddingRight, sheetBottom + bottom)
             code.setPadding(0, 0, 0, bottom)
             WindowInsetsCompat.CONSUMED
         }
@@ -1678,6 +1675,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         topGlass.addOnLayoutChangeListener(relayout)
         root.findViewById<View>(R.id.composerDock).addOnLayoutChangeListener(relayout)
         chatInputContainer.addOnLayoutChangeListener(relayout)
+        // The Controls card hangs off the composer: follow it when it moves or resizes.
+        chatInputContainer.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            if (headerContainer.isVisible) headerContainer.post { placeControlsCard() }
+        }
         rpComposerExtras.addOnLayoutChangeListener(relayout)
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) = updateTopBarEdge()
@@ -3431,6 +3432,7 @@ $cleanContent
             }
             buttonsContainer.isVisible = open
             if (open) updateMenuRowVisibilities()
+            placeControlsCard()
         }
     }
 
@@ -3474,17 +3476,25 @@ $cleanContent
         controlsButton.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
         overlayView?.visibility = View.VISIBLE
         headerContainer.animate().cancel()
+        placeControlsCard()
         headerContainer.apply {
             visibility = View.VISIBLE
-            alpha = 1f; scaleX = 1f; scaleY = 1f
             if (anim) {
-                // A sheet: slides up from the bottom edge (no overshoot, or a gap would open
-                // under it), rows settle in behind it.
-                translationY = height.takeIf { it > 0 }?.toFloat() ?: (420f * d)
-                animate().translationY(0f).setDuration(380).setInterpolator(Motion.iosPush).start()
+                // Grows up out of the composer like the other popovers; rows settle in behind it.
+                // Measured by placeControlsCard, so this works on the first open too.
+                pivotX = measuredWidth / 2f
+                pivotY = measuredHeight.toFloat()
+                alpha = 0f; scaleX = 0.86f; scaleY = 0.86f; translationY = 14f * d
+                animate().alpha(1f).setDuration(160).setInterpolator(Motion.easeOut).start()
+                controlsCardAnim = android.animation.ObjectAnimator.ofPropertyValuesHolder(
+                    this,
+                    android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, 0f)
+                ).setDuration(460).apply { interpolator = Motion.spring; start() }
                 staggerPanelRows(d)
             } else {
-                translationY = 0f
+                alpha = 1f; scaleX = 1f; scaleY = 1f; translationY = 0f
             }
         }
         // The dim now sits over the whole screen, top bar included.
@@ -3498,6 +3508,59 @@ $cleanContent
         if (emptyStateContainer.isVisible) {
             emptyStateContainer.visibility = View.GONE
         }
+    }
+
+    private var controlsCardAnim: android.animation.Animator? = null
+
+    /**
+     * Pin the Controls card above the composer, spanning it edge to edge (the same geometry
+     * [PickerPopover] uses), and cap the "More controls" grid to the room left under the top bar.
+     */
+    private fun placeControlsCard() {
+        val parent = headerContainer.parent as? View ?: return
+        val composer = chatInputContainer
+        if (parent.height == 0 || composer.width == 0) return
+        val d = resources.displayMetrics.density
+        val parentLoc = IntArray(2).also { parent.getLocationInWindow(it) }
+        val composerLoc = IntArray(2).also { composer.getLocationInWindow(it) }
+        val composerTop = composerLoc[1] - parentLoc[1]
+        val gap = (8 * d).toInt()
+        val lp = headerContainer.layoutParams as FrameLayout.LayoutParams
+        val width = composer.width
+        val left = composerLoc[0] - parentLoc[0]
+        val bottom = parent.height - composerTop + gap
+        // Room: from the top bar's bottom edge down to the card's bottom.
+        val bar = view?.findViewById<View>(R.id.topBarGlass)
+        val barBottom = bar?.let { b -> IntArray(2).also { b.getLocationInWindow(it) }[1] - parentLoc[1] + b.height } ?: 0
+        val room = (composerTop - gap - barBottom - gap).coerceAtLeast((200 * d).toInt())
+        val scroll = headerContainer.findViewById<View>(R.id.controlsMoreScroll)
+        val oldScrollHeight = scroll.layoutParams.height
+        // Measure at natural height, then cap.
+        scroll.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+        headerContainer.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val over = headerContainer.measuredHeight - room
+        val scrollHeight = if (over > 0) (scroll.measuredHeight - over).coerceAtLeast(0)
+        else ViewGroup.LayoutParams.WRAP_CONTENT
+        if (lp.width != width || lp.leftMargin != left || lp.bottomMargin != bottom ||
+            lp.gravity != (Gravity.BOTTOM or Gravity.START) || oldScrollHeight != scrollHeight
+        ) {
+            lp.width = width
+            lp.leftMargin = left
+            lp.rightMargin = 0
+            lp.bottomMargin = bottom
+            lp.gravity = Gravity.BOTTOM or Gravity.START
+            scroll.layoutParams = scroll.layoutParams.apply { height = scrollHeight }
+            headerContainer.layoutParams = lp
+        } else {
+            scroll.layoutParams.height = oldScrollHeight
+        }
+        if (over > 0) headerContainer.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
     }
 
     /** Rows of the Controls panel follow the panel in with a slight cascade. */
@@ -3715,15 +3778,19 @@ $cleanContent
         controlsButton.isSelected = false
         dimOverlay?.animate()?.cancel()
         headerContainer.animate().cancel()
+        controlsCardAnim?.cancel()
+        controlsCardAnim = null
         dimOverlay?.animate()?.alpha(0f)?.setDuration(menuMs)?.setInterpolator(Motion.iosIn)?.withEndAction {
             dimOverlay?.visibility = View.GONE
         }?.start()
         if (headerContainer.visibility == View.VISIBLE) animateTopBarDim(0f, menuMs)
-        // Back down past the bottom edge, the way it came.
+        // Shrinks back toward the composer, the way it came (from wherever a drag left it).
         headerContainer.animate()
-            .translationY(maxOf(headerContainer.translationY, headerContainer.height.toFloat().coerceAtLeast(14f * d)))
-            .setDuration(menuMs + 40).setInterpolator(Motion.iosIn).withEndAction {
+            .alpha(0f).scaleX(0.92f).scaleY(0.92f)
+            .translationY(headerContainer.translationY + 10f * d)
+            .setDuration(menuMs).setInterpolator(Motion.iosIn).withEndAction {
                 headerContainer.visibility = View.GONE
+                headerContainer.alpha = 1f
                 headerContainer.scaleX = 1f
                 headerContainer.scaleY = 1f
                 headerContainer.translationY = 0f

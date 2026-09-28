@@ -283,14 +283,14 @@ class ScreenshotTest {
 
     @Test fun controlsPanelDark() = withChat { a, _ ->
         a.findViewById<View>(R.id.controlsButton).performClick(); idle()
-        // A sheet on the screen's bottom edge, over the composer; not a card floating above it.
+        // A card floating above the composer, lined up with it; never covering it.
         val sheet = a.findViewById<View>(R.id.headerContainer)
-        val content = a.findViewById<View>(R.id.rootLayout)
-        org.junit.Assert.assertEquals(content.height, sheet.bottom)
-        org.junit.Assert.assertEquals(0f, sheet.translationY, 0.5f)
-        org.junit.Assert.assertTrue(sheet.top < a.findViewById<View>(R.id.chatInputContainer).let { c ->
-            IntArray(2).also { c.getLocationInWindow(it) }[1] - IntArray(2).also { content.getLocationInWindow(it) }[1]
-        })
+        val composer = a.findViewById<View>(R.id.chatInputContainer)
+        val s = IntArray(2).also { sheet.getLocationInWindow(it) }
+        val c = IntArray(2).also { composer.getLocationInWindow(it) }
+        org.junit.Assert.assertTrue("card must end above the composer", s[1] + sheet.height <= c[1])
+        org.junit.Assert.assertEquals(c[0], s[0])
+        org.junit.Assert.assertEquals(composer.width, sheet.width)
         snap(root(a), "controls_panel_dark")
     }
 

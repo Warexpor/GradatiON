@@ -264,7 +264,7 @@ class PromptLibraryFragment : Fragment() {
         } else {
             popupWindow.showAsDropDown(anchorView)
         }
-        BackdropBlur.behind(popupWindow)
+        MenuDim.behind(popupWindow)
     }
 
     private fun navigateToEditScreen(prompt: Prompt) {

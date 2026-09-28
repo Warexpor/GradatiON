@@ -1009,8 +1009,8 @@
             android:focusable="true"
             android:alpha="0" />
 
-        <!-- Controls sheet: a bottom sheet over the whole screen edge (composer included),
-             not a card hovering over the chat. Bottom padding grows by the nav bar in code. -->
+        <!-- Controls card: floats above the composer, edge to edge with it, like the other
+             popovers. Its width, left edge and bottom margin are set in code. -->
         <io.github.stardomains3.oxproxion.GlassLinearLayout
             android:id="@+id/headerContainer"
             app:glassCornerRadius="32dp"
@@ -1259,6 +1259,14 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- Scrolls only when the open grid is taller than the room above the composer. -->
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/controlsMoreScroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:overScrollMode="never"
+                android:scrollbars="none">
+
             <LinearLayout
                 android:id="@+id/buttonsContainer"
                 android:layout_width="match_parent"
@@ -1505,6 +1513,7 @@
                     app:backgroundTint="@android:color/transparent" />
                 </LinearLayout>
             </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
         </io.github.stardomains3.oxproxion.GlassLinearLayout>
     </FrameLayout>
 

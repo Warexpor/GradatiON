@@ -332,7 +332,7 @@ class SystemMessageLibraryFragment : Fragment() {
             // Show below the anchor view (default behavior)
             popupWindow.showAsDropDown(anchorView)
         }
-        BackdropBlur.behind(popupWindow)
+        MenuDim.behind(popupWindow)
     }
 
 

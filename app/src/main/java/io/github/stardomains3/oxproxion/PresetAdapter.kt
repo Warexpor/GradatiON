@@ -154,6 +154,6 @@ class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val on
         } else {
             popupWindow.showAsDropDown(anchorView)
         }
-        BackdropBlur.behind(popupWindow)
+        MenuDim.behind(popupWindow)
     }
 }

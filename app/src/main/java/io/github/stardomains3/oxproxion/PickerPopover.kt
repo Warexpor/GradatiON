@@ -52,8 +52,6 @@ class PickerPopover(
     private var card: GlassLinearLayout? = null
     private var backCallback: OnBackPressedCallback? = null
     private var opensAbove: Boolean = true
-    /** Host children frosted behind a modal card; un-frosted on dismiss. */
-    private var frosted: List<View> = emptyList()
     private var follower: android.view.ViewTreeObserver.OnGlobalLayoutListener? = null
     var onDismiss: (() -> Unit)? = null
     val isShowing get() = card != null
@@ -71,11 +69,6 @@ class PickerPopover(
         modal: Boolean = true,
     ) {
         if (isShowing) return
-        // Frost what the card floats over (not other popovers still fading out).
-        frosted = if (modal) {
-            (0 until host.childCount).map { host.getChildAt(it) }
-                .filter { it.isVisible && it.getTag(R.id.tag_popover_layer) == null }
-        } else emptyList()
         val scrimView = if (modal) {
             View(context).apply {
                 setBackgroundColor(ContextCompat.getColor(context, R.color.popover_scrim))
@@ -149,7 +142,6 @@ class PickerPopover(
         follower = android.view.ViewTreeObserver.OnGlobalLayoutListener {
             card?.let { refit(it, null, force = false) }
         }.also { host.viewTreeObserver.addOnGlobalLayoutListener(it) }
-        BackdropBlur.set(frosted, on = true, animate = animated)
 
         // Grow out of the anchor: pivot at the anchor, spring scale + lift, rows ripple in.
         val shouldAnimate = animated && Motion.areAnimationsEnabled(context)
@@ -297,8 +289,6 @@ class PickerPopover(
         backCallback = null
         follower?.let { host.viewTreeObserver.removeOnGlobalLayoutListener(it) }
         follower = null
-        BackdropBlur.set(frosted, on = false, animate = animated)
-        frosted = emptyList()
         val remove = Runnable {
             if (c.parent === host) host.removeView(c)
             if (s != null && s.parent === host) host.removeView(s)

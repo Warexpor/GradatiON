@@ -8,7 +8,5 @@
     <item name="tag_visibility_animator" type="id" />
     <item name="tag_glass_decorated" type="id" />
     <item name="tag_glass_button" type="id" />
-    <item name="tag_backdrop_blur_anim" type="id" />
-    <item name="tag_backdrop_blur_radius" type="id" />
     <item name="tag_popover_layer" type="id" />
 </resources>

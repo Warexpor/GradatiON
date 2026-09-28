@@ -185,7 +185,7 @@ class BotModelAdapter(
         } else {
             popupWindow.showAsDropDown(anchorView)
         }
-        BackdropBlur.behind(popupWindow)
+        MenuDim.behind(popupWindow)
     }
 
     fun updateModels(newModels: MutableList<LlmModel>) {
