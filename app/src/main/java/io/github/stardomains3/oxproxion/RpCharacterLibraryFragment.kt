@@ -3,6 +3,8 @@ package io.github.stardomains3.oxproxion
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
@@ -157,7 +159,16 @@ class RpCharacterLibraryFragment : Fragment() {
         val popup = PopupMenu(anchor.context, anchor, Gravity.END)
         popup.menu.add(0, MENU_START, 0, R.string.rp_menu_start_chat)
         popup.menu.add(0, MENU_EDIT, 1, R.string.rp_menu_edit)
-        popup.menu.add(0, MENU_DELETE, 2, R.string.rp_menu_delete)
+        popup.menu.add(0, MENU_DELETE, 2, R.string.rp_menu_delete).apply {
+            val label = SpannableString(title)
+            label.setSpan(
+                ForegroundColorSpan(anchor.context.getColor(R.color.delete_action)),
+                0,
+                label.length,
+                0
+            )
+            title = label
+        }
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_START -> activateCharacter(character)

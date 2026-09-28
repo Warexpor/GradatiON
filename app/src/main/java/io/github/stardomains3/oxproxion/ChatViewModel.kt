@@ -581,6 +581,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         rpSwipeStore = RpSwipeStore(sharedPreferencesHelper)
         // Drop any instruct left by a killed mid-regen process.
         sharedPreferencesHelper.saveRpPendingInstruct(null)
+        // A relaunch starts blank. These ids only remember a thread while this process is alive.
+        sharedPreferencesHelper.saveRpDraftSessionId(ChatMode.ASK, null)
+        sharedPreferencesHelper.saveRpDraftSessionId(ChatMode.RP, null)
+        sharedPreferencesHelper.saveComposerDraft(ChatMode.ASK, "")
+        sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, "")
         _chatMode.value = sharedPreferencesHelper.getChatMode()
         viewModelScope.launch(Dispatchers.IO) { DemoCharacter.seedOnce(rpRepository, sharedPreferencesHelper) }
         sessionTransitionJob = viewModelScope.launch {
@@ -3691,10 +3696,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var launchBlank = true
+
     private suspend fun restoreDraftOrNewChat(mode: ChatMode) {
         // Drop stale work if Ask↔RP flipped again while we were suspended.
         if (_chatMode.value != mode) return
         if (networkJob?.isActive == true) return
+        val blankLaunch = launchBlank
+        launchBlank = false
         val draftId = sharedPreferencesHelper.getRpDraftSessionId(mode)
         val draftSession = draftId?.let { repository.getSessionById(it) }
         if (draftSession != null) {
@@ -3721,7 +3730,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (_chatMode.value != mode) return
             if (draftId != null) sharedPreferencesHelper.saveRpDraftSessionId(mode, null)
             if (mode == ChatMode.RP) {
-                startNewRpChatKeepingCharacterInternal()
+                startNewRpChatKeepingCharacterInternal(persist = !blankLaunch)
             } else {
                 clearOpenTranscript()
             }

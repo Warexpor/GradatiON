@@ -31,6 +31,8 @@
     <color name="xai_row_selected">#FF242424</color>
     <color name="xai_text_highlight">#FF434343</color>
     <color name="xai_error">#FFF0F0F0</color>
+    <!-- Delete actions only. User call: these are red, like diff deletions. -->
+    <color name="delete_action">#FFF85149</color>
     <color name="xai_success">#FFC8C8C8</color>
     <color name="xai_progress">#FF8A8A8A</color>
     <color name="xai_link">#FFECECEC</color>

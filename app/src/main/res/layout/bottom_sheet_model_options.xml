@@ -80,13 +80,13 @@
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
         android:text="@string/model_options_remove"
-        android:textColor="@color/xai_error"
+        android:textColor="@color/delete_action"
         android:textSize="16sp"
         app:icon="@drawable/ic_trash"
         app:iconGravity="start"
         app:iconPadding="16dp"
         app:iconSize="22dp"
-        app:iconTint="@color/xai_error"
+        app:iconTint="@color/delete_action"
         app:rippleColor="@color/press_ripple_none" />
 
     <TextView

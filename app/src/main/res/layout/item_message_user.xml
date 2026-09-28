@@ -113,7 +113,7 @@
                 android:padding="8dp"
                 android:src="@drawable/ic_msg_delete"
                 android:visibility="visible"
-                app:tint="@color/xai_mute" />
+                app:tint="@color/delete_action" />
 
             <ImageButton
                 android:id="@+id/collapseToggleButton"

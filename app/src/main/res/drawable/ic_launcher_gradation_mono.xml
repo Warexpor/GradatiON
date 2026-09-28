@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Themed-icon layer: the blade G from ic_gradation_mark.xml, sized to the foreground bitmap (56dp tall). -->
+<!-- Themed-icon layer: the blade G from ic_gradation_mark.xml, sized to the foreground bitmap (58dp tall). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <group
-        android:translateX="14.174"
-        android:translateY="16.082"
-        android:scaleX="0.076294"
-        android:scaleY="0.076294">
+        android:translateX="12.752"
+        android:translateY="14.728"
+        android:scaleX="0.079019"
+        android:scaleY="0.079019">
         <path
             android:fillColor="#FF000000"
             android:pathData="M720 130C600 170 430 240 350 340C280 430 262 540 285 630C310 730 420 800 535 818L582 645C520 655 440 640 412 570C390 510 410 440 470 405C510 382 560 378 598 378Z" />

@@ -136,10 +136,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/rp_persona_delete_preset"
-                android:textColor="@color/xai_error"
+                android:textColor="@color/delete_action"
                 android:visibility="gone"
                 app:icon="@drawable/ic_trash"
-                app:iconTint="@color/xai_error" />
+                app:iconTint="@color/delete_action" />
         </LinearLayout>
     </LinearLayout>
     </ScrollView>

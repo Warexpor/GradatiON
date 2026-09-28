@@ -999,14 +999,14 @@
         </io.github.stardomains3.oxproxion.GlassLinearLayout>
         </LinearLayout>
 
-        <!-- Jump to latest: left, just above the composer. Lives above the fade so it stays clear. -->
+        <!-- Jump to latest: right corner, just above the composer. Lives above the fade so it stays clear. -->
         <io.github.stardomains3.oxproxion.GlassIconButton
             android:id="@+id/jumpToBottomButton"
             style="@style/Widget.Grokion.IconButton"
             android:layout_width="46dp"
             android:layout_height="46dp"
-            android:layout_gravity="bottom|start"
-            android:layout_marginStart="16dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="16dp"
             android:layout_marginBottom="10dp"
             android:elevation="6dp"
             android:alpha="0"

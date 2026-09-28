@@ -1696,23 +1696,27 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private fun updateJumpToBottom() {
         val b = jumpButton ?: view?.findViewById<View>(R.id.jumpToBottomButton)?.also { jumpButton = it } ?: return
         val show = chatAdapter.itemCount > 0 && remainingBelow() > 160 * resources.displayMetrics.density
-        if (show == jumpShown) return
-        jumpShown = show
+        if (!show) {
+            // Hide immediately. A page reset cancels the fade and would leave the button up
+            // on a thread that has nothing below.
+            jumpShown = false
+            b.animate().cancel()
+            b.alpha = 0f
+            b.isVisible = false
+            return
+        }
+        if (jumpShown && b.isVisible) return
+        jumpShown = true
         b.animate().cancel()
         val lift = 8f * resources.displayMetrics.density
         if (!Motion.areAnimationsEnabled(requireContext())) {
-            b.isVisible = show
-            b.alpha = if (show) 1f else 0f
+            b.isVisible = true
+            b.alpha = 1f
             return
         }
-        if (show) {
-            b.isVisible = true
-            b.translationY = lift
-            b.animate().alpha(1f).translationY(0f).setDuration(260).setInterpolator(Motion.iosOut).start()
-        } else {
-            b.animate().alpha(0f).translationY(lift).setDuration(200).setInterpolator(Motion.easeOut)
-                .withEndAction { b.isVisible = false }.start()
-        }
+        b.isVisible = true
+        b.translationY = lift
+        b.animate().alpha(1f).translationY(0f).setDuration(260).setInterpolator(Motion.iosOut).start()
     }
 
     private fun remainingBelow(): Int = chatRecyclerView.run {
@@ -4050,7 +4054,13 @@ $cleanContent
      * would leave the chat (composer included) parked a page off screen.
      */
     private fun restModePages() {
-        allModePages().forEach { it.animate().cancel(); it.translationX = 0f; it.alpha = 1f }
+        allModePages().forEach { page ->
+            page.animate().cancel()
+            page.translationX = 0f
+            // The jump button's alpha is its shown state. Forcing 1 brings it back on an empty page.
+            if (page.id != R.id.jumpToBottomButton) page.alpha = 1f
+        }
+        updateJumpToBottom()
     }
 
     /** Switch now, no animation. False when blocked (a reply is still streaming). */
@@ -4104,6 +4114,14 @@ $cleanContent
             }
         }
         pendingSpot = null
+        updateJumpToBottom()
+        chatRecyclerView.post {
+            updateJumpToBottom()
+            if (isScrollersEnabled) {
+                scrollToTopButton.setShownAnimated(chatRecyclerView.canScrollVertically(-1))
+                scrollToBottomButton.setShownAnimated(chatRecyclerView.canScrollVertically(1))
+            }
+        }
     }
 
     /** Where the reader was in a mode's thread, so swiping back lands on the same lines. */

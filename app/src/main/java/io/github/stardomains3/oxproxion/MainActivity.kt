@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.fragment.app.FragmentManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
@@ -41,7 +42,14 @@ class MainActivity : AppCompatActivity() {
             else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         }
         AppCompatDelegate.setDefaultNightMode(mode)
+        // Process death restores the last code session on the back stack. A fresh process
+        // should land on the mode's home instead. Rotation keeps sawActivity, so it does not.
+        val reopenAfterDeath = savedInstanceState != null && !sawActivity
+        sawActivity = true
         super.onCreate(savedInstanceState)
+        if (reopenAfterDeath) {
+            supportFragmentManager.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+        }
         GlassQuality.init(this)
         GlassChrome.install(supportFragmentManager)
         // While a screen slides in or out, taps would stack a second copy on top (a double tap
@@ -391,5 +399,15 @@ class MainActivity : AppCompatActivity() {
             // Clear the flag to prevent re-applying on rotation
             intent.removeExtra("apply_preset")
         }
+    }
+
+    override fun onDestroy() {
+        if (!isChangingConfigurations) sawActivity = false
+        super.onDestroy()
+    }
+
+    companion object {
+        /** Survives rotation, not a real close. */
+        private var sawActivity = false
     }
 }
