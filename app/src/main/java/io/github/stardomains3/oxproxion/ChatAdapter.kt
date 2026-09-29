@@ -150,8 +150,7 @@ class ChatAdapter(
     private var editTargetPosition: Int = -1
     private var currentFontScale: Int = 100
     private var streamRevealBoundHolder: AssistantViewHolder? = null
-    private var pendingStreamFinalize: Boolean = false
-    /** Invoked when the stream reveal paints a new frame. */
+    private var pendingStreamFinalize: Boolean = false    /** Invoked when the stream reveal paints a new frame. */
     var onStreamVisualUpdate: (() -> Unit)? = null
     private val streamReveal = StreamRevealAnimator(
         onFrame = { displayed, _ ->
@@ -168,8 +167,8 @@ class ChatAdapter(
             pendingStreamFinalize = false
             if (messages.isNotEmpty()) {
                 val lastIndex = messages.size - 1
-                getPreRenderedContent(messages[lastIndex])
-                // Let the last words finish fading in before swapping to the full render.
+                // Let the last words finish fading in before swapping to the full render. The parse
+                // ran in the background since the stream ended, so the swap itself costs no freeze.
                 val token = ++finalizeToken
                 mainHandler.postDelayed({
                     if (token == finalizeToken && messages.size - 1 == lastIndex) {
@@ -301,6 +300,15 @@ class ChatAdapter(
             return
         }
         pendingStreamFinalize = true
+        // Parse the finished reply now, off the main thread, while the last words still reveal.
+        messages.lastOrNull()?.takeIf { !renderCache.containsKey(it) }?.let { msg ->
+            scope.launch(Dispatchers.Main) {
+                val parsed = withContext(Dispatchers.Default) {
+                    try { renderContent(msg) } catch (e: Exception) { null }
+                }
+                if (parsed != null) renderCache[msg] = parsed
+            }
+        }
         streamReveal.setTarget(text)
         streamReveal.finishFast()
     }
@@ -426,11 +434,12 @@ class ChatAdapter(
 
     // --- OPTIMIZED BAKING FUNCTION ---
     private fun getPreRenderedContent(message: FlexibleMessage): CharSequence {
-        // 1. Check Cache
-        if (renderCache.containsKey(message)) {
-            return renderCache[message]!!
-        }
+        renderCache[message]?.let { return it }
+        return renderContent(message).also { renderCache[message] = it }
+    }
 
+    /** The markdown parse alone, with no cache access, so it can run off the main thread. */
+    private fun renderContent(message: FlexibleMessage): CharSequence {
         // 2. Extract Text (JSON Logic)
         val text = if (message.role == "assistant" && message.toolCalls != null && getMessageText(message.content).isBlank()) {
             // Show a clean, formatted indicator of what tool was used
@@ -456,9 +465,6 @@ class ChatAdapter(
                 throw e
             }
         }
-
-        // 6. Save to Cache
-        renderCache[message] = renderedContent
 
         return renderedContent
     }
