@@ -5726,7 +5726,11 @@ $cleanContent
         pickerPopover?.dismiss(animated = false)
         messageMenu?.dismiss(animated = false)
         anchor.isSelected = true
-        messageMenu = MessageMenu(root, anchor, root.findViewById(R.id.chatBackdrop)).also { m ->
+        messageMenu = MessageMenu(
+            root, anchor, root.findViewById(R.id.chatBackdrop),
+            topBound = root.findViewById(R.id.topBarGlass),
+            bottomBound = chatInputContainer.takeIf { it.isShown }
+        ).also { m ->
             m.onDismiss = { anchor.isSelected = false; if (messageMenu === m) messageMenu = null }
             m.show(items, viewLifecycleOwner)
         }

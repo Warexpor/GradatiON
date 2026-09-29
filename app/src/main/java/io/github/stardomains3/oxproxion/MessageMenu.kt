@@ -27,7 +27,10 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 class MessageMenu(
     private val host: FrameLayout,
     private val anchor: View,
-    private val backdrop: GlassBackdropLayout?
+    private val backdrop: GlassBackdropLayout?,
+    /** The card never crosses these: it stays below [topBound]'s bottom edge and above [bottomBound]'s top edge. */
+    private val topBound: View? = null,
+    private val bottomBound: View? = null
 ) {
     class Item(
         val label: CharSequence,
@@ -92,16 +95,28 @@ class MessageMenu(
         val ay = anchorLoc[1] - hostLoc[1]
         val gutter = gutter()
         val gap = (6 * density).toInt()
-        val leading = ax.coerceAtLeast(gutter)
-        val left = if (leading + width <= host.width - gutter) leading
-        else (ax + anchor.width - width).coerceIn(gutter, host.width - width - gutter)
+        // Nearer the middle of the screen wins: an anchor on the left hangs the card from its leading
+        // edge, one on the right from its trailing edge.
+        val anchorMid = ax + anchor.width / 2
+        val left = (if (anchorMid <= host.width / 2) ax else ax + anchor.width - width)
+            .coerceIn(gutter, (host.width - width - gutter).coerceAtLeast(gutter))
         val imeBottom = ViewCompat.getRootWindowInsets(host)?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
-        val roomBelow = host.height - imeBottom - (ay + anchor.height) - gap - gutter
-        val below = roomBelow >= height || roomBelow >= ay - gap - gutter
+        val topLimit = topBound?.let { it.locationIn(host)[1] + it.height + gap } ?: gutter
+        val bottomLimit = bottomBound?.let { it.locationIn(host)[1] - gap } ?: (host.height - imeBottom - gutter)
+        val roomBelow = bottomLimit - (ay + anchor.height + gap)
+        val roomAbove = ay - gap - topLimit
+        val below = when {
+            roomBelow >= height && roomAbove >= height -> ay + anchor.height / 2 <= (topLimit + bottomLimit) / 2
+            roomBelow >= height -> true
+            roomAbove >= height -> false
+            else -> roomBelow >= roomAbove
+        }
+        val wanted = if (below) ay + anchor.height + gap else ay - gap - height
+        val top = wanted.coerceIn(topLimit, (bottomLimit - height).coerceAtLeast(topLimit))
         val lp = FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT)
-        lp.gravity = Gravity.START or if (below) Gravity.TOP else Gravity.BOTTOM
+        lp.gravity = Gravity.START or Gravity.TOP
         lp.leftMargin = left
-        if (below) lp.topMargin = ay + anchor.height + gap else lp.bottomMargin = host.height - ay + gap
+        lp.topMargin = top
         cardView.layoutParams = lp
         host.addView(cardView)
         scrim = scrimView
@@ -147,6 +162,12 @@ class MessageMenu(
     }
 
     private fun gutter() = (12 * density).toInt()
+
+    private fun View.locationIn(parent: View): IntArray {
+        val p = IntArray(2).also { parent.getLocationInWindow(it) }
+        val me = IntArray(2).also { getLocationInWindow(it) }
+        return intArrayOf(me[0] - p[0], me[1] - p[1])
+    }
 
     private fun bindRow(inflater: LayoutInflater, parent: ViewGroup, item: Item): View {
         val row = inflater.inflate(R.layout.item_message_menu_row, parent, false)
