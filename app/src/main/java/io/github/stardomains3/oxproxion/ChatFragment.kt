@@ -1775,11 +1775,20 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         followStream = true
         rv.stopScroll()
         val screen = rv.height
-        fun glide() {
+        // The scroll range is an estimate while rows of very different heights are unmeasured, so
+        // one glide can stop half a screen short. Check where it landed and finish the job.
+        fun glide(attempt: Int = 0) {
             val left = remainingBelow()
-            if (left <= 0) return
-            val ms = (380 + 180 * left / screen.toFloat()).toInt().coerceIn(380, 680)
-            rv.smoothScrollBy(0, left, Motion.iosOut, ms)
+            if (left <= 0 && !rv.canScrollVertically(1)) return
+            if (attempt >= 3) {
+                layoutManager.scrollToPositionWithOffset(last, -1000000)
+                return
+            }
+            val ms = (380 + 180 * left.coerceAtLeast(0) / screen.toFloat()).toInt().coerceIn(380, 680)
+            rv.smoothScrollBy(0, left.coerceAtLeast(screen / 2), Motion.iosOut, ms)
+            rv.postDelayed({
+                if (isAdded && rv.canScrollVertically(1)) glide(attempt + 1)
+            }, ms + 60L)
         }
         if (remainingBelow() > screen * 3) {
             rv.animate().cancel()
