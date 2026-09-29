@@ -16,9 +16,13 @@ object RpContinuation {
     /** Characters that hug the text after them: a reply that stops on one has more to say right after it. */
     private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C"
 
+    /** Sentence enders, and the markup/quotes that may trail one (`*She smiles.*`, `"Come in."`). */
+    private const val ENDERS = ".!?…"
+    private const val TRAILERS = "*_~\"')]’”"
+
     /**
-     * [base] followed by [addition], with a space between only where the model left none and
-     * the text needs one (a finished sentence or a closed action, then a new word).
+     * [base] followed by [addition], with a separator only where the model left none: a new
+     * paragraph after a finished sentence or closed action, a plain space after unfinished text.
      */
     fun join(base: String, addition: String): String {
         if (addition.isEmpty()) return base
@@ -27,6 +31,7 @@ object RpContinuation {
         val first = addition.first()
         if (last.isWhitespace() || first.isWhitespace()) return base + addition
         if (first in CLOSERS || last in OPENERS) return base + addition
-        return "$base $addition"
+        val end = base.trimEnd { it in TRAILERS }.lastOrNull()
+        return if (end != null && end in ENDERS) "$base\n\n$addition" else "$base $addition"
     }
 }

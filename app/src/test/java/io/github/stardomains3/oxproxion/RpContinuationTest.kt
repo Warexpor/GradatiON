@@ -13,12 +13,17 @@ class RpContinuationTest {
         assertEquals("Hello", RpContinuation.join("", "Hello"))
     }
 
-    @Test fun aFinishedSentenceGetsASpaceBeforeTheNextWord() {
-        assertEquals("She smiles. Then she turns.", RpContinuation.join("She smiles.", "Then she turns."))
+    @Test fun aFinishedSentenceStartsANewParagraph() {
+        assertEquals("She smiles.\n\nThen she turns.", RpContinuation.join("She smiles.", "Then she turns."))
     }
 
-    @Test fun aClosedActionGetsASpaceBeforeDialogue() {
-        assertEquals("*She smiles.* \"Come in.\"", RpContinuation.join("*She smiles.*", "\"Come in.\""))
+    @Test fun aClosedActionStartsANewParagraphBeforeDialogue() {
+        assertEquals("*She smiles.*\n\n\"Come in.\"", RpContinuation.join("*She smiles.*", "\"Come in.\""))
+        assertEquals("\"Come in.\"\n\nShe waits.", RpContinuation.join("\"Come in.\"", "She waits."))
+    }
+
+    @Test fun unfinishedTextGetsASpaceBeforeTheNextWord() {
+        assertEquals("She waits and", RpContinuation.join("She waits", "and"))
     }
 
     @Test fun whitespaceTheModelSentIsKept() {
