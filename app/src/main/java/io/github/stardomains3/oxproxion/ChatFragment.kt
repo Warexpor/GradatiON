@@ -5705,6 +5705,9 @@ $cleanContent
         if (!toHome) applyRpHomeComposer(root, false)
         home.visibility = View.VISIBLE
         layers.forEach { it.translationZ = 8 * d }
+        // The bar stays put above the sliding layers, which would otherwise draw over it.
+        val bar = root.findViewById<View>(R.id.topBarGlass)
+        bar?.translationZ = 16 * d
         val parallax = 0.25f * w
         fun place(p: Float) {
             // p: 0 = list in front, 1 = thread in front
@@ -5721,6 +5724,7 @@ $cleanContent
             addUpdateListener { place(it.animatedValue as Float) }
             val finish = {
                 layers.forEach { it.translationX = 0f; it.translationZ = 0f }
+                bar?.translationZ = 0f
                 home.translationX = 0f
                 home.alpha = 1f
                 rpHomeAnim = null
