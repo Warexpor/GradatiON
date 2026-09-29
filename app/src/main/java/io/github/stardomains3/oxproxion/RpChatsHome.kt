@@ -12,9 +12,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
 /**
- * The screen the Roleplay tab opens on: the chats you already have, one row per character
- * (newest first). New chats start from the top bar's button. It replaces landing
- * straight in the last thread, which made moving between characters a hunt through History.
+ * The screen the Roleplay tab opens on: every character, one row each. The ones you are
+ * mid-story with come first (newest chat on top); the rest sit below and start a chat on a tap.
+ * It replaces landing straight in the last thread and the History drawer, which made moving
+ * between characters a hunt.
  *
  * Pure view code: [ChatFragment] feeds it data and decides when it shows.
  */
@@ -75,12 +76,15 @@ class RpChatsHome(
                 if (row.character != null) RpAvatars.bind(avatar, monogram, row.character)
                 else RpAvatars.bindModel(avatar, monogram, null, row.name)
                 preview.text = row.preview
-                val ago = DateUtils.getRelativeTimeSpanString(
+                // A character you have not talked to yet has no time to show.
+                val ago = if (row.timestamp > 0L) DateUtils.getRelativeTimeSpanString(
                     row.timestamp, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE
-                ).toString()
+                ).toString() else ""
                 whenView.text = if (row.chats > 1) {
                     ago + "\n" + itemView.context.getString(R.string.rp_home_chat_count, row.chats)
                 } else ago
+                whenView.isVisible = whenView.text.isNotEmpty()
+                preview.alpha = if (row.sessionId == null) 0.75f else 1f
                 itemView.setOnClickListener { onOpen(row) }
                 more.setOnClickListener { onMenu(more, row) }
                 itemView.setOnLongClickListener { onMenu(more, row); true }

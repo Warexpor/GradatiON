@@ -834,7 +834,7 @@ class ScreenshotTest {
         chat("Ondine", 80, "assistant" to "Ask me again when the tide turns.")
     }
 
-    /** The Roleplay tab opens on the chats list: characters to start with, then a row per character. */
+    /** The Roleplay tab opens on the characters list: mid-story ones first, then everyone else. */
     @Test fun rpHomeDark() = withChat { a, _ ->
         seedRp(); seedRpChats()
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
@@ -843,21 +843,97 @@ class ScreenshotTest {
         // Composer and chip step aside; the tabs stay.
         org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.composerDock).visibility)
         val rows = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
-        // Mira has two chats but one row.
-        org.junit.Assert.assertEquals(4, rows.adapter!!.itemCount)
+        // Seven characters (the six seeded plus the stock one), one row each: Mira has two chats
+        // but one row, and three have no chat yet.
+        org.junit.Assert.assertEquals(7, rows.adapter!!.itemCount)
         snap(root(a), "rp_home_dark")
 
         // Opening a row resumes that chat: the list goes, the composer and the chip come back.
         rows.findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
         org.junit.Assert.assertEquals(View.GONE, home.visibility)
         org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.composerDock).visibility)
+        // No History in Roleplay: the top-left button is the way back to the list.
+        org.junit.Assert.assertEquals(a.getString(R.string.rp_home_back), a.findViewById<View>(R.id.openSavedChatsButton).contentDescription)
         snap(root(a), "rp_thread_dark")
 
         // The Roleplay tab, tapped again inside a chat, goes back to the list.
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
         org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
+        org.junit.Assert.assertEquals(a.getString(R.string.cd_history), a.findViewById<View>(R.id.openSavedChatsButton).contentDescription)
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
         org.junit.Assert.assertEquals(View.GONE, home.visibility)
+    }
+
+    /** A character you have not talked to yet starts a chat from the list. */
+    @Test fun rpHomeStartsChatWithNewCharacter() = withChat { a, _ ->
+        seedRp(); seedRpChats()
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        val rows = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
+        // Chats first, then the rest by name: Aurelia, then Theo.
+        val aurelia = rows.findViewHolderForAdapterPosition(4)!!.itemView
+        org.junit.Assert.assertEquals("Aurelia", aurelia.findViewById<android.widget.TextView>(R.id.rpChatName).text)
+        org.junit.Assert.assertEquals(a.getString(R.string.rp_home_start), aurelia.findViewById<android.widget.TextView>(R.id.rpChatPreview).text)
+        org.junit.Assert.assertEquals(View.GONE, aurelia.findViewById<View>(R.id.rpChatWhen).visibility)
+        aurelia.performClick(); settle()
+        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.rpHome).visibility)
+        org.junit.Assert.assertEquals("Aurelia", vm.activeRpCharacter.value?.name)
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
+    /** In Roleplay the composer's settings button is the character menu; the controls moved under +. */
+    @Test fun rpControlsButtonOpensCharacterPanel() = withChat { a, _ ->
+        seedRp()
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        // In Chat it stays the controls button.
+        org.junit.Assert.assertEquals(a.getString(R.string.cd_controls), a.findViewById<View>(R.id.controlsButton).contentDescription)
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        val mira = runBlocking { vm.getRpRepository().getAllCharactersOnce() }.first { it.name == "Mira Vance" }
+        vm.startRpChatWithCharacter(mira); settle()
+        val button = a.findViewById<View>(R.id.controlsButton)
+        org.junit.Assert.assertEquals(a.getString(R.string.cd_rp_scene), button.contentDescription)
+        button.performClick(); settle()
+        val dialog = ShadowDialog.getLatestDialog()
+        org.junit.Assert.assertNotNull("the character menu opened", dialog)
+        org.junit.Assert.assertTrue(dialog!!.isShowing)
+        org.junit.Assert.assertEquals("the old controls card stays shut", View.GONE, a.findViewById<View>(R.id.headerContainer).visibility)
+        snapDialog(a, "rp_character_panel_tiles_dark", sharp = true)
+        val grid = dialog.findViewById<android.widget.GridLayout>(R.id.rpPanelTiles)
+        for (i in 0 until grid.childCount) {
+            val tile = grid.getChildAt(i)
+            org.junit.Assert.assertTrue("tile $i has a size", tile.width > 0)
+            org.junit.Assert.assertEquals("tile $i is square", tile.width, tile.height)
+        }
+        dialog.dismiss(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        org.junit.Assert.assertEquals(a.getString(R.string.cd_controls), button.contentDescription)
+    }
+
+    /** Roleplay opens where it was left: on the list, or inside the chat. */
+    @Test fun rpResumesWhereItWasLeft() = withChat { a, _ ->
+        seedRp(); seedRpChats()
+        val home = a.findViewById<View>(R.id.rpHome)
+        // Left on the list: the list again.
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        org.junit.Assert.assertEquals("left on the list", View.VISIBLE, home.visibility)
+        // Left inside a chat: that chat again, not the list.
+        a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
+            .findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
+        org.junit.Assert.assertEquals(View.GONE, home.visibility)
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        org.junit.Assert.assertEquals("left in a chat", View.GONE, home.visibility)
+        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.composerDock).visibility)
+        // Back to the list, leave, return: the list.
+        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); settle()
+        org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
 
     /** A chat's ⋮ on the list: new chat, edit the character, delete (set apart, in the dim red). */
@@ -877,7 +953,8 @@ class ScreenshotTest {
     }
 
     @Test fun rpHomeEmptyDark() = withChat { a, _ ->
-        seedRp()
+        // No characters at all, the stock one included.
+        runBlocking { db.rpDao().getAllCharactersOnce().forEach { db.rpDao().deleteCharacter(it.id) } }
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
         org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.rpHomeEmpty).visibility)
         snap(root(a), "rp_home_empty_dark")

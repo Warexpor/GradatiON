@@ -108,7 +108,6 @@
     <!-- Character panel: an opaque sheet, not glass. Tiles sit one step off the sheet. -->
     <color name="panel_solid">#FF1B1B1B</color>
     <color name="panel_tile">#FF272727</color>
-    <color name="panel_edge">#59FFFFFF</color>
     <color name="panel_tile_on">#FF313131</color>
     <color name="popover_scrim">#4D000000</color>
     <color name="empty_mark">#FF333333</color>

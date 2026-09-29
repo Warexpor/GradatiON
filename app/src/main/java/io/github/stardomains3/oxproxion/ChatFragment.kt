@@ -205,6 +205,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     /** Roleplay's landing screen; see [RpChatsHome]. */
     private var rpHome: RpChatsHome? = null
     private var rpHomeOpen = false
+    /** Where Roleplay was last left: on the characters list (true) or inside a chat. Swiping back lands there. */
+    private var rpResumeAtHome = true
     /** Set when a thread was opened on purpose, so the mode change that follows doesn't put the home over it. */
     private var rpHomeSuppressed = false
     private var rpHomeSessions: List<ChatSession> = emptyList()
@@ -819,10 +821,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.chatMode.observe(viewLifecycleOwner) { mode ->
             val nowRp = mode == ChatMode.RP
             if (nowRp && lastSeenChatMode != ChatMode.RP) {
-                // The Roleplay tab opens on the chats list, unless a thread was just opened on purpose.
-                rpHomeOpen = !rpHomeSuppressed
+                // Roleplay opens where it was left: the characters list, or the chat you were in.
+                // A thread opened on purpose always wins.
+                rpHomeOpen = !rpHomeSuppressed && rpResumeAtHome
                 rpHomeSuppressed = false
             } else if (!nowRp) {
+                if (lastSeenChatMode == ChatMode.RP) rpResumeAtHome = rpHomeOpen
                 rpHomeOpen = false
                 rpHomeSuppressed = false
             }
@@ -853,6 +857,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             tabChat.isSelected = !codeMode.isActive && !rp
             tabRoleplay.isSelected = !codeMode.isActive && rp
             placeModeTabIndicator(animate = true)
+            updateRpHome()
         }
         // Tabs slide like the swipe: both pages side by side, never an empty frame between.
         listOf(tabChat, tabRoleplay, codeMode.tab).forEach { tab ->
@@ -2361,7 +2366,7 @@ $cleanContent
         }
         newChatButton.setOnClickListener {
             if (codeMode.isActive) return@setOnClickListener codeMode.onNewPressed()
-            if (rpHome?.isShown == true) return@setOnClickListener showCharacterPopover(newChatButton)
+            if (rpHome?.isShown == true) return@setOnClickListener openRpCharacterLibrary()
             resetChatButton.performClick()
         }
         newChatButton.setOnLongClickListener {
@@ -2387,6 +2392,8 @@ $cleanContent
         openSavedChatsButton.setOnClickListener {
             hideKeyboard()
             if (codeMode.isActive) return@setOnClickListener codeMode.onMenuPressed()
+            // Roleplay keeps no history of its own: inside a chat this is the way back to the characters.
+            if (viewModel.isRpMode() && rpHome?.isShown != true) return@setOnClickListener openRpHome()
             openHistoryPanel()
         }
 
@@ -2628,6 +2635,13 @@ $cleanContent
         controlsButton.setOnClickListener {
             hideKeyboard()
             dismissAttachPopup()
+            // In Roleplay this button is the character menu, like the speaker line; the
+            // controls moved into the + menu.
+            if (viewModel.isRpMode()) {
+                if (headerContainer.isVisible) hideMenu()
+                showRpCharacterPanel()
+                return@setOnClickListener
+            }
             if (headerContainer.isVisible) hideMenu() else showMenu()
         }
         menuButton.setOnClickListener {
@@ -3611,6 +3625,10 @@ $cleanContent
             R.drawable.ic_stream,
             selected = streaming
         ) { streamButton.performClick() }
+        // The composer's old settings button is the character menu here, so its options live under +.
+        rows += PickerPopover.Row(getString(R.string.rp_plus_controls), getString(R.string.rp_plus_controls_sub), R.drawable.ic_sliders) {
+            menuButton.post { showMenu() }
+        }
         val footer = listOf(
             PickerPopover.Row(getString(R.string.drawer_nav_roleplay), getString(R.string.rp_plus_home_sub), R.drawable.ic_nav_characters) { openRpHub() }
         )
@@ -4078,7 +4096,9 @@ $cleanContent
             root.findViewById(R.id.composerDock),
             root.findViewById(R.id.composerFade),
             root.findViewById(R.id.jumpToBottomButton),
-            root.findViewById(R.id.codeModeContainer)
+            root.findViewById(R.id.codeModeContainer),
+            // The characters list is a page too: left out, it sat still while the chat slid past it.
+            root.findViewById(R.id.rpHome)
         )
     }
 
@@ -4506,6 +4526,8 @@ $cleanContent
             ): Boolean {
                 if (e1 == null) return false
                 if (historyDrawerContainer?.visibility == View.VISIBLE) return false
+                // In Roleplay a rightward swipe pages back to Chat; the drawer is not on that path.
+                if (viewModel.isRpMode() && !codeMode.isActive) return false
                 val dx = e2.x - e1.x
                 val dy = e2.y - e1.y
                 if (abs(dx) < abs(dy) * 1.5f) return false
@@ -5557,12 +5579,16 @@ $cleanContent
         rpHome = RpChatsHome(
             homeRoot,
             onOpen = { row ->
-                viewModel.loadChat(row.sessionId)
-                closeRpHome()
+                val session = row.sessionId
+                if (session != null) {
+                    viewModel.loadChat(session)
+                    closeRpHome()
+                } else row.character?.let { startRpWith(it, ask = false) }
             },
             onMenu = { anchor, row -> showRpHomeMenu(anchor, row) }
         )
         rpHomeOpen = savedInstanceState?.getBoolean(STATE_RP_HOME) ?: viewModel.isRpMode()
+        rpResumeAtHome = savedInstanceState?.getBoolean(STATE_RP_RESUME) ?: true
         lastSeenChatMode = if (viewModel.isRpMode()) ChatMode.RP else null
         // Keep the first row clear of the floating bar, whatever height it has.
         val topGlass = root.findViewById<View>(R.id.topBarGlass)
@@ -5584,7 +5610,7 @@ $cleanContent
         }
     }
 
-    /** Roleplay's chats list: one row per character, with the last line of the newest chat. */
+    /** Roleplay's characters list: a row each, with the last line of the newest chat if there is one. */
     private fun refreshRpHome() {
         val home = rpHome ?: return
         val sessions = rpHomeSessions
@@ -5594,13 +5620,15 @@ $cleanContent
             val dao = AppDatabase.getDatabase(requireContext().applicationContext).chatDao()
             val llm = getString(R.string.rp_llm_speaker)
             val none = getString(R.string.rp_home_no_preview)
-            val heads = RpChatSummaries.build(sessions, characters, emptyMap(), llm, none)
-            val previews = heads.associate { row ->
-                val last = dao.getLastMessage(row.sessionId)
+            val start = getString(R.string.rp_home_start)
+            val heads = RpChatSummaries.build(sessions, characters, emptyMap(), llm, none, start)
+            val previews = heads.mapNotNull { row ->
+                val id = row.sessionId ?: return@mapNotNull null
+                val last = dao.getLastMessage(id)
                 val text = last?.let { RpChatSummaries.previewOf(it.content) }.orEmpty()
-                row.sessionId to if (last?.role == "user" && text.isNotBlank()) getString(R.string.rp_home_you, text) else text
-            }
-            home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none))
+                id to if (last?.role == "user" && text.isNotBlank()) getString(R.string.rp_home_you, text) else text
+            }.toMap()
+            home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none, start))
             updateRpHome()
         }
     }
@@ -5610,6 +5638,14 @@ $cleanContent
         val root = view ?: return
         val show = rpHomeOpen && viewModel.isRpMode() && !codeMode.isActive
         rpHome?.show(show)
+        // Mid-swipe the list arrives with the other pages, not on top of them.
+        if (show) pager?.let { p -> root.findViewById<View>(R.id.rpHome)?.translationX = p.shot.translationX - p.direction * p.w }
+        // The top bar follows: on the list, the app menu and character manager; inside a chat, the way back to the list.
+        val inThread = viewModel.isRpMode() && !codeMode.isActive && !show
+        openSavedChatsButton.setIconResource(if (inThread) R.drawable.ic_chevron_left else R.drawable.ic_grok_menu)
+        openSavedChatsButton.contentDescription = getString(if (inThread) R.string.rp_home_back else R.string.cd_history)
+        newChatButton.setIconResource(if (show) R.drawable.rp_ic_characters else R.drawable.ic_new_chat)
+        newChatButton.contentDescription = getString(if (show) R.string.rp_home_manage else R.string.grok_new_conversation)
         // Only undo what the home did itself: Code mode hides the same composer for its own reasons.
         if (show != rpHomeHidComposer) {
             rpHomeHidComposer = show
@@ -5639,7 +5675,8 @@ $cleanContent
         messageMenu?.dismiss(animated = false)
         val items = buildList {
             if (row.character != null) {
-                add(MessageMenu.Item(getString(R.string.rp_home_menu_new), R.drawable.ic_new_chat) { startRpWith(row.character) })
+                // A tap already starts the first chat with a character you have not talked to.
+                if (row.sessionId != null) add(MessageMenu.Item(getString(R.string.rp_home_menu_new), R.drawable.ic_new_chat) { startRpWith(row.character) })
                 add(MessageMenu.Item(getString(R.string.rp_home_menu_edit), R.drawable.ic_msg_edit) { pushRp(RpCharacterEditFragment.newInstance(row.character.id)) })
             } else if (row.isLlm) {
                 add(MessageMenu.Item(getString(R.string.rp_home_menu_new), R.drawable.ic_new_chat) {
@@ -5647,17 +5684,19 @@ $cleanContent
                     viewModel.startRpLlmChat()
                 })
             }
-            add(MessageMenu.Item(getString(R.string.rp_home_menu_delete), R.drawable.ic_msg_delete, destructive = true) {
+            // A character you have not talked to has no chat to delete.
+            val session = row.sessionId
+            if (session != null) add(MessageMenu.Item(getString(R.string.rp_home_menu_delete), R.drawable.ic_msg_delete, destructive = true) {
                 GrokConfirmDialog.show(
                     fragment = this@ChatFragment,
                     title = getString(R.string.rp_home_delete_title),
                     message = getString(R.string.rp_home_delete_body, row.name),
                     confirmText = getString(R.string.rp_menu_delete),
                     onConfirm = {
-                        sharedPreferencesHelper.setSessionPinned(row.sessionId, false)
-                        viewModel.notifySessionDeleted(row.sessionId)
+                        sharedPreferencesHelper.setSessionPinned(session, false)
+                        viewModel.notifySessionDeleted(session)
                         ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[SavedChatsViewModel::class.java]
-                            .deleteSession(row.sessionId)
+                            .deleteSession(session)
                     }
                 )
             })
@@ -5671,6 +5710,7 @@ $cleanContent
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(STATE_RP_HOME, rpHomeOpen)
+        outState.putBoolean(STATE_RP_RESUME, rpResumeAtHome)
     }
 
     private var pickerPopover: PickerPopover? = null
@@ -5794,10 +5834,10 @@ $cleanContent
         val hasMemory = memory.isNotBlank()
         val personaName = sharedPreferencesHelper.getRpPersonaName()
         val tiles = buildList {
-            add(RpCharacterPanel.Tile(R.string.rp_panel_memory, R.drawable.ic_memory, on = hasMemory || viewModel.currentRpFacts().isNotBlank(), preview = memory.takeIf { hasMemory } ?: viewModel.currentRpFacts().takeIf { it.isNotBlank() }) {
+            // Three rows of three, in the order you reach for them: the story, the look, the character.
+            add(RpCharacterPanel.Tile(R.string.rp_panel_memory, RpTileArt.Kind.MEMORY, on = hasMemory || viewModel.currentRpFacts().isNotBlank()) {
                 menuButton.post { showRpMemoryMenu(memoryId, title) }
             })
-            add(RpCharacterPanel.Tile(R.string.rp_panel_history, R.drawable.rp_ic_archive) { openHistoryPanel() })
             val voice = sharedPreferencesHelper.getRpVoice(memoryId)
             val tts = if (::textToSpeech.isInitialized) textToSpeech else null
             val tweaks = listOfNotNull(
@@ -5807,31 +5847,41 @@ $cleanContent
             val voiceName = RpVoiceDialog.label(this@ChatFragment, tts, voice.name)
             val voiceLabel = if (voiceName == null && tweaks.isEmpty()) null
                 else (listOf(voiceName ?: getString(R.string.rp_voice_default)) + tweaks).joinToString(" · ")
-            add(RpCharacterPanel.Tile(R.string.rp_panel_voice, R.drawable.ic_volume_up, on = voiceLabel != null, preview = voiceLabel) {
+            add(RpCharacterPanel.Tile(R.string.rp_panel_voice, RpTileArt.Kind.VOICE, on = voiceLabel != null, preview = voiceLabel) {
                 RpVoiceDialog.show(this@ChatFragment, title, tts, voice) { sharedPreferencesHelper.saveRpVoice(memoryId, it) }
             })
             val layout = sharedPreferencesHelper.getRpLayout(memoryId)
-            add(RpCharacterPanel.Tile(R.string.rp_panel_layout, R.drawable.ic_rp_layout, preview = getString(layoutLabel(layout))) {
+            val layoutArt = when (layout) {
+                SharedPreferencesHelper.RP_LAYOUT_BUBBLES -> RpTileArt.Kind.LAYOUT_BUBBLES
+                SharedPreferencesHelper.RP_LAYOUT_BOOK -> RpTileArt.Kind.LAYOUT_BOOK
+                else -> RpTileArt.Kind.LAYOUT_CLASSIC
+            }
+            add(RpCharacterPanel.Tile(R.string.rp_panel_layout, layoutArt, preview = getString(layoutLabel(layout))) {
                 menuButton.post { showRpLayoutPicker(memoryId, layout) }
             })
             if (character != null && !llm) {
                 val slot = BackgroundPhoto.slotForCharacter(character.id)
                 val wallpaper = BackgroundPhoto.file(requireContext(), slot).takeIf { it.isFile }
-                add(RpCharacterPanel.Tile(R.string.rp_panel_wallpaper, R.drawable.ic_gallery, on = wallpaper != null, image = wallpaper) {
+                add(RpCharacterPanel.Tile(R.string.rp_panel_wallpaper, RpTileArt.Kind.WALLPAPER, on = wallpaper != null, image = wallpaper) {
                     if (wallpaper == null) pickRpWallpaperFor(character.id)
                     else menuButton.post { showRpWallpaperMenu(character) }
                 })
             }
-            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, R.drawable.rp_ic_persona, preview = personaName.ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
-            add(RpCharacterPanel.Tile(R.string.rp_panel_style, R.drawable.ic_sliders) { pushRp(RpSettingsFragment.newInstance()) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, RpTileArt.Kind.PERSONA, preview = personaName.ifBlank { null }, letter = personaName.trim().ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_style, RpTileArt.Kind.STYLE) { pushRp(RpSettingsFragment.newInstance()) })
             val pinnedId = if (character != null && !llm) sharedPreferencesHelper.getRpLorebookId(character.id) else null
-            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, R.drawable.rp_ic_book, on = pinnedId != null) {
+            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, RpTileArt.Kind.LORE, on = pinnedId != null) {
                 menuButton.post { showRpLorePicker(if (llm) null else character?.id) }
             })
             if (character != null && !llm) {
-                add(RpCharacterPanel.Tile(R.string.rp_panel_edit, R.drawable.ic_edit) { pushRp(RpCharacterEditFragment.newInstance(character.id)) })
+                add(RpCharacterPanel.Tile(R.string.rp_panel_edit, RpTileArt.Kind.EDIT) { pushRp(RpCharacterEditFragment.newInstance(character.id)) })
             }
-            add(RpCharacterPanel.Tile(R.string.rp_panel_switch, R.drawable.rp_ic_characters, header = true) { menuButton.post { showCharacterPopover() } })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_new_chat, RpTileArt.Kind.NEW_CHAT) {
+                if (llm || character == null) {
+                    closeRpHome()
+                    viewModel.startRpLlmChat()
+                } else startRpWith(character)
+            })
         }
         RpCharacterPanel.show(this, if (llm) null else character, title, subtitle, tiles)
     }
@@ -5987,12 +6037,18 @@ $cleanContent
             .commit()
     }
 
-    private fun startRpWith(character: RpCharacter) {
+    /**
+     * [ask] is off for the first chat with a character picked from the list: nothing on screen is
+     * being replaced, so there is no chat to confirm over and no facts to carry.
+     */
+    private fun startRpWith(character: RpCharacter, ask: Boolean = true) {
         val start = { carry: Boolean ->
             closeRpHome()
             viewModel.startRpChatWithCharacter(character, carry)
         }
-        if (viewModel.currentRpFacts().isNotBlank()) {
+        if (!ask) {
+            start(false)
+        } else if (viewModel.currentRpFacts().isNotBlank()) {
             GrokConfirmDialog.show(
                 fragment = this,
                 title = getString(R.string.rp_facts_choice_title),
@@ -6132,6 +6188,8 @@ $cleanContent
         bindEmptyState(rp)
         systemMessageButton.visibility = if (rp) View.GONE else View.VISIBLE
         menuButton.visibility = View.VISIBLE
+        controlsButton.setIconResource(if (rp) R.drawable.ic_rp_scene else R.drawable.ic_sliders)
+        controlsButton.contentDescription = getString(if (rp) R.string.cd_rp_scene else R.string.cd_controls)
         restoreAttachPlusIcon()
         menuButton.contentDescription = getString(
             if (rp) R.string.rp_plus_a11y else R.string.attach_content_description
@@ -6442,3 +6500,4 @@ $cleanContent
 }
 
 private const val STATE_RP_HOME = "rp_home_open"
+private const val STATE_RP_RESUME = "rp_resume_at_home"

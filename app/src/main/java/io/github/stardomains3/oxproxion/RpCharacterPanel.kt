@@ -2,40 +2,44 @@ package io.github.stardomains3.oxproxion
 
 import android.graphics.BitmapFactory
 import android.graphics.Outline
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewOutlineProvider
+import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomsheet.BottomSheetDialog
 
 /**
  * The RP character panel: opened from the character chip. A header with who you're talking to,
- * then a grid of tiles for everything about the scene (memory, history, persona, style,
- * lore, the card itself), so none of it needs a trip through Settings.
+ * then a 3x3 grid of tiles for everything about the scene (memory, voice, layout, wallpaper,
+ * persona, style, lore, the card itself, a fresh chat), so none of it needs a trip through
+ * Settings. There is no History tile: the characters list is how you move between chats.
  *
  * Solid on purpose: it holds a lot of small text and sits over a busy transcript, so it is an
- * opaque sheet with an outline and tiles one step off it, not glass. The chat behind stays sharp.
+ * opaque sheet with tiles one step off it, not glass. The chat behind stays sharp.
  */
 object RpCharacterPanel {
 
     class Tile(
         @StringRes val label: Int,
-        @DrawableRes val icon: Int,
+        /** The drawing on the card; see [RpTileArt]. */
+        val art: RpTileArt.Kind,
         val on: Boolean = false,
-        /** Short live content shown instead of the glyph (the memory itself, the persona's name). */
+        /** A short state under the name (the layout's name, the voice, the persona). */
         val preview: String? = null,
-        /** A picture to show in the card (the character's wallpaper). */
+        /** The character's wallpaper, drawn as the card's picture. */
         val image: java.io.File? = null,
-        /** Round glass button in the header row instead of a card (quick actions). */
-        val header: Boolean = false,
+        /** The persona's initial for its portrait. */
+        val letter: String? = null,
         val onClick: () -> Unit
     )
 
@@ -77,83 +81,73 @@ object RpCharacterPanel {
         val ink = ContextCompat.getColor(ctx, R.color.xai_ink)
         val mute = ContextCompat.getColor(ctx, R.color.xai_mute)
         val gap = (5 * d).toInt()
-        val actions = sheet.findViewById<LinearLayout>(R.id.rpPanelActions)
-        tiles.filter { it.header }.forEach { t ->
-            actions.addView(ImageView(ctx).apply {
-                setImageResource(t.icon)
-                imageTintList = android.content.res.ColorStateList.valueOf(ink)
-                val pad = (12 * d).toInt()
-                setPadding(pad, pad, pad, pad)
-                background = pressable(ctx, R.color.panel_tile, radiusPx = 24 * d)
-                contentDescription = ctx.getString(t.label)
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
-                    dialog.dismiss()
-                    t.onClick()
+        tiles.forEach { t ->
+            // Every card is the same square, so the grid reads as one thing: the name top-left,
+            // a one-line state under it, and a drawing of what the tile opens filling the rest.
+            val fill = if (t.on) R.color.panel_tile_on else R.color.panel_tile
+            val radius = 22 * d
+            val card = object : FrameLayout(ctx) {
+                override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                    val side = MeasureSpec.getSize(widthMeasureSpec)
+                    super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(side, MeasureSpec.EXACTLY))
                 }
-            }, LinearLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt()).apply { marginStart = (6 * d).toInt() })
-        }
-        tiles.filterNot { it.header }.forEach { t ->
-            // A titled glass card (c.ai layout, our glass): name top-left, a quiet preview or a
-            // large glyph bottom-right.
-            val card = android.widget.FrameLayout(ctx).apply {
-                background = pressable(ctx, if (t.on) R.color.panel_tile_on else R.color.panel_tile, radiusPx = 22 * d)
+            }.apply {
+                background = solidShape(ctx, fill, radiusPx = radius)
+                foreground = pressRipple(ctx, radius)
+                clipToOutline = true
                 isClickable = true
                 isFocusable = true
                 contentDescription = listOfNotNull(ctx.getString(t.label), t.preview).joinToString(", ")
-                setPadding((14 * d).toInt(), (12 * d).toInt(), (12 * d).toInt(), (12 * d).toInt())
                 setOnClickListener {
                     dialog.dismiss()
                     t.onClick()
                 }
             }
-            card.addView(TextView(ctx).apply {
+            card.addView(RpTileArt(ctx, t.art, ink, ContextCompat.getColor(ctx, fill)).apply {
+                photo = t.image?.let { f ->
+                    BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = 4 })
+                }
+                letter = t.letter
+            }, FrameLayout.LayoutParams(-1, -1))
+            val labels = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding((14 * d).toInt(), (12 * d).toInt(), (12 * d).toInt(), 0)
+            }
+            card.addView(labels, FrameLayout.LayoutParams(-1, -2))
+            labels.addView(TextView(ctx).apply {
                 setText(t.label)
                 setTextColor(ink)
-                textSize = 16f
+                textSize = 15f
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
                 maxLines = 1
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
-            val picture = t.image?.let { f ->
-                BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = 8 })
-            }
-            if (picture != null) {
-                card.addView(ImageView(ctx).apply {
-                    setImageDrawable(
-                        androidx.core.graphics.drawable.RoundedBitmapDrawableFactory.create(resources, centerCrop(picture, 2.4f))
-                            .apply { cornerRadius = 12 * d }
-                    )
-                    scaleType = ImageView.ScaleType.FIT_XY
-                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                }, android.widget.FrameLayout.LayoutParams(-1, (44 * d).toInt(), Gravity.BOTTOM))
-            } else if (!t.preview.isNullOrBlank()) {
-                card.addView(TextView(ctx).apply {
+            }, LinearLayout.LayoutParams(-1, -2))
+            if (!t.preview.isNullOrBlank()) {
+                labels.addView(TextView(ctx).apply {
                     text = t.preview
                     setTextColor(mute)
-                    textSize = 13f
-                    maxLines = 3
+                    textSize = 12.5f
+                    maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                }, android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM or Gravity.START))
-            } else {
-                card.addView(ImageView(ctx).apply {
-                    setImageResource(t.icon)
-                    imageTintList = android.content.res.ColorStateList.valueOf(if (t.on) ink else mute)
-                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                }, android.widget.FrameLayout.LayoutParams((34 * d).toInt(), (34 * d).toInt(), Gravity.BOTTOM or Gravity.END))
+                }, LinearLayout.LayoutParams(-1, -2))
             }
             grid.addView(card, GridLayout.LayoutParams(
                 GridLayout.spec(GridLayout.UNDEFINED),
                 GridLayout.spec(GridLayout.UNDEFINED, 1f)
             ).apply {
                 width = 0
-                height = (104 * d).toInt()
+                height = GridLayout.LayoutParams.WRAP_CONTENT
                 setMargins(gap, gap, gap, gap)
             })
         }
 
+        // The sheet runs under the navigation bar so its fill reaches the screen's bottom edge.
+        val basePadding = sheet.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(sheet) { v, insets ->
+            v.updatePadding(bottom = basePadding + insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
+            insets
+        }
         dialog.setContentView(sheet)
         // Tall enough for three rows of cards: open fully instead of peeking.
         dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
@@ -173,34 +167,20 @@ object RpCharacterPanel {
             if (!oval) cornerRadius = radiusPx
         }
 
-    /** A solid fill with a tonal flash on press. */
-    private fun pressable(ctx: android.content.Context, color: Int, radiusPx: Float): android.graphics.drawable.Drawable {
-        val fill = solidShape(ctx, color, radiusPx = radiusPx)
+    /** A tonal flash on press, drawn over the tile's art. */
+    private fun pressRipple(ctx: android.content.Context, radiusPx: Float): android.graphics.drawable.Drawable {
         val mask = solidShape(ctx, android.R.color.white, radiusPx = radiusPx)
         return android.graphics.drawable.RippleDrawable(
-            android.content.res.ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.popover_row_pressed)), fill, mask
+            android.content.res.ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.popover_row_pressed)), null, mask
         )
     }
 
-    /** The opaque sheet: rounded on top, a hairline edge, no transparency. */
+    /** The opaque sheet: rounded on top, no edge line, no transparency. */
     private fun solidSheet(ctx: android.content.Context): android.graphics.drawable.Drawable {
         val r = ctx.resources.getDimension(R.dimen.glass_sheet_radius)
         return android.graphics.drawable.GradientDrawable().apply {
             setColor(ContextCompat.getColor(ctx, R.color.panel_solid))
             cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
-            setStroke((1.5f * ctx.resources.displayMetrics.density).toInt().coerceAtLeast(1), ContextCompat.getColor(ctx, R.color.panel_edge))
-        }
-    }
-
-    /** Crop [src] around its center to [aspect] (width / height), so a rounded thumbnail isn't squashed. */
-    private fun centerCrop(src: android.graphics.Bitmap, aspect: Float): android.graphics.Bitmap {
-        val srcAspect = src.width / src.height.toFloat()
-        return if (srcAspect > aspect) {
-            val w = (src.height * aspect).toInt().coerceAtLeast(1)
-            android.graphics.Bitmap.createBitmap(src, (src.width - w) / 2, 0, w, src.height)
-        } else {
-            val h = (src.width / aspect).toInt().coerceAtLeast(1)
-            android.graphics.Bitmap.createBitmap(src, 0, (src.height - h) / 2, src.width, h)
         }
     }
 }

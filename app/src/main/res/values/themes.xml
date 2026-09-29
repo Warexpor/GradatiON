@@ -560,6 +560,15 @@
     <style name="ThemeOverlay.Grokion.BottomSheet.Sharp" parent="ThemeOverlay.Grokion.BottomSheet">
         <item name="android:windowBlurBehindEnabled">false</item>
         <item name="android:backgroundDimAmount">0.5</item>
+        <!-- The sheet draws under the navigation bar and pads itself for it -->
+        <item name="enableEdgeToEdge">true</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="bottomSheetStyle">@style/Widget.Grokion.BottomSheet.Sharp</item>
+    </style>
+
+    <style name="Widget.Grokion.BottomSheet.Sharp" parent="Widget.Grokion.BottomSheet">
+        <item name="paddingBottomSystemWindowInsets">false</item>
     </style>
 
     <!-- iOS alert motion for dialog windows -->

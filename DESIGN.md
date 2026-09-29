@@ -11,7 +11,7 @@ Grok-derived token extraction and `SHELL.md`, which are both still in git histor
    - Exception: delete actions use the dim crimson `delete_action`, never an orange-leaning red.
    - Exception: code syntax highlighting and diffs keep their colors (git green and red).
 2. **Liquid Glass everywhere.** Dialogs, sheets, menus, pills, toggles and bars are all glass.
-   The one exception is the RP character panel, an opaque outlined sheet.
+   The one exception is the RP character panel, an opaque sheet with no edge line.
    Nothing is a flat card sitting on a flat page.
 3. **Quiet by default.** Chrome recedes and content leads. Status appears only when it carries
    meaning: a spinner while working, a mark only on failure.
