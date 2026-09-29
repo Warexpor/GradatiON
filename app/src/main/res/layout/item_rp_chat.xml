@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A row of the Roleplay chats list: portrait, name and last line, when, and a menu. -->
+<!-- A row of the Roleplay chats list: portrait, name and last line, and a menu. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -70,16 +70,6 @@
             android:textColor="@color/xai_mute"
             android:textSize="14.5sp" />
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/rpChatWhen"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:fontFamily="@font/app_sans"
-        android:gravity="end"
-        android:textColor="@color/xai_mute"
-        android:textSize="13sp" />
 
     <ImageButton
         android:id="@+id/rpChatMore"

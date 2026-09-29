@@ -50,6 +50,9 @@ interface ChatDao {
     @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY id DESC LIMIT 1")
     suspend fun getLastMessage(sessionId: Long): ChatMessage?
 
+    @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId")
+    suspend fun countMessages(sessionId: Long): Int
+
     @Query("SELECT * FROM chat_sessions WHERE id = :sessionId")
     suspend fun getSessionById(sessionId: Long): ChatSession?
 

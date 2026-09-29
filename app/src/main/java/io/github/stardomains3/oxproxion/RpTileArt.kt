@@ -4,12 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -20,7 +17,8 @@ import kotlin.math.min
 
 /**
  * The picture on a character-panel tile: a flat grayscale drawing of what the tile opens
- * (stacked memory blocks, a play disc, a mini chat in the chosen layout, the wallpaper itself).
+ * (days of chats, a stack of notes, an open book, a voice wave, a mini chat in the chosen
+ * layout, the wallpaper itself, a type specimen).
  *
  * Fills the whole tile and is clipped by the card, so a drawing can sit low and run off an edge
  * while the name stays clear in the top-left. Only tints of one ink color plus the tile's own
@@ -36,7 +34,15 @@ class RpTileArt(
     private val cut: Int
 ) : View(context) {
 
-    enum class Kind { MEMORY, VOICE, LAYOUT_CLASSIC, LAYOUT_BUBBLES, LAYOUT_BOOK, WALLPAPER, PERSONA, STYLE, LORE, EDIT, NEW_CHAT }
+    private companion object {
+        /** The whole palette, as ink alphas: a dim base shape, a quiet mid, a dark-ish low, the lit accent. */
+        const val BASE = 0.2f
+        const val LOW = 0.34f
+        const val MID = 0.5f
+        const val HI = 0.94f
+    }
+
+    enum class Kind { MEMORY, VOICE, LAYOUT_CLASSIC, LAYOUT_BUBBLES, LAYOUT_BOOK, WALLPAPER, PERSONA, STYLE, LORE, EDIT, HISTORY }
 
     /** The character's wallpaper; without one the tile shows an empty frame with a plus. */
     var photo: Bitmap? = null
@@ -49,6 +55,9 @@ class RpTileArt(
     private val path = Path()
     private val box = RectF()
     private val photoMatrix = Matrix()
+    private val month by lazy { java.text.SimpleDateFormat("MMM", java.util.Locale.getDefault()) }
+    private val small by lazy { androidx.core.content.res.ResourcesCompat.getFont(context, R.font.jakarta_semibold) }
+    private val big by lazy { androidx.core.content.res.ResourcesCompat.getFont(context, R.font.jakarta_bold) }
 
     init {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -60,11 +69,6 @@ class RpTileArt(
         p.shader = null
         p.style = Paint.Style.FILL
         p.color = tint(a)
-    }
-
-    private fun fade(top: Float, bottom: Float, aTop: Float, aBottom: Float) {
-        p.style = Paint.Style.FILL
-        p.shader = LinearGradient(0f, top, 0f, bottom, tint(aTop), tint(aBottom), Shader.TileMode.CLAMP)
     }
 
     private fun cutout() {
@@ -99,53 +103,49 @@ class RpTileArt(
             Kind.STYLE -> style(c, s)
             Kind.LORE -> lore(c, s)
             Kind.EDIT -> edit(c, s)
-            Kind.NEW_CHAT -> newChat(c, s)
+            Kind.HISTORY -> history(c, s)
         }
         p.shader = null
         p.style = Paint.Style.FILL
     }
 
-    /** Three blocks stepping up to the right, the tallest behind and cut off by the tile's edge. */
+    /** A stack of three notes, the front one written on, running off the bottom. */
     private fun memory(c: Canvas, s: Float) {
-        val radius = s * 0.11f
-        val lefts = floatArrayOf(0.6f, 0.39f, 0.17f)
-        val widths = floatArrayOf(0.56f, 0.36f, 0.34f)
-        val tops = floatArrayOf(0.4f, 0.56f, 0.72f)
-        val tints = floatArrayOf(0.26f, 0.5f, 0.94f)
+        val radius = s * 0.1f
+        val insets = floatArrayOf(0.26f, 0.2f, 0.14f)
+        val tops = floatArrayOf(0.46f, 0.54f, 0.62f)
+        val tints = floatArrayOf(BASE, LOW, HI)
         val gap = 2f * d
         for (i in 0..2) {
-            val l = s * lefts[i]
+            val l = s * insets[i]
+            val r = s - l
             val t = s * tops[i]
-            val r = l + s * widths[i]
             if (i > 0) {
                 cutout()
                 round(l - gap, t - gap, r + gap, s + radius, radius + gap, c)
             }
-            fade(t, s, tints[i], tints[i] * 0.78f)
+            solid(tints[i])
             round(l, t, r, s + radius, radius, c)
         }
+        cutout()
+        val bar = s * 0.06f
+        round(s * 0.24f, s * 0.72f, s * 0.64f, s * 0.72f + bar, bar, c)
+        round(s * 0.24f, s * 0.84f, s * 0.5f, s * 0.84f + bar, bar, c)
     }
 
-    /** A silver play disc with a lit rim. */
+    /** A voice wave: five bars, tallest in the middle. */
     private fun voice(c: Canvas, s: Float) {
-        val cx = s * 0.5f
+        val heights = floatArrayOf(0.12f, 0.26f, 0.4f, 0.26f, 0.12f)
+        val tints = floatArrayOf(LOW, HI, HI, HI, LOW)
+        val bw = s * 0.075f
+        val step = s * 0.125f
         val cy = s * 0.66f
-        val r = s * 0.24f
-        p.style = Paint.Style.FILL
-        p.shader = RadialGradient(cx - r * 0.35f, cy - r * 0.5f, r * 1.7f, tint(0.8f), tint(0.34f), Shader.TileMode.CLAMP)
-        c.drawCircle(cx, cy, r, p)
-        stroke(tint(0.85f), 1.5f * d)
-        c.drawCircle(cx, cy, r - 0.75f * d, p)
-        val t = r * 0.3f
-        path.reset()
-        path.moveTo(cx - t * 0.6f, cy - t)
-        path.lineTo(cx - t * 0.6f, cy + t)
-        path.lineTo(cx + t * 1.05f, cy)
-        path.close()
-        solid(1f)
-        c.drawPath(path, p)
-        stroke(tint(1f), 2f * d)
-        c.drawPath(path, p)
+        for (i in heights.indices) {
+            val x = s / 2f + (i - 2) * step
+            val half = s * heights[i] / 2f
+            solid(tints[i])
+            round(x - bw / 2f, cy - half, x + bw / 2f, cy + half, bw / 2f, c)
+        }
     }
 
     /** A tiny transcript in the layout that is set: a speaker line, two bubbles, or centered prose. */
@@ -154,28 +154,28 @@ class RpTileArt(
         when (kind) {
             Kind.LAYOUT_BUBBLES -> {
                 // Their reply comes in from the left edge, yours from the right.
-                solid(0.32f)
-                round(-s * 0.2f, s * 0.5f, s * 0.64f, s * 0.68f, s * 0.09f, c)
-                solid(0.9f)
-                round(s * 0.36f, s * 0.75f, s * 1.2f, s * 0.93f, s * 0.09f, c)
+                solid(LOW)
+                round(-s * 0.2f, s * 0.46f, s * 0.64f, s * 0.64f, s * 0.09f, c)
+                solid(HI)
+                round(s * 0.36f, s * 0.7f, s * 1.2f, s * 0.88f, s * 0.09f, c)
             }
             Kind.LAYOUT_BOOK -> {
                 val widths = floatArrayOf(0.7f, 0.52f, 0.64f, 0.36f)
-                solid(0.6f)
+                solid(MID)
                 for (i in widths.indices) {
-                    val y = s * 0.52f + i * s * 0.12f
+                    val y = s * 0.46f + i * s * 0.12f
                     val half = s * widths[i] / 2f
                     round(s / 2f - half, y, s / 2f + half, y + bar * 0.8f, bar, c)
                 }
             }
             else -> {
                 val l = s * 0.14f
-                val y = s * 0.6f
+                val y = s * 0.5f
                 val dot = s * 0.055f
-                solid(0.94f)
+                solid(HI)
                 c.drawCircle(l + dot, y, dot, p)
                 round(l + dot * 2.8f, y - bar / 2f, s * 0.64f, y + bar / 2f, bar, c)
-                solid(0.36f)
+                solid(LOW)
                 round(l, y + s * 0.15f, s + bar, y + s * 0.15f + bar, bar, c)
                 round(l, y + s * 0.29f, s * 0.7f, y + s * 0.29f + bar, bar, c)
             }
@@ -204,7 +204,7 @@ class RpTileArt(
             round(l, t, r, b, radius, c)
             return
         }
-        fade(t, s, 0.2f, 0.12f)
+        solid(BASE)
         round(l, t, r, b, radius, c)
         c.save()
         path.reset()
@@ -237,11 +237,11 @@ class RpTileArt(
         val cx = s * 0.5f
         val cy = s * 0.66f
         val r = s * 0.24f
-        fade(cy - r, cy + r, 0.42f, 0.22f)
+        solid(BASE)
         c.drawCircle(cx, cy, r, p)
         val initial = letter?.takeIf { it.isNotBlank() }
         if (initial != null) {
-            solid(0.96f)
+            solid(HI)
             p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             p.textSize = r * 0.95f
             p.textAlign = Paint.Align.CENTER
@@ -252,81 +252,90 @@ class RpTileArt(
             path.reset()
             path.addCircle(cx, cy, r, Path.Direction.CW)
             c.clipPath(path)
-            solid(0.88f)
+            solid(MID)
             c.drawCircle(cx, cy - r * 0.2f, r * 0.34f, p)
             box.set(cx - r * 0.68f, cy + r * 0.28f, cx + r * 0.68f, cy + r * 1.4f)
             c.drawOval(box, p)
             c.restore()
         }
-        stroke(tint(0.6f), 1.5f * d)
-        c.drawCircle(cx, cy, r - 0.75f * d, p)
     }
 
-    /** An app-icon squircle, one step darker than the tile, with two sliders in it. */
+    /** How the story is written: a type specimen, the capital lit and the small letter quieter. */
     private fun style(c: Canvas, s: Float) {
-        val cx = s * 0.5f
-        val cy = s * 0.66f
-        val half = s * 0.23f
-        val radius = s * 0.13f
-        val shade = if (ColorUtils.calculateLuminance(ink) > 0.5) {
-            ColorUtils.blendARGB(cut, Color.BLACK, 0.4f)
-        } else {
-            ColorUtils.blendARGB(cut, Color.WHITE, 0.6f)
-        }
         p.shader = null
         p.style = Paint.Style.FILL
-        p.color = shade
-        round(cx - half, cy - half, cx + half, cy + half, radius, c)
-        stroke(tint(0.3f), 1.5f * d)
-        round(cx - half, cy - half, cx + half, cy + half, radius, c)
-        val span = half * 0.56f
-        val knobs = floatArrayOf(0.32f, 0.7f)
-        for (i in 0..1) {
-            val y = cy + (if (i == 0) -1f else 1f) * half * 0.3f
-            val kx = cx - span + 2f * span * knobs[i]
-            stroke(tint(0.3f), 2.2f * d)
-            c.drawLine(cx - span, y, cx + span, y, p)
-            stroke(tint(0.8f), 2.2f * d)
-            c.drawLine(cx - span, y, kx, y, p)
-            solid(0.96f)
-            c.drawCircle(kx, y, half * 0.17f, p)
-        }
+        p.typeface = big
+        p.textSize = s * 0.46f
+        p.textAlign = Paint.Align.LEFT
+        val capital = p.measureText("A")
+        val lower = p.measureText("a")
+        val gap = s * 0.02f
+        val x = (s - capital - gap - lower) / 2f
+        val baseline = s * 0.82f
+        p.color = tint(HI)
+        c.drawText("A", x, baseline, p)
+        p.color = tint(MID)
+        c.drawText("a", x + capital + gap, baseline, p)
     }
 
-    /** An open book: the right page lit, the left one in shade, a few lines set in. */
+    /** The world's book: open on a cover, written pages dipping into the spine, a ribbon hanging out. */
     private fun lore(c: Canvas, s: Float) {
         val cx = s * 0.5f
-        val page = s * 0.29f
-        val tall = s * 0.34f
-        val gap = s * 0.02f
-        val top = s * 0.5f
-        val lift = s * 0.05f
-        val corner = android.graphics.CornerPathEffect(2.5f * d)
-        fun side(dir: Float, a: Float, b: Float) {
+        val w = s * 0.33f
+        val gap = 1.5f * d
+        val outer = s * 0.44f
+        val spine = s * 0.51f
+        val bottom = s * 0.84f
+        val lip = s * 0.035f
+        p.pathEffect = android.graphics.CornerPathEffect(s * 0.04f)
+        solid(LOW)
+        path.reset()
+        path.moveTo(cx, spine + lip)
+        path.lineTo(cx - w - lip, outer + lip)
+        path.lineTo(cx - w - lip, bottom + lip)
+        path.lineTo(cx, bottom + lip * 2.2f)
+        path.lineTo(cx + w + lip, bottom + lip)
+        path.lineTo(cx + w + lip, outer + lip)
+        path.close()
+        c.drawPath(path, p)
+        solid(HI)
+        for (side in floatArrayOf(-1f, 1f)) {
             path.reset()
-            path.moveTo(cx + dir * gap, top + lift)
-            path.lineTo(cx + dir * (gap + page), top)
-            path.lineTo(cx + dir * (gap + page), top + tall)
-            path.lineTo(cx + dir * gap, top + tall + lift)
+            path.moveTo(cx + side * gap, spine)
+            path.lineTo(cx + side * w, outer)
+            path.lineTo(cx + side * w, bottom)
+            path.lineTo(cx + side * gap, bottom + lip)
             path.close()
-            fade(top, top + tall + lift, a, b)
-            p.pathEffect = corner
             c.drawPath(path, p)
-            p.pathEffect = null
         }
-        side(-1f, 0.5f, 0.32f)
-        side(1f, 0.94f, 0.66f)
-        stroke(cut, 1.6f * d)
-        for (i in 0..2) {
-            val y = top + tall * (0.3f + 0.2f * i)
-            val far = if (i == 2) 0.5f else 0.8f
-            for (dir in floatArrayOf(-1f, 1f)) {
-                val x0 = cx + dir * (gap + page * 0.18f)
-                val x1 = cx + dir * (gap + page * far)
-                // The line climbs with the page toward its outer edge.
-                c.drawLine(x0, y + lift * (1f - 0.18f), x1, y + lift * (1f - far), p)
+        p.pathEffect = null
+        // Lines of text follow each page's slope into the spine.
+        val slope = (spine - outer) / w
+        stroke(ColorUtils.setAlphaComponent(cut, 110), s * 0.028f)
+        val near = s * 0.07f
+        val far = w - s * 0.06f
+        val widths = floatArrayOf(1f, 0.8f, 1f, 0.55f)
+        for (side in floatArrayOf(-1f, 1f)) {
+            for (i in widths.indices) {
+                val drop = s * 0.075f + i * s * 0.055f
+                val end = near + (far - near) * widths[i]
+                c.drawLine(
+                    cx + side * near, spine - slope * near + drop,
+                    cx + side * end, spine - slope * end + drop, p
+                )
             }
         }
+        solid(MID)
+        val rw = s * 0.05f
+        val rl = cx + s * 0.1f
+        path.reset()
+        path.moveTo(rl, bottom)
+        path.lineTo(rl + rw, bottom)
+        path.lineTo(rl + rw, s * 0.92f)
+        path.lineTo(rl + rw / 2f, s * 0.89f)
+        path.lineTo(rl, s * 0.92f)
+        path.close()
+        c.drawPath(path, p)
     }
 
     /** A pencil laid across the corner, its end off the tile's edge. */
@@ -367,25 +376,31 @@ class RpTileArt(
         c.restore()
     }
 
-    /** A speech bubble with a plus in it. */
-    private fun newChat(c: Canvas, s: Float) {
-        val l = s * 0.27f
-        val r = s * 0.73f
-        val t = s * 0.5f
-        val b = s * 0.8f
-        fade(t, s * 0.92f, 0.94f, 0.62f)
-        round(l, t, r, b, s * 0.12f, c)
-        path.reset()
-        path.moveTo(l + s * 0.07f, b - 1f)
-        path.lineTo(l + s * 0.03f, s * 0.92f)
-        path.lineTo(l + s * 0.22f, b - 1f)
-        path.close()
-        c.drawPath(path, p)
-        val mx = (l + r) / 2f
-        val my = (t + b) / 2f
-        val arm = s * 0.065f
-        stroke(cut, 2.4f * d)
-        c.drawLine(mx - arm, my, mx + arm, my, p)
-        c.drawLine(mx, my - arm, mx, my + arm, p)
+    /** A strip of days, today lit in the middle, the ones around it running off both edges. */
+    private fun history(c: Canvas, s: Float) {
+        val pw = s * 0.2f
+        val ph = s * 0.34f
+        val step = s * 0.24f
+        val cy = s * 0.66f
+        val day = java.util.Calendar.getInstance()
+        day.add(java.util.Calendar.DAY_OF_MONTH, -2)
+        p.textAlign = Paint.Align.CENTER
+        for (i in -2..2) {
+            val x = s / 2f + i * step
+            val today = i == 0
+            solid(if (today) HI else BASE)
+            round(x - pw / 2f, cy - ph / 2f, x + pw / 2f, cy + ph / 2f, pw * 0.5f, c)
+            p.shader = null
+            p.style = Paint.Style.FILL
+            p.color = if (today) cut else tint(MID)
+            p.typeface = small
+            p.textSize = s * 0.07f
+            c.drawText(month.format(day.time), x, cy - ph * 0.12f, p)
+            p.typeface = big
+            p.textSize = s * 0.105f
+            c.drawText(day.get(java.util.Calendar.DAY_OF_MONTH).toString(), x, cy + ph * 0.26f, p)
+            day.add(java.util.Calendar.DAY_OF_MONTH, 1)
+        }
+        p.textAlign = Paint.Align.LEFT
     }
 }

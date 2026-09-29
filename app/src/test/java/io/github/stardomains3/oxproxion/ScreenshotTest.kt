@@ -859,9 +859,17 @@ class ScreenshotTest {
         // The Roleplay tab, tapped again inside a chat, goes back to the list.
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
         org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
-        org.junit.Assert.assertEquals(a.getString(R.string.cd_history), a.findViewById<View>(R.id.openSavedChatsButton).contentDescription)
+        // On the list the top-left button is Settings, not the History panel.
+        val topLeft = a.findViewById<View>(R.id.openSavedChatsButton)
+        org.junit.Assert.assertEquals(a.getString(R.string.settings_title), topLeft.contentDescription)
+        topLeft.performClick(); settle()
+        org.junit.Assert.assertTrue("settings opened",
+            a.supportFragmentManager.fragments.any { it is SettingsFragment && it.isVisible })
+        org.junit.Assert.assertNotEquals("history stays shut", View.VISIBLE, a.findViewById<View>(R.id.historyDrawerContainer).visibility)
+        a.supportFragmentManager.popBackStackImmediate(); settle()
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
         org.junit.Assert.assertEquals(View.GONE, home.visibility)
+        org.junit.Assert.assertEquals(a.getString(R.string.cd_history), topLeft.contentDescription)
     }
 
     /** A character you have not talked to yet starts a chat from the list. */
@@ -874,7 +882,6 @@ class ScreenshotTest {
         val aurelia = rows.findViewHolderForAdapterPosition(4)!!.itemView
         org.junit.Assert.assertEquals("Aurelia", aurelia.findViewById<android.widget.TextView>(R.id.rpChatName).text)
         org.junit.Assert.assertEquals(a.getString(R.string.rp_home_start), aurelia.findViewById<android.widget.TextView>(R.id.rpChatPreview).text)
-        org.junit.Assert.assertEquals(View.GONE, aurelia.findViewById<View>(R.id.rpChatWhen).visibility)
         aurelia.performClick(); settle()
         org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.rpHome).visibility)
         org.junit.Assert.assertEquals("Aurelia", vm.activeRpCharacter.value?.name)
@@ -949,6 +956,42 @@ class ScreenshotTest {
         }
         org.junit.Assert.assertEquals(listOf("New chat", "Edit character", "Delete chat"), labels)
         snap(root(a), "rp_home_menu_dark")
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+    }
+
+    /** The panel's History tile lists this character's chats, newest first, with a fresh one last. */
+    @Test fun rpPanelHistoryDark() = withChat { a, _ ->
+        seedRp(); seedRpChats()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
+            .findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
+        a.findViewById<View>(R.id.controlsButton).performClick(); settle()
+        val dialog = ShadowDialog.getLatestDialog()!!
+        val grid = dialog.findViewById<android.widget.GridLayout>(R.id.rpPanelTiles)
+        val history = (0 until grid.childCount).map { grid.getChildAt(it) }
+            .first { it.contentDescription == a.getString(R.string.rp_panel_history) }
+        history.performClick(); settle()
+        val page = a.supportFragmentManager.fragments.filterIsInstance<RpChatHistoryFragment>().single().requireView()
+        val list = page.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHistoryList)
+        val previews = mutableListOf<String>()
+        val current = mutableListOf<Boolean>()
+        for (i in 0 until list.adapter!!.itemCount) {
+            val row = list.findViewHolderForAdapterPosition(i)?.itemView ?: continue
+            row.findViewById<android.widget.TextView>(R.id.rpHistoryPreview)?.let {
+                previews += it.text.toString()
+                current += row.findViewById<View>(R.id.rpHistoryCurrent).visibility == View.VISIBLE
+            }
+        }
+        org.junit.Assert.assertEquals(listOf("sighs and grabs a wrench Fine. Show me.", "You: Long story."), previews)
+        org.junit.Assert.assertEquals("the open chat is marked", listOf(true, false), current)
+        snap(root(a), "rp_panel_history_dark")
+        // Picking the older chat opens it and closes the page.
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        val opened = vm.getCurrentSessionId()
+        (0 until list.adapter!!.itemCount).mapNotNull { list.findViewHolderForAdapterPosition(it)?.itemView }
+            .last { it.findViewById<View>(R.id.rpHistoryPreview) != null }.performClick(); settle()
+        org.junit.Assert.assertTrue(a.supportFragmentManager.fragments.none { it is RpChatHistoryFragment })
+        org.junit.Assert.assertNotEquals(opened, vm.getCurrentSessionId())
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
 

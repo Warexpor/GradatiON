@@ -850,7 +850,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.rpSwipeNav.observe(viewLifecycleOwner) { nav ->
             applyRpSwipeChrome(nav)
         }
-        // Code mode (third tab, on by default, Settings > Modes turns it off) lives in its own package; see CodeModeHost.
+        // Code mode (third tab, off until Settings > Modes) lives in its own package; see CodeModeHost.
         codeMode = io.github.stardomains3.oxproxion.code.CodeModeHost(this, view)
         codeMode.onTabsChanged = {
             val rp = viewModel.isRpMode()
@@ -2405,7 +2405,10 @@ $cleanContent
             hideKeyboard()
             if (codeMode.isActive) return@setOnClickListener codeMode.onMenuPressed()
             // Roleplay keeps no history of its own: inside a chat this is the way back to the characters.
-            if (viewModel.isRpMode() && rpHome?.isShown != true) return@setOnClickListener openRpHome()
+            // On the list it goes straight to Settings, the one thing History offered Roleplay.
+            if (viewModel.isRpMode()) {
+                return@setOnClickListener if (rpHome?.isShown == true) openSettingsFromHistory() else openRpHome()
+            }
             openHistoryPanel()
         }
 
@@ -5587,6 +5590,9 @@ $cleanContent
     // ── Roleplay home ──────────────────────────────────────────────────────────────────────
 
     private fun setupRpHome(root: View, savedInstanceState: Bundle?) {
+        parentFragmentManager.setFragmentResultListener(RpChatHistoryFragment.RESULT, viewLifecycleOwner) { _, result ->
+            onRpHistoryPicked(result)
+        }
         val homeRoot = root.findViewById<View>(R.id.rpHome)
         rpHome = RpChatsHome(
             homeRoot,
@@ -5670,10 +5676,18 @@ $cleanContent
             // Mid-swipe the list arrives with the other pages, not on top of them.
             if (show) pager?.let { p -> homeView?.translationX = p.shot.translationX - p.direction * p.w }
         }
-        // The top bar follows: on the list, the app menu and character manager; inside a chat, the way back to the list.
+        // The top bar follows: on the list, Settings and the character manager; inside a chat, the way back to the list.
         val inThread = rpUi && !show
-        openSavedChatsButton.setIconResource(if (inThread) R.drawable.ic_chevron_left else R.drawable.ic_grok_menu)
-        openSavedChatsButton.contentDescription = getString(if (inThread) R.string.rp_home_back else R.string.cd_history)
+        openSavedChatsButton.setIconResource(when {
+            inThread -> R.drawable.ic_chevron_left
+            show -> R.drawable.ic_gear
+            else -> R.drawable.ic_grok_menu
+        })
+        openSavedChatsButton.contentDescription = getString(when {
+            inThread -> R.string.rp_home_back
+            show -> R.string.settings_title
+            else -> R.string.cd_history
+        })
         newChatButton.setIconResource(if (show) R.drawable.rp_ic_characters else R.drawable.ic_new_chat)
         newChatButton.contentDescription = getString(if (show) R.string.rp_home_manage else R.string.grok_new_conversation)
         // While the chat slides away the composer goes with it; it is hidden when the slide ends.
@@ -5922,11 +5936,23 @@ $cleanContent
         val memory = sharedPreferencesHelper.getRpMemory(memoryId)
         val hasMemory = memory.isNotBlank()
         val personaName = sharedPreferencesHelper.getRpPersonaName()
+        val cast = character?.takeIf { !llm }
         val tiles = buildList {
-            // Three rows of three, in the order you reach for them: the story, the look, the character.
+            // Three rows of three: the story (its chats, what is remembered, the world), the people
+            // (the character, how they sound, who you are), and how it looks.
+            add(RpCharacterPanel.Tile(R.string.rp_panel_history, RpTileArt.Kind.HISTORY) {
+                pushRp(RpChatHistoryFragment.newInstance(cast?.id))
+            })
             add(RpCharacterPanel.Tile(R.string.rp_panel_memory, RpTileArt.Kind.MEMORY, on = hasMemory || viewModel.currentRpFacts().isNotBlank()) {
                 menuButton.post { showRpMemoryMenu(memoryId, title) }
             })
+            val pinnedId = cast?.let { sharedPreferencesHelper.getRpLorebookId(it.id) }
+            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, RpTileArt.Kind.LORE, on = pinnedId != null) {
+                menuButton.post { showRpLorePicker(cast?.id) }
+            })
+            if (cast != null) {
+                add(RpCharacterPanel.Tile(R.string.rp_panel_edit, RpTileArt.Kind.EDIT) { pushRp(RpCharacterEditFragment.newInstance(cast.id)) })
+            }
             val voice = sharedPreferencesHelper.getRpVoice(memoryId)
             val tts = if (::textToSpeech.isInitialized) textToSpeech else null
             val tweaks = listOfNotNull(
@@ -5939,40 +5965,40 @@ $cleanContent
             add(RpCharacterPanel.Tile(R.string.rp_panel_voice, RpTileArt.Kind.VOICE, on = voiceLabel != null, preview = voiceLabel) {
                 RpVoiceDialog.show(this@ChatFragment, title, tts, voice) { sharedPreferencesHelper.saveRpVoice(memoryId, it) }
             })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, RpTileArt.Kind.PERSONA, preview = personaName.ifBlank { null }, letter = personaName.trim().ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
+            if (cast != null) {
+                val slot = BackgroundPhoto.slotForCharacter(cast.id)
+                val wallpaper = BackgroundPhoto.file(requireContext(), slot).takeIf { it.isFile }
+                add(RpCharacterPanel.Tile(R.string.rp_panel_wallpaper, RpTileArt.Kind.WALLPAPER, on = wallpaper != null, image = wallpaper) {
+                    if (wallpaper == null) pickRpWallpaperFor(cast.id)
+                    else menuButton.post { showRpWallpaperMenu(cast) }
+                })
+            }
             val layout = sharedPreferencesHelper.getRpLayout(memoryId)
             val layoutArt = when (layout) {
                 SharedPreferencesHelper.RP_LAYOUT_BUBBLES -> RpTileArt.Kind.LAYOUT_BUBBLES
                 SharedPreferencesHelper.RP_LAYOUT_BOOK -> RpTileArt.Kind.LAYOUT_BOOK
                 else -> RpTileArt.Kind.LAYOUT_CLASSIC
             }
-            add(RpCharacterPanel.Tile(R.string.rp_panel_layout, layoutArt, preview = getString(layoutLabel(layout))) {
+            add(RpCharacterPanel.Tile(R.string.rp_panel_layout, layoutArt, spoken = getString(layoutLabel(layout))) {
                 menuButton.post { showRpLayoutPicker(memoryId, layout) }
             })
-            if (character != null && !llm) {
-                val slot = BackgroundPhoto.slotForCharacter(character.id)
-                val wallpaper = BackgroundPhoto.file(requireContext(), slot).takeIf { it.isFile }
-                add(RpCharacterPanel.Tile(R.string.rp_panel_wallpaper, RpTileArt.Kind.WALLPAPER, on = wallpaper != null, image = wallpaper) {
-                    if (wallpaper == null) pickRpWallpaperFor(character.id)
-                    else menuButton.post { showRpWallpaperMenu(character) }
-                })
-            }
-            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, RpTileArt.Kind.PERSONA, preview = personaName.ifBlank { null }, letter = personaName.trim().ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
             add(RpCharacterPanel.Tile(R.string.rp_panel_style, RpTileArt.Kind.STYLE) { pushRp(RpSettingsFragment.newInstance()) })
-            val pinnedId = if (character != null && !llm) sharedPreferencesHelper.getRpLorebookId(character.id) else null
-            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, RpTileArt.Kind.LORE, on = pinnedId != null) {
-                menuButton.post { showRpLorePicker(if (llm) null else character?.id) }
-            })
-            if (character != null && !llm) {
-                add(RpCharacterPanel.Tile(R.string.rp_panel_edit, RpTileArt.Kind.EDIT) { pushRp(RpCharacterEditFragment.newInstance(character.id)) })
-            }
-            add(RpCharacterPanel.Tile(R.string.rp_panel_new_chat, RpTileArt.Kind.NEW_CHAT) {
-                if (llm || character == null) {
-                    closeRpHome()
-                    viewModel.startRpLlmChat()
-                } else startRpWith(character)
-            })
         }
-        RpCharacterPanel.show(this, if (llm) null else character, title, subtitle, tiles)
+        RpCharacterPanel.show(this, cast, title, subtitle, tiles)
+    }
+
+    /** What the chats page picked: a chat to open, or a fresh one with the same character. */
+    private fun onRpHistoryPicked(result: Bundle) {
+        if (result.containsKey(RpChatHistoryFragment.OPEN)) {
+            viewModel.loadChat(result.getLong(RpChatHistoryFragment.OPEN))
+            return
+        }
+        val character = viewModel.activeRpCharacter.value
+        if (sharedPreferencesHelper.isRpLlmMode() || character == null) {
+            closeRpHome()
+            viewModel.startRpLlmChat()
+        } else startRpWith(character)
     }
 
     /** Lore tile: pin a book to this character, or open the library when there is nothing to pin. */

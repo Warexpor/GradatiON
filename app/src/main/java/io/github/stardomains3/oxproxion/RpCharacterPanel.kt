@@ -36,6 +36,8 @@ object RpCharacterPanel {
         val on: Boolean = false,
         /** A short state under the name (the layout's name, the voice, the persona). */
         val preview: String? = null,
+        /** A state read out by TalkBack only, for tiles whose drawing already shows it (the layout). */
+        val spoken: String? = null,
         /** The character's wallpaper, drawn as the card's picture. */
         val image: java.io.File? = null,
         /** The persona's initial for its portrait. */
@@ -97,7 +99,7 @@ object RpCharacterPanel {
                 clipToOutline = true
                 isClickable = true
                 isFocusable = true
-                contentDescription = listOfNotNull(ctx.getString(t.label), t.preview).joinToString(", ")
+                contentDescription = listOfNotNull(ctx.getString(t.label), t.preview ?: t.spoken).joinToString(", ")
                 setOnClickListener {
                     dialog.dismiss()
                     t.onClick()

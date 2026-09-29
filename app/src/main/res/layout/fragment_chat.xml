@@ -472,7 +472,8 @@
                     <TextView
                         android:id="@+id/tabRoleplay"
                         style="@style/Gradation.ModeTab"
-                        android:text="@string/mode_tab_roleplay" />
+                        android:text="@string/mode_tab_roleplay"
+                        android:visibility="gone" />
 
                     <!-- Third tab, only when Code mode is on in Settings (see code/CodeModeHost) -->
                     <TextView

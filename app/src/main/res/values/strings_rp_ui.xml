@@ -45,7 +45,6 @@
     <string name="rp_home_start">Tap to start a chat</string>
     <string name="rp_home_manage">Manage characters</string>
     <string name="rp_home_back">Characters</string>
-    <string name="rp_home_chat_count">%1$d chats</string>
     <string name="rp_home_menu_new">New chat</string>
     <string name="rp_home_menu_edit">Edit character</string>
     <string name="rp_home_menu_delete">Delete chat</string>

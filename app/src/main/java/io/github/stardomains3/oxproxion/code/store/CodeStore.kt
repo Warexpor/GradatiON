@@ -29,8 +29,9 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
+    /** Code tab on the main screen. Off until Settings > Modes turns it on. */
     var enabled: Boolean
-        get() = prefs.getBoolean(KEY_ENABLED, true)
+        get() = prefs.getBoolean(KEY_ENABLED, false)
         set(v) = prefs.edit { putBoolean(KEY_ENABLED, v) }
 
     /**

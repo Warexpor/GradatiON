@@ -1,6 +1,5 @@
 package io.github.stardomains3.oxproxion
 
-import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -68,7 +67,6 @@ class RpChatsHome(
             private val monogram = view.findViewById<TextView>(R.id.rpChatMonogram)
             private val name = view.findViewById<TextView>(R.id.rpChatName)
             private val preview = view.findViewById<TextView>(R.id.rpChatPreview)
-            private val whenView = view.findViewById<TextView>(R.id.rpChatWhen)
             private val more = view.findViewById<ImageButton>(R.id.rpChatMore)
 
             fun bind(row: RpChatSummary) {
@@ -76,14 +74,6 @@ class RpChatsHome(
                 if (row.character != null) RpAvatars.bind(avatar, monogram, row.character)
                 else RpAvatars.bindModel(avatar, monogram, null, row.name)
                 preview.text = row.preview
-                // A character you have not talked to yet has no time to show.
-                val ago = if (row.timestamp > 0L) DateUtils.getRelativeTimeSpanString(
-                    row.timestamp, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE
-                ).toString() else ""
-                whenView.text = if (row.chats > 1) {
-                    ago + "\n" + itemView.context.getString(R.string.rp_home_chat_count, row.chats)
-                } else ago
-                whenView.isVisible = whenView.text.isNotEmpty()
                 preview.alpha = if (row.sessionId == null) 0.75f else 1f
                 itemView.setOnClickListener { onOpen(row) }
                 more.setOnClickListener { onMenu(more, row) }
