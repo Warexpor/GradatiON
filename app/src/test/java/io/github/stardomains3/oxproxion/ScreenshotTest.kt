@@ -167,10 +167,10 @@ class ScreenshotTest {
     private fun seedHistory() = runBlocking {
         val dao = db.chatDao()
         listOf(
-            "Transformer attention, explained",
-            "Grocery list for the week",
-            "Fix Gradle build on AGP 9",
-            "Llama 3 vs Qwen for coding",
+            "Transformer **attention**, explained",
+            "Grocery list for the *week*",
+            "Fix `Gradle` build on AGP 9",
+            "Llama 3 vs **Qwen** for coding",
             "Birthday message for Sam",
         ).forEachIndexed { i, t ->
             dao.insertSessionAndMessages(

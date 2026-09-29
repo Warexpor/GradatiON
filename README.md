@@ -7,6 +7,7 @@ monochrome interface made of iOS-style Liquid Glass. Fork of
 
 | | |
 |--|--|
+| **Version** | 3.0.0 |
 | **Package** | `io.github.warexpor.gradation` |
 | **Android** | 12+ (min SDK 31, target 36) |
 | **License** | Apache 2.0 |
@@ -15,20 +16,31 @@ Not affiliated with xAI, Anthropic, OpenAI or OpenRouter.
 
 ## Screenshots
 
-| Chat | Roleplay | Character panel |
-|------|----------|-----------------|
-| ![Chat](screenshots/01-chat_demo_reply.png) | ![Roleplay](screenshots/02-rp_conversation.png) | ![Character panel](screenshots/03-rp_character_panel.png) |
+| Chat | Reply menu | History |
+|------|------------|---------|
+| ![Chat](screenshots/01-chat.png) | ![Reply menu](screenshots/02-reply_menu.png) | ![History](screenshots/03-history.png) |
+
+| Characters | Roleplay | Character panel |
+|------------|----------|-----------------|
+| ![Characters](screenshots/04-rp_characters.png) | ![Roleplay](screenshots/05-rp_conversation.png) | ![Character panel](screenshots/06-rp_character_panel.png) |
 
 | Code | Code session | Voice input |
 |------|--------------|-------------|
-| ![Code](screenshots/04-code_home.png) | ![Code session](screenshots/05-code_session_done.png) | ![Voice](screenshots/06-chat_dictating.png) |
+| ![Code](screenshots/07-code_home.png) | ![Code session](screenshots/08-code_session_done.png) | ![Voice](screenshots/09-chat_dictating.png) |
 
-| History | Appearance | Bubbles layout |
-|---------|------------|-------|
-| ![History](screenshots/07-history.png) | ![Appearance](screenshots/08-settings_appearance.png) | ![Bubbles layout](screenshots/09-rp_bubbles.png) |
+| Appearance | Bubbles layout | Controls |
+|------------|----------------|----------|
+| ![Appearance](screenshots/10-settings_appearance.png) | ![Bubbles layout](screenshots/11-rp_bubbles.png) | ![Controls](screenshots/12-controls_panel.png) |
 
 Screenshots come from the Robolectric tests (`ScreenshotTest`, `CodeModeScreenshotTest`), so
 they always match the code.
+
+## Install
+
+Grab the signed APK from the [releases page](https://github.com/Warexpor/GradatiON/releases) and
+open it. Every release is signed with the same key, so updates install over it and keep your chats. Check
+a download against the `.sha256` next to it.
+Dev builds (`assembleDev`) are a separate app and never update a release.
 
 ## Three modes
 
@@ -40,8 +52,11 @@ default). Edit, resend or delete a message and the chat forks, with a navigator 
 branches. Chats save automatically to History, where you can pin, rename, search and export.
 
 **Roleplay** (opt-in in Settings > Modes). Build your own characters, personas and lorebooks.
-- Tap the character's name to open a panel with Memory, History, Persona, Style, Lore and Edit.
-  Memory holds facts the character keeps true for the rest of the story.
+- The tab opens on a list of your characters, the ones you are mid-story with first. Tap one
+  and its chat slides in over the list; the back arrow slides it away again.
+- Tap the character's name to open a panel with History, Memory, Lore, Edit, Voice, Persona,
+  Wallpaper, Layout and Style. Memory holds facts the character keeps true for the rest of
+  the story; History lists that character's past chats.
 - On an empty composer the send button becomes Continue: the character takes the next beat
   without you having to write anything.
 - Swipe for alternate replies. Imported cards can use `{{char}}` and `{{user}}`.
@@ -86,6 +101,7 @@ with `scripts/release.sh`; see [`docs/RELEASING.md`](docs/RELEASING.md).
 
 - [`DESIGN.md`](DESIGN.md): the design contract. Palette, glass, type, motion, components.
 - [`AGENTS.md`](AGENTS.md): code map and how to work in this repo, for people and coding agents.
+- [`docs/RELEASING.md`](docs/RELEASING.md): how a release is built, signed and kept updatable.
 - [`docs/backlog.md`](docs/backlog.md): what's done and what's next.
 
 ## Privacy

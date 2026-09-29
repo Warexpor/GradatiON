@@ -5,6 +5,11 @@
 First release under the GradatiON id (`io.github.warexpor.gradation`), signed with the release key. Everything below is new since 2.1.134-rp; see docs/RELEASING.md for how later updates stay installable.
 
 ### Fixed
+- Swiping between pages in quick succession no longer breaks: a slide still settling is landed before the next drag starts, so pages, the underline and the mode stay in step.
+- The History header lines up with the chat top bar.
+- Chat names in History render inline markdown (bold, italic, strikethrough, code).
+- Roleplay opens a character's chat with a slide over the characters list, and Continue starts a new paragraph.
+- Autosave no longer stalls the screen when a reply finishes streaming.
 - Jump-to-latest sits on the left, just above the composer (above the fade, not under it).
 - Mode tabs: inactive labels use the quieter tertiary gray and lighten toward ink as you swipe.
 - A reply's ⋮ menu grows out of the dots as a compact card, not a full-width strip above the input.

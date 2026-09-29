@@ -20,6 +20,8 @@ upstream's and stays as it is.
 | Demo | `DemoModel` (an OkHttp interceptor that streams scripted SSE through the real pipeline) and `code/DemoBackend` (a scripted agent session) |
 | Roleplay | `RpPromptEngine` (system prompt, macros, memory, craft rules), `RpChatDelegate` (reads prefs and the repo), `RpApiMemory` (history trimming), `RpCharacterPanel`, `Rp*Fragment` screens, `RpSwipe*` (alternate replies) |
 | Code mode | `code/CodeHub` (singleton state), `CodeBackend` / `CodeTransport` / `AcpAdapter` (agent protocol), `CodeTranscriptAdapter` (transcript rows), `CodeSessionFragment`, `DiffView`, `code/store/CodeStore` (prefs) |
+| Navigation | `SwipeNavLayout` (wide-swipe recognizer), the mode pager and history drawer in `ChatFragment` (snapshot slide; a new drag lands any slide still settling first), `RpChatsHome` (RP characters list and its slide into a chat) |
+| Text | `TitleMarkdown` (inline markdown for one-line chat names in History) |
 | Settings | `SettingsFragment`, `SettingsDetailFragment`, `SharedPreferencesHelper` (every pref key) |
 
 ## Build and test
@@ -37,7 +39,19 @@ export ANDROID_HOME=/opt/android-sdk        # or wherever your SDK lives
 - If Maven Central rate-limits you, route it through the Google mirror with an init script.
   `CLAUDE.md` has the details.
 - Screenshots land in `app/build/screenshots/`. Look at them after any UI change.
-- The copies in `screenshots/` and `fastlane/.../phoneScreenshots/` are curated from that folder.
+- The copies in `screenshots/` (12, numbered in README order) and `fastlane/.../phoneScreenshots/` (8) are curated
+  from that folder, dark theme only. Sources: `demoModelStreamsWithoutKey`, `replyMoreMenuDark`, `historyDark`
+  (seeded with markdown names), `rpHomeDark`, `rpConversationContinueDark` (also writes the panel and Bubbles
+  shots), `CodeModeScreenshotTest`, `chatDictatingDark`, `settingsAppearanceDark`, `controlsPanelDark`.
+- A full `ScreenshotTest` run aborts if Robolectric can't fetch the API 31 jar (`chatConversationApi31`).
+  Run the tests you need by name with `--tests`.
+
+## Releasing
+
+`docs/RELEASING.md`. The version is `appVersionMajor/Minor/Patch` in `app/build.gradle.kts`
+(versionCode is derived). `scripts/release.sh` builds and checks the signed APK against
+`docs/release-cert.sha256`; plain `assembleRelease` fails without the key on purpose. Room changes
+need a version bump plus a migration, never a destructive fallback.
 
 ## Test gotchas
 

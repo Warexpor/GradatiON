@@ -189,7 +189,7 @@ object DemoModel {
             fun greet(name: String) = "Hello, ${'$'}name"
             ```
 
-            > Tap the icons under this message to copy, share, read aloud, regenerate or edit.
+            > Tap the icons under this message to copy, read aloud, regenerate or edit.
 
             To talk to a real model, add your OpenRouter key in **Settings > Models & API**.
         """.trimIndent()

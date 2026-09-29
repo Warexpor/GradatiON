@@ -98,6 +98,11 @@ Behavior:
   follows the pill.
 - The mode pager snapshots the page, switches modes behind the snapshot, and slides both
   together, so the gap is never visible. Taps and swipes share this path.
+  A new drag while a slide is still settling lands that slide first (snapshot gone, pages at
+  rest), so quick successive swipes always start from a clean state.
+- Opening a Roleplay character slides its chat in from the right over the characters list, which
+  drifts left and dims. The top bar stays above the sliding layers. Going back reverses it.
+- History and the chat top bar share one header geometry (56dp row, 44dp buttons on the same line).
 - Stack animations keep the outgoing screen opaque, and screens opened from History push in.
   `MainActivity` holds touches for the length of each transition.
 - Streaming text eases in by ceil(backlog/24) characters per frame, with no cursor glyph.
