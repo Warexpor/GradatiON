@@ -732,9 +732,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 ChatSaveGate.Outcome.ProceedAllocateNew -> Unit
             }
 
+            // Serializing the whole transcript is the heavy part, and autosave fires the moment a
+            // reply lands, so it runs off the main thread instead of stalling the last frames.
             val messagesToSave = if (stripImages) {
-                messagesSnapshot.map { message ->
-                    message.copy(content = removeImagesFromJsonElement(message.content))
+                withContext(Dispatchers.Default) {
+                    messagesSnapshot.map { message ->
+                        message.copy(content = removeImagesFromJsonElement(message.content))
+                    }
                 }
             } else {
                 messagesSnapshot
@@ -752,12 +756,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 characterId = characterIdAtSave,
                 isLlm = isLlmAtSave
             )
-            val chatMessages = messagesToSave.map {
-                ChatMessage(
-                    sessionId = sessionId,
-                    role = it.role,
-                    content = json.encodeToString(JsonElement.serializer(), it.content)
-                )
+            val chatMessages = withContext(Dispatchers.Default) {
+                messagesToSave.map {
+                    ChatMessage(
+                        sessionId = sessionId,
+                        role = it.role,
+                        content = json.encodeToString(JsonElement.serializer(), it.content)
+                    )
+                }
             }
             if (epoch != sessionEpoch) return@launch
             ChatSessionSaver.save(repository, session, chatMessages)

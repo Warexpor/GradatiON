@@ -2045,6 +2045,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
     }
     override fun onDestroyView() {
+        rpHomeAnim?.cancel()
+        rpHomeAnim = null
+        rpUiWas = null
         ambientBackground = null
         topBarFade = null
         jumpButton = null
@@ -5642,25 +5645,94 @@ $cleanContent
         }
     }
 
+    private var rpUiWas: Boolean? = null
+    private var rpShowWas = false
+    private var rpHomeAnim: android.animation.ValueAnimator? = null
+
     /** Whether the home shows follows the mode and [rpHomeOpen]; the composer steps aside while it does. */
     private fun updateRpHome() {
         val root = view ?: return
         val show = rpHomeOpen && viewModel.isRpMode() && !codeMode.isActive
-        rpHome?.show(show)
-        // Mid-swipe the list arrives with the other pages, not on top of them.
-        if (show) pager?.let { p -> root.findViewById<View>(R.id.rpHome)?.translationX = p.shot.translationX - p.direction * p.w }
+        val rpUi = viewModel.isRpMode() && !codeMode.isActive
+        // A thread opening from the list (or closing back to it) slides; a mode switch does not.
+        val slide = rpUiWas == true && rpUi && show != rpShowWas && root.isAttachedToWindow &&
+            root.width > 0 && Motion.areAnimationsEnabled(requireContext())
+        val settled = rpHomeAnim == null
+        if (!settled && show != rpShowWas) rpHomeAnim?.end()
+        rpUiWas = rpUi
+        val changed = show != rpShowWas
+        rpShowWas = show
+        val homeView = root.findViewById<View>(R.id.rpHome)
+        if (slide && changed) {
+            slideRpHome(root, homeView, toHome = show)
+        } else if (rpHomeAnim == null) {
+            rpHome?.show(show)
+            // Mid-swipe the list arrives with the other pages, not on top of them.
+            if (show) pager?.let { p -> homeView?.translationX = p.shot.translationX - p.direction * p.w }
+        }
         // The top bar follows: on the list, the app menu and character manager; inside a chat, the way back to the list.
-        val inThread = viewModel.isRpMode() && !codeMode.isActive && !show
+        val inThread = rpUi && !show
         openSavedChatsButton.setIconResource(if (inThread) R.drawable.ic_chevron_left else R.drawable.ic_grok_menu)
         openSavedChatsButton.contentDescription = getString(if (inThread) R.string.rp_home_back else R.string.cd_history)
         newChatButton.setIconResource(if (show) R.drawable.rp_ic_characters else R.drawable.ic_new_chat)
         newChatButton.contentDescription = getString(if (show) R.string.rp_home_manage else R.string.grok_new_conversation)
-        // Only undo what the home did itself: Code mode hides the same composer for its own reasons.
-        if (show != rpHomeHidComposer) {
-            rpHomeHidComposer = show
-            val state = if (show) View.GONE else View.VISIBLE
-            root.findViewById<View>(R.id.composerDock)?.visibility = state
-            root.findViewById<View>(R.id.composerFade)?.visibility = state
+        // While the chat slides away the composer goes with it; it is hidden when the slide ends.
+        if (!(slide && changed && show)) applyRpHomeComposer(root, show)
+    }
+
+    /** Only undo what the home did itself: Code mode hides the same composer for its own reasons. */
+    private fun applyRpHomeComposer(root: View, show: Boolean) {
+        if (show == rpHomeHidComposer) return
+        rpHomeHidComposer = show
+        val state = if (show) View.GONE else View.VISIBLE
+        root.findViewById<View>(R.id.composerDock)?.visibility = state
+        root.findViewById<View>(R.id.composerFade)?.visibility = state
+    }
+
+    /**
+     * The thread slides over the list from the right while the list drifts left and dims (and the
+     * other way round going back). The chat layers borrow a little elevation so they draw above it.
+     */
+    private fun slideRpHome(root: View, home: View?, toHome: Boolean) {
+        home ?: return
+        val w = root.width.toFloat()
+        val d = resources.displayMetrics.density
+        val layers = listOfNotNull(
+            root.findViewById<View>(R.id.chatFrameView),
+            root.findViewById<View>(R.id.composerFade),
+            root.findViewById<View>(R.id.composerDock)
+        )
+        if (!toHome) applyRpHomeComposer(root, false)
+        home.visibility = View.VISIBLE
+        layers.forEach { it.translationZ = 8 * d }
+        val parallax = 0.25f * w
+        fun place(p: Float) {
+            // p: 0 = list in front, 1 = thread in front
+            layers.forEach { it.translationX = w * (1f - p) }
+            home.translationX = -parallax * p
+            home.alpha = 1f - 0.5f * p
+        }
+        val from = if (toHome) 1f else 0f
+        val to = 1f - from
+        place(from)
+        rpHomeAnim = android.animation.ValueAnimator.ofFloat(from, to).apply {
+            duration = 380
+            interpolator = Motion.iosOut
+            addUpdateListener { place(it.animatedValue as Float) }
+            val finish = {
+                layers.forEach { it.translationX = 0f; it.translationZ = 0f }
+                home.translationX = 0f
+                home.alpha = 1f
+                rpHomeAnim = null
+                if (view != null) {
+                    rpHome?.show(rpShowWas)
+                    applyRpHomeComposer(root, rpShowWas)
+                }
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) = finish()
+            })
+            start()
         }
     }
 
