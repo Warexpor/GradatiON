@@ -94,7 +94,7 @@ class SavedChatsAdapter(
 
         fun bind(session: ChatSession) {
             currentSession = session
-            titleTextView.text = session.title
+            titleTextView.text = TitleMarkdown.render(session.title)
             timestampTextView.text = formatHistoryTimestamp(session.timestamp)
         }
 
