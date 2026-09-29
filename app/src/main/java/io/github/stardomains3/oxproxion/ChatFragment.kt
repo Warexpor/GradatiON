@@ -2044,6 +2044,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
     }
     override fun onDestroyView() {
+        // Land any slide in flight while its views still exist; its end action must not fire into the next view.
+        if (pager != null) dropPager()
+        finishSettleNow()
         rpHomeAnim?.cancel()
         rpHomeAnim = null
         rpUiWas = null
@@ -4335,21 +4338,31 @@ $cleanContent
         val shotTo = if (commit) p.direction * w else 0f
         val pageTo = if (commit) 0f else -p.direction * w
         val lineTo = indicatorXFor(if (commit) p.target else p.origin)
-        val done = {
-            if (!commit) switchToTab(p.origin)
-            restModePages()
-            // Give an async mode reload a beat to draw before the snapshot goes.
-            p.shot.postDelayed({
-                (p.shot.parent as? ViewGroup)?.removeView(p.shot)
-                (p.shot.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle()
-                p.shot.setImageDrawable(null)
-            }, if (commit) 0L else 120L)
-            pagerBusy = false
-            pagerOrigin = null
-            placeModeTabIndicator(animate = false)
-            releasePagerChrome(p)
+        var finished = false
+        // Runs once, whichever comes first: the animation ending, or a new gesture landing it
+        // early ([finishSettleNow], which also wants the snapshot gone before it takes another).
+        val done = { immediate: Boolean ->
+            if (!finished) {
+                finished = true
+                settleDone = null
+                p.shot.animate().cancel()
+                if (!commit) switchToTab(p.origin)
+                restModePages()
+                if (immediate) {
+                    removeShot(p.shot)
+                } else {
+                    // Give an async mode reload a beat to draw before the snapshot goes.
+                    lingeringShot = p.shot
+                    p.shot.postDelayed({ removeShot(p.shot) }, if (commit) 0L else 120L)
+                }
+                pagerBusy = false
+                pagerOrigin = null
+                placeModeTabIndicator(animate = false)
+                releasePagerChrome(p)
+            }
         }
-        if (!anim) { done(); return }
+        if (!anim) { done(false); return }
+        settleDone = done
         // A released swipe carries its speed on in one spring shared by every layer, so the
         // pages stay edge to edge. A tap has no speed to carry and uses the push curve.
         val fling = velocity?.let { Motion.flingX(p.shot, shotTo, it, response = 0.38f) }
@@ -4357,7 +4370,7 @@ $cleanContent
         val duration = fling?.duration ?: 340L
         p.shot.animate().translationX(shotTo).setDuration(duration).setInterpolator(curve)
             .setUpdateListener { applyPagerProgress(p, abs(p.shot.translationX) / w) }
-            .withEndAction { p.shot.animate().setUpdateListener(null); done() }.start()
+            .withEndAction { p.shot.animate().setUpdateListener(null); done(false) }.start()
         modePages().forEach { it.animate().translationX(pageTo).setDuration(duration).setInterpolator(curve).start() }
         if (lineTo != null) {
             modeTabIndicator.animate().translationX(lineTo).setDuration(duration).setInterpolator(curve).start()
@@ -4371,11 +4384,32 @@ $cleanContent
         switchToTab(p.origin)
         restModePages()
         releasePagerChrome(p)
-        p.shot.postDelayed({
-            (p.shot.parent as? ViewGroup)?.removeView(p.shot)
-            p.shot.setImageDrawable(null)
-        }, 120L)
+        lingeringShot = p.shot
+        p.shot.postDelayed({ removeShot(p.shot) }, 120L)
         pagerBusy = false
+    }
+
+    /** The settle in flight, if any: finishes it on the spot (see [finishSettleNow]). */
+    private var settleDone: ((Boolean) -> Unit)? = null
+    /** A snapshot waiting out its last frames on screen. */
+    private var lingeringShot: ImageView? = null
+
+    private fun removeShot(shot: ImageView) {
+        (shot.parent as? ViewGroup)?.removeView(shot)
+        (shot.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle()
+        shot.setImageDrawable(null)
+        if (lingeringShot === shot) lingeringShot = null
+    }
+
+    /**
+     * A new touch that turns into a drag while the last slide is still settling: land that slide
+     * now. Left running, its end action would fire mid-drag and reset the pages, the underline
+     * and the mode under the finger, and the new snapshot would include the old one.
+     */
+    private fun finishSettleNow() {
+        settleDone?.invoke(true)
+        lingeringShot?.let { removeShot(it) }
+        rpHomeAnim?.end()
     }
 
     /** Tab tap: the same side-by-side slide as a swipe, in the tabs' order. */
@@ -4434,6 +4468,7 @@ $cleanContent
 
             override fun onDrag(dx: Float) {
                 val direction = if (dx > 0) 1 else -1
+                if (pager == null && (settleDone != null || lingeringShot != null || rpHomeAnim != null)) finishSettleNow()
                 if (pagerOrigin == null) pagerOrigin = currentTab()
                 val target = targetFrom(pagerOrigin ?: currentTab(), direction)
                 val toHistory = direction > 0 && target == null
