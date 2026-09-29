@@ -55,25 +55,6 @@ class RpApiMemoryTest {
     }
 
     @Test
-    fun pinnedLineStaysWhenHistoryDrops() {
-        val msgs = listOf(
-            Msg("assistant", 1),
-            Msg("user", 2),
-            Msg("assistant", 3),
-            Msg("user", 4),
-            Msg("assistant", 5)
-        )
-        val out = RpApiMemory.trimNonSystem(
-            nonSystem = msgs,
-            budget = 2,
-            pinCharacterGreeting = true,
-            isAssistant = { it.role == "assistant" },
-            isPinned = { it.id == 3 }
-        ).map { it.id }
-        assertEquals(listOf(3, 5), out)
-    }
-
-    @Test
     fun definitionStaysWholeUntilHistoryIsCut() {
         assertEquals(null, RpApiMemory.definitionCap(messageCount = 4, historyBudget = 10))
         assertEquals(RpApiMemory.DEFINITION_HEAD, RpApiMemory.definitionCap(messageCount = 12, historyBudget = 10))

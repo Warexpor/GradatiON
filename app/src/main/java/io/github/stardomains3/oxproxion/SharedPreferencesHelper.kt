@@ -171,6 +171,8 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_RP_ACTIVE_CHARACTER_ID = "rp_active_character_id"
         private const val KEY_RP_PERSONA = "rp_persona"
         private const val KEY_RP_PERSONA_PRESETS = "rp_persona_presets"
+        private const val KEY_RP_PERSONA_NAME = "rp_persona_name"
+        private const val KEY_RP_PERSONA_PHOTO = "rp_persona_photo"
         private const val KEY_RP_LORE_ENABLED = "rp_lore_enabled"
         private const val KEY_RP_THIRD_PERSON = "rp_third_person"
         private const val KEY_RP_SHOW_THOUGHTS = "rp_show_thoughts"
@@ -1119,6 +1121,12 @@ class SharedPreferencesHelper(context: Context) {
 
     fun getRpPersona(): String = mainPrefs.getString(KEY_RP_PERSONA, "") ?: ""
     fun saveRpPersona(persona: String) = mainPrefs.edit { putString(KEY_RP_PERSONA, persona) }
+    fun saveRpPersonaName(name: String) = mainPrefs.edit { putString(KEY_RP_PERSONA_NAME, name.trim()) }
+    /** Your portrait's file name in [RpAvatarStorage.personaFile]; null shows your initial. */
+    fun getRpPersonaPhoto(): String? = mainPrefs.getString(KEY_RP_PERSONA_PHOTO, null)
+    fun saveRpPersonaPhoto(photo: String?) = mainPrefs.edit {
+        if (photo == null) remove(KEY_RP_PERSONA_PHOTO) else putString(KEY_RP_PERSONA_PHOTO, photo)
+    }
 
     fun getRpPersonaPresets(): List<RpPersonaPreset> {
         val raw = mainPrefs.getString(KEY_RP_PERSONA_PRESETS, null) ?: return emptyList()
@@ -1178,8 +1186,9 @@ class SharedPreferencesHelper(context: Context) {
     fun isRpAutoMemory(): Boolean = mainPrefs.getBoolean("rp_auto_memory", true)
     fun saveRpAutoMemory(on: Boolean) = mainPrefs.edit { putBoolean("rp_auto_memory", on) }
 
-    /** Name of the persona preset currently in use, if the persona text came from one. */
+    /** The name characters call you. Before it was its own field it came from a matching preset. */
     fun getRpPersonaName(): String {
+        mainPrefs.getString(KEY_RP_PERSONA_NAME, null)?.let { return it }
         val persona = getRpPersona().trim()
         if (persona.isEmpty()) return ""
         return getRpPersonaPresets().firstOrNull { it.description.trim() == persona }?.name.orEmpty()
@@ -1245,21 +1254,6 @@ class SharedPreferencesHelper(context: Context) {
 
     fun clearRpSwipeJson(sessionId: Long) {
         mainPrefs.edit { remove("$KEY_RP_SWIPE_PREFIX$sessionId") }
-    }
-
-    /** Texts of RP lines the user pinned, so they survive a reload. The message row itself has no pin column. */
-    fun getRpPinKeys(sessionId: Long): Set<String> {
-        val raw = mainPrefs.getString("rp_pins_$sessionId", null) ?: return emptySet()
-        return try {
-            json.decodeFromString<Set<String>>(raw)
-        } catch (_: Exception) {
-            emptySet()
-        }
-    }
-
-    fun saveRpPinKeys(sessionId: Long, keys: Set<String>) = mainPrefs.edit {
-        if (keys.isEmpty()) remove("rp_pins_$sessionId")
-        else putString("rp_pins_$sessionId", json.encodeToString(keys))
     }
 
     /** Facts the model keeps for one chat. Separate from the Memory note the user wrote. */

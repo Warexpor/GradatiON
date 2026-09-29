@@ -38,7 +38,7 @@ object RpCharacterPanel {
         val preview: String? = null,
         /** A state read out by TalkBack only, for tiles whose drawing already shows it (the layout). */
         val spoken: String? = null,
-        /** The character's wallpaper, drawn as the card's picture. */
+        /** A photo for the card's picture: the character's wallpaper, or your persona's portrait. */
         val image: java.io.File? = null,
         /** The persona's initial for its portrait. */
         val letter: String? = null,
@@ -100,10 +100,9 @@ object RpCharacterPanel {
                 isClickable = true
                 isFocusable = true
                 contentDescription = listOfNotNull(ctx.getString(t.label), t.preview ?: t.spoken).joinToString(", ")
-                setOnClickListener {
-                    dialog.dismiss()
-                    t.onClick()
-                }
+                // Leave the sheet up; ChatFragment parks it only while a destination needs the
+                // window (a full-screen page or a popover under this dialog), then restores it.
+                setOnClickListener { t.onClick() }
             }
             card.addView(RpTileArt(ctx, t.art, ink, ContextCompat.getColor(ctx, fill)).apply {
                 photo = t.image?.let { f ->

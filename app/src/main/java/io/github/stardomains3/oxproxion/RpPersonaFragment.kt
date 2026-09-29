@@ -5,23 +5,53 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
-import android.widget.ArrayAdapter
-import android.widget.Spinner
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
+/**
+ * Who you are in roleplay: a portrait, a name and a description, with every saved persona listed
+ * underneath so switching is one tap. Saving a named persona keeps it in that list; there is no
+ * separate preset step.
+ */
 class RpPersonaFragment : Fragment() {
 
     private lateinit var prefs: SharedPreferencesHelper
-    private lateinit var presetSpinner: Spinner
-    private lateinit var deletePresetButton: MaterialButton
-    private lateinit var personaInput: TextInputEditText
+    private lateinit var nameInput: TextInputEditText
+    private lateinit var aboutInput: TextInputEditText
+    private lateinit var list: LinearLayout
+    private val rows = mutableListOf<Pair<RpPersonaPreset, View>>()
+
+    private val name get() = nameInput.text?.toString()?.trim().orEmpty()
+    private val about get() = aboutInput.text?.toString().orEmpty()
+    /** Portrait file name in the editor; written to storage on pick, kept on Save. */
+    private var photo: String? = null
+
+    private val pickImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        val ctx = requireContext().applicationContext
+        viewLifecycleOwner.lifecycleScope.launch {
+            val saved = withContext(Dispatchers.IO) { RpAvatarStorage.savePersonaFromUri(ctx, uri) }
+            if (saved == null) {
+                AppToast.makeText(ctx, getString(R.string.rp_avatar_save_failed), AppToast.LENGTH_SHORT).show()
+            } else {
+                photo = saved
+                showPortrait()
+            }
+        }
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_rp_persona, container, false)
@@ -30,11 +60,29 @@ class RpPersonaFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         prefs = SharedPreferencesHelper(requireContext())
-        personaInput = view.findViewById(R.id.rpPersonaInput)
-        var baselinePersona = prefs.getRpPersona()
-        personaInput.setText(baselinePersona)
+        nameInput = view.findViewById(R.id.rpPersonaNameInput)
+        aboutInput = view.findViewById(R.id.rpPersonaInput)
+        list = view.findViewById(R.id.rpPersonaList)
+        var baseline = RpPersonaPreset(prefs.getRpPersonaName(), prefs.getRpPersona(), prefs.getRpPersonaPhoto())
+        nameInput.setText(baseline.name)
+        aboutInput.setText(baseline.description)
+        photo = baseline.photo
+
+        renderList()
+        nameInput.doAfterTextChanged { showPortrait() }
+        aboutInput.doAfterTextChanged { markInUse() }
+        showPortrait()
+
+        val pick = View.OnClickListener { pickImage.launch(arrayOf("image/*")) }
+        view.findViewById<View>(R.id.rpPersonaAvatarFrame).setOnClickListener(pick)
+        view.findViewById<View>(R.id.rpPersonaPickPhoto).setOnClickListener(pick)
+        view.findViewById<View>(R.id.rpPersonaRemovePhoto).setOnClickListener {
+            photo = null
+            showPortrait()
+        }
+
         fun navigateUp() {
-            if (personaInput.text?.toString().orEmpty() == baselinePersona) {
+            if (current() == baseline.copy(name = baseline.name.trim())) {
                 parentFragmentManager.popBackStack()
                 return
             }
@@ -54,114 +102,145 @@ class RpPersonaFragment : Fragment() {
                 override fun handleOnBackPressed() = navigateUp()
             }
         )
-        presetSpinner = view.findViewById(R.id.rpPersonaPresetSpinner)
-        deletePresetButton = view.findViewById(R.id.deleteRpPersonaPresetButton)
-        refreshPresetSpinner(personaInput)
-
-        view.findViewById<MaterialButton>(R.id.saveRpPersonaPresetButton).setOnClickListener {
-            val nameInput = TextInputEditText(requireContext())
-            val wrapper = TextInputLayout(requireContext()).apply {
-                hint = getString(R.string.rp_persona_preset_name)
-                addView(nameInput)
-                setPadding(48, 16, 48, 0)
-            }
-            val dialog = GlassAlertDialogBuilder(
-                requireContext(),
-                R.style.CustomMaterialAlertDialogTheme
-            )
-                .setTitle(R.string.rp_save_persona_preset)
-                .setView(wrapper)
-                .setPositiveButton(R.string.action_ok, null)
-                .setNegativeButton(R.string.action_cancel, null)
-                .create()
-            dialog.setOnShowListener {
-                dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                    val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                    imm?.hideSoftInputFromWindow(nameInput.windowToken, 0)
-                    val name = nameInput.text?.toString()?.trim().orEmpty()
-                    if (name.isBlank()) {
-                        AppToast.makeText(requireContext(), getString(R.string.rp_name_required), AppToast.LENGTH_SHORT).show()
-                        return@setOnClickListener
-                    }
-                    val presets = prefs.getRpPersonaPresets().toMutableList()
-                    val droppingOldest = presets.none { it.name == name } && presets.size >= 12
-                    presets.removeAll { it.name == name }
-                    presets.add(0, RpPersonaPreset(name, personaInput.text?.toString().orEmpty()))
-                    prefs.saveRpPersonaPresets(presets.take(12))
-                    refreshPresetSpinner(personaInput)
-                    if (droppingOldest) {
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_persona_preset_cap),
-                            AppToast.LENGTH_SHORT
-                        ).show()
-                    }
-                    dialog.dismiss()
-                }
-            }
-            dialog.show()
-            dialog.window?.setSoftInputMode(
-                WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or
-                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-            )
-            nameInput.requestFocus()
-        }
-
-        deletePresetButton.setOnClickListener { confirmDeleteSelectedPreset(personaInput) }
 
         view.findViewById<MaterialButton>(R.id.saveRpPersonaButton).setOnClickListener {
-            val text = personaInput.text?.toString().orEmpty()
-            prefs.saveRpPersona(text)
-            baselinePersona = text
-            AppToast.makeText(requireContext(), getString(R.string.rp_saved), AppToast.LENGTH_SHORT).show()
+            val persona = current()
+            prefs.saveRpPersona(persona.description)
+            prefs.saveRpPersonaName(persona.name)
+            prefs.saveRpPersonaPhoto(persona.photo)
+            baseline = persona
+            val droppedOldest = if (persona.name.isNotEmpty()) keep(persona) else false
+            prune()
+            AppToast.makeText(
+                requireContext(),
+                getString(if (droppedOldest) R.string.rp_persona_preset_cap else R.string.rp_saved),
+                AppToast.LENGTH_SHORT
+            ).show()
             parentFragmentManager.popBackStack()
         }
     }
 
-    private fun confirmDeleteSelectedPreset(input: TextInputEditText) {
-        val presets = prefs.getRpPersonaPresets()
-        val position = presetSpinner.selectedItemPosition
-        if (position <= 0 || position > presets.size) return
-        val target = presets[position - 1]
+    private fun current() = RpPersonaPreset(name, about, photo)
+
+    /** The photo when there is one, else the name's initial, else a silhouette; the list's check follows. */
+    private fun showPortrait() {
+        val v = view ?: return
+        val image = v.findViewById<ImageView>(R.id.rpPersonaAvatar)
+        val monogram = v.findViewById<TextView>(R.id.rpPersonaMonogram)
+        val file = photo?.let { RpAvatarStorage.personaFile(requireContext(), it) }?.takeIf { it.isFile }
+        RpAvatars.bindModel(image, monogram, file, name)
+        v.findViewById<View>(R.id.rpPersonaSilhouette).visibility =
+            if (file == null && RpAvatars.initial(name).isEmpty()) View.VISIBLE else View.GONE
+        v.findViewById<MaterialButton>(R.id.rpPersonaPickPhoto)
+            .setText(if (file != null) R.string.rp_ui_change_photo else R.string.rp_ui_add_photo)
+        v.findViewById<View>(R.id.rpPersonaRemovePhoto).visibility = if (file != null) View.VISIBLE else View.GONE
+        markInUse()
+    }
+
+    /** Updates the saved persona with this name in place, or adds it on top. True when the cap dropped one. */
+    private fun keep(persona: RpPersonaPreset): Boolean {
+        val presets = prefs.getRpPersonaPresets().toMutableList()
+        val at = presets.indexOfFirst { it.name.equals(persona.name, ignoreCase = true) }
+        if (at >= 0) {
+            presets[at] = persona
+            prefs.saveRpPersonaPresets(presets)
+            return false
+        }
+        presets.add(0, persona)
+        prefs.saveRpPersonaPresets(presets.take(MAX))
+        return presets.size > MAX
+    }
+
+    /** Drops portraits that neither you, any saved persona, nor the editor uses any more. */
+    private fun prune() {
+        val keep = (prefs.getRpPersonaPresets().mapNotNull { it.photo } + listOfNotNull(prefs.getRpPersonaPhoto(), photo)).toSet()
+        RpAvatarStorage.prunePersonas(requireContext(), keep)
+    }
+
+    private fun renderList() {
+        val ctx = requireContext()
+        val inflater = LayoutInflater.from(ctx)
+        val d = resources.displayMetrics.density
+        list.removeAllViews()
+        fun divider(startDp: Int) = list.addView(View(ctx).apply {
+            setBackgroundColor(ContextCompat.getColor(ctx, R.color.xai_hairline))
+        }, LinearLayout.LayoutParams(-1, (1 * d).toInt().coerceAtLeast(1)).apply { marginStart = (startDp * d).toInt() })
+
+        rows.clear()
+        for (preset in prefs.getRpPersonaPresets()) {
+            val row = inflater.inflate(R.layout.item_rp_persona, list, false)
+            val file = preset.photo?.let { RpAvatarStorage.personaFile(ctx, it) }?.takeIf { it.isFile }
+            RpAvatars.bindModel(
+                row.findViewById(R.id.rpPersonaRowPhoto), row.findViewById(R.id.rpPersonaRowInitial), file, preset.name
+            )
+            row.findViewById<TextView>(R.id.rpPersonaRowName).text = preset.name
+            val firstLine = preset.description.trim().lineSequence().firstOrNull().orEmpty()
+            row.findViewById<TextView>(R.id.rpPersonaRowAbout).apply {
+                text = firstLine
+                visibility = if (firstLine.isEmpty()) View.GONE else View.VISIBLE
+            }
+            rows += preset to row
+            row.setOnClickListener {
+                photo = preset.photo
+                nameInput.setText(preset.name)
+                aboutInput.setText(preset.description)
+                showPortrait()
+            }
+            row.findViewById<View>(R.id.rpPersonaRowDelete).setOnClickListener { confirmDelete(preset) }
+            list.addView(row)
+            divider(68)
+        }
+
+        val add = inflater.inflate(R.layout.item_rp_persona_new, list, false)
+        add.setOnClickListener {
+            photo = null
+            nameInput.setText("")
+            aboutInput.setText("")
+            showPortrait()
+            nameInput.requestFocus()
+            (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                ?.showSoftInput(nameInput, InputMethodManager.SHOW_IMPLICIT)
+        }
+        list.addView(add)
+        // With nothing saved the fields are already the new persona, so the section would be noise.
+        val any = if (rows.isEmpty()) View.GONE else View.VISIBLE
+        list.visibility = any
+        view?.findViewById<View>(R.id.rpPersonaListHeader)?.visibility = any
+        markInUse()
+    }
+
+    /** Checks the saved persona that matches the editor, so you can see which one you are. */
+    private fun markInUse() {
+        for ((preset, row) in rows) {
+            val inUse = preset.name.trim() == name && preset.description.trim() == about.trim() && preset.photo == photo
+            row.findViewById<View>(R.id.rpPersonaRowCheck).visibility = if (inUse) View.VISIBLE else View.GONE
+            row.contentDescription = listOfNotNull(
+                preset.name,
+                getString(R.string.rp_persona_in_use).takeIf { inUse },
+                row.findViewById<TextView>(R.id.rpPersonaRowAbout).text.toString().ifEmpty { null }
+            ).joinToString(", ")
+        }
+    }
+
+    private fun confirmDelete(target: RpPersonaPreset) {
         GrokConfirmDialog.show(
             fragment = this,
             title = getString(R.string.rp_persona_delete_preset),
             message = target.name,
             confirmText = getString(R.string.rp_menu_delete),
             onConfirm = {
-                prefs.saveRpPersonaPresets(presets.filterNot { it.name == target.name })
-                refreshPresetSpinner(input)
+                prefs.saveRpPersonaPresets(prefs.getRpPersonaPresets().filterNot { it.name == target.name })
+                prune()
+                renderList()
                 AppToast.makeText(requireContext(), getString(R.string.rp_persona_preset_deleted), AppToast.LENGTH_SHORT).show()
-            }
+            },
+            destructive = true
         )
     }
 
-    private fun refreshPresetSpinner(input: TextInputEditText) {
-        val presets = prefs.getRpPersonaPresets()
-        val labels = listOf(getString(R.string.rp_persona_preset_none)) + presets.map { it.name }
-        presetSpinner.adapter = ArrayAdapter(requireContext(), R.layout.item_rp_spinner, labels).apply {
-            setDropDownViewResource(R.layout.item_rp_spinner)
-        }
-        deletePresetButton.visibility = if (presets.isEmpty()) View.GONE else View.VISIBLE
-        view?.findViewById<View>(R.id.rpPersonaDeleteDivider)?.visibility = deletePresetButton.visibility
-        presetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            private var ignoreNext = true
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, v: View?, position: Int, id: Long) {
-                deletePresetButton.isEnabled = position > 0
-                if (ignoreNext) {
-                    ignoreNext = false
-                    return
-                }
-                if (position > 0) {
-                    input.setText(presets[position - 1].description)
-                }
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-        }
-        deletePresetButton.isEnabled = presetSpinner.selectedItemPosition > 0
-    }
-
     companion object {
+        private const val MAX = 12
+
         fun newInstance() = RpPersonaFragment()
     }
 }

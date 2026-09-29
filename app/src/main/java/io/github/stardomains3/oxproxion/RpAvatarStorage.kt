@@ -10,6 +10,7 @@ import java.io.FileOutputStream
 
 object RpAvatarStorage {
     private const val DIR = "rp_avatars"
+    private const val PERSONA_DIR = "rp_persona_avatars"
     private const val MAX_EDGE = 512
 
     fun avatarFile(context: Context, characterId: Long): File {
@@ -62,6 +63,28 @@ object RpAvatarStorage {
 
     fun deleteAvatar(context: Context, characterId: Long) {
         avatarFile(context, characterId).delete()
+    }
+
+    /** A persona portrait by file name. Names are never reused, so saved personas can share one safely. */
+    fun personaFile(context: Context, name: String): File = File(File(context.filesDir, PERSONA_DIR), name)
+
+    /** Writes a picked image as a new persona portrait and returns its file name. */
+    fun savePersonaFromUri(context: Context, source: Uri): String? {
+        return try {
+            val bitmap = context.contentResolver.openInputStream(source)?.use { decodeSampled(it.readBytes()) }
+                ?: return null
+            val dir = File(context.filesDir, PERSONA_DIR).apply { mkdirs() }
+            val name = "persona_${System.currentTimeMillis()}.jpg"
+            FileOutputStream(File(dir, name)).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+            name
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Deletes persona portraits nothing points at any more. */
+    fun prunePersonas(context: Context, keep: Set<String>) {
+        File(context.filesDir, PERSONA_DIR).listFiles()?.forEach { if (it.name !in keep) it.delete() }
     }
 
     private fun writeJpeg(bitmap: Bitmap, characterId: Long, context: Context): String? {

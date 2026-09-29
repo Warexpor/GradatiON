@@ -52,13 +52,11 @@
                 android:background="@drawable/bg_model_icon_circle">
 
                 <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_gravity="center"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
                     android:contentDescription="@null"
                     android:importantForAccessibility="no"
-                    android:src="@drawable/ic_person"
-                    app:tint="@color/xai_mute" />
+                    android:src="@drawable/ic_avatar_placeholder" />
             </FrameLayout>
 
             <TextView

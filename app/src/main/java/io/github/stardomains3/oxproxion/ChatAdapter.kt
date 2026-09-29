@@ -77,8 +77,6 @@ class ChatAdapter(
             if (messages.isNotEmpty()) notifyDataSetChanged()
         }
 
-    /** Roleplay: long-press a line to keep it when history is trimmed. */
-    var onTogglePin: ((Int) -> Unit)? = null
     /** Tap on a Roleplay reply's speaker line (portrait and name): the character panel. */
     var onSpeakerClick: (() -> Unit)? = null
 
@@ -663,29 +661,6 @@ class ChatAdapter(
     private fun View.marginStartCompat() = (layoutParams as? ViewGroup.MarginLayoutParams)?.marginStart ?: 0
     private fun View.marginEndCompat() = (layoutParams as? ViewGroup.MarginLayoutParams)?.marginEnd ?: 0
 
-    /** A small pin on the line. Only Roleplay installs the long-press, so Ask can still select text. */
-    private fun TextView.bindRpPin(pinned: Boolean, onLongPress: () -> Unit) {
-        if (!isRpMode) {
-            setCompoundDrawablesRelative(null, null, null, null)
-            setOnLongClickListener(null)
-            return
-        }
-        if (pinned) {
-            val icon = ContextCompat.getDrawable(context, R.drawable.ic_pin)?.mutate()
-            val px = (14 * resources.displayMetrics.density).toInt()
-            icon?.setBounds(0, 0, px, px)
-            icon?.setTint(ContextCompat.getColor(context, R.color.xai_mute))
-            setCompoundDrawablesRelative(icon, null, null, null)
-            compoundDrawablePadding = (6 * resources.displayMetrics.density).toInt()
-        } else {
-            setCompoundDrawablesRelative(null, null, null, null)
-        }
-        setOnLongClickListener {
-            onLongPress()
-            true
-        }
-    }
-
     // --- VIEW HOLDERS ---
 
     inner class UserViewHolder(itemView: View, private val markwon: Markwon) : RecyclerView.ViewHolder(itemView) {
@@ -836,7 +811,6 @@ class ChatAdapter(
                 AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_raw_md_copied), AppToast.LENGTH_SHORT).show()
                 true
             }
-            messageTextView.bindRpPin(message.pinned) { onTogglePin?.invoke(bindingAdapterPosition) }
             editButton.setOnClickListener {
                 if (rawUserContent.isNotBlank()) {
                     onEditMessage(bindingAdapterPosition, rawUserContent)
@@ -1413,7 +1387,6 @@ class ChatAdapter(
                 AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_raw_md_copied), AppToast.LENGTH_SHORT).show()
                 true
             }
-            messageTextView.bindRpPin(message.pinned) { onTogglePin?.invoke(bindingAdapterPosition) }
 
             shareButton.setOnClickListener {
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {

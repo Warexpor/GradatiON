@@ -786,7 +786,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
             // First autosave often mints the id after swipe alts were seeded in-memory only.
             persistRpSwipeState()
-            persistRpPins(sessionId, messagesToSave)
             draftRpFacts?.let {
                 sharedPreferencesHelper.saveRpFacts(sessionId, it)
                 draftRpFacts = null
@@ -970,7 +969,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         JsonPrimitive(it.content)
                     }
                 )
-            }.let { applyRpPins(sessionId, it) }
+            }
 
             session?.let {
                 val loadedMode = it.chatMode()
@@ -1655,8 +1654,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             nonSystem = nonSystem,
             budget = budget,
             pinCharacterGreeting = isRpMode() && !sharedPreferencesHelper.isRpLlmMode(),
-            isAssistant = { it.role == "assistant" },
-            isPinned = { it.pinned }
+            isAssistant = { it.role == "assistant" }
         )
         messagesForApiRequest.clear()
         messagesForApiRequest.addAll(systemMessages)
@@ -3877,36 +3875,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         },
         historyBudget = sharedPreferencesHelper.getChatMemoryCount()
     )
-
-    /** Long-press in Roleplay. Returns the new state, or null if that row can't be pinned. */
-    fun toggleMessagePin(index: Int): Boolean? {
-        if (!isRpMode()) return null
-        var now: Boolean? = null
-        updateMessages { list ->
-            val msg = list.getOrNull(index) ?: return@updateMessages
-            if ((msg.role != "user" && msg.role != "assistant") || isAssistantPlaceholder(msg)) return@updateMessages
-            val pinned = !msg.pinned
-            list[index] = msg.copy(pinned = pinned)
-            now = pinned
-        }
-        currentSessionId?.let { persistRpPins(it, _chatMessages.value.orEmpty()) }
-        if (now != null) autoSaveChat()
-        return now
-    }
-
-    private fun applyRpPins(sessionId: Long, messages: List<FlexibleMessage>): List<FlexibleMessage> {
-        val keys = sharedPreferencesHelper.getRpPinKeys(sessionId)
-        if (keys.isEmpty()) return messages
-        return messages.map { msg ->
-            val key = RpApiMemory.pinKey(msg.role, getMessageText(msg.content))
-            if (key in keys) msg.copy(pinned = true) else msg
-        }
-    }
-
-    private fun persistRpPins(sessionId: Long, messages: List<FlexibleMessage>) {
-        val keys = messages.filter { it.pinned }.map { RpApiMemory.pinKey(it.role, getMessageText(it.content)) }.toSet()
-        sharedPreferencesHelper.saveRpPinKeys(sessionId, keys)
-    }
 
     /** True when a "continue" beat makes sense: RP, a character (or LLM) and a reply to build on. */
     fun canContinueRpStory(): Boolean =

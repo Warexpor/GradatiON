@@ -44,7 +44,7 @@ class RpTileArt(
 
     enum class Kind { MEMORY, VOICE, LAYOUT_CLASSIC, LAYOUT_BUBBLES, LAYOUT_BOOK, WALLPAPER, PERSONA, STYLE, LORE, EDIT, HISTORY }
 
-    /** The character's wallpaper; without one the tile shows an empty frame with a plus. */
+    /** The wallpaper or persona portrait; without one the tile shows an empty frame or an initial. */
     var photo: Bitmap? = null
 
     /** The persona's initial; without one, a silhouette. */
@@ -232,15 +232,27 @@ class RpTileArt(
         c.drawLine(s / 2f, py - arm, s / 2f, py + arm, p)
     }
 
-    /** A round portrait: the persona's initial, or a silhouette while there is no name. */
+    /** A round portrait: the persona's photo, else its initial, else a silhouette while there is no name. */
     private fun persona(c: Canvas, s: Float) {
         val cx = s * 0.5f
         val cy = s * 0.66f
         val r = s * 0.24f
         solid(BASE)
         c.drawCircle(cx, cy, r, p)
+        val shot = photo
         val initial = letter?.takeIf { it.isNotBlank() }
-        if (initial != null) {
+        if (shot != null) {
+            val scale = 2f * r / min(shot.width, shot.height)
+            photoMatrix.reset()
+            photoMatrix.setScale(scale, scale)
+            photoMatrix.postTranslate(cx - shot.width * scale / 2f, cy - shot.height * scale / 2f)
+            val shader = BitmapShader(shot, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            shader.setLocalMatrix(photoMatrix)
+            p.style = Paint.Style.FILL
+            p.shader = shader
+            c.drawCircle(cx, cy, r, p)
+            p.shader = null
+        } else if (initial != null) {
             solid(HI)
             p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             p.textSize = r * 0.95f
@@ -252,9 +264,10 @@ class RpTileArt(
             path.reset()
             path.addCircle(cx, cy, r, Path.Direction.CW)
             c.clipPath(path)
+            // Same figure as ic_avatar_placeholder.
             solid(MID)
-            c.drawCircle(cx, cy - r * 0.2f, r * 0.34f, p)
-            box.set(cx - r * 0.68f, cy + r * 0.28f, cx + r * 0.68f, cy + r * 1.4f)
+            c.drawCircle(cx, cy - r * 0.2f, r * 0.36f, p)
+            box.set(cx - r * 0.68f, cy + r * 0.4f, cx + r * 0.68f, cy + r * 1.6f)
             c.drawOval(box, p)
             c.restore()
         }

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Last row of Your personas: clears the fields for a new one -->
+<com.google.android.material.button.MaterialButton xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.Grokion.Button.SettingsRow"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="@string/rp_persona_new"
+    app:icon="@drawable/ic_new_chat" />

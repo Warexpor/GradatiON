@@ -151,8 +151,11 @@
     <string name="rp_field_prompt_override">Pro: full prompt override</string>
     <string name="rp_name_required">Name is required</string>
     <string name="rp_persona_title">Persona</string>
-    <string name="rp_persona_hint">Who you are in RP (name, traits, background)</string>
-    <string name="rp_save_persona">Save persona</string>
+    <string name="rp_persona_hint">About you (looks, traits, background)</string>
+    <string name="rp_persona_name_hint">Your name</string>
+    <string name="rp_persona_footer">Characters call you by this name. Saving keeps it below, one tap to switch back.</string>
+    <string name="rp_persona_new">New persona</string>
+    <string name="rp_persona_in_use">In use</string>    <string name="rp_save_persona">Save persona</string>
     <string name="rp_lorebooks_title">Lorebooks</string>
     <string name="rp_add_lorebook">Add lorebook</string>
     <string name="rp_edit_lorebook">Edit lorebook</string>
@@ -161,8 +164,6 @@
     <string name="rp_field_lore_content">Always-on lore, then [keys: word, phrase] blocks</string>
     <string name="rp_lore_use_active">Use the active lorebook</string>
     <string name="rp_lore_edit">Edit lorebooks</string>
-    <string name="rp_pin_on">Pinned. This line stays when the chat gets long.</string>
-    <string name="rp_pin_off">Unpinned.</string>
     <string name="rp_lore_activated">Lorebook activated</string>
     <string name="rp_lore_activated_disabled">Lorebook activated — turn on “Use active lorebook” in RP settings to include it</string>
     <string name="rp_lore_deleted_active">Active lorebook removed — tap Set active on another book (or leave none)</string>
@@ -197,10 +198,7 @@
     <string name="rp_examples_format_invalid">Examples need User:/Char: blocks (--- between). Fix the format or clear the field to remove examples.</string>
     <string name="rp_delete_lorebook_title">Delete lorebook?</string>
     <string name="rp_delete_lorebook_body">Delete \"%1$s\"?</string>
-    <string name="rp_persona_presets">Presets</string>
-    <string name="rp_persona_preset_none">— Load preset —</string>
-    <string name="rp_persona_preset_name">Preset name</string>
-    <string name="rp_save_persona_preset">Save current as preset</string>
+    <string name="rp_persona_presets">Your personas</string>
     <string name="rp_add_character_title">Add character</string>
     <string name="rp_clear_avatar">Clear avatar</string>
     <string name="rp_characters_empty">No characters yet.\nTap Add character to create one.</string>
@@ -243,9 +241,9 @@
     <string name="rp_llm_off_wipe_body">This clears the current LLM transcript and starts a new RP chat with your selected character\'s greeting.</string>
     <string name="rp_hub_section_library">Library</string>
     <string name="rp_hub_section_backup">Backup</string>
-    <string name="rp_persona_delete_preset">Delete preset</string>
-    <string name="rp_persona_preset_deleted">Preset deleted</string>
-    <string name="rp_persona_preset_cap">Saved — oldest preset dropped (max 12)</string>
+    <string name="rp_persona_delete_preset">Delete persona</string>
+    <string name="rp_persona_preset_deleted">Persona deleted</string>
+    <string name="rp_persona_preset_cap">Saved. Your oldest persona was dropped (max 12).</string>
     <string name="rp_instruct_hint">How should the next reply change?</string>
     <string name="rp_session_llm">GradatiON LLM</string>
     <string name="rp_session_default">RP Chat</string>

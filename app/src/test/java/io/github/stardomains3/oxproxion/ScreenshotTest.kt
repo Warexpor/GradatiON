@@ -507,12 +507,9 @@ class ScreenshotTest {
         val c = Canvas(bmp)
         c.drawColor(0xFF3A3A3A.toInt())
         val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        paint.shader = android.graphics.LinearGradient(0f, 0f, 0f, size.toFloat(), 0xFF8C8C8C.toInt(), 0xFF2A2A2A.toInt(), android.graphics.Shader.TileMode.CLAMP)
-        c.drawRect(0f, 0f, size.toFloat(), size.toFloat(), paint)
-        paint.shader = null
-        paint.color = 0xFFD6D6D6.toInt()
-        c.drawCircle(size / 2f, size * 0.42f, size * 0.2f, paint)
-        c.drawOval(size * 0.18f, size * 0.68f, size * 0.82f, size * 1.2f, paint)
+        paint.color = 0xFFA6A6A6.toInt()
+        c.drawCircle(size / 2f, size * 0.4f, size * 0.18f, paint)
+        c.drawOval(size * 0.16f, size * 0.7f, size * 0.84f, size * 1.3f, paint)
         val file = RpAvatarStorage.avatarFile(ctx, ids[0])
         file.parentFile?.mkdirs()
         file.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
@@ -520,6 +517,30 @@ class ScreenshotTest {
         val prefs = SharedPreferencesHelper(ctx)
         prefs.saveRpActiveCharacterId(if (withActive) ids[0] else null)
         prefs.saveRpPersona("Sam, a courier with a bad sense of direction.")
+        prefs.saveRpPersonaName("Sam")
+        val portrait = RpAvatarStorage.personaFile(ctx, "persona_test.jpg")
+        portrait.parentFile?.mkdirs()
+        file.copyTo(portrait, overwrite = true)
+        prefs.saveRpPersonaPhoto(portrait.name)
+        prefs.saveRpPersonaPresets(listOf(
+            RpPersonaPreset("Sam", "Sam, a courier with a bad sense of direction.", portrait.name),
+            RpPersonaPreset("Captain Rhee", "A retired pilot who still salutes the sunrise.")
+        ))
+    }
+
+    @Test fun rpPersonaSwitchesWithOneTap() = withChat { a, _ ->
+        seedRp()
+        pushFragment(a, RpPersonaFragment.newInstance()); idle()
+        val list = a.findViewById<android.view.ViewGroup>(R.id.rpPersonaList)
+        val rows = (0 until list.childCount).map { list.getChildAt(it) }
+            .filter { it.findViewById<android.view.View?>(R.id.rpPersonaRowName) != null }
+        org.junit.Assert.assertEquals(2, rows.size)
+        val check = { i: Int -> rows[i].findViewById<android.view.View>(R.id.rpPersonaRowCheck).visibility }
+        org.junit.Assert.assertEquals(android.view.View.VISIBLE, check(0))
+        rows[1].performClick(); idle()
+        org.junit.Assert.assertEquals("Captain Rhee", a.findViewById<android.widget.EditText>(R.id.rpPersonaNameInput).text.toString())
+        org.junit.Assert.assertEquals(android.view.View.GONE, check(0))
+        org.junit.Assert.assertEquals(android.view.View.VISIBLE, check(1))
     }
 
     /** Room LiveData and Coil decode on real background threads; give them a moment. */
@@ -992,6 +1013,8 @@ class ScreenshotTest {
             .last { it.findViewById<View>(R.id.rpHistoryPreview) != null }.performClick(); settle()
         org.junit.Assert.assertTrue(a.supportFragmentManager.fragments.none { it is RpChatHistoryFragment })
         org.junit.Assert.assertNotEquals(opened, vm.getCurrentSessionId())
+        // Character sheet comes back after History; it used to stay dismissed.
+        org.junit.Assert.assertTrue(ShadowDialog.getLatestDialog()?.isShowing == true)
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
 

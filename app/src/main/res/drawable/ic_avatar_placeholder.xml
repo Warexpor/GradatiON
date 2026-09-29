@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one stand-in portrait for anyone without a photo or a name: a flat head and shoulders
+     filling a round frame. Draw it full-size over the frame's gray fill. RpTileArt.persona
+     draws the same figure by hand. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <group>
+        <clip-path android:pathData="M0,50 A50,50 0 1,1 100,50 A50,50 0 1,1 0,50 Z" />
+        <path
+            android:fillColor="@color/xai_mute"
+            android:pathData="M32,40 A18,18 0 1,1 68,40 A18,18 0 1,1 32,40 Z" />
+        <path
+            android:fillColor="@color/xai_mute"
+            android:pathData="M16,100 A34,30 0 0,1 84,100 L84,110 L16,110 Z" />
+    </group>
+</vector>

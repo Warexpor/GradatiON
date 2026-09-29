@@ -66,13 +66,11 @@
 
             <ImageView
                 android:id="@+id/rpAvatarPlaceholder"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:layout_gravity="center"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:contentDescription="@null"
                 android:importantForAccessibility="no"
-                android:src="@drawable/ic_person"
-                app:tint="@color/xai_mute" />
+                android:src="@drawable/ic_avatar_placeholder" />
 
             <FrameLayout
                 android:layout_width="36dp"

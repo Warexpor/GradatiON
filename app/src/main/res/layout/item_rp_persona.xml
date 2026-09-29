@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One saved persona: initial, name and first line, a check when in use, delete at the end -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_press_svg"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:minHeight="64dp"
+    android:orientation="horizontal"
+    android:paddingStart="14dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <FrameLayout
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:importantForAccessibility="no">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/rpPersonaRowPhoto"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/rp_bg_monogram"
+            android:scaleType="centerCrop"
+            app:shapeAppearanceOverlay="@style/XaiShapePill" />
+
+        <TextView
+            android:id="@+id/rpPersonaRowInitial"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fontFamily="@font/app_sans"
+            android:gravity="center"
+            android:textColor="@color/xai_ink"
+            android:textFontWeight="600"
+            android:textSize="17sp" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/rpPersonaRowName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="@font/app_sans"
+            android:singleLine="true"
+            android:textColor="@color/xai_ink"
+            android:textFontWeight="600"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/rpPersonaRowAbout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/app_sans"
+            android:singleLine="true"
+            android:textColor="@color/xai_mute"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/rpPersonaRowCheck"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginStart="8dp"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_check"
+        android:visibility="gone"
+        app:tint="@color/xai_ink" />
+
+    <ImageButton
+        android:id="@+id/rpPersonaRowDelete"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="2dp"
+        android:layout_marginEnd="4dp"
+        android:background="@drawable/bg_press_svg"
+        android:contentDescription="@string/rp_persona_delete_preset"
+        android:padding="14dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_trash"
+        app:tint="@color/xai_mute" />
+</LinearLayout>
