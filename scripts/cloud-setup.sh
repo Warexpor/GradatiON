@@ -31,5 +31,17 @@ def mirror = { repos -> repos.maven { name 'gcsCentral'; url 'https://maven-cent
 settingsEvaluated { s -> mirror(s.pluginManagement.repositories); mirror(s.dependencyResolutionManagement.repositories) }
 EOF
 
+# Robolectric fetches its Android jars from Maven Central itself and gets 429s. Seed the API 31
+# one (chatConversationApi31) from the mirror, or the whole ScreenshotTest class aborts.
+ROBO=12-robolectric-7732740-i7
+ROBO_DIR=~/.m2/repository/org/robolectric/android-all-instrumented/$ROBO
+if [ ! -f "$ROBO_DIR/android-all-instrumented-$ROBO.jar" ]; then
+  mkdir -p "$ROBO_DIR"
+  for ext in jar pom; do
+    curl -sSf -o "$ROBO_DIR/android-all-instrumented-$ROBO.$ext" \
+      "https://maven-central.storage-download.googleapis.com/maven2/org/robolectric/android-all-instrumented/$ROBO/android-all-instrumented-$ROBO.$ext"
+  done
+fi
+
 grep -q ANDROID_HOME ~/.bashrc 2>/dev/null || echo "export ANDROID_HOME=$SDK" >> ~/.bashrc
 echo "Done. Build with: ANDROID_HOME=$SDK /opt/gradle-$GRADLE_VERSION/bin/gradle assembleDev"
