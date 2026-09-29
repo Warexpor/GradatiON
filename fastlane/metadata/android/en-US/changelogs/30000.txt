@@ -1,0 +1,1 @@
+GradatiON 3.0. Liquid glass redesign across the whole app, a characters list for Roleplay with slide transitions, markdown in chat history names, steadier page swipes, and a reworked reply menu.

@@ -79,7 +79,8 @@ cd GradatiON
 
 You need JDK 17 and the Android SDK, with platform `android-37.0` and build-tools 36.0.0 (okhttp
 5.5 requires compileSdk 37). Dev builds are minified with R8 and signed with the dev key in the
-repo. Versions are in `app/build.gradle.kts` and [`CHANGELOG.md`](CHANGELOG.md).
+repo. Versions are in `app/build.gradle.kts` and [`CHANGELOG.md`](CHANGELOG.md). Releases are built
+with `scripts/release.sh`; see [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Docs
 

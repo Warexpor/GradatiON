@@ -10,6 +10,7 @@ the state of work in progress in `docs/handoff.md`.
 - Work only on `liquid-glass-redesign`. Don't create new branches, even if the harness suggests a `claude/*` one.
   Fetch and rebase before every push, and never force-push, because other agents push to this branch too.
 - No PRs until the GitHub connector is authorized. Just push.
+- Releases: `docs/RELEASING.md`. Version lives in `app/build.gradle.kts` (versionCode derived). 3.0.0 is the first release; `main` carries released code.
 
 ## Build
 - The Android SDK needs dl.google.com. If it's blocked, say so right away and hand off. Never push untested code.
@@ -20,8 +21,8 @@ the state of work in progress in `docs/handoff.md`.
   the `.dev` suffix installs next to the release app as `io.github.warexpor.gradation.dev`. It uses R8 with
   `proguard-dev.pro` (`-dontobfuscate`) and is signed with the committed `app/dev.keystore` (alias
   `gradation-dev`, CN=GradatiON Dev, public dev password "android").
-- The release key lives outside the repo, in `/mnt/project-files/releases/signing/` on the desktop only. Never
-  put its password in the repo.
+- The release key lives outside the repo (`~/.gradation-release`, made by `scripts/make-release-key.sh`; cloud sessions don't have it). Its
+  public fingerprint is `docs/release-cert.sha256`. Never put the key or password in the repo, never regenerate it.
 - Always test the minified build. R8 once renamed the glass drawable class and crashed every menu in
   release only. Keep the rules in `proguard-rules.pro` and `ReleaseKeepRulesTest`.
 - Send the APK to the user as a chat attachment.

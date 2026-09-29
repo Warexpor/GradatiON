@@ -17,6 +17,10 @@ configurations.all {
         }
     }
 }
+val appVersionMajor = 3
+val appVersionMinor = 0
+val appVersionPatch = 0
+
 android {
     namespace = "io.github.stardomains3.oxproxion"
     compileSdk = 37
@@ -27,8 +31,10 @@ android {
         applicationId = "io.github.warexpor.gradation"
         minSdk = 31
         targetSdk = 36
-        versionCode = 242
-        versionName = "2.1.134-rp"
+        // One place to bump. versionCode is derived (3.0.0 -> 30000, 3.4.2 -> 30402), so it can only
+        // grow with the version, and Android never refuses an update as a downgrade.
+        versionCode = appVersionMajor * 10000 + appVersionMinor * 100 + appVersionPatch
+        versionName = "$appVersionMajor.$appVersionMinor.$appVersionPatch"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -94,6 +100,17 @@ android {
     }
     buildFeatures {
         buildConfig = true
+    }
+    // A release APK signed with anything but the release key cannot update an installed release,
+    // so refuse to build one rather than produce it quietly unsigned or debug-signed.
+    gradle.taskGraph.whenReady {
+        val releaseBuild = allTasks.any { it.project == project && Regex("^(assemble|bundle|package)Release$").matches(it.name) }
+        if (releaseBuild && releaseStoreFile == null) {
+            throw GradleException(
+                "Release builds must be signed with the release key. Run scripts/release.sh " +
+                    "(see docs/RELEASING.md), or pass the -Pgradation.* signing properties."
+            )
+        }
     }
     // Prefer installed build-tools (avoid AGP auto-download of 35.0.0 when offline/proxy)
     buildToolsVersion = "36.0.0"

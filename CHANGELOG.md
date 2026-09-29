@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased — monochrome redesign
+## 3.0.0 — liquid glass redesign
+
+First release under the GradatiON id (`io.github.warexpor.gradation`), signed with the release key. Everything below is new since 2.1.134-rp; see docs/RELEASING.md for how later updates stay installable.
 
 ### Fixed
 - Jump-to-latest sits on the left, just above the composer (above the fade, not under it).
