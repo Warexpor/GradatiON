@@ -32,6 +32,8 @@ export ANDROID_HOME=/opt/android-sdk        # or wherever your SDK lives
 ./gradlew testDebugUnitTest --tests '*ScreenshotTest.rpConversationContinueDark'
 ```
 
+- Fresh cloud container with no SDK: run `scripts/cloud-setup.sh` (SDK, Gradle 9.5.0, Maven mirror). The
+  wrapper can't download Gradle behind the proxy, so use `/opt/gradle-9.5.0/bin/gradle` instead of `./gradlew`.
 - If Maven Central rate-limits you, route it through the Google mirror with an init script.
   `CLAUDE.md` has the details.
 - Screenshots land in `app/build/screenshots/`. Look at them after any UI change.
