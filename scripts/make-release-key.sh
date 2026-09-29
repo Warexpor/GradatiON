@@ -37,7 +37,7 @@ EOF
 chmod 600 "$JKS" "$PROPS"
 
 FINGERPRINT="$(keytool -list -v -keystore "$JKS" -storepass "$PASSWORD" -alias "$ALIAS" \
-  | sed -n 's/^ *SHA256: *//p' | tr -d ':' | tr 'A-F' 'a-f')"
+  | sed -n 's/^[[:space:]]*SHA256: *//p' | tr -d ':' | tr 'A-F' 'a-f')"
 
 echo
 echo "Key:         $JKS"
