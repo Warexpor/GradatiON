@@ -7,6 +7,7 @@
     <string name="lan_type_koboldcpp" translatable="false">KoboldCpp</string>
     <string name="lan_type_other">Other</string>
     <string name="lan_host_hint">Server address</string>
+    <string name="lan_host_help_port">The computer\'s IP, like 192.168.1.20. Port %1$d is added unless you type one.</string>
     <string name="lan_host_help">The computer\'s IP, like 192.168.1.20. http:// and the port are added for you.</string>
     <string name="lan_host_required">Enter the server\'s address</string>
     <string name="lan_host_invalid">That address doesn\'t look right</string>
@@ -15,7 +16,7 @@
     <string name="lan_api_key_hint">API key (only if the server needs one)</string>
     <string name="lan_context_hint">Context size (tokens)</string>
     <string name="lan_context_help">How much the model can read at once. Leave empty to auto-detect, else 8192.</string>
-    <string name="lan_context_ollama">Ollama: also set OLLAMA_CONTEXT_LENGTH on the server.</string>
+    <string name="lan_context_ollama">Ollama reports its model\'s maximum, not what it runs, so auto assumes 4096. If you set OLLAMA_CONTEXT_LENGTH on the server, enter that number here.</string>
     <string name="lan_test">Test connection</string>
     <string name="lan_testing">Testing…</string>
     <plurals name="lan_test_connected">
@@ -34,6 +35,7 @@
     <string name="lan_no_server">No local server is set up yet.</string>
     <string name="lan_retry">Retry</string>
     <string name="lan_edit_server">Edit server</string>
+    <string name="lan_set_up_server">Set up local server</string>
     <string name="lan_loading">Looking for models…</string>
     <string name="lan_model_selected">%1$s selected</string>
     <string name="lan_model_in_use">In use</string>

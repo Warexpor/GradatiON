@@ -60,12 +60,11 @@ class LanServerTest {
 
     // --- host field follows the server type ---
 
-    @Test fun emptyFieldGetsThePortOfThePickedType() {
-        assertEquals(":11434", LanEndpoints.retargetPort("", null, LanServerType.OLLAMA))
-        assertEquals(":1234", LanEndpoints.retargetPort(":11434", LanServerType.OLLAMA, LanServerType.LM_STUDIO))
-        assertEquals(":8080", LanEndpoints.retargetPort(":1234", LanServerType.LM_STUDIO, LanServerType.LLAMA_CPP))
-        assertEquals(":5001", LanEndpoints.retargetPort(":8080", LanServerType.LLAMA_CPP, LanServerType.KOBOLDCPP))
-        assertEquals("", LanEndpoints.retargetPort(":5001", LanServerType.KOBOLDCPP, LanServerType.OTHER))
+    @Test fun emptyFieldStaysEmptyBecauseSaveAddsThePort() {
+        assertEquals("", LanEndpoints.retargetPort("", null, LanServerType.OLLAMA))
+        assertEquals("", LanEndpoints.retargetPort("", LanServerType.OLLAMA, LanServerType.LM_STUDIO))
+        // An old auto-filled ":port" is cleared rather than carried along.
+        assertEquals("", LanEndpoints.retargetPort(":11434", LanServerType.OLLAMA, LanServerType.LM_STUDIO))
     }
 
     @Test fun hostWithTheOldDefaultPortIsRetargeted() {

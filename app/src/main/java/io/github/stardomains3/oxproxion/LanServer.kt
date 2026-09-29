@@ -84,9 +84,8 @@ object LanEndpoints {
         val text = current.trim()
         val oldPort = previous?.defaultPort
         val newPort = next.defaultPort
-        if (text.isEmpty() || (oldPort != null && text == ":$oldPort")) {
-            return newPort?.let { ":$it" }.orEmpty()
-        }
+        // A bare ":port" in an empty field reads as a broken address; normalize adds the port anyway.
+        if (text.isEmpty() || text.matches(Regex("^:\\d*$"))) return ""
         if (oldPort != null) {
             val m = HOST_PORT.matchEntire(text)
             if (m != null && m.groupValues[2] == oldPort.toString()) {

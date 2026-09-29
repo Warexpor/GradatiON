@@ -3174,7 +3174,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }.body<JsonObject>()["model_info"]?.jsonObject
                             ?.entries?.firstOrNull { it.key.endsWith(".context_length") }
                             ?.value?.jsonPrimitive?.intOrNull
-                            ?.coerceAtMost(LanContextBudget.DEFAULT_CONTEXT)
+                            ?.coerceAtMost(LanContextBudget.OLLAMA_SAFE_CONTEXT)
 
                         else -> null
                     }?.takeIf { it > 0 }

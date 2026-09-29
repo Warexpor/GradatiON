@@ -14,6 +14,13 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object LanContextBudget {
     const val DEFAULT_CONTEXT = 8_192
+
+    /**
+     * /api/show reports what the model supports, not the window Ollama actually runs (often 4096
+     * unless OLLAMA_CONTEXT_LENGTH is set). Guessing low only trims older history; guessing high
+     * lets Ollama cut the character card off the front.
+     */
+    const val OLLAMA_SAFE_CONTEXT = 4_096
     private const val CHARS_PER_TOKEN = 3.5
 
     /** Chat template tokens, role markers and estimate error. */

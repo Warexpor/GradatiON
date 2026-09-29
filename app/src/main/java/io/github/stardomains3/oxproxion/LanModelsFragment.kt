@@ -144,6 +144,12 @@ class LanModelsFragment : Fragment() {
     private fun renderServerLabel() {
         val prefs = SharedPreferencesHelper(requireContext())
         val endpoint = prefs.getLanEndpoint()
+        // With no server there is nothing to retry or refresh: the empty state's one button sets it up.
+        view?.findViewById<View>(R.id.lanServerRow)?.isVisible = endpoint != null
+        view?.findViewById<View>(R.id.lanRefresh)?.isVisible = endpoint != null
+        (editButton as? android.widget.TextView)?.setText(
+            if (endpoint == null) R.string.lan_set_up_server else R.string.lan_edit_server
+        )
         serverLabel.text = if (endpoint == null) {
             getString(R.string.lan_no_server)
         } else {
@@ -171,7 +177,8 @@ class LanModelsFragment : Fragment() {
     private fun showState(message: String, loading: Boolean) {
         stateText.text = message
         progress.isVisible = loading
-        retryButton.isVisible = !loading
+        val hasServer = SharedPreferencesHelper(requireContext()).getLanEndpoint() != null
+        retryButton.isVisible = !loading && hasServer
         editButton.isVisible = !loading
         stateGroup.isVisible = true
     }

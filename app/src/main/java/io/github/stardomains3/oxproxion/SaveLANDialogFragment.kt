@@ -101,16 +101,13 @@ class SaveLANDialogFragment : DialogFragment() {
 
         val savedEndpoint = prefs.getLanEndpoint()
         val savedProvider = prefs.getLanProvider()
-        // First open: Ollama is the common case, so it starts selected with its port filled in.
+        // First open: Ollama is the common case, so it starts selected; its port is added on save.
         type = if (savedEndpoint == null) LanServerType.OLLAMA else LanServerType.fromProvider(savedProvider)
         legacyProvider = savedProvider.takeIf {
             LanServerType.fromProvider(it) == LanServerType.OTHER && it != LanServerType.OTHER.provider
         }
         if (savedEndpoint != null) {
             editUrl.setText(LanEndpoints.editText(savedEndpoint))
-        } else {
-            editUrl.setText(LanEndpoints.retargetPort("", null, type))
-            editUrl.setSelection(0)
         }
         editKey.setText(prefs.getLanApiKey())
         prefs.getLanContextSize().takeIf { it > 0 }?.let { editContext.setText(it.toString()) }
@@ -162,7 +159,7 @@ class SaveLANDialogFragment : DialogFragment() {
         val updated = LanEndpoints.retargetPort(current, previous, next)
         if (updated != current) {
             editUrl.setText(updated)
-            editUrl.setSelection(if (updated.startsWith(":")) 0 else updated.length)
+            editUrl.setSelection(updated.length)
         }
         renderType()
         clearStatus()
@@ -176,6 +173,8 @@ class SaveLANDialogFragment : DialogFragment() {
             chip.setTextColor(if (t == type) ink else body)
         }
         ollamaHint.isVisible = type == LanServerType.OLLAMA
+        view?.findViewById<TextView>(R.id.lan_host_help)?.text = type.defaultPort
+            ?.let { getString(R.string.lan_host_help_port, it) } ?: getString(R.string.lan_host_help)
     }
 
     private fun providerToSave(): String =
