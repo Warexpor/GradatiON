@@ -134,8 +134,7 @@ android {
             // `--tests` runs exactly those, screenshots included. `-Pfast` is kept as a no-op.
             val named = gradle.startParameter.taskNames.any { it == "--tests" || it.startsWith("--tests=") }
             if (!project.hasProperty("full") && !named) test.filter.excludeTestsMatching("*ScreenshotTest")
-            // Robolectric is heavy but the box has cores: two JVMs roughly halve the screenshot time.
-            test.maxParallelForks = if (project.hasProperty("full")) 2 else 1
+
         }
     }
     packaging {

@@ -30,7 +30,7 @@ upstream's and stays as it is.
 export ANDROID_HOME=/opt/android-sdk        # or wherever your SDK lives
 ./gradlew assembleDev                        # minified, dev-signed, .dev app id
 ./gradlew testDebugUnitTest                  # logic tests only, skips the screenshot classes (~20 s)
-./gradlew testDebugUnitTest -Pfull           # everything, screenshots included (~4 min, 2 forks)
+./gradlew testDebugUnitTest -Pfull           # everything, screenshots included (~4 min)
 ./gradlew testDebugUnitTest --tests '*ScreenshotTest.rpConversationContinueDark'
 ```
 
