@@ -146,20 +146,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var menuClosedByTouch = false
     private lateinit var textToSpeech: TextToSpeech
 
-    /** Character whose wallpaper the photo picker is choosing (set just before launching it). */
-    private var rpWallpaperFor: Long? = null
-    private val pickRpWallpaper = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        val id = rpWallpaperFor
-        rpWallpaperFor = null
-        if (id == null || uri == null) {
-            resumeRpPanelIfNeeded()
-            return@registerForActivityResult
-        }
-        BackgroundPhoto.import(requireContext(), uri, BackgroundPhoto.slotForCharacter(id)) { ok ->
-            if (!ok) context?.let { GlassNotice.show(it, getString(R.string.toast_could_not_open_image)) }
-            resumeRpPanelIfNeeded()
-        }
-    }
     private var isSpeaking = false
     private var isShare = false
     private lateinit var chatFrameView: FrameLayout
@@ -217,10 +203,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var rpHomeCharacters: List<RpCharacter> = emptyList()
     private var rpHomeRefresh: Job? = null
     private var rpHomeHidComposer = false
-    /** Open character sheet; parked (dismissed with [restoreRpPanel]) while a tile destination is up. */
-    private var rpPanel: com.google.android.material.bottomsheet.BottomSheetDialog? = null
-    /** Bring the character sheet back when the tile destination closes. */
-    private var restoreRpPanel = false
+    /** The character sheet, an overlay in this fragment's own view so pages can slide over it and leave it open. */
+    private var rpPanel: RpCharacterPanel.Host? = null
+    /** Back-stack depth when a panel page was opened; the sheet refreshes when the stack is back to it. */
+    private var rpPanelDepth = 0
+    private val rpPanelBackStackListener = androidx.fragment.app.FragmentManager.OnBackStackChangedListener {
+        if (rpPanel?.isShowing == true && parentFragmentManager.backStackEntryCount <= rpPanelDepth) refreshRpPanel()
+    }
     private var lastSeenChatMode: ChatMode? = null
     private lateinit var modelNameShell: FrameLayout
     private lateinit var tabChat: TextView
@@ -310,6 +299,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     @SuppressLint("ClickableViewAccessibility")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        parentFragmentManager.addOnBackStackChangedListener(rpPanelBackStackListener)
         sharedPreferencesHelper = SharedPreferencesHelper(requireContext())
         cameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
@@ -2109,6 +2099,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         scrollerCanUp = null
         scrollerCanDown = null
         pickerPopover?.dismiss(animated = false)
+        parentFragmentManager.removeOnBackStackChangedListener(rpPanelBackStackListener)
+        rpPanel = null
         if (::textToSpeech.isInitialized) {
             textToSpeech.stop()
             textToSpeech.shutdown()
@@ -4049,7 +4041,7 @@ $cleanContent
             sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, chatEditText.text?.toString().orEmpty())
             viewModel.toggleChatMode()
         }
-        if (!rpOn) clearRpPanel(keepRestore = false)
+        if (!rpOn) closeRpPanel(animated = false)
         if (::codeMode.isInitialized) codeMode.refresh()
         modeTabIndicator.post { placeModeTabIndicator(animate = false) }
     }
@@ -4066,7 +4058,6 @@ $cleanContent
             viewModel.checkAdvancedReasoningStatus()
             convoButton.isSelected = sharedPreferencesHelper.getConversationModeEnabled()
           //  topConvoButton.isSelected = sharedPreferencesHelper.getConversationModeEnabled()
-            resumeRpPanelIfNeeded()
         }
     }
     override fun onStop() {
@@ -4897,6 +4888,10 @@ $cleanContent
 
     fun onBackPressed(): Boolean {
         if (::codeMode.isInitialized && codeMode.onBackPressed()) return true
+        if (rpPanel?.isShowing == true) {
+            closeRpPanel()
+            return true
+        }
         if (historyDrawerContainer?.visibility == View.VISIBLE) {
             closeHistoryPanel()
             return true
@@ -6034,11 +6029,11 @@ $cleanContent
                 pushRp(RpChatHistoryFragment.newInstance(cast?.id))
             })
             add(RpCharacterPanel.Tile(R.string.rp_panel_memory, RpTileArt.Kind.MEMORY, on = hasMemory || viewModel.currentRpFacts().isNotBlank()) {
-                openRpPanelPopover { showRpMemoryMenu(memoryId, title) }
+                pushRp(RpMemoryFragment.newInstance(memoryId, title))
             })
             val pinnedId = cast?.let { sharedPreferencesHelper.getRpLorebookId(it.id) }
             add(RpCharacterPanel.Tile(R.string.rp_panel_lore, RpTileArt.Kind.LORE, on = pinnedId != null) {
-                openRpPanelPopover { showRpLorePicker(cast?.id) }
+                openRpLore(cast)
             })
             if (cast != null) {
                 add(RpCharacterPanel.Tile(R.string.rp_panel_edit, RpTileArt.Kind.EDIT) { pushRp(RpCharacterEditFragment.newInstance(cast.id)) })
@@ -6053,11 +6048,7 @@ $cleanContent
             val voiceLabel = if (voiceName == null && tweaks.isEmpty()) null
                 else (listOf(voiceName ?: getString(R.string.rp_voice_default)) + tweaks).joinToString(" · ")
             add(RpCharacterPanel.Tile(R.string.rp_panel_voice, RpTileArt.Kind.VOICE, on = voiceLabel != null, preview = voiceLabel) {
-                // Voice is another sheet; keep this one under it and refresh when it saves.
-                RpVoiceDialog.show(this@ChatFragment, title, tts, voice) {
-                    sharedPreferencesHelper.saveRpVoice(memoryId, it)
-                    if (rpPanel?.isShowing == true) showRpCharacterPanel()
-                }
+                pushRp(RpVoiceFragment.newInstance(memoryId, title))
             })
             // The card is the portrait alone; the name would crowd it, and off shows the empty silhouette.
             val personaPhoto = sharedPreferencesHelper.getRpPersonaPhoto()?.takeIf { personaOn }
@@ -6067,8 +6058,7 @@ $cleanContent
                 val slot = BackgroundPhoto.slotForCharacter(cast.id)
                 val wallpaper = BackgroundPhoto.file(requireContext(), slot).takeIf { it.isFile }
                 add(RpCharacterPanel.Tile(R.string.rp_panel_wallpaper, RpTileArt.Kind.WALLPAPER, on = wallpaper != null, image = wallpaper) {
-                    if (wallpaper == null) pickRpWallpaperFor(cast.id)
-                    else openRpPanelPopover { showRpWallpaperMenu(cast) }
+                    pushRp(RpWallpaperFragment.newInstance(cast.id, cast.name))
                 })
             }
             val layout = sharedPreferencesHelper.getRpLayout(memoryId)
@@ -6078,66 +6068,45 @@ $cleanContent
                 else -> RpTileArt.Kind.LAYOUT_CLASSIC
             }
             add(RpCharacterPanel.Tile(R.string.rp_panel_layout, layoutArt, spoken = getString(layoutLabel(layout))) {
-                openRpPanelPopover { showRpLayoutPicker(memoryId, layout) }
+                pushRp(RpLayoutFragment.newInstance(memoryId, title))
             })
             add(RpCharacterPanel.Tile(R.string.rp_panel_style, RpTileArt.Kind.STYLE) { pushRp(RpSettingsFragment.newInstance()) })
         }
-        clearRpPanel(keepRestore = false)
-        rpPanel = RpCharacterPanel.show(this, cast, title, subtitle, tiles).also { d ->
-            d.setOnDismissListener {
-                if (rpPanel === d) rpPanel = null
-            }
-        }
+        val content = RpCharacterPanel.content(this, cast, title, subtitle, tiles)
+        val host = rpPanel ?: RpCharacterPanel.Host(requireView() as FrameLayout).also { rpPanel = it }
+        hideKeyboard()
+        host.show(content) { if (rpPanel === host) rpPanel = null }
     }
 
-    /** Drop the open sheet so a tile destination can use the window; [resumeRpPanelIfNeeded] brings it back. */
-    private fun parkRpPanel() {
-        if (rpPanel == null) return
-        restoreRpPanel = true
-        clearRpPanel(keepRestore = true)
-    }
-
-    private fun clearRpPanel(keepRestore: Boolean) {
-        if (!keepRestore) restoreRpPanel = false
-        val d = rpPanel ?: return
-        rpPanel = null
-        d.setOnDismissListener(null)
-        if (d.isShowing) d.dismiss()
-    }
-
-    /**
-     * Popovers live in the chat view tree, under this sheet's window. Park the sheet, open the
-     * picker, and restore when the picker folds. Lore may push a page instead; that restores on return.
-     */
-    private fun openRpPanelPopover(open: () -> Unit) {
-        parkRpPanel()
-        menuButton.post {
-            open()
-            wireRpPanelResumeOnPopoverDismiss()
-        }
-    }
-
-    private fun wireRpPanelResumeOnPopoverDismiss() {
-        val p = pickerPopover ?: return
-        val prior = p.onDismiss
-        p.onDismiss = {
-            prior?.invoke()
-            resumeRpPanelIfNeeded()
-        }
-    }
-
-    /** After History / Persona / a popover / the wallpaper picker: put the sheet back. */
-    private fun resumeRpPanelIfNeeded() {
-        if (!restoreRpPanel) return
-        // Gallery is open; wait for its result callback.
-        if (rpWallpaperFor != null) return
-        if (!isAdded || isHidden || view == null || !viewModel.isRpMode()) return
-        restoreRpPanel = false
+    /** Rebuild the open sheet in place (a page it opened may have changed a tile), with no slide. */
+    private fun refreshRpPanel() {
+        if (!isAdded || view == null) return
+        // The look this chat was drawn with can have changed too: layout and wallpaper.
+        ambientBackground?.photoSlot = null
+        updateRpChrome()
         showRpCharacterPanel()
+    }
+
+    private fun closeRpPanel(animated: Boolean = true) {
+        rpPanel?.dismiss(animated)
+    }
+
+    /** Lore tile: pin a book to this character; with no books yet it opens the library instead. */
+    private fun openRpLore(cast: RpCharacter?) {
+        if (cast == null) {
+            pushRp(RpLorebookLibraryFragment.newInstance())
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val any = viewModel.getRpRepository().getAllLorebooksOnce().isNotEmpty()
+            if (view == null) return@launch
+            pushRp(if (any) RpLorePinFragment.newInstance(cast.id, cast.name) else RpLorebookLibraryFragment.newInstance())
+        }
     }
 
     /** What the chats page picked: a chat to open, or a fresh one with the same character. */
     private fun onRpHistoryPicked(result: Bundle) {
+        closeRpPanel(animated = false)
         if (result.containsKey(RpChatHistoryFragment.OPEN)) {
             viewModel.loadChat(result.getLong(RpChatHistoryFragment.OPEN))
             return
@@ -6149,93 +6118,10 @@ $cleanContent
         } else startRpWith(character)
     }
 
-    /** Lore tile: pin a book to this character, or open the library when there is nothing to pin. */
-    private fun showRpLorePicker(characterId: Long?) {
-        if (characterId == null) {
-            pushRp(RpLorebookLibraryFragment.newInstance())
-            return
-        }
-        viewLifecycleOwner.lifecycleScope.launch {
-            val books = viewModel.getRpRepository().getAllLorebooksOnce()
-            if (view == null) return@launch
-            if (books.isEmpty()) {
-                pushRp(RpLorebookLibraryFragment.newInstance())
-                return@launch
-            }
-            val pinned = sharedPreferencesHelper.getRpLorebookId(characterId)
-            val active = books.firstOrNull { it.isActive }
-            val rows = buildList {
-                add(
-                    PickerPopover.Row(
-                        title = getString(R.string.rp_lore_use_active),
-                        subtitle = active?.name ?: getString(R.string.rp_ui_lore_none),
-                        iconRes = R.drawable.rp_ic_book,
-                        selected = pinned == null
-                    ) { sharedPreferencesHelper.saveRpLorebookId(characterId, null) }
-                )
-                books.forEach { book ->
-                    add(
-                        PickerPopover.Row(
-                            title = book.name,
-                            subtitle = if (book.isActive) getString(R.string.rp_lore_active_badge) else null,
-                            iconRes = R.drawable.rp_ic_book,
-                            selected = book.id == pinned
-                        ) { sharedPreferencesHelper.saveRpLorebookId(characterId, book.id) }
-                    )
-                }
-            }
-            val footer = listOf(
-                PickerPopover.Row(
-                    title = getString(R.string.rp_lore_edit),
-                    iconRes = R.drawable.ic_edit,
-                    onClick = { pushRp(RpLorebookLibraryFragment.newInstance()) }
-                )
-            )
-            newPopover()?.show(getString(R.string.rp_panel_lore), rows, footer)
-            wireRpPanelResumeOnPopoverDismiss()
-        }
-    }
-
     private fun layoutLabel(layout: String) = when (layout) {
         SharedPreferencesHelper.RP_LAYOUT_BUBBLES -> R.string.rp_layout_bubbles
         SharedPreferencesHelper.RP_LAYOUT_BOOK -> R.string.rp_layout_book
         else -> R.string.rp_layout_classic
-    }
-
-    private fun showRpLayoutPicker(characterId: Long?, current: String) {
-        val options = listOf(
-            Triple(SharedPreferencesHelper.RP_LAYOUT_CLASSIC, R.string.rp_layout_classic, R.string.rp_layout_classic_sub),
-            Triple(SharedPreferencesHelper.RP_LAYOUT_BUBBLES, R.string.rp_layout_bubbles, R.string.rp_layout_bubbles_sub),
-            Triple(SharedPreferencesHelper.RP_LAYOUT_BOOK, R.string.rp_layout_book, R.string.rp_layout_book_sub),
-        )
-        val rows = options.map { (key, title, sub) ->
-            PickerPopover.Row(getString(title), getString(sub), R.drawable.ic_rp_layout, selected = key == current) {
-                sharedPreferencesHelper.saveRpLayout(characterId, key)
-                chatAdapter.rpLayout = key
-            }
-        }
-        newPopover()?.show(getString(R.string.rp_panel_layout), rows, emptyList())
-    }
-
-    private fun pickRpWallpaperFor(characterId: Long) {
-        parkRpPanel()
-        rpWallpaperFor = characterId
-        pickRpWallpaper.launch(
-            androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-        )
-    }
-
-    private fun showRpWallpaperMenu(character: RpCharacter) {
-        val slot = BackgroundPhoto.slotForCharacter(character.id)
-        val rows = listOf(
-            PickerPopover.Row(getString(R.string.rp_wallpaper_change), getString(R.string.rp_wallpaper_change_sub, character.name), R.drawable.ic_gallery) {
-                pickRpWallpaperFor(character.id)
-            },
-            PickerPopover.Row(getString(R.string.rp_wallpaper_remove), getString(R.string.rp_wallpaper_remove_sub), R.drawable.ic_code_trash) {
-                BackgroundPhoto.delete(requireContext(), slot)
-            },
-        )
-        newPopover()?.show(getString(R.string.rp_panel_wallpaper), rows, emptyList())
     }
 
     /** Before reading aloud: the active character's voice in Roleplay, the phone's default elsewhere. */
@@ -6254,55 +6140,12 @@ $cleanContent
         }
     }
 
-    private fun showRpMemoryMenu(characterId: Long?, name: String) {
-        val rows = listOf(
-            PickerPopover.Row(
-                title = getString(R.string.rp_memory_note),
-                subtitle = getString(R.string.rp_memory_hint),
-                iconRes = R.drawable.ic_memory
-            ) { editRpMemory(characterId, name) },
-            PickerPopover.Row(
-                title = getString(R.string.rp_facts_title),
-                subtitle = getString(R.string.rp_facts_hint),
-                iconRes = R.drawable.ic_memory
-            ) { editRpFacts(name) }
-        )
-        newPopover()?.show(getString(R.string.rp_panel_memory), rows, emptyList())
-    }
-
-    private fun editRpFacts(name: String) {
-        GrokInputDialog.show(
-            fragment = this,
-            title = getString(R.string.rp_facts_title) + " · " + name,
-            hint = getString(R.string.rp_facts_hint),
-            initialText = viewModel.currentRpFacts(),
-            confirmText = getString(R.string.rp_memory_save),
-            multiline = true
-        ) { text -> viewModel.saveCurrentRpFacts(text) }
-    }
-
-    private fun editRpMemory(characterId: Long?, name: String) {
-        GrokInputDialog.show(
-            fragment = this,
-            title = getString(R.string.rp_memory_title, name),
-            hint = getString(R.string.rp_memory_hint),
-            initialText = sharedPreferencesHelper.getRpMemory(characterId),
-            confirmText = getString(R.string.rp_memory_save),
-            multiline = true
-        ) { text -> sharedPreferencesHelper.saveRpMemory(characterId, text) }
-    }
-
+    /** A full-screen page over the chat and the open panel: it slides in, the panel stays put under it. */
     private fun pushRp(fragment: Fragment) {
-        parkRpPanel()
-        // A folding popover must not revive the sheet while we leave for a full-screen page.
-        pickerPopover?.let { p ->
-            p.onDismiss = { if (pickerPopover === p) pickerPopover = null }
-            p.dismiss(animated = false)
-        }
         hideKeyboard()
+        rpPanelDepth = parentFragmentManager.backStackEntryCount
         parentFragmentManager.beginTransaction()
-            .withGrokStackAnimations()
-            .hide(this)
+            .withGrokPushOver()
             .add(R.id.fragment_container, fragment)
             .addToBackStack(null)
             .commit()

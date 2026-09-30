@@ -84,4 +84,15 @@ class AvatarAndPersonaTest {
         val sheet = android.view.LayoutInflater.from(themed).inflate(R.layout.sheet_avatar_source, null)
         assertNotNull(sheet.findViewById<View>(R.id.avatarSourceFiles))
     }
+
+    /** The panel's full-screen pages are built on these two shells. */
+    @Test fun panelPageLayoutsInflate() {
+        val themed = android.view.ContextThemeWrapper(ctx, R.style.Theme_Grokion)
+        val inflater = android.view.LayoutInflater.from(themed)
+        val page = inflater.inflate(R.layout.fragment_rp_page, null)
+        assertNotNull(page.findViewById<View>(R.id.rpPageBody))
+        val voice = inflater.inflate(R.layout.fragment_rp_voice, null)
+        assertNotNull(voice.findViewById<View>(R.id.rpVoiceList))
+        assertNotNull(voice.findViewById<View>(R.id.rpVoicePitch))
+    }
 }

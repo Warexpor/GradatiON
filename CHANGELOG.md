@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- RP character panel: every tile now opens a full-screen page (Memory, Lore, Layout, Wallpaper and Voice joined History, Edit, Persona and Style). The sheet no longer folds; it stays open under the page and refreshes when you come back.
+
 ### Added
 - Persona can be switched off once one exists: a "Use persona in chats" switch on the Persona screen. Off keeps it saved but characters stop seeing your name and description; saving a persona turns it back on.
 - Choosing an avatar photo (characters and personas) asks where from: Photos (the system photo picker), Gallery or another app, or Files. Then a frame step lets you drag and pinch to choose what part of the photo shows.

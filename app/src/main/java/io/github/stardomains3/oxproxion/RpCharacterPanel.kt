@@ -2,6 +2,7 @@ package io.github.stardomains3.oxproxion
 
 import android.graphics.BitmapFactory
 import android.graphics.Outline
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewOutlineProvider
@@ -16,7 +17,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
-import com.google.android.material.bottomsheet.BottomSheetDialog
+import androidx.coordinatorlayout.widget.CoordinatorLayout
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 
 /**
  * The RP character panel: opened from the character chip. A header with who you're talking to,
@@ -45,12 +47,14 @@ object RpCharacterPanel {
         val onClick: () -> Unit
     )
 
-    fun show(fragment: Fragment, character: RpCharacter?, title: String, subtitle: String, tiles: List<Tile>): BottomSheetDialog {
+    /**
+     * The panel's content, not yet on screen; [Host] puts it there. It is a view in the chat's own
+     * tree, not a dialog window, so a full-screen page can slide over it and leave it open.
+     */
+    fun content(fragment: Fragment, character: RpCharacter?, title: String, subtitle: String, tiles: List<Tile>): View {
         val ctx = fragment.requireContext()
-        val dialog = BottomSheetDialog(ctx, R.style.ThemeOverlay_Grokion_BottomSheet_Sharp)
         val sheet = LayoutInflater.from(ctx).inflate(R.layout.sheet_rp_character, null)
         val d = ctx.resources.displayMetrics.density
-        sheet.background = solidSheet(ctx)
 
         sheet.findViewById<TextView>(R.id.rpPanelName).text = title
         sheet.findViewById<TextView>(R.id.rpPanelSubtitle).apply {
@@ -99,8 +103,7 @@ object RpCharacterPanel {
                 isClickable = true
                 isFocusable = true
                 contentDescription = listOfNotNull(ctx.getString(t.label), t.preview ?: t.spoken).joinToString(", ")
-                // Leave the sheet up; ChatFragment parks it only while a destination needs the
-                // window (a full-screen page or a popover under this dialog), then restores it.
+                // The sheet stays up under whatever page this opens.
                 setOnClickListener { t.onClick() }
             }
             card.addView(RpTileArt(ctx, t.art, ink, ContextCompat.getColor(ctx, fill)).apply {
@@ -142,22 +145,84 @@ object RpCharacterPanel {
             })
         }
 
-        // The sheet runs under the navigation bar so its fill reaches the screen's bottom edge.
-        val basePadding = sheet.paddingBottom
-        ViewCompat.setOnApplyWindowInsetsListener(sheet) { v, insets ->
-            v.updatePadding(bottom = basePadding + insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
-            insets
+        return sheet
+    }
+
+    /** Shows [content] as a bottom sheet over [root]: a scrim, drag to dismiss, back handled by the caller. */
+    class Host(private val root: FrameLayout) {
+        private var overlay: CoordinatorLayout? = null
+        private var box: FrameLayout? = null
+        private var behavior: BottomSheetBehavior<FrameLayout>? = null
+        private var onGone: (() -> Unit)? = null
+
+        val isShowing get() = overlay != null
+
+        /** Puts [content] up; while the sheet is already open it is swapped in place, with no slide. */
+        fun show(content: View, onGone: () -> Unit) {
+            this.onGone = onGone
+            val open = box
+            if (open != null) {
+                open.removeAllViews()
+                open.addView(content)
+                return
+            }
+            val ctx = root.context
+            val d = ctx.resources.displayMetrics.density
+            val scrim = View(ctx).apply {
+                setBackgroundColor(0x66000000)
+                alpha = 0f
+                setOnClickListener { dismiss() }
+            }
+            val nav = ViewCompat.getRootWindowInsets(root)?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+            val sheet = FrameLayout(ctx).apply {
+                background = solidSheet(ctx)
+                // Under the navigation bar so the fill reaches the screen's bottom edge.
+                updatePadding(bottom = nav)
+                isClickable = true
+                addView(content)
+            }
+            val b = BottomSheetBehavior<FrameLayout>().apply {
+                isHideable = true
+                skipCollapsed = true
+                state = BottomSheetBehavior.STATE_HIDDEN
+                addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
+                    override fun onStateChanged(v: View, newState: Int) {
+                        if (newState == BottomSheetBehavior.STATE_HIDDEN) remove()
+                    }
+                    override fun onSlide(v: View, slideOffset: Float) {
+                        scrim.alpha = (1f + slideOffset).coerceIn(0f, 1f)
+                    }
+                })
+            }
+            val host = CoordinatorLayout(ctx).apply {
+                elevation = 24 * d
+                addView(scrim, CoordinatorLayout.LayoutParams(-1, -1))
+                addView(sheet, CoordinatorLayout.LayoutParams(-1, -2).apply {
+                    gravity = Gravity.BOTTOM
+                    behavior = b
+                })
+            }
+            root.addView(host, FrameLayout.LayoutParams(-1, -1))
+            overlay = host
+            box = sheet
+            behavior = b
+            host.post { if (overlay === host) b.state = BottomSheetBehavior.STATE_EXPANDED }
         }
-        dialog.setContentView(sheet)
-        // Tall enough for three rows of cards: open fully instead of peeking.
-        dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
-        dialog.behavior.skipCollapsed = true
-        dialog.show()
-        dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { container ->
-            container.background = null
-            container.backgroundTintList = null
+
+        fun dismiss(animated: Boolean = true) {
+            val b = behavior ?: return
+            if (animated && b.state != BottomSheetBehavior.STATE_HIDDEN) b.state = BottomSheetBehavior.STATE_HIDDEN else remove()
         }
-        return dialog
+
+        private fun remove() {
+            val o = overlay ?: return
+            overlay = null
+            box = null
+            behavior = null
+            root.removeView(o)
+            onGone?.invoke()
+            onGone = null
+        }
     }
 
     internal fun solidShape(ctx: android.content.Context, color: Int, oval: Boolean = false, radiusPx: Float = 0f) =

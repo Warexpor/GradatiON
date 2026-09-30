@@ -4,19 +4,17 @@ import android.content.res.ColorStateList
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import java.util.Locale
 
 /**
- * Picks the system voice a roleplay character reads aloud with, plus pitch and speed. Voices
+ * The voice page: picks the system voice a roleplay character reads aloud with, plus pitch and speed. Voices
  * are the engine's for the phone's language, named "Voice 1…" because engine ids mean nothing
  * to people; tapping one previews it. [tts] is null (or has no voices) when the engine isn't
  * ready, and then only pitch and speed apply to the default voice.
@@ -40,17 +38,16 @@ object RpVoiceDialog {
         return if (i >= 0) fragment.getString(R.string.rp_voice_n, i + 1) else null
     }
 
-    fun show(
+    /** Wires the voice page's [sheet]; [onChange] gets the whole choice after every tap, and each tap previews it. */
+    fun bind(
         fragment: Fragment,
+        sheet: View,
         characterName: String,
         tts: TextToSpeech?,
         current: SharedPreferencesHelper.RpVoice,
-        onSave: (SharedPreferencesHelper.RpVoice) -> Unit
+        onChange: (SharedPreferencesHelper.RpVoice) -> Unit
     ) {
         val ctx = fragment.requireContext()
-        val dialog = GlassAlertDialogBuilder(ctx, R.style.CustomMaterialAlertDialogTheme).create()
-        val sheet = LayoutInflater.from(ctx).inflate(R.layout.dialog_rp_voice, null)
-        sheet.findViewById<TextView>(R.id.rpVoiceTitle).text = fragment.getString(R.string.rp_voice_title, characterName)
         val d = ctx.resources.displayMetrics.density
         val ink = ContextCompat.getColor(ctx, R.color.xai_ink)
         val mute = ContextCompat.getColor(ctx, R.color.xai_mute)
@@ -62,6 +59,7 @@ object RpVoiceDialog {
         val sample = fragment.getString(R.string.rp_voice_sample, characterName)
 
         fun preview() {
+            onChange(SharedPreferencesHelper.RpVoice(name, pitch, rate))
             val t = tts ?: return
             runCatching {
                 t.voice = voices.firstOrNull { it.name == name } ?: t.defaultVoice
@@ -123,16 +121,5 @@ object RpVoiceDialog {
         }
         bindSteps(R.id.rpVoicePitch, intArrayOf(R.id.rpPitchLow, R.id.rpPitchMid, R.id.rpPitchHigh), PITCH, pitch) { pitch = it }
         bindSteps(R.id.rpVoiceRate, intArrayOf(R.id.rpRateSlow, R.id.rpRateMid, R.id.rpRateFast), RATE, rate) { rate = it }
-
-        sheet.findViewById<MaterialButton>(R.id.rpVoiceCancel).setOnClickListener { dialog.dismiss() }
-        sheet.findViewById<MaterialButton>(R.id.rpVoiceSave).setOnClickListener {
-            dialog.dismiss()
-            onSave(SharedPreferencesHelper.RpVoice(name, pitch, rate))
-        }
-        dialog.setOnDismissListener { runCatching { tts?.stop() } }
-        dialog.setView(sheet)
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.let { GlassDialogs.frost(it) }
-        dialog.show()
     }
 }
