@@ -160,7 +160,7 @@ object RpCharacterPanel {
         return dialog
     }
 
-    private fun solidShape(ctx: android.content.Context, color: Int, oval: Boolean = false, radiusPx: Float = 0f) =
+    internal fun solidShape(ctx: android.content.Context, color: Int, oval: Boolean = false, radiusPx: Float = 0f) =
         android.graphics.drawable.GradientDrawable().apply {
             shape = if (oval) android.graphics.drawable.GradientDrawable.OVAL else android.graphics.drawable.GradientDrawable.RECTANGLE
             setColor(ContextCompat.getColor(ctx, color))
@@ -168,7 +168,7 @@ object RpCharacterPanel {
         }
 
     /** A tonal flash on press, drawn over the tile's art. */
-    private fun pressRipple(ctx: android.content.Context, radiusPx: Float): android.graphics.drawable.Drawable {
+    internal fun pressRipple(ctx: android.content.Context, radiusPx: Float): android.graphics.drawable.Drawable {
         val mask = solidShape(ctx, android.R.color.white, radiusPx = radiusPx)
         return android.graphics.drawable.RippleDrawable(
             android.content.res.ColorStateList.valueOf(ContextCompat.getColor(ctx, R.color.popover_row_pressed)), null, mask
@@ -176,7 +176,7 @@ object RpCharacterPanel {
     }
 
     /** The opaque sheet: rounded on top, no edge line, no transparency. */
-    private fun solidSheet(ctx: android.content.Context): android.graphics.drawable.Drawable {
+    internal fun solidSheet(ctx: android.content.Context): android.graphics.drawable.Drawable {
         val r = ctx.resources.getDimension(R.dimen.glass_sheet_radius)
         return android.graphics.drawable.GradientDrawable().apply {
             setColor(ContextCompat.getColor(ctx, R.color.panel_solid))

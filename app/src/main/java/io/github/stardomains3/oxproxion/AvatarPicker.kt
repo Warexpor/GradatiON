@@ -39,8 +39,23 @@ class AvatarPicker(private val fragment: Fragment, private val onPicked: (Uri) -
     /** Asks where to pick from. */
     fun launch() {
         val ctx = fragment.requireContext()
-        val dialog = BottomSheetDialog(ctx, R.style.ThemeOverlay_Grokion_BottomSheet)
+        val dialog = BottomSheetDialog(ctx, R.style.ThemeOverlay_Grokion_BottomSheet_Sharp)
         val sheet = LayoutInflater.from(ctx).inflate(R.layout.sheet_avatar_source, null)
+        // The same opaque sheet and tonal rows as the character panel; the bare sheet theme is see-through.
+        sheet.background = RpCharacterPanel.solidSheet(ctx)
+        val d = ctx.resources.displayMetrics.density
+        val radius = 22 * d
+        listOf(R.id.avatarSourcePhotos, R.id.avatarSourceGallery, R.id.avatarSourceFiles).forEach { id ->
+            sheet.findViewById<View>(id).apply {
+                background = RpCharacterPanel.solidShape(ctx, R.color.panel_tile, radiusPx = radius)
+                foreground = RpCharacterPanel.pressRipple(ctx, radius)
+            }
+        }
+        val base = sheet.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(sheet) { v, insets ->
+            v.updatePadding(bottom = base + insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
+            insets
+        }
         fun row(id: Int, action: () -> Unit) = sheet.findViewById<MaterialButton>(id).setOnClickListener {
             dialog.dismiss()
             action()
@@ -58,6 +73,10 @@ class AvatarPicker(private val fragment: Fragment, private val onPicked: (Uri) -
         dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
         dialog.behavior.skipCollapsed = true
         dialog.show()
+        dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { container ->
+            container.background = null
+            container.backgroundTintList = null
+        }
     }
 
     private fun crop(source: Uri) {

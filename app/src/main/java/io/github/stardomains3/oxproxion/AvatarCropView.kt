@@ -20,7 +20,10 @@ import kotlin.math.min
  * round window, never letting the window see past the photo's edge. [crop] returns exactly what
  * the window shows.
  */
-class AvatarCropView(context: Context) : View(context) {
+class AvatarCropView @JvmOverloads constructor(
+    context: Context,
+    attrs: android.util.AttributeSet? = null
+) : View(context, attrs) {
 
     private val d = resources.displayMetrics.density
     private val matrix = Matrix()
