@@ -342,21 +342,25 @@ class RpMemoryFragment : RpPageFragment() {
     }
 }
 
-/** Voice, pitch and speed for reading this character aloud; every tap saves and previews. */
+/** Voice, pitch and speed for reading this character aloud; every tap previews, Save keeps it, back discards. */
 class RpVoiceFragment : RpPageFragment() {
     private var tts: TextToSpeech? = null
 
     override fun title() = getString(R.string.rp_voice_title, characterName)
     override fun layoutRes() = R.layout.fragment_rp_voice
 
+    private var pending: SharedPreferencesHelper.RpVoice? = null
+
     override fun build(body: LinearLayout) {
+        requireView().findViewById<View>(R.id.rpSaveButton).setOnClickListener {
+            pending?.let { prefs.saveRpVoice(characterId, it) }
+            parentFragmentManager.popBackStack()
+        }
         // Voices arrive once the engine is up, so the list is bound then.
         tts = TextToSpeech(requireContext().applicationContext) { status ->
             if (!isAdded || view == null) return@TextToSpeech
             val engine = tts.takeIf { status == TextToSpeech.SUCCESS }
-            RpVoiceDialog.bind(this, requireView(), characterName, engine, prefs.getRpVoice(characterId)) {
-                prefs.saveRpVoice(characterId, it)
-            }
+            RpVoiceDialog.bind(this, requireView(), characterName, engine, prefs.getRpVoice(characterId)) { pending = it }
         }
     }
 

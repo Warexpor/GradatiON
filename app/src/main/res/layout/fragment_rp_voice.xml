@@ -169,6 +169,12 @@
 
 
             </LinearLayout>
+
+            <include
+                layout="@layout/view_rp_save_button"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="20dp" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>
