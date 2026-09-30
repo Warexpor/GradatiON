@@ -148,7 +148,10 @@ class ChatAdapter(
     private var editTargetPosition: Int = -1
     private var currentFontScale: Int = 100
     private var streamRevealBoundHolder: AssistantViewHolder? = null
-    private var pendingStreamFinalize: Boolean = false    /** Invoked when the stream reveal paints a new frame. */
+    private var pendingStreamFinalize: Boolean = false
+    /** The finished reply's parse + text layout, running off the main thread; the swap waits for it. */
+    private var finalParse: kotlinx.coroutines.Job? = null
+    /** Invoked when the stream reveal paints a new frame. */
     var onStreamVisualUpdate: (() -> Unit)? = null
     private val streamReveal = StreamRevealAnimator(
         onFrame = { displayed, _ ->
@@ -168,12 +171,7 @@ class ChatAdapter(
                 // Let the last words finish fading in before swapping to the full render. The parse
                 // ran in the background since the stream ended, so the swap itself costs no freeze.
                 val token = ++finalizeToken
-                mainHandler.postDelayed({
-                    if (token == finalizeToken && messages.size - 1 == lastIndex) {
-                        notifyItemChanged(lastIndex)
-                        onStreamVisualUpdate?.invoke()
-                    }
-                }, StreamFadeSpan.DURATION_MS)
+                mainHandler.postDelayed({ swapFinal(lastIndex, token, retried = false) }, StreamFadeSpan.DURATION_MS)
             }
         }
     )
@@ -299,16 +297,65 @@ class ChatAdapter(
         }
         pendingStreamFinalize = true
         // Parse the finished reply now, off the main thread, while the last words still reveal.
-        messages.lastOrNull()?.takeIf { !renderCache.containsKey(it) }?.let { msg ->
-            scope.launch(Dispatchers.Main) {
-                val parsed = withContext(Dispatchers.Default) {
-                    try { renderContent(msg) } catch (e: Exception) { null }
-                }
-                if (parsed != null) renderCache[msg] = parsed
-            }
-        }
+        messages.lastOrNull()?.let { msg -> finalParse = scope.launch(Dispatchers.Main) { prepareFinal(msg) } }
         streamReveal.setTarget(text)
         streamReveal.finishFast()
+    }
+
+    /**
+     * Parses [msg] and lays its text out off the main thread, then caches the result. The swap
+     * to the full render then costs a bind and nothing else: no markdown parse, no line breaking.
+     */
+    private suspend fun prepareFinal(msg: FlexibleMessage) {
+        val cached = renderCache[msg]
+        val params = textParams()
+        val ready = withContext(Dispatchers.Default) {
+            val content = cached ?: try { renderContent(msg) } catch (e: Exception) { null }
+            content?.let { precompute(it, params) }
+        }
+        if (ready != null) renderCache[msg] = ready
+    }
+
+    /** The reply text's measuring setup, read from the streaming row; it is the same on every row. */
+    private fun textParams(): androidx.core.text.PrecomputedTextCompat.Params? {
+        val tv = streamRevealBoundHolder?.messageTextView ?: return null
+        tv.textSize = 16f * currentFontScale / 100f
+        tv.typeface = currentTypeface
+        return androidx.core.widget.TextViewCompat.getTextMetricsParams(tv)
+    }
+
+    /**
+     * Line-breaks [content] ahead of time. Anything with inline drawn spans (tables, images) is
+     * left alone: those measure against the view. A mismatch at bind time falls back to a normal
+     * layout in [setReplyText], so this can only help.
+     */
+    private fun precompute(content: CharSequence, params: androidx.core.text.PrecomputedTextCompat.Params?): CharSequence {
+        if (params == null || content !is Spanned || content.isEmpty()) return content
+        if (content.getSpans(0, content.length, android.text.style.ReplacementSpan::class.java).isNotEmpty()) return content
+        return try {
+            androidx.core.text.PrecomputedTextCompat.create(content, params)
+        } catch (e: Exception) {
+            content
+        }
+    }
+
+    /** Waits for the background work rather than repeating it on the main thread, then rebinds the reply. */
+    private fun swapFinal(lastIndex: Int, token: Int, retried: Boolean) {
+        if (token != finalizeToken || messages.size - 1 != lastIndex) return
+        val msg = messages[lastIndex]
+        val job = finalParse
+        if (job != null && job.isActive) {
+            job.invokeOnCompletion { mainHandler.post { swapFinal(lastIndex, token, retried) } }
+            return
+        }
+        if (!retried && !renderCache.containsKey(msg)) {
+            // A late update dropped the cached parse: redo it in the background first.
+            finalParse = scope.launch(Dispatchers.Main) { prepareFinal(msg) }
+            swapFinal(lastIndex, token, retried = true)
+            return
+        }
+        notifyItemChanged(lastIndex)
+        onStreamVisualUpdate?.invoke()
     }
 
     /** A copy of what the list shows, so a mode's thread can be put back instantly. */
@@ -391,7 +438,9 @@ class ChatAdapter(
     fun updateLastMessage(newMessage: FlexibleMessage) {
         if (messages.isNotEmpty()) {
             val oldMessage = messages.last()
-            renderCache.remove(oldMessage) // Invalidate cache for the streaming message
+            // Only when the text actually changed: the same reply arriving again must keep its
+            // background-parsed render, or the swap at the end of a stream parses on the main thread.
+            if (oldMessage != newMessage) renderCache.remove(oldMessage)
         }
         updateChannel.trySend(newMessage)
     }
@@ -495,6 +544,22 @@ class ChatAdapter(
         const val VIEW_TYPE_HIDDEN = 4
         private const val REASONING_KEY_CHARS = 80
         private const val ACTION_STAGGER_MS = 55L
+
+        /**
+         * Markwon's text setter: uses a reply's precomputed layout when it fits the view, else
+         * lays it out the usual way (a different size or font than it was measured for).
+         */
+        fun setReplyText(tv: TextView, text: Spanned, type: TextView.BufferType) {
+            if (text is androidx.core.text.PrecomputedTextCompat) {
+                try {
+                    androidx.core.widget.TextViewCompat.setPrecomputedText(tv, text)
+                    return
+                } catch (e: IllegalArgumentException) {
+                    // Measured for other params: fall through to a normal layout.
+                }
+            }
+            tv.setText(text, type)
+        }
         private val TABLE_AFTER_ITEM = Regex(
             """(^[\t >]*([-+*]|\d+\.)\s+(?:\\\$\\\[ ?[ xX]?\\]\\\s+)?[^\n]*)\n(?=\|)""",
             RegexOption.MULTILINE
@@ -664,7 +729,7 @@ class ChatAdapter(
     // --- VIEW HOLDERS ---
 
     inner class UserViewHolder(itemView: View, private val markwon: Markwon) : RecyclerView.ViewHolder(itemView) {
-        private val messageTextView: TextView = itemView.findViewById(R.id.messageTextView)
+        val messageTextView: TextView = itemView.findViewById(R.id.messageTextView)
         private val messageContainer: ConstraintLayout = itemView.findViewById(R.id.messageContainer)
         private val buttonContainer: LinearLayout = itemView.findViewById(R.id.buttonContainer)
         private val copyButtonuser: ImageButton = itemView.findViewById(R.id.copyButtonuser)
@@ -831,7 +896,7 @@ class ChatAdapter(
         private val onSynthesizeToWavFile: (String, Int) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
 
-        private val messageTextView: TextView = itemView.findViewById(R.id.messageTextView)
+        val messageTextView: TextView = itemView.findViewById(R.id.messageTextView)
         private val copyButton: ImageButton = itemView.findViewById(R.id.copyButton)
         private val aipdfButton: ImageButton = itemView.findViewById(R.id.aipdfButton)
         private val shareButton: ImageButton = itemView.findViewById(R.id.shareButton)

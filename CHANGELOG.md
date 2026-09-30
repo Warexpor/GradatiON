@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Persona can be switched off once one exists: a "Use persona in chats" switch on the Persona screen. Off keeps it saved but characters stop seeing your name and description; saving a persona turns it back on.
+- Choosing an avatar photo (characters and personas) asks where from: Photos (the system photo picker), Gallery or another app, or Files. Then a frame step lets you drag and pinch to choose what part of the photo shows.
+
+### Fixed
+- The Persona card in the character panel no longer washes the portrait out, drops the name under the title, or leaves the spacing off; the panel header's avatar is no longer squashed.
+- The pause between the last words of a reply and its tools appearing: the finished reply's markdown and text layout are prepared off the main thread, and a late update of the same reply no longer throws that work away. Needs a phone to confirm.
+
 ## 3.0.0 — liquid glass redesign
 
 First release under the GradatiON id (`io.github.warexpor.gradation`), signed with the release key. Everything below is new since 2.1.134-rp; see docs/RELEASING.md for how later updates stay installable.

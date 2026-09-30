@@ -32,10 +32,10 @@ class RpCharacterEditFragment : Fragment() {
     private lateinit var clearAvatarButton: MaterialButton
     private lateinit var rpDelegate: RpChatDelegate
 
-    private val pickImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val pickImage = AvatarPicker(this) { uri ->
         pendingAvatarUri = uri
         clearAvatar = false
-        uri?.let { showAvatar(it) }
+        showAvatar(uri)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -147,8 +147,8 @@ class RpCharacterEditFragment : Fragment() {
             baseline = currentSnapshot()
         }
 
-        pickAvatarButton.setOnClickListener { pickImage.launch(arrayOf("image/*")) }
-        view.findViewById<View>(R.id.rpAvatarFrame).setOnClickListener { pickImage.launch(arrayOf("image/*")) }
+        pickAvatarButton.setOnClickListener { pickImage.launch() }
+        view.findViewById<View>(R.id.rpAvatarFrame).setOnClickListener { pickImage.launch() }
         clearAvatarButton.setOnClickListener {
             pendingAvatarUri = null
             clearAvatar = true

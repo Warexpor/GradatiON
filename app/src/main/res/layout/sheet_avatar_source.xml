@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Where to pick an avatar photo from: phones differ in which of these shows their gallery -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="20dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="28dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="8dp"
+        android:text="@string/avatar_source_title"
+        android:textColor="@color/xai_ink"
+        android:textFontWeight="600"
+        android:textSize="20sp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/avatarSourcePhotos"
+        style="@style/Widget.Grokion.Button.SettingsRow"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/avatar_source_photos" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/avatarSourceGallery"
+        style="@style/Widget.Grokion.Button.SettingsRow"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/avatar_source_gallery" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/avatarSourceFiles"
+        style="@style/Widget.Grokion.Button.SettingsRow"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/avatar_source_files" />
+</LinearLayout>

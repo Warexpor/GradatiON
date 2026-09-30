@@ -271,7 +271,13 @@ class RpHubFragment : Fragment() {
         setRowValue(R.id.rpHubCharactersRow, if (characters.isEmpty()) "" else characters.size.toString())
         setRowValue(
             R.id.rpHubPersonaRow,
-            getString(if (prefs.getRpPersona().isBlank()) R.string.rp_ui_persona_unset else R.string.rp_ui_persona_set)
+            getString(
+                when {
+                    prefs.getRpPersona().isBlank() && prefs.getRpPersonaName().isBlank() -> R.string.rp_ui_persona_unset
+                    !prefs.isRpPersonaEnabled() -> R.string.rp_ui_persona_off
+                    else -> R.string.rp_ui_persona_set
+                }
+            )
         )
         setRowValue(
             R.id.rpHubLorebooksRow,

@@ -173,6 +173,7 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_RP_PERSONA_PRESETS = "rp_persona_presets"
         private const val KEY_RP_PERSONA_NAME = "rp_persona_name"
         private const val KEY_RP_PERSONA_PHOTO = "rp_persona_photo"
+        private const val KEY_RP_PERSONA_ENABLED = "rp_persona_enabled"
         private const val KEY_RP_LORE_ENABLED = "rp_lore_enabled"
         private const val KEY_RP_THIRD_PERSON = "rp_third_person"
         private const val KEY_RP_SHOW_THOUGHTS = "rp_show_thoughts"
@@ -1120,6 +1121,13 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun getRpPersona(): String = mainPrefs.getString(KEY_RP_PERSONA, "") ?: ""
+    /** Whether chats use your persona. Off keeps it saved but sends and shows nothing of it. */
+    fun isRpPersonaEnabled(): Boolean = mainPrefs.getBoolean(KEY_RP_PERSONA_ENABLED, true)
+    fun setRpPersonaEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_PERSONA_ENABLED, enabled) }
+    /** What a chat should use: the persona's description, or nothing while it is off. */
+    fun activeRpPersona(): String = if (isRpPersonaEnabled()) getRpPersona() else ""
+    /** What a chat should call you: the persona's name, or nothing while it is off. */
+    fun activeRpPersonaName(): String = if (isRpPersonaEnabled()) getRpPersonaName() else ""
     fun saveRpPersona(persona: String) = mainPrefs.edit { putString(KEY_RP_PERSONA, persona) }
     fun saveRpPersonaName(name: String) = mainPrefs.edit { putString(KEY_RP_PERSONA_NAME, name.trim()) }
     /** Your portrait's file name in [RpAvatarStorage.personaFile]; null shows your initial. */

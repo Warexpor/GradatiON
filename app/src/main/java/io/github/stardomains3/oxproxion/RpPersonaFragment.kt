@@ -39,8 +39,7 @@ class RpPersonaFragment : Fragment() {
     /** Portrait file name in the editor; written to storage on pick, kept on Save. */
     private var photo: String? = null
 
-    private val pickImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@registerForActivityResult
+    private val pickImage = AvatarPicker(this) { uri ->
         val ctx = requireContext().applicationContext
         viewLifecycleOwner.lifecycleScope.launch {
             val saved = withContext(Dispatchers.IO) { RpAvatarStorage.savePersonaFromUri(ctx, uri) }
@@ -69,11 +68,18 @@ class RpPersonaFragment : Fragment() {
         photo = baseline.photo
 
         renderList()
+        val enabledCard = view.findViewById<View>(R.id.rpPersonaEnabledCard)
+        val enabledSwitch = view.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.rpPersonaEnabledSwitch)
+        // Turning it off only makes sense once there is one to turn off.
+        val hasPersona = baseline.name.isNotBlank() || baseline.description.isNotBlank() || prefs.getRpPersonaPresets().isNotEmpty()
+        enabledCard.visibility = if (hasPersona) View.VISIBLE else View.GONE
+        enabledSwitch.isChecked = prefs.isRpPersonaEnabled()
+        enabledSwitch.setOnCheckedChangeListener { _, on -> prefs.setRpPersonaEnabled(on) }
         nameInput.doAfterTextChanged { showPortrait() }
         aboutInput.doAfterTextChanged { markInUse() }
         showPortrait()
 
-        val pick = View.OnClickListener { pickImage.launch(arrayOf("image/*")) }
+        val pick = View.OnClickListener { pickImage.launch() }
         view.findViewById<View>(R.id.rpPersonaAvatarFrame).setOnClickListener(pick)
         view.findViewById<View>(R.id.rpPersonaPickPhoto).setOnClickListener(pick)
         view.findViewById<View>(R.id.rpPersonaRemovePhoto).setOnClickListener {
@@ -108,6 +114,8 @@ class RpPersonaFragment : Fragment() {
             prefs.saveRpPersona(persona.description)
             prefs.saveRpPersonaName(persona.name)
             prefs.saveRpPersonaPhoto(persona.photo)
+            // Saving a persona is choosing to be it, so it comes back on if it was off.
+            prefs.setRpPersonaEnabled(true)
             baseline = persona
             val droppedOldest = if (persona.name.isNotEmpty()) keep(persona) else false
             prune()

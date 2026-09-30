@@ -136,6 +136,28 @@
             android:textAppearance="@style/TextAppearance.Gradation.Footnote"
             android:textSize="15sp" />
 
+        <!-- Only once a persona exists: off keeps it saved but characters stop seeing it -->
+        <LinearLayout
+            android:id="@+id/rpPersonaEnabledCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/rp_bg_card"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:visibility="gone">
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/rpPersonaEnabledSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="56dp"
+                android:text="@string/rp_persona_enabled"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" />
+        </LinearLayout>
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

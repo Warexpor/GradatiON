@@ -3628,7 +3628,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (!RpAutoMemory.shouldUpdate(turns.size, budget, previousRun)) return
 
         val charName = if (llm) getApplication<Application>().getString(R.string.rp_llm_speaker) else character!!.name
-        val userName = sharedPreferencesHelper.getRpPersonaName().ifBlank { "User" }
+        val userName = sharedPreferencesHelper.activeRpPersonaName().ifBlank { "User" }
         val userMemory = sharedPreferencesHelper.getRpMemory(characterId)
         val facts = currentRpFacts()
         val prompt = RpAutoMemory.prompt(

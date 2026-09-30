@@ -155,6 +155,7 @@
     <string name="rp_persona_name_hint">Your name</string>
     <string name="rp_persona_footer">Characters call you by this name. Saving keeps it below, one tap to switch back.</string>
     <string name="rp_persona_new">New persona</string>
+    <string name="rp_persona_enabled">Use persona in chats</string>
     <string name="rp_persona_in_use">In use</string>    <string name="rp_save_persona">Save persona</string>
     <string name="rp_lorebooks_title">Lorebooks</string>
     <string name="rp_add_lorebook">Add lorebook</string>

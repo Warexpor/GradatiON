@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
@@ -249,6 +250,8 @@ class RpTileArt(
             val shader = BitmapShader(shot, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
             shader.setLocalMatrix(photoMatrix)
             p.style = Paint.Style.FILL
+            // A shader is drawn through the paint's alpha: keep it opaque, or the portrait comes out washed.
+            p.color = Color.BLACK
             p.shader = shader
             c.drawCircle(cx, cy, r, p)
             p.shader = null

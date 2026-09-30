@@ -652,6 +652,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val taskBg = ContextCompat.getColor(requireContext(), R.color.xai_canvas_card)
 
         markwon = Markwon.builder(requireContext())
+            .textSetter { tv, text, type, done -> ChatAdapter.setReplyText(tv, text, type); done.run() }
             // ✅ TablePlugin EARLY with custom theme
             .usePlugin(TablePlugin.create(customTableTheme))
 
@@ -5971,7 +5972,8 @@ $cleanContent
             .lineSequence().firstOrNull().orEmpty()
         val memory = sharedPreferencesHelper.getRpMemory(memoryId)
         val hasMemory = memory.isNotBlank()
-        val personaName = sharedPreferencesHelper.getRpPersonaName()
+        val personaOn = sharedPreferencesHelper.isRpPersonaEnabled()
+        val personaName = sharedPreferencesHelper.activeRpPersonaName()
         val cast = character?.takeIf { !llm }
         val tiles = buildList {
             // Three rows of three: the story (its chats, what is remembered, the world), the people
@@ -6005,9 +6007,10 @@ $cleanContent
                     if (rpPanel?.isShowing == true) showRpCharacterPanel()
                 }
             })
-            val personaPhoto = sharedPreferencesHelper.getRpPersonaPhoto()
+            // The card is the portrait alone; the name would crowd it, and off shows the empty silhouette.
+            val personaPhoto = sharedPreferencesHelper.getRpPersonaPhoto()?.takeIf { personaOn }
                 ?.let { RpAvatarStorage.personaFile(requireContext(), it) }?.takeIf { it.isFile }
-            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, RpTileArt.Kind.PERSONA, preview = personaName.ifBlank { null }, image = personaPhoto, letter = personaName.trim().ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, RpTileArt.Kind.PERSONA, image = personaPhoto, letter = personaName.trim().ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
             if (cast != null) {
                 val slot = BackgroundPhoto.slotForCharacter(cast.id)
                 val wallpaper = BackgroundPhoto.file(requireContext(), slot).takeIf { it.isFile }

@@ -67,12 +67,11 @@ object RpCharacterPanel {
         character?.let { c ->
             val file = RpAvatarStorage.avatarFile(ctx, c.id)
             if (file.exists()) {
+                // centerCrop keeps the aspect; the frame's oval outline does the rounding. A circular
+                // RoundedBitmapDrawable stretched a non-square photo into the square instead.
                 BitmapFactory.decodeFile(file.absolutePath)?.let { bmp ->
                     sheet.findViewById<ImageView>(R.id.rpPanelAvatar).apply {
-                        setImageDrawable(
-                            androidx.core.graphics.drawable.RoundedBitmapDrawableFactory.create(resources, bmp)
-                                .apply { isCircular = true }
-                        )
+                        setImageBitmap(bmp)
                         visibility = View.VISIBLE
                     }
                 }
