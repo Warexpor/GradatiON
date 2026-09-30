@@ -168,10 +168,10 @@ class ChatAdapter(
             pendingStreamFinalize = false
             if (messages.isNotEmpty()) {
                 val lastIndex = messages.size - 1
-                // Let the last words finish fading in before swapping to the full render. The parse
-                // ran in the background since the stream ended, so the swap itself costs no freeze.
+                // Swap at once: waiting for the last words' fade left a dead beat between the final
+                // word and the tools. The parse ran in the background, so the swap itself is cheap.
                 val token = ++finalizeToken
-                mainHandler.postDelayed({ swapFinal(lastIndex, token, retried = false) }, StreamFadeSpan.DURATION_MS)
+                mainHandler.post { swapFinal(lastIndex, token, retried = false) }
             }
         }
     )
