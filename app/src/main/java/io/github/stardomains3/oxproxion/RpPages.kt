@@ -274,7 +274,7 @@ class RpWallpaperFragment : RpPageFragment() {
     }
 }
 
-/** What this character remembers (a note that lasts) and the facts this chat has established. Saved when you leave. */
+/** What this character remembers (a note that lasts) and the facts this chat has established. Save writes both; back discards. */
 class RpMemoryFragment : RpPageFragment() {
     override fun title() = getString(R.string.rp_panel_memory)
 
@@ -288,6 +288,12 @@ class RpMemoryFragment : RpPageFragment() {
         factsStart = chatViewModel.currentRpFacts()
         note = field(body, R.string.rp_memory_note, R.string.rp_memory_hint, noteStart)
         facts = field(body, R.string.rp_facts_title, R.string.rp_facts_hint, factsStart)
+        val saveButton = layoutInflater.inflate(R.layout.view_rp_save_button, body, false)
+        saveButton.setOnClickListener {
+            save()
+            parentFragmentManager.popBackStack()
+        }
+        body.addView(saveButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(20) })
     }
 
     private fun field(body: LinearLayout, label: Int, hintRes: Int, text: String): EditText {
@@ -314,8 +320,7 @@ class RpMemoryFragment : RpPageFragment() {
         return edit
     }
 
-    override fun onPause() {
-        super.onPause()
+    private fun save() {
         note?.text?.toString()?.takeIf { it != noteStart }?.let {
             prefs.saveRpMemory(characterId, it)
             noteStart = it
