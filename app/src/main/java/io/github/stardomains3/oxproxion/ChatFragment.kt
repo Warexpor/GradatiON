@@ -1536,13 +1536,21 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val topBar = root.findViewById<View>(R.id.topBarGlass)
         val dock = root.findViewById<View>(R.id.composerDock)
         val code = root.findViewById<View>(R.id.codeModeContainer)
+        val fade = root.findViewById<View>(R.id.composerFade)
+        val list = root.findViewById<View>(R.id.chatRecyclerView)
         val barTop = topBar.paddingTop
         val dockBottom = dock.paddingBottom
         frame.clipToPadding = false
+        // The keyboard's rise is animated, not laid out: while it moves the layout keeps the
+        // bars-only inset and the composer (and the transcript, when it is at the bottom) are
+        // translated by the keyboard's live height, so nothing relayouts per frame. When it
+        // settles the real inset is applied in one go, landing exactly where the translation was.
+        var imeAnimating = false
+        var listFollows = false
         ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val bottom = maxOf(bars.bottom, ime.bottom)
+            val bottom = if (imeAnimating) bars.bottom else maxOf(bars.bottom, ime.bottom)
             v.setPadding(bars.left, 0, bars.right, 0)
             topBar.setPadding(topBar.paddingLeft, barTop + bars.top, topBar.paddingRight, topBar.paddingBottom)
             // Everything in the chat frame keeps its old place; only the backdrop bleeds out.
@@ -1558,6 +1566,50 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             code.setPadding(0, 0, 0, bottom)
             WindowInsetsCompat.CONSUMED
         }
+        fun lift(insets: WindowInsetsCompat?): Float {
+            insets ?: return 0f
+            val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            return -maxOf(0, ime.bottom - sys.bottom).toFloat()
+        }
+        fun move(offset: Float) {
+            dock.translationY = offset
+            fade.translationY = offset
+            list.translationY = if (listFollows) offset else 0f
+        }
+        val imeType = WindowInsetsCompat.Type.ime()
+        ViewCompat.setWindowInsetsAnimationCallback(content, object : androidx.core.view.WindowInsetsAnimationCompat.Callback(
+            androidx.core.view.WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE
+        ) {
+            override fun onPrepare(animation: androidx.core.view.WindowInsetsAnimationCompat) {
+                if (animation.typeMask and imeType == 0) return
+                imeAnimating = true
+                listFollows = !list.canScrollVertically(1)
+                // Hiding lays out at the end state at once: start the translation where the keyboard is.
+                move(lift(ViewCompat.getRootWindowInsets(content)))
+            }
+
+            override fun onProgress(
+                insets: WindowInsetsCompat,
+                runningAnimations: MutableList<androidx.core.view.WindowInsetsAnimationCompat>
+            ): WindowInsetsCompat {
+                if (!imeAnimating) return insets
+                move(lift(insets))
+                if (code.isVisible) {
+                    val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                    code.setPadding(0, 0, 0, maxOf(sys.bottom, insets.getInsets(imeType).bottom))
+                }
+                return insets
+            }
+
+            override fun onEnd(animation: androidx.core.view.WindowInsetsAnimationCompat) {
+                if (animation.typeMask and imeType == 0 || !imeAnimating) return
+                imeAnimating = false
+                listFollows = false
+                move(0f)
+                ViewCompat.requestApplyInsets(content)
+            }
+        })
         ViewCompat.requestApplyInsets(content)
     }
 
