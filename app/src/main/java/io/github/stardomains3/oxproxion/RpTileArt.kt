@@ -236,8 +236,9 @@ class RpTileArt(
     /** A round portrait: the persona's photo, else its initial, else a silhouette while there is no name. */
     private fun persona(c: Canvas, s: Float) {
         val cx = s * 0.5f
-        val cy = s * 0.66f
-        val r = s * 0.24f
+        // Centered in the room under the name (about 0.27 to 1.0 of the tile), as large as fits.
+        val cy = s * 0.635f
+        val r = s * 0.295f
         solid(BASE)
         c.drawCircle(cx, cy, r, p)
         val shot = photo

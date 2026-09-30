@@ -31,7 +31,7 @@ class AvatarAndPersonaTest {
         art.layout(0, 0, 300, 300)
         val out = Bitmap.createBitmap(300, 300, Bitmap.Config.ARGB_8888)
         art.draw(Canvas(out))
-        val px = out.getPixel(150, (300 * 0.66f).toInt())
+        val px = out.getPixel(150, (300 * 0.635f).toInt())
         assertEquals(255, Color.red(px))
         assertTrue("green ${Color.green(px)}", Color.green(px) < 8)
         assertTrue("blue ${Color.blue(px)}", Color.blue(px) < 8)
