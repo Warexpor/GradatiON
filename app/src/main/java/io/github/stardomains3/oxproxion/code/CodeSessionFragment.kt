@@ -21,7 +21,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import io.github.stardomains3.oxproxion.AppToast
 import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
@@ -91,7 +90,11 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             decodeScope = viewLifecycleOwner.lifecycleScope,
             onApproval = { e, opt ->
                 view.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
-                hub.answer(sessionId, e.requestId, opt)
+                hub.answer(sessionId, e.requestId, opt) {
+                    // Nothing went out: the card gets its buttons back, and the person hears why.
+                    if (::adapter.isInitialized) adapter.approvalFailed(e.requestId)
+                    context?.let { GlassNotice.show(it, getString(R.string.code_approval_send_failed)) }
+                }
             },
             onOpenDiff = { e -> openDiff(e) },
             onOpenToolOutput = { e -> openToolOutput(e) },
@@ -117,7 +120,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                 val state = hub.sessions.value[sessionId]
                 if (state !== approvalScanState) {
                     approvalScanState = state
-                    approvalScanPending = state?.events?.any { it is CodeEvent.Approval && it.chosen == null } == true
+                    approvalScanPending = state?.events?.any { it is CodeEvent.Approval && it.pending } == true
                 }
                 if (approvalScanPending) updateApprovalBar(state)
             }
@@ -199,6 +202,8 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
     }
 
     override fun onDestroyView() {
+        // An idle session stops being tracked on the machine link once its screen is gone.
+        if (::hub.isInitialized) hub.release(sessionId)
         // Recycle the rows so their per-row work (the "Working" sweep, stream fades) stops.
         list.adapter = null
         sessionTopFade = null
@@ -209,6 +214,14 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         val title = view.findViewById<TextView>(R.id.codeSessionTitle)
         val subtitle = view.findViewById<TextView>(R.id.codeSessionSubtitle)
         val banner = view.findViewById<TextView>(R.id.codeSessionBanner)
+        val stateView = view.findViewById<TextView>(R.id.codeSessionState)
+        // Tapping the banner (or the failed-load message) connects again instead of waiting out the backoff.
+        banner.setOnClickListener { hub.hosts.value.find { it.id == hub.sessions.value[sessionId]?.summary?.hostId }?.let { hub.connect(it) } }
+        stateView.setOnClickListener {
+            val host = hub.hosts.value.find { it.id == hub.sessions.value[sessionId]?.summary?.hostId } ?: return@setOnClickListener
+            hub.connect(host)
+            hub.attach(sessionId)
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
@@ -233,6 +246,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                         composer.setPermission(s.summary.permissionMode)
                         composer.availableCommands = s.availableCommands
                         composer.input.hint = getString(R.string.code_session_reply_hint, s.summary.harness.shortName)
+                        bindStateView(stateView, s)
                         render(s)
                     }
                 }
@@ -256,13 +270,35 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                             banner.text = if (c == ConnectionState.CONNECTING) {
                                 getString(R.string.code_status_connecting)
                             } else {
-                                getString(R.string.code_session_offline_banner, h.name)
+                                val err = hub.lastErrorOf(h.id)
+                                buildString {
+                                    append(getString(R.string.code_session_offline_banner, h.name))
+                                    append('\n').append(getString(R.string.code_session_reconnect))
+                                    if (!err.isNullOrBlank()) append('\n').append(err)
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    /**
+     * What the empty transcript says: loading, waiting for the agent's first word, or that the
+     * history could not be loaded (tap to retry). Gone as soon as there is anything to show.
+     */
+    private fun bindStateView(view: TextView, s: CodeSessionState) {
+        val text = when {
+            s.events.isNotEmpty() -> null
+            s.attachError != null -> getString(R.string.code_session_attach_failed)
+            s.attaching || !s.attached -> getString(R.string.code_session_loading)
+            !s.running -> getString(R.string.code_session_empty)
+            else -> null
+        }
+        view.isVisible = text != null
+        if (text != null) view.text = text
+        view.isClickable = s.events.isEmpty() && s.attachError != null
     }
 
     private fun render(s: CodeSessionState) {
@@ -417,7 +453,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         rows += PickerPopover.Row(getString(R.string.code_session_copy_id), subtitle = sessionId, iconRes = R.drawable.ic_copi) {
             requireContext().getSystemService(ClipboardManager::class.java)
                 ?.setPrimaryClip(ClipData.newPlainText("session", sessionId))
-            AppToast.makeText(requireContext(), getString(R.string.code_session_copied), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.code_session_copied))
         }
         val started = DateUtils.getRelativeTimeSpanString(s.summary.createdAt).toString()
         rows += PickerPopover.Row(getString(R.string.code_session_forget), subtitle = started, iconRes = R.drawable.ic_code_trash) {

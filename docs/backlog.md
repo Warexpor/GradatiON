@@ -75,7 +75,7 @@ app, drive it to the best direction you think it is."
 ## Roleplay
 - [x] R1. Revisit the RP harness (prompt assembly, character/persona/lorebook handling) and make it better.
       Chat harness too where it helps.
-- [ ] R2. RP UI polish.
+- [x] R2. RP UI polish. Done in the 2026-09-30 passes: a full-screen page behind every panel tile, a shared page kit (`RpPageKit`), drawn tile art, persona and character avatar picker with crop, History page, persona off switch, and the sheet-drop fix.
 - [x] R3. From the user's RP references (layout and feel only, never visuals):
       - A "continue" / fast-forward button: the AI writes the next beat without a user message,
         to drive the story. It has to fit our composer somehow.

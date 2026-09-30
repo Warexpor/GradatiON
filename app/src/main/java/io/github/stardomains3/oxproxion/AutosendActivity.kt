@@ -41,10 +41,10 @@ class AutosendActivity : AppCompatActivity() {
             if (sharedText.length > 200) "$text…" else text
         }
         GlassAlertDialogBuilder(this)
-            .setTitle("Auto Send")
-            .setMessage("Send this text to GradatiON now?\n\n$preview")
-            .setPositiveButton("Send") { _, _ -> forwardToMain(sharedText) }
-            .setNegativeButton("Cancel") { _, _ -> finish() }
+            .setTitle(R.string.autosend_title)
+            .setMessage(getString(R.string.autosend_message, preview))
+            .setPositiveButton(R.string.chooser_send) { _, _ -> forwardToMain(sharedText) }
+            .setNegativeButton(R.string.action_cancel) { _, _ -> finish() }
             .setOnCancelListener { finish() }
             .show()
     }

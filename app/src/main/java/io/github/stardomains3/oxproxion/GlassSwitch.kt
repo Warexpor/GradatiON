@@ -53,10 +53,13 @@ private fun lerpColor(a: Int, b: Int, t: Float): Int = Color.argb(
 
 private fun IntArray.has(attr: Int) = contains(attr)
 
-/** Animate only what is on screen; state set while binding (not laid out yet) just jumps. */
+/**
+ * Animate only what is on screen; state set while binding (not laid out yet) just jumps, and
+ * so does everything when the system's animations are off (the pill and fill snap into place).
+ */
 internal fun Drawable.canAnimateOnScreen(): Boolean {
     val v = callback as? android.view.View ?: return false
-    return isVisible && v.isLaidOut && v.isAttachedToWindow
+    return isVisible && v.isLaidOut && v.isAttachedToWindow && Motion.areAnimationsEnabled(v.context)
 }
 
 class GlassSwitchTrackDrawable : Drawable() {

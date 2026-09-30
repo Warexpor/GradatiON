@@ -3,17 +3,14 @@ package io.github.stardomains3.oxproxion
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 
 import android.os.Bundle
-import android.text.SpannableString
-import android.text.style.ForegroundColorSpan
-import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.appcompat.widget.PopupMenu
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.activityViewModels
@@ -30,6 +27,7 @@ class RpCharacterLibraryFragment : Fragment() {
     private lateinit var adapter: RpCharacterAdapter
     private lateinit var prefs: SharedPreferencesHelper
     private lateinit var emptyView: View
+    private var cardMenu: MessageMenu? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_rp_character_library, container, false)
@@ -65,24 +63,17 @@ class RpCharacterLibraryFragment : Fragment() {
                         chatViewModel.getRpRepository().deleteCharacter(character.id)
                         if (!isAdded) return@launch
                         RpAvatarStorage.deleteAvatar(requireContext(), character.id)
+                        prefs.clearRpCharacterPrefs(character.id)
                         if (prefs.getRpActiveCharacterId() == character.id) {
                             prefs.saveRpActiveCharacterId(null)
                             chatViewModel.refreshActiveRpCharacter()
                             if (prefs.isRpLlmMode()) {
-                                AppToast.makeText(
-                                    requireContext(),
-                                    getString(R.string.rp_character_deleted_parked),
-                                    AppToast.LENGTH_SHORT
-                                ).show()
+                                GlassNotice.show(requireContext(), getString(R.string.rp_character_deleted_parked))
                             } else {
                                 if (chatViewModel.isRpMode()) {
                                     chatViewModel.startNewChat()
                                 }
-                                AppToast.makeText(
-                                    requireContext(),
-                                    getString(R.string.rp_character_deleted_active),
-                                    AppToast.LENGTH_SHORT
-                                ).show()
+                                GlassNotice.show(requireContext(), getString(R.string.rp_character_deleted_active))
                             }
                         }
                     }
@@ -156,28 +147,24 @@ class RpCharacterLibraryFragment : Fragment() {
     }
 
     private fun showCardMenu(anchor: View, character: RpCharacter, onEdit: (RpCharacter) -> Unit, onDelete: (RpCharacter) -> Unit) {
-        val popup = PopupMenu(anchor.context, anchor, Gravity.END)
-        popup.menu.add(0, MENU_START, 0, R.string.rp_menu_start_chat)
-        popup.menu.add(0, MENU_EDIT, 1, R.string.rp_menu_edit)
-        popup.menu.add(0, MENU_DELETE, 2, R.string.rp_menu_delete).apply {
-            val label = SpannableString(title)
-            label.setSpan(
-                ForegroundColorSpan(anchor.context.getColor(R.color.delete_action)),
-                0,
-                label.length,
-                0
-            )
-            title = label
+        val root = view as? FrameLayout ?: return
+        cardMenu?.dismiss(animated = false)
+        // Same glass menu as the chats list, not the platform popup (an opaque system-themed card).
+        val items = listOf(
+            MessageMenu.Item(getString(R.string.rp_menu_start_chat), R.drawable.ic_new_chat) { activateCharacter(character) },
+            MessageMenu.Item(getString(R.string.rp_menu_edit), R.drawable.ic_msg_edit) { onEdit(character) },
+            MessageMenu.Item(getString(R.string.rp_menu_delete), R.drawable.ic_msg_delete, destructive = true) { onDelete(character) }
+        )
+        cardMenu = MessageMenu(root, anchor, root.findViewById(R.id.rpLibraryBackdrop)).also { m ->
+            m.onDismiss = { if (cardMenu === m) cardMenu = null }
+            m.show(items, viewLifecycleOwner)
         }
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                MENU_START -> activateCharacter(character)
-                MENU_EDIT -> onEdit(character)
-                MENU_DELETE -> onDelete(character)
-            }
-            true
-        }
-        popup.show()
+    }
+
+    override fun onDestroyView() {
+        cardMenu?.dismiss(animated = false)
+        cardMenu = null
+        super.onDestroyView()
     }
 
     private class RpCharacterAdapter(
@@ -253,9 +240,6 @@ class RpCharacterLibraryFragment : Fragment() {
 
     companion object {
         const val BACK_STACK_TAG = "rp_character_library"
-        private const val MENU_START = 1
-        private const val MENU_EDIT = 2
-        private const val MENU_DELETE = 3
         fun newInstance() = RpCharacterLibraryFragment()
     }
 }

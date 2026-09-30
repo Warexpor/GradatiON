@@ -29,7 +29,10 @@ class ChatTextView @JvmOverloads constructor(
 ) : AppCompatTextView(context, attrs, defStyleAttr) {
 
     private val density = resources.displayMetrics.density
-    private val scaled = resources.displayMetrics.scaledDensity
+    /** Pixels per sp at the user's font size (what the deprecated scaledDensity was). */
+    private val scaled = android.util.TypedValue.applyDimension(
+        android.util.TypedValue.COMPLEX_UNIT_SP, 1f, resources.displayMetrics
+    )
     private val cardRadius = 12f * density
     private val pillRadius = 6f * density
     private val pillPadX = 3.5f * density
@@ -52,7 +55,7 @@ class ChatTextView @JvmOverloads constructor(
     }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = ContextCompat.getColor(context, R.color.xai_mute)
-        textSize = 12.5f * scaled
+        textSize = 13f * scaled  // Nothing tappable is under 13sp: the label is part of the copy header
         typeface = runCatching { ResourcesCompat.getFont(context, R.font.jakarta_medium) }.getOrNull()
     }
     private val copyIcon: Drawable? = ContextCompat.getDrawable(context, R.drawable.ic_msg_copy)?.mutate()?.apply {
@@ -71,6 +74,10 @@ class ChatTextView @JvmOverloads constructor(
         val rect = RectF()
         var code: String = ""
     }
+    private var markerText: Spanned? = null
+    private var markerLength = -1
+    private var codeBlocks: Array<ChatMarkdown.CodeBlockMarker> = emptyArray()
+    private var inlineCodes: Array<ChatMarkdown.InlineCodeMarker> = emptyArray()
     private val chips = ArrayList<CopyChip>(4)
     private var chipCount = 0
     private var pressedChip = -1
@@ -90,8 +97,15 @@ class ChatTextView @JvmOverloads constructor(
         val layout = layout
         chipCount = 0
         if (spanned != null && layout != null) {
-            val blocks = spanned.getSpans(0, spanned.length, ChatMarkdown.CodeBlockMarker::class.java)
-            val inlines = spanned.getSpans(0, spanned.length, ChatMarkdown.InlineCodeMarker::class.java)
+            // The markers only change with the text; a fade tick redraws the same text every frame.
+            if (spanned !== markerText || spanned.length != markerLength) {
+                markerText = spanned
+                markerLength = spanned.length
+                codeBlocks = spanned.getSpans(0, spanned.length, ChatMarkdown.CodeBlockMarker::class.java)
+                inlineCodes = spanned.getSpans(0, spanned.length, ChatMarkdown.InlineCodeMarker::class.java)
+            }
+            val blocks = codeBlocks
+            val inlines = inlineCodes
             if (blocks.isNotEmpty() || inlines.isNotEmpty()) {
                 canvas.save()
                 canvas.translate(totalPaddingLeft.toFloat(), totalPaddingTop.toFloat())

@@ -111,6 +111,17 @@ object GlassQuality {
     private var lowRam = false
     private var initialized = false
 
+    /** Told (on the main thread) when battery saver flips, so live glass and tickers re-evaluate. */
+    fun interface Listener {
+        fun onGlassQualityChanged()
+    }
+
+    // Weak: a view that forgot to unregister must not be kept alive by this singleton.
+    private val listeners = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Listener, Boolean>())
+
+    fun addListener(listener: Listener) { listeners.add(listener) }
+    fun removeListener(listener: Listener) { listeners.remove(listener) }
+
     fun init(context: Context) {
         if (initialized) return
         initialized = true
@@ -123,7 +134,12 @@ object GlassQuality {
                 app,
                 object : BroadcastReceiver() {
                     override fun onReceive(c: Context, intent: Intent) {
-                        powerSave = pm?.isPowerSaveMode == true
+                        val now = pm?.isPowerSaveMode == true
+                        if (now == powerSave) return
+                        powerSave = now
+                        // The level is read at draw time, but glass that is sitting still never
+                        // draws again: poke it, or it keeps its blur until the next touch.
+                        listeners.toList().forEach { it.onGlassQualityChanged() }
                     }
                 },
                 IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED),
@@ -156,7 +172,7 @@ class GlassMaterial(
     private val host: View,
     attrs: AttributeSet?,
     capsuleByDefault: Boolean = false
-) {
+) : GlassQuality.Listener {
 
     private val density = host.resources.displayMetrics.density
 
@@ -229,6 +245,8 @@ class GlassMaterial(
     private var lastDy = Int.MIN_VALUE
     private var searched = false
     private var effectLevel: GlassQuality.Level? = null
+    /** The compiled lens (API 33+; untyped so the class loads on 31-32), kept across resizes. */
+    private var lensShader: Any? = null
     private var softBmp: Bitmap? = null
 
     // Touch state
@@ -295,13 +313,26 @@ class GlassMaterial(
 
     fun onAttached() {
         host.viewTreeObserver.addOnPreDrawListener(positionWatcher)
+        GlassQuality.addListener(this)
         if (source == null) findSource()
     }
 
+    override fun onGlassQualityChanged() = host.invalidate()
+
     fun onDetached() {
         host.viewTreeObserver.removeOnPreDrawListener(positionWatcher)
+        GlassQuality.removeListener(this)
         pressAnimator?.cancel()
         press = 0f
+        if (interactive) {
+            // A press animation cut off mid-spring would leave the view swollen and off-center
+            // when it comes back (recycled rows, a screen re-shown). Only the press owns these.
+            host.animate().cancel()
+            host.scaleX = 1f
+            host.scaleY = 1f
+            host.translationX = 0f
+            host.translationY = 0f
+        }
         searched = false
         softBmp?.recycle()
         softBmp = null
@@ -472,7 +503,8 @@ class GlassMaterial(
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun lensEffect(w: Int, h: Int): RenderEffect {
-        val shader = RuntimeShader(LENS_AGSL)
+        // Compiling AGSL is the costly part; a resize or tint change only needs new uniforms.
+        val shader = (lensShader as? RuntimeShader) ?: RuntimeShader(LENS_AGSL).also { lensShader = it }
         val short = min(w, h).toFloat()
         // Bigger glass is "thicker": a wider band and a stronger bend, as Apple describes.
         val band = (short * 0.34f).coerceIn(6f * density, 22f * density)

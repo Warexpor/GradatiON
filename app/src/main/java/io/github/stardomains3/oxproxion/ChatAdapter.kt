@@ -11,9 +11,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.text.Spanned
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
-import android.os.Environment
-import android.os.StrictMode
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -21,16 +18,16 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.widget.ImageViewCompat
 import androidx.recyclerview.widget.RecyclerView
 import coil.dispose
 import coil.imageLoader
 import coil.request.ImageRequest
-import com.google.android.material.snackbar.Snackbar
 import io.noties.markwon.Markwon
 import io.noties.markwon.utils.NoCopySpannableFactory
 import kotlinx.coroutines.CoroutineScope
@@ -58,13 +55,7 @@ class ChatAdapter(
     private val onInstructMessage: (Int) -> Unit,
     private val onDeleteMessage: (Int) -> Unit,
     private val onEditAssistantMessage: (Int, String) -> Unit,
-    private val onSaveMarkdown: (Int, String) -> Unit,
-    private val onCaptureItemToBitmap: (Int, String) -> Unit,
-    private val onShowMarkdown: (String) -> Unit,
-    private val onSaveHtml: (String) -> Unit,
-    private val onSaveText: (Int, String) -> Unit,
     private val onCollapse: () -> Unit,
-    private val onSaveAsFile: (String) -> Unit,
     private val forkNavStateForPosition: (Int) -> ChatViewModel.ForkNavState?,
     private val onForkNavigate: (Int) -> Unit
 
@@ -180,10 +171,36 @@ class ChatAdapter(
 
     // Streaming render state: cached closed blocks + per-chunk fade timestamps in rendered
     // coordinates, so each newly revealed run of words eases in on its own clock.
-    private val streamMarkdown = IncrementalMarkdown(markwon, ::ensureTableSpacing)
+    private val streamMarkdown = IncrementalMarkdown(markwon, ::ensureTableSpacing) { text, from ->
+        ChatMarkdown.polish(text, from)
+    }
     private val fadeStarts = ArrayList<Int>()
     private val fadeTimes = ArrayList<Long>()
     private var lastRenderedLen = 0
+
+    /** Needs a context for the animation setting; the list supplies one while it is attached. */
+    private var listContext: Context? = null
+
+    /**
+     * Whether this stream eases words in. Read once when the stream starts (not per frame, and not
+     * per word): with animations off the text simply appears as it arrives.
+     */
+    private var streamAnimated = true
+
+    private fun beginStream() {
+        streamAnimated = listContext?.let { Motion.areAnimationsEnabled(it) } ?: true
+        streamReveal.instant = !streamAnimated
+    }
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        super.onAttachedToRecyclerView(recyclerView)
+        listContext = recyclerView.context
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        listContext = null
+        super.onDetachedFromRecyclerView(recyclerView)
+    }
 
     /**
      * Set while a reply grows in place (Roleplay's Continue): the text it started from. The first
@@ -199,7 +216,6 @@ class ChatAdapter(
         fadeTimes.clear()
         // Prime the incremental parser and the fade bookkeeping with what is already shown.
         val shown = streamMarkdown.render(previous)
-        ChatMarkdown.polish(shown)
         lastRenderedLen = shown.length
     }
 
@@ -212,6 +228,7 @@ class ChatAdapter(
     }
 
     private fun applyStreamFades(text: android.text.SpannableStringBuilder, now: Long) {
+        if (!streamAnimated) return
         val len = text.length
         if (len < lastRenderedLen) {
             while (fadeStarts.isNotEmpty() && fadeStarts.last() >= len) {
@@ -252,6 +269,7 @@ class ChatAdapter(
                     messages[messages.size - 1] = newMessage
                     val text = getMessageText(newMessage.content)
                     if (!ThinkingPlaceholder.matches(text) && text.isNotBlank()) {
+                        if (streamReveal.displayed().isEmpty()) beginStream()
                         val from = continuingFrom
                         if (from != null && from.isNotBlank() && streamReveal.displayed().isEmpty() && text.startsWith(from)) {
                             seedContinuation(from)
@@ -483,6 +501,16 @@ class ChatAdapter(
         return null
     }
 
+    /** What a message shows: its text, or for a turn that only called tools a line naming them. */
+    private fun visibleText(message: FlexibleMessage): String {
+        val text = getMessageText(message.content)
+        if (message.role == "assistant" && message.toolCalls != null && text.isBlank()) {
+            val names = message.toolCalls.map { it.function.name }.distinct().joinToString()
+            return listContext?.getString(R.string.tool_used_format, names) ?: "**Tool used:** $names"
+        }
+        return text
+    }
+
     // --- OPTIMIZED BAKING FUNCTION ---
     private fun getPreRenderedContent(message: FlexibleMessage): CharSequence {
         renderCache[message]?.let { return it }
@@ -491,19 +519,9 @@ class ChatAdapter(
 
     /** The markdown parse alone, with no cache access, so it can run off the main thread. */
     private fun renderContent(message: FlexibleMessage): CharSequence {
-        // 2. Extract Text (JSON Logic)
-        val text = if (message.role == "assistant" && message.toolCalls != null && getMessageText(message.content).isBlank()) {
-            // Show a clean, formatted indicator of what tool was used
-            "🔧 **Tool Used:** ${message.toolCalls.map { it.function.name }.distinct().joinToString()}"
-        } else {
-            getMessageText(message.content)
-        }
-
         // Reasoning lives in its own collapsible UI — do not bake it into the body.
-        val rawText = text
-
         // 3. Run Regex (Expensive)
-        val fullText = ensureTableSpacing(rawText)
+        val fullText = ensureTableSpacing(visibleText(message))
 
         // 4. Render Markdown with Safety (Expensive)
         val renderedContent = try {
@@ -564,6 +582,21 @@ class ChatAdapter(
             }
             tv.setText(text, type)
         }
+
+        /** A stored photo scaled to about [maxEdge] pixels across; the full 12 MB bitmap is never built. */
+        private fun decodeSampled(base64: String, maxEdge: Int): android.graphics.Bitmap? {
+            val bytes = try {
+                android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+            } catch (e: IllegalArgumentException) {
+                return null
+            }
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= maxEdge && bounds.outHeight / (sample * 2) >= maxEdge) sample *= 2
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+        }
+
         private val TABLE_AFTER_ITEM = Regex(
             """(^[\t >]*([-+*]|\d+\.)\s+(?:\\\$\\\[ ?[ xX]?\\]\\\s+)?[^\n]*)\n(?=\|)""",
             RegexOption.MULTILINE
@@ -661,12 +694,6 @@ class ChatAdapter(
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val message = messages[position]
-        var contentText = getMessageText(message.content)
-
-        if (message.role == "assistant" && message.toolCalls != null && contentText.isBlank()) {
-            contentText = "🔧 **Tool Used:** ${message.toolCalls.map { it.function.name }.distinct().joinToString()}"
-        }
-
         when (holder) {
             is UserViewHolder -> holder.bind(message)
             is AssistantViewHolder -> holder.bind(message, position, isSpeaking, currentSpeakingPosition)
@@ -764,6 +791,17 @@ class ChatAdapter(
             val next = !userActionsExpanded.contains(actionsMsgKey)
             if (next) userActionsExpanded.add(actionsMsgKey) else userActionsExpanded.remove(actionsMsgKey)
             applyActionsVisibility(next, animate = true)
+            labelActionsClick(next)
+        }
+
+        /** A tap on the bubble opens or closes the action row; TalkBack says so instead of a bare "double tap to activate". */
+        private fun labelActionsClick(expanded: Boolean) {
+            ViewCompat.replaceAccessibilityAction(
+                messageContainer,
+                AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_CLICK,
+                itemView.context.getString(if (expanded) R.string.a11y_hide_message_actions else R.string.a11y_show_message_actions),
+                null
+            )
         }
 
         fun bind(message: FlexibleMessage) {
@@ -774,6 +812,7 @@ class ChatAdapter(
             collapseToggleButton.visibility = View.GONE
             actionsMsgKey = rawUserContent.hashCode().toString() + "_" + (message.imageUri ?: "")
             applyActionsVisibility(userActionsExpanded.contains(actionsMsgKey), animate = false)
+            labelActionsClick(userActionsExpanded.contains(actionsMsgKey))
 
             val tapToggle = View.OnClickListener { toggleActions() }
             messageContainer.setOnClickListener(tapToggle)
@@ -786,7 +825,8 @@ class ChatAdapter(
                 val MAX_CHARS_THRESHOLD = if (isTablet) 300 else 150
                 val MAX_LINES_THRESHOLD = 3
 
-                val rawLines = rawUserContent.lines().size
+                val lines = rawUserContent.lines()
+                val rawLines = lines.size
                 val charLength = rawUserContent.length
                 val isLongMessage = rawLines > MAX_LINES_THRESHOLD || charLength > MAX_CHARS_THRESHOLD
 
@@ -802,7 +842,7 @@ class ChatAdapter(
                             val safeIndex = if (cutOffIndex > 0) cutOffIndex else MAX_CHARS_THRESHOLD
                             rawUserContent.take(safeIndex) + "...(continued)"
                         } else {
-                            rawUserContent.lines().take(MAX_LINES_THRESHOLD).joinToString("\n") + "\n\n**...(continued)**"
+                            lines.take(MAX_LINES_THRESHOLD).joinToString("\n") + "\n\n**...(continued)**"
                         }
                     } else {
                         rawUserContent
@@ -849,16 +889,23 @@ class ChatAdapter(
                             }
                             itemView.context.startActivity(intent)
                         } catch (e: Exception) {
-                            AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_could_not_open_image), AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(itemView.context, itemView.context.getString(R.string.toast_could_not_open_image))
                         }
                     }
                 } catch (e: Exception) {
                     val base64 = getImageBase64(message.content)
                     if (base64 != null) {
-                        val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
-                        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        imageView.setImageBitmap(bitmap)
+                        // A stored photo can be 12 MB: decode it scaled to the screen, off the main thread.
+                        imageView.setImageDrawable(null)
+                        imageView.setTag(R.id.userImageView, imageUriStr)
                         imageView.visibility = View.VISIBLE
+                        val maxEdge = itemView.resources.displayMetrics.widthPixels
+                        scope.launch {
+                            val bitmap = withContext(Dispatchers.Default) { decodeSampled(base64, maxEdge) }
+                            if (bitmap != null && imageView.getTag(R.id.userImageView) == imageUriStr) {
+                                imageView.setImageBitmap(bitmap)
+                            }
+                        }
                     } else {
                         imageView.visibility = View.GONE
                     }
@@ -871,23 +918,27 @@ class ChatAdapter(
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Copied Text", rawUserContent)
                 clipboard.setPrimaryClip(clip)
+                Haptics.tap(copyButtonuser, android.view.HapticFeedbackConstants.CONFIRM)
                 CopyFeedbackAnimator.play(copyButtonuser)
             }
             copyButtonuser.setOnLongClickListener {
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Copied Markdown", rawUserContent)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_raw_md_copied), AppToast.LENGTH_SHORT).show()
+                Haptics.tap(copyButtonuser, android.view.HapticFeedbackConstants.CONFIRM)
+                CopyFeedbackAnimator.play(copyButtonuser)
                 true
             }
             editButton.setOnClickListener {
                 if (rawUserContent.isNotBlank()) {
+                    Haptics.tap(editButton)
                     onEditMessage(bindingAdapterPosition, rawUserContent)
                 }
             }
             // Regenerated from AI row now; keep listener no-op for ID stability
             resendButton.setOnClickListener(null)
             deleteButton.setOnClickListener {
+                Haptics.tap(deleteButton)
                 onDeleteMessage(bindingAdapterPosition)
             }
         }
@@ -902,10 +953,6 @@ class ChatAdapter(
 
         val messageTextView: TextView = itemView.findViewById(R.id.messageTextView)
         private val copyButton: ImageButton = itemView.findViewById(R.id.copyButton)
-        private val aipdfButton: ImageButton = itemView.findViewById(R.id.aipdfButton)
-        private val shareButton: ImageButton = itemView.findViewById(R.id.shareButton)
-        private val markdownButton: ImageButton = itemView.findViewById(R.id.markdownButton)
-        private val pngButton: ImageButton = itemView.findViewById(R.id.pngButton)
         val ttsButton: ImageButton = itemView.findViewById(R.id.ttsButton)
         private val regenerateButton: ImageButton = itemView.findViewById(R.id.regenerateButton)
         private val moreActionsButton: ImageButton = itemView.findViewById(R.id.moreActionsButton)
@@ -932,9 +979,7 @@ class ChatAdapter(
         val messageContainer: ConstraintLayout = itemView.findViewById(R.id.messageContainer)
         private var pulseAnimator: ObjectAnimator? = null
         private var bgColorAnimator: ObjectAnimator? = null
-        private val htmlButton: ImageButton = itemView.findViewById(R.id.htmlButton)
-        private val collapseToggleButton: ImageButton = itemView.findViewById(R.id.collapseToggleButton)
-        private val saveFileButton: ImageButton = itemView.findViewById(R.id.saveFileButton)
+        private val aiActionRow: View = itemView.findViewById(R.id.aiActionRow)
         private val editButton: ImageButton = itemView.findViewById(R.id.editButton)
         private val reasoningBlock: View = itemView.findViewById(R.id.reasoningBlock)
         private val reasoningHeader: View = itemView.findViewById(R.id.reasoningHeader)
@@ -942,9 +987,6 @@ class ChatAdapter(
         private val reasoningTitle: TextView = itemView.findViewById(R.id.reasoningTitle)
         private val reasoningTextView: TextView = itemView.findViewById(R.id.reasoningTextView)
         private val thinkingRow: View = itemView.findViewById(R.id.thinkingRow)
-        private val thinkingBar1: View = itemView.findViewById(R.id.thinkingBar1)
-        private val thinkingBar2: View = itemView.findViewById(R.id.thinkingBar2)
-        private val thinkingBar3: View = itemView.findViewById(R.id.thinkingBar3)
         private val forkNavigator: View = itemView.findViewById(R.id.forkNavigator)
         private val forkPrev: ImageButton = itemView.findViewById(R.id.forkPrev)
         private val forkNext: ImageButton = itemView.findViewById(R.id.forkNext)
@@ -954,20 +996,18 @@ class ChatAdapter(
         }
         private val rpSpeakerAvatar: ImageView = itemView.findViewById(R.id.rpSpeakerAvatar)
         private val rpSpeakerNameView: TextView = itemView.findViewById(R.id.rpSpeakerName)
-        private var thinkingBarAnimators: List<ObjectAnimator>? = null
         private var rpBubbleLayoutApplied: Boolean? = null
+        /** The bubble look last set on [messageContainer], so a rebind only touches it when it changes. */
+        private var bubbleLookApplied: Boolean? = null
 
         private val thinkingLabel: TextView = itemView.findViewById(R.id.thinkingLabel)
 
-        // "Thinking" sheen replaces the old bar meter; bars stay in the layout for ID stability.
+        // The "Thinking" label glints while the model works.
         private fun startThinkingBars() {
-            itemView.findViewById<View>(R.id.thinkingBars).visibility = View.GONE
             ShimmerText.post(thinkingLabel, ShimmerText.highlightFor(thinkingLabel))
         }
 
         private fun stopThinkingBars() {
-            thinkingBarAnimators?.forEach { it.cancel() }
-            thinkingBarAnimators = null
             ShimmerText.stop(thinkingLabel)
         }
 
@@ -1060,7 +1100,7 @@ class ChatAdapter(
             val d = itemView.resources.displayMetrics.density
             val headerLp = rpSpeakerHeader.layoutParams as ConstraintLayout.LayoutParams
             val msgLp = messageContainer.layoutParams as ConstraintLayout.LayoutParams
-            val actionRow = itemView.findViewById<View>(R.id.aiActionRow)
+            val actionRow = aiActionRow
             val actionLp = actionRow.layoutParams as ConstraintLayout.LayoutParams
 
             rpSpeakerNameView.visibility = View.VISIBLE
@@ -1189,27 +1229,16 @@ class ChatAdapter(
                     val fades = if (text is android.text.Spanned) {
                         text.getSpans(0, text.length, StreamFadeSpan::class.java)
                     } else emptyArray()
-                    val cursors = if (text is android.text.Spanned) {
-                        text.getSpans(0, text.length, StreamCursorSpan::class.java)
-                    } else emptyArray()
-                    val fadesDone = fades.isEmpty() || fades.all { it.isDone() }
-                    if (fadesDone && cursors.isEmpty()) {
+                    // Word fades need every frame; once they are all done there is nothing left to tick.
+                    if (fades.isEmpty() || fades.all { it.isDone() }) {
                         fadeTicker = null
                         if (text is android.text.Spannable) {
                             fades.forEach { text.removeSpan(it) }
                         }
                         return
                     }
-                    if (fadesDone && text is android.text.Spannable) {
-                        fades.forEach { text.removeSpan(it) }
-                    }
                     messageTextView.invalidate()
-                    // Word fades need every frame; the breathing cursor alone runs at ~15fps.
-                    if (fadesDone) {
-                        android.view.Choreographer.getInstance().postFrameCallbackDelayed(this, 66L)
-                    } else {
-                        android.view.Choreographer.getInstance().postFrameCallback(this)
-                    }
+                    android.view.Choreographer.getInstance().postFrameCallback(this)
                 }
             }
             fadeTicker = ticker
@@ -1231,10 +1260,9 @@ class ChatAdapter(
                 // No cursor glyph: new words ease in on their own (Claude-style), and nothing
                 // hops from line end to line end while the reply flows.
                 val spanned = streamMarkdown.render(displayed)
-                ChatMarkdown.polish(spanned)
                 applyStreamFades(spanned, android.os.SystemClock.uptimeMillis())
                 messageTextView.setText(spanned, TextView.BufferType.SPANNABLE)
-                ensureFadeTicker()
+                if (streamAnimated) ensureFadeTicker()
             } catch (_: Exception) {
                 messageTextView.text = displayed
             }
@@ -1243,7 +1271,7 @@ class ChatAdapter(
         fun bindTextOnly(message: FlexibleMessage) {
             attachStreamRevealHolder(this)
             // Hold the row's space while streaming so the finished reply doesn't jump a step.
-            itemView.findViewById<View>(R.id.aiActionRow).visibility = View.INVISIBLE
+            aiActionRow.visibility = View.INVISIBLE
             val text = getMessageText(message.content)
 
             if (ThinkingPlaceholder.matches(text) || text.isBlank()) {
@@ -1279,11 +1307,7 @@ class ChatAdapter(
 
             bindReasoning(message, streaming = false)
 
-            val text = if (message.role == "assistant" && message.toolCalls != null && getMessageText(message.content).isBlank()) {
-                "Tool Call: ${message.toolCalls.map { it.function.name }.distinct().joinToString()}"
-            } else {
-                getMessageText(message.content)
-            }
+            val text = visibleText(message)
             val isThinking = ThinkingPlaceholder.matches(text)
 
             if (!isThinking) {
@@ -1296,11 +1320,6 @@ class ChatAdapter(
             // Replies always show in full; the fold-long-answers toggle is gone.
             messageTextView.maxLines = Int.MAX_VALUE
             messageTextView.ellipsize = null
-            collapseToggleButton.visibility = View.GONE
-            collapseToggleButton.setOnClickListener(null)
-            shareButton.visibility = View.GONE
-
-            val reasoningText = reasoningSource(message).let { if (it.isBlank()) "" else "\n\n$it" }
 
             // 3. UI STATE LOGIC
             // Read aloud lives in the ⋮ menu now; the button only carries its actions.
@@ -1310,7 +1329,7 @@ class ChatAdapter(
 
             // Copy, share, regenerate and the rest only make sense on a finished reply: the
             // row stays away while this one is still streaming and fades in once it lands.
-            val actionRow = itemView.findViewById<View>(R.id.aiActionRow)
+            val actionRow = aiActionRow
             val streamingHere = replyInFlight && position == messages.lastIndex
             val showActions = !isThinking && !streamingHere
             if (showActions && actionRow.visibility != View.VISIBLE && itemView.isAttachedToWindow &&
@@ -1336,15 +1355,19 @@ class ChatAdapter(
             bindThinkingState(isThinking)
             bindRpSpeakerHeader(isThinking)
 
-            messageContainer.setBackgroundResource(R.drawable.bg_ai_message)
-            val d = itemView.resources.displayMetrics.density
             val bubble = isRpMode && rpLayout == SharedPreferencesHelper.RP_LAYOUT_BUBBLES && !isThinking
-            if (bubble) {
-                messageContainer.setBackgroundResource(R.drawable.bg_rp_bubble)
-                messageContainer.setPadding((14 * d).toInt(), (10 * d).toInt(), (14 * d).toInt(), (10 * d).toInt())
-            } else {
-                val p = (4 * d).toInt()
-                messageContainer.setPadding(p, p, p, p)
+            if (bubbleLookApplied != bubble) {
+                // Swapping the background drawable and padding re-lays the row out: only on a change.
+                bubbleLookApplied = bubble
+                val d = itemView.resources.displayMetrics.density
+                if (bubble) {
+                    messageContainer.setBackgroundResource(R.drawable.bg_rp_bubble)
+                    messageContainer.setPadding((14 * d).toInt(), (10 * d).toInt(), (14 * d).toInt(), (10 * d).toInt())
+                } else {
+                    messageContainer.setBackgroundResource(R.drawable.bg_ai_message)
+                    val p = (4 * d).toInt()
+                    messageContainer.setPadding(p, p, p, p)
+                }
             }
             applyRpBubbleLayout(bubble)
             if (isError) {
@@ -1383,7 +1406,7 @@ class ChatAdapter(
                             }
                             itemView.context.startActivity(intent)
                         } catch (e: Exception) {
-                            AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_could_not_open_image), AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(itemView.context, itemView.context.getString(R.string.toast_could_not_open_image))
                         }
                     }
                 } catch (e: Exception) {
@@ -1393,20 +1416,7 @@ class ChatAdapter(
                 generatedImageView.visibility = View.GONE
             }
 
-            // 6. BUTTON LISTENERS (Lazy Calculation)
-            htmlButton.setOnClickListener {
-                val fullRawMarkdown = ensureTableSpacing(reasoningText + text)
-                if (fullRawMarkdown.isNotBlank()) {
-                    onShowMarkdown.invoke(fullRawMarkdown)
-                }
-            }
-            htmlButton.setOnLongClickListener {
-                val fullRawMarkdown = ensureTableSpacing(reasoningText + text)
-                if (fullRawMarkdown.isNotBlank()) {
-                    onSaveHtml.invoke(fullRawMarkdown)
-                    true // Consume long press
-                } else false
-            }
+            // 6. BUTTON LISTENERS
             editButton.setOnClickListener {
                 // Edit the visible reply only — do not bake reasoning into content/swipe alts.
                 onEditAssistantMessage(bindingAdapterPosition, ensureTableSpacing(text))
@@ -1416,6 +1426,7 @@ class ChatAdapter(
                 if (pos <= 0 || pos >= messages.size) return@setOnClickListener
                 val prev = messages[pos - 1]
                 if (prev.role == "user") {
+                    Haptics.tap(regenerateButton)
                     onRedoMessage(pos - 1, prev.content)
                 }
             }
@@ -1424,8 +1435,15 @@ class ChatAdapter(
                 if (pos < 0 || pos >= messages.size) return@setOnClickListener
                 onInstructMessage(pos)
             }
-            val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" }
-            val lastUserIndex = messages.indexOfLast { it.role == "user" }
+            // One pass from the end finds both: the last assistant and the last user turn.
+            var lastAssistantIndex = -1
+            var lastUserIndex = -1
+            for (i in messages.indices.reversed()) {
+                val role = messages[i].role
+                if (lastAssistantIndex < 0 && role == "assistant") lastAssistantIndex = i
+                if (lastUserIndex < 0 && role == "user") lastUserIndex = i
+                if (lastAssistantIndex >= 0 && lastUserIndex >= 0) break
+            }
             val hasUserTurn = lastUserIndex >= 0
             // Instruct/regen only when there is an assistant reply after the last user turn
             // (not the opening greeting after a cancelled request). Error bubbles still allow retry.
@@ -1445,38 +1463,20 @@ class ChatAdapter(
             ) View.VISIBLE else View.GONE
             copyButton.setOnClickListener {
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("Copied Text", messageTextView.text.toString().trimEnd('\u258C'))
+                val clip = ClipData.newPlainText("Copied Text", messageTextView.text.toString())
                 clipboard.setPrimaryClip(clip)
+                Haptics.tap(copyButton, android.view.HapticFeedbackConstants.CONFIRM)
                 CopyFeedbackAnimator.play(copyButton)
             }
 
             copyButton.setOnLongClickListener {
-                val fullRawMarkdown = ensureTableSpacing(reasoningText + text)
+                val reasoning = reasoningSource(message).let { if (it.isBlank()) "" else "\n\n$it" }
+                val fullRawMarkdown = ensureTableSpacing(reasoning + text)
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Copied Markdown", fullRawMarkdown)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_raw_md_copied), AppToast.LENGTH_SHORT).show()
-                true
-            }
-
-            shareButton.setOnClickListener {
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, messageTextView.text.toString())
-                    putExtra(Intent.EXTRA_SUBJECT, itemView.context.getString(R.string.share_subject_message))
-                }
-                itemView.context.startActivity(Intent.createChooser(shareIntent, itemView.context.getString(R.string.toast_share_message)))
-            }
-
-            shareButton.setOnLongClickListener {
-                val fullRawMarkdown = ensureTableSpacing(reasoningText + text)
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, fullRawMarkdown)
-                    putExtra(Intent.EXTRA_SUBJECT, itemView.context.getString(R.string.share_subject_markdown))
-                }
-                itemView.context.startActivity(Intent.createChooser(shareIntent, itemView.context.getString(R.string.toast_share_markdown)))
-                AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_sharing_markdown), AppToast.LENGTH_SHORT).show()
+                Haptics.tap(copyButton, android.view.HapticFeedbackConstants.CONFIRM)
+                CopyFeedbackAnimator.play(copyButton)
                 true
             }
 
@@ -1497,7 +1497,7 @@ class ChatAdapter(
                     ForegroundService.stopTtsSpeaking()
                     onSpeakText(textToSpeak, position)
                 } else {
-                    AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_no_text_speak), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(itemView.context, itemView.context.getString(R.string.toast_no_text_speak))
                 }
             }
 
@@ -1507,95 +1507,11 @@ class ChatAdapter(
                     ForegroundService.stopTtsSpeaking()
                     onSynthesizeToWavFile(textToSpeak, position)
                 } else {
-                    AppToast.makeText(itemView.context, itemView.context.getString(R.string.toast_no_text_save), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(itemView.context, itemView.context.getString(R.string.toast_no_text_save))
                 }
                 true
             }
 
-            aipdfButton.setOnClickListener {
-                val fullRawMarkdown = ensureTableSpacing(reasoningText + text)
-                // Fragment-scoped: a long PDF must not outlive the chat screen.
-                scope.launch {
-                    val pdfUri = withContext(Dispatchers.IO) {
-                        try {
-                            val generator = PdfGenerator(itemView.context)
-                            val imageUriStr = message.imageUri
-                            val imageUri = imageUriStr?.toUri()
-                            if (imageUri != null) {
-                                generator.generateMarkdownPdfWithImage(fullRawMarkdown, imageUri.toString())
-                            } else {
-                                generator.generateMarkdownPdf(fullRawMarkdown)
-                            }
-                        } catch (e: Exception) {
-                            null
-                        }
-                    }
-
-                    if (pdfUri != null) {
-                        val context = itemView.context
-
-                        // Disable StrictMode check for file:// URI
-                        try {
-                            val m = StrictMode::class.java.getMethod("disableDeathOnFileUriExposure")
-                            m.invoke(null)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-
-                        val path = WorkspacePaths.workspaceDirForRead()
-
-                        // Create intent to view the folder
-                        val intent = Intent(Intent.ACTION_VIEW)
-                        intent.setDataAndType(Uri.fromFile(path), "resource/folder")
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                        // Create the system chooser intent
-                        val chooserIntent = Intent.createChooser(intent, itemView.context.getString(R.string.action_open_folder))
-
-                        // The row may have scrolled into the recycler pool meanwhile; a detached
-                        // view has no parent for a Snackbar, so fall back to the notice pill.
-                        if (itemView.isAttachedToWindow) {
-                            Snackbar.make(itemView, R.string.toast_pdf_saved, Snackbar.LENGTH_LONG)
-                                .setAction(R.string.action_open_folder) {
-                                    context.startActivity(chooserIntent)
-                                }
-                                .show()
-                        } else {
-                            GlassNotice.show(context, context.getString(R.string.toast_pdf_saved))
-                        }
-                    } else {
-                        GlassNotice.show(itemView.context, itemView.context.getString(R.string.toast_pdf_failed))
-                    }
-                }
-            }
-
-            pngButton.setOnClickListener {
-                onCaptureItemToBitmap(bindingAdapterPosition, "png")
-            }
-
-            pngButton.setOnLongClickListener {
-                onCaptureItemToBitmap(bindingAdapterPosition, "webp")
-                true
-            }
-
-            aipdfButton.setOnLongClickListener {
-                onCaptureItemToBitmap(bindingAdapterPosition, "jpg")
-                true
-            }
-
-            markdownButton.setOnClickListener {
-                val fullRawMarkdown = ensureTableSpacing(reasoningText + text)
-                onSaveMarkdown(bindingAdapterPosition, fullRawMarkdown)
-            }
-
-            markdownButton.setOnLongClickListener {
-                onSaveText(bindingAdapterPosition, messageTextView.text.toString())
-                true
-            }
-            saveFileButton.setOnClickListener {
-                //  onSaveAsFile.invoke(messageTextView.text.toString())
-                onSaveAsFile.invoke(text)
-            }
             bindForkNavigator(position)
         }
 
@@ -1612,7 +1528,6 @@ class ChatAdapter(
             messageContainer.visibility = View.VISIBLE
             messageContainer.alpha = 1f
             messageContainer.clearAnimation()
-            messageContainer.background = ContextCompat.getDrawable(itemView.context, R.drawable.bg_ai_message)
         }
 
         private fun isRpErrorText(text: String): Boolean =

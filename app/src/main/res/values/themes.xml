@@ -93,14 +93,7 @@
         <item name="android:windowLightNavigationBar">true</item>
     </style>
 
-    <!-- ── Type scale (iOS-like, Inter) ── -->
-    <style name="TextAppearance.Gradation.LargeTitle" parent="TextAppearance.Material3.HeadlineMedium">
-        <item name="android:textSize">32sp</item>
-        <item name="android:textColor">@color/xai_ink</item>
-        <item name="android:fontFamily">@font/app_sans</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">-0.025</item>
-    </style>
+    <!-- ── Type scale (iOS-like, Plus Jakarta Sans) ── -->
 
     <style name="TextAppearance.Gradation.Title" parent="TextAppearance.Material3.TitleLarge">
         <item name="android:textSize">20sp</item>
@@ -190,7 +183,6 @@
         <item name="cornerSize">50%</item>
     </style>
 
-    <style name="ff" parent="XaiShapeCard" />
 
     <!-- ── Buttons ── -->
     <!-- Primary: dense glass capsule, ink label (no solid white/black slab) -->
@@ -334,26 +326,7 @@
         <item name="materialThemeOverlay">@style/ThemeOverlay.Grokion.ToggleButton</item>
     </style>
 
-    <style name="Widget.Grokion.Button.FilterChip" parent="Widget.Grokion.Button.OutlinedToggle">
-        <item name="android:textSize">14sp</item>
-        <item name="android:minHeight">36dp</item>
-        <item name="android:paddingStart">14dp</item>
-        <item name="android:paddingEnd">14dp</item>
-        <item name="android:insetTop">0dp</item>
-        <item name="android:insetBottom">0dp</item>
-        <item name="cornerRadius">18dp</item>
-    </style>
 
-    <style name="Widget.Grokion.ModelCapabilityBadge" parent="Widget.AppCompat.TextView">
-        <item name="android:background">@drawable/bg_capability_badge</item>
-        <item name="android:paddingStart">8dp</item>
-        <item name="android:paddingTop">2dp</item>
-        <item name="android:paddingEnd">8dp</item>
-        <item name="android:paddingBottom">2dp</item>
-        <item name="android:textColor">@color/xai_mute</item>
-        <item name="android:textSize">11sp</item>
-        <item name="android:textFontWeight">500</item>
-    </style>
 
     <style name="ThemeOverlay.Grokion.ToggleButton" parent="">
         <item name="colorPrimary">@color/xai_ink</item>
@@ -442,22 +415,7 @@
         <item name="android:textFontWeight">600</item>
     </style>
 
-    <style name="XaiDialogButton.Destructive" parent="XaiDialogButton">
-        <item name="android:textColor">@color/xai_error</item>
-        <item name="android:textFontWeight">600</item>
-    </style>
 
-    <style name="CustomDialogTheme" parent="ThemeOverlay.Material3.Dialog.Alert">
-        <item name="android:windowBlurBehindEnabled">true</item>
-        <item name="android:windowBlurBehindRadius">22dp</item>
-        <item name="android:windowAnimationStyle">@style/Animation.Gradation.Dialog</item>
-        <item name="colorSurface">@color/xai_canvas_card</item>
-        <item name="android:backgroundDimAmount">0.4</item>
-        <item name="android:textColorPrimary">@color/xai_body</item>
-        <item name="colorPrimary">@color/xai_ink</item>
-        <item name="materialAlertDialogTitleTextStyle">@style/CustomDialogTitleText</item>
-        <item name="materialAlertDialogBodyTextStyle">@style/CustomDialogBodyText</item>
-    </style>
 
     <style name="CustomDialogBodyText" parent="TextAppearance.Material3.BodyMedium">
         <item name="android:textSize">15sp</item>
@@ -474,27 +432,7 @@
         <item name="android:letterSpacing">-0.015</item>
     </style>
 
-    <style name="RoundedCornersDialog" parent="Theme.MaterialComponents.DayNight.Dialog">
-        <item name="android:windowBlurBehindEnabled">true</item>
-        <item name="android:windowBlurBehindRadius">22dp</item>
-        <item name="android:windowAnimationStyle">@style/Animation.Gradation.Dialog</item>
-        <item name="android:backgroundDimAmount">0.4</item>
-        <item name="android:windowBackground">@drawable/rounded_dialog_background</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowIsFloating">true</item>
-        <item name="android:windowIsTranslucent">false</item>
-        <item name="android:windowContentOverlay">@null</item>
-        <item name="colorAccent">@color/xai_ink</item>
-        <item name="colorPrimary">@color/xai_ink</item>
-        <item name="colorSurface">@color/xai_canvas_card</item>
-        <item name="android:fontFamily">@font/app_sans</item>
-    </style>
 
-    <style name="MyEditTextTheme" parent="ThemeOverlay.AppCompat.DayNight">
-        <item name="colorControlActivated">@color/xai_ink</item>
-        <item name="colorControlNormal">@color/xai_hairline</item>
-        <item name="android:textColorHint">@color/xai_mute</item>
-    </style>
 
     <!-- Text fields: filled gray, no outline until focus -->
     <style name="Xai.TextInputLayout" parent="Widget.Material3.TextInputLayout.OutlinedBox">
@@ -507,16 +445,6 @@
         <item name="boxCornerRadiusBottomStart">14dp</item>
         <item name="boxCornerRadiusBottomEnd">14dp</item>
         <item name="boxBackgroundColor">@color/xai_canvas_soft</item>
-    </style>
-
-    <!-- Brand wordmark (history header) -->
-    <!-- Masthead wordmark: Michroma, tracked out; matches Wordmark.build() before it binds -->
-    <style name="GrokionBrandWordmark" parent="@android:style/TextAppearance">
-        <item name="android:fontFamily">@font/michroma_regular</item>
-        <item name="fontFamily">@font/michroma_regular</item>
-        <item name="android:textAllCaps">false</item>
-        <item name="android:letterSpacing">0.04</item>
-        <item name="android:textStyle">normal</item>
     </style>
 
     <style name="Theme.Grokion.AIFix" parent="Theme.Grokion">
@@ -557,19 +485,7 @@
     </style>
 
     <!-- Sheets that are opaque cards (the character panel): dim the screen, never blur it -->
-    <style name="ThemeOverlay.Grokion.BottomSheet.Sharp" parent="ThemeOverlay.Grokion.BottomSheet">
-        <item name="android:windowBlurBehindEnabled">false</item>
-        <item name="android:backgroundDimAmount">0.5</item>
-        <!-- The sheet draws under the navigation bar and pads itself for it -->
-        <item name="enableEdgeToEdge">true</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:enforceNavigationBarContrast">false</item>
-        <item name="bottomSheetStyle">@style/Widget.Grokion.BottomSheet.Sharp</item>
-    </style>
 
-    <style name="Widget.Grokion.BottomSheet.Sharp" parent="Widget.Grokion.BottomSheet">
-        <item name="paddingBottomSystemWindowInsets">false</item>
-    </style>
 
     <!-- iOS alert motion for dialog windows -->
     <style name="Animation.Gradation.Dialog" parent="@android:style/Animation.Dialog">

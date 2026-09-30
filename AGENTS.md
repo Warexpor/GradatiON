@@ -14,11 +14,12 @@ upstream's and stays as it is.
 |---|---|
 | Shell | `MainActivity` (touch lock during transitions), `ChatFragment` (top bar, composer, mode pager, RP chrome), `ChatViewModel` (sending, streaming, saving, forks, RP flow) |
 | Glass | `Glass.kt` (`GlassQuality` tiers, backdrop and lens), `GlassSurfaces.kt` (`GlassDrawable`, dialog chrome), `GlassSwitch`, `GlassNotice`, `GlassSegmentedGroup`, `PickerPopover`, `BackdropBlur` (frost behind open menus), `LiquidMarkView` (the animated glass logo) |
-| Motion | `Motion.kt` (curves, stack animations), `StreamRevealAnimator` (paced streaming) |
+| Motion | `Motion.kt` (curves, stack animations), `StreamRevealAnimator` (paced streaming), `StreamRevealPacing` (how much to reveal per frame, from the arrival rate) |
+| Touch | `TouchTargets` (44dp hit areas), `Haptics` (one helper that honors Settings > Haptics) |
 | Backgrounds | `AmbientBackgroundView`, `BackgroundPhoto` |
 | Voice | `VoiceInput` (engine choice, device recognizer, cloud and local fallback), `VoiceDictation` (composer wiring, mic states), `VoiceWaveView` |
 | Demo | `DemoModel` (an OkHttp interceptor that streams scripted SSE through the real pipeline) and `code/DemoBackend` (a scripted agent session) |
-| Roleplay | `RpPromptEngine` (system prompt, macros, memory, craft rules), `RpChatDelegate` (reads prefs and the repo), `RpApiMemory` (history trimming), `RpCharacterPanel`, `Rp*Fragment` screens, `RpSwipe*` (alternate replies) |
+| Roleplay | `RpPromptEngine` (system prompt, macros, memory, craft rules), `RpChatDelegate` (reads prefs and the repo), `RpApiMemory` (history trimming), `RpCharacterPanel` (the tile sheet), `RpPages` (`RpPageFragment` and `RpPageKit`, the shared full-screen page each tile opens), `RpTileArt` (the drawn tile pictures), `RpChatHistoryFragment` (the History tile's page), `AvatarPicker` and `AvatarCropView` (choose a photo, then pan-zoom crop, for characters and personas), `Rp*Fragment` screens, `RpSwipe*` (alternate replies) |
 | Code mode | `code/CodeHub` (singleton state), `CodeBackend` / `CodeTransport` / `AcpAdapter` (agent protocol), `CodeTranscriptAdapter` (transcript rows), `CodeSessionFragment`, `DiffView`, `code/store/CodeStore` (prefs) |
 | Navigation | `SwipeNavLayout` (wide-swipe recognizer), the mode pager and history drawer in `ChatFragment` (snapshot slide; a new drag lands any slide still settling first), `RpChatsHome` (RP characters list and its slide into a chat) |
 | Text | `TitleMarkdown` (inline markdown for one-line chat names in History) |

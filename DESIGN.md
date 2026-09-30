@@ -29,7 +29,6 @@ Grok-derived token extraction and `SHELL.md`, which are both still in git histor
 | `xai_body` | `#D9D9D9` | `#272727` | Long-form text |
 | `xai_mute` | `#8A8A8A` | `#808080` | Secondary text, idle icons |
 | `xai_hairline` | white 12% | black 9% | Strokes, separators |
-| `glass_bar_tint` | `#111111` @ 78% | `#E8E8E8` @ 82% | Top bar, composer |
 | `glass_sheet_tint` | `#1A1A1A` @ 85% | `#F1F1F1` @ 85% | Sheets, dialogs, notices |
 | `glass_control_tint` | `#1E1E1E` @ 58% | `#EEEEEE` @ 62% | Buttons, tiles, chips |
 
@@ -51,7 +50,7 @@ Build surfaces from `GlassDrawable` (`sheet()`, `control()`, or a custom radius)
 - Selected state crossfades to a brighter tint (`selectedTint`). It never inverts into a solid slab.
 - `GlassSwitch` is a 60×28 recessed glass groove with a 36×24 pill of clear glass that magnifies the groove under it (a lens, not frost). The pill never changes color; the groove says on or off. Held, dragged or sliding, it swells past the groove, magnifies harder, and springs back when it stops.
 - `GlassNotice` is the one allowed interruption: a pill under the top bar that explains why an action did nothing.
-  - Toasts are silenced app-wide (`AppToast` is a no-op), so use `GlassNotice` whenever silence would read as a broken button.
+  - There are no toasts. Every refusal or failure the user needs to know about goes through `GlassNotice` (or the field's error text inside a dialog); silence reads as a broken button.
 
 ## Type
 
@@ -105,8 +104,9 @@ Behavior:
 - History and the chat top bar share one header geometry (56dp row, 44dp buttons on the same line).
 - Stack animations keep the outgoing screen opaque, and screens opened from History push in.
   `MainActivity` holds touches for the length of each transition.
-- Streaming text eases in by ceil(backlog/24) characters per frame, with no cursor glyph.
-  Chat and Code share this pacing.
+- Streaming text eases in at a pace set by an average of how fast text is arriving (`StreamRevealPacing`).
+  A small lag sits behind the buffer and fades out after 150 to 450 ms without new text, so a slow
+  stream doesn't drain, stop and lurch. There is no cursor glyph. Chat and Code share this pacing.
 - Every animation checks `Motion.areAnimationsEnabled` and snaps into place when it's off.
 - Backgrounds (`AmbientBackgroundView`: Off, Drift, Flow, Adaptive, Photo) run at 12 to 14 fps
   and pause while scrolling and offscreen.
@@ -119,7 +119,7 @@ status bar, and the bars are inset by hand (`setupEdgeToEdge`).
 
 **Composer.** A glass capsule holding the input, then a row with:
 - `+` for attachments in Chat, or scene tools in Roleplay.
-- The sliders button, which opens the chat settings sheet: model, reasoning, search, stream.
+- The sliders button, which opens the Controls panel: model, reasoning effort, web search, stream and more. In Roleplay it is the character menu.
 - The model pill. In Roleplay it is gone: the character lives in a speaker line on each reply (portrait and name); tapping it opens the character panel.
 - The mic and send buttons.
 
@@ -148,17 +148,18 @@ and never auto-send, and there's no hold-to-talk. While listening:
 - The session menu switches between Normal view (folded) and Thinking view (every thought and
   output open).
 
-**Roleplay home.** The Roleplay tab opens on a chats list (`RpChatsHome`): one row per character with the newest chat's last line, time and chat count. New chats start from the top bar button. A row's ⋮ offers New chat, Edit character and Delete chat. Tapping the Roleplay tab again inside a chat returns to it; the composer and chip step aside while it shows.
+**Roleplay home.** The Roleplay tab opens on a chats list (`RpChatsHome`): one row per character with the newest chat's last line, time and chat count. The top-left button is a gear that opens app Settings (inside a chat it is the back chevron); the top-right button opens the character library. New chats start from a row's menu. A row's ⋮ offers New chat, Edit character and Delete chat. Tapping the Roleplay tab again inside a chat returns to it; the composer and chip step aside while it shows.
 
 **Message menu.** The ⋮ on a reply opens `MessageMenu`, a compact context card: label left, icon right, hairlines between rows, destructive rows set apart in the dim red. It is not `PickerPopover`, which stays the composer's picker.
 
 **Continue.** The » button on an empty Roleplay composer sends a hidden prompt (no bubble). The reply is sewn onto the end of the last message (`RpContinuation.join`) and eases in from where the text stopped.
 
-**Character panel.** An opaque sheet (`panel_solid`, tiles `panel_tile`) with:
-- A header: round avatar, name, a one-line description, and a Switch button.
-- A 3-column grid of titled cards: Memory, History, Persona, Style, Lore, Edit.
-- Cards show live content when there is some (the memory text, the persona name). Otherwise
-  they show a large glyph in `xai_mute`.
+**Character panel.** An opaque sheet (`panel_solid`, tiles `panel_tile`) with no edge line. It draws under the nav bar and pads itself.
+- A header: round avatar (centerCrop under an oval outline), name and a one-line description.
+- A 3-column grid of square tiles, in this order: History, Memory, Lore / Edit, Voice, Persona / Wallpaper, Layout, Style.
+- Each tile is a drawing (`RpTileArt`) in one flat palette, with no gradients, filling the whole card and clipped by it, so the art sits low and runs off an edge. The Persona tile shows the persona's portrait when there is one. Layout has no state line, though TalkBack still reads its state.
+- Every tile opens a full-screen page built from `RpPageKit` (a 96dp hero drawing with a caption, section labels, cards of 56dp rows with hairlines, footnotes, and a Save pinned above the keyboard). The sheet stays open under the page and refreshes when you come back.
+- The pages: History (this character's chats by day, with a New chat button), Memory (your note, plus the Facts of the open chat), Lore, Edit, Voice, Persona, Wallpaper (a phone-shaped preview), Layout (three drawings, a ring on the chosen one) and Style (Writing, Story and Mode cards).
 
 **Sheets, popovers, dialogs.**
 - Sheets and dialogs are glass and blur the screen behind them.

@@ -51,12 +51,11 @@ class RpHubFragment : Fragment() {
                 requireContext().contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(json.encodeToString(RpCharacterBackup.serializer(), backup).toByteArray())
                 } ?: run {
-                    AppToast.makeText(requireContext(), getString(R.string.rp_export_failed), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.rp_export_failed))
                     return@launch
                 }
-                AppToast.makeText(requireContext(), getString(R.string.rp_export_ok), AppToast.LENGTH_SHORT).show()
             } catch (_: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_export_failed), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_export_failed))
             }
         }
     }
@@ -68,12 +67,12 @@ class RpHubFragment : Fragment() {
             try {
                 val text = requireContext().contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
                     ?: run {
-                        AppToast.makeText(requireContext(), getString(R.string.rp_import_failed), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
                         return@launch
                     }
                 val backup = json.decodeFromString(RpCharacterBackup.serializer(), text)
                 if (backup.characters.isEmpty()) {
-                    AppToast.makeText(requireContext(), getString(R.string.rp_import_empty), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.rp_import_empty))
                     return@launch
                 }
                 val repo = chatViewModel.getRpRepository()
@@ -97,7 +96,7 @@ class RpHubFragment : Fragment() {
                     applyCharacterBackup(backup)
                 }
             } catch (_: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_import_failed), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
             }
         }
     }
@@ -114,12 +113,11 @@ class RpHubFragment : Fragment() {
                 requireContext().contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(json.encodeToString(RpLorebookBackup.serializer(), backup).toByteArray())
                 } ?: run {
-                    AppToast.makeText(requireContext(), getString(R.string.rp_export_failed), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.rp_export_failed))
                     return@launch
                 }
-                AppToast.makeText(requireContext(), getString(R.string.rp_export_ok), AppToast.LENGTH_SHORT).show()
             } catch (_: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_export_failed), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_export_failed))
             }
         }
     }
@@ -131,12 +129,12 @@ class RpHubFragment : Fragment() {
             try {
                 val text = requireContext().contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
                     ?: run {
-                        AppToast.makeText(requireContext(), getString(R.string.rp_import_failed), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
                         return@launch
                     }
                 val backup = json.decodeFromString(RpLorebookBackup.serializer(), text)
                 if (backup.lorebooks.isEmpty()) {
-                    AppToast.makeText(requireContext(), getString(R.string.rp_import_empty), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.rp_import_empty))
                     return@launch
                 }
                 val repo = chatViewModel.getRpRepository()
@@ -157,7 +155,7 @@ class RpHubFragment : Fragment() {
                     applyLoreBackup(backup)
                 }
             } catch (_: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_import_failed), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
             }
         }
     }
@@ -210,7 +208,7 @@ class RpHubFragment : Fragment() {
             viewLifecycleOwner.lifecycleScope.launch {
                 val chars = chatViewModel.getRpRepository().getAllCharactersOnce()
                 if (chars.isEmpty()) {
-                    AppToast.makeText(requireContext(), getString(R.string.rp_export_empty_chars), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.rp_export_empty_chars))
                     return@launch
                 }
                 exportCharsLauncher.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -230,7 +228,7 @@ class RpHubFragment : Fragment() {
             viewLifecycleOwner.lifecycleScope.launch {
                 val books = chatViewModel.getRpRepository().getAllLorebooksOnce()
                 if (books.isEmpty()) {
-                    AppToast.makeText(requireContext(), getString(R.string.rp_export_empty_lore), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.rp_export_empty_lore))
                     return@launch
                 }
                 exportLoreLauncher.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -405,14 +403,10 @@ class RpHubFragment : Fragment() {
             chatViewModel.refreshActiveRpCharacter()
             chatViewModel.syncActiveCharacterGreetingIfIdle()
             if (!isAdded) return
-            AppToast.makeText(
-                requireContext(),
-                getString(R.string.rp_import_chars_ok, imported),
-                AppToast.LENGTH_SHORT
-            ).show()
+            GlassNotice.show(requireContext(), getString(R.string.rp_import_chars_ok, imported))
         } catch (_: Exception) {
             if (isAdded) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_import_failed), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
             }
         }
     }
@@ -445,14 +439,10 @@ class RpHubFragment : Fragment() {
             } else {
                 ""
             }
-            AppToast.makeText(
-                requireContext(),
-                getString(R.string.rp_import_lore_ok, imported) + loreHint,
-                AppToast.LENGTH_LONG
-            ).show()
+            GlassNotice.show(requireContext(), getString(R.string.rp_import_lore_ok, imported) + loreHint)
         } catch (_: Exception) {
             if (isAdded) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_import_failed), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
             }
         }
     }

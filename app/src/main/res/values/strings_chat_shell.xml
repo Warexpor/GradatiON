@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chat shell: notices, dialog buttons and labels moved out of ChatFragment, ChatAdapter, MainActivity. -->
+<resources>
+    <string name="tts_saved_to_downloads">Saved to Downloads: %1$s</string>
+    <string name="tts_save_failed">Couldn\'t save the audio</string>
+    <string name="toast_image_params_google_only">Image options are only for Google image models.</string>
+    <string name="pdf_page_n">Page %1$d</string>
+    <string name="action_convert">Convert</string>
+    <string name="action_remove_all">Remove all</string>
+    <string name="action_close">Close</string>
+    <string name="unknown_model">Unknown model</string>
+    <string name="font_plus_jakarta_sans">Plus Jakarta Sans</string>
+    <string name="font_inter">Inter</string>
+    <string name="font_system_default">System default</string>
+    <string name="tool_used_format">**Tool used:** %1$s</string>
+    <string name="a11y_show_message_actions">Show message actions</string>
+    <string name="a11y_hide_message_actions">Hide message actions</string>
+    <string name="cd_attachment_preview">Attachment preview</string>
+    <string name="cd_attached_image">Attached image</string>
+    <string name="cd_generated_image">Generated image</string>
+    <string name="notice_biometrics_unavailable">Biometrics unavailable. Continuing without the lock.</string>
+    <string name="notice_auth_error">Couldn\'t unlock</string>
+    <string name="notice_preset_not_found">Preset not found (ID: %1$s)</string>
+    <string name="notice_preset_model_missing">Preset not applied: the model \"%1$s\" no longer exists.</string>
+    <string name="notice_preset_system_message_missing">Preset not applied: the system message \"%1$s\" no longer exists.</string>
+</resources>

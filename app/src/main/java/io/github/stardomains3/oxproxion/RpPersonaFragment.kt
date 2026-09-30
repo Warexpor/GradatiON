@@ -44,7 +44,7 @@ class RpPersonaFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             val saved = withContext(Dispatchers.IO) { RpAvatarStorage.savePersonaFromUri(ctx, uri) }
             if (saved == null) {
-                AppToast.makeText(ctx, getString(R.string.rp_avatar_save_failed), AppToast.LENGTH_SHORT).show()
+                if (isAdded) GlassNotice.show(requireContext(), getString(R.string.rp_avatar_save_failed))
             } else {
                 photo = saved
                 showPortrait()
@@ -99,7 +99,12 @@ class RpPersonaFragment : Fragment() {
                 title = getString(R.string.rp_discard_edits_title),
                 message = getString(R.string.rp_discard_edits_body),
                 confirmText = getString(R.string.rp_discard_edits_confirm),
-                onConfirm = { parentFragmentManager.popBackStack() },
+                onConfirm = {
+                    // A portrait picked in this session is written to storage on pick; drop it with the edits.
+                    photo = baseline.photo
+                    prune()
+                    parentFragmentManager.popBackStack()
+                },
                 destructive = true
             )
         }
@@ -121,11 +126,8 @@ class RpPersonaFragment : Fragment() {
             baseline = persona
             val droppedOldest = if (persona.name.isNotEmpty()) keep(persona) else false
             prune()
-            AppToast.makeText(
-                requireContext(),
-                getString(if (droppedOldest) R.string.rp_persona_preset_cap else R.string.rp_saved),
-                AppToast.LENGTH_SHORT
-            ).show()
+            // The page closes on Save, so a plain "Saved" adds nothing; losing a persona to the cap does.
+            if (droppedOldest) GlassNotice.show(requireContext(), getString(R.string.rp_persona_preset_cap))
             parentFragmentManager.popBackStack()
         }
     }
@@ -242,7 +244,6 @@ class RpPersonaFragment : Fragment() {
                 prefs.saveRpPersonaPresets(prefs.getRpPersonaPresets().filterNot { it.name == target.name })
                 prune()
                 renderList()
-                AppToast.makeText(requireContext(), getString(R.string.rp_persona_preset_deleted), AppToast.LENGTH_SHORT).show()
             },
             destructive = true
         )

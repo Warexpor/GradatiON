@@ -6,9 +6,11 @@ import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.format.DateFormat
 import android.text.format.DateUtils
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -17,9 +19,11 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -35,14 +39,18 @@ class RpChatHistoryFragment : Fragment() {
     private val chatViewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
 
     private sealed interface Item {
-        object Header : Item
+        data class Header(val count: Int) : Item
         data class Section(val label: String) : Item
         data class Chat(val id: Long, val whenLabel: String, val preview: String, val messages: Int, val current: Boolean) : Item
+        /** No chat with this character yet. */
+        object Empty : Item
     }
 
     private var character: RpCharacter? = null
-    private var chatCount = 0
     private val adapter = Adapter()
+    /** One build at a time: a newer list cancels the one still counting messages for the last. */
+    private var buildJob: Job? = null
+    private var chatMenu: MessageMenu? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         inflater.inflate(R.layout.fragment_rp_chat_history, container, false)
@@ -63,19 +71,27 @@ class RpChatHistoryFragment : Fragment() {
             val mine = sessions.orEmpty()
                 .filter { if (characterId == LLM) it.isLlm else !it.isLlm && it.characterId == characterId }
                 .sortedByDescending { it.timestamp }
-            viewLifecycleOwner.lifecycleScope.launch {
+            buildJob?.cancel()
+            buildJob = viewLifecycleOwner.lifecycleScope.launch {
                 if (characterId != LLM && character == null) character = chatViewModel.getRpRepository().getCharacterById(characterId)
-                adapter.items = build(mine)
-                adapter.notifyDataSetChanged()
+                adapter.submit(build(mine))
             }
         }
+    }
+
+    override fun onDestroyView() {
+        buildJob?.cancel()
+        buildJob = null
+        chatMenu?.dismiss(animated = false)
+        chatMenu = null
+        super.onDestroyView()
     }
 
     private suspend fun build(sessions: List<ChatSession>): List<Item> {
         val dao = AppDatabase.getDatabase(requireContext().applicationContext).chatDao()
         val current = chatViewModel.getCurrentSessionId()
-        chatCount = sessions.size
-        val items = mutableListOf<Item>(Item.Header)
+        val items = mutableListOf<Item>(Item.Header(sessions.size))
+        if (sessions.isEmpty()) items += Item.Empty
         var lastSection: String? = null
         for (s in sessions) {
             val section = sectionOf(s.timestamp)
@@ -123,6 +139,35 @@ class RpChatHistoryFragment : Fragment() {
         set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 
+    /** The ⋮ on a chat: delete it. Deleting the open chat starts a fresh one, which the view model handles. */
+    private fun showChatMenu(anchor: View, chat: Item.Chat) {
+        val root = view as? FrameLayout ?: return
+        chatMenu?.dismiss(animated = false)
+        val items = listOf(
+            MessageMenu.Item(getString(R.string.rp_home_menu_delete), R.drawable.ic_msg_delete, destructive = true) {
+                GrokConfirmDialog.show(
+                    fragment = this,
+                    title = getString(R.string.rp_home_delete_title),
+                    message = getString(R.string.rp_home_delete_body, character?.name ?: getString(R.string.rp_llm_speaker)),
+                    confirmText = getString(R.string.rp_menu_delete),
+                    onConfirm = { deleteChat(chat.id) }
+                )
+            }
+        )
+        chatMenu = MessageMenu(root, anchor, root.findViewById(R.id.rpHistoryBackdrop)).also { m ->
+            m.onDismiss = { if (chatMenu === m) chatMenu = null }
+            m.show(items, viewLifecycleOwner)
+        }
+    }
+
+    private fun deleteChat(sessionId: Long) {
+        // Same steps as the chats list's delete; the list below follows the database on its own.
+        SharedPreferencesHelper(requireContext()).setSessionPinned(sessionId, false)
+        chatViewModel.notifySessionDeleted(sessionId)
+        androidx.lifecycle.ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[SavedChatsViewModel::class.java]
+            .deleteSession(sessionId)
+    }
+
     private fun pick(result: Bundle) {
         setFragmentResult(RESULT, result)
         parentFragmentManager.popBackStack()
@@ -135,13 +180,37 @@ class RpChatHistoryFragment : Fragment() {
 
     private inner class Adapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         var items: List<Item> = emptyList()
+            private set
+
+        /** Only the rows that changed are rebound, so a delete does not flash the whole page. */
+        fun submit(next: List<Item>) {
+            val prev = items
+            val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                override fun getOldListSize() = prev.size
+                override fun getNewListSize() = next.size
+                override fun areItemsTheSame(o: Int, n: Int): Boolean {
+                    val a = prev[o]
+                    val b = next[n]
+                    return when {
+                        a is Item.Header && b is Item.Header -> true
+                        a is Item.Section && b is Item.Section -> a.label == b.label
+                        a is Item.Chat && b is Item.Chat -> a.id == b.id
+                        else -> a === b
+                    }
+                }
+                override fun areContentsTheSame(o: Int, n: Int) = prev[o] == next[n]
+            })
+            items = next
+            diff.dispatchUpdatesTo(this)
+        }
 
         override fun getItemCount() = items.size
 
         override fun getItemViewType(position: Int) = when (items[position]) {
-            Item.Header -> 0
+            is Item.Header -> 0
             is Item.Section -> 1
             is Item.Chat -> 2
+            Item.Empty -> 3
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -158,6 +227,16 @@ class RpChatHistoryFragment : Fragment() {
                     isAllCaps = true
                     letterSpacing = 0.06f
                 }
+                3 -> TextView(parent.context).apply {
+                    layoutParams = RecyclerView.LayoutParams(-1, -2)
+                    val d = resources.displayMetrics.density
+                    setPadding((24 * d).toInt(), (28 * d).toInt(), (24 * d).toInt(), (28 * d).toInt())
+                    typeface = androidx.core.content.res.ResourcesCompat.getFont(parent.context, R.font.app_sans)
+                    setTextColor(ContextCompat.getColor(parent.context, R.color.xai_mute))
+                    textSize = 15f
+                    gravity = Gravity.CENTER
+                    setText(R.string.rp_history_none)
+                }
                 else -> inflater.inflate(R.layout.item_rp_history_chat, parent, false).apply {
                     background = RippleDrawable(
                         ColorStateList.valueOf(ContextCompat.getColor(parent.context, R.color.popover_row_pressed)),
@@ -172,16 +251,17 @@ class RpChatHistoryFragment : Fragment() {
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
             val v = holder.itemView
             when (val item = items[position]) {
-                Item.Header -> {
+                is Item.Header -> {
                     val name = character?.name ?: getString(R.string.rp_llm_speaker)
                     val avatar = v.findViewById<ImageView>(R.id.rpHistoryAvatar)
                     val monogram = v.findViewById<TextView>(R.id.rpHistoryMonogram)
                     character?.let { RpAvatars.bind(avatar, monogram, it) } ?: RpAvatars.bindModel(avatar, monogram, null, name)
                     v.findViewById<TextView>(R.id.rpHistoryName).text = name
                     v.findViewById<TextView>(R.id.rpHistoryCount).text =
-                        resources.getQuantityString(R.plurals.rp_history_count, chatCount, chatCount)
+                        resources.getQuantityString(R.plurals.rp_history_count, item.count, item.count)
                 }
                 is Item.Section -> (v as TextView).text = item.label
+                Item.Empty -> Unit
                 is Item.Chat -> {
                     v.findViewById<TextView>(R.id.rpHistoryWhen).text = item.whenLabel
                     v.findViewById<View>(R.id.rpHistoryCurrent).visibility = if (item.current) View.VISIBLE else View.GONE
@@ -194,6 +274,9 @@ class RpChatHistoryFragment : Fragment() {
                     v.setOnClickListener {
                         if (item.current) parentFragmentManager.popBackStack() else pick(bundleOf(OPEN to item.id))
                     }
+                    val more = v.findViewById<View>(R.id.rpHistoryMore)
+                    more.setOnClickListener { showChatMenu(more, item) }
+                    v.setOnLongClickListener { showChatMenu(more, item); true }
                 }
             }
         }

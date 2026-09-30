@@ -58,7 +58,7 @@ class SystemMessageLibraryFragment : Fragment() {
                         requireContext().contentResolver.openOutputStream(uri)?.use { outputStream ->
                             outputStream.write(json.toByteArray())
                         }
-                        AppToast.makeText(requireContext(), "System Messages exported successfully", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_system_messages_exported))
                     } catch (e: Exception) {
                         GlassNotice.show(requireContext(), getString(R.string.notice_export_system_messages_failed))
                     }
@@ -95,7 +95,7 @@ class SystemMessageLibraryFragment : Fragment() {
                             }
                             sharedPreferencesHelper.saveCustomSystemMessages(currentMessages)
                             loadSystemMessages()
-                            AppToast.makeText(requireContext(), "System Messages imported successfully", AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.notice_system_messages_imported))
                         } else {
                             throw Exception("Failed to read file content.")
                         }
@@ -131,7 +131,7 @@ class SystemMessageLibraryFragment : Fragment() {
         val searchItem = toolbar.menu.findItem(R.id.action_search)
         if (searchItem != null) {
             searchView = searchItem.actionView as SearchView
-            searchView.queryHint = "Search system messages..."
+            searchView.queryHint = getString(R.string.search_system_messages_hint)
             searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
                 override fun onQueryTextSubmit(query: String?): Boolean {
                     return true
@@ -143,7 +143,7 @@ class SystemMessageLibraryFragment : Fragment() {
                 }
             })
         } else {
-            AppToast.makeText(requireContext(), "Search not available", AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.notice_search_unavailable))
         }
         toolbar.setOnMenuItemClickListener { menuItem ->
             when (menuItem.itemId) {

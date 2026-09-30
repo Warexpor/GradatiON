@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Every chat with one character: a portrait header, the chats by day, a fresh one at the bottom -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- The root frame hosts a chat's ⋮ menu; the backdrop layer is what the menu's glass blurs. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rpHistoryRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<io.github.stardomains3.oxproxion.GlassBackdropLayout
+    android:id="@+id/rpHistoryBackdrop"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<LinearLayout
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -44,3 +55,5 @@
         app:iconGravity="textStart"
         app:iconTint="@color/xai_ink" />
 </LinearLayout>
+</io.github.stardomains3.oxproxion.GlassBackdropLayout>
+</FrameLayout>

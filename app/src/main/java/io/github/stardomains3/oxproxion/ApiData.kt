@@ -72,6 +72,17 @@ data class FlexibleMessage(
     val imageUri: String? = null  // For user/generated images (original Uri.toString())
 )
 
+/**
+ * The wire form of a transcript message: role, content, tool_calls and tool_call_id only.
+ * [FlexibleMessage] also carries what the UI needs (a generated image's Uri, the reasoning
+ * text, the tools badge), and none of that belongs in a provider request.
+ */
+fun FlexibleMessage.toApiMessage(): FlexibleMessage =
+    if (!toolsUsed && reasoning == null && thinking == null && imageUri == null) this
+    else copy(toolsUsed = false, reasoning = null, thinking = null, imageUri = null)
+
+fun List<FlexibleMessage>.toApiMessages(): List<FlexibleMessage> = map { it.toApiMessage() }
+
 @Serializable
 data class Plugin(
     val id: String,
@@ -235,7 +246,8 @@ data class FunctionCall(
 
 @Serializable
 data class ToolCallChunk(
-    val index: Int,
+    // Some servers (and Gemini-style relays) omit the index on whole, unsplit calls.
+    val index: Int? = null,
     val id: String? = null,
     val type: String? = null,
     val function: FunctionCallChunk? = null

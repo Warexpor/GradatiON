@@ -14,6 +14,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Agent Client Protocol (https://agentclientprotocol.com) over JSON-RPC 2.0, as relayed by the
@@ -40,13 +42,22 @@ class AcpAdapter : HarnessAdapter {
     override val protocol = "acp/1"
 
     private val json = Json { ignoreUnknownKeys = true }
+    // Frames decode on a background thread while the hub reads and clears cursors from Main, so
+    // every map here is concurrent.
     /** Keys of the currently open agent message / thought per session, so chunks merge. */
-    private val openText = HashMap<String, String>()
-    private val openThought = HashMap<String, String>()
+    private val openText = ConcurrentHashMap<String, String>()
+    private val openThought = ConcurrentHashMap<String, String>()
     /** Highest bridge `_meta.seq` seen per session (for session/load afterSeq resume). */
-    private val lastSeqBySession = HashMap<String, Long>()
+    private val lastSeqBySession = ConcurrentHashMap<String, Long>()
     /** Fallback key counter when a frame has no `_meta.seq` (non-bridge / tests). */
-    private var localKeyCounter = 0L
+    private val localKeyCounter = AtomicLong(0L)
+
+    /**
+     * A seq hole being refilled: [seen] holds seqs delivered past the hole, so the replay that
+     * fills it does not append those chunks a second time.
+     */
+    private class OpenGap { val seen: MutableSet<Long> = ConcurrentHashMap.newKeySet() }
+    private val openGaps = ConcurrentHashMap<String, OpenGap>()
 
     // ── outbound ──────────────────────────────────────────────────────────────────────────
 
@@ -117,7 +128,7 @@ class AcpAdapter : HarnessAdapter {
         put("id", requestId.toLongOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(requestId))
         put("result", buildJsonObject {
             put("outcome", buildJsonObject {
-                if (optionId == null) put("outcome", "cancelled")
+                if (optionId.isNullOrEmpty()) put("outcome", "cancelled")
                 else { put("outcome", "selected"); put("optionId", optionId) }
             })
         })
@@ -165,6 +176,38 @@ class AcpAdapter : HarnessAdapter {
         }
         val method = obj.str("method")
         val idEl = obj["id"]
+        val admit = admit(method, obj)
+        if (admit is Admit.Drop) return ignored("replayed seq")
+        val out = decodeBody(method, idEl, obj)
+        return if (admit is Admit.Hole) listOf<AdapterOutput>(AdapterOutput.Gap(admit.sessionId, admit.afterSeq)) + out else out
+    }
+
+    private sealed interface Admit {
+        object Ok : Admit
+        /** Already delivered while a seq hole was open; the replay repeats it. */
+        object Drop : Admit
+        /** This frame's seq jumped past the session's last one: frames after [afterSeq] went missing. */
+        data class Hole(val sessionId: String, val afterSeq: Long) : Admit
+    }
+
+    /**
+     * Seq bookkeeping for one notification, before it is decoded. Bridge seqs are consecutive per
+     * session, so a jump means frames were dropped in flight; the first frame past the hole opens
+     * a [OpenGap] until the backend's reload finishes.
+     */
+    private fun admit(method: String?, obj: JsonObject): Admit {
+        if (method !in SEQ_METHODS) return Admit.Ok
+        val params = obj["params"] as? JsonObject ?: return Admit.Ok
+        val sid = params.str("sessionId") ?: return Admit.Ok
+        val seq = bridgeSeq(params, obj) ?: return Admit.Ok
+        openGaps[sid]?.let { gap -> return if (gap.seen.add(seq)) Admit.Ok else Admit.Drop }
+        val prev = lastSeqBySession[sid] ?: return Admit.Ok
+        if (seq <= prev + 1) return Admit.Ok
+        openGaps[sid] = OpenGap().also { it.seen.add(seq) }
+        return Admit.Hole(sid, prev)
+    }
+
+    private fun decodeBody(method: String?, idEl: JsonElement?, obj: JsonObject): List<AdapterOutput> {
         return when {
             method == "session/update" -> {
                 val params = obj["params"] as? JsonObject ?: return ignored("no params")
@@ -362,6 +405,10 @@ class AcpAdapter : HarnessAdapter {
         }.orEmpty()
         val now = System.currentTimeMillis()
         closeText(sid)
+        // A request with no choices still has to be answerable; "Deny" replies `cancelled`.
+        val offered = options.ifEmpty {
+            listOf(ApprovalOption(ApprovalOption.CANCEL_ID, "Deny", ApprovalOption.Kind.REJECT_ONCE))
+        }
         return listOf(AdapterOutput.Update(sid, CodeUpdate.Upsert(CodeEvent.Approval(
             key = "approval:$requestId",
             at = now,
@@ -370,7 +417,7 @@ class AcpAdapter : HarnessAdapter {
             title = call?.str("title") ?: "The agent wants to continue",
             detail = call?.let { detailOf(it) },
             kind = toolKind(call?.str("kind")),
-            options = options
+            options = offered
         )), seq))
     }
 
@@ -388,8 +435,7 @@ class AcpAdapter : HarnessAdapter {
 
     /** Restore a resume cursor from Room after process death (keeps the higher value). */
     fun seedLastSeq(sessionId: String, seq: Long) {
-        val prev = lastSeqBySession[sessionId]
-        if (prev == null || seq > prev) lastSeqBySession[sessionId] = seq
+        lastSeqBySession.merge(sessionId, seq) { a, b -> maxOf(a, b) }
     }
 
     /** Drop resume cursor when the hub forgets a session (B2). */
@@ -397,6 +443,12 @@ class AcpAdapter : HarnessAdapter {
         lastSeqBySession.remove(sessionId)
         openText.remove(sessionId)
         openThought.remove(sessionId)
+        openGaps.remove(sessionId)
+    }
+
+    /** The replay that refilled a seq hole has finished (or failed); stop dropping repeats. */
+    fun endGap(sessionId: String) {
+        openGaps.remove(sessionId)
     }
 
     /**
@@ -404,14 +456,13 @@ class AcpAdapter : HarnessAdapter {
      * use ACP ids instead. Without seq (plain ACP / older fixtures), fall back to a local counter.
      */
     private fun stableKey(kind: String, bridgeSeq: Long?): String {
-        val n = bridgeSeq ?: localKeyCounter++
+        val n = bridgeSeq ?: localKeyCounter.getAndIncrement()
         return "$kind:$n"
     }
 
     private fun noteSeq(sessionId: String, seq: Long?) {
         if (seq == null) return
-        val prev = lastSeqBySession[sessionId]
-        if (prev == null || seq > prev) lastSeqBySession[sessionId] = seq
+        lastSeqBySession.merge(sessionId, seq) { a, b -> maxOf(a, b) }
     }
 
     /** Bridge (or top-level) `_meta.seq` on a notification / permission request. */
@@ -500,5 +551,8 @@ class AcpAdapter : HarnessAdapter {
     companion object {
         /** Tool output kept per call (tail). No bridge full-log RPC yet; phone shows this only. */
         const val MAX_OUTPUT = 4000
+        private val SEQ_METHODS = setOf(
+            "session/update", "session/request_permission", "bridge/permissionResolved", "bridge/sessionStatus",
+        )
     }
 }

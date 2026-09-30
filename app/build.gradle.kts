@@ -7,9 +7,6 @@ plugins {
 }
 configurations.all {
     exclude(group = "org.jetbrains", module = "annotations-java5")
-}
-
-configurations.all {
     resolutionStrategy.eachDependency {
         if (requested.group == "com.atlassian.commonmark") {
             useTarget("org.commonmark:${requested.name}:${libs.versions.commonmark.get()}")
@@ -100,6 +97,7 @@ android {
     }
     buildFeatures {
         buildConfig = true
+        viewBinding = false
     }
     // A release APK signed with anything but the release key cannot update an installed release,
     // so refuse to build one rather than produce it quietly unsigned or debug-signed.
@@ -123,12 +121,16 @@ android {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
-    buildFeatures {
-        viewBinding = true
+    lint {
+        // Only the checks that guard the resource and accessibility rules; everything else stays quiet.
+        checkOnly += setOf("UnusedResources", "HardcodedText", "ContentDescription", "TouchTargetSizeCheck")
+        abortOnError = false
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all { test ->
+            // The screenshot tests write PNGs outside the declared outputs, so a cache hit would skip them.
+            test.outputs.doNotCacheIf("screenshots are side effects") { true }
             // Logic tests only by default (~20 s): the screenshot classes are ~85% of the run.
             // `-Pfull` adds them (UI changes, and always before a release). Naming tests with
             // `--tests` runs exactly those, screenshots included. `-Pfast` is kept as a no-op.

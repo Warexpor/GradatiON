@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
-import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -42,11 +41,17 @@ class MainActivity : AppCompatActivity() {
             else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         }
         AppCompatDelegate.setDefaultNightMode(mode)
+        // Locked means the gate has to run before anything shows. A restored activity (process death,
+        // or the system reclaiming it while backgrounded) must not come back open, and its saved
+        // fragments cannot be restored without the layout the gate holds back: start it clean.
+        BiometricGateHelper.relockIfAway()
+        val locked = SharedPreferencesHelper(this).getBiometricEnabled() && !BiometricGateHelper.unlocked
+        val state = if (locked) null else savedInstanceState
         // Process death restores the last code session on the back stack. A fresh process
         // should land on the mode's home instead. Rotation keeps sawActivity, so it does not.
-        val reopenAfterDeath = savedInstanceState != null && !sawActivity
+        val reopenAfterDeath = state != null && !sawActivity
         sawActivity = true
-        super.onCreate(savedInstanceState)
+        super.onCreate(state)
         if (reopenAfterDeath) {
             supportFragmentManager.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE)
         }
@@ -55,31 +60,43 @@ class MainActivity : AppCompatActivity() {
         // While a screen slides in or out, taps would stack a second copy on top (a double tap
         // on a settings row sank the stack a level too deep). Hold touches for the transition.
         supportFragmentManager.addOnBackStackChangedListener {
+            // With animations off there is no transition to protect, and the lock would only eat taps.
+            if (!Motion.areAnimationsEnabled(this)) return@addOnBackStackChangedListener
             navLockUntil = android.os.SystemClock.uptimeMillis() +
                 resources.getInteger(R.integer.motion_fragment)
         }
 
-        /* ------------------------------------------------------ */
-        /* 1.  Cold-start gate:  finish() if auth fails / none    */
-        /* ------------------------------------------------------ */
-
-
-        if (savedInstanceState == null && SharedPreferencesHelper(this).getBiometricEnabled()) {
-            BiometricGateHelper.gateIfNeeded(this) {
-                continueOnCreate()
-            }
+        // Closes the app if the unlock is cancelled; otherwise carries on once it succeeds.
+        if (locked) {
+            BiometricGateHelper.gateIfNeeded(this) { continueOnCreate(state) }
             return
         }
 
-        continueOnCreate()
+        continueOnCreate(state)
     }
 
-    private fun continueOnCreate() {
+    /** Coming back after a while away: the lock re-arms, so ask again. */
+    override fun onRestart() {
+        super.onRestart()
+        BiometricGateHelper.relockIfAway()
+        if (SharedPreferencesHelper(this).getBiometricEnabled() && !BiometricGateHelper.unlocked) {
+            BiometricGateHelper.gateIfNeeded(this) {}
+        }
+    }
+
+    override fun onStop() {
+        // A rotation stops the activity too, and is not leaving.
+        if (!isChangingConfigurations) BiometricGateHelper.noteStopped()
+        super.onStop()
+    }
+
+    private fun continueOnCreate(savedInstanceState: Bundle?) {
         // Edge to edge on every version (Android 15+ already forces it): screens pad themselves,
         // and chat lets its background run under the status bar.
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
-        askNotificationPermission()
+        // A rotation recreates the activity; asking again would re-show the system dialog each time.
+        if (savedInstanceState == null) askNotificationPermission()
         handleCodePairIntent(intent)
         handleCodeAwayIntent(intent)
         val sharedPreferencesHelper = SharedPreferencesHelper(this)
@@ -124,32 +141,16 @@ class MainActivity : AppCompatActivity() {
                 .add(R.id.fragment_container, chatFragment, "ChatFragment")
                 .commitNow()
         }
-        // NEW: Auto‑apply "digital assistant" preset for assistant launches
-        if (intent?.action in listOf(Intent.ACTION_ASSIST, Intent.ACTION_VOICE_COMMAND)) {
-            val digitalAssistantPreset = findDigitalAssistantPreset()
-            if (digitalAssistantPreset != null) {
-                val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
-                PresetManager.applyPreset(this, vm, digitalAssistantPreset)
-                vm.signalPresetApplied()
+        // What the launching intent asked for runs once, on a fresh create. A rotation or a restore
+        // hands the same intent back, and replaying it would re-send the message or re-apply the preset.
+        if (savedInstanceState == null) {
+            // Auto-apply the "digital assistant" preset for assistant launches
+            if (intent?.action in listOf(Intent.ACTION_ASSIST, Intent.ACTION_VOICE_COMMAND)) {
+                applyDigitalAssistantPreset()
+                intent.action = null
             }
-        }
-        val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
-        handlePresetIntent(intent)
-        if (intent.getBooleanExtra("autosend", false)) {
-            intent.getStringExtra("shared_text")?.let { text ->
-                val clearChat = intent.getBooleanExtra("clear_chat", false)
-                if (clearChat) vm.startFreshChatForCurrentMode()
-                vm.consumeSharedTextautosend(text)
-            }
-        } else if (intent.getBooleanExtra("input_only", false)) {
-            intent.getStringExtra("shared_text")?.let { text ->
-                val clearChat = intent.getBooleanExtra("clear_chat", false)
-                if (clearChat) vm.startFreshChatForCurrentMode()
-                vm.consumeSharedText(text)
-                val sharedPreferencesHelper = SharedPreferencesHelper(this)
-                val systemMessageTitle = sharedPreferencesHelper.getSelectedSystemMessage().title
-                AppToast.makeText(this, systemMessageTitle, AppToast.LENGTH_SHORT).show()
-            }
+            handlePresetIntent(intent)
+            consumeSharedTextIntent(intent)
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -170,6 +171,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        Motion.refreshAnimations(this)
         ForegroundService.clearLegacyRunningNotification(this)
     }
     override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
@@ -227,60 +229,46 @@ class MainActivity : AppCompatActivity() {
         handlePresetIntent(intent)
 
         if (intent.action == Intent.ACTION_SEND && "text/plain" == intent.type && !intent.getBooleanExtra("autosend", false)) {
-            intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+            intent.removeExtra(Intent.EXTRA_TEXT)
+            if (text != null) {
                 val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
-                val sharedPreferencesHelper = SharedPreferencesHelper(this)
                 vm.consumeSharedText(text)
-                val systemMessageTitle = sharedPreferencesHelper.getSelectedSystemMessage().title
-                AppToast.makeText(this, systemMessageTitle, AppToast.LENGTH_SHORT).show()
-                //AppToast.makeText(this, "Text received", AppToast.LENGTH_LONG).show()
-                //val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
-                //if (fragment is ChatFragment) {
-                //    fragment.setSharedText(text)
-                //  }
             }
-
         }
 
-        /*  if (intent.getBooleanExtra("autosend", false)) {
-              intent.getStringExtra("shared_text")?.let { text ->
-                  val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
-                  val sharedPreferencesHelper = SharedPreferencesHelper(this)
-                  val clearChat = intent.getBooleanExtra("clear_chat", false)
-                  if (clearChat) {
-                      vm.startNewChat()  // Clear the chat
-                  }
-                  vm.consumeSharedTextautosend(text)
-                  val systemMessageTitle = sharedPreferencesHelper.getSelectedSystemMessage().title
-                  AppToast.makeText(this, "System: $systemMessageTitle", AppToast.LENGTH_SHORT).show()
-              }
-          }*/
+        consumeSharedTextIntent(intent)
+        if (intent.action == Intent.ACTION_ASSIST) {
+            applyDigitalAssistantPreset()
+            intent.action = null
+        }
+    }
+
+    /**
+     * The autosend / input-only hand-offs (shortcuts, other apps): each runs once, then its extras
+     * go, so the same intent coming back on a recreate cannot send the message again.
+     */
+    private fun consumeSharedTextIntent(intent: Intent) {
+        val autosend = intent.getBooleanExtra("autosend", false)
+        val inputOnly = !autosend && intent.getBooleanExtra("input_only", false)
+        if (!autosend && !inputOnly) return
+        val text = intent.getStringExtra("shared_text")
+        val clearChat = intent.getBooleanExtra("clear_chat", false)
+        intent.removeExtra("autosend")
+        intent.removeExtra("input_only")
+        intent.removeExtra("shared_text")
+        intent.removeExtra("clear_chat")
+        if (text == null) return
         val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
-        if (intent.getBooleanExtra("autosend", false)) {
-            intent.getStringExtra("shared_text")?.let { text ->
-                val clearChat = intent.getBooleanExtra("clear_chat", false)
-                if (clearChat) vm.startFreshChatForCurrentMode()
-                vm.consumeSharedTextautosend(text)
-            }
-        } else if (intent.getBooleanExtra("input_only", false)) {
-            intent.getStringExtra("shared_text")?.let { text ->
-                val clearChat = intent.getBooleanExtra("clear_chat", false)
-                if (clearChat) vm.startFreshChatForCurrentMode()
-                vm.consumeSharedText(text)
-                val sharedPreferencesHelper = SharedPreferencesHelper(this)
-                val systemMessageTitle = sharedPreferencesHelper.getSelectedSystemMessage().title
-                AppToast.makeText(this, systemMessageTitle, AppToast.LENGTH_SHORT).show()
-            }
-        }
-        val isAssistLaunch = intent.action in listOf(Intent.ACTION_ASSIST)
-        if (isAssistLaunch) {
-            val digitalAssistantPreset = findDigitalAssistantPreset()
-            if (digitalAssistantPreset != null) {
-                val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
-                PresetManager.applyPreset(this, vm, digitalAssistantPreset)
-                vm.signalPresetApplied()
-            }
-        }
+        if (clearChat) vm.startFreshChatForCurrentMode()
+        if (autosend) vm.consumeSharedTextautosend(text) else vm.consumeSharedText(text)
+    }
+
+    private fun applyDigitalAssistantPreset() {
+        val preset = findDigitalAssistantPreset() ?: return
+        val vm: ChatViewModel by viewModels { AppViewModelFactory(application) }
+        PresetManager.applyPreset(this, vm, preset)
+        vm.signalPresetApplied()
     }
 
     /**
@@ -302,6 +290,8 @@ class MainActivity : AppCompatActivity() {
         if (!fromAway) return
         val hub = CodeHub.get(this)
         if (!hub.awayNotifier.consumeOpenToken(sessionId, token)) return
+        // Sessions load off the main thread now; on a cold start they are not in yet.
+        hub.awaitSessionsLoaded()
         val session = hub.sessions.value[sessionId] ?: return
         hub.store.enabled = true
         hub.store.lastTabWasCode = true
@@ -336,7 +326,7 @@ class MainActivity : AppCompatActivity() {
                     CodePairing.Reason.BAD_FINGERPRINT -> R.string.code_pair_bad_fingerprint
                     CodePairing.Reason.PIN_REQUIRES_WSS -> R.string.code_pair_pin_requires_wss
                 }
-                AppToast.makeText(this, getString(msg), AppToast.LENGTH_LONG).show()
+                GlassNotice.show(this, getString(msg))
                 intent.data = null
             }
         }
@@ -358,7 +348,7 @@ class MainActivity : AppCompatActivity() {
             val preset = repository.findById(presetId)
 
             if (preset == null) {
-                AppToast.makeText(this, "Preset not found (ID: $presetId)", AppToast.LENGTH_LONG).show()
+                GlassNotice.show(this, getString(R.string.notice_preset_not_found, presetId))
                 return
             }
 
@@ -368,13 +358,13 @@ class MainActivity : AppCompatActivity() {
             // 2. Validation (Model and System Message still exist)
             val allModels = (vm.getBuiltInModels() + prefs.getCustomModels()).distinctBy { it.apiIdentifier.lowercase() }
             if (allModels.none { it.apiIdentifier.equals(preset.modelIdentifier, ignoreCase = true) }) {
-                AppToast.makeText(this, "Preset not applied: Model \"${preset.modelIdentifier}\" no longer exists.", AppToast.LENGTH_LONG).show()
+                GlassNotice.show(this, getString(R.string.notice_preset_model_missing, preset.modelIdentifier))
                 return
             }
 
             val allMessages = listOf(prefs.getDefaultSystemMessage()) + prefs.getCustomSystemMessages()
             if (allMessages.none { it.title == preset.systemMessage.title && it.prompt == preset.systemMessage.prompt }) {
-                AppToast.makeText(this, "Preset not applied: System message \"${preset.systemMessage.title}\" no longer exists.", AppToast.LENGTH_LONG).show()
+                GlassNotice.show(this, getString(R.string.notice_preset_system_message_missing, preset.systemMessage.title))
                 return
             }
 

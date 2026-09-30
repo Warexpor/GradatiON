@@ -88,10 +88,7 @@ def main():
         off = (full - px) // 2
         vis = place(g, full, frac, background(full)).crop((off, off, off + px, off + px))
         d = os.path.join(RES, f"mipmap-{dpi}")
-        masked(vis, False).save(os.path.join(d, "ic_launcher.webp"), lossless=True)
-        masked(vis, True).save(os.path.join(d, "ic_launcher_round.webp"), lossless=True)
         masked(vis, False).save(os.path.join(d, "ic_launcherrobot.png"), optimize=True)
-        masked(vis, True).save(os.path.join(d, "ic_launcherrobot_round.png"), optimize=True)
     # Store icon: full-bleed square; the stores apply their own mask.
     place(g, 512, 0.70, background(512)).convert("RGB").save(STORE, optimize=True)
 

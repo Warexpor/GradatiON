@@ -27,8 +27,8 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import io.github.stardomains3.oxproxion.AppToast
 import io.github.stardomains3.oxproxion.GlassNotice
+import io.github.stardomains3.oxproxion.GrokConfirmDialog
 import io.github.stardomains3.oxproxion.TouchTargets
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
@@ -38,6 +38,8 @@ import io.github.stardomains3.oxproxion.PickerPopover
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
@@ -77,6 +79,13 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     private var lastConn: ConnectionState = ConnectionState.DISCONNECTED
     /** Host id + connection we last synced models for (avoid listHarnesses spam). */
     private var lastModelsSyncKey: Pair<String?, ConnectionState>? = null
+    /** Swiped away and waiting out the undo window; hidden from the list, forgotten when it closes. */
+    private val pendingForget = LinkedHashSet<String>()
+
+    private companion object {
+        /** The undo pill lives at least 5 s; forgetting waits just past that. */
+        const val UNDO_WINDOW_MS = 5_500L
+    }
 
     /** Space the chat screen's floating top bar takes; set by [CodeModeHost]. */
     var topInset: Int = 0
@@ -132,17 +141,19 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     return
                 }
                 val id = item.s.summary.id
-                // Sync drop the row so ItemTouchHelper sees it gone before DiffUtil commits.
-                val next = adapter.currentList.filterNot {
-                    it is HomeItem.Session && it.s.summary.id == id
+                // A session that is working or waiting on you is not dropped by a stray swipe.
+                if (item.s.running || item.s.status == SessionStatus.NEEDS_APPROVAL) {
+                    if (pos != RecyclerView.NO_POSITION) adapter.notifyItemChanged(pos)
+                    GrokConfirmDialog.show(
+                        this@CodeHomeFragment,
+                        getString(R.string.code_session_forget),
+                        getString(R.string.code_home_forget_active),
+                        getString(R.string.code_host_remove),
+                        { removeWithUndo(id) },
+                    )
+                    return
                 }
-                adapter.submitList(next)
-                hub.forget(id)
-                AppToast.makeText(
-                    requireContext(),
-                    getString(R.string.code_home_removed),
-                    AppToast.LENGTH_SHORT
-                ).show()
+                removeWithUndo(id)
             }
         }).attachToRecyclerView(list)
         list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
@@ -185,7 +196,12 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 syncPermissionFromStore()
                 hub.connect()
-                combine(hub.activeHost, hub.connection, hub.sessions) { h, c, _ -> h to c }.collect { (host, conn) ->
+                // Only what the list shows may re-render it: streaming tokens change `sessions` many
+                // times a second, but a row changes only when its title, preview, status or age does.
+                val rows = hub.sessions.map { all ->
+                    all.values.map { listOf(it.summary.id, it.summary.title, it.summary.preview, it.status, it.summary.updatedAt / 60_000) }
+                }.distinctUntilChanged()
+                combine(hub.activeHost, hub.connection, rows, hub.sessionsLoaded) { h, c, _, _ -> h to c }.collect { (host, conn) ->
                     bindHost(host)
                     render(host, conn)
                     // listHarnesses needs CONNECTED (or demo); re-sync when host/connection changes.
@@ -216,6 +232,9 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     }
 
     override fun onDestroyView() {
+        // The undo window ends with the screen: whatever is still pending is forgotten now.
+        pendingForget.toList().forEach { hub.forget(it) }
+        pendingForget.clear()
         hideSearchKeyboard()
         searchField = null
         super.onDestroyView()
@@ -319,10 +338,11 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
             items += HomeItem.Onboard
         } else {
             items += HomeItem.Header(host, conn)
-            val sessions = hub.sessionsFor(host.id)
+            val sessions = hub.sessionsFor(host.id).filter { it.summary.id !in pendingForget }
             if (sessions.isEmpty()) {
                 searchQuery = ""
-                items += HomeItem.Hero(host, harness, workspace)
+                // Until the saved list has loaded, an empty list is not "no sessions yet".
+                if (hub.sessionsLoaded.value) items += HomeItem.Hero(host, harness, workspace)
             } else {
                 items += HomeItem.Search
                 val filtered = CodeSessionFilter.filterSessions(searchQuery, sessions)
@@ -342,6 +362,19 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
             }
         }
         adapter.submitList(items)
+    }
+
+    /** Hides [id] at once and forgets it once the undo pill has gone without Undo being tapped. */
+    private fun removeWithUndo(id: String) {
+        pendingForget += id
+        // Drop the row synchronously so ItemTouchHelper sees it gone before DiffUtil commits.
+        adapter.submitList(adapter.currentList.filterNot { it is HomeItem.Session && it.s.summary.id == id })
+        render(lastHost, lastConn)
+        GlassNotice.show(requireContext(), getString(R.string.code_home_removed), getString(R.string.code_home_undo)) {
+            if (pendingForget.remove(id)) render(lastHost, lastConn)
+        }
+        // A little past the pill's action window, so the last moment of it can still undo.
+        view?.postDelayed({ if (pendingForget.remove(id)) hub.forget(id) }, UNDO_WINDOW_MS)
     }
 
     private fun promptRename(session: CodeSessionState) {
@@ -544,7 +577,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     private fun start(prompt: String, attachments: List<PromptAttachment> = emptyList()) {
         val host = hub.activeHost.value ?: return
         if (workspace.isBlank()) {
-            AppToast.makeText(requireContext(), getString(R.string.code_home_need_folder), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.code_home_need_folder))
             pickFolder()
             return
         }

@@ -317,4 +317,37 @@ class SessionUpdatePumpTest {
         val upserts = mergeLegacySessionRows(emptyList(), legacy)
         assertEquals(listOf("a", "b"), upserts.map { it.id })
     }
+
+    @Test
+    fun foldedTranscriptIsCappedAtTheNewestEvents() {
+        var state = CodeSessionState(summary(), running = true)
+        repeat(CodeSessionFolder.MAX_EVENTS + 50) { i ->
+            state = CodeSessionFolder.apply(
+                state,
+                CodeUpdate.Upsert(CodeEvent.Notice("n$i", i.toLong(), "note $i")),
+                now = 1L,
+            )
+        }
+        assertTrue(state.events.size <= CodeSessionFolder.MAX_EVENTS)
+        assertEquals("n${CodeSessionFolder.MAX_EVENTS + 49}", state.events.last().key)
+        assertFalse("oldest events are the ones dropped", state.events.any { it.key == "n0" })
+    }
+
+    @Test
+    fun onlyTheNewestInlineImagesKeepTheirBase64() {
+        var state = CodeSessionState(summary(), running = true)
+        val total = CodeSessionFolder.MAX_LIVE_IMAGES + 3
+        repeat(total) { i ->
+            state = CodeSessionFolder.apply(
+                state,
+                CodeUpdate.ImageChunk("img$i", "image/png", "DATA$i"),
+                now = 1L,
+            )
+        }
+        val images = state.events.filterIsInstance<CodeEvent.AgentText>().flatMap { it.images }
+        assertEquals(total, images.size)
+        assertEquals(total - CodeSessionFolder.MAX_LIVE_IMAGES, images.count { it.data.isEmpty() })
+        assertTrue("the newest image is intact", images.last().data.isNotEmpty())
+        assertTrue("the oldest image was shed", images.first().data.isEmpty())
+    }
 }

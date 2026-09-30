@@ -73,7 +73,7 @@ class AddEditPromptFragment : Fragment() {
 
                         if (hasDuplicate) {
                             Snackbar.make(requireView(), R.string.prompt_title_exists, Snackbar.LENGTH_LONG)
-                                .setAction("OK") { }
+                                .setAction(R.string.action_ok) { }
                                 .show()
                             return@setOnMenuItemClickListener true
                         }

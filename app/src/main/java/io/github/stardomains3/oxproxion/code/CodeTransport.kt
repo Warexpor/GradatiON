@@ -47,6 +47,16 @@ interface CodeTransport {
 }
 
 /**
+ * Codes the transport and backend leave in `lastError` for messages the phone words itself.
+ * [CodeHub.lastErrorOf] turns them into localized text; anything else is a wire message shown as is.
+ */
+object CodeErrors {
+    const val INVALID_ADDRESS = "code:invalid_address"
+    const val TOKEN_REJECTED = "code:token_rejected"
+    const val HANDSHAKE_FAILED = "code:handshake_failed"
+}
+
+/**
  * Exponential backoff for transport reconnect: 0.5 s → 30 s cap, with full jitter.
  * Counter resets after a connection has stayed up for [RESET_AFTER_CONNECTED_MS].
  */
@@ -119,7 +129,7 @@ class WebSocketTransport(
     @Volatile private var attempt = 0
     @Volatile private var connectedAtMs: Long? = null
     @Volatile private var authRejected = false
-    private var reconnectJob: Job? = null
+    @Volatile private var reconnectJob: Job? = null
 
     override fun setAppBackgrounded(backgrounded: Boolean) {
         appBackgrounded = backgrounded
@@ -157,7 +167,7 @@ class WebSocketTransport(
                 header("X-Gradation-Client", "android/1")
             }.build()
         }.getOrElse {
-            lastError = "Invalid address"
+            lastError = CodeErrors.INVALID_ADDRESS
             _state.value = ConnectionState.FAILED
             return
         }
@@ -188,7 +198,7 @@ class WebSocketTransport(
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 handleDrop(webSocket, generation, authReject = response?.code == 401 || response?.code == 403) {
                     lastError = when (response?.code) {
-                        401, 403 -> "The bridge rejected the pairing token"
+                        401, 403 -> CodeErrors.TOKEN_REJECTED
                         null -> t.message ?: t.javaClass.simpleName
                         else -> "HTTP ${response.code}"
                     }

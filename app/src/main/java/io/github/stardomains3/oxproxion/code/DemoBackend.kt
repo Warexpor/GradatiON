@@ -148,7 +148,7 @@ class DemoBackend(
 
     override suspend fun cancel(sessionId: String) {
         turns.remove(sessionId)?.cancel()
-        emit(sessionId, CodeUpdate.Upsert(CodeEvent.Notice(key(), now(), "Stopped", NoticeLevel.WARNING)))
+        // The "Stopped" row is the TurnEnd below; a Notice as well would say it twice.
         emit(sessionId, CodeUpdate.TurnDone("cancelled"))
     }
 

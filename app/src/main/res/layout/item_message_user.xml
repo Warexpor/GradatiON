@@ -39,6 +39,7 @@
                 android:id="@+id/userImageView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:contentDescription="@string/cd_attached_image"
                 android:layout_margin="4dp"
                 android:adjustViewBounds="true"
                 android:scaleType="fitEnd"
@@ -85,43 +86,43 @@
 
             <ImageButton
                 android:id="@+id/editButton"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_edit_message"
-                android:padding="8dp"
+                android:padding="7dp"
                 android:src="@drawable/ic_msg_edit"
                 android:visibility="visible"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/copyButtonuser"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_copy_text"
-                android:padding="8dp"
+                android:padding="7dp"
                 android:src="@drawable/ic_msg_copy"
                 app:tint="@color/xai_mute" />
 
             <ImageButton
                 android:id="@+id/deleteButton"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_delete_message"
-                android:padding="8dp"
+                android:padding="7dp"
                 android:src="@drawable/ic_msg_delete"
                 android:visibility="visible"
                 app:tint="@color/delete_action" />
 
             <ImageButton
                 android:id="@+id/collapseToggleButton"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:background="@drawable/bg_action_press"
                 android:contentDescription="@string/cd_toggle_expand"
-                android:padding="8dp"
+                android:padding="7dp"
                 android:src="@drawable/ic_msg_expand"
                 android:visibility="gone"
                 app:tint="@color/xai_mute" />

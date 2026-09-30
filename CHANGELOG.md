@@ -2,15 +2,47 @@
 
 ## Unreleased
 
-- RP character panel: every tile now opens a full-screen page (Memory, Lore, Layout, Wallpaper and Voice joined History, Edit, Persona and Style). The sheet no longer folds; it stays open under the page and refreshes when you come back.
-
 ### Added
-- Persona can be switched off once one exists: a "Use persona in chats" switch on the Persona screen. Off keeps it saved but characters stop seeing your name and description; saving a persona turns it back on.
-- Choosing an avatar photo (characters and personas) asks where from: Photos (the system photo picker), Gallery or another app, or Files. Then a frame step lets you drag and pinch to choose what part of the photo shows.
+- RP character panel pages: every tile (History, Memory, Lore, Edit, Voice, Persona, Wallpaper, Layout, Style) opens its own full-screen page with a drawn hero, cards and a Save pinned above the keyboard. The sheet stays open under the page and refreshes when you come back. History lists that character's chats by day (current one marked "Open now") with a New chat button. Layout shows three drawings with a ring on the chosen one; Wallpaper previews the picture in a phone shape; Voice lists Default at once and adds the engine's voices when speech is ready; Style is Writing, Story and Mode cards.
+- Persona can be switched off once one exists: a "Use persona in chats" switch on the Persona screen. Off keeps it saved but characters stop seeing your name and description; saving a persona turns it back on. The persona screen now has a tappable portrait, a name and About field, and your saved personas as rows (up to 12).
+- Choosing an avatar photo (characters and personas) opens a small menu under the portrait: Gallery (your gallery app) or the system Photo picker. A frame step then lets you drag and pinch to choose what part of the photo shows, and saves a 512px square.
+- Streaming reveal pacing (`StreamRevealPacing`): text eases in at a pace set by how fast it is arriving, so a slow stream no longer drains, stops and lurches. Chat and Code share it.
+- Help is rewritten for the current app (Chat, Roleplay and Code, History, the composer, voice, models and reasoning, backgrounds, Settings) and now lives in `res/raw/help.md`.
+- Every refusal and failure now says so. Toasts had been silenced app-wide, and about 165 messages with them (missing key, save failed, name required, export results, "nothing to copy", tool errors, LAN load failures, the reply cut at max tokens). They now show as a `GlassNotice` under the top bar, or as the field's error text inside a dialog. The notice is announced to TalkBack, stays longer for longer text, and can carry an action ("Open folder"), which replaced the two Material snackbars.
+- Settings rows show their current value: theme, voice engine, local server, saved or missing API keys, max tokens, timeout, chat memory.
+- Roleplay: the character History page has ⋮ / long-press delete with a confirmation and an empty state; Memory and Voice ask before discarding edits; removing a wallpaper confirms; the empty home has an "Add a character" button; the Memory and Facts fields show a 0/4000 counter; the character library's row menu is the glass `MessageMenu`.
+- Code: unanswered approvals expire when the turn ends ("Expired"); Allow/Deny lock while the answer is in flight and say so on failure; the session screen has loading, waiting and failed-attach states with tap-to-retry, and the offline banner shows the reason; a dot on the Code tab while a session waits for approval on another tab; swiping a running session away asks first, and any other removal has Undo; a dropped-frame gap reloads the session from the last seen event.
+- Voice: a recording still being transcribed is kept when you tap send or leave (it used to be thrown away), the send waits for it, and the mic turns into a cancel while transcribing. A missing key, model or server is reported before recording starts. The phone recognizer stops after 90 s of silence or repeated empty results instead of cycling forever.
+- Chat: streaming, fades, the copy check and the glass switch all honour the system "animations off" setting; message copies confirm with the check animation and a haptic; the haptics preference applies to every tap (new `Haptics.tap`).
+
+### Changed
+- Roleplay characters list: the top-left button is a gear that opens Settings (inside a chat it stays the back chevron).
+- Character panel: square tiles with flat drawn art that fills each card; no edge line; the header's Switch button and the New chat tile are gone (New chat lives on the History page).
+- About 50 older icons were redrawn as 24dp round strokes to match the rest, and `ic_licenses` was added. 30 unused drawables, plus about 100 unused layouts, menus, colors, styles and strings, were removed.
+- Settings rows share one text edge and divider inset; the local-network row has its own icon. The Controls grid packs the tiles that are visible and hides New chat instead of leaving a gap.
+- Labels and notices use sentence case throughout (Settings, dialogs, tool names), with `…` and straight apostrophes, and no trailing period on short notices. The tool manager, notification channel and share-sheet entries now read from string resources.
+- "Local network" is the one name for models on your own server (it was sometimes "LAN").
+- Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
-- The Persona card in the character panel no longer washes the portrait out, drops the name under the title, or leaves the spacing off; the panel header's avatar is no longer squashed.
+- The character panel sheet dropped by its own height after coming back from a page.
+- The Persona tile no longer washes the portrait out, and the panel header's avatar is no longer squashed.
 - The pause between the last words of a reply and its tools appearing: the swap to the final render used to wait out the 340 ms word fade; it now happens at once. The finished reply's markdown and text layout are also prepared off the main thread, and a late update of the same reply no longer throws that work away.
+- The avatar picker decodes large photos at a sensible size and releases its bitmaps; Memory and Voice drafts survive rotation; Roleplay pages leave room for the keyboard; the wallpaper and the panel avatar decode off the main thread.
+- The empty Roleplay home points at the characters button.
+- The AI grammar fix popup can be cancelled with a 48dp button, and says so when the text is read-only instead of closing silently.
+- Streaming: a connection that drops mid-reply no longer passes for a finished reply. The reader reports the failure, a stream that ends without `[DONE]` or a finish reason keeps what arrived and says it may be incomplete, and a reply that never started shows the error. The request timeout no longer caps a long stream (read timeout only), timeouts show the configured minutes instead of "90 seconds", and changing the timeout in Settings applies to the next request without a restart.
+- Tool calls: every `tool_call_id` gets a reply even when the model repeats a call, and Stop mid-run stubs the unanswered ones, so the next send no longer fails with 400 on strict providers. Streamed tool calls with a missing index, a reused index 0 or a late id assemble correctly. Tool follow-ups and file tools run off the main thread; Stop halts the remaining tools.
+- Requests carry only role, content and tool fields; local bookkeeping (image URIs, reasoning, thinking, tools-used flags) no longer leaves the phone.
+- Deleting a chat clears its fork stash, facts and swipe data; deleting a character clears its memory, layout, voice, lorebook pin and wallpaper. Imports are one transaction, accept newer backups with unknown fields, and report a bad file separately from a database error.
+- The auto-memory note goes to the chat it was written for even if you switched chats meanwhile; the job is cancelled on a session change. A character's Additional instruction expands `{{char}}` and `{{user}}`. The reply cleaner no longer deletes story lines that start with "Instructions" or "No limits". Lorebook keys in Chinese, Japanese, Korean, Thai and similar scripts now match inside running text, and key regexes compile once.
+- A corrupt cached model list or prompt no longer crash-loops the app at launch. A failed API key save keeps the old key. The rotation of the app no longer re-sends a shared or auto-send prompt or re-applies the assistant preset. One unrecognised fingerprint no longer closes the app, and a restore after process death still asks for it.
+- The character editor no longer creates a duplicate when the avatar save fails on a new character, and keeps in-progress edits and the picked photo across rotation; a discarded persona photo is deleted.
+- PDF export paginates onto A4 pages instead of one page as tall as the chat, closes its streams, and no longer crashes on an image that fails to decode. Exported HTML escapes raw HTML and links. Read-file tools cap their output at 200 KB, file edits keep the original if the write fails, History search treats `%` and `_` literally.
+- Code: history no longer opens blank after an app restart (the resume cursor was ahead of an empty local transcript); whole-file "replace" diffs on big files with a small edit; the hub no longer opens the Code database on every app start or chat open; decoding, diffs and markdown parsing run off the main thread; "Stopped" showed twice.
+- Performance: the liquid mark no longer does a GPU readback on a timer (only when a snapshot needs it); backgrounds and the mark stop their frame loop when animations are off or on power save; shaders are built once, not per frame; the ambient photo key, hour and time zone are cached; the static field renders on a worker thread; dialogs frost the screen once, not three times; streaming polishes only the open tail of the markdown, not the whole reply per frame; history search cancels stale queries; assistant rows bind less. Imported background photos respect EXIF orientation.
+- Accessibility: 44dp targets on the Thinking header, the extended top bar, the back and home buttons, photo buttons, Code approval buttons, thought and tool rows; content descriptions on preview, generated and user images and on the Roleplay row menu; tool rows expose Running / Failed / Expanded; diff cards read their path and counts; 13sp minimum on Code subtitles, diff counts and mono text.
+- Dead code: the hidden per-message export buttons and their PDF/HTML/PNG chain, `MarkdownViewerFragment`, `StreamCursorSpan`, `AppToast`, the invisible model-chip colour animator and about 160 unused resources are gone.
 
 ## 3.0.0 — liquid glass redesign
 
@@ -35,9 +67,9 @@ First release under the GradatiON id (`io.github.warexpor.gradation`), signed wi
 - Thinking stays folded while a reply streams, glints in gently, and opens on tap without a highlight. The finished reply's tools ease in left to right, and the view glides along with the streaming text instead of jumping a line at a time.
 - Roleplay no longer has a response-language setting. Replies follow the conversation instead of being forced into English, Russian, or Chinese.
 - Install id is `io.github.warexpor.gradation` (dev builds: `io.github.warexpor.gradation.dev`). Older `grokion` installs stay as they are and do not update into this id. Dev builds stay signed with the committed GradatiON Dev key.
-- Typography: Plus Jakarta Sans across the app, a serif-italic GradatiON wordmark in History, and larger semibold labels on big buttons and dialog actions. Back, chevron and close icons are redrawn as rounded iOS-style strokes.
+- Typography: Plus Jakarta Sans across the app, a Michroma GradatiON wordmark in History, and larger semibold labels on big buttons and dialog actions. Back, chevron and close icons are redrawn as rounded iOS-style strokes.
 - Glass everywhere: every dialog, bottom sheet, context menu, dropdown and settings subpage now uses the liquid-glass style; toolbar back and action buttons are glass capsules that spring under the finger.
-- Palette one step dimmer and darker (dark base #111111, light #F1F1F1), still strictly neutral.
+- Palette one step dimmer and darker (dark base #111111, light a dimmed off-white, #E8E8E8), still strictly neutral.
 - Liquid glass: top bar controls are now floating glass buttons and chips over a soft scroll-edge fade, and glass bends content at its rim with a specular edge (Android 13+). Touching glass springs it up, leans it toward your finger and lights it from the touch point. Battery saver and low-RAM devices get a solid frosted fill instead of live blur.
 - Glass: the transcript scrolls beneath a live-blurred top bar and a floating glass composer; the Controls panel is the same material, and dialogs and sheets frost the screen behind them.
 - Palette moves off pure black to a charcoal base (and a soft paper base in light) with a finer stepped gray ramp and lower overall contrast.
@@ -45,7 +77,7 @@ First release under the GradatiON id (`io.github.warexpor.gradation`), signed wi
 - Markdown: code blocks are rounded cards with a language header (tap to copy), inline code is a pill, headings are calmer and paragraph spacing tighter.
 - Motion: the Controls panel rises on a spring with its rows cascading in, sent messages rise from the composer, presses sink and settle, dialogs enter like iOS alerts, and screens push in from the edge over a parallaxed, dimmed previous screen. Reasoning expands and collapses smoothly.
 - Whole UI reworked to a minimal, iOS-style monochrome look: system grays, soft gradients on the composer, bubbles and chips, no gold accent and no glow. Light and dark now share one theme definition.
-- Inter 4 in four weights with a proper type scale; titles use semibold, the History wordmark is a large title.
+- A proper type scale in Plus Jakarta Sans; titles use semibold, and the History wordmark is set in Michroma.
 - Pressing things shows a soft gray wash instead of the burst animation.
 - Settings, RP hub and forms use grouped inset cards with section headers; dialogs are rounded cards with pill buttons; text fields are filled; nav bars are flush.
 - Chat empty state is a small mark with a greeting instead of the big watermark.
@@ -67,7 +99,7 @@ First release under the GradatiON id (`io.github.warexpor.gradation`), signed wi
 - Picked images are read off the main thread with a size cap.
 - Spell-check popup, Help and the HTML viewer used hard-coded dark colors; they follow the theme now.
 
-## Unreleased — upstream sync (oxproxion v2.1.103 to v2.2.5)
+## Upstream sync: oxproxion 2.1.103 to 2.2.5 (merged before 3.0.0)
 
 ### Added
 - Nativ LAN server type (OpenAI-compatible `/v1/models`, Mac-only inference server).

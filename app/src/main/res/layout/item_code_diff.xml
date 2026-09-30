@@ -56,7 +56,7 @@
                 android:maxLines="1"
                 android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
                 android:textColor="@color/xai_ink"
-                android:textSize="12.5sp" />
+                android:textSize="13sp" />
         </LinearLayout>
 
         <View

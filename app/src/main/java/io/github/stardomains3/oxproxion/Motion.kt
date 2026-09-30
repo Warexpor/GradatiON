@@ -1,11 +1,14 @@
 package io.github.stardomains3.oxproxion
 
 import android.animation.TimeInterpolator
+import android.content.ContentResolver
 import android.content.Context
+import android.database.ContentObserver
 import android.provider.Settings
 import android.view.View
 import android.view.animation.PathInterpolator
 import androidx.fragment.app.FragmentTransaction
+import java.lang.ref.WeakReference
 import kotlin.math.abs
 
 object Motion {
@@ -102,16 +105,54 @@ object Motion {
         return Fling(d, if (d == 0f) 0f else velocity * kotlin.math.sign(d), response)
     }
 
+    /**
+     * The system "animator duration scale" is asked about from draw loops and tick callbacks, so
+     * the answer is cached and a [ContentObserver] clears it when the setting changes.
+     * Null means "read it again".
+     */
+    @Volatile
+    private var animationsOn: Boolean? = null
+    private var watched: WeakReference<ContentResolver>? = null
+
     fun areAnimationsEnabled(context: Context): Boolean {
-        return try {
-            val durationScale = Settings.Global.getFloat(
-                context.contentResolver,
-                Settings.Global.ANIMATOR_DURATION_SCALE,
-                1.0f
-            )
-            durationScale != 0.0f
+        val app = context.applicationContext ?: context
+        watch(app.contentResolver)
+        animationsOn?.let { return it }
+        return read(app)
+    }
+
+    /**
+     * Read the setting again now. Views call this when their window regains focus, in case a
+     * change happened while the observer couldn't tell us (it is per process and can be missed
+     * across a process restart of the settings provider).
+     */
+    fun refreshAnimations(context: Context): Boolean = read(context.applicationContext ?: context)
+
+    private fun read(app: Context): Boolean {
+        val on = try {
+            Settings.Global.getFloat(app.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1.0f) != 0.0f
         } catch (_: Exception) {
             true
+        }
+        animationsOn = on
+        return on
+    }
+
+    /** One observer per resolver; a new resolver (a fresh application) starts with a cold cache. */
+    private fun watch(resolver: ContentResolver) {
+        if (watched?.get() === resolver) return
+        watched = WeakReference(resolver)
+        animationsOn = null
+        runCatching {
+            resolver.registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE),
+                false,
+                object : ContentObserver(null) {
+                    override fun onChange(selfChange: Boolean) {
+                        animationsOn = null
+                    }
+                }
+            )
         }
     }
 

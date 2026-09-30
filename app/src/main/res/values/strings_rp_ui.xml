@@ -51,7 +51,8 @@
     <string name="rp_ui_section_you">You</string>
     <!-- Roleplay home: the characters list you land on -->
     <string name="rp_home_chats">Characters</string>
-    <string name="rp_home_empty">No characters yet. Open your characters (top right) to create one.</string>
+    <string name="rp_home_empty">No characters yet. Add one to start your first story.</string>
+    <string name="rp_home_empty_cta">Add a character</string>
     <string name="rp_home_start">Tap to start a chat</string>
     <string name="rp_home_manage">Manage characters</string>
     <string name="rp_home_back">Characters</string>
@@ -62,4 +63,8 @@
     <string name="rp_home_delete_body">Your conversation with %1$s is removed for good.</string>
     <string name="rp_home_you">You: %1$s</string>
     <string name="rp_home_no_preview">No messages yet</string>
+    <string name="rp_page_no_character">Pick a character first.</string>
+    <string name="rp_wallpaper_remove_title">Remove wallpaper?</string>
+    <string name="rp_wallpaper_remove_body">The chat with %1$s goes back to your app background.</string>
+    <string name="rp_history_none">No chats yet. Start one below.</string>
 </resources>

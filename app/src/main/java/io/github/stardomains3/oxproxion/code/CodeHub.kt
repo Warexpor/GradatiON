@@ -3,12 +3,15 @@ package io.github.stardomains3.oxproxion.code
 import android.content.Context
 import android.util.Log
 import io.github.stardomains3.oxproxion.AppDatabase
+import io.github.stardomains3.oxproxion.R
 import io.github.stardomains3.oxproxion.code.store.CodeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
@@ -24,8 +27,13 @@ data class CodeSessionState(
     val attached: Boolean = false,
     /** Slash commands from ACP `available_commands_update` (session-scoped, not persisted). */
     val availableCommands: List<AvailableCommand> = emptyList(),
+    /** An attach (session/load) is in flight: the screen shows "loading" until history lands. */
+    val attaching: Boolean = false,
+    /** Why the last attach failed; null when it has not. Empty when the failure had no message. */
+    val attachError: String? = null,
 ) {
-    val status: SessionStatus get() = TranscriptReducer.statusOf(events, running)
+    // Scans the transcript, and the home list asks on every emission, so do it once per state.
+    val status: SessionStatus by lazy(LazyThreadSafetyMode.NONE) { TranscriptReducer.statusOf(events, running) }
 }
 
 /**
@@ -55,7 +63,8 @@ class CodeHub internal constructor(context: Context) {
     private val attachingSessions = HashSet<String>()
     /** Opens that arrived while an attach was in flight (F3); re-launch after failure/finally. */
     private val needsAttach = HashSet<String>()
-    private val sessionDao: CodeSessionDao = AppDatabase.getDatabase(appContext).codeSessionDao()
+    // Opening the encrypted database costs real time; first use happens on the IO loader below.
+    private val sessionDao: CodeSessionDao by lazy { AppDatabase.getDatabase(appContext).codeSessionDao() }
     /** Latest session-index snapshot waiting for Room; null when idle. */
     private val pendingPersist = AtomicReference<List<CodeSessionEntity>?>(null)
     /** Single-flight flag so only one replaceAll runs at a time. */
@@ -64,12 +73,15 @@ class CodeHub internal constructor(context: Context) {
     /** Coalesce backend SessionUpdates to ~one _sessions write per frame (see SessionUpdatePump). */
     private val updatePump = SessionUpdatePump(scope, ::drainSessionUpdates)
 
+    /** Sessions the user has open on screen. They re-attach when their machine comes back. */
+    private val viewing = HashSet<String>()
+
     /** Local away notifications (§5.6); no sticky FGS. */
     val awayNotifier = CodeAwayNotifier(appContext, store) { hostId ->
         // Real CONNECTED only (demo included once its backend is up). No isDemo bypass —
         // historical attach TurnDone is gated via sessionWasRunning in onUpdate (A4).
         connectionOf(hostId) == ConnectionState.CONNECTED
-    }
+    }.also { it.setBackgrounded(appBackgrounded) }
 
     private val _hosts = MutableStateFlow(store.hosts)
     val hosts: StateFlow<List<CodeHost>> = _hosts
@@ -77,9 +89,34 @@ class CodeHub internal constructor(context: Context) {
     private val _activeHost = MutableStateFlow(resolveActive())
     val activeHost: StateFlow<CodeHost?> = _activeHost
 
-    private val _sessions = MutableStateFlow(loadSessionsFromRoom())
-    /** All known sessions by id. */
+    private val _sessions = MutableStateFlow<Map<String, CodeSessionState>>(emptyMap())
+    /** All known sessions by id. Fills in shortly after the hub exists; see [sessionsLoaded]. */
     val sessions: StateFlow<Map<String, CodeSessionState>> = _sessions
+
+    private val _sessionsLoaded = MutableStateFlow(false)
+    /** True once the saved session index has been read, so an empty list can be told from "not yet". */
+    val sessionsLoaded: StateFlow<Boolean> = _sessionsLoaded
+    /** A persist asked for before the index loaded; writing then would wipe rows not read yet. */
+    @Volatile private var persistWaitsForLoad = false
+
+    private val sessionsLoad: Job = scope.launch(Dispatchers.IO) {
+        val loaded = try {
+            loadSessionsFromRoom()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            // No saved index is better than no Code tab; the list just starts empty.
+            Log.w(TAG, "Session index failed to load", t)
+            emptyMap()
+        }
+        // In-memory entries (an early startSession, say) win over what was saved.
+        _sessions.update { cur -> loaded + cur }
+        _sessionsLoaded.value = true
+        if (persistWaitsForLoad) {
+            persistWaitsForLoad = false
+            queuePersist(_sessions.value)
+        }
+    }
 
     private val _connection = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connection: StateFlow<ConnectionState> = _connection
@@ -93,8 +130,8 @@ class CodeHub internal constructor(context: Context) {
         return all.find { it.id == store.activeHostId } ?: all.firstOrNull()
     }
 
-    /** Load Room index; one-shot merge of any leftover prefs session list. */
-    private fun loadSessionsFromRoom(): Map<String, CodeSessionState> = runBlocking(Dispatchers.IO) {
+    /** Load Room index; one-shot merge of any leftover prefs session list. Runs on IO. */
+    private suspend fun loadSessionsFromRoom(): Map<String, CodeSessionState> {
         val legacy = store.peekLegacySessions()
         if (legacy != null) {
             try {
@@ -110,8 +147,15 @@ class CodeHub internal constructor(context: Context) {
                 Log.w(TAG, "Prefs→Room session migration deferred", t)
             }
         }
-        sessionDao.getAll().associate { it.id to CodeSessionState(it.toSummary()) }
+        return sessionDao.getAll().associate { it.id to CodeSessionState(it.toSummary()) }
     }
+
+    /**
+     * Blocks until the saved session index has loaded. Only for a path that needs the list this
+     * instant and cannot wait for [sessionsLoaded] (an away-notification tap on a cold start, and
+     * tests). Normal screens observe [sessions] and [sessionsLoaded] instead.
+     */
+    fun awaitSessionsLoaded() = runBlocking { sessionsLoad.join() }
 
     // ── hosts ─────────────────────────────────────────────────────────────────────────────
 
@@ -184,18 +228,26 @@ class CodeHub internal constructor(context: Context) {
             TransportKind.DEMO -> DemoBackend(host, scope)
             TransportKind.BRIDGE -> BridgeBackend(host, WebSocketTransport(host.url, host.token, host.fingerprint), AcpAdapter(), scope)
         }
-        // Seed resume cursors from the Room-backed session index (process-death safe).
-        _sessions.value.values.filter { it.summary.hostId == host.id }.forEach { s ->
-            s.summary.lastSeq?.let { b.rememberLastSeq(s.summary.id, it) }
-        }
+        // Resume cursors are not seeded from Room: transcripts are memory-only, so a cursor with
+        // no history behind it would skip everything before it. attach() decides per session.
+        if (appBackgrounded) b.setAppBackgrounded(true)
         scope.launch { b.updates.collect { updatePump.offer(it) } }
         scope.launch {
             b.connection.collect { st ->
                 _connections.value = _connections.value + (host.id to st)
                 if (_activeHost.value?.id == host.id) _connection.value = st
+                // A screen that was waiting on this machine (failed or never-started attach) retries.
+                if (st == ConnectionState.CONNECTED) reattachViewing(host.id)
             }
         }
         b
+    }
+
+    private fun reattachViewing(hostId: String) {
+        for (id in viewing.toList()) {
+            val s = _sessions.value[id] ?: continue
+            if (s.summary.hostId == hostId && !s.attached && !s.attaching) attach(id)
+        }
     }
 
     fun connect(target: CodeHost? = null) {
@@ -206,14 +258,23 @@ class CodeHub internal constructor(context: Context) {
         refreshSessions()
     }
 
+    /** Raw last error of the active host (codes included); for classifying, not for showing. */
     fun lastError(): String? = _activeHost.value?.let { backends[it.id]?.lastError }
+
+    /** Turns the codes the transport leaves in `lastError` into localized text; wire messages pass through. */
+    fun describeError(raw: String?): String? = when (raw) {
+        CodeErrors.INVALID_ADDRESS -> appContext.getString(R.string.code_error_invalid_address)
+        CodeErrors.TOKEN_REJECTED -> appContext.getString(R.string.code_error_token_rejected)
+        CodeErrors.HANDSHAKE_FAILED -> appContext.getString(R.string.code_error_handshake)
+        else -> raw
+    }
 
     /** Connection state for [hostId] (falls back to DISCONNECTED when unknown). */
     fun connectionOf(hostId: String): ConnectionState =
         _connections.value[hostId] ?: ConnectionState.DISCONNECTED
 
     /** Last transport error for [hostId], if any. */
-    fun lastErrorOf(hostId: String): String? = backends[hostId]?.lastError
+    fun lastErrorOf(hostId: String): String? = describeError(backends[hostId]?.lastError)
 
     /**
      * Bridge / server version from the last successful initialize on [hostId]'s backend.
@@ -223,6 +284,7 @@ class CodeHub internal constructor(context: Context) {
 
     /** Pause bridge reconnect while backgrounded unless a session turn is in flight. */
     fun setAppBackgrounded(backgrounded: Boolean) {
+        appBackgrounded = backgrounded
         awayNotifier.setBackgrounded(backgrounded)
         backends.values.forEach { it.setAppBackgrounded(backgrounded) }
     }
@@ -308,8 +370,10 @@ class CodeHub internal constructor(context: Context) {
         }
     }
 
+    /** The user opened this session's screen: load its history from the machine and keep it live. */
     fun attach(sessionId: String) {
         val s = _sessions.value[sessionId] ?: return
+        viewing += sessionId
         if (s.attached) return
         // F3: coalesce overlapping opens onto one in-flight attempt; remember
         // a concurrent open so failure/finally can re-launch (retry during slow ensureReady).
@@ -323,13 +387,25 @@ class CodeHub internal constructor(context: Context) {
             attachingSessions.remove(sessionId)
             return
         }
-        s.summary.lastSeq?.let { backendFor(host).rememberLastSeq(sessionId, it) }
+        val backend = backendFor(host)
+        // Transcripts live in memory only. With nothing on screen (a fresh launch), resume from
+        // zero: the saved cursor would skip the very history this screen is about to show.
+        val fresh = s.events.isEmpty()
+        val summary = if (fresh) s.summary.copy(lastSeq = null) else s.summary
+        if (fresh) backend.forgetLastSeq(sessionId)
+        else summary.lastSeq?.let { backend.rememberLastSeq(sessionId, it) }
+        update(sessionId) { it.copy(attaching = true, attachError = null) }
         // E3: only mark attached after a successful backend attach so a failed
         // ensureReady / session/load can retry on the next open.
         scope.launch {
             try {
-                val ok = runCatching { backendFor(host).attach(s.summary) }.isSuccess
-                if (ok) update(sessionId) { it.copy(attached = true) }
+                val failure = runCatching { backend.attach(summary) }.exceptionOrNull()
+                update(sessionId) {
+                    if (failure == null) it.copy(attached = true, attaching = false, attachError = null)
+                    else it.copy(attaching = false, attachError = describeError(failure.message).orEmpty())
+                }
+                // The screen closed while this was in flight: release() had nothing to detach yet.
+                if (sessionId !in viewing && _sessions.value[sessionId]?.running != true) detachIdle(sessionId)
             } finally {
                 attachingSessions.remove(sessionId)
                 val retry = sessionId in needsAttach &&
@@ -338,6 +414,26 @@ class CodeHub internal constructor(context: Context) {
                 if (retry) attach(sessionId)
             }
         }
+    }
+
+    /**
+     * The session screen closed. An idle session is detached so the backend stops tracking it
+     * (reconnects only replay sessions that are open or working); reopening resumes from its
+     * cursor. A running one stays attached until its turn ends.
+     */
+    fun release(sessionId: String) {
+        viewing -= sessionId
+        val s = _sessions.value[sessionId] ?: return
+        if (s.running || s.status == SessionStatus.NEEDS_APPROVAL) return
+        detachIdle(sessionId)
+    }
+
+    private fun detachIdle(sessionId: String) {
+        val s = _sessions.value[sessionId] ?: return
+        backends[s.summary.hostId]?.detach(sessionId)
+        attachingSessions.remove(sessionId)
+        needsAttach.remove(sessionId)
+        if (s.attached || s.attaching) update(sessionId) { it.copy(attached = false, attaching = false) }
     }
 
     /** Starts a prompt when the session is idle; returns false for an overlapping prompt. */
@@ -371,25 +467,35 @@ class CodeHub internal constructor(context: Context) {
     /** AWAY-02: approval in-flight keys must not collide across sessions. */
     private fun answeringKey(sessionId: String, requestId: String) = "$sessionId\u0000$requestId"
 
-    fun answer(sessionId: String, requestId: String, option: ApprovalOption?) {
+    /**
+     * Answers an approval. [onFailed] runs (on Main) when the answer did not go out, or there was
+     * nothing left to answer, so the card can re-enable its buttons and say why.
+     */
+    fun answer(sessionId: String, requestId: String, option: ApprovalOption?, onFailed: () -> Unit = {}) {
         // M3 / AWAY-02: drop a second tap for the same session+request before fold.
         val key = answeringKey(sessionId, requestId)
         if (!answeringRequests.add(key)) return
         val s = _sessions.value[sessionId]
         val open = s?.events?.any {
-            it is CodeEvent.Approval && it.requestId == requestId && it.chosen == null
+            it is CodeEvent.Approval && it.requestId == requestId && it.pending
         } == true
         val host = s?.let { st -> _hosts.value.find { it.id == st.summary.hostId } }
         if (!open || host == null) {
             answeringRequests.remove(key)
+            onFailed()
             return
         }
         scope.launch {
             try {
                 backendFor(host).answer(sessionId, requestId, option)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                answeringRequests.remove(key)
+                // Waiting for the machine timed out; that is a failed answer, not a cancelled screen.
+                if (e is kotlinx.coroutines.TimeoutCancellationException) onFailed() else throw e
             } catch (_: Throwable) {
                 // H2: send failed — allow retry.
                 answeringRequests.remove(key)
+                onFailed()
             }
         }
     }
@@ -406,6 +512,9 @@ class CodeHub internal constructor(context: Context) {
         option: ApprovalOption?,
         onDone: (Boolean) -> Unit,
     ) {
+        // A notification button can start a cold process; the session list is still loading then,
+        // and this is a short, user-initiated path, so it may wait for it.
+        if (!_sessionsLoaded.value) awaitSessionsLoaded()
         val s = _sessions.value[sessionId]
         if (s == null) {
             onDone(false)
@@ -420,8 +529,8 @@ class CodeHub internal constructor(context: Context) {
         // has no transcript) still attempts the wire — PendingIntent is app-private (AWAY-01).
         val approval = s.events.filterIsInstance<CodeEvent.Approval>()
             .find { it.requestId == requestId }
-        if (approval?.chosen != null) {
-            onDone(true) // already answered — cancel lingering shade
+        if (approval != null && !approval.pending) {
+            onDone(true) // already answered or expired — cancel lingering shade
             return
         }
         val key = answeringKey(sessionId, requestId)
@@ -485,6 +594,7 @@ class CodeHub internal constructor(context: Context) {
         awayNotifier.cancelSession(sessionId) // A5
         // M2: stop an in-flight turn so keepalive / outbox do not outlive the row.
         // B2: detach so reconnect does not session/load a forgotten id.
+        viewing -= sessionId
         val s = _sessions.value[sessionId]
         if (s != null) {
             // C1: do not leave cancel-suppress for a dropped id (wire-only cancel emits no TurnDone).
@@ -548,6 +658,10 @@ class CodeHub internal constructor(context: Context) {
             if (su.update is CodeUpdate.ApprovalAnswered) {
                 answeringRequests.remove(answeringKey(su.sessionId, su.update.requestId))
             }
+            if (su.update is CodeUpdate.TurnDone) {
+                // Its unanswered approvals just expired; drop their in-flight marks too.
+                answeringRequests.removeAll { it.startsWith(su.sessionId + "\u0000") }
+            }
             val state = _sessions.value[su.sessionId] ?: continue
             val wasRunning = before[su.sessionId]?.running == true ||
                 su.sessionId in suppressSnapshot
@@ -560,6 +674,11 @@ class CodeHub internal constructor(context: Context) {
             )
         }
         if (result.needsPersist) persistSessions()
+        // A turn that ended on its own while nobody has the screen open leaves nothing to track.
+        for (su in batch) {
+            val done = su.update as? CodeUpdate.TurnDone ?: continue
+            if (done.stopReason != "cancelled" && su.sessionId !in viewing) detachIdle(su.sessionId)
+        }
     }
 
     private inline fun update(sessionId: String, f: (CodeSessionState) -> CodeSessionState) {
@@ -579,13 +698,24 @@ class CodeHub internal constructor(context: Context) {
      * a single IO worker always writes the latest pending list; no concurrent replaceAll.
      */
     private fun persistSessions() {
+        if (!_sessionsLoaded.value) {
+            // The saved index is still loading; replaceAll now would erase rows not read yet.
+            // Flag first, then look again: the loader sets "loaded" before it reads the flag, so
+            // one of the two sees the other.
+            persistWaitsForLoad = true
+            if (!_sessionsLoaded.value) return
+        }
         // Refresh lastSeq from live adapters before writing.
         val enriched = _sessions.value.mapValues { (id, state) ->
             val seq = backends[state.summary.hostId]?.peekLastSeq(id) ?: state.summary.lastSeq
             if (seq != state.summary.lastSeq) state.copy(summary = state.summary.copy(lastSeq = seq)) else state
         }
         if (enriched != _sessions.value) _sessions.value = enriched
-        val entities = enriched.values
+        queuePersist(enriched)
+    }
+
+    private fun queuePersist(sessions: Map<String, CodeSessionState>) {
+        val entities = sessions.values
             .map { CodeSessionEntity.from(it.summary) }
             .sortedByDescending { it.updatedAt }
             .take(200)
@@ -611,6 +741,7 @@ class CodeHub internal constructor(context: Context) {
     }
 
     internal fun releaseForTesting() {
+        sessionsLoad.cancel()
         updatePump.cancel()
         backends.values.forEach { it.close() }
     }
@@ -646,6 +777,32 @@ class CodeHub internal constructor(context: Context) {
             resetForTesting()
             installed = factory
         }
+
+        /**
+         * Whether the app is backgrounded, kept here so a hub created later (an away-notification
+         * tap, say) starts with the right policy instead of reconnecting in the background.
+         */
+        @Volatile
+        private var appBackgrounded = false
+
+        /**
+         * The hub if one exists, without creating it. Creating reads encrypted hosts and opens the
+         * database, so app start and lifecycle callbacks must not do it for people who never use Code.
+         */
+        fun peek(context: Context): CodeHub? {
+            if (installed != null) return null
+            return byApp[context.applicationContext]
+        }
+
+        /** App lifecycle hook: records the state and forwards it to the hub only if one exists. */
+        fun noteAppBackgrounded(context: Context, backgrounded: Boolean) {
+            appBackgrounded = backgrounded
+            peek(context)?.setAppBackgrounded(backgrounded)
+        }
+
+        /** Tests only: [get] plus waiting for the saved session index. */
+        @androidx.annotation.VisibleForTesting
+        fun getLoaded(context: Context): CodeHub = get(context).also { it.awaitSessionsLoaded() }
 
         fun get(context: Context): CodeHub {
             installed?.let { return it(context) }

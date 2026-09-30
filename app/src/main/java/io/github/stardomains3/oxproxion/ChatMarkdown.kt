@@ -72,16 +72,17 @@ object ChatMarkdown {
     fun copyCode(widget: View, code: String) {
         val clipboard = widget.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("code", code))
-        widget.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+        Haptics.tap(widget, android.view.HapticFeedbackConstants.CONFIRM)
     }
 
     /**
-     * Shrinks the blank separator line between blocks (outside code cards). Idempotent enough
-     * to run on every streaming frame: it only adds spans.
+     * Shrinks the blank separator line between blocks (outside code cards). Idempotent: it only
+     * adds spans, so a run can be polished again. [from] skips text that already was.
      */
-    fun polish(text: Spannable, gapScale: Float = GAP_SCALE) {
-        val codeRanges = text.getSpans(0, text.length, CodeBlockMarker::class.java)
-        var i = text.indexOf("\n\n")
+    fun polish(text: Spannable, from: Int = 0, gapScale: Float = GAP_SCALE) {
+        val start = from.coerceIn(0, text.length)
+        val codeRanges = text.getSpans(start, text.length, CodeBlockMarker::class.java)
+        var i = text.indexOf("\n\n", start)
         while (i >= 0 && i + 1 < text.length) {
             val gap = i + 1
             var inCode = false
@@ -111,7 +112,10 @@ object ChatMarkdown {
 
     private class Plugin(private val context: Context) : AbstractMarkwonPlugin() {
         private val density = context.resources.displayMetrics.density
-        private val scaled = context.resources.displayMetrics.scaledDensity
+        /** Pixels per sp at the user's font size (what the deprecated scaledDensity was). */
+        private val scaled = android.util.TypedValue.applyDimension(
+            android.util.TypedValue.COMPLEX_UNIT_SP, 1f, context.resources.displayMetrics
+        )
         private val mute = ContextCompat.getColor(context, R.color.xai_mute)
         private val codeText = ContextCompat.getColor(context, R.color.markwon_code_text)
         private val quote = ContextCompat.getColor(context, R.color.markwon_blockquote)

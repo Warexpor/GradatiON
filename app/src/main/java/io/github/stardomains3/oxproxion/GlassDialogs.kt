@@ -15,6 +15,16 @@ import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.Window
 import android.view.WindowManager
+import androidx.core.widget.doOnTextChanged
+import com.google.android.material.textfield.TextInputLayout
+
+/**
+ * A dialog window covers the activity's notice pill, so a refused Save speaks on the field
+ * itself. Call once from onViewCreated; the error clears as soon as the user edits.
+ */
+fun TextInputLayout.clearErrorOnEdit() {
+    editText?.doOnTextChanged { _, _, _, _ -> if (error != null) error = null }
+}
 
 /**
  * Dialog windows frost what's behind them (cross-window blur, Android 12+) with a light dim,
@@ -24,6 +34,11 @@ import android.view.WindowManager
  */
 object GlassDialogs {
     fun frost(window: Window, animate: Boolean = true) {
+        // A dialog reaches here from its builder, its own onViewCreated and GlassChrome's started
+        // hook; each extra pass would snapshot and blur the screen again for nothing.
+        val decor = window.decorView
+        if (decor.getTag(R.id.tag_glass_frosted) == true) return
+        decor.setTag(R.id.tag_glass_frosted, true)
         val wm = window.context.getSystemService(WindowManager::class.java)
         val blur = wm?.isCrossWindowBlurEnabled == true
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)

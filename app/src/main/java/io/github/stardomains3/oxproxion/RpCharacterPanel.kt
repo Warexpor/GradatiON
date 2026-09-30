@@ -110,12 +110,17 @@ object RpCharacterPanel {
                 // The sheet stays up under whatever page this opens.
                 setOnClickListener { t.onClick() }
             }
-            card.addView(RpTileArt(ctx, t.art, ink, ContextCompat.getColor(ctx, fill)).apply {
-                photo = t.image?.let { f ->
-                    BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = 4 })
+            val art = RpTileArt(ctx, t.art, ink, ContextCompat.getColor(ctx, fill)).apply { letter = t.letter }
+            // A wallpaper is a full-size photo: decoding it here would hold the panel's opening on the main thread.
+            t.image?.let { f ->
+                fragment.viewLifecycleOwner.lifecycleScope.launch {
+                    val bmp = withContext(Dispatchers.IO) {
+                        BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = 4 })
+                    }
+                    if (fragment.isAdded) art.photo = bmp
                 }
-                letter = t.letter
-            }, FrameLayout.LayoutParams(-1, -1))
+            }
+            card.addView(art, FrameLayout.LayoutParams(-1, -1))
             val labels = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding((14 * d).toInt(), (12 * d).toInt(), (12 * d).toInt(), 0)

@@ -1,7 +1,10 @@
 package io.github.stardomains3.oxproxion
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
@@ -41,8 +44,29 @@ class VoiceDictation(
     private val animate get() = Motion.areAnimationsEnabled(context)
 
     private val permission = fragment.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) engine.start()
-        else GlassNotice.show(context, context.getString(R.string.toast_mic_permission))
+        if (granted) {
+            engine.start()
+        } else if (!fragment.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
+            // Just refused, yet the system won't ask again: only the app's settings can turn it on.
+            GrokConfirmDialog.show(
+                fragment = fragment,
+                title = context.getString(R.string.voice_mic_blocked_title),
+                message = context.getString(R.string.voice_mic_blocked_message),
+                confirmText = context.getString(R.string.action_open_app_settings),
+                onConfirm = { openAppSettings() },
+                destructive = false,
+            )
+        } else {
+            GlassNotice.show(context, context.getString(R.string.toast_mic_permission))
+        }
+    }
+
+    private fun openAppSettings() {
+        runCatching {
+            fragment.startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+            )
+        }
     }
 
     // The span of [input] this dictation owns: separator + settled words + words in flight.
@@ -57,6 +81,7 @@ class VoiceDictation(
     val isActive: Boolean get() = state != VoiceInput.State.IDLE
 
     init {
+        // Idle starts, listening finishes, and a tap while transcribing gives that up (engine.toggle).
         micButton.setOnClickListener {
             if (state == VoiceInput.State.IDLE) begin() else engine.toggle()
         }
@@ -80,6 +105,11 @@ class VoiceDictation(
             onError(context.getString(R.string.voice_unavailable))
             return
         }
+        // A missing key or model should say so now, before the mic permission prompt and a recording.
+        engine.preflightError()?.let {
+            onError(context.getString(it))
+            return
+        }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             permission.launch(Manifest.permission.RECORD_AUDIO)
         } else {
@@ -87,8 +117,21 @@ class VoiceDictation(
         }
     }
 
-    /** Keep what was heard and stop now, e.g. before sending. */
-    fun finishNow() = engine.finishNow()
+    /** True while a recording is being turned into text. */
+    val isTranscribing: Boolean get() = state == VoiceInput.State.TRANSCRIBING
+
+    /**
+     * Keep what was heard and stop now, before sending. Returns true when the caller may go on
+     * and send. A Phone dictation has its words immediately, but a recording still has to be
+     * transcribed: then this says so and returns false, so the message isn't sent without the
+     * words the user just spoke (they land in the composer when the text is ready).
+     */
+    fun finishNow(): Boolean {
+        engine.finishNow()
+        if (!isTranscribing) return true
+        GlassNotice.show(context, context.getString(R.string.voice_still_transcribing))
+        return false
+    }
 
     // ── VoiceInput.Listener ─────────────────────────────────────────────────────────────
 
@@ -109,10 +152,11 @@ class VoiceDictation(
             VoiceInput.State.TRANSCRIBING -> {
                 haptic()
                 wave.mode = VoiceWaveView.Mode.WORKING
-                micButton.isEnabled = false
+                // Transcribing can take minutes on a slow link: the button becomes a way out.
+                micButton.isEnabled = true
                 micButton.isSelected = false
-                micButton.setIconResource(R.drawable.ic_mic)
-                micButton.contentDescription = context.getString(R.string.cd_voice_transcribing)
+                micButton.setIconResource(R.drawable.ic_close_x)
+                micButton.contentDescription = context.getString(R.string.cd_voice_cancel_transcribing)
                 settleMic()
             }
             VoiceInput.State.IDLE -> {

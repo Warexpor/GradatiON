@@ -50,7 +50,7 @@ class CodeHubAttachTest {
 
     @Test
     fun saveHostClearsStickyAttachedAndReattaches() = runBlocking {
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         hub.store.enabled = true
         val host = hub.addDemoHost()
         val id = hub.startSession(
@@ -85,7 +85,7 @@ class CodeHubAttachTest {
     fun answerFromAwayAttemptsWireWhenEventsEmpty() = runBlocking {
         // AWAY-01 / G3: after process death Room has the session index but no transcript
         // events. Away Allow/Deny must still hit the wire (demo answers immediately).
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         hub.store.enabled = true
         val host = hub.addDemoHost()
         val id = hub.startSession(
@@ -103,7 +103,7 @@ class CodeHubAttachTest {
             while (dao.getAll().none { it.id == id }) delay(5)
         }
         CodeHub.resetForTesting()
-        val cold = CodeHub.get(ctx)
+        val cold = CodeHub.getLoaded(ctx)
         cold.store.enabled = true
         assertTrue("session reloaded from Room", cold.sessions.value.containsKey(id))
         assertTrue("cold start has empty transcript", cold.sessions.value[id]!!.events.isEmpty())
@@ -125,7 +125,7 @@ class CodeHubAttachTest {
     fun answerFromAwayAllowsSameRequestIdAcrossSessions() = runBlocking {
         // AWAY-02: Hub answeringRequests keyed by (sessionId, requestId). Two sessions may
         // share numeric id "1"; both away answers must proceed (bare requestId rejected B).
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         hub.store.enabled = true
         val host = hub.addDemoHost()
         suspend fun start(prompt: String) = hub.startSession(
@@ -153,7 +153,7 @@ class CodeHubAttachTest {
     @Test
     fun answerFromAwayDedupesSameSessionRequest() = runBlocking {
         // AWAY-02 / M3: same session+request still collapses while the first is in flight.
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         hub.store.enabled = true
         val host = hub.addDemoHost()
         val id = hub.startSession(

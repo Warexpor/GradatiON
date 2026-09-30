@@ -58,4 +58,31 @@ class RpAutoMemoryTest {
         val long = (1..200).joinToString("\n") { "- fact number $it" }
         assertTrue(RpAutoMemory.clean(long)!!.length <= RpAutoMemory.MEMORY_CHARS)
     }
+
+    @Test fun cleanDropsAFenceLanguageTag() {
+        assertEquals("- Mira owes Sam a favor", RpAutoMemory.clean("```text\n- Mira owes Sam a favor\n```"))
+        assertEquals("- Mira owes Sam a favor", RpAutoMemory.clean("<think>hm</think>\n```markdown\n- Mira owes Sam a favor\n```"))
+    }
+
+    @Test fun cleanCapNeverLeavesAHalfLine() {
+        val line = "- fact".padEnd(39, 'x')
+        val out = RpAutoMemory.clean((1..100).joinToString("\n") { line })!!
+        assertTrue(out.length <= RpAutoMemory.MEMORY_CHARS)
+        assertTrue(out.lines().all { it == line })
+    }
+
+    @Test fun cleanCapKeepsALineThatEndsExactlyAtTheLimit() {
+        val short = "- fact".padEnd(39, 'x')
+        val last = "- fact".padEnd(40, 'x')
+        // 39 short lines with their newlines are 1560 chars; the 40-char line ends at 1600, right at the cap.
+        val long = (List(39) { short } + last + List(10) { short }).joinToString("\n")
+        val out = RpAutoMemory.clean(long)!!
+        assertEquals(40, out.lines().size)
+        assertEquals(last, out.lines().last())
+    }
+
+    @Test fun cleanCapKeepsAnOverlongSingleLine() {
+        val out = RpAutoMemory.clean("- " + "y".repeat(3000))!!
+        assertEquals(RpAutoMemory.MEMORY_CHARS, out.length)
+    }
 }

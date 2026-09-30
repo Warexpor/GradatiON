@@ -76,13 +76,17 @@ object RpAutoMemory {
         if (reply.isNullOrBlank()) return null
         var t = reply.trim()
         if (t.startsWith("Error:")) return null
-        t = t.removePrefix("```").removeSuffix("```").trim()
-        // Reasoning models sometimes leak their scratchpad.
+        // Reasoning models sometimes leak their scratchpad, ahead of any fence.
         t = t.replace(Regex("(?s)<think>.*?</think>"), "").trim()
+        // The opening fence can carry a language tag ("```text"); it must go with it, not become a fact.
+        t = t.replace(Regex("^```[A-Za-z0-9_-]*[ \\t]*\\n?"), "").removeSuffix("```").trim()
         val lines = t.lines().map { it.trim() }.filter { it.isNotEmpty() }
             .map { if (it.startsWith("* ") || it.startsWith("• ")) "- " + it.drop(2) else it }
         if (lines.isEmpty()) return null
         val note = lines.joinToString("\n")
-        return if (note.length > MEMORY_CHARS) note.take(MEMORY_CHARS).substringBeforeLast('\n') else note
+        if (note.length <= MEMORY_CHARS) return note
+        val cut = note.take(MEMORY_CHARS)
+        // Whole lines only, unless the cut already lands on a line's end (then nothing is half-written) or there is no break to fall back on.
+        return if (note[MEMORY_CHARS] == '\n') cut else cut.substringBeforeLast('\n', cut)
     }
 }

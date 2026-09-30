@@ -92,7 +92,7 @@ class AddEditSystemMessageFragment : Fragment() {
                         if (hasDuplicate) {
                             // Show error with Snackbar
                             Snackbar.make(requireView(), R.string.system_message_title_exists, Snackbar.LENGTH_LONG)
-                                .setAction("OK") { /* Dismiss action */ }
+                                .setAction(R.string.action_ok) { }
                                 .show()
                             return@setOnMenuItemClickListener true
                         }

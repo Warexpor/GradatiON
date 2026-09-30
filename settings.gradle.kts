@@ -21,6 +21,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "oxproxion"
+rootProject.name = "GradatiON"
 include(":app")
  

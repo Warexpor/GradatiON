@@ -36,8 +36,9 @@ interface ChatDao {
     SELECT DISTINCT s.id 
     FROM chat_sessions s 
     LEFT JOIN chat_messages m ON s.id = m.sessionId 
-    WHERE (s.title LIKE :query OR m.content LIKE :query) AND s.mode = :mode
+    WHERE (s.title LIKE :query ESCAPE '\' OR m.content LIKE :query ESCAPE '\') AND s.mode = :mode
 """)
+    /** [query] is a LIKE pattern whose `%`, `_` and `\` are escaped with `\` (see [ChatRepository.searchSessions]). */
     suspend fun searchSessionIds(query: String, mode: String): List<Long>
 
     @Transaction
@@ -69,11 +70,17 @@ interface ChatDao {
     suspend fun deleteMessagesForSession(sessionId: Long)
 
     @Transaction
-    suspend fun insertSessionAndMessages(session: ChatSession, messages: List<ChatMessage>) {
+    suspend fun insertSessionAndMessages(session: ChatSession, messages: List<ChatMessage>): Long {
         val sessionId = insertSession(session)
         // REPLACE on session alone does not clear child rows — wipe then re-insert.
         deleteMessagesForSession(sessionId)
         val messagesWithSessionId = messages.map { it.copy(id = 0, sessionId = sessionId) }
         insertMessages(messagesWithSessionId)
+        return sessionId
     }
+
+    /** Every imported chat in one transaction, so a failure part-way leaves the list untouched. */
+    @Transaction
+    suspend fun insertImportedSessions(batch: List<Pair<ChatSession, List<ChatMessage>>>): List<Long> =
+        batch.map { (session, messages) -> insertSessionAndMessages(session, messages) }
 }

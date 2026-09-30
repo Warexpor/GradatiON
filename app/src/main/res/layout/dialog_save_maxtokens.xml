@@ -32,7 +32,6 @@
             android:digits="0123456789"
 
             android:textColor="@color/xai_ink"
-            android:text="12000"
             android:singleLine="true" />
     </com.google.android.material.textfield.TextInputLayout>
 

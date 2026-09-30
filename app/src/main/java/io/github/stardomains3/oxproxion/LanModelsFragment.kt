@@ -33,11 +33,7 @@ class LanModelsFragment : Fragment() {
             viewModel.startLanModelsFetch()
         } else {
             // Permission denied. Explain to the user.
-            AppToast.makeText(
-                requireContext(),
-                "Local Network permission is required to fetch models from your LAN server.",
-                AppToast.LENGTH_LONG
-            ).show()
+            GlassNotice.show(requireContext(), getString(R.string.lan_models_permission_needed))
         }
     }
 
@@ -104,26 +100,23 @@ class LanModelsFragment : Fragment() {
             allModels = models.sortedBy { it.displayName.lowercase() }
             adapter.updateModels(allModels)
 
-            // EMPTY TOAST
+            // Say why the list is empty, since the screen would otherwise just look broken.
             if (models.isEmpty()) {
                 val emptyMessage = when (provider) {
-                    "lm_studio" -> "No LM Studio models found.\nMake sure LM Studio is running and has models loaded."
-                    "llama_cpp" -> "No llama.cpp models found.\nMake sure llama.cpp server is running and has models loaded."
-                    "mlx_lm" -> "No MLX LM models found.\nMake sure MLX LM server is running and has models loaded."
-                    "ollama" -> "No Ollama models found.\nMake sure Ollama is installed and has models pulled."
-                    "omlx" -> "No oMLX models found.\nMake sure oMLX is installed and has models pulled."
-                    "nativ" -> "No Nativ models found.\nMake sure Nativ is installed and has models pulled."
-                    "hermes_agent" -> "No Hermes Agent models found.\nMake sure Hermes Agent server is running and has models loaded."
-                    else -> "No models found."
+                    "lm_studio", "llama_cpp", "mlx_lm", "hermes_agent" ->
+                        getString(R.string.lan_models_empty_running, title)
+                    "ollama", "omlx", "nativ" ->
+                        getString(R.string.lan_models_empty_installed, title)
+                    else -> getString(R.string.lan_models_empty_generic)
                 }
-                AppToast.makeText(requireContext(), emptyMessage, AppToast.LENGTH_LONG).show()
+                GlassNotice.show(requireContext(), emptyMessage)
             }
         }
 
         // OBSERVE ERRORS
         viewModel.toolUiEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let {
-                AppToast.makeText(requireContext(), it, AppToast.LENGTH_LONG).show()
+                GlassNotice.show(requireContext(), it)
             }
         }
 
@@ -172,16 +165,13 @@ class LanModelsFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                AppToast.makeText(context, "Loading model, please wait...", AppToast.LENGTH_SHORT).show()
+                // The row's spinner and the refreshed list already show progress and success.
                 val success = viewModel.loadLlamaCppModel(model)
-                if (success) {
-                    AppToast.makeText(context, "Loaded model: ${model.apiIdentifier}", AppToast.LENGTH_SHORT).show()
-
-                } else {
-                    AppToast.makeText(context, "Server returned unsuccessful load", AppToast.LENGTH_SHORT).show()
+                if (!success) {
+                    context?.let { GlassNotice.show(it, getString(R.string.lan_model_load_refused)) }
                 }
             } catch (e: Exception) {
-                AppToast.makeText(context, "Failed to load: ${e.message}", AppToast.LENGTH_SHORT).show()
+                context?.let { GlassNotice.show(it, getString(R.string.lan_model_load_failed, e.message.orEmpty())) }
             } finally {
                 kotlinx.coroutines.delay(1600.milliseconds)
                 // Hide spinner and fetch updated list
@@ -198,14 +188,11 @@ class LanModelsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val success = viewModel.unloadLlamaCppModel(model)
-                if (success) {
-                    AppToast.makeText(context, "Unloaded model: ${model.apiIdentifier}", AppToast.LENGTH_SHORT).show()
-
-                } else {
-                    AppToast.makeText(context, "Server returned unsuccessful unload", AppToast.LENGTH_SHORT).show()
+                if (!success) {
+                    context?.let { GlassNotice.show(it, getString(R.string.lan_model_unload_refused)) }
                 }
             } catch (e: Exception) {
-                AppToast.makeText(context, "Failed to unload: ${e.message}", AppToast.LENGTH_SHORT).show()
+                context?.let { GlassNotice.show(it, getString(R.string.lan_model_unload_failed, e.message.orEmpty())) }
             } finally {
                 kotlinx.coroutines.delay(1600.milliseconds)
                 // Hide spinner and fetch updated list

@@ -32,6 +32,11 @@ class RpChatsHome(
         list.layoutManager = LinearLayoutManager(root.context)
         list.adapter = adapter
         list.itemAnimator = null
+        // The top-bar button does the same, but nothing says so on an empty screen.
+        root.findViewById<View>(R.id.rpHomeEmptyAdd).setOnClickListener {
+            (root.context as? androidx.fragment.app.FragmentActivity)?.supportFragmentManager?.fragments
+                ?.filterIsInstance<ChatFragment>()?.firstOrNull()?.openRpCharacterLibrary()
+        }
     }
 
     val isShown get() = root.isVisible
@@ -76,13 +81,10 @@ class RpChatsHome(
                 preview.text = row.preview
                 preview.alpha = if (row.sessionId == null) 0.75f else 1f
                 itemView.setOnClickListener { onOpen(row) }
+                more.contentDescription = itemView.context.getString(R.string.rp_ui_more_options, row.name)
                 more.setOnClickListener { onMenu(more, row) }
                 itemView.setOnLongClickListener { onMenu(more, row); true }
             }
         }
-    }
-
-    private companion object {
-        const val STRIP_MAX = 12
     }
 }

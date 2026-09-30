@@ -67,7 +67,6 @@ class PresetsListFragment : Fragment() {
                     onConfirm = {
                         repository.deleteById(preset.id)
                         refresh()
-                        AppToast.makeText(requireContext(), "Preset deleted", AppToast.LENGTH_SHORT).show()
                     }
                 )
             }
@@ -135,8 +134,6 @@ class PresetsListFragment : Fragment() {
             // One-tap toggle: Saves state immediately
             setOnCheckedChangeListener { _, isChecked ->
                 sharedPrefs.saveClearChatDefault2(isChecked)
-                // Optional: Toast feedback
-                // AppToast.makeText(requireContext(), if (isChecked) "Will clear chat" else "Won't clear", AppToast.LENGTH_SHORT).show()
             }
         }
     }
@@ -144,14 +141,14 @@ class PresetsListFragment : Fragment() {
         val allModels = (viewModel.getBuiltInModels() + SharedPreferencesHelper(requireContext()).getCustomModels()).distinctBy { it.apiIdentifier.lowercase() }
         val selectedModel = allModels.find { it.apiIdentifier.equals(preset.modelIdentifier, ignoreCase = true) }
         if (selectedModel == null) {
-            AppToast.makeText(requireContext(), "Preset not applied: Model \"${preset.modelIdentifier}\" no longer exists.", AppToast.LENGTH_LONG).show()
+            GlassNotice.show(requireContext(), getString(R.string.preset_not_applied_model, preset.modelIdentifier))
             return false
         }
 
         val allMessages = listOf(SharedPreferencesHelper(requireContext()).getDefaultSystemMessage()) + SharedPreferencesHelper(requireContext()).getCustomSystemMessages()
         val existsMessage = allMessages.any { it.title == preset.systemMessage.title && it.prompt == preset.systemMessage.prompt }
         if (!existsMessage) {
-            AppToast.makeText(requireContext(), "Preset not applied: Saved system message not found.", AppToast.LENGTH_LONG).show()
+            GlassNotice.show(requireContext(), getString(R.string.preset_not_applied_message))
             return false
         }
 
@@ -165,7 +162,6 @@ class PresetsListFragment : Fragment() {
             ForegroundService.updateNotificationStatusSilently(displayName, "Preset Applied")
         }*/
 
-       // AppToast.makeText(requireContext(), "Preset applied: ${preset.title}", AppToast.LENGTH_SHORT).show()
         return true
     }
 }

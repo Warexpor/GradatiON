@@ -1,4 +1,18 @@
-# Handoff (2026-09-29)
+# Handoff (2026-10-01)
+
+## Polish wave 1 (2026-10-01)
+Six parallel audits (chat shell, chat core, Roleplay, Code, glass/voice/settings, resources/docs/build), then six workers on disjoint file sets, then one build. Everything is in CHANGELOG.md Unreleased. 574 tests pass (`-Pfull`), `assembleDev` builds. Nothing verified on a phone yet. Phone checklist, most important first:
+- Streaming: a slow model past 5 minutes; kill Wi-Fi mid-reply (partial stays, notice says it may be incomplete); Stop mid tool run then send again (no 400).
+- Voice: dictate, tap send before the transcript lands (send waits, notice), the X while transcribing, phone recognizer idle stop at 90 s, "Open settings" when the mic permission is denied for good.
+- GlassNotice everywhere a toast used to be: missing key on send, save with an empty character name, export/import, copy on a reply (check + haptic), "Open folder" action after a tool writes a file.
+- Biometric lock: one bad read keeps the prompt; 30 s away re-locks; camera/gallery trip does not.
+- Roleplay: History page delete (including the open chat), Memory back with edits, wallpaper remove confirm, rotation mid-edit in the character editor, library row ⋮ menu, empty home CTA.
+- Code: approval buttons lock on tap, expire on Stop; session screen states and banner tap; dot on the Code tab; swipe-away undo; cold start from an away notification.
+- Settings rows show values; dialogs show field errors; theme switch keeps the liquid mark alive; animations-off in developer settings snaps everything.
+- Background photo from a portrait camera shot is upright; power saver flips glass to solid and stops the loops.
+Known leftovers: Code `code_strings.xml` still has a few unused strings and "image(s)" (lint will list them); session ids are still minted MAX+1 (autoGenerate is set, so a plain `@Insert` with id 0 in one transaction is the fix); DB open has no recovery path when the Keystore passphrase is gone; settings detail still inflates all sections; the LAN trust mode is still TrustAll (pin like `BridgeTls`).
+
+## Handoff (2026-09-29)
 
 ## Unreleased (after 3.0.0)
 `main` is merged into `liquid-glass-redesign` (only the cert fingerprint commit differed). Work since then, all unverified on a phone:
@@ -75,7 +89,7 @@ The full suite (426 tests) passed at b9789d9. Dev APK `GradatiON-dev-b9789d9.apk
 
 ## Next
 - Lorebooks match the scene (`RpLore`). Text above the first `[keys: …]` line is always included. A block under that line is included only when the recent chat, the character's name, or the scenario mentions a key. A character can pin its own book from the Lore card.
-- Drop order: history goes first. Once it no longer fits, a long card keeps its first 4,000 characters (`RpApiMemory.definitionCap`). Long-press a Roleplay line to pin it; that line stays. A pin shows a small mark.
+- Drop order: history goes first. Once it no longer fits, a long card keeps its first 4,000 characters (`RpApiMemory.definitionCap`).
 - Memory is the note you write and is not rewritten. Facts are a separate per-chat note (you, the character, and other people). The RP setting turns Facts off. A new chat asks to carry them or start fresh. Example lines use a stand-in name, not yours. `RpAutoMemoryTest` and `RpPromptEngineTest` passed.
 - RP auto memory is done: after a reply, once the chat nears the API window (or 60 messages when
   memory is "All"), a quiet non-streamed call (`LlmService.completeOnce`) rewrites the character's

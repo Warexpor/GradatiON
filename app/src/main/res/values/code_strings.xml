@@ -205,4 +205,44 @@
     <string name="code_verbosity_thinking_hint">Open every thought and tool output</string>
     <string name="code_verbosity_normal">Normal view</string>
     <string name="code_verbosity_normal_hint">Fold thoughts and output to one line</string>
+
+    <!-- Approval state -->
+    <string name="code_approval_expired">Expired</string>
+    <string name="code_approval_send_failed">Couldn\'t send your answer. Check the connection and try again.</string>
+
+    <!-- Notices the phone writes into a transcript -->
+    <string name="code_notice_resume_failed">Resume failed, retrying: %1$s</string>
+    <string name="code_notice_turn_failed">Turn failed</string>
+    <string name="code_notice_stop_pending">Stop did not reach the host. Retrying…</string>
+    <string name="code_notice_send_gave_up">Couldn\'t send your message. Check the connection and try again.</string>
+    <string name="code_notice_resume_gave_up">Couldn\'t resume this session. Close and reopen it to try again.</string>
+
+    <!-- Transport errors (resolved by CodeHub; the raw codes never reach the screen) -->
+    <string name="code_error_invalid_address">Invalid address</string>
+    <string name="code_error_token_rejected">The bridge rejected the pairing token</string>
+    <string name="code_error_handshake">Handshake failed</string>
+
+    <!-- Session loading states -->
+    <string name="code_session_loading">Loading the session…</string>
+    <string name="code_session_attach_failed">Couldn\'t load this session. Tap to try again.</string>
+    <string name="code_session_reconnect">Tap to reconnect</string>
+
+    <!-- Tool rows and diff cards (TalkBack) -->
+    <string name="code_tool_state_waiting">Waiting</string>
+    <string name="code_tool_state_running">Running</string>
+    <string name="code_tool_state_done">Done</string>
+    <string name="code_tool_state_failed">Failed</string>
+    <string name="cd_code_diff_card">Changes to %1$s: %2$d added, %3$d removed</string>
+    <string name="cd_code_diff_card_new">New file %1$s: %2$d lines</string>
+
+    <!-- Forgetting a session -->
+    <string name="code_home_forget_active">This session is still working or waiting for you. Remove it from this phone anyway? It keeps going on the machine.</string>
+    <string name="code_home_undo">Undo</string>
+
+    <!-- Away alerts -->
+    <string name="code_settings_notify_denied">Notifications are off for GradatiON, so alerts can\'t show. Turn them on in system settings, then try again.</string>
+    <string name="code_tab_needs_you_a11y">Code mode. An agent is waiting for your approval</string>
+
+    <!-- Pairing -->
+    <string name="code_pair_form_failed">Couldn\'t open the pairing form</string>
 </resources>

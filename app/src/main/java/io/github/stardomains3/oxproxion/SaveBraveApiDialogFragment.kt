@@ -5,12 +5,12 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 
 class SaveBraveApiDialogFragment : DialogFragment() {
 
@@ -36,19 +36,21 @@ class SaveBraveApiDialogFragment : DialogFragment() {
         val buttonSave = view.findViewById<MaterialButton>(R.id.button_save_brave_api)
         val buttonCancel = view.findViewById<MaterialButton>(R.id.button_cancel_brave_api)
 
+        val keyLayout = view.findViewById<TextInputLayout>(R.id.edit_text_lay_brave_api)
+        keyLayout.clearErrorOnEdit()
+
         buttonSave.setOnClickListener {
             val apiKey = editTextApiKey.text.toString().trim()
             if (apiKey.isNotBlank()) {
-                val saved = sharedPreferencesHelper.saveApiKey("brave_search_api_key", apiKey)
+                val saved = sharedPreferencesHelper.saveApiKeyKeepingOld("brave_search_api_key", apiKey)
                 if (saved) {
                     viewModel.refreshApiKey()
-                    AppToast.makeText(requireContext(), "Brave API Key saved.", AppToast.LENGTH_SHORT).show()
                     dismiss()
                 } else {
-                    AppToast.makeText(requireContext(), "Failed to save Brave API key.", AppToast.LENGTH_LONG).show()
+                    keyLayout.error = getString(R.string.api_key_save_failed)
                 }
             } else {
-                editTextApiKey.error = "API Key cannot be empty"
+                keyLayout.error = getString(R.string.api_key_empty)
             }
         }
 

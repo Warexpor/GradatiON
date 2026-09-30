@@ -33,6 +33,7 @@
 
         <!-- Edit field -->
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/edit_text_lan_url_layout"
             style="@style/Xai.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -59,6 +60,17 @@
             android:textSize="14sp"
             android:layout_marginTop="16dp"
             android:layout_marginBottom="8dp" />
+
+        <!-- Shown when Save is tapped with no server type picked. -->
+        <TextView
+            android:id="@+id/lan_provider_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="@string/lan_error_pick_server"
+            android:textColor="@color/xai_error"
+            android:textSize="13sp"
+            android:visibility="gone" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -139,6 +151,7 @@
             android:layout_marginBottom="8dp" />
 
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/edit_text_lan_api_key_layout"
             style="@style/Xai.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

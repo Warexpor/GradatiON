@@ -97,11 +97,7 @@ class RpSettingsFragment : Fragment() {
                             chatViewModel.refreshActiveRpCharacter()
                             if (!isAdded) return@launch
                             if (prefs.getRpActiveCharacterId() == null) {
-                                AppToast.makeText(
-                                    requireContext(),
-                                    getString(R.string.rp_select_character),
-                                    AppToast.LENGTH_SHORT
-                                ).show()
+                                GlassNotice.show(requireContext(), getString(R.string.rp_select_character))
                                 chatViewModel.startNewChat()
                             } else {
                                 chatViewModel.startNewRpChatKeepingCharacter()
@@ -128,11 +124,7 @@ class RpSettingsFragment : Fragment() {
                     chatViewModel.refreshActiveRpCharacter()
                     if (!isAdded) return@launch
                     if (prefs.getRpActiveCharacterId() == null) {
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_select_character),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_select_character))
                         if (chatViewModel.isRpMode()) {
                             chatViewModel.startNewChat()
                         }

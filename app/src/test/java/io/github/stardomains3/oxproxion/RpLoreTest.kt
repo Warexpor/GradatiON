@@ -49,6 +49,16 @@ class RpLoreTest {
     }
 
     @Test
+    fun keysInUnspacedScriptsMatchInsideRunningText() {
+        assertTrue(RpLore.keyHits("灰港", "他们在灰港的码头见面"))
+        assertTrue(RpLore.keyHits("ミラ", "今日はミラのロケットを探す"))
+        assertFalse(RpLore.keyHits("灰港", "他们在码头见面"))
+        // Spaced scripts keep the word-boundary rule.
+        assertTrue(RpLore.keyHits("Гавань", "Мы видели Гавань."))
+        assertFalse(RpLore.keyHits("порт", "аэропорт"))
+    }
+
+    @Test
     fun phraseAndCase() {
         val out = RpLore.select(book, "People still say GREY HAVEN.")
         assertTrue(out.contains("old name"))

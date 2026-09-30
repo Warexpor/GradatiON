@@ -182,8 +182,12 @@ class SavedChatsFragment : Fragment() {
         }
     }
 
+    /** The search in flight; a newer query, or a list change, replaces it so a slow result can't land late. */
+    private var filterJob: Job? = null
+
     private fun filterSessions(query: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
+        filterJob?.cancel()
+        filterJob = viewLifecycleOwner.lifecycleScope.launch {
             val mode = viewModel.chatMode.value ?: ChatMode.ASK
             val filtered = if (query.isEmpty()) {
                 allSessions

@@ -89,7 +89,8 @@ class AvatarPicker(private val fragment: Fragment, private val onPicked: (Uri) -
         fragment.lifecycleScope.launch {
             val bitmap = withContext(Dispatchers.IO) { decode(ctx, source) }
             if (bitmap == null) {
-                AppToast.makeText(ctx, ctx.getString(R.string.rp_avatar_save_failed), AppToast.LENGTH_SHORT).show()
+                // GlassNotice needs an Activity, so the fragment's context, not the application's.
+                if (fragment.isAdded) GlassNotice.show(fragment.requireContext(), ctx.getString(R.string.rp_avatar_save_failed))
                 return@launch
             }
             if (!fragment.isAdded) {
@@ -124,7 +125,7 @@ class AvatarPicker(private val fragment: Fragment, private val onPicked: (Uri) -
                 }
                 dialog.dismiss()
                 if (uri == null) {
-                    AppToast.makeText(app, app.getString(R.string.rp_avatar_save_failed), AppToast.LENGTH_SHORT).show()
+                    if (fragment.isAdded) GlassNotice.show(fragment.requireContext(), app.getString(R.string.rp_avatar_save_failed))
                 } else {
                     onPicked(uri)
                 }

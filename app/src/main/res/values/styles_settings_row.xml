@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The current value at the trailing edge of a settings row (Theme: Dark, Timeout: 5 min). -->
+    <style name="TextAppearance.Gradation.RowValue" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/xai_mute</item>
+        <item name="android:fontFamily">@font/app_sans</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+</resources>

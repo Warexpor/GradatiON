@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Controls-panel tile: clear glass; when on (selected) the glass brightens and the rim glows,
+<!-- Controls-panel tile: clear glass; when on (selected) the glass brightens (no glow),
      the icon stays ink. No inversion into a solid slab. -->
 <drawable xmlns:app="http://schemas.android.com/apk/res-auto"
     class="io.github.stardomains3.oxproxion.GlassDrawable"

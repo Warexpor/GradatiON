@@ -81,7 +81,7 @@ app before you add a key.
 | Ollama, LM Studio, llama.cpp, MLX LM, oMLX, Nativ, Hermes Agent | LAN HTTP(S) | You host the server |
 
 - Plain HTTP only works for private, loopback, link-local and `.local` hosts. HTTPS works for any host.
-- To use a self-signed certificate on the LAN, turn on Settings > Models & API > Trust self-signed LAN TLS.
+- To use a self-signed certificate on the LAN, turn on Settings > Models & API > Trust self-signed certificates.
 
 ## Build
 
@@ -89,7 +89,7 @@ app before you add a key.
 git clone https://github.com/Warexpor/GradatiON.git
 cd GradatiON
 ./gradlew assembleDev          # installs next to the release app as io.github.warexpor.gradation.dev
-./gradlew testDebugUnitTest    # unit tests and screenshots (app/build/screenshots)
+./gradlew testDebugUnitTest    # logic tests, ~20 s; add -Pfull for the screenshot classes (app/build/screenshots)
 ```
 
 You need JDK 17 and the Android SDK, with platform `android-37.0` and build-tools 36.0.0 (okhttp

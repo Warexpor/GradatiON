@@ -28,6 +28,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.util.Base64
 import kotlin.time.Duration.Companion.milliseconds
 
+private const val OPENROUTER_REFERER = "https://github.com/Warexpor/GradatiON"
+
 /**
  * LAN and cloud chat completion, streamed and not. Split out of [ChatViewModel] so tests can
  * construct a [ChatStreamTransport] with a [ChatStreamHost] and no Activity. The ViewModel
@@ -154,7 +156,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
         channel: ByteReadChannel,
         shouldStop: (() -> Boolean)? = null,
         onPayload: suspend (String) -> Unit
-    ) = SseJsonReader.forEachJsonPayload(channel, onPayload, shouldStop)
+    ): SseJsonReader.End = SseJsonReader.forEachJsonPayload(channel, onPayload, shouldStop)
 
     internal fun parseStreamChunk(jsonString: String): StreamedChatResponse? {
         return try {
@@ -277,7 +279,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
             val lanProvider = sharedPreferencesHelper.getLanProvider()
             val chatRequest = ChatRequest(
                 model = modelForRequest,
-                messages = messagesForApiRequest,
+                messages = messagesForApiRequest.toApiMessages(),
                 stream = true,
                 max_tokens = configuredMaxTokens(),
                 think = ollamaThink(reasoningModel, lanProvider),
@@ -306,7 +308,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
             val tools = toolsForTurn()
             val chatRequest = ChatRequest(
                 model = modelForRequest,
-                messages = messagesForApiRequest,
+                messages = messagesForApiRequest.toApiMessages(),
                 transforms = openRouterTransforms(),
                 stream = true,
                 max_tokens = configuredMaxTokens(),
@@ -334,14 +336,16 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
         messagesForApiRequest: List<FlexibleMessage>,
         thinkingMessage: FlexibleMessage?
     ) {
-        withTimeout((sharedPreferencesHelper.getTimeoutMinutes().toLong() * 60_000L).milliseconds) {
+        // The timeout covers the request and its body only: delivering the reply runs tools and
+        // the follow-up turns, which bring their own timeouts and must not share this one.
+        val chatResponse = withTimeout(requestTimeout()) {
             withContext(Dispatchers.IO) {
                 val tools = toolsForTurn()
                 val reasoningModel = isReasoningModel(_activeChatModel.value)
                 val lanProvider = sharedPreferencesHelper.getLanProvider()
                 val chatRequest = ChatRequest(
                     model = modelForRequest,
-                    messages = messagesForApiRequest,
+                    messages = messagesForApiRequest.toApiMessages(),
                     think = ollamaThink(reasoningModel, lanProvider),
                     reasoningEffort = ollamaReasoningEffort(reasoningModel, lanProvider),
                     chatTemplateKwargs = lanThinkingKwargs(reasoningModel, lanProvider),
@@ -356,18 +360,19 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     setBody(chatRequest)
                 }
 
-                deliverChatResponse(readChatResponse(response), thinkingMessage, stripThink = true)
+                readChatResponse(response)
             }
         }
+        deliverChatResponse(chatResponse, thinkingMessage, stripThink = true)
     }
 
     internal suspend fun handleNonStreamedResponse(modelForRequest: String, messagesForApiRequest: List<FlexibleMessage>, thinkingMessage: FlexibleMessage?) {
-        withTimeout((sharedPreferencesHelper.getTimeoutMinutes().toLong() * 60_000L).milliseconds) {
+        val chatResponse = withTimeout(requestTimeout()) {
             withContext(Dispatchers.IO) {
                 val tools = toolsForTurn()
                 val chatRequest = ChatRequest(
                     model = modelForRequest,
-                    messages = messagesForApiRequest,
+                    messages = messagesForApiRequest.toApiMessages(),
                     transforms = openRouterTransforms(),
                     max_tokens = configuredMaxTokens(),
                     reasoning = cloudReasoning(),
@@ -381,16 +386,21 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
 
                 val response = httpClient.post(activeChatUrl) {
                     header("Authorization", "Bearer $activeChatApiKey")
-                    header("HTTP-Referer", "https://github.com/Warexpor/oxproxion")
+                    header("HTTP-Referer", OPENROUTER_REFERER)
                     header("X-Title", "GradatiON")
                     contentType(ContentType.Application.Json)
                     setBody(chatRequest)
                 }
 
-                deliverChatResponse(readChatResponse(response), thinkingMessage, stripThink = false)
+                readChatResponse(response)
             }
         }
+        deliverChatResponse(chatResponse, thinkingMessage, stripThink = false)
     }
+
+    /** Read on every call, so a timeout changed in Settings applies to the next request. */
+    private fun requestTimeout() =
+        (sharedPreferencesHelper.getTimeoutMinutes().toLong() * 60_000L).milliseconds
 
     private suspend fun readChatResponse(response: HttpResponse): ChatResponse {
         if (response.status.isSuccess()) return response.body()
@@ -415,30 +425,26 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
         thinkingMessage: FlexibleMessage?,
         stripThink: Boolean,
     ) {
-        withContext(Dispatchers.Main) {
+        // Tools run outside the Main block: they do file and network work, and only the
+        // transcript update needs the main thread.
+        val toolCalls = withContext(Dispatchers.Main) {
             val choice = chatResponse.choices.firstOrNull()
             choice?.error?.let { error ->
                 handleErrorResponse(error, thinkingMessage)
-                return@withContext
+                return@withContext null
             }
             when (choice?.finish_reason) {
                 "error" -> {
-                    val errorMsg = "**Error:** The model encountered an error while generating the response. Please try again."
+                    val errorMsg = application.getString(R.string.error_model_generation_failed)
                     handleError(Exception(errorMsg), thinkingMessage)
-                    return@withContext
+                    return@withContext null
                 }
                 "content_filter" -> {
-                    val errorMsg = application.getString(R.string.error_provider_content_filter)
+                    val errorMsg = application.getString(R.string.error_response_filtered)
                     handleError(Exception(errorMsg), thinkingMessage)
-                    return@withContext
+                    return@withContext null
                 }
-                "length" -> {
-                    AppToast.makeText(
-                        application.applicationContext,
-                        application.getString(R.string.toast_response_truncated_max_tokens),
-                        AppToast.LENGTH_LONG
-                    ).show()
-                }
+                "length" -> _toastUiEvent.postValue(Event(application.getString(R.string.toast_response_truncated_max_tokens)))
                 else -> Unit
             }
             if (choice?.message?.toolCalls?.isNotEmpty() == true && !toolCallsHandledForTurn && !isRpMode() && _isToolsEnabled.value == true) {
@@ -463,14 +469,16 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     if (thinkingMessage == null) list.add(assistantMessage)
                     else putAssistantMessage(list, thinkingMessage, assistantMessage)
                 }
-                handleToolCalls(toolCalls, thinkingMessage)
+                toolCalls
             } else {
                 val downloadedUris = choice?.message?.images?.let { images ->
                     downloadImages(images.map { it.image_url.url })
                 } ?: emptyList()
                 handleSuccessResponse(chatResponse, thinkingMessage, downloadedUris)
+                null
             }
         }
+        if (toolCalls != null) handleToolCalls(toolCalls, thinkingMessage)
     }
 
     private fun handleSuccessResponse(
@@ -574,7 +582,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
             client.preparePost(activeChatUrl) {
                 header("Authorization", "Bearer $activeChatApiKey")
                 if (openRouterHeaders) {
-                    header("HTTP-Referer", "https://github.com/Warexpor/oxproxion")
+                    header("HTTP-Referer", OPENROUTER_REFERER)
                     header("X-Title", "GradatiON")
                 }
                 header(HttpHeaders.Accept, "text/event-stream")
@@ -598,13 +606,14 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                 val accumulatedImages = mutableListOf<String>()
                 val audioBuffer = StringBuilder()
                 var streamAborted = false
+                var streamEnd = SseJsonReader.End.CLOSED
 
                 val pump = StreamUiPump(viewModelScope) { partial ->
                     updateMessages { list -> putAssistantMessage(list, thinkingMessage, partial) }
                 }
                 activeStreamPump = pump
                 pump.drive {
-                    forEachSseJsonPayload(channel, shouldStop = { streamAborted }) { jsonString ->
+                    streamEnd = forEachSseJsonPayload(channel, shouldStop = { streamAborted }) { jsonString ->
                         if (streamAborted) return@forEachSseJsonPayload
                         val chunk = parseStreamChunk(jsonString) ?: return@forEachSseJsonPayload
 
@@ -640,30 +649,35 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                 }
 
                 if (streamAborted) return@execute
+                // Hung up with neither [DONE] nor a finish reason: what arrived may be only part of a reply.
+                // Keep the text (some LAN servers just close the socket) and say so; error out only when
+                // nothing came at all.
+                if (streamEnd == SseJsonReader.End.CLOSED && finishReason == null) {
+                    if (fold.content().isBlank() && toolCallBuffer.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            handleError(Exception(application.getString(R.string.error_reply_cut_off)), thinkingMessage)
+                        }
+                        return@execute
+                    }
+                    _toastUiEvent.postValue(Event(application.getString(R.string.notice_reply_may_be_cut_off)))
+                }
+                fillMissingToolCallIds(toolCallBuffer)
                 when (finishReason) {
                     "error" -> {
-                        val errorMsg = "**Error:** The model encountered an error while generating the response. Please try again."
+                        val errorMsg = application.getString(R.string.error_model_generation_failed)
                         withContext(Dispatchers.Main) {
                             handleError(Exception(errorMsg), thinkingMessage)
                         }
                         return@execute
                     }
                     "content_filter" -> {
-                        val errorMsg = application.getString(R.string.error_provider_content_filter)
+                        val errorMsg = application.getString(R.string.error_response_filtered)
                         withContext(Dispatchers.Main) {
                             handleError(Exception(errorMsg), thinkingMessage)
                         }
                         return@execute
                     }
-                    "length" -> {
-                        withContext(Dispatchers.Main) {
-                            AppToast.makeText(
-                                application.applicationContext,
-                                application.getString(R.string.toast_response_truncated_max_tokens),
-                                AppToast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
+                    "length" -> _toastUiEvent.postValue(Event(application.getString(R.string.toast_response_truncated_max_tokens)))
                     else -> Unit
                 }
 
@@ -677,9 +691,9 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                         val audioBytes = Base64.getDecoder().decode(audioBuffer.toString())
                         val filename = "lyria_${System.currentTimeMillis()}.mp3"
                         saveBinaryFileToDownloads(filename, audioBytes, "audio/mpeg")
-                        _toolUiEvent.postValue(Event("Music saved: $filename"))
+                        _toolUiEvent.postValue(Event(application.getString(R.string.save_audio_ok, filename)))
                     } catch (e: Exception) {
-                        _toolUiEvent.postValue(Event("Audio save failed: ${e.message}"))
+                        _toolUiEvent.postValue(Event(application.getString(R.string.save_audio_failed, e.message)))
                     }
                 }
 
@@ -752,30 +766,65 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
         }
     }
 
-    private fun absorbToolDelta(buffer: MutableList<ToolCall>, delta: StreamedDelta) {
-        delta.toolCalls?.forEach { deltaTc ->
-            val index = deltaTc.index
-            if (index >= buffer.size) {
-                buffer.add(
-                    ToolCall(
-                        id = deltaTc.id ?: "",
-                        type = deltaTc.type ?: "function",
-                        function = FunctionCall(
-                            name = deltaTc.function?.name ?: "",
-                            arguments = deltaTc.function?.arguments ?: ""
-                        )
-                    )
-                )
-            } else {
-                val existing = buffer[index]
-                buffer[index] = existing.copy(
-                    function = existing.function.copy(
-                        name = existing.function.name + (deltaTc.function?.name ?: ""),
-                        arguments = existing.function.arguments + (deltaTc.function?.arguments ?: "")
-                    )
-                )
-            }
+    private fun absorbToolDelta(buffer: MutableList<ToolCall>, delta: StreamedDelta) =
+        absorbToolCallChunks(buffer, delta.toolCalls)
+}
+
+/**
+ * Folds streamed tool-call fragments into whole calls. Servers differ: most send an index and
+ * split the arguments, some repeat the name on every fragment, some omit the index and send each
+ * call whole, and some reuse index 0 for every call. A new id (or, without an index, a second
+ * name) starts a new call; the id is taken from whichever fragment carries it first.
+ */
+internal fun absorbToolCallChunks(buffer: MutableList<ToolCall>, chunks: List<ToolCallChunk>?) {
+    chunks?.forEach { chunk ->
+        val fragmentName = chunk.function?.name.orEmpty()
+        val fragmentArgs = chunk.function?.arguments.orEmpty()
+        val fragmentId = chunk.id?.takeIf { it.isNotBlank() }
+        val index: Int? = chunk.index
+        var slot: Int = when {
+            index == null -> buffer.lastIndex
+            index in buffer.indices -> index
+            else -> -1
         }
+        if (slot >= 0) {
+            val existing = buffer[slot]
+            val idChanged = fragmentId != null && existing.id.isNotBlank() && fragmentId != existing.id
+            val wholeCallWithoutIndex =
+                index == null && fragmentName.isNotEmpty() && existing.function.name.isNotEmpty()
+            if (idChanged || wholeCallWithoutIndex) slot = -1
+        }
+        if (slot < 0) {
+            buffer.add(
+                ToolCall(
+                    id = fragmentId.orEmpty(),
+                    type = chunk.type ?: "function",
+                    function = FunctionCall(name = fragmentName, arguments = fragmentArgs),
+                )
+            )
+        } else {
+            val existing = buffer[slot]
+            // A name repeated on every fragment is not a longer name.
+            val name = if (fragmentName.isEmpty() || fragmentName == existing.function.name) {
+                existing.function.name
+            } else {
+                existing.function.name + fragmentName
+            }
+            buffer[slot] = existing.copy(
+                id = existing.id.ifBlank { fragmentId.orEmpty() },
+                function = existing.function.copy(
+                    name = name,
+                    arguments = existing.function.arguments + fragmentArgs,
+                ),
+            )
+        }
+    }
+}
+
+/** A provider that never sent an id still needs one, because each tool reply must cite its call. */
+internal fun fillMissingToolCallIds(buffer: MutableList<ToolCall>) {
+    buffer.forEachIndexed { i, call ->
+        if (call.id.isBlank()) buffer[i] = call.copy(id = "call_${i}_${System.nanoTime()}")
     }
 }
 

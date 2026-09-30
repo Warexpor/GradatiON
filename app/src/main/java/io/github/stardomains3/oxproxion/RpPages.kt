@@ -65,8 +65,15 @@ abstract class RpPageFragment : Fragment() {
         val pageTitle = title()
         view.findViewById<MaterialToolbar>(R.id.toolbar).apply {
             title = pageTitle
-            setNavigationOnClickListener { parentFragmentManager.popBackStack() }
+            setNavigationOnClickListener { leave() }
         }
+        requireActivity().onBackPressedDispatcher.addCallback(
+            viewLifecycleOwner,
+            object : androidx.activity.OnBackPressedCallback(true) {
+                // A page hidden under another one still holds this callback; it must not ask about its own edits then.
+                override fun handleOnBackPressed() = if (isHidden) parentFragmentManager.popBackStack() else leave()
+            }
+        )
         body = view.findViewById(R.id.rpPageBody) ?: view as LinearLayout
         RpPageKit.applyInsets(view)
         intro()?.let { body.addView(RpPageKit.intro(requireContext(), it), 0) }
@@ -75,6 +82,24 @@ abstract class RpPageFragment : Fragment() {
 
     /** A line on what the page is for, at the top. */
     protected open fun intro(): String? = null
+
+    /** True when leaving now would throw away edits; back then asks first. */
+    protected open fun hasUnsavedChanges(): Boolean = false
+
+    private fun leave() {
+        if (!hasUnsavedChanges()) {
+            parentFragmentManager.popBackStack()
+            return
+        }
+        GrokConfirmDialog.show(
+            fragment = this,
+            title = getString(R.string.rp_discard_edits_title),
+            message = getString(R.string.rp_discard_edits_body),
+            confirmText = getString(R.string.rp_discard_edits_confirm),
+            onConfirm = { parentFragmentManager.popBackStack() },
+            destructive = true
+        )
+    }
 
     /** Shows the pinned Save under the scroll; the page stays open for back to discard. */
     protected fun pinSave(onSave: () -> Unit) {
@@ -357,7 +382,7 @@ class RpLorePinFragment : RpPageFragment() {
     override fun intro() = getString(R.string.rp_page_lore_caption, characterName)
 
     override fun build(body: LinearLayout) {
-        val id = characterId ?: return
+        val id = characterId ?: return footnote(getString(R.string.rp_page_no_character))
         viewLifecycleOwner.lifecycleScope.launch {
             val books = chatViewModel.getRpRepository().getAllLorebooksOnce()
             if (view == null) return@launch
@@ -399,7 +424,7 @@ class RpWallpaperFragment : RpPageFragment() {
 
     private val pick = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         val id = characterId
-        if (uri == null || id == null) return@registerForActivityResult
+        if (uri == null || id == null || !isAdded) return@registerForActivityResult
         BackgroundPhoto.import(requireContext(), uri, BackgroundPhoto.slotForCharacter(id)) { ok ->
             if (!isAdded) return@import
             if (!ok) GlassNotice.show(requireContext(), getString(R.string.toast_could_not_open_image))
@@ -408,7 +433,7 @@ class RpWallpaperFragment : RpPageFragment() {
     }
 
     override fun build(body: LinearLayout) {
-        val id = characterId ?: return
+        val id = characterId ?: return footnote(getString(R.string.rp_page_no_character))
         val slot = BackgroundPhoto.slotForCharacter(id)
         val ctx = requireContext()
         // Phone-shaped, so the picture is judged the way it will sit behind the chat.
@@ -462,8 +487,17 @@ class RpWallpaperFragment : RpPageFragment() {
                     actions, getString(R.string.rp_wallpaper_remove), getString(R.string.rp_wallpaper_remove_sub),
                     titleColor = R.color.delete_action
                 ) {
-                    BackgroundPhoto.delete(ctx, slot)
-                    bindActions()
+                    GrokConfirmDialog.show(
+                        fragment = this,
+                        title = getString(R.string.rp_wallpaper_remove_title),
+                        message = getString(R.string.rp_wallpaper_remove_body, characterName),
+                        confirmText = getString(R.string.rp_wallpaper_remove),
+                        onConfirm = {
+                            BackgroundPhoto.delete(ctx, slot)
+                            if (view != null) bindActions()
+                        },
+                        destructive = true
+                    )
                 }
             }
         }
@@ -506,6 +540,9 @@ class RpMemoryFragment : RpPageFragment() {
 
     private fun speaker() = characterName.ifBlank { getString(R.string.rp_llm_speaker) }
 
+    override fun hasUnsavedChanges() =
+        note?.text?.toString()?.let { it != noteStart } == true || facts?.text?.toString()?.let { it != factsStart } == true
+
     override fun build(body: LinearLayout) {
         noteStart = prefs.getRpMemory(characterId)
         factsStart = chatViewModel.currentRpFacts()
@@ -522,6 +559,8 @@ class RpMemoryFragment : RpPageFragment() {
     private fun field(hintRes: Int, text: String): EditText {
         val box = layoutInflater.inflate(R.layout.view_rp_page_field, body, false) as TextInputLayout
         box.hint = getString(hintRes)
+        // Past this the prompt cuts the note off, so the count says where that happens.
+        box.counterMaxLength = RpPromptEngine.MEMORY_MAX_CHARS
         body.addView(box)
         return box.findViewById<EditText>(R.id.rpPageFieldInput).apply { setText(text) }
     }
@@ -569,17 +608,26 @@ class RpVoiceFragment : RpPageFragment() {
 
     private fun speaker() = characterName.ifBlank { getString(R.string.rp_llm_speaker) }
 
+    // Every tap reports a choice, so "pending" alone would count a tap back onto the saved voice as an edit.
+    override fun hasUnsavedChanges() = pending?.let { it != prefs.getRpVoice(characterId) } == true
+
     override fun build(body: LinearLayout) {
         pending = restorePending(restoredState) ?: pending
         pinSave { pending?.let { prefs.saveRpVoice(characterId, it) } }
         val start = pending ?: prefs.getRpVoice(characterId)
         // Default and the steps show at once; the engine's own voices join the list once it is up.
         RpVoiceDialog.bind(this, requireView(), speaker(), null, start) { pending = it }
-        tts = TextToSpeech(requireContext().applicationContext) { status ->
-            if (!isAdded || view == null) return@TextToSpeech
+        var created: TextToSpeech? = null
+        created = TextToSpeech(requireContext().applicationContext) { status ->
+            if (!isAdded || view == null) {
+                // onDestroyView already dropped the field, so this engine would otherwise never be released.
+                runCatching { created?.shutdown() }
+                return@TextToSpeech
+            }
             val engine = tts.takeIf { status == TextToSpeech.SUCCESS } ?: return@TextToSpeech
             RpVoiceDialog.bind(this, requireView(), speaker(), engine, pending ?: start) { pending = it }
         }
+        tts = created
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

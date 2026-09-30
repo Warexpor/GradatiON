@@ -161,7 +161,8 @@ class MessageMenu(
         }
     }
 
-    private fun gutter() = (12 * density).toInt()
+    /** The screen gutter of the design contract. */
+    private fun gutter() = (16 * density).toInt()
 
     private fun View.locationIn(parent: View): IntArray {
         val p = IntArray(2).also { parent.getLocationInWindow(it) }
@@ -181,7 +182,7 @@ class MessageMenu(
             icon.imageTintList = android.content.res.ColorStateList.valueOf(red)
         }
         row.setOnClickListener {
-            row.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            Haptics.tap(row)
             dismiss()
             item.onClick()
         }

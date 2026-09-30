@@ -2,7 +2,7 @@
 <resources>
     <!-- Compact pill for in-card actions (approval cards, onboarding). Tonal, never a solid ink slab. -->
     <style name="Widget.Gradation.Code.Button" parent="Widget.Gradation.Button.Tonal">
-        <item name="android:minHeight">40dp</item>
+        <item name="android:minHeight">44dp</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
         <item name="android:paddingStart">16dp</item>
@@ -19,7 +19,7 @@
 
     <style name="TextAppearance.Gradation.Code.Mono" parent="">
         <item name="android:fontFamily">@font/atkinsonhyperlegiblemono_regular</item>
-        <item name="android:textSize">12.5sp</item>
+        <item name="android:textSize">13sp</item>
         <item name="android:textColor">@color/xai_mute</item>
     </style>
 

@@ -633,4 +633,91 @@ class CodeProtocolTest {
             scope.cancel()
         }
     }
+
+    // ── audit fixes: approvals, diffs, seq gaps ───────────────────────────────────────────
+
+    @Test fun unansweredApprovalExpiresWhenTheTurnEnds() {
+        val ask = acp.decode("""{"jsonrpc":"2.0","id":7,"method":"session/request_permission","params":{"sessionId":"s1",
+            "toolCall":{"toolCallId":"t1","title":"rm","kind":"execute"},
+            "options":[{"optionId":"a","name":"Allow","kind":"allow_once"}]}}""")
+        var list = TranscriptReducer.apply(emptyList(), (ask.single() as AdapterOutput.Update).update, now = 1L)
+        assertEquals(SessionStatus.NEEDS_APPROVAL, TranscriptReducer.statusOf(list, running = true))
+        list = TranscriptReducer.apply(list, CodeUpdate.TurnDone("end_turn"), now = 2L)
+        val approval = list.filterIsInstance<CodeEvent.Approval>().single()
+        assertTrue(approval.expired)
+        assertFalse(approval.pending)
+        assertNull(approval.chosen)
+        assertEquals(SessionStatus.IDLE, TranscriptReducer.statusOf(list, running = false))
+    }
+
+    @Test fun answeredApprovalDoesNotExpire() {
+        val ask = acp.decode("""{"jsonrpc":"2.0","id":7,"method":"session/request_permission","params":{"sessionId":"s1",
+            "options":[{"optionId":"a","name":"Allow","kind":"allow_once"}]}}""")
+        var list = TranscriptReducer.apply(emptyList(), (ask.single() as AdapterOutput.Update).update, now = 1L)
+        list = TranscriptReducer.apply(list, CodeUpdate.ApprovalAnswered("7", ApprovalOption.Kind.ALLOW_ONCE), now = 2L)
+        list = TranscriptReducer.apply(list, CodeUpdate.TurnDone("end_turn"), now = 3L)
+        val approval = list.filterIsInstance<CodeEvent.Approval>().single()
+        assertFalse(approval.expired)
+        assertEquals(ApprovalOption.Kind.ALLOW_ONCE, approval.chosen)
+    }
+
+    @Test fun requestWithoutOptionsOffersDenyThatCancels() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":8,"method":"session/request_permission","params":{"sessionId":"s1",
+            "toolCall":{"toolCallId":"t1","title":"x","kind":"execute"},"options":[]}}""")
+        val approval = ((out.single() as AdapterOutput.Update).update as CodeUpdate.Upsert).event as CodeEvent.Approval
+        val deny = approval.options.single()
+        assertEquals(ApprovalOption.CANCEL_ID, deny.id)
+        assertEquals(ApprovalOption.Kind.REJECT_ONCE, deny.kind)
+        val reply = Json.parseToJsonElement(acp.answerApproval("8", deny.id)).jsonObject
+        val outcome = reply["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("cancelled", outcome["outcome"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun bigFileEditKeepsTheUntouchedLinesAsContext() {
+        // 3,000 x 3,000 lines is past maxCells, but one changed line in the middle must not turn the
+        // whole file into a delete-and-add: the common prefix and suffix are trimmed first.
+        val old = (1..3000).joinToString("\n") { "line $it" }
+        val new = (1..3000).joinToString("\n") { if (it == 1500) "line 1500 changed" else "line $it" }
+        val lines = Diff.between(old, new, maxCells = 1_000L)
+        val (added, removed) = Diff.counts(lines)
+        assertEquals(1, added)
+        assertEquals(1, removed)
+        assertTrue("only a hunk around the change is kept", lines.size < 20)
+    }
+
+    @Test fun bigRewriteStillDegradesToReplaceForTheChangedSpan() {
+        val old = (1..2000).joinToString("\n") { "old $it" }
+        val new = (1..2000).joinToString("\n") { "new $it" }
+        val lines = Diff.between(old, new, maxCells = 1_000L)
+        val (added, removed) = Diff.counts(lines)
+        assertEquals(2000, added)
+        assertEquals(2000, removed)
+    }
+
+    @Test fun seqJumpAnnouncesAGapAndTheReplayIsNotAppliedTwice() {
+        val a = AcpAdapter()
+        fun chunk(text: String, seq: Long) =
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"$text"}}""", seq = seq)
+        assertTrue(a.decode(chunk("A", 1)).single() is AdapterOutput.Update)
+        // 2 and 3 never arrived; 4 jumps past the hole.
+        val jump = a.decode(chunk("D", 4))
+        val gap = jump.first() as AdapterOutput.Gap
+        assertEquals("s1", gap.sessionId)
+        assertEquals(1L, gap.afterSeq)
+        assertTrue(jump[1] is AdapterOutput.Update)
+        // The reload replays everything after seq 1: the missing frames apply, the delivered one is dropped.
+        assertTrue(a.decode(chunk("B", 2)).single() is AdapterOutput.Update)
+        assertTrue(a.decode(chunk("C", 3)).single() is AdapterOutput.Update)
+        assertTrue(a.decode(chunk("D", 4)).single() is AdapterOutput.Ignored)
+        a.endGap("s1")
+        assertTrue(a.decode(chunk("E", 5)).single() is AdapterOutput.Update)
+    }
+
+    @Test fun consecutiveSeqsNeverReportAGap() {
+        val a = AcpAdapter()
+        val outs = (1L..6L).flatMap {
+            a.decode(update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"x"}}""", seq = it))
+        }
+        assertTrue(outs.none { it is AdapterOutput.Gap })
+    }
 }

@@ -10,6 +10,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -19,6 +20,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
 import androidx.appcompat.widget.SwitchCompat
 import io.github.stardomains3.oxproxion.GlassAlertDialogBuilder
+import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.launch
@@ -39,6 +41,8 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
             } else {
                 hub.store.notifyWhenAway = false
                 sw?.isChecked = false
+                // The switch just flipped back by itself; say why, or it reads as a broken toggle.
+                GlassNotice.show(requireContext(), getString(R.string.code_settings_notify_denied))
             }
         }
 
@@ -80,14 +84,22 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
      * Launches the runtime prompt on API 33+ when not yet granted.
      */
     private fun ensureNotificationPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < 33) return true
-        val granted = ContextCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.POST_NOTIFICATIONS,
-        ) == PackageManager.PERMISSION_GRANTED
-        if (granted) return true
-        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        return false
+        if (Build.VERSION.SDK_INT >= 33) {
+            val granted = ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                return false
+            }
+        }
+        // Permission granted but notifications switched off for the whole app: alerts still can't show.
+        if (!NotificationManagerCompat.from(requireContext()).areNotificationsEnabled()) {
+            GlassNotice.show(requireContext(), getString(R.string.code_settings_notify_denied))
+            return false
+        }
+        return true
     }
 
     private fun bindMachines(card: LinearLayout, hosts: List<CodeHost>) {

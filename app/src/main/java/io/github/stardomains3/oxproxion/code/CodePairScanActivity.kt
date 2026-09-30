@@ -10,13 +10,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
-import io.github.stardomains3.oxproxion.AppToast
 import io.github.stardomains3.oxproxion.R
 
 /**
  * Thin QR scanner for Code pairing. No network — returns / queues a parsed
- * [CodePairing.Result] via [CodePairPending]. Camera denied → toast and finish
- * so the caller can fall back to manual entry.
+ * [CodePairing.Result] via [CodePairPending]. A bad QR or a denied camera finishes with
+ * RESULT_CANCELED and the reason in [EXTRA_ERROR]; the same text is queued on
+ * [CodePairPending.error] because the dialog starts this screen without a result callback and
+ * [CodeModeHost] shows it once the chat screen is back. The caller can fall back to manual entry.
  */
 class CodePairScanActivity : AppCompatActivity() {
 
@@ -32,26 +33,14 @@ class CodePairScanActivity : AppCompatActivity() {
                 setResult(RESULT_OK)
                 finish()
             }
-            is CodePairing.ParseResult.Err -> {
-                AppToast.makeText(
-                    this,
-                    getString(errorString(parsed.reason)),
-                    AppToast.LENGTH_LONG
-                ).show()
-                setResult(RESULT_CANCELED)
-                finish()
-            }
+            is CodePairing.ParseResult.Err -> fail(getString(errorString(parsed.reason)))
         }
     }
 
     private val cameraPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) launchScanner() else {
-            AppToast.makeText(this, getString(R.string.code_pair_camera_denied), AppToast.LENGTH_LONG).show()
-            setResult(RESULT_CANCELED)
-            finish()
-        }
+        if (granted) launchScanner() else fail(getString(R.string.code_pair_camera_denied))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,6 +50,12 @@ class CodePairScanActivity : AppCompatActivity() {
                 PackageManager.PERMISSION_GRANTED -> launchScanner()
             else -> cameraPermission.launch(Manifest.permission.CAMERA)
         }
+    }
+
+    private fun fail(message: String) {
+        CodePairPending.offerError(message)
+        setResult(RESULT_CANCELED, Intent().putExtra(EXTRA_ERROR, message))
+        finish()
     }
 
     private fun launchScanner() {
@@ -84,6 +79,8 @@ class CodePairScanActivity : AppCompatActivity() {
     }
 
     companion object {
+        const val EXTRA_ERROR = "code_pair_error"
+
         fun intent(context: Context): Intent = Intent(context, CodePairScanActivity::class.java)
     }
 }

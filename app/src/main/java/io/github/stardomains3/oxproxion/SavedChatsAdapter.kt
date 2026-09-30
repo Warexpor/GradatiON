@@ -99,21 +99,39 @@ class SavedChatsAdapter(
         }
 
         private fun formatHistoryTimestamp(timestamp: Long): String {
+            val formats = HistoryTimeFormats.get(itemView.context)
             val now = Calendar.getInstance()
             val then = Calendar.getInstance().apply { timeInMillis = timestamp }
-            val locale = Locale.getDefault()
+            val date = Date(timestamp)
             return when {
                 now.get(Calendar.YEAR) == then.get(Calendar.YEAR) &&
-                    now.get(Calendar.DAY_OF_YEAR) == then.get(Calendar.DAY_OF_YEAR) ->
-                    SimpleDateFormat("h:mm a", locale).format(Date(timestamp))
+                    now.get(Calendar.DAY_OF_YEAR) == then.get(Calendar.DAY_OF_YEAR) -> formats.time.format(date)
                 now.get(Calendar.YEAR) == then.get(Calendar.YEAR) &&
-                    now.get(Calendar.WEEK_OF_YEAR) == then.get(Calendar.WEEK_OF_YEAR) ->
-                    SimpleDateFormat("EEEE", locale).format(Date(timestamp))
-                now.get(Calendar.YEAR) == then.get(Calendar.YEAR) ->
-                    SimpleDateFormat("MMM d", locale).format(Date(timestamp))
-                else ->
-                    SimpleDateFormat("MMM d, yyyy", locale).format(Date(timestamp))
+                    now.get(Calendar.WEEK_OF_YEAR) == then.get(Calendar.WEEK_OF_YEAR) -> formats.weekday.format(date)
+                now.get(Calendar.YEAR) == then.get(Calendar.YEAR) -> formats.monthDay.format(date)
+                else -> formats.full.format(date)
             }
+        }
+    }
+
+}
+
+/** The row timestamp formats, built once per locale and 12/24-hour setting instead of on every bind. */
+private class HistoryTimeFormats(val locale: Locale, val use24h: Boolean) {
+    val time = SimpleDateFormat(if (use24h) "HH:mm" else "h:mm a", locale)
+    val weekday = SimpleDateFormat("EEEE", locale)
+    val monthDay = SimpleDateFormat("MMM d", locale)
+    val full = SimpleDateFormat("MMM d, yyyy", locale)
+
+    companion object {
+        private var cached: HistoryTimeFormats? = null
+
+        /** Main thread only, like every bind. */
+        fun get(context: android.content.Context): HistoryTimeFormats {
+            val locale = Locale.getDefault()
+            val use24h = android.text.format.DateFormat.is24HourFormat(context)
+            cached?.let { if (it.locale == locale && it.use24h == use24h) return it }
+            return HistoryTimeFormats(locale, use24h).also { cached = it }
         }
     }
 }

@@ -11,7 +11,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
-import android.graphics.Typeface
 import android.view.View
 import androidx.core.graphics.ColorUtils
 import kotlin.math.max
@@ -53,6 +52,8 @@ class RpTileArt(
             field = value
             cachedPhotoShader = null
             cachedPhotoSource = null
+            // The photo can arrive after the first draw, once it has been decoded off the main thread.
+            invalidate()
         }
 
     /** The persona's initial; without one, a silhouette. */
@@ -270,7 +271,7 @@ class RpTileArt(
             p.shader = null
         } else if (initial != null) {
             solid(HI)
-            p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            p.typeface = big
             p.textSize = r * 0.95f
             p.textAlign = Paint.Align.CENTER
             c.drawText(initial.take(1).uppercase(), cx, cy - (p.descent() + p.ascent()) / 2f, p)

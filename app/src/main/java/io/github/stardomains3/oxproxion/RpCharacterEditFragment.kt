@@ -15,7 +15,9 @@ import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class RpCharacterEditFragment : Fragment() {
 
@@ -40,7 +42,18 @@ class RpCharacterEditFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        characterId = arguments?.getLong(ARG_ID) ?: 0
+        // A first Save may have created the row since the page opened, so the saved id wins over the argument.
+        characterId = savedInstanceState?.getLong(KEY_ID, 0L)?.takeIf { it > 0 } ?: arguments?.getLong(ARG_ID) ?: 0
+        // The text fields restore themselves; the picked photo is ours to bring back.
+        pendingAvatarUri = savedInstanceState?.getString(KEY_PENDING_AVATAR)?.let(Uri::parse)
+        clearAvatar = savedInstanceState?.getBoolean(KEY_CLEAR_AVATAR) ?: false
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putLong(KEY_ID, characterId)
+        pendingAvatarUri?.let { outState.putString(KEY_PENDING_AVATAR, it.toString()) }
+        outState.putBoolean(KEY_CLEAR_AVATAR, clearAvatar)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
@@ -69,7 +82,7 @@ class RpCharacterEditFragment : Fragment() {
         val promptInput = view.findViewById<TextInputEditText>(R.id.rpPromptInput)
         val examplesInput = view.findViewById<TextInputEditText>(R.id.rpExamplesInput)
         val saveButton = view.findViewById<MaterialButton>(R.id.saveRpCharacterButton)
-        showAvatar(null)
+        showAvatar(pendingAvatarUri)
         nameInput.doAfterTextChanged { text ->
             currentName = text?.toString().orEmpty()
             avatarMonogram.text = RpAvatars.initial(currentName)
@@ -117,34 +130,44 @@ class RpCharacterEditFragment : Fragment() {
                     val char = chatViewModel.getRpRepository().getCharacterById(characterId)
                     if (!isAdded) return@launch
                     if (char == null) {
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_character_gone),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_character_gone))
                         parentFragmentManager.popBackStack()
                         return@launch
                     }
-                    nameInput.setText(char.name)
-                    greetingInput.setText(char.greeting)
-                    personalityInput.setText(char.personality)
-                    styleInput.setText(char.style)
-                    scenarioInput.setText(char.scenario)
-                    instructionInput.setText(char.instruction)
-                    promptInput.setText(char.prompt)
-                    examplesInput.setText(rpDelegate.formatExamplesForEdit(char.examplesJson))
+                    val examples = rpDelegate.formatExamplesForEdit(char.examplesJson)
+                    // After a rotation the fields already hold the user's edits; loading would overwrite them.
+                    if (savedInstanceState == null) {
+                        nameInput.setText(char.name)
+                        greetingInput.setText(char.greeting)
+                        personalityInput.setText(char.personality)
+                        styleInput.setText(char.style)
+                        scenarioInput.setText(char.scenario)
+                        instructionInput.setText(char.instruction)
+                        promptInput.setText(char.prompt)
+                        examplesInput.setText(examples)
+                    }
                     when {
+                        clearAvatar -> showAvatar(null)
+                        pendingAvatarUri != null -> showAvatar(pendingAvatarUri)
                         !char.photoUri.isNullOrBlank() -> showAvatar(char.photoUri)
                         RpAvatarStorage.avatarFile(requireContext(), char.id).exists() ->
                             showAvatar(RpAvatarStorage.avatarFile(requireContext(), char.id))
                     }
-                    baseline = currentSnapshot().copy(avatarChanged = false)
+                    // The baseline is what is stored, so a restored edit still counts as one.
+                    baseline = CharacterEditSnapshot(
+                        name = char.name,
+                        greeting = char.greeting,
+                        personality = char.personality,
+                        style = char.style,
+                        scenario = char.scenario,
+                        instruction = char.instruction,
+                        prompt = char.prompt,
+                        examples = examples
+                    )
                 } finally {
                     if (isAdded) saveButton.isEnabled = true
                 }
             }
-        } else {
-            baseline = currentSnapshot()
         }
 
         val avatarFrame = view.findViewById<android.widget.FrameLayout>(R.id.rpAvatarFrame)
@@ -161,7 +184,7 @@ class RpCharacterEditFragment : Fragment() {
             if (!saveButton.isEnabled) return@setOnClickListener
             val name = nameInput.text?.toString()?.trim().orEmpty()
             if (name.isBlank()) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_name_required), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_name_required))
                 return@setOnClickListener
             }
             saveButton.isEnabled = false
@@ -171,11 +194,7 @@ class RpCharacterEditFragment : Fragment() {
                     val existing = if (characterId > 0) repo.getCharacterById(characterId) else null
                     if (characterId > 0 && existing == null) {
                         if (isAdded) {
-                            AppToast.makeText(
-                                requireContext(),
-                                getString(R.string.rp_character_gone),
-                                AppToast.LENGTH_SHORT
-                            ).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_character_gone))
                             parentFragmentManager.popBackStack()
                         }
                         return@launch
@@ -184,11 +203,7 @@ class RpCharacterEditFragment : Fragment() {
                     val parsedExamples = rpDelegate.parseExamplesFromEdit(examplesRaw)
                     if (examplesRaw.isNotBlank() && parsedExamples.isEmpty()) {
                         if (isAdded) {
-                            AppToast.makeText(
-                                requireContext(),
-                                getString(R.string.rp_examples_format_invalid),
-                                AppToast.LENGTH_LONG
-                            ).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_examples_format_invalid))
                             saveButton.isEnabled = true
                         }
                         return@launch
@@ -212,23 +227,22 @@ class RpCharacterEditFragment : Fragment() {
                             photoUri = photoUri
                         )
                     )
+                    // The row exists now; a retry after a failed photo must update it, not insert a twin.
+                    characterId = savedId
                     if (!isAdded) return@launch
                     // Delete file only after DB cleared the uri — avoid orphaning Room on failed save.
                     if (deleteAvatarAfterSave) {
                         RpAvatarStorage.deleteAvatar(requireContext(), savedId)
                     }
                     pendingAvatarUri?.let { uri ->
-                        val saved = RpAvatarStorage.saveFromUri(requireContext(), uri, savedId)
+                        val appContext = requireContext().applicationContext
+                        val saved = withContext(Dispatchers.IO) { RpAvatarStorage.saveFromUri(appContext, uri, savedId) }
                         if (saved != null) {
                             repo.getCharacterById(savedId)?.let { c ->
                                 repo.saveCharacter(c.copy(photoUri = saved))
                             }
                         } else if (isAdded) {
-                            AppToast.makeText(
-                                requireContext(),
-                                getString(R.string.rp_avatar_save_failed),
-                                AppToast.LENGTH_LONG
-                            ).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_avatar_save_failed))
                             saveButton.isEnabled = true
                             return@launch
                         }
@@ -243,11 +257,7 @@ class RpCharacterEditFragment : Fragment() {
                 } catch (_: Exception) {
                     if (isAdded) {
                         saveButton.isEnabled = true
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_save_failed),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_save_failed))
                     }
                 }
             }
@@ -283,6 +293,9 @@ class RpCharacterEditFragment : Fragment() {
 
     companion object {
         private const val ARG_ID = "character_id"
+        private const val KEY_ID = "state_character_id"
+        private const val KEY_PENDING_AVATAR = "state_pending_avatar"
+        private const val KEY_CLEAR_AVATAR = "state_clear_avatar"
         fun newInstance(characterId: Long) = RpCharacterEditFragment().apply {
             arguments = Bundle().apply { putLong(ARG_ID, characterId) }
         }

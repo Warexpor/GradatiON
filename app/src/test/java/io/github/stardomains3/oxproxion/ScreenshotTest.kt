@@ -46,6 +46,8 @@ class ScreenshotTest {
     @Before
     fun setUp() {
         DemoModel.pace = 0.02f
+        // The static background field renders on a worker thread on the phone; snapshots need it now.
+        AmbientBackgroundView.renderFieldInline = true
         TestEnv.resetViewModelFactory()
         val ctx = ApplicationProvider.getApplicationContext<Application>()
         Settings.Global.putFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
@@ -636,9 +638,6 @@ class ScreenshotTest {
             "add_system_message_dark" to { AddEditSystemMessageFragment() },
             "preset_edit_dark" to { PresetEditFragment.newInstance(null) },
             "edit_message_dark" to { EditMessageFragment.newInstance(0, "Can you explain how attention works?") },
-            "markdown_viewer_dark" to {
-                MarkdownViewerFragment.newInstance("# Notes\n\nSome **bold** text and `code`.\n\n- one\n- two", "Inter", "Qwen 3")
-            },
             "presets_dark" to { PresetsListFragment() },
             "system_messages_dark" to { SystemMessageLibraryFragment() },
             "tools_dark" to { ToolsFragment() },
@@ -1652,6 +1651,11 @@ class ScreenshotTest {
         adapter.replyInFlight = false
         adapter.onBindViewHolder(vh, last)
         org.junit.Assert.assertEquals(View.VISIBLE, vh.itemView.findViewById<View>(R.id.aiActionRow).visibility)
+        // Message actions are bare 32dp icons, and the images name themselves for TalkBack.
+        val d = a.resources.displayMetrics.density
+        org.junit.Assert.assertEquals((32 * d + 0.5f).toInt(), vh.itemView.findViewById<View>(R.id.copyButton).layoutParams.width)
+        org.junit.Assert.assertNotNull(vh.itemView.findViewById<View>(R.id.generatedImageView).contentDescription)
+        org.junit.Assert.assertTrue(vh.itemView.findViewById<View>(R.id.reasoningHeader).minimumHeight >= (44 * d).toInt())
     }
 
     /** A reply's ⋮ opens a compact context menu with Edit (and Read aloud / Instruct where they apply). */

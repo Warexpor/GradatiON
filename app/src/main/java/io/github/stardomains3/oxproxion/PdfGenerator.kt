@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Picture
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
@@ -77,7 +78,7 @@ class PdfGenerator(private val context: Context) {
         .tableBorderWidth(2)
         .tableCellPadding(1)
 
-        .tableHeaderRowBackgroundColor("#121314".toColorInt())
+        .tableHeaderRowBackgroundColor("#111111".toColorInt())
 
         //.borderWidth(2f)
         .build()
@@ -102,6 +103,7 @@ class PdfGenerator(private val context: Context) {
         })
         .build()
     fun generateMarkdownPdfWithImage(markdown: String, imageUri: String): String? {
+        var document: PdfDocument? = null
         try {
             val processedMarkdown = processMarkdownLinks(markdown)
             val margin = 20f
@@ -169,12 +171,9 @@ class PdfGenerator(private val context: Context) {
             }
             totalHeight += textHeight + margin
 
-            // Create PDF with calculated height
-            val document = PdfDocument()
-            val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, totalHeight.toInt(), 1).create()
-            val page = document.startPage(pageInfo)
-            val canvas = page.canvas
-            canvas.drawColor("#121314".toColorInt())
+            // Lay the content out once, then cut it into A4 pages.
+            val paged = PagedPdf(totalHeight.toInt())
+            val canvas = paged.canvas
 
             // Render content: Image first, then text
             var currentY = margin
@@ -187,6 +186,7 @@ class PdfGenerator(private val context: Context) {
                 if (textHeight > 0) {
                     currentY += 20f // Padding between image and text
                 }
+                paged.breakAt(currentY)
             }
 
             // Render text blocks
@@ -212,37 +212,36 @@ class PdfGenerator(private val context: Context) {
                     }
                 }
                 if (index < blocks.size - 1) currentY += 8f // spacing between blocks
+                paged.breakAt(currentY)
             }
 
-            document.finishPage(page)
-
-            val contentValues = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, "${System.currentTimeMillis()}.pdf")
-                put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
-                put(MediaStore.MediaColumns.RELATIVE_PATH, WorkspacePaths.mediaStoreRelativePath())
-               // put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            }
-            val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-            if (uri == null) {
-                document.close()
-                return null
-            }
-            context.contentResolver.openOutputStream(uri).use { outputStream ->
-                if (outputStream != null) {
-                    document.writeTo(outputStream)
-                }
-            }
-            document.close()
-            return uri.toString()
-        } catch (e: IOException) {
-           // Log.e("PdfGenerator", "Error creating Markdown PDF with image", e)
+            val pdf = paged.toDocument(PDF_BACKGROUND)
+            document = pdf
+            return saveToDownloads(pdf)
+        } catch (e: Throwable) {
+            // Log.e("PdfGenerator", "Error rendering Markdown PDF with image", e)
             return null
-        } catch (e: Exception) {
-         //   Log.e("PdfGenerator", "Error rendering Markdown PDF with image", e)
-            return null
+        } finally {
+            document?.close()
         }
     }
+
+    /** Writes the finished PDF to the workspace in Downloads; the content URI, or null when it could not be created. */
+    private fun saveToDownloads(pdf: PdfDocument): String? {
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "${System.currentTimeMillis()}.pdf")
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, WorkspacePaths.mediaStoreRelativePath())
+        }
+        val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            ?: return null
+        context.contentResolver.openOutputStream(uri).use { outputStream ->
+            if (outputStream != null) pdf.writeTo(outputStream)
+        }
+        return uri.toString()
+    }
     fun generateMarkdownPdf(markdown: String): String? {
+        var document: PdfDocument? = null
         try {
             val processedMarkdown = processMarkdownLinks(markdown)
             val margin = 20f
@@ -296,12 +295,9 @@ class PdfGenerator(private val context: Context) {
             }
             totalHeight += margin
 
-            // Create PDF with calculated height
-            val document = PdfDocument()
-            val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, totalHeight.toInt(), 1).create()
-            val page = document.startPage(pageInfo)
-            val canvas = page.canvas
-            canvas.drawColor("#121314".toColorInt())
+            // Lay the content out once, then cut it into A4 pages.
+            val paged = PagedPdf(totalHeight.toInt())
+            val canvas = paged.canvas
 
             // Render content
             var currentY = margin
@@ -327,34 +323,17 @@ class PdfGenerator(private val context: Context) {
                     }
                 }
                 if (index < blocks.size - 1) currentY += 8f // spacing between blocks
+                paged.breakAt(currentY)
             }
 
-            document.finishPage(page)
-
-            val contentValues = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, "${System.currentTimeMillis()}.pdf")
-                put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
-                put(MediaStore.MediaColumns.RELATIVE_PATH, WorkspacePaths.mediaStoreRelativePath())
-                //put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            }
-            val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-            if (uri == null) {
-                document.close()
-                return null
-            }
-            context.contentResolver.openOutputStream(uri).use { outputStream ->
-                if (outputStream != null) {
-                    document.writeTo(outputStream)
-                }
-            }
-            document.close()
-            return uri.toString()
-        } catch (e: IOException) {
-         //   Log.e("PdfGenerator", "Error creating Markdown PDF", e)
+            val pdf = paged.toDocument(PDF_BACKGROUND)
+            document = pdf
+            return saveToDownloads(pdf)
+        } catch (e: Throwable) {
+            // Log.e("PdfGenerator", "Error rendering Markdown PDF", e)
             return null
-        } catch (e: Exception) {
-         //   Log.e("PdfGenerator", "Error rendering Markdown PDF", e)
-            return null
+        } finally {
+            document?.close()
         }
     }
 
@@ -454,18 +433,18 @@ class PdfGenerator(private val context: Context) {
         }
         totalHeight += pageMargin + bubbleSpacing
 
+        var document: PdfDocument? = null
         try {
-            val document = PdfDocument()
-            val pageInfo = PdfDocument.PageInfo.Builder(PageSize.A4.width(), totalHeight.toInt(), 1).create()
-            val page = document.startPage(pageInfo)
-            val canvas = page.canvas
-            canvas.drawColor("#000000".toColorInt())
+            // Lay the chat out once, then cut it into A4 pages.
+            val paged = PagedPdf(totalHeight.toInt())
+            val canvas = paged.canvas
 
             // Draw title
             val titleX = canvas.width / 2f
             var currentY = pageMargin + titlePaint.fontMetrics.top.let { -it }
             canvas.drawText(modelName, titleX, currentY, titlePaint)
             currentY += titlePaint.fontSpacing + bubbleSpacing
+            paged.breakAt(currentY - bubbleSpacing / 2)
 
             messagesToRender.forEachIndexed { index, message ->
                 val isUser = message.role == "user"
@@ -488,18 +467,20 @@ class PdfGenerator(private val context: Context) {
                 val messageHeight = calculateTotalMessageHeight(textContent, finalImageBitmap, canvas.width.toFloat(), if (isUser) userIconDrawable != null else aiIconDrawable != null)
                 drawMessage(canvas, textContent, finalImageBitmap, isUser, currentY, if (isUser) userIconDrawable else aiIconDrawable)
                 currentY += messageHeight + bubbleSpacing
-
-                // Recycle the bitmap
-                finalImageBitmap?.recycle()
+                paged.breakAt(currentY - bubbleSpacing / 2)
             }
 
-            document.finishPage(page)
-            FileOutputStream(file).use { document.writeTo(it) }
-            document.close()
+            val pdf = paged.toDocument(CHAT_PDF_BACKGROUND)
+            document = pdf
+            FileOutputStream(file).use { pdf.writeTo(it) }
             return file.absolutePath
-        } catch (e: IOException) {
-         //   Log.e("PdfGenerator", "Error creating PDF with generated images", e)
+        } catch (e: Throwable) {
+            // Log.e("PdfGenerator", "Error creating PDF with generated images", e)
             return null
+        } finally {
+            document?.close()
+            // The recording refers to these until the pages are written, so they are freed last.
+            imageBitmaps.values.forEach { it.recycle() }
         }
     }
 
@@ -509,8 +490,7 @@ class PdfGenerator(private val context: Context) {
         if (uriString == null) return null
         return try {
             val uri = uriString.toUri()
-            val inputStream = context.contentResolver.openInputStream(uri)
-            BitmapFactory.decodeStream(inputStream)
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
         } catch (e: Exception) {
          //   Log.e("PdfGenerator", "Failed to load bitmap from URI: $uriString", e)
             null
@@ -582,7 +562,7 @@ class PdfGenerator(private val context: Context) {
                 }
                 if (imageUrl != null) {
                     imageBitmap = decodeImage(imageUrl)
-                    imageBitmaps[index] = imageBitmap!!  // Store the decoded bitmap for reuse
+                    imageBitmap?.let { imageBitmaps[index] = it }  // Store the decoded bitmap for reuse
                 }
             } else if (message.content is JsonPrimitive) {
                 textContent = message.content.content
@@ -595,20 +575,18 @@ class PdfGenerator(private val context: Context) {
         }
         totalHeight += pageMargin + bubbleSpacing // Add bottom margin and a small buffer
 
+        var document: PdfDocument? = null
         try {
-            val document = PdfDocument()
-            val pageInfo = PdfDocument.PageInfo.Builder(PdfGenerator.PageSize.A4.width(), totalHeight.toInt(), 1).create()
-            val page = document.startPage(pageInfo)
-            val canvas = page.canvas
-
-            // Set background color
-            canvas.drawColor("#000000".toColorInt())
+            // Lay the chat out once, then cut it into A4 pages.
+            val paged = PagedPdf(totalHeight.toInt())
+            val canvas = paged.canvas
 
             // Draw title
             val titleX = canvas.width / 2f
             var currentY = pageMargin + titlePaint.fontMetrics.top.let { -it }
             canvas.drawText(modelName, titleX, currentY, titlePaint)
             currentY += titlePaint.fontSpacing + bubbleSpacing
+            paged.breakAt(currentY - bubbleSpacing / 2)
 
             messagesToRender.forEachIndexed { index, message ->
                 val isUser = message.role == "user"
@@ -636,21 +614,21 @@ class PdfGenerator(private val context: Context) {
                 val messageHeight = calculateTotalMessageHeight(textContent, imageBitmap, canvas.width.toFloat(), if (isUser) userIconDrawable != null else aiIconDrawable != null)
                 drawMessage(canvas, textContent, imageBitmap, isUser, currentY, if (isUser) userIconDrawable else aiIconDrawable)
                 currentY += messageHeight + bubbleSpacing
-
-                // Recycle bitmaps to free memory
-                imageBitmap?.recycle()
+                paged.breakAt(currentY - bubbleSpacing / 2)
             }
 
-            document.finishPage(page)
-            FileOutputStream(file).use {
-                document.writeTo(it)
-            }
-            document.close()
+            val pdf = paged.toDocument(CHAT_PDF_BACKGROUND)
+            document = pdf
+            FileOutputStream(file).use { pdf.writeTo(it) }
             return file.absolutePath
 
-        } catch (e: IOException) {
-           // Log.e("PdfGenerator", "Error creating PDF", e)
+        } catch (e: Throwable) {
+            // Log.e("PdfGenerator", "Error creating PDF", e)
             return null
+        } finally {
+            document?.close()
+            // The recording refers to these until the pages are written, so they are freed last.
+            imageBitmaps.values.forEach { it.recycle() }
         }
     }
     private fun processMarkdownLinks(markdown: String): String {
@@ -745,7 +723,7 @@ class PdfGenerator(private val context: Context) {
 
     private fun drawBubble(canvas: Canvas, text: String, image: Bitmap?, isUser: Boolean, startY: Float) {
         val bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (isUser) "#1A1C20".toColorInt() else "#191919".toColorInt()
+            color = if (isUser) "#1A1A1A".toColorInt() else "#191919".toColorInt()
         }
         val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
@@ -952,6 +930,7 @@ class PdfGenerator(private val context: Context) {
 
         val latch = CountDownLatch(1)
         var bmp: Bitmap? = null
+        val abandoned = java.util.concurrent.atomic.AtomicBoolean(false)
 
         activity.runOnUiThread {
             host.addView(tv)
@@ -963,6 +942,10 @@ class PdfGenerator(private val context: Context) {
                 private val maxPasses = 10
 
                 override fun onGlobalLayout() {
+                    if (abandoned.get()) {
+                        if (host.viewTreeObserver.isAlive) host.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                        return
+                    }
                     val measuredHeight = host.measuredHeight
                     if (measuredHeight > 0 && passCount < maxPasses) {
                         passCount++
@@ -994,12 +977,76 @@ class PdfGenerator(private val context: Context) {
             host.viewTreeObserver.addOnGlobalLayoutListener(listener)
         }
 
-        latch.await(3, TimeUnit.SECONDS)
+        try {
+            latch.await(3, TimeUnit.SECONDS)
+        } finally {
+            // A layout that never settles would leave the off-screen host attached to the window for good.
+            abandoned.set(true)
+            activity.runOnUiThread {
+                if (host.parent != null) root.removeView(host)
+            }
+        }
         return requireNotNull(bmp) { "Failed to render table bitmap, the operation timed out." }
+    }
+
+    /**
+     * A whole document laid out on one tall recording, cut into A4 pages by [toDocument]. A single
+     * page as tall as a long chat overran PDF viewers and printers. Page ends prefer the last
+     * [breakAt] offset that fits, so a message or block is not sliced unless it is taller than a page.
+     * Nothing is bitmap-backed, so the recording stays small however long the document is.
+     */
+    private class PagedPdf(contentHeight: Int) {
+        private val height = contentHeight.coerceAtLeast(1)
+        private val picture = Picture()
+        private val breaks = ArrayList<Int>()
+        val canvas: Canvas = picture.beginRecording(PageSize.A4.width(), height)
+
+        fun breakAt(y: Float) {
+            breaks.add(y.toInt())
+        }
+
+        fun toDocument(background: Int): PdfDocument {
+            picture.endRecording()
+            val pageWidth = PageSize.A4.width()
+            val pageHeight = PageSize.A4.height()
+            val document = PdfDocument()
+            try {
+                var top = 0
+                var number = 1
+                do {
+                    val limit = top + pageHeight
+                    val bottom = if (limit >= height) {
+                        height
+                    } else {
+                        breaks.lastOrNull { it > top + pageHeight / 3 && it <= limit } ?: limit
+                    }
+                    val page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, number).create())
+                    page.canvas.drawColor(background)
+                    page.canvas.withSave {
+                        clipRect(0f, 0f, pageWidth.toFloat(), (bottom - top).toFloat())
+                        translate(0f, -top.toFloat())
+                        drawPicture(picture)
+                    }
+                    document.finishPage(page)
+                    top = bottom
+                    number++
+                } while (top < height)
+            } catch (t: Throwable) {
+                document.close()
+                throw t
+            }
+            return document
+        }
     }
 
     object PageSize {
         val A4 = Rect(0, 0, 595, 842)
+    }
+
+    private companion object {
+        // Neutral grays only (design contract): the old page fills carried a blue tint.
+        val PDF_BACKGROUND = Color.rgb(0x11, 0x11, 0x11)
+        val CHAT_PDF_BACKGROUND = Color.BLACK
     }
 }
 

@@ -6,10 +6,10 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import androidx.core.graphics.drawable.toDrawable
 
 class MaxTokensDialogFragment : DialogFragment() {
@@ -38,15 +38,17 @@ class MaxTokensDialogFragment : DialogFragment() {
         val savedMaxTokens = sharedPreferencesHelper.getMaxTokens()
         editTextMaxTokens.setText(savedMaxTokens)
 
+        val layout = view.findViewById<TextInputLayout>(R.id.edit_text_lay_maxtokens)
+        layout.clearErrorOnEdit()
+
         buttonSave.setOnClickListener {
             val maxTokensStr = editTextMaxTokens.text.toString().trim()
             val maxTokensInt = maxTokensStr.toIntOrNull()
             if (maxTokensStr.isNotBlank() && maxTokensInt != null && maxTokensInt in 1..999999) {
                 sharedPreferencesHelper.saveMaxTokens(maxTokensStr)
-                AppToast.makeText(requireContext(), "Max tokens saved.", AppToast.LENGTH_SHORT).show()
                 dismiss()
             } else {
-                editTextMaxTokens.error = "Please enter a number between 1 and 999,999"
+                layout.error = getString(R.string.maxtokens_error_range)
             }
         }
 

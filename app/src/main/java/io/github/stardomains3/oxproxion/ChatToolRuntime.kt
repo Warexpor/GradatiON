@@ -34,7 +34,10 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -63,6 +66,9 @@ import java.util.Date
 import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.milliseconds
+
+/** Characters a read_*_file call may return before the text is cut (about 200 KB). */
+private const val READ_FILE_CHAR_LIMIT = 200_000
 
 /**
  * Tool schemas and execution for Ask chat. Lives outside [ChatViewModel] so a test can
@@ -784,6 +790,8 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
         block: suspend (JsonObject) -> String,
     ): String = try {
         block(json.decodeFromString(raw))
+    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+        throw e // Stop must end the tool run, not become a tool error.
     } catch (e: Exception) {
         onError(e)
     }
@@ -807,7 +815,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                         thinkingMessage,
                         FlexibleMessage(
                             role = "assistant",
-                            content = JsonPrimitive("**Error:**\n---\nTool recursion limit reached.")
+                            content = JsonPrimitive("**Error:**\n---\n" + application.getString(R.string.error_tool_recursion_limit))
                         )
                     )
                 }
@@ -815,13 +823,57 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
             return
         }
 
-        // Deduplicate tool calls: Group by name + arguments and execute only once per unique combo
-        val uniqueToolCalls = toolCalls.groupBy { "${it.function.name}:${it.function.arguments}" }
-            .map { it.value.first() }
         val toolResults = mutableListOf<FlexibleMessage>()
+        try {
+            // File and network tools must not run on the main thread.
+            withContext(Dispatchers.IO) { executeToolCalls(toolCalls, toolResults) }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            // Stop mid-run: the assistant turn already cites these ids, and a provider rejects a
+            // transcript where a tool call has no reply, so every later send would fail.
+            withContext(NonCancellable + Dispatchers.Main) {
+                val answered = toolResults.map { it.toolCallId }.toSet()
+                val stubs = toolCalls.filter { it.id !in answered }.map {
+                    FlexibleMessage(
+                        role = "tool",
+                        content = JsonPrimitive(application.getString(R.string.error_tool_cancelled)),
+                        toolCallId = it.id
+                    )
+                }
+                updateMessages { it.addAll(toolResults + stubs) }
+            }
+            throw e
+        }
+        withContext(Dispatchers.Main) {
+            updateMessages { it.addAll(toolResults) }
+        }
+        // All tool calls now continue the conversation to report their status.
+        val messagesForApi = _chatMessages.value?.toMutableList() ?: mutableListOf()
+        val systemMessage = sharedPreferencesHelper.getSelectedSystemMessage().prompt
+        if (messagesForApi.isEmpty() || messagesForApi[0].role != "system") {
+            messagesForApi.add(
+                0,
+                FlexibleMessage(role = "system", content = JsonPrimitive(systemMessage))
+            )
+            // Log.d("ToolDebug", "Re-added system message to continuation payload")
+        }
+        continueConversation(messagesForApi)
+    }
 
-        for (toolCall in uniqueToolCalls) {  // Now looping over uniques only
-            val result: String = when (toolCall.function.name) {
+    /**
+     * Runs the calls in order, appending one `tool` message per call id to [toolResults] as each
+     * finishes. A repeat of the same name and arguments reuses the first result instead of
+     * running again, but still answers its own id: a provider rejects a transcript where a
+     * tool call goes unanswered.
+     */
+    private suspend fun executeToolCalls(
+        toolCalls: List<ToolCall>,
+        toolResults: MutableList<FlexibleMessage>,
+    ) {
+        val resultsByCall = HashMap<String, String>()
+        for (toolCall in toolCalls) {
+            currentCoroutineContext().ensureActive()
+            val callKey = "${toolCall.function.name}:${toolCall.function.arguments}"
+            val result: String = resultsByCall[callKey] ?: when (toolCall.function.name) {
                 "set_timer" -> withToolArgs(toolCall.function.arguments, {
                     val error = "Failed to set timer: Error parsing arguments."
                     _toastUiEvent.postValue(Event(error))
@@ -1356,6 +1408,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
                 else -> "Error: Unknown tool call"
             }
+            resultsByCall[callKey] = result
             toolResults.add(
                 FlexibleMessage(
                     role = "tool",
@@ -1364,21 +1417,6 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 )
             )
         }
-        withContext(Dispatchers.Main) {
-            updateMessages { it.addAll(toolResults) }
-        }
-        // All tool calls now continue the conversation to report their status.
-        val messagesForApi = _chatMessages.value?.toMutableList() ?: mutableListOf()
-        val systemMessage = sharedPreferencesHelper.getSelectedSystemMessage().prompt
-        if (messagesForApi.isEmpty() || messagesForApi[0].role != "system") {
-            messagesForApi.add(
-                0,
-                FlexibleMessage(role = "system", content = JsonPrimitive(systemMessage))
-            )
-            // Log.d("ToolDebug", "Re-added system message to continuation payload")
-        }
-      //  messagesForApi.addAll(toolResults)
-        continueConversation(messagesForApi)
     }
 
     private suspend fun fetchCurrentLocation(): String {
@@ -1607,11 +1645,26 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 val finalMimeType = mimeType ?: targetFile.type ?: "text/plain"
 
                 // 4. Overwrite Content
-                // "w" mode truncates the file before writing
-                application.applicationContext.contentResolver.openOutputStream(targetFile.uri, "w")?.use { outputStream ->
-                    outputStream.write(newContent.toByteArray(Charsets.UTF_8))
-                    outputStream.flush()
-                } ?: return@withContext "Error: Could not open file for writing."
+                // Opening for write truncates first, so keep the old bytes in hand and put them
+                // back if the write fails part-way. "wt" asks for truncation outright; plain "w"
+                // leaves the old tail behind on some providers when the new text is shorter.
+                val resolver = application.applicationContext.contentResolver
+                val original = resolver.openInputStream(targetFile.uri)?.use { it.readBytes() }
+                try {
+                    resolver.openOutputStream(targetFile.uri, "wt")?.use { outputStream ->
+                        outputStream.write(newContent.toByteArray(Charsets.UTF_8))
+                        outputStream.flush()
+                    } ?: return@withContext "Error: Could not open file for writing."
+                } catch (e: Exception) {
+                    if (original != null) {
+                        try {
+                            resolver.openOutputStream(targetFile.uri, "wt")?.use { it.write(original) }
+                        } catch (_: Exception) {
+                            // Nothing more can be done; the original error is the one to report.
+                        }
+                    }
+                    throw e
+                }
 
                 "File '$filepath' successfully updated."
 
@@ -2217,15 +2270,28 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
         return withContext(Dispatchers.IO) {
             try {
                 withWorkspaceFile(filepath) { targetFile ->
-                    if (targetFile.length() > 10 * 1024 * 1024) {
-                        return@withWorkspaceFile "Error: File is too large (max 10MB)."
-                    }
                     application.applicationContext.contentResolver.openInputStream(targetFile.uri)?.use { inputStream ->
-                        val content = inputStream.bufferedReader().readText()
+                        // The reply goes back to the model as one message, so a big file is cut
+                        // short and says so, rather than filling the context window.
+                        val buffer = CharArray(READ_FILE_CHAR_LIMIT + 1)
+                        val reader = inputStream.bufferedReader()
+                        var filled = 0
+                        while (filled < buffer.size) {
+                            val read = reader.read(buffer, filled, buffer.size - filled)
+                            if (read < 0) break
+                            filled += read
+                        }
+                        val truncated = filled > READ_FILE_CHAR_LIMIT
+                        val content = String(buffer, 0, minOf(filled, READ_FILE_CHAR_LIMIT))
                         if (content.contains('\u0000')) {
                             return@withWorkspaceFile "Error: Binary files cannot be read. Only text files are supported."
                         }
-                        "File: $filepath\n\n$content"
+                        val note = if (truncated) {
+                            "\n\n[Truncated: only the first ${READ_FILE_CHAR_LIMIT / 1000} KB of this file is shown.]"
+                        } else {
+                            ""
+                        }
+                        "File: $filepath\n\n$content$note"
                     } ?: "Error: Could not open input stream."
                 }
             } catch (e: Exception) {

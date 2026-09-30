@@ -50,7 +50,7 @@ class RpLorebookLibraryFragment : Fragment() {
                     } else {
                         getString(R.string.rp_lore_activated_disabled)
                     }
-                    AppToast.makeText(requireContext(), msg, AppToast.LENGTH_LONG).show()
+                    GlassNotice.show(requireContext(), msg)
                 }
             },
             onDelete = { book ->
@@ -65,11 +65,7 @@ class RpLorebookLibraryFragment : Fragment() {
                             chatViewModel.getRpRepository().deleteLorebook(book.id)
                             if (!isAdded) return@launch
                             if (wasActive) {
-                                AppToast.makeText(
-                                    requireContext(),
-                                    getString(R.string.rp_lore_deleted_active),
-                                    AppToast.LENGTH_LONG
-                                ).show()
+                                GlassNotice.show(requireContext(), getString(R.string.rp_lore_deleted_active))
                             }
                         }
                     }

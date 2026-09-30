@@ -46,7 +46,7 @@ class PresetChooserActivity : AppCompatActivity() {
             GlassAlertDialogBuilder(this)
                 .setTitle(R.string.preset_chooser_empty_title)
                 .setMessage(R.string.preset_chooser_empty_body)
-                .setPositiveButton("OK") { _, _ -> finish() }
+                .setPositiveButton(R.string.action_ok) { _, _ -> finish() }
                 .setOnDismissListener { finish() }
                 .show()
             return

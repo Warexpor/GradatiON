@@ -18,7 +18,6 @@ import android.view.Choreographer
 import androidx.annotation.RequiresApi
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.core.widget.ImageViewCompat
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -38,7 +37,9 @@ import kotlin.math.roundToInt
  * chat's glass backdrop, so every frame also refreshes the glass sampling it, hence the low rate.
  * API 31-32, or a driver that can't compile the shader, draws the plain tinted drawable.
  * A software canvas (the pager's fallback snapshot) cannot run the shader, so it blits
- * [lastFrame]: the latest hardware frame, copied off the draw path by [HardwareRaster].
+ * [lastFrame], a copy made by [HardwareRaster] off the draw path. That render and readback is
+ * synchronous GPU work, so it happens only on [prepareSnapshot], on the first software draw and
+ * after a resize, never on a timer.
  */
 class LiquidMarkView @JvmOverloads constructor(
     context: Context,
@@ -76,7 +77,18 @@ class LiquidMarkView @JvmOverloads constructor(
     private var shaderFailed = false
     private var maskMap: Bitmap? = null
     private var heightMap: Bitmap? = null
-    private var surfaceKey = ""
+    /** What the surface bitmaps were built for; compared as plain values, never a per-frame string. */
+    private var surfaceW = 0
+    private var surfaceH = 0
+    private var surfaceDrawable: Drawable? = null
+    /** Shaders over the two bitmaps, built with them; they are set on the AGSL once per surface. */
+    private var maskShader: BitmapShader? = null
+    private var heightShader: BitmapShader? = null
+    private var inputsBound = false
+    /** Uniforms that only change with the surface, the tint or the theme. */
+    private var uniformsDirty = true
+    private var lastTint = 0
+    private var lastNight = false
     private val paint = Paint()
     private var ticking = false
     private var windowVisible = true
@@ -85,6 +97,8 @@ class LiquidMarkView @JvmOverloads constructor(
     private var lastFrame: Bitmap? = null
     private var lastFrameTime = Float.NaN
     private var cachePosted = false
+    /** A software canvas wants [lastFrame] and there is none: build it once after the next hardware draw. */
+    private var cacheWanted = false
 
     private val frame = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
@@ -95,11 +109,17 @@ class LiquidMarkView @JvmOverloads constructor(
                 invalidate()
                 Choreographer.getInstance().postFrameCallbackDelayed(this, FRAME_MS)
             } else {
-                // Battery saver or animations off: hold still, look again in a while.
-                Choreographer.getInstance().postFrameCallbackDelayed(this, IDLE_POLL_MS)
+                // Battery saver or animations off: hold the still frame and stop calling back.
+                // updateTicking restarts us on window focus or when the power mode flips.
+                ticking = false
             }
             lastTick = now
         }
+    }
+
+    private val qualityListener = GlassQuality.Listener {
+        updateTicking()
+        invalidate()
     }
 
     private val cacheFrame = Runnable {
@@ -117,10 +137,20 @@ class LiquidMarkView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        GlassQuality.addListener(qualityListener)
+        updateTicking()
+    }
+
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (!hasWindowFocus) return
+        // Nothing polls while still, so a change made in system settings is noticed on return.
+        Motion.refreshAnimations(context)
         updateTicking()
     }
 
     override fun onDetachedFromWindow() {
+        GlassQuality.removeListener(qualityListener)
         stopTicking()
         removeCallbacks(cacheFrame)
         cachePosted = false
@@ -158,9 +188,15 @@ class LiquidMarkView @JvmOverloads constructor(
     }
 
     private fun dropSurface() {
-        surfaceKey = ""
+        surfaceDrawable = null
         maskMap = null
         heightMap = null
+        maskShader = null
+        heightShader = null
+        inputsBound = false
+        uniformsDirty = true
+        // A resize makes the software copy the wrong size; rebuild it once, not on a timer.
+        if (lastFrame != null) cacheWanted = true
         lastFrame?.recycle()
         lastFrame = null
         lastFrameTime = Float.NaN
@@ -170,7 +206,7 @@ class LiquidMarkView @JvmOverloads constructor(
         Motion.areAnimationsEnabled(context) && GlassQuality.level != GlassQuality.Level.SOLID
 
     private fun updateTicking() {
-        val run = animated && isLiquid && isAttachedToWindow && windowVisible && isShown
+        val run = animated && isLiquid && isAttachedToWindow && windowVisible && isShown && canAnimate()
         if (run == ticking) return
         if (run) {
             ticking = true
@@ -198,7 +234,7 @@ class LiquidMarkView @JvmOverloads constructor(
         // RuntimeShader only runs on a hardware canvas. Never spin up a HardwareRenderer here:
         // the pager's drawToBitmap is software, and nested GPU work mid-draw crashes the process.
         if (canvas.isHardwareAccelerated && drawLiquid(canvas)) {
-            scheduleCacheRefresh()
+            if (cacheWanted) scheduleCacheRefresh()
             return
         }
         val cached = lastFrame
@@ -206,13 +242,28 @@ class LiquidMarkView @JvmOverloads constructor(
             canvas.drawBitmap(cached, 0f, 0f, null)
             return
         }
+        // First software draw with nothing cached: draw flat now, build the copy after the next
+        // hardware frame (never here, mid-draw).
+        cacheWanted = true
         super.onDraw(canvas)
+    }
+
+    /**
+     * Build the software copy of the current liquid frame now. The GPU render and readback is
+     * synchronous, so it runs only when asked: call this on the UI thread, outside any draw,
+     * right before capturing the view onto a software canvas (the pager's fallback snapshot).
+     * Hardware snapshots never need it.
+     */
+    fun prepareSnapshot() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        removeCallbacks(cacheFrame)
+        cachePosted = false
+        refreshLastFrame()
     }
 
     private fun scheduleCacheRefresh() {
         if (cachePosted || width == 0 || height == 0) return
-        // A swipe only needs a recent frame, not a readback on every tick.
-        if (lastFrame != null && abs(animTime - lastFrameTime) < 0.4f) return
+        cacheWanted = false
         cachePosted = true
         post(cacheFrame)
     }
@@ -242,22 +293,31 @@ class LiquidMarkView @JvmOverloads constructor(
         val d = drawable ?: return false
         if (width == 0 || height == 0) return false
         val s = shader() ?: return false
-        val (m, h) = surface(d) ?: return false
+        if (!ensureSurface(d)) return false
         val night = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         val tint = ImageViewCompat.getImageTintList(this)?.getColorForState(drawableState, Color.GRAY) ?: Color.GRAY
-        val density = resources.displayMetrics.density
-        val step = max(1f, 1.5f * density)
-        s.setInputShader("mask", BitmapShader(m, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP))
-        // Linear filtering matters: nearest sampling turns the 8-bit height map's slope into a checkerboard.
-        s.setInputShader("height", BitmapShader(h, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
-            filterMode = BitmapShader.FILTER_MODE_LINEAR
-        })
-        s.setFloatUniform("res", width.toFloat(), height.toFloat())
+        if (tint != lastTint || night != lastNight) {
+            lastTint = tint
+            lastNight = night
+            uniformsDirty = true
+        }
+        // The bitmaps and most uniforms only change with the surface, the tint or the theme;
+        // a frame of animation sets the clock and nothing else.
+        if (!inputsBound) {
+            s.setInputShader("mask", maskShader!!)
+            s.setInputShader("height", heightShader!!)
+            inputsBound = true
+        }
+        if (uniformsDirty) {
+            val step = max(1f, 1.5f * resources.displayMetrics.density)
+            s.setFloatUniform("res", width.toFloat(), height.toFloat())
+            s.setFloatUniform("base", Color.red(tint) / 255f, Color.green(tint) / 255f, Color.blue(tint) / 255f)
+            s.setFloatUniform("dark", if (night) 1f else 0f)
+            s.setFloatUniform("stepPx", step)
+            s.setFloatUniform("slope", SLOPE * blurRadius() / step)
+            uniformsDirty = false
+        }
         s.setFloatUniform("time", animTime)
-        s.setFloatUniform("base", Color.red(tint) / 255f, Color.green(tint) / 255f, Color.blue(tint) / 255f)
-        s.setFloatUniform("dark", if (night) 1f else 0f)
-        s.setFloatUniform("stepPx", step)
-        s.setFloatUniform("slope", SLOPE * blurRadius() / step)
         paint.shader = s
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         paint.shader = null
@@ -280,12 +340,12 @@ class LiquidMarkView @JvmOverloads constructor(
 
     private fun blurRadius(): Float = max(2f, min(width, height) * BLUR_FRACTION)
 
-    /** Crisp mask and height map (the mask blurred), both at view size. Rebuilt only on size or drawable change. */
-    private fun surface(d: Drawable): Pair<Bitmap, Bitmap>? {
-        val key = "$width:$height:${System.identityHashCode(d)}"
-        val m0 = maskMap
-        val h0 = heightMap
-        if (key == surfaceKey && m0 != null && h0 != null) return m0 to h0
+    /**
+     * Crisp mask and height map (the mask blurred), both at view size, each wrapped in its
+     * shader. Rebuilt only on size or drawable change; true when they are ready.
+     */
+    private fun ensureSurface(d: Drawable): Boolean {
+        if (surfaceW == width && surfaceH == height && surfaceDrawable === d && maskShader != null && heightShader != null) return true
         val m = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         Canvas(m).apply {
             translate(paddingLeft.toFloat(), paddingTop.toFloat())
@@ -301,13 +361,21 @@ class LiquidMarkView @JvmOverloads constructor(
         alpha.recycle()
         maskMap = m
         heightMap = h
-        surfaceKey = key
-        return m to h
+        // Linear filtering matters: nearest sampling turns the 8-bit height map's slope into a checkerboard.
+        maskShader = BitmapShader(m, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        heightShader = BitmapShader(h, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+            filterMode = BitmapShader.FILTER_MODE_LINEAR
+        }
+        inputsBound = false
+        uniformsDirty = true
+        surfaceW = width
+        surfaceH = height
+        surfaceDrawable = d
+        return true
     }
 
     companion object {
         private const val FRAME_MS = 50L
-        private const val IDLE_POLL_MS = 2000L
         private const val START_TIME = 2.4f
         /** Height-map blur as a fraction of the view: how far in from the edge the glass curves. */
         private const val BLUR_FRACTION = 0.03f

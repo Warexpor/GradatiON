@@ -9,7 +9,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
-import io.github.stardomains3.oxproxion.AppToast
+import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -87,7 +87,7 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
 
     private fun ask(prompt: String) {
         if (!hub.prompt(sessionId, prompt)) {
-            AppToast.makeText(requireContext(), getString(R.string.code_changes_busy), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.code_changes_busy))
             return
         }
         parentFragmentManager.popBackStack(CodeSessionFragment.BACK_STACK_TAG, 0)

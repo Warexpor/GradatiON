@@ -83,6 +83,42 @@ class AvatarAndPersonaTest {
         assertNotNull(crop.findViewById<AvatarCropView>(R.id.avatarCropView))
     }
 
+    /** Deleting a character must not leave its notes, layout, voice, pinned book or wallpaper behind. */
+    @Test fun deletingACharacterClearsItsPrefsAndWallpaper() {
+        val prefs = SharedPreferencesHelper(ctx)
+        val id = 4242L
+        prefs.saveRpMemory(id, "note")
+        prefs.saveRpLayout(id, SharedPreferencesHelper.RP_LAYOUT_BOOK)
+        prefs.saveRpVoice(id, SharedPreferencesHelper.RpVoice("voice-a", 1.2f, 0.85f))
+        prefs.saveRpLorebookId(id, 7L)
+        val wallpaper = BackgroundPhoto.file(ctx, BackgroundPhoto.slotForCharacter(id)).apply {
+            parentFile?.mkdirs()
+            writeText("x")
+        }
+        prefs.clearRpCharacterPrefs(id)
+        assertEquals("", prefs.getRpMemory(id))
+        assertEquals(SharedPreferencesHelper.RP_LAYOUT_CLASSIC, prefs.getRpLayout(id))
+        assertEquals(SharedPreferencesHelper.RpVoice(null, 1f, 1f), prefs.getRpVoice(id))
+        assertEquals(null, prefs.getRpLorebookId(id))
+        assertFalse(wallpaper.exists())
+    }
+
+    /** The character library and the chats page host a ⋮ menu, so each has a frame and a backdrop for its glass. */
+    @Test fun rpScreensInflateWithTheirMenuHostsAndNewPieces() {
+        val themed = android.view.ContextThemeWrapper(ctx, R.style.Theme_Grokion)
+        val inflater = android.view.LayoutInflater.from(themed)
+        val library = inflater.inflate(R.layout.fragment_rp_character_library, null)
+        assertTrue(library is android.widget.FrameLayout)
+        assertNotNull(library.findViewById<View>(R.id.rpLibraryBackdrop))
+        assertNotNull(library.findViewById<View>(R.id.rpCharacterRecyclerView))
+        val history = inflater.inflate(R.layout.fragment_rp_chat_history, null)
+        assertTrue(history is android.widget.FrameLayout)
+        assertNotNull(history.findViewById<View>(R.id.rpHistoryBackdrop))
+        assertNotNull(history.findViewById<View>(R.id.rpHistoryList))
+        assertNotNull(inflater.inflate(R.layout.item_rp_history_chat, null).findViewById<View>(R.id.rpHistoryMore))
+        assertNotNull(inflater.inflate(R.layout.view_rp_home, null).findViewById<View>(R.id.rpHomeEmptyAdd))
+    }
+
     /** The panel's full-screen pages are built on these two shells. */
     @Test fun panelPageLayoutsInflate() {
         val themed = android.view.ContextThemeWrapper(ctx, R.style.Theme_Grokion)

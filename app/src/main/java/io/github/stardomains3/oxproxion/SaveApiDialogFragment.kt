@@ -5,12 +5,23 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
+
+/**
+ * [SharedPreferencesHelper.saveApiKey] overwrites the stored key before it checks the new one
+ * reads back, so a failed save would leave no key at all. Put the old one back when it fails.
+ */
+internal fun SharedPreferencesHelper.saveApiKeyKeepingOld(alias: String, apiKey: String): Boolean {
+    val old = getApiKeyFromPrefs(alias)
+    if (saveApiKey(alias, apiKey)) return true
+    if (old.isNotBlank()) saveApiKey(alias, old)
+    return false
+}
 
 class SaveApiDialogFragment : DialogFragment() {
 
@@ -36,20 +47,22 @@ class SaveApiDialogFragment : DialogFragment() {
         val buttonSave = view.findViewById<MaterialButton>(R.id.button_saveapi)
         val buttonCancel = view.findViewById<MaterialButton>(R.id.button_cancelapi)
 
+        val keyLayout = view.findViewById<TextInputLayout>(R.id.edit_text_lay)
+        keyLayout.clearErrorOnEdit()
+
         buttonSave.setOnClickListener {
             val apiKey = editTextApiKey.text.toString().trim()
             if (apiKey.isNotBlank()) {
-                val saved = sharedPreferencesHelper.saveApiKey("openrouter_api_key", apiKey)
+                val saved = sharedPreferencesHelper.saveApiKeyKeepingOld("openrouter_api_key", apiKey)
                 if (saved) {
                     viewModel.refreshApiKey()
-                    AppToast.makeText(requireContext(), getString(R.string.api_key_saved), AppToast.LENGTH_SHORT).show()
                     dismiss()
                 } else {
-                    // Toasts are silent and the dialog stays open, so say why on the field itself.
-                    editTextApiKey.error = getString(R.string.api_key_save_failed)
+                    // The dialog stays open, so say why on the field itself.
+                    keyLayout.error = getString(R.string.api_key_save_failed)
                 }
             } else {
-                editTextApiKey.error = getString(R.string.api_key_empty)
+                keyLayout.error = getString(R.string.api_key_empty)
             }
         }
 

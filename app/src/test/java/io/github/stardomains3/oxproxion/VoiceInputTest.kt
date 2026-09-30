@@ -6,6 +6,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -60,6 +61,33 @@ class VoiceInputTest {
         assertEquals(VoiceEngine.CLOUD, VoiceInput.resolve(ctx, prefs))
         prefs.setVoiceInputProvider(VoiceEngine.GROK.key)
         assertEquals(VoiceEngine.GROK, VoiceInput.resolve(ctx, prefs))
+    }
+
+    @Test fun phoneNeedsNothingUpFront() {
+        assertNull(VoiceInput.preflight(VoiceEngine.DEVICE, prefs))
+    }
+
+    @Test fun cloudNeedsAModelThenAKey() {
+        assertEquals(R.string.voice_need_model, VoiceInput.preflight(VoiceEngine.CLOUD, prefs))
+        prefs.setVoiceInputModel("openai/whisper-1")
+        // No OpenRouter key has been saved in this test's prefs.
+        assertEquals(R.string.voice_need_openrouter_key, VoiceInput.preflight(VoiceEngine.CLOUD, prefs))
+    }
+
+    @Test fun grokNeedsAnXaiKey() {
+        assertEquals(R.string.voice_need_xai_key, VoiceInput.preflight(VoiceEngine.GROK, prefs))
+    }
+
+    @Test fun localNeedsAModelThenAServer() {
+        assertEquals(R.string.voice_need_model, VoiceInput.preflight(VoiceEngine.LAN, prefs))
+        prefs.setVoiceInputModel("whisper-large")
+        assertEquals(R.string.voice_need_lan_endpoint, VoiceInput.preflight(VoiceEngine.LAN, prefs))
+        prefs.setLanEndpoint("http://192.168.1.10:8080")
+        assertNull(VoiceInput.preflight(VoiceEngine.LAN, prefs))
+    }
+
+    @Test fun everyEngineHasASettingsLabel() {
+        for (e in VoiceEngine.entries) assertTrue(e.name, ctx.getString(e.labelRes).isNotBlank())
     }
 
     @Test fun unknownKeysReadAsPhone() {

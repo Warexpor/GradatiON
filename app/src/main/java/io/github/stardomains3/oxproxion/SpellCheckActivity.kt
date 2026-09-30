@@ -94,7 +94,7 @@ class SpellCheckActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                marginEnd = 120 // Make room for cancel button
+                marginEnd = (52 * resources.displayMetrics.density).toInt() // room for the cancel button
             }
         }
         loadingContainer.addView(progressBar)
@@ -103,8 +103,12 @@ class SpellCheckActivity : AppCompatActivity() {
         loadingCancelButton = ImageView(this).apply {
             setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_cancel))
             scaleType = ImageView.ScaleType.FIT_CENTER  // Scales icon to fit
-            setPadding(8, 8, 8, 8)  // Less padding so icon is bigger
-            layoutParams = FrameLayout.LayoutParams(96, 96).apply {  // Bigger: 96x96
+            val d = resources.displayMetrics.density
+            val pad = (10 * d).toInt()
+            setPadding(pad, pad, pad, pad)
+            contentDescription = getString(R.string.action_cancel)
+            // 48dp is the smallest tap target.
+            layoutParams = FrameLayout.LayoutParams((48 * d).toInt(), (48 * d).toInt()).apply {
                 gravity = Gravity.CENTER_VERTICAL or Gravity.END
             }
             setOnClickListener { onLoadingCancel() }
@@ -156,6 +160,7 @@ class SpellCheckActivity : AppCompatActivity() {
                 cornerRadius = 999f
                 setColor(token(R.color.xai_canvas_mid))
             }
+            minHeight = (48 * resources.displayMetrics.density).toInt()
             setPadding(48, 24, 48, 24)
             setOnClickListener { onCancel() }
         }
@@ -173,6 +178,7 @@ class SpellCheckActivity : AppCompatActivity() {
             isAllCaps = false
             setTextColor(token(R.color.xai_ink))
             background = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_glass_button_primary)
+            minHeight = (48 * resources.displayMetrics.density).toInt()
             setPadding(48, 24, 48, 24)
             setOnClickListener { onAccept() }
         }
@@ -205,8 +211,7 @@ class SpellCheckActivity : AppCompatActivity() {
         }
 
         if (isReadOnly) {
-            AppToast.makeText(this, "Text is read-only. AI cannot replace it here.", AppToast.LENGTH_LONG).show()
-            finish()
+            showError(getString(R.string.spell_read_only))
             return
         }
 
@@ -286,6 +291,7 @@ class SpellCheckActivity : AppCompatActivity() {
 
         // Show just a "Close" button (relabel Cancel)
         cancelButton.text = getString(R.string.spell_close)
+        acceptButton.visibility = View.GONE
         buttonContainer.visibility = View.VISIBLE
     }
 

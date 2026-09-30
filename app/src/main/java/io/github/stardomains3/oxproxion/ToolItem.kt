@@ -1,8 +1,11 @@
 package io.github.stardomains3.oxproxion
 
+import android.content.Context
+import androidx.annotation.StringRes
+
 data class ToolItem(
     val name: String,               // e.g. "make_file"
-    val displayName: String,        // Human‑readable e.g. "Create File"
+    val displayName: String,        // Human-readable, e.g. "Create file"
     val description: String,        // Short description shown under the name
     val isEnabled: Boolean // Current state from prefs
 ) {
@@ -33,147 +36,34 @@ data class ToolItem(
             return result
         }
 
-        fun getAllToolItems(enabledSet: Set<String>): List<ToolItem> = listOf(
-            ToolItem(
-                name = "make_file",
-                displayName = "Create File",
-                description = "Creates and saves a text-based file (TXT/HTML/JSON/Markdown etc.) to the $WORKSPACE folder",
-                isEnabled = "make_file" in enabledSet
-            ),
-
-            ToolItem(
-                name = "delete_files",
-                displayName = "Delete File(s)",
-                description = "Deletes existing file(s) from the $WORKSPACE workspace.",
-                isEnabled = "delete_files" in enabledSet
-            ),
-            ToolItem(
-                name = "get_location",
-                displayName = "Get Location",
-                description = "Gets current precise location with Plus Code, coordinates, map links, and accuracy",
-                isEnabled = "get_location" in enabledSet
-            ),
-            ToolItem(
-                name = "brave_search",
-                displayName = "Brave Web Search",
-                description = "AI-optimized web search returning extracted page content (text, tables, code). Customizable: freshness (day/week/month/year/date range), result count (1-50), context size (1K-32K tokens), relevance threshold (strict/balanced/lenient), and SafeSearch.",
-                isEnabled = "brave_search" in enabledSet
-            ),
-            ToolItem(
-                name = "brave_news",
-                displayName = "Brave News",
-                description = "Dedicated news index for recent articles from trusted outlets. Customizable: freshness (day/week/month/year/date range), article count (1-50), and SafeSearch.",
-                isEnabled = "brave_news" in enabledSet
-            ),
-            ToolItem(
-                name = "find_nearby_places",
-                displayName = "Brave Place Search",
-                description = "Finds businesses, landmarks, and POIs by location name or coordinates. Customizable: search query, location (name or lat/long), and radius in meters (default 5000).",
-                isEnabled = "find_nearby_places" in enabledSet
-            ),
-            ToolItem(
-                name = "set_timer",
-                displayName = "Set Timer",
-                description = "Launch Android timer with optional title",
-                isEnabled = "set_timer" in enabledSet
-            ),
-            ToolItem(
-                name = "set_alarm",
-                displayName = "Set Alarm",
-                description = "Create a system alarm for a specific time with optional title. Specify AM/PM." ,
-                isEnabled = "set_alarm" in enabledSet
-            ),
-
-            ToolItem(
-                name = "add_calendar_event",
-                displayName = "Add Calendar Event",
-                description = "Adds an event to the user's calendar. Provide a title and start date/time. Can also provide if all-day and a location.",
-                isEnabled = "add_calendar_event" in enabledSet
-            ),
-
-
-            ToolItem(
-                name = "list_gradation_files",
-                displayName = "List GradatiON Files",
-                description = "List files and folders in the $WORKSPACE workspace, including subfolders",
-                isEnabled = isToolEnabled("list_gradation_files", enabledSet)
-            ),
-            ToolItem(
-                name = "read_gradation_file",
-                displayName = "Read GradatiON File",
-                description = "Read a text-based file from the $WORKSPACE workspace.",
-                isEnabled = isToolEnabled("read_gradation_file", enabledSet)
+        /** Names and descriptions come from resources; `%1$s` in a description is the workspace folder. */
+        fun getAllToolItems(enabledSet: Set<String>, context: Context): List<ToolItem> {
+            fun item(name: String, @StringRes label: Int, @StringRes desc: Int, enabled: Boolean) =
+                ToolItem(name, context.getString(label), context.getString(desc, WORKSPACE), enabled)
+            return listOf(
+                item("make_file", R.string.tool_make_file_name, R.string.tool_make_file_desc, "make_file" in enabledSet),
+                item("delete_files", R.string.tool_delete_files_name, R.string.tool_delete_files_desc, "delete_files" in enabledSet),
+                item("get_location", R.string.tool_get_location_name, R.string.tool_get_location_desc, "get_location" in enabledSet),
+                item("brave_search", R.string.tool_brave_search_name, R.string.tool_brave_search_desc, "brave_search" in enabledSet),
+                item("brave_news", R.string.tool_brave_news_name, R.string.tool_brave_news_desc, "brave_news" in enabledSet),
+                item("find_nearby_places", R.string.tool_find_nearby_places_name, R.string.tool_find_nearby_places_desc, "find_nearby_places" in enabledSet),
+                item("set_timer", R.string.tool_set_timer_name, R.string.tool_set_timer_desc, "set_timer" in enabledSet),
+                item("set_alarm", R.string.tool_set_alarm_name, R.string.tool_set_alarm_desc, "set_alarm" in enabledSet),
+                item("add_calendar_event", R.string.tool_add_calendar_event_name, R.string.tool_add_calendar_event_desc, "add_calendar_event" in enabledSet),
+                item("list_gradation_files", R.string.tool_list_files_name, R.string.tool_list_files_desc, isToolEnabled("list_gradation_files", enabledSet)),
+                item("read_gradation_file", R.string.tool_read_file_name, R.string.tool_read_file_desc, isToolEnabled("read_gradation_file", enabledSet)),
+                item("create_folder", R.string.tool_create_folder_name, R.string.tool_create_folder_desc, "create_folder" in enabledSet),
+                item("open_file", R.string.tool_open_file_name, R.string.tool_open_file_desc, "open_file" in enabledSet),
+                item("edit_file", R.string.tool_edit_file_name, R.string.tool_edit_file_desc, "edit_file" in enabledSet),
+                item("copy_file", R.string.tool_copy_file_name, R.string.tool_copy_file_desc, "copy_file" in enabledSet),
+                item("process_plus_code", R.string.tool_plus_code_name, R.string.tool_plus_code_desc, "process_plus_code" in enabledSet),
+                item("start_navigation", R.string.tool_start_navigation_name, R.string.tool_start_navigation_desc, "start_navigation" in enabledSet),
+                item("get_current_datetime", R.string.tool_datetime_name, R.string.tool_datetime_desc, "get_current_datetime" in enabledSet),
+                item("open_app", R.string.tool_open_app_name, R.string.tool_open_app_desc, "open_app" in enabledSet),
+                item("search_list_apps", R.string.tool_search_apps_name, R.string.tool_search_apps_desc, "search_list_apps" in enabledSet),
+                item("set_sound_mode", R.string.tool_sound_mode_name, R.string.tool_sound_mode_desc, "set_sound_mode" in enabledSet),
+                item("wait", R.string.tool_wait_name, R.string.tool_wait_desc, "wait" in enabledSet)
             )
-            ,
-            ToolItem(
-                name = "create_folder",
-                displayName = "Create Folder",
-                description = "Creates a new subfolder in the $WORKSPACE workspace",
-                isEnabled = "create_folder" in enabledSet
-            ),
-            ToolItem(
-                name = "open_file",
-                displayName = "Open File",
-                description = "Opens an existing file from the $WORKSPACE folder using the system's default app. GradatiON has to be in the foreground for this tool to work.",
-                isEnabled = "open_file" in enabledSet
-            ),
-            ToolItem(
-                name = "edit_file",
-                displayName = "Edit File",
-                description = "Overwrites an existing file with new content. Use to update or modify files while keeping the same name.",
-                isEnabled = "edit_file" in enabledSet
-            ),
-
-            ToolItem(
-                name = "copy_file",
-                displayName = "Copy/Rename File",
-                description = "Copies a file to a new location or renames it. Automatically adds a timestamp if the destination exists to prevent overwriting.",
-                isEnabled = "copy_file" in enabledSet
-            ),
-                    ToolItem(
-                    name = "process_plus_code",
-            displayName = "Plus Code Converter",
-            description = "Convert between geographic coordinates (Lat/Long) and Plus Codes",
-            isEnabled = "process_plus_code" in enabledSet
-        ),
-            ToolItem(
-                name = "start_navigation",
-                displayName = "Start Navigation",
-                description = "Launches Google Maps turn-by-turn navigation. Options include driving, walking, bicycling, or transit modes, plus route avoidance (e.g., no tolls or highways).",
-                isEnabled = "start_navigation" in enabledSet
-            ),
-            ToolItem(
-                name = "get_current_datetime",
-                displayName = "Get Date & Time",
-                description = "Returns current date and time with day, date, time (including seconds), timezone, and UTC offset information",
-                isEnabled = "get_current_datetime" in enabledSet
-            ),
-            ToolItem(
-                name = "open_app",
-                displayName = "App Launcher / Settings",
-                description = "Opens apps by name/package OR opens specific Android settings pages.",
-                isEnabled = "open_app" in enabledSet
-            ),
-            ToolItem(
-                name = "search_list_apps",
-                displayName = "Search/List Installed Apps",
-                description = "Searches for installed apps by name or package to find the correct ID for launching.",
-                isEnabled = "search_list_apps" in enabledSet
-            ),
-            ToolItem(
-                name = "set_sound_mode",
-                displayName = "Sound Mode",
-                description = "Gets or sets the device ringer mode (Normal, Vibrate, Silent).",
-                isEnabled = "set_sound_mode" in enabledSet
-            ),
-            ToolItem(
-                name = "wait",
-                displayName = "Wait / Delay",
-                description = "Pauses execution for a specified duration (10-600 seconds). Use for timed delays between repeated actions.",
-                isEnabled = "wait" in enabledSet
-            )
-
-            // Add more tools here as your app grows
-        )
+        }
     }
 }

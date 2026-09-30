@@ -21,6 +21,12 @@ class StreamRevealAnimator(
     private var lastSetTargetMs: Long = 0L
     private val pacing = StreamRevealPacing.State()
 
+    /**
+     * Animations are off for this stream: text shows the moment it arrives, with no pacing and no
+     * frame loop. The owner reads the setting once per stream and sets this before the first word.
+     */
+    var instant: Boolean = false
+
     private val callback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNs: Long) {
             if (!running) return
@@ -92,7 +98,18 @@ class StreamRevealAnimator(
             StreamRevealPacing.noteTargetGrowth(pacing, growth, nowMs)
             lastSetTargetMs = nowMs
         }
+        if (instant) {
+            revealAllNow()
+            return
+        }
         ensureRunning()
+    }
+
+    private fun revealAllNow() {
+        if (shown >= target.length) return
+        val from = shown
+        shown = target.length
+        onFrame(target, from)
     }
 
     /** [text] is already on screen (a reply that keeps growing): reveal only what comes after it. */
@@ -109,6 +126,13 @@ class StreamRevealAnimator(
         if (shown <= 0) "" else target.substring(0, shown.coerceAtMost(target.length))
 
     fun finishFast() {
+        if (instant) {
+            stop()
+            revealAllNow()
+            finishing = false
+            onCaughtUp()
+            return
+        }
         finishing = true
         ensureRunning()
     }

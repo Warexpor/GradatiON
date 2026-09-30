@@ -15,7 +15,9 @@ import androidx.core.view.isVisible
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.core.os.bundleOf
+import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -34,7 +36,10 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         val ctx = context ?: return@registerForActivityResult
         if (uri == null) { onPhotoPicked?.invoke(false); return@registerForActivityResult }
         BackgroundPhoto.import(ctx, uri) { ok ->
-            if (!ok) GlassNotice.show(ctx, getString(R.string.settings_background_photo_failed))
+            // The picker can outlive this fragment (rotation, process death), and then the UI
+            // callback is gone: the preference is the part that must not be lost with it.
+            if (ok) SharedPreferencesHelper(ctx).saveBackgroundStyle(AmbientBackgroundView.Style.PHOTO.key)
+            else GlassNotice.show(ctx, ctx.getString(R.string.settings_background_photo_failed))
             onPhotoPicked?.invoke(ok)
         }
     }
@@ -48,7 +53,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                         requireContext().contentResolver.openOutputStream(uri)?.use { outputStream ->
                             outputStream.write(json.toByteArray())
                         }
-                        AppToast.makeText(requireContext(), "Chats exported successfully", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_chats_exported))
                     } catch (_: Exception) {
                         GlassNotice.show(requireContext(), getString(R.string.notice_export_chats_failed))
                     }
@@ -69,7 +74,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                             savedChatsViewModel.importChatsFromJson(json) { importResult ->
                                 when (importResult) {
                                     is ChatImportResult.Success ->
-                                        AppToast.makeText(requireContext(), "Chats imported successfully", AppToast.LENGTH_SHORT).show()
+                                        GlassNotice.show(requireContext(), getString(R.string.notice_chats_imported))
                                     is ChatImportResult.Error ->
                                         GlassNotice.show(requireContext(), importResult.message)
                                 }
@@ -94,6 +99,56 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
 
         bindAllControls(view)
         applySectionVisibility(view, section)
+        bindValues(view)
+        // Every dialog opened from a row edits what the row shows, so refresh when one closes.
+        childFragmentManager.registerFragmentLifecycleCallbacks(object : FragmentManager.FragmentLifecycleCallbacks() {
+            override fun onFragmentDestroyed(fm: FragmentManager, f: Fragment) {
+                if (f is DialogFragment) this@SettingsDetailFragment.view?.let { bindValues(it) }
+            }
+        }, false)
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        // Back from a sub-screen (tools, presets, LAN models...) that may have changed a value.
+        if (!hidden) view?.let { bindValues(it) }
+    }
+
+    /**
+     * The rows that open a dialog show what is set in it, so the list reads without a tap. Only
+     * the open section is bound: the key checks decrypt through the Keystore.
+     */
+    private fun bindValues(view: View) {
+        val ctx = requireContext()
+        val prefs = SharedPreferencesHelper(ctx)
+        val notSet = getString(R.string.settings_value_not_set)
+        val saved = getString(R.string.settings_value_saved)
+        fun show(rowId: Int, valueId: Int, value: String) {
+            val valueView = view.findViewById<TextView>(valueId) ?: return
+            valueView.text = value
+            // The value floats over the button, so a screen reader would only hear its label.
+            view.findViewById<TextView>(rowId)?.let {
+                it.contentDescription = getString(R.string.cd_settings_row_value, it.text, value)
+            }
+        }
+        when (section) {
+            SECTION_MODELS -> {
+                val endpoint = prefs.getLanEndpoint()?.takeIf { it.isNotBlank() }
+                val host = endpoint?.let { runCatching { java.net.URI(it).authority }.getOrNull() ?: it }
+                show(R.id.lanButton, R.id.lanValue, host ?: notSet)
+                show(R.id.apiKeyButton, R.id.apiKeyValue,
+                    if (prefs.getApiKeyFromPrefs("openrouter_api_key").isNotBlank()) saved else notSet)
+                show(R.id.braveApiKeyButton, R.id.braveApiKeyValue,
+                    if (prefs.getApiKeyFromPrefs("brave_search_api_key").isNotBlank()) saved else notSet)
+            }
+            SECTION_ADVANCED -> {
+                show(R.id.maxTokensButton, R.id.maxTokensValue, prefs.getMaxTokens())
+                show(R.id.timeoutButton, R.id.timeoutValue,
+                    getString(R.string.settings_value_minutes, prefs.getTimeoutMinutes()))
+                view.findViewById<com.google.android.material.button.MaterialButton>(R.id.chatMemoryButton)
+                    ?.text = ChatMemoryDialogFragment.label(ctx, prefs.getChatMemoryCount())
+            }
+        }
     }
 
     private fun sectionTitle(section: String): String = when (section) {
@@ -149,8 +204,6 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
 
         biometricsSwitch.isChecked = prefs.getBiometricEnabled()
         notificationsSwitch.isChecked = prefs.getNotiPreference()
-        val memoryCount = prefs.getChatMemoryCount()
-        chatMemoryButton.text = if (memoryCount == Int.MAX_VALUE) "All messages" else "$memoryCount messages"
         keepScreenOnSwitch.isChecked = prefs.getKeepScreenOnPreference()
         copyOrDismissSwitch.isChecked = prefs.getUseCopyButton2()
         animateBarOnErrorSwitch.isChecked = prefs.getAnimateBarOnError()
@@ -444,10 +497,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             chooseButton?.setText(if (has) R.string.settings_background_photo_change else R.string.settings_background_photo_choose)
         }
         fun pickPhoto() {
-            onPhotoPicked = { ok ->
-                if (ok) prefs.saveBackgroundStyle(AmbientBackgroundView.Style.PHOTO.key)
-                select(AmbientBackgroundView.Style.fromKey(prefs.getBackgroundStyle()))
-            }
+            onPhotoPicked = { _ -> select(AmbientBackgroundView.Style.fromKey(prefs.getBackgroundStyle())) }
             pickBackgroundPhoto.launch(
                 androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
             )
@@ -698,8 +748,8 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                 confirmText = getString(R.string.action_save),
             ) { text ->
                 val key = text.trim()
-                if (key.isNotEmpty()) {
-                    prefs.saveApiKey(SharedPreferencesHelper.XAI_API_KEY_ALIAS, key)
+                if (key.isNotEmpty() && !prefs.saveApiKeyKeepingOld(SharedPreferencesHelper.XAI_API_KEY_ALIAS, key)) {
+                    GlassNotice.show(ctx, getString(R.string.api_key_save_failed))
                 }
                 render()
             }

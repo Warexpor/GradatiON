@@ -227,15 +227,31 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return model?.isTranscription ?: false
     }
     /** Answers locally with a paced stream; see [DemoModel]. */
-    private val demoHttpClient: HttpClient by lazy {
+    private val demoClientDelegate = lazy {
         HttpClient(OkHttp) {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
             engine { addInterceptor(DemoModel.StreamInterceptor { isRpMode() }) }
         }
     }
+    private val demoHttpClient: HttpClient by demoClientDelegate
 
-    private fun createHttpClient(): HttpClient {
-        val timeoutMs = sharedPreferencesHelper.getTimeoutMinutes().toLong() * 60_000L
+    /** A timeout change takes effect on the next turn; swapping clients mid-stream would cut it off. */
+    private var clientsStale = false
+    private val timeoutPrefListener =
+        android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == SharedPreferencesHelper.KEY_TIMEOUT_MINUTES) clientsStale = true
+        }
+
+    /**
+     * The cloud and LAN clients differ only in their write and connect limits and in what
+     * [configureOkHttp] adds, so the rest of the setup lives here once.
+     */
+    private fun buildChatClient(
+        writeTimeoutMs: Long,
+        connectTimeoutMs: Long,
+        configureOkHttp: okhttp3.OkHttpClient.Builder.() -> Unit = {},
+    ): HttpClient {
+        val readTimeoutMs = sharedPreferencesHelper.getTimeoutMinutes().toLong() * 60_000L
         return HttpClient(OkHttp) {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
             install(DefaultRequest) {
@@ -246,54 +262,41 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 config {
                     pingInterval(56, TimeUnit.SECONDS)
                     retryOnConnectionFailure(true)
+                    configureOkHttp()
                     addInterceptor(CompressionInterceptor(Gzip))
                     addInterceptor(BrotliInterceptor)
-                    readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                    callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                    writeTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                    connectTimeout(60_000L, TimeUnit.MILLISECONDS)
+                    // The limit that matters is silence: the read timeout is how long the server may
+                    // go without sending a byte. A call timeout would also cut off a reply that is
+                    // still streaming, so it stays off; non-streamed requests carry their own withTimeout.
+                    readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
+                    callTimeout(0, TimeUnit.MILLISECONDS)
+                    writeTimeout(writeTimeoutMs, TimeUnit.MILLISECONDS)
+                    connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
                 }
             }
         }
     }
+
+    private fun createHttpClient(): HttpClient = buildChatClient(
+        writeTimeoutMs = sharedPreferencesHelper.getTimeoutMinutes().toLong() * 60_000L,
+        connectTimeoutMs = 60_000L,
+    )
+
     private fun createLanHttpClient(): HttpClient {
-        val timeoutMs = sharedPreferencesHelper.getTimeoutMinutes().toLong() * 60_000L
         val trustSelfSignedLan = sharedPreferencesHelper.getTrustSelfSignedLan()
-
-        return HttpClient(OkHttp) {
-            install(ContentNegotiation) {
-                json(Json { ignoreUnknownKeys = true })
-            }
-            install(DefaultRequest) {
-                header("User-Agent", "GradatiON/${BuildConfig.VERSION_NAME}")
-            }
-
-            engine {
-                clientCacheSize = 0
-                config {
-                    pingInterval(56, TimeUnit.SECONDS)
-                    retryOnConnectionFailure(true)
-                    connectionPool(okhttp3.ConnectionPool(3, 90, TimeUnit.SECONDS))
-                    if (trustSelfSignedLan) {
-                        val trustAllCerts = object : X509TrustManager {
-                            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-                        }
-                        val sslContext = SSLContext.getInstance("SSL")
-                        sslContext.init(null, arrayOf(trustAllCerts), SecureRandom())
-
-                        sslSocketFactory(sslContext.socketFactory, trustAllCerts)
-                        hostnameVerifier { _, _ -> true }
-                    }
-
-                    addInterceptor(CompressionInterceptor(Gzip))
-                    addInterceptor(BrotliInterceptor)
-                    readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                    callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                    writeTimeout(30_000L, TimeUnit.MILLISECONDS)
-                    connectTimeout(30_000L, TimeUnit.MILLISECONDS)
+        return buildChatClient(writeTimeoutMs = 30_000L, connectTimeoutMs = 30_000L) {
+            connectionPool(okhttp3.ConnectionPool(3, 90, TimeUnit.SECONDS))
+            if (trustSelfSignedLan) {
+                val trustAllCerts = object : X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
                 }
+                val sslContext = SSLContext.getInstance("SSL")
+                sslContext.init(null, arrayOf(trustAllCerts), SecureRandom())
+
+                sslSocketFactory(sslContext.socketFactory, trustAllCerts)
+                hostnameVerifier { _, _ -> true }
             }
         }
     }
@@ -503,6 +506,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun startNetworkJob(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
         networkJob?.cancel()
         activeStreamPump?.cancel()
+        if (clientsStale) {
+            clientsStale = false
+            refreshHttpClient()
+        }
         val job = viewModelScope.launch {
             try {
                 block()
@@ -589,7 +596,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             content = JsonPrimitive(ThinkingPlaceholder.TOKEN)
         )
 
+        /** Starts every error reply; the adapter and the fragment recognise an error bubble by it. */
+        const val ERROR_BUBBLE_PREFIX = "**Error:**\n---\n"
+        private const val MAX_GENERATED_IMAGE_BYTES = 25L * 1024 * 1024
+        private const val TITLE_SOURCE_MESSAGES = 4
+        private const val TITLE_SOURCE_MESSAGE_CHARS = 700
+        private const val TITLE_SOURCE_CHARS = 2000
     }
+
+    private fun str(@androidx.annotation.StringRes id: Int, vararg args: Any?): String =
+        getApplication<Application>().getString(id, *args)
     //val generatedImages = mutableMapOf<Int, String>()
     private var pendingUserImageUri: String? = null  // String (toString())
     private var httpClient: HttpClient
@@ -619,14 +635,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             refreshActiveRpCharacter()
             restoreDraftOrNewChat(_chatMode.value ?: ChatMode.ASK)
         }
-        sharedPreferencesHelper.setTimeoutChangedListener(object :
-            SharedPreferencesHelper.OnTimeoutChangedListener {
-            override fun onTimeoutChanged(newMinutes: Int) {
-                refreshHttpClient()
-            }
-        })
         httpClient = createHttpClient()
         lanHttpClient = createLanHttpClient()
+        // The Settings dialog writes through its own SharedPreferencesHelper, so the change has to
+        // be heard on the shared preferences file itself. The listener is kept in a field because
+        // SharedPreferences holds it weakly.
+        sharedPreferencesHelper.mainPrefs.registerOnSharedPreferenceChangeListener(timeoutPrefListener)
         migrateOpenRouterModels()
         allOpenRouterModels = sharedPreferencesHelper.getOpenRouterModels()
         _activeChatModel.value = sharedPreferencesHelper.getPreferenceModelnew()
@@ -650,8 +664,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        sharedPreferencesHelper.mainPrefs.unregisterOnSharedPreferenceChangeListener(timeoutPrefListener)
         httpClient.close()
         lanHttpClient.close()
+        if (demoClientDelegate.isInitialized()) demoHttpClient.close()
     }
 
     fun setModel(model: String) {
@@ -666,6 +682,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // Restore mid-regen first so a truncated hole isn't autosaved into the old session.
         cancelCurrentRequest(restoreSwipeAlt = true)
         sessionEpoch++
+        rpMemoryJob?.cancel() // Its note was written for the chat being left.
         sessionTransitionJob?.cancel()
         val job = viewModelScope.launch { block() }
         sessionTransitionJob = job
@@ -866,10 +883,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 // Skip title LLM — character name (+ first user snippet) or LLM label/snippet.
                 buildRpAutosaveTitle(messages, isLlmAtSave)
             } else {
+                // A failed title request returns null; a cancelled one must keep cancelling.
                 val title = try {
-                    var suggested = getSuggestedChatTitle()
-                    if (suggested != null && suggested.startsWith("Error:")) suggested = null
-                    suggested
+                    getSuggestedChatTitle()
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) {
                     null
                 }
@@ -1067,8 +1085,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun saveTxtToDownloads(rawTxt: String) = writeDownload(
-        success = "✅ TXT saved to Downloads!",
-        failure = { "❌ TXT save failed: ${it.message}" },
+        success = str(R.string.save_txt_ok),
+        failure = { str(R.string.save_txt_failed, it.message) },
     ) {
         saveFileToDownloads("chat-${System.currentTimeMillis()}.txt", rawTxt, "text/plain")
     }
@@ -1282,7 +1300,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         return withContext(Dispatchers.IO) {
-            runCatching {
+            // Not runCatching: that would turn the caller's cancellation into a failed transcription.
+            try {
                 val response = when (engine) {
                     VoiceEngine.GROK -> {
                         val xaiKey = sharedPreferencesHelper.getApiKeyFromPrefs(SharedPreferencesHelper.XAI_API_KEY_ALIAS)
@@ -1340,7 +1359,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 if (!response.status.isSuccess()) error("Transcription failed: ${response.status.value}")
-                response.body<JsonObject>()["text"]?.jsonPrimitive?.content?.trim().orEmpty()
+                Result.success(response.body<JsonObject>()["text"]?.jsonPrimitive?.content?.trim().orEmpty())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Result.failure(e)
             }
         }
     }
@@ -1358,7 +1381,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 })
             }
-            transcriptionText(response, "Transcription failed")
+            transcriptionText(response, R.string.transcription_failed)
         }
     }
 
@@ -1378,7 +1401,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             ) {
                 header("Authorization", "Bearer ${sharedPreferencesHelper.getLanApiKeyForRequest()}")
             }
-            transcriptionText(response, "LAN Transcription failed")
+            transcriptionText(response, R.string.transcription_lan_failed)
         }
     }
 
@@ -1425,12 +1448,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun transcriptionText(response: io.ktor.client.statement.HttpResponse, failurePrefix: String): String {
+    private suspend fun transcriptionText(
+        response: io.ktor.client.statement.HttpResponse,
+        @androidx.annotation.StringRes failureText: Int,
+    ): String {
         if (!response.status.isSuccess()) {
-            val errorBody = try { response.bodyAsText() } catch (_: Exception) { "No details" }
-            throw Exception("$failurePrefix: ${response.status} - $errorBody")
+            val errorBody = try { response.bodyAsText() } catch (e: CancellationException) { throw e } catch (_: Exception) { "No details" }
+            throw Exception(str(failureText, response.status, errorBody))
         }
-        return response.body<JsonObject>()["text"]?.jsonPrimitive?.content ?: "No transcription received."
+        return response.body<JsonObject>()["text"]?.jsonPrimitive?.content ?: str(R.string.transcription_empty)
     }
     fun updateMessageAt(position: Int, newContent: String) {
         val currentList = _chatMessages.value ?: return
@@ -1577,11 +1603,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (!activeModelIsLan()) return true
         val lanEndpoint = sharedPreferencesHelper.getLanEndpoint()
         if (lanEndpoint == null) {
-            AppToast.makeText(
-                getApplication<Application>().applicationContext,
-                getApplication<Application>().getString(R.string.toast_lan_endpoint_missing),
-                AppToast.LENGTH_SHORT
-            ).show()
+            _toastUiEvent.postValue(Event(str(R.string.toast_lan_endpoint_missing)))
             return false
         }
         activeChatUrl = "$lanEndpoint/v1/chat/completions"
@@ -1612,6 +1634,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         streamTransport.handleNonStreamedResponse(modelForRequest, messagesForApiRequest, thinkingMessage)
                     }
                 }
+            } catch (e: TimeoutCancellationException) {
+                // The request's own withTimeout, not Stop: the job is alive, and the user should
+                // hear that the request ran out of time rather than see the bubble vanish.
+                handleError(e, thinkingMessage)
             } catch (e: CancellationException) {
                 withContext(Dispatchers.Main) {
                     val wasRpRegen = pendingRpSwipeAppend
@@ -1706,7 +1732,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun writeDownload(
         success: String,
-        failure: (Exception) -> String = { "❌ Save failed: ${it.message}" },
+        failure: (Exception) -> String = { str(R.string.save_failed_detail, it.message) },
         write: () -> Unit,
     ) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -1730,7 +1756,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         null,
                         FlexibleMessage(
                             role = "assistant",
-                            content = JsonPrimitive("**Error:**\n---\nTool follow-up recursion limit reached.")
+                            content = JsonPrimitive(ERROR_BUBBLE_PREFIX + str(R.string.error_tool_followup_limit))
                         )
                     )
                 }
@@ -1757,6 +1783,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 streamTransport.handleNonStreamedResponseLAN(modelForRequest, messages, toolThinkingMessage)
             } else {
                 streamTransport.handleNonStreamedResponse(modelForRequest, messages, toolThinkingMessage)
+            }
+        } catch (e: TimeoutCancellationException) {
+            withContext(Dispatchers.Main) {
+                handleError(e, toolThinkingMessage)
             }
         } catch (e: CancellationException) {
             withContext(Dispatchers.Main) {
@@ -1885,11 +1915,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val errorMsg = when (e) {
             is ClientRequestException -> {
                 // Handle in a coroutine scope
-                var errorText = "**Error:**\n---\nClient error: ${e.response.status}. Check your input."
+                var errorText = ERROR_BUBBLE_PREFIX + str(R.string.error_client_request, e.response.status)
                 viewModelScope.launch {
                     try {
                         val errorBody = e.response.bodyAsText()
-                        errorText = "**Error:**\n---\n${parseOpenRouterError(errorBody)}"
+                        errorText = ERROR_BUBBLE_PREFIX + parseOpenRouterError(errorBody)
                     } catch (parseError: Exception) {
                         // Keep the default error text
                     }
@@ -1903,11 +1933,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             is ServerResponseException -> {
                 // Handle in a coroutine scope
-                var errorText = "**Error:**\n---\nServer error: ${e.response.status}. Try later."
+                var errorText = ERROR_BUBBLE_PREFIX + str(R.string.error_server_request, e.response.status)
                 viewModelScope.launch {
                     try {
                         val errorBody = e.response.bodyAsText()
-                        errorText = "**Error:**\n---\n${parseOpenRouterError(errorBody)}"
+                        errorText = ERROR_BUBBLE_PREFIX + parseOpenRouterError(errorBody)
                     } catch (parseError: Exception) {
                         // Keep the default error text
                     }
@@ -1920,13 +1950,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 errorText // Return initial message for immediate display
             }
             is TimeoutCancellationException, is SocketTimeoutException ->
-                "**Error:**\n---\nRequest timed out after 90 seconds. Please try again."
-            is IOException -> "**Error:**\n---\nNetwork error: Check your connection."
-            else -> """
-            **Error:**
-            ---
-            ${e.localizedMessage ?: "Unknown error occurred"}
-            """.trimIndent()
+                ERROR_BUBBLE_PREFIX + str(R.string.error_request_timeout, sharedPreferencesHelper.getTimeoutMinutes())
+            is IOException -> ERROR_BUBBLE_PREFIX + str(R.string.error_network)
+            else -> ERROR_BUBBLE_PREFIX + (e.localizedMessage ?: str(R.string.error_unknown))
         }
 
         // For non-suspend errors, update immediately
@@ -1950,6 +1976,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         sessionTransitionJob?.cancel()
         sessionTransitionJob = null
         sessionEpoch++
+        rpMemoryJob?.cancel()
         clearOpenTranscript()
     }
 
@@ -2184,9 +2211,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (remaining != null) {
                 val formattedCredits = String.format("%.4f", remaining)
-                _creditsResult.postValue(Event("Remaining Credits: $formattedCredits"))
+                _creditsResult.postValue(Event(str(R.string.credits_remaining, formattedCredits)))
             } else {
-                _creditsResult.postValue(Event("Failed to retrieve credits."))
+                _creditsResult.postValue(Event(str(R.string.credits_failed)))
             }
         }
     }
@@ -2201,7 +2228,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val first = _chatMessages.value.orEmpty().firstOrNull { it.role == "user" }
             return DemoModel.titleFor(first?.let { getMessageText(it.content) }.orEmpty())
         }
-        val chatContent = getFormattedChatHistory()
+        // A title needs the gist, not the whole chat: the opening turns, capped.
+        val chatContent = _chatMessages.value.orEmpty()
+            .filter { (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it) }
+            .take(TITLE_SOURCE_MESSAGES)
+            .joinToString("\n\n") { message ->
+                val speaker = if (message.role == "user") "User" else "AI"
+                "$speaker: ${getMessageText(message.content).trim().take(TITLE_SOURCE_MESSAGE_CHARS)}"
+            }
+            .take(TITLE_SOURCE_CHARS)
 
         // 1. Get the current provider (important for llama.cpp logic)
         val lanProvider = sharedPreferencesHelper.getLanProvider()
@@ -2286,128 +2321,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         it.role == "assistant" && !it.imageUri.isNullOrEmpty()
     } ?: false
 
-
-
-
-
-    fun saveFileWithName(fileName: String, extension: String, content: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val cleanName = fileName.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                val cleanExtension = extension.trim().removePrefix(".")
-
-                if (cleanName.isEmpty() || cleanExtension.isEmpty()) {
-                    _toolUiEvent.postValue(Event("❌ File name and extension required"))
-                    return@launch
-                }
-
-                // Strip markdown code fences if present (e.g., ```js ... ```)
-                val cleanContent = content.replace(Regex("""^```[a-zA-Z0-9]*\n?|\n?```$"""), "").trim()
-
-                val fullFileName = "$cleanName.$cleanExtension"
-
-                val mimeType = when (cleanExtension.lowercase()) {
-                    "txt" -> "text/plain"
-                    "md", "markdown" -> "text/markdown"
-                    "html", "htm" -> "text/html"
-                    "json" -> "application/json"
-                    "xml" -> "application/xml"
-                    "js", "javascript" -> "application/javascript"
-                    "kt", "kotlin" -> "text/x-kotlin"
-                    "java" -> "text/x-java-source"
-                    "py", "python" -> "text/x-python"
-                    "css" -> "text/css"
-                    "csv" -> "text/csv"
-                    "yaml", "yml" -> "application/x-yaml"
-                    "sql" -> "application/sql"
-                    "sh", "bash" -> "application/x-sh"
-                    "c", "cpp", "h", "hpp" -> "text/x-c"
-                    "cs" -> "text/x-csharp"
-                    "go" -> "text/x-go"
-                    "rs", "rust" -> "text/x-rust"
-                    "swift" -> "text/x-swift"
-                    "php" -> "application/x-php"
-                    "rb", "ruby" -> "text/x-ruby"
-                    else -> "text/plain"
-                }
-
-                saveFileToDownloads(fullFileName, cleanContent, mimeType)
-                _toolUiEvent.postValue(Event("✅ Saved: $fullFileName"))
-            } catch (e: Exception) {
-                _toolUiEvent.postValue(Event("❌ Save failed: ${e.message}"))
-            }
-        }
-    }
-    fun saveBitmapToDownloads(bitmap: Bitmap, format: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val ext = when (format) {
-                    "png" -> "png"
-                    "webp" -> "webp"
-                    "jpg" -> "jpg"
-                    else -> "png"
-                }
-                val mimeType = when (format) {
-                    "png" -> "image/png"
-                    "webp" -> "image/webp"
-                    "jpg" -> "image/jpeg"
-                    else -> "image/png"
-                }
-
-                val saved = saveBitmapToDownloadsNow(
-                    filename = "chat-item-${System.currentTimeMillis()}.$ext",
-                    bitmap = bitmap,
-                    mimeType = mimeType,
-                    format = format
-                )
-
-                if (saved) {
-                    _toolUiEvent.postValue(Event("✅ Screenshot saved to Downloads!"))
-                } else {
-                    _toolUiEvent.postValue(Event("❌ Save failed"))
-                }
-            } catch (e: Exception) {
-                _toolUiEvent.postValue(Event("❌ Save failed: ${e.message}"))
-            }
-        }
-    }
-    private fun saveBitmapToDownloadsNow(filename: String, bitmap: Bitmap, mimeType: String, format: String): Boolean {
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-            //put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            put(MediaStore.MediaColumns.RELATIVE_PATH, WorkspacePaths.mediaStoreRelativePath())
-        }
-
-        val uri = getApplication<Application>().contentResolver
-            .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: return false
-
-        getApplication<Application>().contentResolver.openOutputStream(uri)?.use { out ->
-            when (format) {
-                "png" -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                "webp" -> bitmap.compress(Bitmap.CompressFormat.WEBP, 72, out)
-                "jpg" -> bitmap.compress(Bitmap.CompressFormat.JPEG, 72, out)
-                else -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) // fallback
-            }
-            return true
-        }
-
-        return false
-    }
-    fun saveMarkdownToDownloads(rawMarkdown: String) = writeDownload("✅ Markdown saved to Downloads!") {
+    fun saveMarkdownToDownloads(rawMarkdown: String) = writeDownload(str(R.string.save_markdown_ok)) {
         saveFileToDownloads("chat-${System.currentTimeMillis()}.md", rawMarkdown, "text/markdown")
     }
 
-    fun saveTextToDownloads(text: String) = writeDownload("✅ Text saved to Downloads!") {
-        saveFileToDownloads("chat-${System.currentTimeMillis()}.txt", text, "text/plain")
-    }
-
-    fun saveHtmlSingleToDownloads(htmlContent: String) = writeDownload("✅ HTML saved to Downloads!") {
-        saveFileToDownloads("chat-${System.currentTimeMillis()}.html", htmlContent, "text/html")
-    }
-
-    fun saveHtmlToDownloads(innerHtml: String) = writeDownload("✅ HTML saved to Downloads!") {
+    fun saveHtmlToDownloads(innerHtml: String) = writeDownload(str(R.string.save_html_ok)) {
         val currentModel = _activeChatModel.value ?: "Unknown"
         val dateTime = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.getDefault()).format(Date())
         val filename = "${currentModel.replace("/", "-")}_$dateTime.html"
@@ -2536,7 +2454,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         buildString {
             // Title
             append("""
-                <h1 style="text-align: center; margin-bottom: 1em;">Chat with $currentModel</h1>
+                <h1 style="text-align: center; margin-bottom: 1em;">Chat with ${escapeHtmlText(currentModel)}</h1>
                 <hr style="border: 0; border-top: 1px solid #000; margin-bottom: 2em;" />
             """.trimIndent())
 
@@ -2584,8 +2502,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun saveEpubToDownloads(innerHtml: String) = writeDownload(
-        success = "✅ EPUB saved to Downloads!",
-        failure = { "❌ EPUB save failed: ${it.message}" },
+        success = str(R.string.save_epub_ok),
+        failure = { str(R.string.save_epub_failed, it.message) },
     ) {
         val currentModel = _activeChatModel.value ?: "Unknown"
         val dateTime = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.getDefault()).format(Date())
@@ -2630,7 +2548,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 |<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 |<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 |<head>
-|<title>$title</title>
+|<title>${escapeHtmlText(title)}</title>
 |<style>
 |body { font-family: sans-serif; margin: 5px; padding: 0; }
 |img { max-width: 100%; height: auto; display: block; margin-top: 0.5em; }
@@ -2933,24 +2851,41 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         withContext(Dispatchers.IO) {
             imageUrls.forEachIndexed { index, imageUrl ->
                 try {
-                    val base64Data = imageUrl.substringAfter(",")
-                    val imageBytes = Base64.getDecoder().decode(base64Data)
-                    val timestamp = System.currentTimeMillis()
-                    val filename = "generated_image_${timestamp}.png"
-                    val uri = writeBytesToDownloads(filename, "image/png", imageBytes)
+                    // Providers return either a base64 data URL or, for some image models, a plain https link.
+                    val (imageBytes, mimeType) = if (imageUrl.startsWith("https://")) {
+                        fetchGeneratedImage(imageUrl)
+                    } else {
+                        val mime = imageUrl.substringAfter("data:", "").substringBefore(";").ifBlank { "image/png" }
+                        Base64.getDecoder().decode(imageUrl.substringAfter(",")) to mime
+                    }
+                    val extension = when (mimeType) {
+                        "image/jpeg", "image/jpg" -> "jpg"
+                        "image/webp" -> "webp"
+                        else -> "png"
+                    }
+                    val filename = "generated_image_${System.currentTimeMillis()}_$index.$extension"
+                    val uri = writeBytesToDownloads(filename, mimeType, imageBytes)
                     downloadedUris.add(uri.toString())
-
-                    withContext(Dispatchers.Main) {
-                        AppToast.makeText(getApplication<Application>().applicationContext, "Image downloaded: $filename", AppToast.LENGTH_SHORT).show()
-                    }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        AppToast.makeText(getApplication<Application>().applicationContext, "Failed to download image: ${e.message}", AppToast.LENGTH_SHORT).show()
-                    }
+                    _toastUiEvent.postValue(Event(str(R.string.image_download_failed, e.message)))
                 }
             }
         }
         return downloadedUris  // NEW: Return list
+    }
+
+    private suspend fun fetchGeneratedImage(url: String): Pair<ByteArray, String> {
+        val response = httpClient.get(url)
+        if (!response.status.isSuccess()) error(response.status.toString())
+        val length = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        if (length != null && length > MAX_GENERATED_IMAGE_BYTES) error("image too large")
+        val bytes = response.body<ByteArray>()
+        if (bytes.size > MAX_GENERATED_IMAGE_BYTES) error("image too large")
+        val mime = response.headers[HttpHeaders.ContentType]?.substringBefore(";")?.trim()
+            ?.takeIf { it.startsWith("image/") } ?: "image/png"
+        return bytes to mime
     }
     fun getActiveLlmModel(): LlmModel? {
         val id = _activeChatModel.value ?: return null
@@ -2980,11 +2915,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: CancellationException) {
                 if (e is TimeoutCancellationException) {
                     _lanModels.value = emptyList()
-                    _toastUiEvent.value = Event("LAN models timeout (10s, $provider). Check server/endpoint.")
+                    _toastUiEvent.value = Event(str(R.string.lan_models_timeout, provider))
                 }
             } catch (e: Exception) {
                 _lanModels.value = emptyList()
-                _toastUiEvent.value = Event("LAN fetch failed ($provider): ${e.message}")
+                _toastUiEvent.value = Event(str(R.string.lan_models_failed, provider, e.message))
             }
         }
     }
@@ -3173,14 +3108,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             "Unknown error format: ${responseText.take(200)}"
         }
     }
+    private fun escapeHtmlText(text: String): String = text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;")
+
     private fun markdownToHtmlFragment(markdown: String): String {
         // ✅ Core + TABLES EXTENSION (renders | Col | perfectly)
         val parser = Parser.builder()
             .extensions(listOf(TablesExtension.create()))  // ✅ Tables magic
             .build()
 
+        // Replies are untrusted and the export opens in a browser (and runs the copy script), so raw
+        // HTML is shown as text and script-capable link targets are dropped.
         val renderer = HtmlRenderer.builder()
             .extensions(listOf(TablesExtension.create()))  // ✅ Renderer too
+            .escapeHtml(true)
+            .sanitizeUrls(true)
             .build()
 
         val document = parser.parse(markdown)
@@ -3239,7 +3185,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         buildString {
             append("""
-            <h1 style="color: #24292f; font-size: 2em; font-weight: 600; border-bottom: 1px solid #eaecef; padding-bottom: .3em; margin: 0 0 1em 0;">Chat with $currentModel</h1>
+            <h1 style="color: #24292f; font-size: 2em; font-weight: 600; border-bottom: 1px solid #eaecef; padding-bottom: .3em; margin: 0 0 1em 0;">Chat with ${escapeHtmlText(currentModel)}</h1>
             <div style="margin-top: 2em;"></div>
         """.trimIndent())
 
@@ -3639,6 +3585,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             else "https://openrouter.ai/api/v1/chat/completions"
         val apiKey = if (isLan) sharedPreferencesHelper.getLanApiKeyForRequest() else activeChatApiKey
         if (endpoint == null || (!isLan && !demo && apiKey.isBlank())) return
+        // Which chat this note is for: the session (null while it is still unsaved) and the open-chat epoch.
+        val launchSessionId = currentSessionId
+        val launchEpoch = sessionEpoch
         rpMemoryJob = viewModelScope.launch(Dispatchers.IO) {
             val reply = llmService.completeOnce(
                 prompt = prompt,
@@ -3651,9 +3600,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 client = if (demo) demoHttpClient else if (isLan) lanHttpClient else null
             )
             val note = RpAutoMemory.clean(reply)
-            // The user may have switched characters meanwhile; the note belongs to the one it was built for.
-            if (note != null) saveCurrentRpFacts(note)
-            rpMemoryRunAt[sessionKey] = RpAutoMemory.watermarkAfter(previousRun, turns.size, note != null)
+            // The user may have switched chats meanwhile; the note belongs to the one it was built for.
+            withContext(Dispatchers.Main) {
+                if (note != null) {
+                    // A chat that was unsaved at launch may have been saved since, which is still the same chat.
+                    val sameChat = sessionEpoch == launchEpoch &&
+                        (launchSessionId == null || currentSessionId == launchSessionId)
+                    if (sameChat) {
+                        saveCurrentRpFacts(note)
+                    } else if (launchSessionId != null && repository.getSessionById(launchSessionId) != null) {
+                        sharedPreferencesHelper.saveRpFacts(launchSessionId, note)
+                    }
+                }
+                rpMemoryRunAt[sessionKey] = RpAutoMemory.watermarkAfter(previousRun, turns.size, note != null)
+            }
         }
     }
 

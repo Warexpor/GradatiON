@@ -43,7 +43,7 @@ class ChooserActivity : AppCompatActivity() {
 
         // NEW: Get the active model's display name
         val vm = ViewModelProvider(this, AppViewModelFactory(application))[ChatViewModel::class.java]
-        val modelDisplayName = vm.getModelDisplayName(vm.activeChatModel.value ?: "Unknown Model")
+        val modelDisplayName = vm.getModelDisplayName(vm.activeChatModel.value ?: getString(R.string.unknown_model))
 
         // Inflate custom dialog view
         val dialogView = layoutInflater.inflate(R.layout.dialog_chooser, null)

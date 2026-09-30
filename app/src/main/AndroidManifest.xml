@@ -85,7 +85,7 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <intent-filter android:label="Prompt">
+            <intent-filter android:label="@string/share_target_prompt">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
@@ -132,7 +132,7 @@
         </activity>
         <activity
             android:name=".SpellCheckActivity"
-            android:label="Fix with GradatiON"
+            android:label="@string/share_target_fix"
             android:theme="@style/Theme.Grokion.AIFix"
             android:exported="true"
             android:excludeFromRecents="true"
@@ -155,7 +155,7 @@
 
             android:windowSoftInputMode="stateAlwaysHidden"
             android:theme="@style/Theme.Grokion">
-            <intent-filter android:label="Auto Send">
+            <intent-filter android:label="@string/share_target_autosend">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
@@ -169,7 +169,7 @@
 
             android:windowSoftInputMode="stateAlwaysHidden"
             android:theme="@style/Theme.Grokion">
-            <intent-filter android:label="System Message Chooser">
+            <intent-filter android:label="@string/share_target_system_message">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
@@ -183,7 +183,7 @@
 
             android:windowSoftInputMode="stateAlwaysHidden"
             android:theme="@style/Theme.Grokion">
-            <intent-filter android:label="Presets">
+            <intent-filter android:label="@string/share_target_presets">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />

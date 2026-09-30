@@ -94,10 +94,10 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             val nm = context.getSystemService(NotificationManager::class.java) ?: return
             val channel = NotificationChannel(
                 ANSWER_CHANNEL_ID,
-                "Answers",
+                context.getString(R.string.notif_channel_answers),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Notifies when your answer is ready"
+                description = context.getString(R.string.notif_channel_answers_desc)
             }
             nm.createNotificationChannel(channel)
             // Leave legacy Connectivity channel disabled-looking if it already exists;
@@ -181,9 +181,9 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
                 .setAutoCancel(true)
 
             if (!ttsActive) {
-                builder.addAction(android.R.drawable.ic_media_play, "Speak", togglePendingIntent)
+                builder.addAction(android.R.drawable.ic_media_play, context.getString(R.string.notif_action_speak), togglePendingIntent)
             } else {
-                builder.addAction(android.R.drawable.ic_media_pause, "Stop", togglePendingIntent)
+                builder.addAction(android.R.drawable.ic_media_pause, context.getString(R.string.notif_action_stop), togglePendingIntent)
             }
 
             val mainPrefs = context.getSharedPreferences("MainAppPrefs", Context.MODE_PRIVATE)
@@ -191,15 +191,15 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             val useCopyButton2 = mainPrefs.getBoolean("use_copy_button2", false)
 
             if (useCopyButton2) {
-                builder.addAction(android.R.drawable.ic_input_get, "Copy", copyPendingIntent)
+                builder.addAction(android.R.drawable.ic_input_get, context.getString(R.string.action_copy), copyPendingIntent)
             } else {
-                builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPendingIntent)
+                builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.notif_action_dismiss), dismissPendingIntent)
             }
 
             if (useCopyButton) {
-                builder.addAction(android.R.drawable.ic_input_get, "Copy", copyPendingIntent)
+                builder.addAction(android.R.drawable.ic_input_get, context.getString(R.string.action_copy), copyPendingIntent)
             } else {
-                builder.addAction(android.R.drawable.ic_menu_info_details, "Open", pendingIntent)
+                builder.addAction(android.R.drawable.ic_menu_info_details, context.getString(R.string.notif_action_open), pendingIntent)
             }
 
             if (silent) {

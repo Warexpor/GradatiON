@@ -49,13 +49,12 @@ class LlmService(
                         isReasoningModel = isReasoningModel,
                     ),
                 )
-                if (!response.status.isSuccess()) {
-                    val errorBody = try { response.bodyAsText() } catch (_: Exception) { "No details available" }
-                    return@withTimeout "Error: API request failed with status ${response.status.value} - $errorBody"
-                }
-                val content = response.body<ChatResponse>().choices.firstOrNull()?.message?.content?.trim()
-                if (content.isNullOrBlank()) "Untitled Chat" else content
+                if (!response.status.isSuccess()) return@withTimeout null
+                response.body<ChatResponse>().choices.firstOrNull()?.message?.content?.trim()?.ifBlank { null }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // A timeout is just "no title"; any other cancellation belongs to the caller.
+            if (e is TimeoutCancellationException) null else throw e
         } catch (_: Exception) {
             null
         }

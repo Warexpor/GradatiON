@@ -103,10 +103,12 @@ class PresetEditFragment : Fragment() {
         streamingSwitch.isChecked = false // default: off
         reasoningSwitch.isChecked = true // default: on
         conversationSwitch.isChecked = false // default: off
+        titleInput.inputLayout()?.clearErrorOnEdit()
+        modelAutoComplete.inputLayout()?.clearErrorOnEdit()
     }
 
     private fun setupToolbar() {
-        toolbar.title = if (editingPreset == null) "Create Preset" else "Edit Preset"
+        toolbar.title = getString(if (editingPreset == null) R.string.preset_edit_create_title else R.string.preset_edit_edit_title)
         toolbar.setNavigationOnClickListener {
             parentFragmentManager.popBackStack()
         }
@@ -163,7 +165,7 @@ class PresetEditFragment : Fragment() {
         val allModels = getAllModels()
         val matched = allModels.find { it.apiIdentifier.equals(preset.modelIdentifier, ignoreCase = true) }
         val modelDisplayName = matched?.let { ModelNames.withoutProvider(it.displayName, it.apiIdentifier) }
-            ?: "Missing: ${preset.modelIdentifier}"
+            ?: getString(R.string.preset_model_missing, preset.modelIdentifier)
         modelAutoComplete.setText(modelDisplayName, false)
         selectedModelIdentifier = preset.modelIdentifier
 
@@ -231,16 +233,16 @@ class PresetEditFragment : Fragment() {
     private fun save() {
         val title = titleInput.text?.toString()?.trim().orEmpty()
         if (title.isEmpty()) {
-            titleInput.error = "Title is required"
+            titleInput.inputLayout()?.error = getString(R.string.preset_edit_title_required)
             return
         }
 
         val model = getSelectedModel()
         if (model == null) {
-            // Show error but don't block - allow saving with missing model (shows as "Missing: ...")
+            // A name that no longer matches a model still saves (it shows as "Missing: ..."); a blank one can't.
             val modelName = modelAutoComplete.text.toString().trim()
             if (modelName.isEmpty()) {
-                // Still empty, show error
+                modelAutoComplete.inputLayout()?.error = getString(R.string.preset_edit_model_required)
                 return
             }
         }
@@ -267,10 +269,14 @@ class PresetEditFragment : Fragment() {
         val repo = PresetRepository(requireContext())
         repo.upsert(preset)
 
-        AppToast.makeText(requireContext(),
-            if (editingPreset == null) "Preset created" else "Preset saved",
-            AppToast.LENGTH_SHORT).show()
         parentFragmentManager.popBackStack()
+    }
+
+    /** The TextInputLayout around this field, where errors show. */
+    private fun View.inputLayout(): com.google.android.material.textfield.TextInputLayout? {
+        var p = parent
+        while (p != null && p !is com.google.android.material.textfield.TextInputLayout) p = p.parent
+        return p as? com.google.android.material.textfield.TextInputLayout
     }
 
     companion object {

@@ -49,7 +49,8 @@ class PromptLibraryFragment : Fragment() {
                         requireContext().contentResolver.openOutputStream(uri)?.use { outputStream ->
                             outputStream.write(json.toByteArray())
                         }
-                        AppToast.makeText(requireContext(), "Prompts exported successfully", AppToast.LENGTH_SHORT).show()
+                        // The picker closes onto this same screen, so silence would read as a no-op.
+                        GlassNotice.show(requireContext(), getString(R.string.notice_prompts_exported))
                     } catch (e: Exception) {
                         GlassNotice.show(requireContext(), getString(R.string.notice_export_prompts_failed))
                     }
@@ -78,7 +79,7 @@ class PromptLibraryFragment : Fragment() {
                             }
                             sharedPreferencesHelper.saveCustomPrompts(currentPrompts)
                             loadPrompts()
-                            AppToast.makeText(requireContext(), "Prompts imported successfully", AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.notice_prompts_imported))
                         } else {
                             throw Exception("Failed to read file content.")
                         }
@@ -103,7 +104,7 @@ class PromptLibraryFragment : Fragment() {
 
         val searchItem = toolbar.menu.findItem(R.id.action_search)
         searchView = searchItem.actionView as SearchView
-        searchView.queryHint = "Search prompts..."
+        searchView.queryHint = getString(R.string.search_prompts_hint)
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean = true
             override fun onQueryTextChange(newText: String?): Boolean {
@@ -177,7 +178,8 @@ class PromptLibraryFragment : Fragment() {
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Prompt", prompt.prompt)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(requireContext(), "Copied to clipboard: ${prompt.title}", AppToast.LENGTH_SHORT).show()
+                // Android 12 has no system clipboard confirmation, and the screen closes right after.
+                GlassNotice.show(requireContext(), getString(R.string.notice_prompt_copied, prompt.title))
 
                 // Disappear fragments back to ChatFragment
                 clearAllFragmentsAndGoToChat()

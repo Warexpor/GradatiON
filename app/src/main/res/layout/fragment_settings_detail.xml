@@ -665,25 +665,43 @@
                     android:paddingTop="4dp"
                     android:paddingBottom="4dp">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/lanButton"
-                        style="@style/Widget.Grokion.Button.Text"
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="start|center_vertical"
-                        android:minHeight="56dp"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="@string/settings_lan"
-                        android:textColor="@color/xai_ink"
-                        android:textSize="16sp"
-                        app:backgroundTint="@android:color/transparent"
-                        app:icon="@drawable/ic_local_network"
-                        app:iconGravity="start"
-                        app:iconPadding="16dp"
-                        app:iconSize="22dp"
-                        app:iconTint="@color/xai_ink"
-                        app:rippleColor="@color/press_ripple_none" />
+                        android:layout_height="wrap_content">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/lanButton"
+                            style="@style/Widget.Grokion.Button.Text"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="start|center_vertical"
+                            android:minHeight="56dp"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:text="@string/settings_lan"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="16sp"
+                            app:backgroundTint="@android:color/transparent"
+                            app:icon="@drawable/ic_local_network"
+                            app:iconGravity="start"
+                            app:iconPadding="16dp"
+                            app:iconSize="22dp"
+                            app:iconTint="@color/xai_ink"
+                            app:rippleColor="@color/press_ripple_none" />
+
+                        <!-- Current value; not clickable, so taps fall through to the row's button. -->
+                        <TextView
+                            android:id="@+id/lanValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end|center_vertical"
+                            android:layout_marginEnd="16dp"
+                            android:ellipsize="middle"
+                            android:importantForAccessibility="no"
+                            android:maxWidth="130dp"
+                            android:singleLine="true"
+                            android:textAppearance="@style/TextAppearance.Gradation.RowValue" />
+                    </FrameLayout>
 
                     <View
                         android:layout_width="match_parent"
@@ -731,25 +749,42 @@
                         android:layout_marginStart="54dp"
                         android:background="@color/xai_hairline" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/apiKeyButton"
-                        style="@style/Widget.Grokion.Button.Text"
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="start|center_vertical"
-                        android:minHeight="56dp"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="@string/settings_openrouter_key"
-                        android:textColor="@color/xai_ink"
-                        android:textSize="16sp"
-                        app:backgroundTint="@android:color/transparent"
-                        app:icon="@drawable/ic_key"
-                        app:iconGravity="start"
-                        app:iconPadding="16dp"
-                        app:iconSize="22dp"
-                        app:iconTint="@color/xai_ink"
-                        app:rippleColor="@color/press_ripple_none" />
+                        android:layout_height="wrap_content">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/apiKeyButton"
+                            style="@style/Widget.Grokion.Button.Text"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="start|center_vertical"
+                            android:minHeight="56dp"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:text="@string/settings_openrouter_key"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="16sp"
+                            app:backgroundTint="@android:color/transparent"
+                            app:icon="@drawable/ic_key"
+                            app:iconGravity="start"
+                            app:iconPadding="16dp"
+                            app:iconSize="22dp"
+                            app:iconTint="@color/xai_ink"
+                            app:rippleColor="@color/press_ripple_none" />
+
+                        <TextView
+                            android:id="@+id/apiKeyValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end|center_vertical"
+                            android:layout_marginEnd="16dp"
+                            android:ellipsize="middle"
+                            android:importantForAccessibility="no"
+                            android:maxWidth="130dp"
+                            android:singleLine="true"
+                            android:textAppearance="@style/TextAppearance.Gradation.RowValue" />
+                    </FrameLayout>
 
                     <View
                         android:layout_width="match_parent"
@@ -757,25 +792,42 @@
                         android:layout_marginStart="54dp"
                         android:background="@color/xai_hairline" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/braveApiKeyButton"
-                        style="@style/Widget.Grokion.Button.Text"
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="start|center_vertical"
-                        android:minHeight="56dp"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="@string/settings_brave_key"
-                        android:textColor="@color/xai_ink"
-                        android:textSize="16sp"
-                        app:backgroundTint="@android:color/transparent"
-                        app:icon="@drawable/ic_key"
-                        app:iconGravity="start"
-                        app:iconPadding="16dp"
-                        app:iconSize="22dp"
-                        app:iconTint="@color/xai_ink"
-                        app:rippleColor="@color/press_ripple_none" />
+                        android:layout_height="wrap_content">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/braveApiKeyButton"
+                            style="@style/Widget.Grokion.Button.Text"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="start|center_vertical"
+                            android:minHeight="56dp"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:text="@string/settings_brave_key"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="16sp"
+                            app:backgroundTint="@android:color/transparent"
+                            app:icon="@drawable/ic_key"
+                            app:iconGravity="start"
+                            app:iconPadding="16dp"
+                            app:iconSize="22dp"
+                            app:iconTint="@color/xai_ink"
+                            app:rippleColor="@color/press_ripple_none" />
+
+                        <TextView
+                            android:id="@+id/braveApiKeyValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end|center_vertical"
+                            android:layout_marginEnd="16dp"
+                            android:ellipsize="middle"
+                            android:importantForAccessibility="no"
+                            android:maxWidth="130dp"
+                            android:singleLine="true"
+                            android:textAppearance="@style/TextAppearance.Gradation.RowValue" />
+                    </FrameLayout>
 
                     <View
                         android:layout_width="match_parent"
@@ -972,25 +1024,42 @@
                     android:paddingTop="4dp"
                     android:paddingBottom="4dp">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/maxTokensButton"
-                        style="@style/Widget.Grokion.Button.Text"
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="start|center_vertical"
-                        android:minHeight="56dp"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="@string/settings_max_tokens"
-                        android:textColor="@color/xai_ink"
-                        android:textSize="16sp"
-                        app:backgroundTint="@android:color/transparent"
-                        app:icon="@drawable/ic_ruler"
-                        app:iconGravity="start"
-                        app:iconPadding="16dp"
-                        app:iconSize="22dp"
-                        app:iconTint="@color/xai_ink"
-                        app:rippleColor="@color/press_ripple_none" />
+                        android:layout_height="wrap_content">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/maxTokensButton"
+                            style="@style/Widget.Grokion.Button.Text"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="start|center_vertical"
+                            android:minHeight="56dp"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:text="@string/settings_max_tokens"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="16sp"
+                            app:backgroundTint="@android:color/transparent"
+                            app:icon="@drawable/ic_ruler"
+                            app:iconGravity="start"
+                            app:iconPadding="16dp"
+                            app:iconSize="22dp"
+                            app:iconTint="@color/xai_ink"
+                            app:rippleColor="@color/press_ripple_none" />
+
+                        <TextView
+                            android:id="@+id/maxTokensValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end|center_vertical"
+                            android:layout_marginEnd="16dp"
+                            android:ellipsize="middle"
+                            android:importantForAccessibility="no"
+                            android:maxWidth="130dp"
+                            android:singleLine="true"
+                            android:textAppearance="@style/TextAppearance.Gradation.RowValue" />
+                    </FrameLayout>
 
                     <View
                         android:layout_width="match_parent"
@@ -998,25 +1067,42 @@
                         android:layout_marginStart="54dp"
                         android:background="@color/xai_hairline" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/timeoutButton"
-                        style="@style/Widget.Grokion.Button.Text"
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="start|center_vertical"
-                        android:minHeight="56dp"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="@string/settings_timeout"
-                        android:textColor="@color/xai_ink"
-                        android:textSize="16sp"
-                        app:backgroundTint="@android:color/transparent"
-                        app:icon="@drawable/ic_timeout"
-                        app:iconGravity="start"
-                        app:iconPadding="16dp"
-                        app:iconSize="22dp"
-                        app:iconTint="@color/xai_ink"
-                        app:rippleColor="@color/press_ripple_none" />
+                        android:layout_height="wrap_content">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/timeoutButton"
+                            style="@style/Widget.Grokion.Button.Text"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="start|center_vertical"
+                            android:minHeight="56dp"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:text="@string/settings_timeout"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="16sp"
+                            app:backgroundTint="@android:color/transparent"
+                            app:icon="@drawable/ic_timeout"
+                            app:iconGravity="start"
+                            app:iconPadding="16dp"
+                            app:iconSize="22dp"
+                            app:iconTint="@color/xai_ink"
+                            app:rippleColor="@color/press_ripple_none" />
+
+                        <TextView
+                            android:id="@+id/timeoutValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end|center_vertical"
+                            android:layout_marginEnd="16dp"
+                            android:ellipsize="middle"
+                            android:importantForAccessibility="no"
+                            android:maxWidth="130dp"
+                            android:singleLine="true"
+                            android:textAppearance="@style/TextAppearance.Gradation.RowValue" />
+                    </FrameLayout>
 
                     <View
                         android:layout_width="match_parent"
@@ -1084,7 +1170,6 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:minHeight="48dp"
-                            android:text="@string/settings_chat_memory_hint"
                             android:textColor="@color/xai_ink"
                             app:backgroundTint="@android:color/transparent"
                             app:rippleColor="@color/press_ripple_none" />

@@ -19,7 +19,6 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Resources
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
@@ -63,11 +62,11 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
+import coil.dispose
 import coil.load
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -96,7 +95,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.snackbar.Snackbar
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.LinkResolverDef
 import io.noties.markwon.Markwon
@@ -246,7 +244,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var rightButtonContainer: LinearLayout
     private lateinit var menuButton: MaterialButton
     private lateinit var controlsButton: MaterialButton
-    private var modelChipColorAnimator: ValueAnimator? = null
     private lateinit var backcopyButton: MaterialButton
     private lateinit var backButton: MaterialButton
     private lateinit var progressBar: View
@@ -305,19 +302,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (isGranted) {
                 launchCamera()
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_camera_permission), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_camera_permission))
             }
         }
         localNetworkPermissionLauncher = registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
-            if (isGranted) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_lan_granted), AppToast.LENGTH_SHORT).show()
-                // Optional: Auto-trigger send or model connection if you interrupted it
-            } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_lan_permission), AppToast.LENGTH_LONG).show()
-                // Optional: Revert model selection to a cloud model
-            }
+            // Granting needs no word: the system sheet closing is the answer.
+            if (!isGranted) GlassNotice.show(requireContext(), getString(R.string.toast_lan_permission))
         }
 
         cameraLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -331,56 +323,52 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             } ?: result.data?.data  // Fallbacks
 
+            currentCameraUri = null  // Always reset after callback
+            val resolver = requireContext().contentResolver
             if (result.resultCode == Activity.RESULT_OK && imageUri != null) {
                 if (discardAttachmentIfRp()) return@registerForActivityResult
-                try {
-                    // Read raw bytes first (fresh stream, one-time read)
-                    val rawBytes = requireContext().contentResolver.openInputStream(imageUri)?.use { stream ->
-                        stream.readBytes()
-                    } ?: run {
-                        GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_image))
-                        return@registerForActivityResult
+                // A 12 MB photo read and delete on the main thread stalls the sheet closing.
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val rawBytes = withContext(Dispatchers.IO) {
+                        try {
+                            // Read raw bytes first (fresh stream, one-time read)
+                            resolver.openInputStream(imageUri)?.use { it.readBytes() }
+                        } catch (e: Exception) {
+                            null
+                        }
                     }
-
+                    if (rawBytes == null) {
+                        GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_image))
+                        return@launch
+                    }
                     if (rawBytes.size > 12_000_000) {
                         GlassNotice.show(requireContext(), getString(R.string.toast_image_too_large))
-                        requireContext().contentResolver.delete(imageUri, null, null)
-                        return@registerForActivityResult
+                        withContext(Dispatchers.IO) { runCatching { resolver.delete(imageUri, null, null) } }
+                        return@launch
                     }
-
                     selectedImageBytes = rawBytes  // Raw for send (EXIF intact)
                     selectedImageMime = "image/jpeg"
-                    previewImageView.setImageURI(imageUri)  // Use Uri for preview (EXIF auto)
+                    previewImageView.load(imageUri)  // Coil decodes off the main thread and honours EXIF
                     attachmentPreviewContainer.visibility = View.VISIBLE
-                    AppToast.makeText(requireContext(), getString(R.string.toast_photo_saved), AppToast.LENGTH_SHORT).show()
 
-                    // NEW: Set pending as string for FlexibleMessage (MediaStore Uri already persistent)
+                    // Set pending as string for FlexibleMessage (MediaStore Uri already persistent)
                     viewModel.setPendingUserImageUri(imageUri.toString())
 
                     // Notify for gallery refresh
-                    requireContext().contentResolver.notifyChange(imageUri, null)
-                } catch (e: Exception) {
-                    GlassNotice.show(requireContext(), getString(R.string.toast_failed_process_photo))
-                    requireContext().contentResolver.delete(imageUri, null, null)
+                    resolver.notifyChange(imageUri, null)
                 }
             } else {
-                // Cancel or error
-                    AppToast.makeText(
-                        requireContext(),
-                        getString(
-                            if (result.resultCode == Activity.RESULT_CANCELED) {
-                                R.string.toast_capture_canceled
-                            } else {
-                                R.string.toast_capture_failed
-                            }
-                        ),
-                        AppToast.LENGTH_SHORT
-                    ).show()
+                // Cancelling needs no word; a failed capture does.
+                if (result.resultCode != Activity.RESULT_CANCELED) {
+                    GlassNotice.show(requireContext(), getString(R.string.toast_capture_failed))
+                }
                 imageUri?.let { uri ->
-                    requireContext().contentResolver.delete(uri, null, null)  // Clean up placeholder
+                    // Clean up the placeholder.
+                    viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                        runCatching { resolver.delete(uri, null, null) }
+                    }
                 }
             }
-            currentCameraUri = null  // Always reset after callback
         }
 
         folderPickerLauncher = registerForActivityResult(
@@ -394,7 +382,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 // Save via your helper
                 sharedPreferencesHelper.saveSafFolderUri(uri.toString())
 
-                AppToast.makeText(requireContext(), getString(R.string.toast_folder_granted), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_folder_granted))
             }
         }
         audioPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -410,19 +398,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             uri?.let { processPdfUri(it) }  // Null-safe: Call if non-null
         }
         textFilePicker = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-            if (uris.isNotEmpty()) {
-                // Process each URI (with size/MIME checks via processTextFile)
-                var successCount = 0
-                var errorCount = 0
-                uris.forEach { uri ->
-                    processTextFile(uri)  // Your updated function—handles one at a time
-                    // Note: Since processTextFile is async, we don't await here; toasts/UI update inside it
-                    // For batch feedback, you could collect results, but simple loop + toasts work fine
-                }
-                // Optional: Single toast after all (but since async, use a counter or LiveData)
-
-                //  AppToast.makeText(requireContext(), "${uris.size} files processed", AppToast.LENGTH_SHORT).show()
-            }
+            // One at a time, with the size and type checks inside processTextFile.
+            uris.forEach { uri -> processTextFile(uri) }
         }
         // --- Initialize Views from fragment_chat.xml ---
         pdfChatButton = view.findViewById(R.id.pdfChatButton)
@@ -536,8 +513,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                             if (parts.size == 4 && parts[0] == "TTS" && parts[1] == "SAVE") {
                                 val timestamp = parts[2].toLongOrNull() ?: return
                                 val position = parts[3].toIntOrNull() ?: return
-                                val context = requireContext()
-                                val tempFile = File(context.cacheDir, "temp_tts_${timestamp}.wav")
+                                // Binder thread: the fragment may be gone by now, so no requireContext().
+                                val appContext = this@ChatFragment.context?.applicationContext ?: return
+                                val tempFile = File(appContext.cacheDir, "temp_tts_${timestamp}.wav")
                                 val fileName = "TTS_${timestamp}_msg${position}.wav"
 
                                 // 🎯 COROUTINES: IO → Main (Structured, Cancellable, No Thread Leaks!)
@@ -558,7 +536,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                                             put(MediaStore.MediaColumns.IS_PENDING, 1)
                                         }
 
-                                        val resolver = context.contentResolver
+                                        val resolver = appContext.contentResolver
                                         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
                                             ?: throw Exception("Failed to create MediaStore URI")
 
@@ -581,42 +559,32 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                                         tempFile.delete()
                                     }
 
-                                    // 🎯 MAIN THREAD TOAST (Auto-switched!)
-                                    withContext(Dispatchers.Main) {
-                                        val message = if (success) {
-                                            "✅ Saved to Downloads: $fileName"
-                                        } else {
-                                            "❌ Save failed"
-                                        }
-                                        AppToast.makeText(context, message, AppToast.LENGTH_LONG).show()
+                                    if (success) {
+                                        noticeFromAnyThread(R.string.tts_saved_to_downloads, fileName)
+                                    } else {
+                                        noticeFromAnyThread(R.string.tts_save_failed)
                                     }
                                 }
                             }
                         }
                         else {
-                            requireActivity().runOnUiThread { onSpeechFinished() }  // Run on main thread
+                            activity?.runOnUiThread { onSpeechFinished() }  // Run on main thread
                         }
                     }
                     @Deprecated("Deprecated in Java")
                     override fun onError(utteranceId: String?) {
                         if (utteranceId?.startsWith("TTS_SAVE_") == true) {
-                            AppToast.makeText(requireContext(), getString(R.string.toast_tts_synthesis_error), AppToast.LENGTH_SHORT).show()
+                            noticeFromAnyThread(R.string.toast_tts_synthesis_error)
                         }
                         else {
-                            requireActivity().runOnUiThread {
-                                AppToast.makeText(
-                                    requireContext(),
-                                    getString(R.string.toast_tts_engine_error),
-                                    AppToast.LENGTH_SHORT
-                                ).show()
-                                onSpeechFinished()
-                            }
+                            noticeFromAnyThread(R.string.toast_tts_engine_error)
+                            activity?.runOnUiThread { onSpeechFinished() }
                         }
                     }
                 })
                 ttsAvailable = true
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_tts_failed), AppToast.LENGTH_SHORT).show()
+                noticeFromAnyThread(R.string.toast_tts_failed)
                 ttsAvailable = false
             }
         }
@@ -715,6 +683,15 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         )
         TouchTargets.expand(view.findViewById(R.id.extBG), scrollToTopButton, scrollToBottomButton, presetsButton2)
         TouchTargets.expand(removeAttachmentButton.parent as ViewGroup, removeAttachmentButton)
+        // The extended top bar's toggles and the return buttons under the bar are 40dp discs.
+        TouchTargets.expand(
+            extendedTopBarContainer,
+            view.findViewById(R.id.topReasoningButton), view.findViewById(R.id.topWebSearchButton),
+            view.findViewById(R.id.topStreamButton), view.findViewById(R.id.topConvoButton),
+            view.findViewById(R.id.topToolsButton), view.findViewById(R.id.topPresetsButton),
+            view.findViewById(R.id.topSettingsButton)
+        )
+        TouchTargets.expand(topBarLayout, backcopyButton, backButton, homeButton)
 
         // In onViewCreated(), after initializing chatEditText and before setupClickListeners()
         chatEditText.addTextChangedListener(object : android.text.TextWatcher {
@@ -782,7 +759,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     // Only toggle if it's currently OFF to avoid redundant toasts
                     if (viewModel.isStreamingEnabled.value == false) {
                         viewModel.toggleStreaming()
-                        AppToast.makeText(requireContext(), getString(R.string.toast_streaming_music), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.toast_streaming_music))
                     }
                 }
 
@@ -800,14 +777,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     selectedImageBytes = null
                     selectedImageMime = null
                     attachmentPreviewContainer.visibility = View.GONE
-                    AppToast.makeText(requireContext(), getString(R.string.toast_image_removed_no_vision), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_image_removed_no_vision))
                 }
                 // Clear staged audio if model doesn't support transcription
                 if (selectedAudioBytes != null && !viewModel.isTranscriptionModel(model)) {
                     selectedAudioBytes = null
                     selectedAudioFormat = null
                     attachmentPreviewContainer.visibility = View.GONE
-                    AppToast.makeText(requireContext(), getString(R.string.toast_audio_removed_no_transcription), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_audio_removed_no_transcription))
                 }
             }
 
@@ -990,16 +967,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             view?.findViewById<View>(R.id.exportLabel)?.isVisible = hasMessages
         }
 
-        fun areAnimationsEnabled(context: Context): Boolean {
-            val resolver = context.contentResolver
-            return try {
-                val durationScale = Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1.0f)
-                durationScale != 0.0f
-            } catch (e: Exception) {
-                true // Default to true if we can't read settings
-            }
-        }
-
         viewModel.isAwaitingResponse.observe(viewLifecycleOwner) { isAwaiting ->
             chatAdapter.replyInFlight = isAwaiting
             if (!isAwaiting && sharedPreferencesHelper.getConversationModeEnabled()) {
@@ -1075,16 +1042,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         val baseColor = ContextCompat.getColor(requireContext(), R.color.xai_ink)
                         val isError = lastMessage.content
                             .let { it as? JsonPrimitive }?.content?.startsWith("**Error:**") == true
-                        modelChipColorAnimator?.cancel()
+                        // Ink and the error color are the same gray in this palette, so the chip has nothing to flash.
                         modelNameTextView.setTextColor(baseColor)
-                        if (isError) {
-                            val errorColor = ContextCompat.getColor(requireContext(), R.color.xai_error)
-                            modelChipColorAnimator = ValueAnimator.ofArgb(baseColor, errorColor, errorColor, baseColor).apply {
-                                duration = 3200
-                                addUpdateListener { modelNameTextView.setTextColor(it.animatedValue as Int) }
-                                start()
-                            }
-                        }
                         if ( sharedPreferencesHelper.getAnimateBarOnError()) {
                             val borderOverlayView = view.findViewById<View>(R.id.borderOverlayView)
                             val accentColor = ContextCompat.getColor(requireContext(), R.color.xai_mute)
@@ -1106,7 +1065,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 viewModel.isWebSearchEnabled.value == true) {
                 viewModel._isWebSearchEnabled.value = false
                 sharedPreferencesHelper.saveWebSearchEnabled(false)
-                AppToast.makeText(requireContext(), getString(R.string.toast_web_search_auto_off), AppToast.LENGTH_SHORT).show()
             }
         }
 
@@ -1135,7 +1093,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         // --- Credits Observer ---
         viewModel.creditsResult.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { resultMessage ->
-                AppToast.makeText(requireContext(), resultMessage, AppToast.LENGTH_LONG).show()
+                GlassNotice.show(requireContext(), resultMessage)
             }
         }
 
@@ -1218,7 +1176,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         viewModel.toastUiEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { message ->
-                AppToast.makeText(requireContext(), message, AppToast.LENGTH_LONG).show()
+                GlassNotice.show(requireContext(), message)
             }
         }
         viewModel.composerRestoreEvent.observe(viewLifecycleOwner) { event ->
@@ -1237,31 +1195,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
         }
         viewModel.toolUiEvent.observe(viewLifecycleOwner) { event ->
-            event.getContentIfNotHandled()?.let { message ->
-
-                Snackbar.make(requireView(), message, Snackbar.LENGTH_LONG)
-                    .setAction(R.string.action_open_folder) {
-                        WorkspacePaths.ensureWorkspaceExists()
-                        val path = WorkspacePaths.workspaceDirForRead()
-                        val intent = Intent(Intent.ACTION_VIEW)
-
-                        // Disable StrictMode check for file:// URI
-                        try {
-                            val m = StrictMode::class.java.getMethod("disableDeathOnFileUriExposure")
-                            m.invoke(null)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-
-                        intent.setDataAndType("file://${path.absolutePath}".toUri(), "resource/folder")
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                        // Always show system chooser
-                        val chooserIntent = Intent.createChooser(intent, getString(R.string.chooser_open_file_manager))
-                        startActivity(chooserIntent)
-                    }
-                    .show()
-            }
+            event.getContentIfNotHandled()?.let { message -> showFolderNotice(message) }
         }
         viewModel.presetAppliedEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let {
@@ -1323,21 +1257,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         updateExtendedTopBarVisibility(sharedPreferencesHelper.getExtendedTopBarEnabled())
         updateModelSourceIndicator()
         applyChatTextScale()
-        rootView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                // 1. IMPORTANT: Remove the listener immediately so it doesn't fire
-                // every time the layout changes (like when a message arrives)
-                view.viewTreeObserver.removeOnGlobalLayoutListener(this)
-
-                val mode = when (sharedPreferencesHelper.getThemeMode()) {
-                    SharedPreferencesHelper.THEME_LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
-                    SharedPreferencesHelper.THEME_DARK  -> AppCompatDelegate.MODE_NIGHT_YES
-                    else                               -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                }
-                AppCompatDelegate.setDefaultNightMode(mode)
-
-            }
-        })
         if (viewModel.activeModelIsLan()) {
             checkLocalNetworkPermission()
         }
@@ -1977,30 +1896,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     .addToBackStack(null)
                     .commit()
             },
-            onSaveMarkdown = { position, rawMarkdown ->
-                viewModel.saveMarkdownToDownloads(rawMarkdown)  // Your ViewModel method
-            },
-            onCaptureItemToBitmap = ::captureItemToBitmap,
-            onShowMarkdown = { markdown ->
-                val modelString = viewModel.activeChatModel.value ?: "AI"
-                val modeltoPass = viewModel.getModelDisplayName(modelString)
-                val selectedFontName = sharedPreferencesHelper.getSelectedFont()
-                parentFragmentManager.beginTransaction()
-                    .withGrokStackAnimations()
-                    //.setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out, android.R.anim.fade_in, android.R.anim.fade_out)
-                    .hide(this)  // Hides chat fragment
-                    .add(R.id.fragment_container, MarkdownViewerFragment.newInstance(markdown,selectedFontName,modeltoPass))
-                    .addToBackStack(null)
-                    .commit()
-            },
-            onSaveHtml = { markdown ->
-                // Generate clean HTML (light theme, no custom font)
-                val htmlContent = MarkdownRenderer.toHtmlExp(markdown)
-                viewModel.saveHtmlSingleToDownloads(htmlContent)
-            },
-            onSaveText = {position, text ->
-                viewModel.saveTextToDownloads(text)
-            }, onCollapse = {
+            onCollapse = {
                 if (isScrollProgressEnabled) {
                     updateScrollProgress()
                 }
@@ -2012,9 +1908,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         scrollToTopButton.setShownAnimated(canScrollUp)
                         scrollToBottomButton.setShownAnimated(canScrollDown)
                     }
-            },
-            onSaveAsFile = { content ->
-                showSaveFileDialog(content)
             },
             forkNavStateForPosition = { position ->
                 viewModel.getForkNavForMessage(position)
@@ -2098,6 +1991,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         scrollerCanUp = null
         scrollerCanDown = null
         pickerPopover?.dismiss(animated = false)
+        // Its scrim and card live in the view being torn down; a menu left open would outlive it.
+        messageMenu?.dismiss(animated = false)
         parentFragmentManager.removeOnBackStackChangedListener(rpPanelBackStackListener)
         rpPanel = null
         if (::textToSpeech.isInitialized) {
@@ -2123,7 +2018,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         currentTempImageFile = null
         selectedAudioBytes = null
         selectedAudioFormat = null
-        previewImageView.setImageBitmap(null)
+        clearPreview()
         pendingFiles.clear()
         updateAttachmentButton()
         chatAdapter.clearCache()
@@ -2138,10 +2033,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             selectedAudioFormat = null
             attachmentPreviewContainer.visibility = View.GONE
             viewModel.setPendingUserImageUri(null)
-            previewImageView.setImageBitmap(null)
+            clearPreview()
             currentTempImageFile?.delete()
             currentTempImageFile = null
-            AppToast.makeText(requireContext(), getString(R.string.toast_attachment_removed), AppToast.LENGTH_SHORT).show()
         }
         webSearchButton.setOnClickListener {
             //  hideMenu()
@@ -2172,7 +2066,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         toolsButton.setOnClickListener {
             if (!sharedPreferencesHelper.hasWorkspaceGrant()) {
                 WorkspacePaths.ensureWorkspaceExists()
-                AppToast.makeText(requireContext(), getString(R.string.toast_gradation_folder), AppToast.LENGTH_LONG).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_gradation_folder))
                 folderPickerLauncher.launch(null)
             } else {
                 WorkspacePaths.ensureWorkspaceExists()
@@ -2181,7 +2075,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
         }
         sendChatButton.setOnClickListener {
-            dictation?.finishNow()
+            // A recording still being transcribed would land in the field after the send went out.
+            if (dictation?.finishNow() == false) return@setOnClickListener
             if (sharedPreferencesHelper.getHapticButtons()) {
                 sendChatButton.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
             }
@@ -2274,11 +2169,11 @@ $cleanContent
                     // RP: validate before clearing the composer so character-gate failures keep the draft.
                     if (viewModel.isRpMode()) {
                         if (!viewModel.canSendRpMessage()) {
-                            AppToast.makeText(requireContext(), getString(R.string.rp_select_character), AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_select_character))
                             return@setOnClickListener
                         }
                         if (viewModel.isAwaitingResponse.value == true) {
-                            AppToast.makeText(requireContext(), getString(R.string.rp_wait_for_reply), AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_wait_for_reply))
                             return@setOnClickListener
                         }
                         if (!viewModel.sendRpUserMessage(substitutedPrompt)) {
@@ -2292,9 +2187,10 @@ $cleanContent
                     chatEditText.setText("")
                     chatEditText.text.clear()
 
-                    val userContent = if (selectedImageBytes != null) {
-                        val base64 = Base64.encodeToString(selectedImageBytes, Base64.NO_WRAP)
-                        val imageUrl = "data:$selectedImageMime;base64,$base64"
+                    val stagedImage = selectedImageBytes
+                    val stagedImageMime = selectedImageMime
+                    fun imageContent(base64: String) = run {
+                        val imageUrl = "data:$stagedImageMime;base64,$base64"
                         buildJsonArray {
                             // if (prompt.isNotBlank()) { //#subpromptcode replaced
                             if (substitutedPrompt.isNotBlank()) { //#subpromptcode
@@ -2321,14 +2217,16 @@ $cleanContent
                                 )
                             )
                         }
-                    } else {
-                        //  JsonPrimitive(prompt) //#subpromptcode replaced
-                        JsonPrimitive(substitutedPrompt)  //#subpromptcode
                     }
-                    //   val systemMessage = sharedPreferencesHelper.getSelectedSystemMessage() //#subpromptcode commentedout
-                    //   viewModel.sendUserMessage(userContent, systemMessage.prompt) //#subpromptcode replaced
-                    viewModel.sendUserMessage(userContent, substitutedSystemPrompt) //#subpromptcode
-                  //  chatEditText.clearFocus()
+                    if (stagedImage != null) {
+                        // A 12 MB photo is a 16 MB string: encode it off the main thread.
+                        lifecycleScope.launch {
+                            val base64 = withContext(Dispatchers.Default) { Base64.encodeToString(stagedImage, Base64.NO_WRAP) }
+                            viewModel.sendUserMessage(imageContent(base64), substitutedSystemPrompt)
+                        }
+                    } else {
+                        viewModel.sendUserMessage(JsonPrimitive(substitutedPrompt), substitutedSystemPrompt) //#subpromptcode
+                    }
                     hideMenu()
                     selectedImageBytes = null
                     selectedImageMime = null
@@ -2345,11 +2243,7 @@ $cleanContent
                     model.contains("image", ignoreCase = true)
 
             if (!isGoogleImageModel) {
-                AppToast.makeText(
-                    requireContext(),
-                    "Image generation parameters only supported for Google image models",
-                    AppToast.LENGTH_SHORT
-                ).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_image_params_google_only))
                 return@setOnClickListener
             }
 
@@ -2462,7 +2356,7 @@ $cleanContent
             val messages = viewModel.chatMessages.value ?: emptyList()
 
             if (messages.isEmpty()) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_no_chat_export), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_no_chat_export))
                 return@setOnClickListener
             }
 
@@ -2473,7 +2367,7 @@ $cleanContent
             }, 500)
 
             lifecycleScope.launch {
-                val modelIdentifier = viewModel.activeChatModel.value ?: "Unknown Model"
+                val modelIdentifier = viewModel.activeChatModel.value ?: getString(R.string.unknown_model)
                 val modelName = viewModel.getModelDisplayName(modelIdentifier)
 
                 val filePath = withContext(Dispatchers.IO) {
@@ -2504,34 +2398,7 @@ $cleanContent
 
                 withContext(Dispatchers.Main) {
                     if (filePath != null) {
-                        val rootView = requireView()
-                        val context = rootView.context
-
-                        // Disable StrictMode check for file:// URI
-                        try {
-                            val m = StrictMode::class.java.getMethod("disableDeathOnFileUriExposure")
-                            m.invoke(null)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-
-                        // GradatiON workspace folder (read path may fall back to legacy folders)
-                        val path = WorkspacePaths.workspaceDirForRead()
-
-                        // Create intent to view the folder
-                        val intent = Intent(Intent.ACTION_VIEW)
-                        intent.setDataAndType("file://${path.absolutePath}".toUri(), "resource/folder")
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                        // Create the system chooser intent
-                        val chooserIntent = Intent.createChooser(intent, getString(R.string.action_open_folder))
-
-                        // Show Snackbar with the action
-                        Snackbar.make(rootView, R.string.toast_pdf_saved, Snackbar.LENGTH_LONG)
-                            .setAction(R.string.action_open_folder) {
-                                context.startActivity(chooserIntent)
-                            }
-                            .show()
+                        showFolderNotice(getString(R.string.toast_pdf_saved))
                     } else {
                         GlassNotice.show(requireContext(), getString(R.string.toast_pdf_failed))
                     }
@@ -2557,10 +2424,10 @@ $cleanContent
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Chat History (Markdown)", chatText)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(requireContext(), getString(R.string.toast_chat_copied_md), AppToast.LENGTH_SHORT).show()
+                flashCopied(copyChatButton)
                 true  // Consume the long press
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_copy), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_copy))
                 true
             }
         }
@@ -2571,9 +2438,9 @@ $cleanContent
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Chat History", chatText)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(requireContext(), getString(R.string.toast_chat_copied), AppToast.LENGTH_SHORT).show()
+                flashCopied(copyChatButton)
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_copy), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_copy))
             }
         }
         backButton.setOnLongClickListener {
@@ -2585,7 +2452,7 @@ $cleanContent
             chatEditText.text.clear()
             currentTempImageFile?.delete()
             currentTempImageFile = null
-            previewImageView.setImageBitmap(null)
+            clearPreview()
             // Add to reset logic
             pendingFiles.clear()
             updateAttachmentButton()
@@ -2604,7 +2471,7 @@ $cleanContent
             chatEditText.text.clear()
             currentTempImageFile?.delete()
             currentTempImageFile = null
-            previewImageView.setImageBitmap(null)
+            clearPreview()
             // Add to reset logic
             pendingFiles.clear()
             updateAttachmentButton()
@@ -2633,7 +2500,7 @@ $cleanContent
                 if (chatHtml.isNotBlank()) {
                     printChatHtml(chatHtml)
                 } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_print), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_print))
                 }
             }
         }
@@ -2649,10 +2516,9 @@ $cleanContent
             hideMenu()
             val chatText = viewModel.getFormattedChatHistoryMarkdownandPrint()
             if (chatText.isNotBlank()) {
-                viewModel.saveMarkdownToDownloads(chatText)
-                // No need for local Toast - ViewModel handles UI event via _toolUiEvent
+                viewModel.saveMarkdownToDownloads(chatText)  // The ViewModel reports the save through toolUiEvent.
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_save))
             }
         }
         saveEpubButton.setOnClickListener {
@@ -2665,7 +2531,7 @@ $cleanContent
                     // Call the new ViewModel function
                     viewModel.saveEpubToDownloads(innerHtml)
                 } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_save))
                 }
             }
         }
@@ -2675,7 +2541,7 @@ $cleanContent
             if (chatText.isNotBlank()) {
                 viewModel.saveTxtToDownloads(chatText)
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_save))
             }
             true  // Required for onLongClickListener
         }
@@ -2685,9 +2551,8 @@ $cleanContent
                 val innerHtml = viewModel.getFormattedChatHistoryStyledHtml()
                 if (innerHtml.isNotBlank()) {
                     viewModel.saveHtmlToDownloads(innerHtml)
-                    // VM handles success Toast via _toolUiEvent
                 } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_save))
                 }
             }
         }
@@ -2712,9 +2577,9 @@ $cleanContent
         menuButton.setOnLongClickListener {
             val inputText = chatEditText.text.toString().trim()
             if (inputText.isBlank()) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_no_text_to_correct), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_no_text_to_correct))
             } else if (viewModel.activeChatApiKey.isBlank()) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_api_key_missing), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_api_key_missing))
             } else {
                 menuButton.isSelected = true
                 menuButton.setIconResource(R.drawable.ic_magic)
@@ -2725,12 +2590,7 @@ $cleanContent
                         chatEditText.setText(corrected)
                         chatEditText.setSelection(corrected.length)
                     } else {
-                        AppToast.makeText(
-
-                            requireContext(),
-                            getString(R.string.toast_correction_failed),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.toast_correction_failed))
                     }
                     restoreAttachPlusIcon()
                 }
@@ -2823,7 +2683,7 @@ $cleanContent
 
             if (isLyria && isStreamEnabled) {
                 // Prevent turning off streaming for Lyria
-                AppToast.makeText(requireContext(), getString(R.string.toast_streaming_required_lyria), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_streaming_required_lyria))
             } else {
                 // Normal toggle for other models or if turning it ON for Lyria
                 viewModel.toggleStreaming()
@@ -2853,9 +2713,9 @@ $cleanContent
             hideMenu()
 
             val fontOptions = listOf(
-                Pair("Plus Jakarta Sans", R.font.jakarta_regular as Int?),
-                Pair("Inter", R.font.inter_regular),
-                Pair("System Default", null),
+                Pair(getString(R.string.font_plus_jakarta_sans), R.font.jakarta_regular as Int?),
+                Pair(getString(R.string.font_inter), R.font.inter_regular),
+                Pair(getString(R.string.font_system_default), null),
             )
 
             fun fontNameFromRes(fontResId: Int?): String = when (fontResId) {
@@ -2939,7 +2799,6 @@ $cleanContent
             SharedPreferencesHelper(requireContext()).saveSelectedSystemMessage(defaultMessage)
             systemMessageButton.isSelected = false
             updateChatEditTextHint()
-            // AppToast.makeText(requireContext(), "System message reset to default", AppToast.LENGTH_SHORT).show()
             true
         }
 
@@ -2993,10 +2852,10 @@ $cleanContent
                     chatEditText.text.replace(start, end, text.toString())
                 } else {
                     // Clipboard item is not text (e.g., image, URI, etc.)
-                    AppToast.makeText(requireContext(), getString(R.string.toast_clipboard_no_text), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_clipboard_no_text))
                 }
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_paste), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_paste))
             }
         }
 
@@ -3014,10 +2873,10 @@ $cleanContent
                     sendChatButton.performClick()
                 } else {
                     // Clipboard item is not text (e.g., image, URI, etc.)
-                    AppToast.makeText(requireContext(), getString(R.string.toast_clipboard_no_text), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_clipboard_no_text))
                 }
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_paste), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_paste))
             }
             true
         }
@@ -3145,9 +3004,9 @@ $cleanContent
                 selectedAudioFormat = audioFormat
 
                 // Show audio attachment indicator
+                previewImageView.dispose()
                 previewImageView.setImageResource(android.R.drawable.ic_media_play) // or use a custom ic_audio
                 attachmentPreviewContainer.visibility = View.VISIBLE
-                AppToast.makeText(requireContext(), getString(R.string.toast_audio_attached), AppToast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 GlassNotice.show(requireContext(), getString(R.string.toast_audio_read_failed, e.message ?: ""))
             }
@@ -3159,7 +3018,7 @@ $cleanContent
         val context = requireContext()
 
         if (safeText.length < text.length) {
-            AppToast.makeText(context, context.getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(context, context.getString(R.string.toast_tts_text_truncated))
         }
 
         try {
@@ -3179,17 +3038,13 @@ $cleanContent
                 utteranceId
             )
 
-            when (result) {
-                TextToSpeech.SUCCESS -> {
-                    AppToast.makeText(context, context.getString(R.string.toast_tts_audio_generating), AppToast.LENGTH_SHORT).show()
-                }
-                else -> {
-                    AppToast.makeText(context, context.getString(R.string.toast_tts_wav_failed, result), AppToast.LENGTH_SHORT).show()
-                }
+            // Queued: the save notice follows when the file is written.
+            if (result != TextToSpeech.SUCCESS) {
+                GlassNotice.show(context, context.getString(R.string.toast_tts_wav_failed, result))
             }
 
         } catch (e: Exception) {
-            AppToast.makeText(context, context.getString(R.string.toast_tts_queue_error, e.message ?: ""), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(context, context.getString(R.string.toast_tts_queue_error, e.message ?: ""))
         }
     }
 
@@ -3210,91 +3065,9 @@ $cleanContent
         updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
         val safeText = text.take(3900)
         if (safeText.length < text.length) {
-            AppToast.makeText(requireContext(), getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_tts_text_truncated))
         }
         textToSpeech.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, "tts_utterance")
-    }
-    private fun showSaveFileDialog(content: String) {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_save_file, null)
-        val fileNameInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.fileNameInput)
-        val fileExtensionInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.fileExtensionInput)
-
-        // Smart extension detection from content
-        val detectedExt = when {
-            // === PRIORITY 1: Markdown code fences (explicit language tags) ===
-            content.contains("```html", ignoreCase = true) ||
-                    content.contains("```htm", ignoreCase = true) -> "html"
-
-            content.contains("```kotlin", ignoreCase = true) ||
-                    content.contains("```kt", ignoreCase = true) -> "kt"
-
-            content.contains("```javascript", ignoreCase = true) ||
-                    content.contains("```js", ignoreCase = true) -> "js"
-
-            content.contains("```python", ignoreCase = true) ||
-                    content.contains("```py", ignoreCase = true) -> "py"
-
-            content.contains("```css", ignoreCase = true) -> "css"
-            content.contains("```json", ignoreCase = true) -> "json"
-            content.contains("```java", ignoreCase = true) -> "java"
-            content.contains("```xml", ignoreCase = true) -> "xml"
-            content.contains("```sql", ignoreCase = true) -> "sql"
-            content.contains("```cpp", ignoreCase = true) ||
-                    content.contains("```c++", ignoreCase = true) -> "cpp"
-
-            // === PRIORITY 2: Content-based detection (plain text without fences) ===
-            // HTML FIRST (before JS) because HTML files often contain <script> tags with const/let
-            content.contains("<!DOCTYPE html>", ignoreCase = true) ||
-                    content.contains("<html", ignoreCase = true) -> "html"
-
-            // Kotlin
-            content.contains(" fun ", ignoreCase = true) ||
-                    (content.contains("class ", ignoreCase = true) && content.contains("{")) -> "kt"
-
-            // JavaScript - only if NOT HTML (avoid matching const/let inside <script> tags)
-            !content.contains("<html", ignoreCase = true) &&
-                    (content.contains("const ", ignoreCase = true) || content.contains("let ", ignoreCase = true)) &&
-                    content.contains("{") -> "js"
-
-            // Python
-            content.contains("def ", ignoreCase = true) ||
-                    content.contains("import ", ignoreCase = true) && content.contains(":") -> "py"
-
-            else -> "txt"
-        }
-        fileExtensionInput.setText(detectedExt)
-
-        val dialog = GlassAlertDialogBuilder(requireContext(),
-            R.style.CustomMaterialAlertDialogTheme
-        )
-            .setTitle(R.string.save_as_file_title)
-            .setView(dialogView)
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                val fileName = fileNameInput.text?.toString()?.trim() ?: ""
-                val extension = fileExtensionInput.text?.toString()?.trim() ?: ""
-
-                if (fileName.isNotEmpty() && extension.isNotEmpty()) {
-                    viewModel.saveFileWithName(fileName, extension, content)
-                } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_filename_extension_required), AppToast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton(R.string.action_cancel, null)
-            .show()
-
-        // Apply dim amount like your other dialog
-        dialog.window?.let { GlassDialogs.frost(it) }
-
-        // Optional: Make the Save button disabled until text is entered
-        val saveButton = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
-        fileNameInput.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) {
-                saveButton.isEnabled = !s.isNullOrBlank()
-            }
-        })
-        saveButton.isEnabled = false
     }
     private fun updateIconDirectlyOrNotify(position: Int, @DrawableRes iconRes: Int) {
         val lm = chatRecyclerView.layoutManager as? LinearLayoutManager ?: return
@@ -3320,6 +3093,46 @@ $cleanContent
             // flashissue: Update icon directly if holder is attached, else notify
             updateIconDirectlyOrNotify(pos, R.drawable.ic_msg_speak)
         }
+    }
+
+    /** TextToSpeech calls back on a binder thread: hop to main, and do nothing if the screen is gone. */
+    private fun noticeFromAnyThread(@androidx.annotation.StringRes res: Int, vararg args: Any) {
+        val host = activity ?: return
+        host.runOnUiThread { if (isAdded) GlassNotice.show(host, getString(res, *args)) }
+    }
+
+    /** Says what was saved and offers the workspace folder, for the tools and the chat exports. */
+    private fun showFolderNotice(message: CharSequence) {
+        GlassNotice.show(requireContext(), message, getString(R.string.action_open_folder)) { openWorkspaceFolder() }
+    }
+
+    private fun openWorkspaceFolder() {
+        WorkspacePaths.ensureWorkspaceExists()
+        val path = WorkspacePaths.workspaceDirForRead()
+        // The file manager gets a file:// URI, which StrictMode would otherwise refuse.
+        try {
+            StrictMode::class.java.getMethod("disableDeathOnFileUriExposure").invoke(null)
+        } catch (e: Exception) {
+            // Hidden API gone on this build: the chooser still opens.
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType("file://${path.absolutePath}".toUri(), "resource/folder")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.chooser_open_file_manager)))
+    }
+
+    /** Copy confirmation for a menu icon button: the glyph turns into a check for a moment, with a tick. */
+    private fun flashCopied(button: MaterialButton) {
+        Haptics.tap(button)
+        button.setIconResource(R.drawable.ic_check)
+        button.postDelayed({ if (button.isAttachedToWindow) button.setIconResource(R.drawable.ic_copi) }, 950L)
+    }
+
+    /** Empties the attachment thumbnail, and cancels a Coil load still on its way to it. */
+    private fun clearPreview() {
+        previewImageView.dispose()
+        previewImageView.setImageDrawable(null)
     }
     override fun handleKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
@@ -3412,7 +3225,7 @@ $cleanContent
                     )
                 }
             }
-            group.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            Haptics.tap(group)
             viewModel.checkAdvancedReasoningStatus()
             updateQuickControls()
         }
@@ -3432,7 +3245,7 @@ $cleanContent
         val label = (more as ViewGroup).getChildAt(0) as TextView
         more.setOnClickListener {
             val open = !buttonsContainer.isVisible
-            more.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            Haptics.tap(more)
             label.setText(if (open) R.string.controls_less else R.string.controls_more)
             val anim = Motion.areAnimationsEnabled(requireContext())
             chevron.animate().rotation(if (open) 180f else 0f).setDuration(if (anim) 260 else 0)
@@ -3490,7 +3303,7 @@ $cleanContent
         val anim = Motion.areAnimationsEnabled(requireContext())
         val d = resources.displayMetrics.density
         controlsButton.isSelected = true
-        controlsButton.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+        Haptics.tap(controlsButton)
         overlayView?.visibility = View.VISIBLE
         headerContainer.animate().cancel()
         placeControlsCard()
@@ -3726,11 +3539,7 @@ $cleanContent
         if (discardAttachmentIfRp()) return
         val model = viewModel.activeChatModel.value
         if (model != null && !viewModel.isVisionModel(model)) {
-            AppToast.makeText(
-                requireContext(),
-                getString(R.string.toast_image_need_vision),
-                AppToast.LENGTH_SHORT
-            ).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_image_need_vision))
         }
         val resolver = requireContext().applicationContext.contentResolver
         val mime = resolver.getType(uri)
@@ -3770,7 +3579,7 @@ $cleanContent
             if (discardAttachmentIfRp()) return@launch
             selectedImageBytes = bytes
             selectedImageMime = mime
-            previewImageView.setImageURI(uri)
+            previewImageView.load(uri)  // Coil decodes and downsamples off the main thread
             attachmentPreviewContainer.visibility = View.VISIBLE
             try {
                 val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -4012,7 +3821,8 @@ $cleanContent
         }
         prefs.registerOnSharedPreferenceChangeListener(rp)
         roleplaySwitchWatcher = rp
-        val store = io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store
+        // Prefs only: building the hub here would open the Code database on every chat open.
+        val store = io.github.stardomains3.oxproxion.code.store.CodeStore(requireContext())
         val code = store.addEnabledListener { onModeSwitchChanged() }
         codeSwitchWatcher = code
         viewLifecycleOwner.lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
@@ -4047,7 +3857,10 @@ $cleanContent
 
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
-        if (hidden) pickerPopover?.dismiss(animated = false)
+        if (hidden) {
+            pickerPopover?.dismiss(animated = false)
+            messageMenu?.dismiss(animated = false)
+        }
         if (!hidden) {  // Fragment is now visible
             refreshModeTabs()
             settleSendButton()
@@ -4309,7 +4122,7 @@ $cleanContent
             pagerBusy = false
             return false
         }
-        target.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+        Haptics.tap(target)
         edgeAnimator?.cancel()
         pager = Pager(target, origin, direction, shot, content.width.toFloat(), edgeFrom, origin.textColors)
         movePager(0f)
@@ -4350,6 +4163,8 @@ $cleanContent
                 HardwareRaster.render(content.width, content.height, software = false) { content.draw(it) }
             }.getOrNull()?.let { return it }
         }
+        // Software fallback: the liquid mark only has a frame to draw if it read one back.
+        if (::centerWatermarkIcon.isInitialized) centerWatermarkIcon.prepareSnapshot()
         return runCatching { content.drawToBitmap(Bitmap.Config.ARGB_8888) }.getOrNull()
     }
 
@@ -4463,7 +4278,7 @@ $cleanContent
         val order = modeTabsInOrder()
         val direction = if (order.indexOf(tab) < order.indexOf(from)) 1 else -1
         if (!Motion.areAnimationsEnabled(requireContext())) {
-            if (switchToTab(tab)) tab.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            if (switchToTab(tab)) Haptics.tap(tab)
             placeModeTabIndicator(animate = false)
             return
         }
@@ -4546,7 +4361,7 @@ $cleanContent
             private fun releaseVelocity() = (root as? SwipeNavLayout)?.releaseVelocity ?: 0f
 
             override fun onCommit(direction: Int) {
-                content.performHapticFeedback(android.view.HapticFeedbackConstants.GESTURE_END)
+                Haptics.tap(content, android.view.HapticFeedbackConstants.GESTURE_END)
                 if (historyDrag) {
                     historyDrag = false
                     pagerOrigin = null
@@ -4925,7 +4740,7 @@ $cleanContent
             if (cameraIntent.resolveActivity(requireContext().packageManager) != null) {
                 cameraLauncher.launch(cameraIntent)
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_no_camera_app), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_no_camera_app))
                 requireContext().contentResolver.delete(imageUri, null, null)
                 currentCameraUri = null  // NEW: Clean up
             }
@@ -4947,7 +4762,7 @@ $cleanContent
                     // Direct access fallback (rare)
                     val inputStream = requireContext().contentResolver.openInputStream(pdfUri)
                         ?: run {
-                            AppToast.makeText(requireContext(), getString(R.string.toast_pdf_no_read_access), AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.toast_pdf_no_read_access))
                             return@launch
                         }
 
@@ -4973,12 +4788,12 @@ $cleanContent
                 val pdfRenderer = PdfRenderer(parcelFd)
                 when (val pageCount = pdfRenderer.pageCount) {
                     0 -> {
-                        AppToast.makeText(requireContext(), getString(R.string.toast_pdf_no_pages), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.toast_pdf_no_pages))
                         pdfRenderer.close()
                     }
                     1 -> {
                         val bitmap = renderPdfPageToBitmap(pdfRenderer, 0)
-                        processPdfBitmap(bitmap, "Page 1 of 1")
+                        processPdfBitmap(bitmap)
                         pdfRenderer.close()
                     }
                     else -> {
@@ -5038,32 +4853,28 @@ $cleanContent
     }
 
 
-    private suspend fun processPdfBitmap(bitmap: Bitmap, description: String) {
+    private suspend fun processPdfBitmap(bitmap: Bitmap) {
         if (discardAttachmentIfRp()) {
             bitmap.recycle()
             return
         }
-        val byteArrayOutputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
-        val bytes = byteArrayOutputStream.toByteArray()
+        // A page rendered at 2x is several megapixels: PNG-encoding it and writing the preview
+        // file would stall the main thread, so both happen on IO.
+        val tempPngFile = File(requireContext().cacheDir, "pdf_page_${System.currentTimeMillis()}.png")
+        val bytes = withContext(Dispatchers.IO) {
+            val byteArrayOutputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
+            bitmap.recycle()
+            byteArrayOutputStream.toByteArray().also { if (it.size <= 12_000_000) tempPngFile.writeBytes(it) }
+        }
 
         if (bytes.size > 12_000_000) {
             GlassNotice.show(requireContext(), getString(R.string.toast_pdf_page_too_large))
-            bitmap.recycle()
             return
         }
 
         selectedImageBytes = bytes
         selectedImageMime = "image/png"
-
-        // Save PNG to temp file for chat preview
-        val cacheDir = requireContext().cacheDir
-        val tempPngFile = File(cacheDir, "pdf_page_${System.currentTimeMillis()}.png")
-        withContext(Dispatchers.IO) {  // Off UI: Write bytes to file
-            tempPngFile.outputStream().use { out ->
-                out.write(bytes)
-            }
-        }
         currentTempImageFile = tempPngFile  // Track for cleanup
 
         val pngUri = FileProvider.getUriForFile(
@@ -5075,15 +4886,8 @@ $cleanContent
         // Set for ViewModel (enables bubble preview)
         viewModel.setPendingUserImageUri(pngUri.toString())
 
-        val previewBmp = bitmap.copy(Bitmap.Config.ARGB_8888, false)
-        previewImageView.setImageBitmap(previewBmp)
+        previewImageView.load(tempPngFile)
         attachmentPreviewContainer.visibility = View.VISIBLE
-
-        AppToast.makeText(requireContext(), getString(R.string.toast_converted_to_image, description), AppToast.LENGTH_SHORT).show()
-
-        // Recycle originals
-        bitmap.recycle()
-        // After copy
     }
 
 
@@ -5095,7 +4899,7 @@ $cleanContent
         pageCount: Int,
         tempPdfFile: File?
     ) {
-        val pageTitles = (1..pageCount).map { "Page $it" }.toTypedArray()
+        val pageTitles = (1..pageCount).map { getString(R.string.pdf_page_n, it) }.toTypedArray()
         var selectedPage = 0
         var converting = false
         val release = {
@@ -5107,12 +4911,12 @@ $cleanContent
         GlassAlertDialogBuilder(requireContext())
             .setTitle(R.string.dialog_select_pdf_page)
             .setSingleChoiceItems(pageTitles, 0) { _, which -> selectedPage = which }
-            .setPositiveButton("Convert") { _, _ ->
+            .setPositiveButton(R.string.action_convert) { _, _ ->
                 converting = true
                 lifecycleScope.launch {
                     try {
                         val bitmap = renderPdfPageToBitmap(pdfRenderer, selectedPage)
-                        processPdfBitmap(bitmap, "Page ${selectedPage + 1} of $pageCount")
+                        processPdfBitmap(bitmap)
                     } catch (e: Exception) {
                         GlassNotice.show(requireContext(), getString(R.string.notice_pdf_render_failed, e.message ?: ""))
                     } finally {
@@ -5205,7 +5009,6 @@ $cleanContent
 
                 // Update UI (your existing)
                 updateAttachmentButton()
-                AppToast.makeText(requireContext(), getString(R.string.toast_file_attached, fileName), AppToast.LENGTH_SHORT).show()
 
             } catch (e: Exception) {
                 GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_file, e.message ?: ""))
@@ -5296,11 +5099,11 @@ $cleanContent
         val builder = GlassAlertDialogBuilder(requireContext())
             .setTitle(getString(R.string.dialog_attached_files, pendingFiles.size))
             .setMessage(filesList)
-            .setPositiveButton("Remove All") { _, _ ->
+            .setPositiveButton(R.string.action_remove_all) { _, _ ->
                 pendingFiles.clear()
                 updateAttachmentButton()
             }
-            .setNegativeButton("Close", null)
+            .setNegativeButton(R.string.action_close, null)
 
         val dialog = builder.show()
 
@@ -5395,13 +5198,6 @@ $cleanContent
             else -> String.format("%.1fMB", bytes / 1024f / 1024f)
         }
     }
-    fun Int.dpToPx(): Int = (this * Resources.getSystem().displayMetrics.density).toInt()
-    fun TextView.animateColor(from: Int, to: Int, dur: Long): ValueAnimator? =
-        ValueAnimator.ofArgb(from, to).apply {
-            duration = dur
-            addUpdateListener { setTextColor(it.animatedValue as Int) }
-            start()
-        }
     private var scrollerCanUp: Boolean? = null
     private var scrollerCanDown: Boolean? = null
 
@@ -5507,25 +5303,13 @@ $cleanContent
         val extendedEnabled = sharedPreferencesHelper.getExtendedTopBarEnabled()
         homeButton.visibility = if (extendedEnabled) View.VISIBLE else View.GONE //backcopyButton.isGone &&
     }
-    private fun captureItemToBitmap(position: Int, format: String) {
-        val viewHolder = chatRecyclerView.findViewHolderForAdapterPosition(position) as? ChatAdapter.AssistantViewHolder
-        if (viewHolder != null) {
-            val bitmap = captureViewToBitmapNow(viewHolder.messageContainer)
-            if (bitmap != null) {
-                viewModel.saveBitmapToDownloads(bitmap, format)
-            } else {
-                GlassNotice.show(requireContext(), getString(R.string.toast_failed_capture_view))
-            }
-        } else {
-            AppToast.makeText(requireContext(), getString(R.string.toast_item_not_visible), AppToast.LENGTH_SHORT).show()
-        }
-    }
     fun copyLatestMessage() {
         chatAdapter.getLatestPlainText()?.let { text ->
             if (text.isNotBlank()) {
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Copied", text))
-                AppToast.makeText(requireContext(), getString(R.string.toast_copied), AppToast.LENGTH_SHORT).show()
+                // The app steps aside right after, so a tick is the only confirmation there is time for.
+                Haptics.tap(backcopyButton, android.view.HapticFeedbackConstants.CONFIRM)
             }
         }
     }
@@ -5682,17 +5466,9 @@ $cleanContent
         val historyHasWebp = viewModel.hasWebpInHistory()
         val hasImagesInCurrentChat = viewModel.hasImagesInChat()
         if (!newModelSupportsWebp && (isStagedImageWebp || historyHasWebp)) {
-            AppToast.makeText(
-                requireContext(),
-                getString(R.string.model_switch_no_webp),
-                AppToast.LENGTH_LONG
-            ).show()
+            GlassNotice.show(requireContext(), getString(R.string.model_switch_no_webp))
         } else if (hasImagesInCurrentChat && !viewModel.isVisionModel(modelString)) {
-            AppToast.makeText(
-                requireContext(),
-                getString(R.string.model_switch_no_vision),
-                AppToast.LENGTH_LONG
-            ).show()
+            GlassNotice.show(requireContext(), getString(R.string.model_switch_no_vision))
         } else {
             viewModel.setModel(modelString)
             if (viewModel.activeModelIsLan()) {
@@ -6379,11 +6155,7 @@ $cleanContent
             pendingFiles.clear()
             updateAttachmentButton()
             if (hadAttachments) {
-                AppToast.makeText(
-                    requireContext(),
-                    getString(R.string.rp_attachments_disabled),
-                    AppToast.LENGTH_SHORT
-                ).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
             }
             applyModelCapabilityChrome(viewModel.activeChatModel.value)
             presetsButton.visibility = View.GONE
@@ -6493,29 +6265,6 @@ $cleanContent
         }
     }
 
-    fun captureViewToBitmapNow(view: View): Bitmap? {
-        // If the view is already laid out, use its current size.
-        if (view.width > 0 && view.height > 0) {
-            val bitmap = createBitmap(view.width, view.height)
-            val canvas = Canvas(bitmap)
-            view.draw(canvas)
-            return bitmap
-        }
-
-        // If not laid out, measure and layout manually.
-        val widthSpec = View.MeasureSpec.makeMeasureSpec(view.layoutParams.width, View.MeasureSpec.EXACTLY)
-        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        view.measure(widthSpec, heightSpec)
-        val measuredHeight = view.measuredHeight
-        val heightSpecExact = View.MeasureSpec.makeMeasureSpec(measuredHeight, View.MeasureSpec.EXACTLY)
-        view.measure(widthSpec, heightSpecExact)
-
-        val bitmap = createBitmap(view.measuredWidth, view.measuredHeight)
-        val canvas = Canvas(bitmap)
-        view.layout(0, 0, view.measuredWidth, view.measuredHeight)
-        view.draw(canvas)
-        return bitmap
-    }
     private fun printChatHtml(htmlContent: String) {
         val printManager = requireContext().getSystemService(Context.PRINT_SERVICE) as PrintManager
         val currentModel = viewModel._activeChatModel.value ?: "Unknown"

@@ -13,7 +13,8 @@
     <LinearLayout
         android:id="@+id/codeThoughtHeader"
         android:layout_width="wrap_content"
-        android:layout_height="32dp"
+        android:layout_height="wrap_content"
+        android:minHeight="44dp"
         android:background="@drawable/bg_press_svg"
         android:clickable="true"
         android:focusable="true"

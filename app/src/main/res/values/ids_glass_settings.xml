@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Set on a dialog window's decor once it has been frosted, so only the first call does the work. -->
+    <item name="tag_glass_frosted" type="id" />
+</resources>

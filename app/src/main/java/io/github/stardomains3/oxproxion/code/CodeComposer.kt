@@ -174,15 +174,19 @@ class CodeComposer(
                 outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
             }
             val remove = ImageButton(context).apply {
-                val sz = (22 * d).toInt()
-                layoutParams = FrameLayout.LayoutParams(sz, sz, Gravity.TOP or Gravity.END).also {
-                    it.topMargin = (2 * d).toInt()
-                    it.marginEnd = (2 * d).toInt()
-                }
+                // A 44dp hit area around the same 22dp disc. TouchTargets.expand can't do it here:
+                // its padded rect must sit inside the host, and the disc is at the chip's corner.
+                val hit = (44 * d).toInt()
+                val gapSide = (2 * d).toInt()
+                val gapFar = (20 * d).toInt()
+                val pad = (4 * d).toInt()
+                layoutParams = FrameLayout.LayoutParams(hit, hit, Gravity.TOP or Gravity.END)
                 setImageResource(R.drawable.ic_close_x)
-                setBackgroundResource(R.drawable.bg_circle_soft)
+                background = android.graphics.drawable.InsetDrawable(
+                    context.getDrawable(R.drawable.bg_circle_soft), gapFar, gapSide, gapSide, gapFar
+                )
                 contentDescription = context.getString(R.string.cd_code_remove_attachment)
-                setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
+                setPadding(gapFar + pad, gapSide + pad, gapSide + pad, gapFar + pad)
                 setOnClickListener {
                     pendingAttachments.remove(att)
                     refreshAttachStrip()

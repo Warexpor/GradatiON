@@ -26,15 +26,16 @@ class SharedPreferencesHelper(context: Context) {
     val mainPrefs: SharedPreferences = appContext.getSharedPreferences(MAIN_PREFS, Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
     private val gson = Gson() // Kept temporarily for migration only
-    interface OnTimeoutChangedListener {
-        fun onTimeoutChanged(newMinutes: Int)
-    }
 
-    private var timeoutListener: OnTimeoutChangedListener? = null
+    /** Decodes a stored JSON value. A corrupt one falls back instead of crashing every screen that reads it. */
+    private inline fun <reified T> decodeOr(key: String, raw: String, fallback: () -> T): T =
+        try {
+            json.decodeFromString<T>(raw)
+        } catch (e: Exception) {
+            Log.w("SharedPrefs", "Unreadable $key (${e.javaClass.simpleName}); using the default")
+            fallback()
+        }
 
-    fun setTimeoutChangedListener(listener: OnTimeoutChangedListener) {
-        this.timeoutListener = listener
-    }
     companion object {
 
         private const val KEY_VOICE_INPUT_MODEL = "voice_input_model"
@@ -89,7 +90,8 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_OPENROUTER_TRANSFORMS_ENABLED = "openrouter_transforms_enabled"
         private const val KEY_EXPANDABLE_INPUT = "expandable_input_enabled"
         const val LAN_API_KEY = "lan_api_key"  // NEW
-        private const val KEY_TIMEOUT_MINUTES = "timeout_minutes"
+        /** Request timeout in minutes; the chat clients rebuild themselves when this changes. */
+        const val KEY_TIMEOUT_MINUTES = "timeout_minutes"
         private const val KEY_DISABLE_WEB_SEARCH_AFTER_SEND = "disable_web_search_after_send"
         private const val KEY_SCROLLERS_ENABLED = "scrollers_enabled"
         private const val KEY_CUSTOM_PROMPTS = "custom_prompts"
@@ -266,14 +268,19 @@ class SharedPreferencesHelper(context: Context) {
         val oldJson = mainPrefs.getString(KEY_OPEN_ROUTER_MODELS, null)
         if (oldJson != null) {
             val type = object : TypeToken<List<LlmModel>>() {}.type
-            val oldModels: List<LlmModel> = gson.fromJson(oldJson, type)
-            saveOpenRouterModels(oldModels)
+            val oldModels: List<LlmModel>? = try {
+                gson.fromJson(oldJson, type)
+            } catch (e: Exception) {
+                Log.w("SharedPrefs", "Unreadable $KEY_OPEN_ROUTER_MODELS (${e.javaClass.simpleName}); skipping migration")
+                null
+            }
+            if (oldModels != null) saveOpenRouterModels(oldModels)
         }
     }
     fun getCustomPrompts(): List<Prompt> {
         val jsonString = mainPrefs.getString(KEY_CUSTOM_PROMPTS, null)
         return if (jsonString != null) {
-            json.decodeFromString(jsonString)
+            decodeOr(KEY_CUSTOM_PROMPTS, jsonString) { emptyList<Prompt>() }
         } else {
             emptyList()
         }
@@ -502,8 +509,6 @@ class SharedPreferencesHelper(context: Context) {
     }
     fun saveTimeoutMinutes(minutes: Int) {
         mainPrefs.edit { putInt(KEY_TIMEOUT_MINUTES, minutes) }
-        // Notify the listener if it exists
-        timeoutListener?.onTimeoutChanged(minutes)
     }
     fun getScrollProgressEnabled(): Boolean = mainPrefs.getBoolean(KEY_SCROLL_PROGRESS_ENABLED, false)  // Off: a full-width rule under the tabs reads as a glitch
     fun saveScrollProgressEnabled(enabled: Boolean) = mainPrefs.edit {
@@ -511,7 +516,7 @@ class SharedPreferencesHelper(context: Context) {
     }
     fun getSortOrder(): SortOrder {
         val sortOrderName = mainPrefs.getString(KEY_SORT_ORDER, SortOrder.ALPHABETICAL.name)
-        return SortOrder.valueOf(sortOrderName ?: SortOrder.ALPHABETICAL.name)
+        return SortOrder.entries.firstOrNull { it.name == sortOrderName } ?: SortOrder.ALPHABETICAL
     }
     fun getUseCopyButton2(): Boolean {
         return mainPrefs.getBoolean(KEY_USE_COPY_BUTTON2, false)  // false = Dismiss, true = Copy
@@ -549,6 +554,21 @@ class SharedPreferencesHelper(context: Context) {
         }
     }
 
+    /**
+     * Everything kept in prefs for one chat: its fork, swipe alternates and memory facts. Call it
+     * when the chat is deleted, and when a new chat is given an id, so a recycled id never
+     * inherits another chat's leftovers.
+     */
+    fun clearSessionPrefs(sessionId: Long) {
+        mainPrefs.edit {
+            remove("$KEY_CHAT_FORK_INDEX_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_PREFIX$sessionId")
+            remove("$KEY_RP_SWIPE_PREFIX$sessionId")
+            remove("rp_facts_$sessionId")
+        }
+    }
+
     fun saveExpandableInput(enabled: Boolean) {
         mainPrefs.edit { putBoolean(KEY_EXPANDABLE_INPUT, enabled) }
     }
@@ -567,7 +587,7 @@ class SharedPreferencesHelper(context: Context) {
     fun getOpenRouterModels(): List<LlmModel> {
         val jsonString = mainPrefs.getString(KEY_OPEN_ROUTER_MODELS, null)
         return if (jsonString != null) {
-            json.decodeFromString(jsonString)
+            decodeOr(KEY_OPEN_ROUTER_MODELS, jsonString) { emptyList<LlmModel>() }
         } else {
             emptyList()
         }
@@ -775,6 +795,18 @@ class SharedPreferencesHelper(context: Context) {
     // --- API Key Management ---
 
     fun saveApiKey(alias: String, apiKey: String): Boolean {
+        // Keep the old key until the new one proves it decrypts, so a failed save is not a lost key.
+        val oldEncrypted = apiKeysPrefs.getString("${alias}_encrypted", null)
+        val oldIv = apiKeysPrefs.getString("${alias}_iv", null)
+        fun restoreOld() = apiKeysPrefs.edit {
+            if (oldEncrypted != null && oldIv != null) {
+                putString("${alias}_encrypted", oldEncrypted)
+                putString("${alias}_iv", oldIv)
+            } else {
+                remove("${alias}_encrypted")
+                remove("${alias}_iv")
+            }
+        }
         return try {
             val secretKey = getOrCreateSecretKey(alias)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -794,11 +826,13 @@ class SharedPreferencesHelper(context: Context) {
             val roundTrip = getApiKeyFromPrefs(alias)
             if (roundTrip != apiKey) {
                 Log.e("API_KEY_STORAGE", "Round-trip verification failed for $alias")
+                restoreOld()
                 return false
             }
             true
         } catch (e: Exception) {
             Log.e("API_KEY_STORAGE", "Error encrypting $alias", e)
+            restoreOld()
             false
         }
     }
@@ -923,7 +957,7 @@ class SharedPreferencesHelper(context: Context) {
     fun getCustomModels(): MutableList<LlmModel> {
         val jsonString = mainPrefs.getString(KEY_CUSTOM_MODELS, null)
         return if (jsonString != null) {
-            json.decodeFromString<MutableList<LlmModel>>(jsonString)
+            decodeOr(KEY_CUSTOM_MODELS, jsonString) { mutableListOf<LlmModel>() }
         } else {
             mutableListOf()
         }
@@ -983,7 +1017,7 @@ class SharedPreferencesHelper(context: Context) {
     fun getSelectedSystemMessage(): SystemMessage {
         val jsonString = mainPrefs.getString(KEY_SELECTED_SYSTEM_MESSAGE, null)
         return if (jsonString != null) {
-            json.decodeFromString(jsonString)
+            decodeOr(KEY_SELECTED_SYSTEM_MESSAGE, jsonString) { getDefaultSystemMessage() }
         } else {
             // Return the saved default message instead of creating a new instance
             getDefaultSystemMessage()
@@ -993,7 +1027,7 @@ class SharedPreferencesHelper(context: Context) {
     fun getCustomSystemMessages(): List<SystemMessage> {
         val jsonString = mainPrefs.getString(KEY_CUSTOM_SYSTEM_MESSAGES, null)
         return if (jsonString != null) {
-            json.decodeFromString(jsonString)
+            decodeOr(KEY_CUSTOM_SYSTEM_MESSAGES, jsonString) { emptyList<SystemMessage>() }
         } else {
             emptyList()
         }
@@ -1020,12 +1054,14 @@ class SharedPreferencesHelper(context: Context) {
     fun getDefaultSystemMessage(): SystemMessage {
         val jsonString = mainPrefs.getString(KEY_DEFAULT_SYSTEM_MESSAGE, null)
         return if (jsonString != null) {
-            json.decodeFromString(jsonString)
+            decodeOr(KEY_DEFAULT_SYSTEM_MESSAGE, jsonString) { builtInDefaultSystemMessage() }
         } else {
-            // Fallback to the original default
-            SystemMessage("Default", "You are a helpful assistant. Markdown rendering is supported in your response", isDefault = true)
+            builtInDefaultSystemMessage()
         }
     }
+
+    private fun builtInDefaultSystemMessage() =
+        SystemMessage("Default", "You are a helpful assistant. Markdown rendering is supported in your response", isDefault = true)
 
     // Add this method to save the default system message
     fun saveDefaultSystemMessage(systemMessage: SystemMessage) {
@@ -1188,6 +1224,23 @@ class SharedPreferencesHelper(context: Context) {
         if (voice.name == null) remove("rp_voice_$k") else putString("rp_voice_$k", voice.name)
         putFloat("rp_voice_pitch_$k", voice.pitch)
         putFloat("rp_voice_rate_$k", voice.rate)
+    }
+
+    /**
+     * Everything stored per character outside Room, for when the character is deleted. Ids are
+     * never reused by Room's autoincrement, so these would otherwise sit there for good (the
+     * wallpaper photo most visibly, as a file the user can no longer reach).
+     */
+    fun clearRpCharacterPrefs(characterId: Long) {
+        mainPrefs.edit {
+            remove(rpMemoryKey(characterId))
+            remove("rp_layout_$characterId")
+            remove("rp_voice_$characterId")
+            remove("rp_voice_pitch_$characterId")
+            remove("rp_voice_rate_$characterId")
+            remove("rp_lorebook_$characterId")
+        }
+        BackgroundPhoto.delete(appContext, BackgroundPhoto.slotForCharacter(characterId))
     }
 
     /** Let the model keep each character's Memory up to date as long chats outgrow the API window. */

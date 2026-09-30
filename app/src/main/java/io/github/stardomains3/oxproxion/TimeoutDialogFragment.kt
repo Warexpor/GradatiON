@@ -5,11 +5,11 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import kotlin.text.toIntOrNull
 import kotlin.text.trim
 
@@ -41,15 +41,17 @@ class TimeoutDialogFragment : DialogFragment() {
         // pre‑fill with current value
         editText.setText(prefs.getTimeoutMinutes().toString())
 
+        val layout = view.findViewById<TextInputLayout>(R.id.edit_text_layout_timeout)
+        layout.clearErrorOnEdit()
+
         btnSave.setOnClickListener {
             val txt = editText.text?.toString()?.trim() ?: ""
             val minutes = txt.toIntOrNull()
             if (minutes != null && minutes in MIN_MINUTES..MAX_MINUTES) {
                 prefs.saveTimeoutMinutes(minutes)
-                AppToast.makeText(requireContext(), "Timeout saved ($minutes min)", AppToast.LENGTH_SHORT).show()
                 dismiss()
             } else {
-                editText.error = "Enter a whole number between $MIN_MINUTES and $MAX_MINUTES"
+                layout.error = getString(R.string.timeout_error_range, MIN_MINUTES, MAX_MINUTES)
             }
         }
 

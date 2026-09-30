@@ -28,6 +28,16 @@ class PerfInvariantsTest {
         }
     }
 
+    /** The hour is kept for the minute it was computed in; a later minute must not reuse it wrongly. */
+    @Test fun localHourMemoFollowsTheClock() {
+        val start = (System.currentTimeMillis() / 60_000L) * 60_000L
+        val cal = Calendar.getInstance()
+        for (step in listOf(0L, 30_000L, 59_999L, 60_000L, 3_600_000L * 5, 3_600_000L * 5 + 1_000, 3_600_000L * 29)) {
+            cal.timeInMillis = start + step
+            assertEquals("step $step", cal.get(Calendar.HOUR_OF_DAY), localHourOfDay(start + step))
+        }
+    }
+
     @Test fun boxBlurSecondCallMatchesTheFirst() {
         fun sample(): Bitmap {
             val b = Bitmap.createBitmap(9, 7, Bitmap.Config.ARGB_8888)

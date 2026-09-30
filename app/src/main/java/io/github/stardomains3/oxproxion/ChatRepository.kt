@@ -23,6 +23,10 @@ class ChatRepository(private val chatDao: ChatDao) {
         chatDao.insertSessionAndMessages(session, messages)
     }
 
+    /** All or nothing; returns the new session ids in order. */
+    suspend fun insertImportedSessions(batch: List<Pair<ChatSession, List<ChatMessage>>>): List<Long> =
+        chatDao.insertImportedSessions(batch)
+
     suspend fun updateSessionTitle(sessionId: Long, newTitle: String) {
         chatDao.updateSessionTitle(sessionId, newTitle)
     }
@@ -45,7 +49,9 @@ class ChatRepository(private val chatDao: ChatDao) {
         return chatDao.getAllSessionsWithMessages()
     }
     suspend fun searchSessions(query: String, mode: ChatMode = ChatMode.ASK): List<ChatSession> {
-        val sessionIds = chatDao.searchSessionIds("%$query%", mode.storageValue)
+        // Escape LIKE's wildcards so a search for "50%" or "a_b" matches the text, not everything.
+        val escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        val sessionIds = chatDao.searchSessionIds("%$escaped%", mode.storageValue)
         return sessionIds.mapNotNull { chatDao.getSessionById(it) }
     }
 }

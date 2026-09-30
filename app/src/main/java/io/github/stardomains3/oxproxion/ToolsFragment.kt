@@ -29,11 +29,8 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
         locationPermissionLauncher = registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
-            if (isGranted) {
-                AppToast.makeText(requireContext(), "Location permission granted", AppToast.LENGTH_SHORT).show()
-            } else {
-                AppToast.makeText(requireContext(), "Location permission is required for this tool", AppToast.LENGTH_SHORT).show()
-            }
+            // Granting shows on the row itself; only a refusal needs saying.
+            if (!isGranted) GlassNotice.show(requireContext(), getString(R.string.toast_location_permission))
             refreshUI()
         }
 
@@ -50,7 +47,6 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
                 val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 requireContext().contentResolver.takePersistableUriPermission(uri, takeFlags)
                 sharedPreferencesHelper.saveSafFolderUri(uri.toString())
-                AppToast.makeText(requireContext(), "Folder access granted!", AppToast.LENGTH_SHORT).show()
                 refreshUI()
             }
         }
@@ -79,7 +75,7 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
             enabledTools
         }
 
-        var allItems = ToolItem.getAllToolItems(effectiveEnabledSet)
+        var allItems = ToolItem.getAllToolItems(effectiveEnabledSet, requireContext())
 
         // Filter Brave
         val braveApiKey = sharedPreferencesHelper.getApiKeyFromPrefs("brave_search_api_key")
