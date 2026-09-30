@@ -58,6 +58,7 @@ the state of work in progress in `docs/handoff.md`.
 - Replies are the tightest TLDR that is still understandable. No emojis. Say what was verified and what still needs the phone.
 - She trusts your taste. For "make this better" with no specifics, pick the direction yourself, do it,
   and explain the why.
+- Standing permission, in her words: "Hey, i trust ur taste, you can do whatever you want to make stuff better for both of us". When nothing specific is asked, or a fix has an obvious better form, do it and say why. Still no releases, force-pushes or key changes without a direct ask.
 - When context gets big, write `docs/handoff.md` and let a fresh session continue.
 
 Reply in TL;DR form: short, answer first, no long explanations unless asked.
