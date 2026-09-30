@@ -28,7 +28,7 @@ the state of work in progress in `docs/handoff.md`.
 - Send the APK to the user as a chat attachment.
 
 ## Tests
-- `./gradlew testDebugUnitTest -Pfast` runs the logic tests only. Run the full suite for UI changes and before a push.
+- `./gradlew testDebugUnitTest` runs the logic tests only (~20 s). `-Pfull` adds the screenshot classes (~4 min): run it for UI changes and always before a release. `--tests` names run as asked, screenshots included.
 - Screenshots come from Robolectric (`ScreenshotTest`, `CodeModeScreenshotTest`) and land in
   `app/build/screenshots`. There's no emulator, so anything involving motion needs a check on a real phone.
 - Kill stray test JVMs with `pgrep -f "Gradle Test Executo[r]"`. Using `pkill -f` with the plain pattern kills

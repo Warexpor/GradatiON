@@ -129,9 +129,13 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all { test ->
-            // `-Pfast`: logic tests only (~20 s). The screenshot classes are ~90% of the run;
-            // keep them for UI changes and before a push.
-            if (project.hasProperty("fast")) test.filter.excludeTestsMatching("*ScreenshotTest")
+            // Logic tests only by default (~20 s): the screenshot classes are ~85% of the run.
+            // `-Pfull` adds them (UI changes, and always before a release). Naming tests with
+            // `--tests` runs exactly those, screenshots included. `-Pfast` is kept as a no-op.
+            val named = gradle.startParameter.taskNames.any { it == "--tests" || it.startsWith("--tests=") }
+            if (!project.hasProperty("full") && !named) test.filter.excludeTestsMatching("*ScreenshotTest")
+            // Robolectric is heavy but the box has cores: two JVMs roughly halve the screenshot time.
+            test.maxParallelForks = if (project.hasProperty("full")) 2 else 1
         }
     }
     packaging {

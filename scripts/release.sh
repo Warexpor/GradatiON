@@ -38,7 +38,7 @@ fi
 [[ -z "$(git status --porcelain)" ]] || fail "working tree is not clean; commit or stash first."
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
-  "$GRADLE" testDebugUnitTest
+  "$GRADLE" testDebugUnitTest -Pfull
 fi
 
 "$GRADLE" clean assembleRelease \
