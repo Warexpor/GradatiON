@@ -50,7 +50,7 @@
     <string name="rp_ui_section_you">You</string>
     <!-- Roleplay home: the characters list you land on -->
     <string name="rp_home_chats">Characters</string>
-    <string name="rp_home_empty">No characters yet. Tap + to create one.</string>
+    <string name="rp_home_empty">No characters yet. Open your characters (top right) to create one.</string>
     <string name="rp_home_start">Tap to start a chat</string>
     <string name="rp_home_manage">Manage characters</string>
     <string name="rp_home_back">Characters</string>

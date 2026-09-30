@@ -1,8 +1,12 @@
 package io.github.stardomains3.oxproxion
 
 import android.app.Dialog
+import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
@@ -19,6 +23,7 @@ import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.max
@@ -87,7 +92,10 @@ class AvatarPicker(private val fragment: Fragment, private val onPicked: (Uri) -
                 AppToast.makeText(ctx, ctx.getString(R.string.rp_avatar_save_failed), AppToast.LENGTH_SHORT).show()
                 return@launch
             }
-            if (!fragment.isAdded) return@launch
+            if (!fragment.isAdded) {
+                bitmap.recycle()
+                return@launch
+            }
             showCropper(bitmap)
         }
     }
@@ -109,7 +117,11 @@ class AvatarPicker(private val fragment: Fragment, private val onPicked: (Uri) -
             val cut = view.crop(OUT_SIZE)
             val app = ctx.applicationContext
             fragment.lifecycleScope.launch {
-                val uri = cut?.let { withContext(Dispatchers.IO) { write(app, it) } }
+                val uri = withContext(Dispatchers.IO) {
+                    val out = cut?.let { write(app, it) }
+                    cut?.let { if (!it.isRecycled) it.recycle() }
+                    out
+                }
                 dialog.dismiss()
                 if (uri == null) {
                     AppToast.makeText(app, app.getString(R.string.rp_avatar_save_failed), AppToast.LENGTH_SHORT).show()
@@ -117,6 +129,9 @@ class AvatarPicker(private val fragment: Fragment, private val onPicked: (Uri) -
                     onPicked(uri)
                 }
             }
+        }
+        dialog.setOnDismissListener {
+            if (!bitmap.isRecycled) bitmap.recycle()
         }
         dialog.setContentView(root)
         dialog.window?.apply {
@@ -131,12 +146,20 @@ class AvatarPicker(private val fragment: Fragment, private val onPicked: (Uri) -
         const val OUT_SIZE = 512
         const val DECODE_EDGE = 2048
 
-        /** Decoded with the phone's own decoder, which also applies the photo's rotation. */
-        fun decode(ctx: android.content.Context, uri: Uri): Bitmap? = try {
+        /** Decoded with the phone's own decoder when possible; EXIF upright in both paths. */
+        fun decode(ctx: Context, uri: Uri): Bitmap? {
+            val fromDecoder = decodeWithImageDecoder(ctx, uri)
+            if (fromDecoder != null) return fromDecoder
+            return decodeWithBitmapFactory(ctx, uri)
+        }
+
+        private fun decodeWithImageDecoder(ctx: Context, uri: Uri): Bitmap? = try {
             ImageDecoder.decodeBitmap(ImageDecoder.createSource(ctx.contentResolver, uri)) { decoder, info, _ ->
                 val longest = max(info.size.width, info.size.height)
                 if (longest > DECODE_EDGE) {
-                    decoder.setTargetSampleSize(Integer.highestOneBit(longest / DECODE_EDGE).coerceAtLeast(1))
+                    var sample = 1
+                    while (longest / sample > DECODE_EDGE) sample *= 2
+                    decoder.setTargetSampleSize(sample)
                 }
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                 decoder.isMutableRequired = false
@@ -145,8 +168,58 @@ class AvatarPicker(private val fragment: Fragment, private val onPicked: (Uri) -
             null
         }
 
+        private fun decodeWithBitmapFactory(ctx: Context, uri: Uri): Bitmap? = try {
+            val raw = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            val longest = max(bounds.outWidth, bounds.outHeight)
+            while (longest / sample > DECODE_EDGE) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            val decoded = BitmapFactory.decodeByteArray(raw, 0, raw.size, opts) ?: return null
+            val oriented = applyExifOrientation(decoded, raw)
+            if (oriented !== decoded) decoded.recycle()
+            oriented
+        } catch (_: Exception) {
+            null
+        }
+
+        private fun readOrientation(raw: ByteArray): Int = try {
+            ExifInterface(ByteArrayInputStream(raw))
+                .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        } catch (_: Exception) {
+            ExifInterface.ORIENTATION_NORMAL
+        }
+
+        private fun applyExifOrientation(src: Bitmap, raw: ByteArray): Bitmap {
+            val orientation = readOrientation(raw)
+            val matrix = Matrix()
+            when (orientation) {
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.setRotate(180f)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.setScale(1f, -1f)
+                ExifInterface.ORIENTATION_TRANSPOSE -> {
+                    matrix.setRotate(90f)
+                    matrix.postScale(-1f, 1f)
+                }
+                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.setRotate(90f)
+                ExifInterface.ORIENTATION_TRANSVERSE -> {
+                    matrix.setRotate(-90f)
+                    matrix.postScale(-1f, 1f)
+                }
+                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.setRotate(-90f)
+                else -> return src
+            }
+            return try {
+                Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
+            } catch (_: Throwable) {
+                src
+            }
+        }
+
         /** The cut photo, in the cache; the screens' own save turns it into the stored avatar. */
-        fun write(ctx: android.content.Context, bitmap: Bitmap): Uri? = try {
+        fun write(ctx: Context, bitmap: Bitmap): Uri? = try {
             val stale = ctx.cacheDir.listFiles { f -> f.name.startsWith("avatar_crop_") }
             val file = File(ctx.cacheDir, "avatar_crop_${System.nanoTime()}.jpg")
             FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }

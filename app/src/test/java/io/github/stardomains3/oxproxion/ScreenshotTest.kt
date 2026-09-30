@@ -447,10 +447,43 @@ class ScreenshotTest {
         return bg
     }
 
+    private fun rpPanelGrid(a: MainActivity): android.widget.GridLayout {
+        val grid = root(a).findViewById<android.widget.GridLayout>(R.id.rpPanelTiles)
+        org.junit.Assert.assertNotNull("the character menu opened", grid)
+        return grid!!
+    }
+
+    private fun dismissRpPanel(a: MainActivity) {
+        var view: View = rpPanelGrid(a)
+        while (view.parent is View) {
+            view = view.parent as View
+            if (view is androidx.coordinatorlayout.widget.CoordinatorLayout) {
+                view.getChildAt(0).performClick()
+                break
+            }
+        }
+        idle()
+    }
+
+    private fun rpPanelShowing(a: MainActivity): Boolean =
+        root(a).findViewById<View>(R.id.rpPanelTiles)?.isShown == true
+
     /** [sharp]: the dialog dims the screen but does not blur it (the opaque character panel). */
     private fun snapDialog(a: MainActivity, name: String, sharp: Boolean = false) {
         val d: Dialog? = ShadowDialog.getLatestDialog()
-        if (d == null) { snap(root(a), name); return }
+        if (d == null) {
+            if (sharp) {
+                val r = root(a)
+                val bg = Bitmap.createBitmap(r.width, r.height, Bitmap.Config.ARGB_8888).also { b ->
+                    Canvas(b).apply { r.draw(this); drawColor(0x80000000.toInt()) }
+                }
+                val out = File("build/screenshots").apply { mkdirs() }
+                File(out, "$name.png").outputStream().use { bg.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            } else {
+                snap(root(a), name)
+            }
+            return
+        }
         val bg = if (sharp) {
             val r = root(a)
             Bitmap.createBitmap(r.width, r.height, Bitmap.Config.ARGB_8888).also { b ->
@@ -921,18 +954,16 @@ class ScreenshotTest {
         val button = a.findViewById<View>(R.id.controlsButton)
         org.junit.Assert.assertEquals(a.getString(R.string.cd_rp_scene), button.contentDescription)
         button.performClick(); settle()
-        val dialog = ShadowDialog.getLatestDialog()
-        org.junit.Assert.assertNotNull("the character menu opened", dialog)
-        org.junit.Assert.assertTrue(dialog!!.isShowing)
+        org.junit.Assert.assertTrue("the character menu opened", rpPanelShowing(a))
         org.junit.Assert.assertEquals("the old controls card stays shut", View.GONE, a.findViewById<View>(R.id.headerContainer).visibility)
         snapDialog(a, "rp_character_panel_tiles_dark", sharp = true)
-        val grid = dialog.findViewById<android.widget.GridLayout>(R.id.rpPanelTiles)
+        val grid = rpPanelGrid(a)
         for (i in 0 until grid.childCount) {
             val tile = grid.getChildAt(i)
             org.junit.Assert.assertTrue("tile $i has a size", tile.width > 0)
             org.junit.Assert.assertEquals("tile $i is square", tile.width, tile.height)
         }
-        dialog.dismiss(); idle()
+        dismissRpPanel(a)
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
         org.junit.Assert.assertEquals(a.getString(R.string.cd_controls), button.contentDescription)
     }
@@ -987,8 +1018,7 @@ class ScreenshotTest {
         a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
             .findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
         a.findViewById<View>(R.id.controlsButton).performClick(); settle()
-        val dialog = ShadowDialog.getLatestDialog()!!
-        val grid = dialog.findViewById<android.widget.GridLayout>(R.id.rpPanelTiles)
+        val grid = rpPanelGrid(a)
         val history = (0 until grid.childCount).map { grid.getChildAt(it) }
             .first { it.contentDescription == a.getString(R.string.rp_panel_history) }
         history.performClick(); settle()
@@ -1013,8 +1043,8 @@ class ScreenshotTest {
             .last { it.findViewById<View>(R.id.rpHistoryPreview) != null }.performClick(); settle()
         org.junit.Assert.assertTrue(a.supportFragmentManager.fragments.none { it is RpChatHistoryFragment })
         org.junit.Assert.assertNotEquals(opened, vm.getCurrentSessionId())
-        // Character sheet comes back after History; it used to stay dismissed.
-        org.junit.Assert.assertTrue(ShadowDialog.getLatestDialog()?.isShowing == true)
+        // Picking a chat lands in it: the sheet closes instead of staying over the new chat.
+        org.junit.Assert.assertFalse("panel closes after picking a chat", rpPanelShowing(a))
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
 
@@ -1093,7 +1123,7 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.modelNameTextView).visibility)
         (a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView).adapter as ChatAdapter).onSpeakerClick!!.invoke(); settle()
         snapDialog(a, "rp_character_panel_dark", sharp = true)
-        ShadowDialog.getLatestDialog()?.dismiss(); idle()
+        dismissRpPanel(a)
         // Re-apply RP chrome (the panel reads prefs; the chat reads them on mode change).
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()

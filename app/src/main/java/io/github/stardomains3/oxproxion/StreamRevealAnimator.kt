@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion
 
+import android.os.SystemClock
 import android.view.Choreographer
 
 /**
@@ -17,11 +18,21 @@ class StreamRevealAnimator(
     private var finishing: Boolean = false
     private var running: Boolean = false
     private var lastFrameNs: Long = 0L
+    private var lastSetTargetMs: Long = 0L
+    private val pacing = StreamRevealPacing.State()
 
     private val callback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNs: Long) {
             if (!running) return
-            val dtMs = if (lastFrameNs == 0L) 16f else ((frameTimeNs - lastFrameNs) / 1_000_000f).coerceIn(8f, 33f)
+            val nowMs = frameTimeNs / 1_000_000L
+            val dtMs = if (lastFrameNs == 0L) {
+                16f
+            } else {
+                ((frameTimeNs - lastFrameNs) / 1_000_000f).coerceIn(
+                    StreamRevealPacing.FRAME_DT_MIN_MS,
+                    StreamRevealPacing.FRAME_DT_MAX_MS
+                )
+            }
             lastFrameNs = frameTimeNs
 
             val backlog = target.length - shown
@@ -30,19 +41,32 @@ class StreamRevealAnimator(
                     finishing = false
                     stop()
                     onCaughtUp()
-                } else {
+                } else if (nowMs - lastSetTargetMs >= StreamRevealPacing.IDLE_STOP_MS) {
                     stop()
+                } else {
+                    choreographer.postFrameCallback(this)
                 }
                 return
             }
 
             val fadeFrom = shown
-            val chars = charsToReveal(backlog, dtMs, finishing)
-            shown = (shown + chars).coerceAtMost(target.length)
-            if (!finishing && shown < target.length) {
-                shown = snapToWordEnd(target, shown)
+            val backlogBefore = backlog
+            val out = StreamRevealPacing.charsForFrame(
+                pacing,
+                StreamRevealPacing.FrameInput(
+                    shown, target.length, dtMs, finishing, nowMs - lastSetTargetMs
+                )
+            )
+            pacing.revealCarry = out.revealCarry
+            if (out.charsToReveal > 0) {
+                shown = (shown + out.charsToReveal).coerceAtMost(target.length)
+                if (shown < target.length &&
+                    (finishing || backlogBefore >= StreamRevealPacing.WORD_SNAP_BACKLOG_THRESHOLD)
+                ) {
+                    shown = StreamRevealPacing.snapToWordEnd(target, shown)
+                }
+                onFrame(target.substring(0, shown), fadeFrom)
             }
-            onFrame(target.substring(0, shown), fadeFrom)
 
             if (shown >= target.length && finishing) {
                 finishing = false
@@ -56,14 +80,18 @@ class StreamRevealAnimator(
 
     fun setTarget(text: String) {
         if (text == target) return
-        // regionMatches avoids copying the shown prefix on every token; the common case is
-        // the reply only growing, and that path used to allocate a string each time.
         val held = shown.coerceAtMost(target.length)
         if (held > 0 && !text.regionMatches(0, target, 0, held)) {
             shown = longestCommonPrefixLen(target, text, held)
         }
+        val growth = text.length - target.length
+        val nowMs = SystemClock.uptimeMillis()
         target = text
         if (shown > target.length) shown = target.length
+        if (growth > 0) {
+            StreamRevealPacing.noteTargetGrowth(pacing, growth, nowMs)
+            lastSetTargetMs = nowMs
+        }
         ensureRunning()
     }
 
@@ -73,6 +101,8 @@ class StreamRevealAnimator(
         target = text
         shown = text.length
         finishing = false
+        pacing.reset()
+        lastSetTargetMs = SystemClock.uptimeMillis()
     }
 
     fun displayed(): String =
@@ -96,38 +126,19 @@ class StreamRevealAnimator(
         shown = 0
         finishing = false
         lastFrameNs = 0L
+        lastSetTargetMs = 0L
+        pacing.reset()
     }
 
     private fun ensureRunning() {
         if (running) return
         running = true
-        lastFrameNs = 0L
         choreographer.postFrameCallback(callback)
     }
 
     private fun stop() {
         running = false
         choreographer.removeFrameCallback(callback)
-    }
-
-    /**
-     * Ease toward the network: reveal about 1/24th of the backlog per frame (a ~0.4s time
-     * constant), never less than a character. A big chunk from the model spreads into a steady
-     * flow instead of landing as a block (the old curve dumped 1000 chars in four frames).
-     */
-    private fun charsToReveal(backlog: Int, dtMs: Float, finishing: Boolean): Int {
-        val frames = dtMs / 16f
-        val base = kotlin.math.ceil(backlog / 24f).toInt().coerceAtLeast(1)
-        val scaled = (base * frames).toInt().coerceAtLeast(1)
-        return if (finishing) maxOf(scaled * 3, backlog / 6, 12) else scaled
-    }
-
-    private fun snapToWordEnd(text: String, index: Int): Int {
-        if (index <= 0 || index >= text.length) return index
-        val c = text[index - 1]
-        if (c.isWhitespace() || c == '\n') return index
-        val nextBreak = text.indexOfAny(charArrayOf(' ', '\n', '\t', '.', ',', ';', ':', '!', '?'), index)
-        return if (nextBreak in index until index + 12) nextBreak + 1 else index
     }
 
     private fun longestCommonPrefixLen(a: String, b: String, limit: Int = minOf(a.length, b.length)): Int {

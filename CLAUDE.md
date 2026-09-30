@@ -65,3 +65,4 @@ Reply in TL;DR form: short, answer first, no long explanations unless asked.
 - Never add Claude attribution to git commits or PRs: no "Co-Authored-By: Claude" trailer, no "Generated with Claude Code" line.
 - Use the built-in Edit/Write/Read tools for file changes instead of Python scripts or shell workarounds, unless the tools can't handle it (binary files, big batch edits).
 - Only when running as Opus 5.5 (Haiku or Sonnet sessions ignore this rule and do the work themselves): act as an orchestrator: for big multi-step or parallelizable tasks, delegate the work to `worker` subagents (Sonnet 5.5, effort high, set in `.claude/agents/worker.md`) without asking, run independent ones in parallel, and review their results before reporting. Handle quick, small tasks yourself.
+ In Cursor, delegate to `generalPurpose` subagents on Composer 2.5 instead of `worker` (Cursor has no "auto" for subagents).

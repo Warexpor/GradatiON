@@ -219,8 +219,12 @@ class ChatAdapter(
                 fadeTimes.removeAt(fadeTimes.lastIndex)
             }
         } else if (len > lastRenderedLen) {
-            fadeStarts.add(lastRenderedLen)
-            fadeTimes.add(now)
+            val tailActive = fadeTimes.isNotEmpty() &&
+                now - fadeTimes.last() < StreamFadeSpan.DURATION_MS
+            if (!tailActive) {
+                fadeStarts.add(lastRenderedLen)
+                fadeTimes.add(now)
+            }
         }
         lastRenderedLen = len
         while (fadeTimes.isNotEmpty() && now - fadeTimes[0] >= StreamFadeSpan.DURATION_MS) {
@@ -951,6 +955,7 @@ class ChatAdapter(
         private val rpSpeakerAvatar: ImageView = itemView.findViewById(R.id.rpSpeakerAvatar)
         private val rpSpeakerNameView: TextView = itemView.findViewById(R.id.rpSpeakerName)
         private var thinkingBarAnimators: List<ObjectAnimator>? = null
+        private var rpBubbleLayoutApplied: Boolean? = null
 
         private val thinkingLabel: TextView = itemView.findViewById(R.id.thinkingLabel)
 
@@ -1050,6 +1055,8 @@ class ChatAdapter(
          * ignores the header's bottomMargin when the header has no bottom constraint.
          */
         private fun applyRpBubbleLayout(bubble: Boolean) {
+            if (rpBubbleLayoutApplied == bubble) return
+            rpBubbleLayoutApplied = bubble
             val d = itemView.resources.displayMetrics.density
             val headerLp = rpSpeakerHeader.layoutParams as ConstraintLayout.LayoutParams
             val msgLp = messageContainer.layoutParams as ConstraintLayout.LayoutParams
@@ -1259,7 +1266,6 @@ class ChatAdapter(
             streamReveal.setTarget(text)
             if (streamReveal.displayed().isEmpty()) {
                 bindReasoning(message, streaming = true)
-                renderStreamFrame(text.take(1))
             }
         }
 

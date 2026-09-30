@@ -6,6 +6,7 @@ import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Shader
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.animation.LinearInterpolator
 import android.widget.TextView
 
@@ -14,6 +15,11 @@ import android.widget.TextView
  * sheen. The base text keeps its muted color; a brighter band of [highlight] travels over it.
  */
 object ShimmerText {
+
+    private class ShimmerHooks(
+        val attach: View.OnAttachStateChangeListener,
+        val visibility: ViewTreeObserver.OnPreDrawListener,
+    )
 
     fun start(view: TextView, highlight: Int, periodMs: Long = 1600L) {
         stop(view)
@@ -40,17 +46,29 @@ object ShimmerText {
                 view.invalidate()
             }
         }
-        // Pause while the label is off the window (scrolled away, pooled, screen gone) so an
-        // infinite sweep never ticks for a view nobody can see.
+        val syncPause = {
+            if (view.isAttachedToWindow && view.isShown && view.windowVisibility == View.VISIBLE) {
+                animator.resume()
+            } else {
+                animator.pause()
+            }
+        }
+        val visibilityDraw = object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                syncPause()
+                return true
+            }
+        }
         val pauser = object : View.OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(v: View) = animator.resume()
+            override fun onViewAttachedToWindow(v: View) = syncPause()
             override fun onViewDetachedFromWindow(v: View) = animator.pause()
         }
         view.addOnAttachStateChangeListener(pauser)
+        view.viewTreeObserver.addOnPreDrawListener(visibilityDraw)
         view.setTag(R.id.tag_shimmer_animator, animator)
-        view.setTag(R.id.tag_shimmer_pauser, pauser)
+        view.setTag(R.id.tag_shimmer_pauser, ShimmerHooks(pauser, visibilityDraw))
         animator.start()
-        if (!view.isAttachedToWindow) animator.pause()
+        syncPause()
     }
 
     /**
@@ -66,8 +84,11 @@ object ShimmerText {
 
     fun stop(view: TextView) {
         view.setTag(R.id.tag_shimmer_pending, null)
-        (view.getTag(R.id.tag_shimmer_pauser) as? View.OnAttachStateChangeListener)?.let {
-            view.removeOnAttachStateChangeListener(it)
+        (view.getTag(R.id.tag_shimmer_pauser) as? ShimmerHooks)?.let { hooks ->
+            view.removeOnAttachStateChangeListener(hooks.attach)
+            if (view.viewTreeObserver.isAlive) {
+                view.viewTreeObserver.removeOnPreDrawListener(hooks.visibility)
+            }
         }
         view.setTag(R.id.tag_shimmer_pauser, null)
         (view.getTag(R.id.tag_shimmer_animator) as? ValueAnimator)?.cancel()

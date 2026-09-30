@@ -91,7 +91,9 @@ class AvatarAndPersonaTest {
         val inflater = android.view.LayoutInflater.from(themed)
         val page = inflater.inflate(R.layout.fragment_rp_page, null)
         assertNotNull(page.findViewById<View>(R.id.rpPageBody))
+        assertNotNull(page.findViewById<View>(R.id.rpPageScroll))
         val voice = inflater.inflate(R.layout.fragment_rp_voice, null)
+        assertNotNull(voice.findViewById<View>(R.id.rpPageScroll))
         assertNotNull(voice.findViewById<View>(R.id.rpVoiceList))
         assertNotNull(voice.findViewById<View>(R.id.rpVoicePitch))
     }

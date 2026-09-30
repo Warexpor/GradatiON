@@ -40,6 +40,8 @@ class AvatarCropView @JvmOverloads constructor(
 
     private var bitmap: Bitmap? = null
     private var minScale = 1f
+    private val matrixValues = FloatArray(9)
+    private val mappedRect = RectF()
 
     private val scaler = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
@@ -103,16 +105,16 @@ class AvatarCropView @JvmOverloads constructor(
     }
 
     private fun currentScale(): Float {
-        val v = FloatArray(9)
-        matrix.getValues(v)
-        return v[Matrix.MSCALE_X]
+        matrix.getValues(matrixValues)
+        return matrixValues[Matrix.MSCALE_X]
     }
 
     /** Keeps the photo covering the window on every side. */
     private fun settle() {
         val bmp = bitmap ?: return
-        val r = RectF(0f, 0f, bmp.width.toFloat(), bmp.height.toFloat())
-        matrix.mapRect(r)
+        mappedRect.set(0f, 0f, bmp.width.toFloat(), bmp.height.toFloat())
+        matrix.mapRect(mappedRect)
+        val r = mappedRect
         var dx = 0f
         var dy = 0f
         if (r.left > window.left) dx = window.left - r.left else if (r.right < window.right) dx = window.right - r.right

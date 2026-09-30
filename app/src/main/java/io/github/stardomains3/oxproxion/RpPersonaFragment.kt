@@ -79,8 +79,10 @@ class RpPersonaFragment : Fragment() {
         aboutInput.doAfterTextChanged { markInUse() }
         showPortrait()
 
+        val frame = view.findViewById<android.widget.FrameLayout>(R.id.rpPersonaAvatarFrame)
         val pick = View.OnClickListener { pickImage.launch() }
-        view.findViewById<View>(R.id.rpPersonaAvatarFrame).setOnClickListener(pick)
+        frame.setOnClickListener(pick)
+        TouchTargets.expand(frame, view.findViewById(R.id.rpPersonaCameraBadge))
         view.findViewById<View>(R.id.rpPersonaPickPhoto).setOnClickListener(pick)
         view.findViewById<View>(R.id.rpPersonaRemovePhoto).setOnClickListener {
             photo = null

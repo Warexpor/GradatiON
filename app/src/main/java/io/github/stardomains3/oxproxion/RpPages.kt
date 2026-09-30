@@ -15,16 +15,23 @@ import android.view.ViewOutlineProvider
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.max
 
 /**
  * The character panel's tiles that used to open small popovers now open these full-screen pages.
@@ -34,6 +41,7 @@ abstract class RpPageFragment : Fragment() {
 
     protected lateinit var prefs: SharedPreferencesHelper
     protected lateinit var body: LinearLayout
+    protected var restoredState: Bundle? = null
     protected val chatViewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
 
     /** The character this page is about; null is the plain LLM speaker (its settings have no character id). */
@@ -50,6 +58,7 @@ abstract class RpPageFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        restoredState = savedInstanceState
         prefs = SharedPreferencesHelper(requireContext())
         val pageTitle = title()
         view.findViewById<MaterialToolbar>(R.id.toolbar).apply {
@@ -57,7 +66,30 @@ abstract class RpPageFragment : Fragment() {
             setNavigationOnClickListener { parentFragmentManager.popBackStack() }
         }
         body = view.findViewById(R.id.rpPageBody) ?: view as LinearLayout
+        applyPageInsets(view)
         build(body)
+    }
+
+    private fun applyPageInsets(root: View) {
+        val toolbar = root.findViewById<MaterialToolbar>(R.id.toolbar)
+        val scroll = root.findViewById<ScrollView>(R.id.rpPageScroll)
+            ?: root.findViewById<View>(R.id.rpPageBody)?.parent as? ScrollView
+        val scrollPadBottom = scroll?.paddingBottom ?: 0
+        val toolbarPadTop = toolbar.paddingTop
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            toolbar?.updatePadding(top = toolbarPadTop + bars.top)
+            scroll?.updatePadding(
+                left = bars.left,
+                right = bars.right,
+                bottom = scrollPadBottom + max(bars.bottom, ime.bottom),
+            )
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
     }
 
     protected fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
@@ -114,6 +146,7 @@ abstract class RpPageFragment : Fragment() {
 
     /** Full-screen page over this one, like the panel's own tiles. */
     protected fun pushPage(fragment: Fragment) {
+        if (!isAdded || parentFragmentManager.isStateSaved) return
         parentFragmentManager.beginTransaction()
             .withGrokStackAnimations()
             .hide(this)
@@ -209,6 +242,7 @@ class RpWallpaperFragment : RpPageFragment() {
     override fun title() = getString(R.string.rp_panel_wallpaper)
 
     private var refresh: (() -> Unit)? = null
+    private var previewJob: kotlinx.coroutines.Job? = null
 
     private val pick = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         val id = characterId
@@ -243,9 +277,19 @@ class RpWallpaperFragment : RpPageFragment() {
 
         fun bindActions() {
             val file = BackgroundPhoto.file(ctx, slot).takeIf { it.isFile }
-            preview.setImageBitmap(file?.let {
-                BitmapFactory.decodeFile(it.absolutePath, BitmapFactory.Options().apply { inSampleSize = 2 })
-            })
+            preview.setImageDrawable(null)
+            previewJob?.cancel()
+            if (file != null) {
+                val maxEdge = dp(720)
+                previewJob = viewLifecycleOwner.lifecycleScope.launch {
+                    val bmp = withContext(Dispatchers.IO) { decodeWallpaperPreview(file.absolutePath, maxEdge) }
+                    if (!isAdded || view == null) {
+                        bmp?.recycle()
+                        return@launch
+                    }
+                    preview.setImageBitmap(bmp)
+                }
+            }
             actions.removeAllViews()
             actions.addView(row(
                 getString(R.string.rp_wallpaper_change),
@@ -265,12 +309,24 @@ class RpWallpaperFragment : RpPageFragment() {
     }
 
     override fun onDestroyView() {
+        previewJob?.cancel()
+        previewJob = null
         refresh = null
         super.onDestroyView()
     }
 
     companion object {
         fun newInstance(characterId: Long, name: String) = RpWallpaperFragment().with(characterId, name)
+
+        private fun decodeWallpaperPreview(path: String, maxEdge: Int): android.graphics.Bitmap? {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            val longest = max(bounds.outWidth, bounds.outHeight)
+            while (longest / sample > maxEdge) sample *= 2
+            return BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+        }
     }
 }
 
@@ -286,8 +342,9 @@ class RpMemoryFragment : RpPageFragment() {
     override fun build(body: LinearLayout) {
         noteStart = prefs.getRpMemory(characterId)
         factsStart = chatViewModel.currentRpFacts()
-        note = field(body, R.string.rp_memory_note, R.string.rp_memory_hint, noteStart)
-        facts = field(body, R.string.rp_facts_title, R.string.rp_facts_hint, factsStart)
+        val saved = restoredState
+        note = field(body, R.string.rp_memory_note, R.string.rp_memory_hint, saved?.getString(KEY_NOTE) ?: noteStart)
+        facts = field(body, R.string.rp_facts_title, R.string.rp_facts_hint, saved?.getString(KEY_FACTS) ?: factsStart)
         val saveButton = layoutInflater.inflate(R.layout.view_rp_save_button, body, false)
         saveButton.setOnClickListener {
             save()
@@ -331,6 +388,12 @@ class RpMemoryFragment : RpPageFragment() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        note?.text?.toString()?.let { outState.putString(KEY_NOTE, it) }
+        facts?.text?.toString()?.let { outState.putString(KEY_FACTS, it) }
+    }
+
     override fun onDestroyView() {
         note = null
         facts = null
@@ -338,6 +401,9 @@ class RpMemoryFragment : RpPageFragment() {
     }
 
     companion object {
+        private const val KEY_NOTE = "rpMemoryDraftNote"
+        private const val KEY_FACTS = "rpMemoryDraftFacts"
+
         fun newInstance(characterId: Long?, name: String) = RpMemoryFragment().with(characterId, name)
     }
 }
@@ -352,16 +418,23 @@ class RpVoiceFragment : RpPageFragment() {
     private var pending: SharedPreferencesHelper.RpVoice? = null
 
     override fun build(body: LinearLayout) {
+        pending = restorePending(restoredState) ?: pending
         requireView().findViewById<View>(R.id.rpSaveButton).setOnClickListener {
             pending?.let { prefs.saveRpVoice(characterId, it) }
             parentFragmentManager.popBackStack()
         }
+        val start = pending ?: prefs.getRpVoice(characterId)
         // Voices arrive once the engine is up, so the list is bound then.
         tts = TextToSpeech(requireContext().applicationContext) { status ->
             if (!isAdded || view == null) return@TextToSpeech
             val engine = tts.takeIf { status == TextToSpeech.SUCCESS }
-            RpVoiceDialog.bind(this, requireView(), characterName, engine, prefs.getRpVoice(characterId)) { pending = it }
+            RpVoiceDialog.bind(this, requireView(), characterName, engine, start) { pending = it }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pending?.let { savePending(outState, it) }
     }
 
     override fun onDestroyView() {
@@ -371,6 +444,25 @@ class RpVoiceFragment : RpPageFragment() {
     }
 
     companion object {
+        private const val KEY_VOICE_NAME = "rpVoiceDraftName"
+        private const val KEY_VOICE_PITCH = "rpVoiceDraftPitch"
+        private const val KEY_VOICE_RATE = "rpVoiceDraftRate"
+
+        fun savePending(out: Bundle, voice: SharedPreferencesHelper.RpVoice) {
+            out.putString(KEY_VOICE_NAME, voice.name)
+            out.putFloat(KEY_VOICE_PITCH, voice.pitch)
+            out.putFloat(KEY_VOICE_RATE, voice.rate)
+        }
+
+        fun restorePending(saved: Bundle?): SharedPreferencesHelper.RpVoice? {
+            if (saved == null || !saved.containsKey(KEY_VOICE_PITCH)) return null
+            return SharedPreferencesHelper.RpVoice(
+                saved.getString(KEY_VOICE_NAME),
+                saved.getFloat(KEY_VOICE_PITCH, 1f),
+                saved.getFloat(KEY_VOICE_RATE, 1f),
+            )
+        }
+
         fun newInstance(characterId: Long?, name: String) = RpVoiceFragment().with(characterId, name)
     }
 }

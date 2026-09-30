@@ -28,11 +28,12 @@
             android:layout_height="wrap_content"
             android:text="@string/save_lan_example"
             android:textColor="@color/xai_mute"
-            android:textSize="12sp"
+            android:textSize="13sp"
             android:layout_marginBottom="8dp" />
 
         <!-- Edit field -->
         <com.google.android.material.textfield.TextInputLayout
+            style="@style/Xai.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/save_lan_endpoint_hint"
@@ -138,6 +139,7 @@
             android:layout_marginBottom="8dp" />
 
         <com.google.android.material.textfield.TextInputLayout
+            style="@style/Xai.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/save_lan_enter_if_required"

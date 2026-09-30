@@ -653,7 +653,7 @@
                         android:layout_width="40dp"
                         android:layout_height="40dp"
                         android:contentDescription="@string/control_settings"
-                        app:icon="@drawable/ic_settings" />
+                        app:icon="@drawable/ic_gear" />
                 </LinearLayout>
             </HorizontalScrollView>
         </androidx.constraintlayout.widget.ConstraintLayout>
@@ -1326,151 +1326,224 @@
 
             <LinearLayout
                 android:id="@+id/buttonsRow1"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:gravity="center"
                 android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/reasoningButton"
-                    style="@style/Widget.Gradation.ControlTile"
-                    android:visibility="gone"
-                    android:layout_width="76dp"
-                    android:layout_height="72dp"
-                    android:text="@string/control_reasoning"
-                    app:icon="@drawable/ic_reasoning" />
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/reasoningButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:visibility="gone"
+                        android:text="@string/control_reasoning"
+                        app:icon="@drawable/ic_reasoning" />
+                </FrameLayout>
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
             </LinearLayout>
             <LinearLayout
                 android:id="@+id/buttonsRow3"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
                 android:layout_marginTop="8dp"
-                android:gravity="center"
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/toolsButton"
                     style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
+                    android:layout_width="0dp"
                     android:layout_height="72dp"
+                    android:layout_weight="1"
                     android:text="@string/control_tools"
                     app:icon="@drawable/ic_tools" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/presetsButton"
                     style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
+                    android:layout_width="0dp"
                     android:layout_height="72dp"
+                    android:layout_weight="1"
                     android:text="@string/control_presets"
                     app:icon="@drawable/ic_presets" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/systemMessageButton"
                     style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
+                    android:layout_width="0dp"
                     android:layout_height="72dp"
+                    android:layout_weight="1"
                     android:contentDescription="@string/cd_system_message"
                     android:text="@string/control_system"
                     app:icon="@drawable/ic_system_prompt" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/settingsButton"
                     style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
+                    android:layout_width="0dp"
                     android:layout_height="72dp"
+                    android:layout_weight="1"
                     android:text="@string/control_settings"
-                    app:icon="@drawable/ic_settings" />
+                    app:icon="@drawable/ic_gear" />
             </LinearLayout>
             <LinearLayout
                 android:id="@+id/buttonsRowComposer"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
                 android:layout_marginTop="8dp"
-                android:gravity="center"
                 android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/attachmentButton"
-                    style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
-                    android:layout_height="72dp"
-                    android:contentDescription="@string/cd_attach_file"
-                    android:text="@string/control_files"
-                    app:icon="@drawable/ic_attachdoc" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/plusButton"
-                    style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
-                    android:layout_height="72dp"
-                    android:contentDescription="@string/cd_attach_media"
-                    android:text="@string/control_image"
-                    app:icon="@drawable/ic_imgup" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/genButton"
-                    style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
-                    android:layout_height="72dp"
-                    android:visibility="gone"
-                    android:contentDescription="@string/cd_image_gen"
-                    android:text="@string/control_generate"
-                    app:icon="@drawable/ic_palette" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/resetChatButton"
-                    style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
-                    android:layout_height="72dp"
-                    android:contentDescription="@string/cd_new_chat"
-                    android:text="@string/control_new_chat"
-                    app:icon="@drawable/ic_rechat" />
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/attachmentButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:contentDescription="@string/cd_attach_file"
+                        android:text="@string/control_files"
+                        app:icon="@drawable/ic_attachdoc" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/plusButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:contentDescription="@string/cd_attach_media"
+                        android:text="@string/control_image"
+                        app:icon="@drawable/ic_imgup" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/genButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:visibility="gone"
+                        android:contentDescription="@string/cd_image_gen"
+                        android:text="@string/control_generate"
+                        app:icon="@drawable/ic_palette" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/resetChatButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:visibility="gone"
+                        android:contentDescription="@string/cd_new_chat"
+                        android:text="@string/control_new_chat"
+                        app:icon="@drawable/ic_rechat" />
+                </FrameLayout>
             </LinearLayout>
             <LinearLayout
                 android:id="@+id/buttonsRowAux"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
                 android:layout_marginTop="8dp"
-                android:gravity="center"
                 android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/convoButton"
-                    style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
-                    android:layout_height="72dp"
-                    android:text="@string/control_read_aloud"
-                    app:icon="@drawable/ic_convo" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/fontsButton"
-                    style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
-                    android:layout_height="72dp"
-                    android:text="@string/control_font"
-                    app:icon="@drawable/ic_fonts" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/fontSizeButton"
-                    style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
-                    android:layout_height="72dp"
-                    android:text="@string/control_text_size"
-                    app:icon="@drawable/ic_format" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/utilityButton"
-                    style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
-                    android:layout_height="72dp"
-                    android:visibility="gone"
-                    android:contentDescription="@string/cd_paste"
-                    android:text="@string/control_paste"
-                    app:icon="@drawable/ic_paste" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/clearButton"
-                    style="@style/Widget.Gradation.ControlTile"
-                    android:layout_width="76dp"
-                    android:layout_height="72dp"
-                    android:visibility="gone"
-                    android:contentDescription="@string/cd_clear_input"
-                    android:text="@string/control_clear"
-                    app:icon="@drawable/ic_clearchat" />
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/convoButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:text="@string/control_read_aloud"
+                        app:icon="@drawable/ic_convo" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/fontsButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:text="@string/control_font"
+                        app:icon="@drawable/ic_fonts" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/fontSizeButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:text="@string/control_text_size"
+                        app:icon="@drawable/ic_format" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/utilityButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:visibility="gone"
+                        android:contentDescription="@string/cd_paste"
+                        android:text="@string/control_paste"
+                        app:icon="@drawable/ic_paste" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/clearButton"
+                        style="@style/Widget.Gradation.ControlTile"
+                        android:layout_width="match_parent"
+                        android:layout_height="72dp"
+                        android:visibility="gone"
+                        android:contentDescription="@string/cd_clear_input"
+                        android:text="@string/control_clear"
+                        app:icon="@drawable/ic_clearchat" />
+                </FrameLayout>
             </LinearLayout>
 
                 <TextView

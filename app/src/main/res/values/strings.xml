@@ -29,7 +29,7 @@
     <string name="settings_group_app">App</string>
     <string name="settings_group_modes">Modes</string>
     <string name="settings_mode_roleplay">Roleplay</string>
-    <string name="settings_mode_roleplay_sub">Characters, personas and lorebooks as a tab</string>
+    <string name="settings_mode_roleplay_sub">Characters, personas and lorebooks</string>
     <string name="settings_mode_code">Code</string>
     <string name="settings_mode_code_sub">Drive coding agents on your machines</string>
     <string name="settings_group_grok">AI</string>
@@ -631,7 +631,7 @@
     <string name="rp_panel_wallpaper">Wallpaper</string>
     <string name="rp_voice_title">%1$s\'s voice</string>
     <string name="rp_voice_hint">Used when you tap read aloud</string>
-    <string name="rp_voice_default">Phone default</string>
+    <string name="rp_voice_default">Default</string>
     <string name="rp_voice_n">Voice %1$d</string>
     <string name="rp_voice_device">On device</string>
     <string name="rp_voice_network">Needs network</string>

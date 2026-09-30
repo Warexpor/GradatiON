@@ -73,6 +73,7 @@
                 android:src="@drawable/ic_avatar_placeholder" />
 
             <FrameLayout
+                android:id="@+id/rpAvatarCameraBadge"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:layout_gravity="bottom|end"

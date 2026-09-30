@@ -37,37 +37,33 @@
             android:layout_marginStart="12dp"
             android:orientation="vertical">
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/codeSessionRowTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp"
+                android:textFontWeight="600" />
 
-                <TextView
-                    android:id="@+id/codeSessionRowTitle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textColor="@color/xai_ink"
-                    android:textSize="16sp"
-                    android:textFontWeight="600" />
-
-                <TextView
-                    android:id="@+id/codeSessionBadge"
-                    android:layout_width="wrap_content"
-                    android:layout_height="20dp"
-                    android:layout_marginStart="8dp"
-                    android:ellipsize="end"
-                    android:gravity="center"
-                    android:maxWidth="120dp"
-                    android:maxLines="1"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:textSize="11.5sp"
-                    android:textFontWeight="700" />
-            </LinearLayout>
+            <TextView
+                android:id="@+id/codeSessionBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxWidth="160dp"
+                android:maxLines="1"
+                android:minHeight="22dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:textSize="13sp"
+                android:textFontWeight="600"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/codeSessionRowMeta"

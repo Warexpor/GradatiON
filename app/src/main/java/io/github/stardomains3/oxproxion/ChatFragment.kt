@@ -920,7 +920,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             val hasMessages = messages.isNotEmpty()
             centerWatermarkIcon.isClickable = false
             if(hasMessages){
-                resetChatButton.icon.alpha = 255
                 // Right after a mode swipe the list is the other mode's thread landing, not a
                 // conversation starting: the mark just goes, or it swells on the new page.
                 val justSwitched = android.os.SystemClock.uptimeMillis() - modeSwitchedAt < MODE_LOAD_WINDOW_MS
@@ -936,7 +935,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 } else {
                     emptyStateContainer.visibility = View.GONE
                 }
-                resetChatButton.isVisible = true
                 val lastMessage = messages.last()
                 if (lastMessage.role == "assistant" && lastMessage.content is JsonPrimitive) {
                     val contentStr = lastMessage.content.content
@@ -960,7 +958,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
             else
             {
-                resetChatButton.icon.alpha = 102
                 val wasHidden = !emptyStateContainer.isVisible
                 emptyStateContainer.animate().cancel()
                 emptyStateContainer.scaleX = 1f
@@ -985,7 +982,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     scrollToBottomButton.setShownAnimated(canScrollDown)
                 }
             }
-            resetChatButton.isEnabled = hasMessages
+            resetChatButton.isVisible = hasMessages
+            updateMenuRowVisibilities()
            // pdfChatButton.isVisible = hasMessages
             //copyChatButton.isVisible = hasMessages
             buttonsRow2.isVisible = hasMessages
@@ -2090,6 +2088,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         // Land any slide in flight while its views still exist; its end action must not fire into the next view.
         if (pager != null) dropPager()
         finishSettleNow()
+        controlTileOrder = null
         rpHomeAnim?.cancel()
         rpHomeAnim = null
         rpUiWas = null
@@ -5579,7 +5578,28 @@ $cleanContent
         backButton.visibility = View.VISIBLE
         backcopyButton.visibility = View.VISIBLE
     }
+    /** Tiles in the composer and aux rows, in layout order; captured once because reflow moves them. */
+    private var controlTileOrder: List<View>? = null
+
+    /** Packs the visible tiles into the leading slots so hidden ones leave no holes in the grid. */
+    private fun reflowControlTiles() {
+        val root = view ?: return
+        val slots = listOf(R.id.buttonsRowComposer, R.id.buttonsRowAux).flatMap { id ->
+            val row = root.findViewById<LinearLayout>(id) ?: return
+            (0 until row.childCount).map { row.getChildAt(it) }.filterIsInstance<FrameLayout>()
+        }
+        if (slots.isEmpty()) return
+        val tiles = controlTileOrder
+            ?: slots.flatMap { slot -> (0 until slot.childCount).map { slot.getChildAt(it) } }
+                .also { controlTileOrder = it }
+        val (shown, hidden) = tiles.partition { it.isVisible }
+        slots.forEach { it.removeAllViews() }
+        shown.forEachIndexed { i, tile -> slots[i.coerceAtMost(slots.lastIndex)].addView(tile) }
+        hidden.forEach { slots.last().addView(it) }
+    }
+
     private fun updateMenuRowVisibilities() {
+        reflowControlTiles()
         // Grab the rows in order (excluding buttonsRow2 as we discussed)
         val rows = listOf(
             view?.findViewById<LinearLayout>(R.id.buttonsRow1),
@@ -5595,10 +5615,21 @@ $cleanContent
                 var hasVisibleChild = false
                 // Check every child inside this row
                 for (i in 0 until row.childCount) {
-                    if (row.getChildAt(i).isVisible) {
+                    val child = row.getChildAt(i)
+                    if (child is MaterialButton && child.isVisible) {
                         hasVisibleChild = true
                         break
                     }
+                    if (child is ViewGroup) {
+                        for (j in 0 until child.childCount) {
+                            val nested = child.getChildAt(j)
+                            if (nested is MaterialButton && nested.isVisible) {
+                                hasVisibleChild = true
+                                break
+                            }
+                        }
+                    }
+                    if (hasVisibleChild) break
                 }
 
                 if (hasVisibleChild) {
@@ -6142,6 +6173,7 @@ $cleanContent
 
     /** A full-screen page over the chat and the open panel: it slides in, the panel stays put under it. */
     private fun pushRp(fragment: Fragment) {
+        if (!isAdded || parentFragmentManager.isStateSaved) return
         hideKeyboard()
         rpPanelDepth = parentFragmentManager.backStackEntryCount
         parentFragmentManager.beginTransaction()

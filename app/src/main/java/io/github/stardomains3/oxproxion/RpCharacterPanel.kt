@@ -18,6 +18,11 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.max
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 
 /**
@@ -71,13 +76,13 @@ object RpCharacterPanel {
         character?.let { c ->
             val file = RpAvatarStorage.avatarFile(ctx, c.id)
             if (file.exists()) {
-                // centerCrop keeps the aspect; the frame's oval outline does the rounding. A circular
-                // RoundedBitmapDrawable stretched a non-square photo into the square instead.
-                BitmapFactory.decodeFile(file.absolutePath)?.let { bmp ->
-                    sheet.findViewById<ImageView>(R.id.rpPanelAvatar).apply {
-                        setImageBitmap(bmp)
-                        visibility = View.VISIBLE
-                    }
+                val avatarView = sheet.findViewById<ImageView>(R.id.rpPanelAvatar)
+                val edgePx = (56 * d).toInt().coerceAtLeast(1)
+                fragment.viewLifecycleOwner.lifecycleScope.launch {
+                    val bmp = withContext(Dispatchers.IO) { decodeAvatarThumb(file.absolutePath, edgePx) }
+                    if (!fragment.isAdded || bmp == null) return@launch
+                    avatarView.setImageBitmap(bmp)
+                    avatarView.visibility = View.VISIBLE
                 }
             }
         }
@@ -129,7 +134,7 @@ object RpCharacterPanel {
                 labels.addView(TextView(ctx).apply {
                     text = t.preview
                     setTextColor(mute)
-                    textSize = 12.5f
+                    textSize = 13f
                     maxLines = 1
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -247,5 +252,15 @@ object RpCharacterPanel {
             setColor(ContextCompat.getColor(ctx, R.color.panel_solid))
             cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
         }
+    }
+
+    private fun decodeAvatarThumb(path: String, maxEdge: Int): android.graphics.Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        val longest = max(bounds.outWidth, bounds.outHeight)
+        while (longest / sample > maxEdge) sample *= 2
+        return BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
     }
 }

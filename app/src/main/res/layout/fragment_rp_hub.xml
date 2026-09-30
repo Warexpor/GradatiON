@@ -105,8 +105,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/rp_ui_hub_current"
-                            android:textAppearance="@style/TextAppearance.Gradation.SectionHeader"
-                            android:textSize="11sp" />
+                            android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
                         <TextView
                             android:id="@+id/rpHubHeroName"

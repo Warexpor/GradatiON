@@ -3,6 +3,7 @@ package io.github.stardomains3.oxproxion
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
+import android.graphics.Shader.TileMode
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
@@ -47,6 +48,12 @@ class RpTileArt(
 
     /** The wallpaper or persona portrait; without one the tile shows an empty frame or an initial. */
     var photo: Bitmap? = null
+        set(value) {
+            if (field === value) return
+            field = value
+            cachedPhotoShader = null
+            cachedPhotoSource = null
+        }
 
     /** The persona's initial; without one, a silhouette. */
     var letter: String? = null
@@ -56,6 +63,8 @@ class RpTileArt(
     private val path = Path()
     private val box = RectF()
     private val photoMatrix = Matrix()
+    private var cachedPhotoShader: BitmapShader? = null
+    private var cachedPhotoSource: Bitmap? = null
     private val month by lazy { java.text.SimpleDateFormat("MMM", java.util.Locale.getDefault()) }
     private val small by lazy { androidx.core.content.res.ResourcesCompat.getFont(context, R.font.jakarta_semibold) }
     private val big by lazy { androidx.core.content.res.ResourcesCompat.getFont(context, R.font.jakarta_bold) }
@@ -65,6 +74,17 @@ class RpTileArt(
     }
 
     private fun tint(a: Float) = ColorUtils.setAlphaComponent(ink, (a.coerceIn(0f, 1f) * 255).toInt())
+
+    private fun shaderFor(shot: Bitmap, setup: (Matrix) -> Unit): BitmapShader {
+        if (cachedPhotoSource !== shot) {
+            cachedPhotoShader = BitmapShader(shot, TileMode.CLAMP, TileMode.CLAMP)
+            cachedPhotoSource = shot
+        }
+        photoMatrix.reset()
+        setup(photoMatrix)
+        cachedPhotoShader!!.setLocalMatrix(photoMatrix)
+        return cachedPhotoShader!!
+    }
 
     private fun solid(a: Float) {
         p.shader = null
@@ -195,13 +215,11 @@ class RpTileArt(
             val fw = r - l
             val fh = s - t
             val scale = max(fw / shot.width, fh / shot.height)
-            photoMatrix.reset()
-            photoMatrix.setScale(scale, scale)
-            photoMatrix.postTranslate(l + (fw - shot.width * scale) / 2f, t + (fh - shot.height * scale) / 2f)
-            val shader = BitmapShader(shot, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-            shader.setLocalMatrix(photoMatrix)
             p.style = Paint.Style.FILL
-            p.shader = shader
+            p.shader = shaderFor(shot) { m ->
+                m.setScale(scale, scale)
+                m.postTranslate(l + (fw - shot.width * scale) / 2f, t + (fh - shot.height * scale) / 2f)
+            }
             round(l, t, r, b, radius, c)
             return
         }
@@ -212,25 +230,21 @@ class RpTileArt(
         path.addRoundRect(l, t, r, b, radius, radius, Path.Direction.CW)
         c.clipPath(path)
         val fw = r - l
+        val hillTop = t + (b - t) * 0.55f
         solid(0.14f)
         path.reset()
-        path.moveTo(l, s * 0.92f)
-        path.lineTo(l + fw * 0.34f, s * 0.72f)
-        path.lineTo(l + fw * 0.58f, s * 0.86f)
-        path.lineTo(l + fw * 0.78f, s * 0.77f)
-        path.lineTo(r, s * 0.88f)
+        path.moveTo(l, b)
+        path.lineTo(l, hillTop + (b - hillTop) * 0.35f)
+        path.lineTo(l + fw * 0.32f, hillTop)
+        path.lineTo(l + fw * 0.55f, hillTop + (b - hillTop) * 0.22f)
+        path.lineTo(l + fw * 0.82f, hillTop + (b - hillTop) * 0.08f)
+        path.lineTo(r, hillTop + (b - hillTop) * 0.28f)
         path.lineTo(r, b)
-        path.lineTo(l, b)
         path.close()
         c.drawPath(path, p)
-        solid(0.3f)
-        c.drawCircle(r - fw * 0.17f, t + s * 0.1f, s * 0.05f, p)
+        solid(0.32f)
+        c.drawCircle(l + fw * 0.78f, t + (b - t) * 0.18f, s * 0.055f, p)
         c.restore()
-        val py = s * 0.76f
-        val arm = s * 0.07f
-        stroke(tint(0.92f), 2.2f * d)
-        c.drawLine(s / 2f - arm, py, s / 2f + arm, py, p)
-        c.drawLine(s / 2f, py - arm, s / 2f, py + arm, p)
     }
 
     /** A round portrait: the persona's photo, else its initial, else a silhouette while there is no name. */
@@ -245,15 +259,13 @@ class RpTileArt(
         val initial = letter?.takeIf { it.isNotBlank() }
         if (shot != null) {
             val scale = 2f * r / min(shot.width, shot.height)
-            photoMatrix.reset()
-            photoMatrix.setScale(scale, scale)
-            photoMatrix.postTranslate(cx - shot.width * scale / 2f, cy - shot.height * scale / 2f)
-            val shader = BitmapShader(shot, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-            shader.setLocalMatrix(photoMatrix)
             p.style = Paint.Style.FILL
             // A shader is drawn through the paint's alpha: keep it opaque, or the portrait comes out washed.
             p.color = Color.BLACK
-            p.shader = shader
+            p.shader = shaderFor(shot) { m ->
+                m.setScale(scale, scale)
+                m.postTranslate(cx - shot.width * scale / 2f, cy - shot.height * scale / 2f)
+            }
             c.drawCircle(cx, cy, r, p)
             p.shader = null
         } else if (initial != null) {
@@ -357,11 +369,11 @@ class RpTileArt(
 
     /** A pencil laid across the corner, its end off the tile's edge. */
     private fun edit(c: Canvas, s: Float) {
-        val hw = s * 0.085f
-        val tip = s * 0.17f
-        val band = s * 0.62f
+        val hw = s * 0.065f
+        val tip = s * 0.13f
+        val band = s * 0.48f
         c.save()
-        c.translate(s * 0.3f, s * 0.88f)
+        c.translate(s * 0.34f, s * 0.84f)
         c.rotate(-40f)
         solid(0.5f)
         path.reset()

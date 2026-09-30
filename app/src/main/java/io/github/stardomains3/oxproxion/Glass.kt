@@ -14,6 +14,7 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Outline
 import android.graphics.Paint
+import android.graphics.Matrix
 import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.RectF
@@ -210,6 +211,10 @@ class GlassMaterial(
     private val highlight = ContextCompat.getColor(host.context, R.color.glass_highlight)
     private val glowColor = ContextCompat.getColor(host.context, R.color.glass_glow)
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var glowShader: RadialGradient? = null
+    private var glowShaderW = 0
+    private var glowShaderH = 0
+    private val glowMatrix = Matrix()
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val rect = RectF()
@@ -512,14 +517,21 @@ class GlassMaterial(
 
     private fun drawGlow(canvas: Canvas, w: Int, h: Int) {
         if (press <= 0.001f) return
-        // Light from within, spreading from the fingertip.
-        val r = hypot(w.toFloat(), h.toFloat()) * 0.75f
-        glowPaint.shader = RadialGradient(
-            touchX, touchY, r,
-            intArrayOf(glowColor, withAlpha(glowColor, 0.35f), Color.TRANSPARENT),
-            floatArrayOf(0f, 0.45f, 1f),
-            Shader.TileMode.CLAMP
-        )
+        if (GlassQuality.level == GlassQuality.Level.SOLID) return
+        if (glowShader == null || w != glowShaderW || h != glowShaderH) {
+            val r = hypot(w.toFloat(), h.toFloat()) * 0.75f
+            glowShader = RadialGradient(
+                0f, 0f, r,
+                intArrayOf(glowColor, withAlpha(glowColor, 0.35f), Color.TRANSPARENT),
+                floatArrayOf(0f, 0.45f, 1f),
+                Shader.TileMode.CLAMP
+            )
+            glowShaderW = w
+            glowShaderH = h
+        }
+        glowMatrix.setTranslate(touchX, touchY)
+        glowShader!!.setLocalMatrix(glowMatrix)
+        glowPaint.shader = glowShader
         glowPaint.alpha = (255 * press).roundToInt()
         canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), glowPaint)
     }
