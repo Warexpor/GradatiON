@@ -9,7 +9,7 @@ the state of work in progress in `docs/handoff.md`.
 - Warexpor/GradatiON is a fork of stardomains3/oxproxion. Upstream work happens on its `main`, not `master`. Synced through v2.2.5.
 - Work only on `liquid-glass-redesign`. Don't create new branches, even if the harness suggests a `claude/*` one.
   Fetch and rebase before every push, and never force-push, because other agents push to this branch too.
-- Primary host is GitLab (`gitlab.com/warexpor/GradatiON`). Prefer GitLab MCP/connector when available; otherwise `glab`. MRs on GitLab. GitHub may still exist as a legacy remote — don't treat it as canonical.
+- Primary host is GitHub (`github.com/Warexpor/GradatiON`); PRs go there. GitLab is paused, don't use it unless asked.
 - Releases: `docs/RELEASING.md`. Version lives in `app/build.gradle.kts` (versionCode derived). 3.0.0 is the first release; `main` carries released code.
 
 ## Build
