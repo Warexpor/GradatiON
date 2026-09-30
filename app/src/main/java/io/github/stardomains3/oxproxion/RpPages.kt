@@ -69,12 +69,12 @@ abstract class RpPageFragment : Fragment() {
         }
         body = view.findViewById(R.id.rpPageBody) ?: view as LinearLayout
         RpPageKit.applyInsets(view)
-        hero()?.let { (kind, caption) -> body.addView(RpPageKit.hero(requireContext(), kind, caption), 0) }
+        intro()?.let { body.addView(RpPageKit.intro(requireContext(), it), 0) }
         build(body)
     }
 
-    /** The tile's own drawing and a line on what the page is for, so the page reads as the tile opened up. */
-    protected open fun hero(): Pair<RpTileArt.Kind, String>? = null
+    /** A line on what the page is for, at the top. */
+    protected open fun intro(): String? = null
 
     /** Shows the pinned Save under the scroll; the page stays open for back to discard. */
     protected fun pinSave(onSave: () -> Unit) {
@@ -173,21 +173,18 @@ internal object RpPageKit {
         }
     }
 
-    fun hero(ctx: Context, kind: RpTileArt.Kind, caption: String) = LinearLayout(ctx).apply {
-        orientation = LinearLayout.VERTICAL
+    /** The line on what a page is for, under the toolbar; no drawing, the tile that opened it already had one. */
+    fun intro(ctx: Context, caption: String) = TextView(ctx).apply {
+        text = caption
+        setTextAppearance(R.style.TextAppearance_Gradation_Footnote)
+        textSize = 15f
         gravity = Gravity.CENTER_HORIZONTAL
-        addView(art(ctx, kind, 26), LinearLayout.LayoutParams(dp(ctx, 96), dp(ctx, 96)).apply { topMargin = dp(ctx, 8) })
-        addView(TextView(ctx).apply {
-            text = caption
-            setTextAppearance(R.style.TextAppearance_Gradation_Footnote)
-            textSize = 15f
-            gravity = Gravity.CENTER_HORIZONTAL
-            setLineSpacing(0f, 1.15f)
-        }, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = dp(ctx, 14)
+        setLineSpacing(0f, 1.15f)
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(ctx, 8)
             marginStart = dp(ctx, 12)
             marginEnd = dp(ctx, 12)
-        })
+        }
     }
 
     fun section(ctx: Context, text: String) = TextView(ctx).apply {
@@ -279,6 +276,7 @@ internal object RpPageKit {
 /** Classic, Bubbles or Book: how this character's chat is drawn, picked from drawings of each. */
 class RpLayoutFragment : RpPageFragment() {
     override fun title() = getString(R.string.rp_panel_layout)
+    override fun intro() = getString(R.string.rp_page_layout_caption, characterName.ifBlank { getString(R.string.rp_llm_speaker) })
 
     override fun build(body: LinearLayout) {
         var current = prefs.getRpLayout(characterId)
@@ -288,12 +286,6 @@ class RpLayoutFragment : RpPageFragment() {
             Triple(SharedPreferencesHelper.RP_LAYOUT_BOOK, R.string.rp_layout_book, R.string.rp_layout_book_sub),
         )
         val ctx = requireContext()
-        body.addView(TextView(ctx).apply {
-            text = getString(R.string.rp_page_layout_caption, characterName.ifBlank { getString(R.string.rp_llm_speaker) })
-            setTextAppearance(R.style.TextAppearance_Gradation_Footnote)
-            textSize = 15f
-            gravity = Gravity.CENTER_HORIZONTAL
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         val strip = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
         body.addView(strip, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
         val description = RpPageKit.footnote(ctx, "").apply { gravity = Gravity.CENTER_HORIZONTAL; textSize = 14f }
@@ -362,7 +354,7 @@ class RpLayoutFragment : RpPageFragment() {
 /** Pin a lorebook to this character, or follow whichever one is active. */
 class RpLorePinFragment : RpPageFragment() {
     override fun title() = getString(R.string.rp_panel_lore)
-    override fun hero() = RpTileArt.Kind.LORE to getString(R.string.rp_page_lore_caption, characterName)
+    override fun intro() = getString(R.string.rp_page_lore_caption, characterName)
 
     override fun build(body: LinearLayout) {
         val id = characterId ?: return
@@ -400,6 +392,7 @@ class RpLorePinFragment : RpPageFragment() {
 /** This character's wallpaper: a preview, pick a new picture, or drop it. */
 class RpWallpaperFragment : RpPageFragment() {
     override fun title() = getString(R.string.rp_panel_wallpaper)
+    override fun intro() = getString(R.string.rp_page_wallpaper_caption, characterName)
 
     private var refresh: (() -> Unit)? = null
     private var previewJob: kotlinx.coroutines.Job? = null
@@ -418,17 +411,6 @@ class RpWallpaperFragment : RpPageFragment() {
         val id = characterId ?: return
         val slot = BackgroundPhoto.slotForCharacter(id)
         val ctx = requireContext()
-        body.addView(TextView(ctx).apply {
-            text = getString(R.string.rp_page_wallpaper_caption, characterName)
-            setTextAppearance(R.style.TextAppearance_Gradation_Footnote)
-            textSize = 15f
-            gravity = Gravity.CENTER_HORIZONTAL
-            setLineSpacing(0f, 1.15f)
-        }, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = dp(8)
-            marginStart = dp(12)
-            marginEnd = dp(12)
-        })
         // Phone-shaped, so the picture is judged the way it will sit behind the chat.
         val radius = dp(26).toFloat()
         val frame = FrameLayout(ctx).apply {
@@ -520,7 +502,7 @@ class RpMemoryFragment : RpPageFragment() {
     private var noteStart = ""
     private var factsStart = ""
 
-    override fun hero() = RpTileArt.Kind.MEMORY to getString(R.string.rp_page_memory_caption, speaker())
+    override fun intro() = getString(R.string.rp_page_memory_caption, speaker())
 
     private fun speaker() = characterName.ifBlank { getString(R.string.rp_llm_speaker) }
 
@@ -580,7 +562,7 @@ class RpVoiceFragment : RpPageFragment() {
     private var tts: TextToSpeech? = null
 
     override fun title() = getString(R.string.rp_panel_voice)
-    override fun hero() = RpTileArt.Kind.VOICE to getString(R.string.rp_page_voice_caption, speaker())
+    override fun intro() = getString(R.string.rp_page_voice_caption, speaker())
     override fun layoutRes() = R.layout.fragment_rp_voice
 
     private var pending: SharedPreferencesHelper.RpVoice? = null

@@ -29,7 +29,7 @@ class RpSettingsFragment : Fragment() {
         }
         RpPageKit.applyInsets(view)
         view.findViewById<android.widget.LinearLayout>(R.id.rpPageBody).addView(
-            RpPageKit.hero(requireContext(), RpTileArt.Kind.STYLE, getString(R.string.rp_page_style_caption)), 0
+            RpPageKit.intro(requireContext(), getString(R.string.rp_page_style_caption)), 0
         )
         view.findViewById<SwitchCompat>(R.id.rpLoreEnabledSwitch).apply {
             isChecked = prefs.isRpLoreEnabled()
