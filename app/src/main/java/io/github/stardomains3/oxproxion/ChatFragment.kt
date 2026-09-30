@@ -6101,7 +6101,7 @@ $cleanContent
             add(RpCharacterPanel.Tile(R.string.rp_panel_layout, layoutArt, spoken = getString(layoutLabel(layout))) {
                 pushRp(RpLayoutFragment.newInstance(memoryId, title))
             })
-            add(RpCharacterPanel.Tile(R.string.rp_panel_style, RpTileArt.Kind.STYLE) { pushRp(RpSettingsFragment.newInstance()) })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_style, RpTileArt.Kind.STYLE) { pushRp(RpSettingsFragment.newInstance(R.string.rp_panel_style)) })
         }
         val content = RpCharacterPanel.content(this, cast, title, subtitle, tiles)
         val host = rpPanel ?: RpCharacterPanel.Host(requireView() as FrameLayout).also { rpPanel = it }

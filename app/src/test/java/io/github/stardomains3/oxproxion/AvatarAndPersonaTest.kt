@@ -76,13 +76,11 @@ class AvatarAndPersonaTest {
         assertEquals("A tall stranger", prefs.activeRpPersona())
     }
 
-    /** The layouts the picker shows must inflate: the crop view needs the (Context, AttributeSet) constructor. */
+    /** The crop screen must inflate: the crop view needs the (Context, AttributeSet) constructor. */
     @Test fun pickerLayoutsInflate() {
         val themed = android.view.ContextThemeWrapper(ctx, R.style.Theme_Grokion)
         val crop = android.view.LayoutInflater.from(themed).inflate(R.layout.dialog_avatar_crop, null)
         assertNotNull(crop.findViewById<AvatarCropView>(R.id.avatarCropView))
-        val sheet = android.view.LayoutInflater.from(themed).inflate(R.layout.sheet_avatar_source, null)
-        assertNotNull(sheet.findViewById<View>(R.id.avatarSourceFiles))
     }
 
     /** The panel's full-screen pages are built on these two shells. */

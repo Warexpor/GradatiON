@@ -1,69 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- RP style and settings: how stories are written, what they draw on, and LLM mode, in labelled cards -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/xai_grouped"
-    android:fitsSystemWindows="true">
+    android:orientation="vertical">
 
-    <LinearLayout
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:minHeight="?attr/actionBarSize"
+        android:background="@color/xai_grouped"
+        app:navigationContentDescription="@string/cd_navigate_up"
+        app:navigationIcon="@drawable/is_backarrow"
+        app:navigationIconTint="@color/xai_ink"
+        app:title="@string/rp_settings_title"
+        app:titleTextColor="@color/xai_ink" />
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:background="@color/xai_grouped"
-            app:navigationIcon="@drawable/is_backarrow"
-            app:navigationContentDescription="@string/cd_navigate_up"
-            app:navigationIconTint="@color/xai_ink"
-            app:title="@string/rp_settings_title"
-            app:titleTextColor="@color/xai_ink" />
+    <ScrollView
+        android:id="@+id/rpPageScroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:scrollbars="none">
 
         <LinearLayout
+            android:id="@+id/rpPageBody"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:paddingStart="16dp"
+            android:paddingTop="4dp"
             android:paddingEnd="16dp"
             android:paddingBottom="24dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/rp_page_style_writing"
+                android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_settings_card"
+                android:background="@drawable/rp_bg_card"
                 android:orientation="vertical"
                 android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp">
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/rpLoreEnabledSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="56dp"
-                    android:maxLines="2"
-                    android:ellipsize="end"
-                    android:text="@string/rp_lore_enabled"
-                    android:textColor="@color/xai_ink"
-                    android:textSize="16sp" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/xai_hairline" />
+                android:paddingEnd="16dp">
 
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/rpThirdPersonSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
-                    android:maxLines="2"
-                    android:ellipsize="end"
                     android:text="@string/rp_third_person"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />
@@ -78,9 +73,43 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
-                    android:maxLines="2"
-                    android:ellipsize="end"
                     android:text="@string/rp_show_thoughts"
+                    android:textColor="@color/xai_ink"
+                    android:textSize="16sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="16dp"
+                android:text="@string/rp_page_style_writing_foot"
+                android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/rp_page_style_story"
+                android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/rp_bg_card"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/rpLoreEnabledSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="56dp"
+                    android:text="@string/rp_lore_enabled"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />
 
@@ -89,8 +118,7 @@
                     android:layout_height="1dp"
                     android:background="@color/xai_hairline" />
 
-                <!-- The model folds long stories into each character's Memory as old turns age out -->
-                <!-- The sentence is the control: two lines clip it to "left al…", which hides that Memory stays put. -->
+                <!-- The model folds long stories into Facts as old turns age out -->
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/rpAutoMemorySwitch"
                     android:layout_width="match_parent"
@@ -99,23 +127,52 @@
                     android:text="@string/rp_auto_memory"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />
+            </LinearLayout>
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/xai_hairline" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="16dp"
+                android:text="@string/rp_auto_memory_sub"
+                android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/rp_page_style_mode"
+                android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/rp_bg_card"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
 
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/rpLlmModeSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
-                    android:maxLines="2"
-                    android:ellipsize="end"
                     android:text="@string/rp_llm_mode"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />
             </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="16dp"
+                android:text="@string/rp_page_style_mode_foot"
+                android:textAppearance="@style/TextAppearance.Gradation.Footnote" />
         </LinearLayout>
-    </LinearLayout>
-</ScrollView>
+    </ScrollView>
+</LinearLayout>

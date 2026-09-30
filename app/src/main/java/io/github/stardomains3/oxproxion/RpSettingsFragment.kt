@@ -23,9 +23,14 @@ class RpSettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         prefs = SharedPreferencesHelper(requireContext())
-        view.findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener {
-            parentFragmentManager.popBackStack()
+        view.findViewById<MaterialToolbar>(R.id.toolbar).apply {
+            arguments?.getInt(ARG_TITLE)?.takeIf { it != 0 }?.let(::setTitle)
+            setNavigationOnClickListener { parentFragmentManager.popBackStack() }
         }
+        RpPageKit.applyInsets(view)
+        view.findViewById<android.widget.LinearLayout>(R.id.rpPageBody).addView(
+            RpPageKit.hero(requireContext(), RpTileArt.Kind.STYLE, getString(R.string.rp_page_style_caption)), 0
+        )
         view.findViewById<SwitchCompat>(R.id.rpLoreEnabledSwitch).apply {
             isChecked = prefs.isRpLoreEnabled()
             setOnCheckedChangeListener { _, checked -> prefs.saveRpLoreEnabled(checked) }
@@ -140,6 +145,11 @@ class RpSettingsFragment : Fragment() {
     }
 
     companion object {
-        fun newInstance() = RpSettingsFragment()
+        private const val ARG_TITLE = "title"
+
+        /** [title] names the page after where it was opened from: the panel's Style tile, or RP settings. */
+        fun newInstance(@androidx.annotation.StringRes title: Int = 0) = RpSettingsFragment().apply {
+            arguments = Bundle().apply { putInt(ARG_TITLE, title) }
+        }
     }
 }

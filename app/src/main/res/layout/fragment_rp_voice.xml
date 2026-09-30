@@ -5,13 +5,13 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/xai_grouped"
-    android:fitsSystemWindows="true"
     android:orientation="vertical">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
+        android:layout_height="wrap_content"
+        android:minHeight="?attr/actionBarSize"
         android:background="@color/xai_grouped"
         app:navigationContentDescription="@string/cd_navigate_up"
         app:navigationIcon="@drawable/is_backarrow"
@@ -24,159 +24,169 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:clipToPadding="false"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:scrollbars="none">
 
         <LinearLayout
+            android:id="@+id/rpPageBody"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:paddingStart="16dp"
+            android:paddingTop="4dp"
             android:paddingEnd="16dp"
             android:paddingBottom="24dp">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:layout_marginTop="4dp"
-                android:text="@string/rp_voice_hint"
-                android:textColor="@color/xai_mute"
-                android:textSize="13sp" />
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/rp_page_voice_section"
+                android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
             <LinearLayout
                 android:id="@+id/rpVoiceList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/bg_settings_card"
-                android:orientation="vertical"
-                android:paddingStart="12dp"
-                android:paddingTop="4dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="4dp" />
+                android:background="@drawable/rp_bg_card"
+                android:clipToOutline="true"
+                android:orientation="vertical" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/rp_page_delivery_section"
+                android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/bg_settings_card"
+                android:background="@drawable/rp_bg_card"
                 android:orientation="vertical"
                 android:paddingStart="16dp"
-                android:paddingTop="8dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="8dp">
+                android:paddingEnd="12dp">
 
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/rp_voice_pitch"
-                android:textColor="@color/xai_ink"
-                android:textSize="15sp" />
-
-            <io.github.stardomains3.oxproxion.GlassSegmentedGroup
-                android:id="@+id/rpVoicePitch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:selectionRequired="true"
-                app:singleSelection="true">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rpPitchLow"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/rp_voice_low"
-                    app:backgroundTint="@color/toggle_background_selector"
-                    app:strokeColor="@color/xai_hairline" />
+                    android:gravity="center_vertical"
+                    android:minHeight="60dp"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rpPitchMid"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/rp_voice_pitch"
+                        android:textColor="@color/xai_ink"
+                        android:textSize="16sp" />
+
+                    <io.github.stardomains3.oxproxion.GlassSegmentedGroup
+                        android:id="@+id/rpVoicePitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/rpPitchLow"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/rp_voice_low"
+                            app:backgroundTint="@color/toggle_background_selector"
+                            app:strokeColor="@color/xai_hairline" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/rpPitchMid"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/rp_voice_normal"
+                            app:backgroundTint="@color/toggle_background_selector"
+                            app:strokeColor="@color/xai_hairline" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/rpPitchHigh"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/rp_voice_high"
+                            app:backgroundTint="@color/toggle_background_selector"
+                            app:strokeColor="@color/xai_hairline" />
+                    </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/xai_hairline" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/rp_voice_normal"
-                    app:backgroundTint="@color/toggle_background_selector"
-                    app:strokeColor="@color/xai_hairline" />
+                    android:gravity="center_vertical"
+                    android:minHeight="60dp"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rpPitchHigh"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/rp_voice_high"
-                    app:backgroundTint="@color/toggle_background_selector"
-                    app:strokeColor="@color/xai_hairline" />
-            </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
-        </LinearLayout>
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/rp_voice_speed"
+                        android:textColor="@color/xai_ink"
+                        android:textSize="16sp" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+                    <io.github.stardomains3.oxproxion.GlassSegmentedGroup
+                        android:id="@+id/rpVoiceRate"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/rp_voice_speed"
-                android:textColor="@color/xai_ink"
-                android:textSize="15sp" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/rpRateSlow"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/rp_voice_slow"
+                            app:backgroundTint="@color/toggle_background_selector"
+                            app:strokeColor="@color/xai_hairline" />
 
-            <io.github.stardomains3.oxproxion.GlassSegmentedGroup
-                android:id="@+id/rpVoiceRate"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:selectionRequired="true"
-                app:singleSelection="true">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/rpRateMid"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/rp_voice_normal"
+                            app:backgroundTint="@color/toggle_background_selector"
+                            app:strokeColor="@color/xai_hairline" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rpRateSlow"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/rp_voice_slow"
-                    app:backgroundTint="@color/toggle_background_selector"
-                    app:strokeColor="@color/xai_hairline" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rpRateMid"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/rp_voice_normal"
-                    app:backgroundTint="@color/toggle_background_selector"
-                    app:strokeColor="@color/xai_hairline" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/rpRateFast"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/rp_voice_fast"
-                    app:backgroundTint="@color/toggle_background_selector"
-                    app:strokeColor="@color/xai_hairline" />
-            </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
-        </LinearLayout>
-
-
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/rpRateFast"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/rp_voice_fast"
+                            app:backgroundTint="@color/toggle_background_selector"
+                            app:strokeColor="@color/xai_hairline" />
+                    </io.github.stardomains3.oxproxion.GlassSegmentedGroup>
+                </LinearLayout>
             </LinearLayout>
-
-            <include
-                layout="@layout/view_rp_save_button"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="20dp" />
         </LinearLayout>
     </ScrollView>
+
+    <include
+        layout="@layout/view_rp_save_button"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp" />
 </LinearLayout>

@@ -1,14 +1,10 @@
 package io.github.stardomains3.oxproxion
 
-import android.content.res.ColorStateList
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
-import android.view.Gravity
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.TextView
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButtonToggleGroup
 import java.util.Locale
@@ -48,10 +44,6 @@ object RpVoiceDialog {
         onChange: (SharedPreferencesHelper.RpVoice) -> Unit
     ) {
         val ctx = fragment.requireContext()
-        val d = ctx.resources.displayMetrics.density
-        val ink = ContextCompat.getColor(ctx, R.color.xai_ink)
-        val mute = ContextCompat.getColor(ctx, R.color.xai_mute)
-
         var name = current.name
         var pitch = current.pitch
         var rate = current.rate
@@ -69,37 +61,18 @@ object RpVoiceDialog {
             }
         }
 
+        // Bound again once the engine is up, so it starts from an empty list and fresh listeners.
         val list = sheet.findViewById<LinearLayout>(R.id.rpVoiceList)
+        list.removeAllViews()
         val rows = ArrayList<Pair<String?, ImageView>>()
         fun refreshChecks() = rows.forEach { (n, check) -> check.visibility = if (n == name) View.VISIBLE else View.INVISIBLE }
         fun addRow(title: String, subtitle: String?, voiceName: String?) {
-            val row = LinearLayout(ctx).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = (48 * d).toInt()
-                setPadding((4 * d).toInt(), 0, (4 * d).toInt(), 0)
-                setBackgroundResource(R.drawable.bg_press_svg)
-                isClickable = true
-                isFocusable = true
-                contentDescription = listOfNotNull(title, subtitle).joinToString(", ")
-            }
-            val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
-            texts.addView(TextView(ctx).apply { text = title; setTextColor(ink); textSize = 15f })
-            if (subtitle != null) texts.addView(TextView(ctx).apply { text = subtitle; setTextColor(mute); textSize = 13f })
-            row.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            val check = ImageView(ctx).apply {
-                setImageResource(R.drawable.ic_check)
-                imageTintList = ColorStateList.valueOf(ink)
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }
-            row.addView(check, LinearLayout.LayoutParams((20 * d).toInt(), (20 * d).toInt()))
-            rows += voiceName to check
-            row.setOnClickListener {
+            val (_, check) = RpPageKit.row(list, title, subtitle, selected = false) {
                 name = voiceName
                 refreshChecks()
                 preview()
             }
-            list.addView(row)
+            rows += voiceName to check!!
         }
         addRow(fragment.getString(R.string.rp_voice_default), null, null)
         voices.forEachIndexed { i, v ->
@@ -112,12 +85,17 @@ object RpVoiceDialog {
         fun bindSteps(groupId: Int, ids: IntArray, steps: FloatArray, value: Float, set: (Float) -> Unit) {
             val group = sheet.findViewById<MaterialButtonToggleGroup>(groupId)
             val idx = steps.indices.minByOrNull { kotlin.math.abs(steps[it] - value) } ?: 1
+            // Only this page's own listener is swapped; the group keeps the one that slides its thumb.
+            (group.getTag(groupId) as? MaterialButtonToggleGroup.OnButtonCheckedListener)
+                ?.let(group::removeOnButtonCheckedListener)
             group.check(ids[idx])
-            group.addOnButtonCheckedListener { _, id, checked ->
-                if (!checked) return@addOnButtonCheckedListener
+            val listener = MaterialButtonToggleGroup.OnButtonCheckedListener { _, id, checked ->
+                if (!checked) return@OnButtonCheckedListener
                 set(steps[ids.indexOf(id).coerceAtLeast(0)])
                 preview()
             }
+            group.setTag(groupId, listener)
+            group.addOnButtonCheckedListener(listener)
         }
         bindSteps(R.id.rpVoicePitch, intArrayOf(R.id.rpPitchLow, R.id.rpPitchMid, R.id.rpPitchHigh), PITCH, pitch) { pitch = it }
         bindSteps(R.id.rpVoiceRate, intArrayOf(R.id.rpRateSlow, R.id.rpRateMid, R.id.rpRateFast), RATE, rate) { rate = it }

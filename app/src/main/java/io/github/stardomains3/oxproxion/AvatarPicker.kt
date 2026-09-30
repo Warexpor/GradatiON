@@ -1,16 +1,21 @@
 package io.github.stardomains3.oxproxion
 
+import android.app.Activity
 import android.app.Dialog
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
+import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
@@ -18,8 +23,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -29,8 +32,7 @@ import java.io.FileOutputStream
 import kotlin.math.max
 
 /**
- * Choosing an avatar photo: where it comes from (the photo picker, a gallery or other app, or
- * the file browser, since phones differ in which of these actually shows their gallery), then a
+ * Choosing an avatar photo: the phone's own gallery app, or Android's photo picker, then a
  * pan-and-zoom step to pick which part of it shows. [onPicked] gets a square JPEG, already cut.
  *
  * Create it as a property of the fragment, so its result launchers register before it starts.
@@ -38,49 +40,47 @@ import kotlin.math.max
 class AvatarPicker(private val fragment: Fragment, private val onPicked: (Uri) -> Unit) {
 
     private val photos = fragment.registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { it?.let(::crop) }
-    private val gallery = fragment.registerForActivityResult(ActivityResultContracts.GetContent()) { it?.let(::crop) }
-    private val files = fragment.registerForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(::crop) }
+    private val gallery = fragment.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.data?.takeIf { result.resultCode == Activity.RESULT_OK }?.let(::crop)
+    }
+    private var popover: PickerPopover? = null
 
-    /** Asks where to pick from. */
-    fun launch() {
-        val ctx = fragment.requireContext()
-        val dialog = BottomSheetDialog(ctx, R.style.ThemeOverlay_Grokion_BottomSheet_Sharp)
-        val sheet = LayoutInflater.from(ctx).inflate(R.layout.sheet_avatar_source, null)
-        // The same opaque sheet and tonal rows as the character panel; the bare sheet theme is see-through.
-        sheet.background = RpCharacterPanel.solidSheet(ctx)
-        val d = ctx.resources.displayMetrics.density
-        val radius = 22 * d
-        listOf(R.id.avatarSourcePhotos, R.id.avatarSourceGallery, R.id.avatarSourceFiles).forEach { id ->
-            sheet.findViewById<View>(id).apply {
-                background = RpCharacterPanel.solidShape(ctx, R.color.panel_tile, radiusPx = radius)
-                foreground = RpCharacterPanel.pressRipple(ctx, radius)
-            }
+    /** Asks where to pick from, in a small card that grows out of [anchor]. */
+    fun launch(anchor: View) {
+        val activity = fragment.activity ?: return
+        val host = activity.findViewById<FrameLayout>(android.R.id.content) ?: return
+        if (popover?.isOpenOn(anchor) == true) {
+            popover?.dismiss()
+            return
         }
-        val base = sheet.paddingBottom
-        ViewCompat.setOnApplyWindowInsetsListener(sheet) { v, insets ->
-            v.updatePadding(bottom = base + insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
-            insets
+        popover?.dismiss(animated = false)
+        val rows = listOf(
+            PickerPopover.Row(
+                title = activity.getString(R.string.avatar_source_gallery),
+                subtitle = activity.getString(R.string.avatar_source_gallery_sub),
+                iconRes = R.drawable.ic_imgup,
+                onClick = ::openGallery
+            ),
+            PickerPopover.Row(
+                title = activity.getString(R.string.avatar_source_photos),
+                subtitle = activity.getString(R.string.avatar_source_photos_sub),
+                iconRes = R.drawable.ic_photo_library,
+                onClick = { photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+            ),
+        )
+        popover = PickerPopover(host, anchor, null).also { p ->
+            p.onDismiss = { if (popover === p) popover = null }
+            p.show(activity.getString(R.string.avatar_source_title), rows, lifecycleOwner = fragment.viewLifecycleOwner)
         }
-        fun row(id: Int, action: () -> Unit) = sheet.findViewById<MaterialButton>(id).setOnClickListener {
-            dialog.dismiss()
-            action()
-        }
-        row(R.id.avatarSourcePhotos) {
-            if (ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(ctx)) {
-                photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-            } else {
-                gallery.launch("image/*")
-            }
-        }
-        row(R.id.avatarSourceGallery) { gallery.launch("image/*") }
-        row(R.id.avatarSourceFiles) { files.launch(arrayOf("image/*")) }
-        dialog.setContentView(sheet)
-        dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
-        dialog.behavior.skipCollapsed = true
-        dialog.show()
-        dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { container ->
-            container.background = null
-            container.backgroundTintList = null
+    }
+
+    /** The gallery app itself (Samsung Gallery, Google Photos...); a phone without one gets the picker. */
+    private fun openGallery() {
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).setType("image/*")
+        try {
+            gallery.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
     }
 

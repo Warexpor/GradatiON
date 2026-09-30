@@ -2,7 +2,6 @@ package io.github.stardomains3.oxproxion
 
 import android.graphics.BitmapFactory
 import android.graphics.Outline
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewOutlineProvider
@@ -202,10 +201,9 @@ object RpCharacterPanel {
             val host = CoordinatorLayout(ctx).apply {
                 elevation = 24 * d
                 addView(scrim, CoordinatorLayout.LayoutParams(-1, -1))
-                addView(sheet, CoordinatorLayout.LayoutParams(-1, -2).apply {
-                    gravity = Gravity.BOTTOM
-                    behavior = b
-                })
+                // No bottom gravity: the behavior offsets the sheet from the top on every layout, so a
+                // gravity would count that offset twice as soon as the content was swapped in place.
+                addView(sheet, CoordinatorLayout.LayoutParams(-1, -2).apply { behavior = b })
             }
             root.addView(host, FrameLayout.LayoutParams(-1, -1))
             overlay = host

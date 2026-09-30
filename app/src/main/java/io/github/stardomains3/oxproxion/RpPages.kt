@@ -1,18 +1,19 @@
 package io.github.stardomains3.oxproxion
 
+import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
 import android.graphics.Outline
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
-import android.text.InputType
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -27,6 +28,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.textfield.TextInputLayout
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -66,83 +68,42 @@ abstract class RpPageFragment : Fragment() {
             setNavigationOnClickListener { parentFragmentManager.popBackStack() }
         }
         body = view.findViewById(R.id.rpPageBody) ?: view as LinearLayout
-        applyPageInsets(view)
+        RpPageKit.applyInsets(view)
+        hero()?.let { (kind, caption) -> body.addView(RpPageKit.hero(requireContext(), kind, caption), 0) }
         build(body)
     }
 
-    private fun applyPageInsets(root: View) {
-        val toolbar = root.findViewById<MaterialToolbar>(R.id.toolbar)
-        val scroll = root.findViewById<ScrollView>(R.id.rpPageScroll)
-            ?: root.findViewById<View>(R.id.rpPageBody)?.parent as? ScrollView
-        val scrollPadBottom = scroll?.paddingBottom ?: 0
-        val toolbarPadTop = toolbar.paddingTop
-        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
-            val bars = insets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-            )
-            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            toolbar?.updatePadding(top = toolbarPadTop + bars.top)
-            scroll?.updatePadding(
-                left = bars.left,
-                right = bars.right,
-                bottom = scrollPadBottom + max(bars.bottom, ime.bottom),
-            )
-            insets
-        }
-        ViewCompat.requestApplyInsets(root)
-    }
+    /** The tile's own drawing and a line on what the page is for, so the page reads as the tile opened up. */
+    protected open fun hero(): Pair<RpTileArt.Kind, String>? = null
 
-    protected fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-
-    protected fun hint(text: String, top: Int = 4) = TextView(requireContext()).apply {
-        this.text = text
-        setTextColor(ContextCompat.getColor(context, R.color.xai_mute))
-        textSize = 13f
-        setPadding(dp(4), dp(top), dp(4), dp(4))
-    }
-
-    protected fun card(gap: Int = 12): LinearLayout {
-        val top = dp(gap)
-        return LinearLayout(requireContext()).apply {
-        orientation = LinearLayout.VERTICAL
-        setBackgroundResource(R.drawable.bg_settings_card)
-        setPadding(dp(12), dp(4), dp(12), dp(4))
-        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = top }
+    /** Shows the pinned Save under the scroll; the page stays open for back to discard. */
+    protected fun pinSave(onSave: () -> Unit) {
+        requireView().findViewById<View>(R.id.rpSaveButton).apply {
+            visibility = View.VISIBLE
+            setOnClickListener {
+                onSave()
+                parentFragmentManager.popBackStack()
+            }
         }
     }
+
+    protected fun dp(v: Int) = RpPageKit.dp(requireContext(), v)
+
+    protected fun section(text: String) = body.addView(RpPageKit.section(requireContext(), text))
+
+    protected fun footnote(text: String) = body.addView(RpPageKit.footnote(requireContext(), text))
+
+    protected fun card(): LinearLayout = RpPageKit.card(requireContext()).also { body.addView(it) }
 
     /** One tappable line; [selected] non-null draws a check that only the chosen line shows. */
-    protected fun row(title: String, subtitle: String?, selected: Boolean?, onClick: () -> Unit): Pair<View, ImageView?> {
-        val ctx = requireContext()
-        val ink = ContextCompat.getColor(ctx, R.color.xai_ink)
-        val mute = ContextCompat.getColor(ctx, R.color.xai_mute)
-        val row = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(56)
-            setPadding(dp(4), dp(6), dp(4), dp(6))
-            setBackgroundResource(R.drawable.bg_press_svg)
-            isClickable = true
-            isFocusable = true
-            contentDescription = listOfNotNull(title, subtitle).joinToString(", ")
-            setOnClickListener { onClick() }
-        }
-        val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
-        texts.addView(TextView(ctx).apply { text = title; setTextColor(ink); textSize = 16f })
-        if (subtitle != null) texts.addView(TextView(ctx).apply { text = subtitle; setTextColor(mute); textSize = 13f })
-        row.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
-        var check: ImageView? = null
-        if (selected != null) {
-            check = ImageView(ctx).apply {
-                setImageResource(R.drawable.ic_check)
-                imageTintList = ColorStateList.valueOf(ink)
-                visibility = if (selected) View.VISIBLE else View.INVISIBLE
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }
-            row.addView(check, LinearLayout.LayoutParams(dp(20), dp(20)))
-        }
-        return row to check
-    }
+    protected fun row(
+        card: LinearLayout,
+        title: String,
+        subtitle: String?,
+        selected: Boolean? = null,
+        chevron: Boolean = false,
+        onClick: () -> Unit,
+    ): Pair<View, ImageView?> = RpPageKit.row(card, title, subtitle, selected, chevron, onClick = onClick)
 
     /** Full-screen page over this one, like the panel's own tiles. */
     protected fun pushPage(fragment: Fragment) {
@@ -169,7 +130,153 @@ abstract class RpPageFragment : Fragment() {
     }
 }
 
-/** Classic, Bubbles or Book: how this character's chat is drawn. */
+/**
+ * The pages' shared pieces, so each one reads like Persona: the tile's drawing on top, small
+ * section labels, rounded cards of full-height rows with hairlines between them, footnotes.
+ */
+internal object RpPageKit {
+
+    fun dp(ctx: Context, v: Int) = (v * ctx.resources.displayMetrics.density).toInt()
+
+    /** Status bar over the toolbar; the keyboard or nav bar under the whole page, so a pinned Save rides the keyboard. */
+    fun applyInsets(root: View) {
+        val toolbar = root.findViewById<View>(R.id.toolbar)
+        val scroll = root.findViewById<ScrollView>(R.id.rpPageScroll)
+        val toolbarPadTop = toolbar?.paddingTop ?: 0
+        val rootPadBottom = root.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            toolbar?.updatePadding(top = toolbarPadTop + bars.top)
+            scroll?.updatePadding(left = bars.left, right = bars.right)
+            v.updatePadding(bottom = rootPadBottom + max(bars.bottom, ime.bottom))
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    fun roundOutline(radius: Float) = object : ViewOutlineProvider() {
+        override fun getOutline(v: View, outline: Outline) = outline.setRoundRect(0, 0, v.width, v.height, radius)
+    }
+
+    /** A drawing as the tile shows it, on the tile's own fill. */
+    fun art(ctx: Context, kind: RpTileArt.Kind, radiusDp: Int, photo: android.graphics.Bitmap? = null): FrameLayout {
+        val radius = dp(ctx, radiusDp).toFloat()
+        val fill = ContextCompat.getColor(ctx, R.color.panel_tile)
+        return FrameLayout(ctx).apply {
+            background = RpCharacterPanel.solidShape(ctx, R.color.panel_tile, radiusPx = radius)
+            outlineProvider = roundOutline(radius)
+            clipToOutline = true
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            addView(RpTileArt(ctx, kind, ContextCompat.getColor(ctx, R.color.xai_ink), fill).apply { this.photo = photo },
+                FrameLayout.LayoutParams(-1, -1))
+        }
+    }
+
+    fun hero(ctx: Context, kind: RpTileArt.Kind, caption: String) = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        addView(art(ctx, kind, 26), LinearLayout.LayoutParams(dp(ctx, 96), dp(ctx, 96)).apply { topMargin = dp(ctx, 8) })
+        addView(TextView(ctx).apply {
+            text = caption
+            setTextAppearance(R.style.TextAppearance_Gradation_Footnote)
+            textSize = 15f
+            gravity = Gravity.CENTER_HORIZONTAL
+            setLineSpacing(0f, 1.15f)
+        }, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(ctx, 14)
+            marginStart = dp(ctx, 12)
+            marginEnd = dp(ctx, 12)
+        })
+    }
+
+    fun section(ctx: Context, text: String) = TextView(ctx).apply {
+        this.text = text
+        setTextAppearance(R.style.TextAppearance_Gradation_SectionHeader)
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+            marginStart = dp(ctx, 16)
+            topMargin = dp(ctx, 24)
+            bottomMargin = dp(ctx, 8)
+        }
+    }
+
+    fun footnote(ctx: Context, text: String) = TextView(ctx).apply {
+        this.text = text
+        setTextAppearance(R.style.TextAppearance_Gradation_Footnote)
+        setLineSpacing(0f, 1.1f)
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+            marginStart = dp(ctx, 16)
+            marginEnd = dp(ctx, 16)
+            topMargin = dp(ctx, 8)
+        }
+    }
+
+    fun card(ctx: Context) = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundResource(R.drawable.rp_bg_card)
+        clipToOutline = true
+        layoutParams = LinearLayout.LayoutParams(-1, -2)
+    }
+
+    /** Adds a row to [card], with a hairline above it when it isn't the first. */
+    fun row(
+        card: LinearLayout,
+        title: String,
+        subtitle: String?,
+        selected: Boolean? = null,
+        chevron: Boolean = false,
+        titleColor: Int = R.color.xai_ink,
+        onClick: () -> Unit,
+    ): Pair<View, ImageView?> {
+        val ctx = card.context
+        val ink = ContextCompat.getColor(ctx, titleColor)
+        if (card.childCount > 0) {
+            card.addView(View(ctx).apply { setBackgroundColor(ContextCompat.getColor(ctx, R.color.xai_hairline)) },
+                LinearLayout.LayoutParams(-1, 1).apply { marginStart = dp(ctx, 16) })
+        }
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(ctx, 56)
+            setPadding(dp(ctx, 16), dp(ctx, 10), dp(ctx, 14), dp(ctx, 10))
+            setBackgroundResource(R.drawable.bg_press_svg)
+            isClickable = true
+            isFocusable = true
+            contentDescription = listOfNotNull(title, subtitle).joinToString(", ")
+            setOnClickListener { onClick() }
+        }
+        val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(TextView(ctx).apply { text = title; setTextColor(ink); textSize = 16f })
+        if (subtitle != null) {
+            texts.addView(TextView(ctx).apply {
+                text = subtitle
+                setTextAppearance(R.style.TextAppearance_Gradation_Footnote)
+                setPadding(0, dp(ctx, 2), 0, 0)
+            })
+        }
+        row.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
+        val trailing = when {
+            selected != null -> R.drawable.ic_check
+            chevron -> R.drawable.ic_chevron_right
+            else -> 0
+        }
+        var check: ImageView? = null
+        if (trailing != 0) {
+            val icon = ImageView(ctx).apply {
+                setImageResource(trailing)
+                imageTintList = ColorStateList.valueOf(ContextCompat.getColor(ctx, if (chevron) R.color.xai_mute else R.color.xai_ink))
+                if (selected != null) visibility = if (selected) View.VISIBLE else View.INVISIBLE
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            row.addView(icon, LinearLayout.LayoutParams(dp(ctx, 20), dp(ctx, 20)).apply { marginStart = dp(ctx, 12) })
+            if (selected != null) check = icon
+        }
+        card.addView(row)
+        return row to check
+    }
+}
+
+/** Classic, Bubbles or Book: how this character's chat is drawn, picked from drawings of each. */
 class RpLayoutFragment : RpPageFragment() {
     override fun title() = getString(R.string.rp_panel_layout)
 
@@ -180,18 +287,71 @@ class RpLayoutFragment : RpPageFragment() {
             Triple(SharedPreferencesHelper.RP_LAYOUT_BUBBLES, R.string.rp_layout_bubbles, R.string.rp_layout_bubbles_sub),
             Triple(SharedPreferencesHelper.RP_LAYOUT_BOOK, R.string.rp_layout_book, R.string.rp_layout_book_sub),
         )
-        val card = card()
-        val checks = ArrayList<Pair<String, ImageView>>()
-        options.forEach { (key, name, sub) ->
-            val (v, check) = row(getString(name), getString(sub), key == current) {
-                current = key
-                prefs.saveRpLayout(characterId, key)
-                checks.forEach { (k, c) -> c.visibility = if (k == key) View.VISIBLE else View.INVISIBLE }
-            }
-            checks += key to check!!
-            card.addView(v)
+        val ctx = requireContext()
+        body.addView(TextView(ctx).apply {
+            text = getString(R.string.rp_page_layout_caption, characterName.ifBlank { getString(R.string.rp_llm_speaker) })
+            setTextAppearance(R.style.TextAppearance_Gradation_Footnote)
+            textSize = 15f
+            gravity = Gravity.CENTER_HORIZONTAL
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        val strip = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        body.addView(strip, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
+        val description = RpPageKit.footnote(ctx, "").apply { gravity = Gravity.CENTER_HORIZONTAL; textSize = 14f }
+        body.addView(description)
+        val rims = ArrayList<Pair<String, View>>()
+        val labels = ArrayList<Pair<String, TextView>>()
+        fun select(key: String) {
+            rims.forEach { (k, rim) -> rim.isSelected = k == key }
+            labels.forEach { (k, t) -> t.alpha = if (k == key) 1f else 0.6f }
+            description.setText(options.first { it.first == key }.third)
         }
-        body.addView(card)
+        options.forEachIndexed { i, (key, name, sub) ->
+            val kind = when (key) {
+                SharedPreferencesHelper.RP_LAYOUT_BUBBLES -> RpTileArt.Kind.LAYOUT_BUBBLES
+                SharedPreferencesHelper.RP_LAYOUT_BOOK -> RpTileArt.Kind.LAYOUT_BOOK
+                else -> RpTileArt.Kind.LAYOUT_CLASSIC
+            }
+            val column = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                isClickable = true
+                isFocusable = true
+                contentDescription = "${getString(name)}, ${getString(sub)}"
+                setOnClickListener {
+                    current = key
+                    prefs.saveRpLayout(characterId, key)
+                    select(key)
+                }
+            }
+            // A ring around the chosen drawing, drawn by the frame so the art keeps its own corners.
+            val rim = FrameLayout(ctx).apply {
+                background = android.graphics.drawable.StateListDrawable().apply {
+                    addState(intArrayOf(android.R.attr.state_selected), GradientDrawable().apply {
+                        setStroke(dp(2), ContextCompat.getColor(ctx, R.color.xai_ink))
+                        cornerRadius = dp(22).toFloat()
+                    })
+                }
+                setPadding(dp(4), dp(4), dp(4), dp(4))
+                addView(RpPageKit.art(ctx, kind, 18), FrameLayout.LayoutParams(-1, -1))
+            }
+            val side = object : FrameLayout(ctx) {
+                override fun onMeasure(w: Int, h: Int) = super.onMeasure(w, MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(w), MeasureSpec.EXACTLY))
+            }.apply { addView(rim, FrameLayout.LayoutParams(-1, -1)) }
+            column.addView(side, LinearLayout.LayoutParams(-1, -2))
+            val label = TextView(ctx).apply {
+                setText(name)
+                setTextColor(ContextCompat.getColor(ctx, R.color.xai_ink))
+                textSize = 15f
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
+            column.addView(label, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+            strip.addView(column, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                if (i > 0) marginStart = dp(10)
+            })
+            rims += key to rim
+            labels += key to label
+        }
+        select(current)
     }
 
     companion object {
@@ -202,6 +362,7 @@ class RpLayoutFragment : RpPageFragment() {
 /** Pin a lorebook to this character, or follow whichever one is active. */
 class RpLorePinFragment : RpPageFragment() {
     override fun title() = getString(R.string.rp_panel_lore)
+    override fun hero() = RpTileArt.Kind.LORE to getString(R.string.rp_page_lore_caption, characterName)
 
     override fun build(body: LinearLayout) {
         val id = characterId ?: return
@@ -210,25 +371,24 @@ class RpLorePinFragment : RpPageFragment() {
             if (view == null) return@launch
             var pinned = prefs.getRpLorebookId(id)
             val active = books.firstOrNull { it.isActive }
+            section(getString(R.string.rp_page_lore_section))
             val card = card()
             val checks = ArrayList<Pair<Long?, ImageView>>()
             fun add(bookId: Long?, name: String, sub: String?) {
-                val (v, check) = row(name, sub, bookId == pinned) {
+                val (_, check) = row(card, name, sub, selected = bookId == pinned) {
                     pinned = bookId
                     prefs.saveRpLorebookId(id, bookId)
                     checks.forEach { (k, c) -> c.visibility = if (k == bookId) View.VISIBLE else View.INVISIBLE }
                 }
                 checks += bookId to check!!
-                card.addView(v)
             }
             add(null, getString(R.string.rp_lore_use_active), active?.name ?: getString(R.string.rp_ui_lore_none))
             books.forEach { add(it.id, it.name, if (it.isActive) getString(R.string.rp_lore_active_badge) else null) }
-            body.addView(card)
-            body.addView(card().apply {
-                addView(row(getString(R.string.rp_lore_edit), null, null) {
-                    pushPage(RpLorebookLibraryFragment.newInstance())
-                }.first)
-            })
+            val edit = card()
+            (edit.layoutParams as LinearLayout.LayoutParams).topMargin = dp(16)
+            row(edit, getString(R.string.rp_lore_edit), null, chevron = true) {
+                pushPage(RpLorebookLibraryFragment.newInstance())
+            }
         }
     }
 
@@ -258,29 +418,50 @@ class RpWallpaperFragment : RpPageFragment() {
         val id = characterId ?: return
         val slot = BackgroundPhoto.slotForCharacter(id)
         val ctx = requireContext()
-        val radius = dp(22).toFloat()
-        val preview = ImageView(ctx).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            background = GradientDrawable().apply {
-                setColor(ContextCompat.getColor(ctx, R.color.panel_tile))
-                cornerRadius = radius
-            }
-            outlineProvider = object : ViewOutlineProvider() {
-                override fun getOutline(v: View, outline: Outline) = outline.setRoundRect(0, 0, v.width, v.height, radius)
-            }
+        body.addView(TextView(ctx).apply {
+            text = getString(R.string.rp_page_wallpaper_caption, characterName)
+            setTextAppearance(R.style.TextAppearance_Gradation_Footnote)
+            textSize = 15f
+            gravity = Gravity.CENTER_HORIZONTAL
+            setLineSpacing(0f, 1.15f)
+        }, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(8)
+            marginStart = dp(12)
+            marginEnd = dp(12)
+        })
+        // Phone-shaped, so the picture is judged the way it will sit behind the chat.
+        val radius = dp(26).toFloat()
+        val frame = FrameLayout(ctx).apply {
+            background = RpCharacterPanel.solidShape(ctx, R.color.panel_tile, radiusPx = radius)
+            outlineProvider = RpPageKit.roundOutline(radius)
             clipToOutline = true
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        body.addView(preview, LinearLayout.LayoutParams(-1, dp(360)).apply { topMargin = dp(8) })
+        val empty = RpPageKit.art(ctx, RpTileArt.Kind.WALLPAPER, 26)
+        val preview = ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+        frame.addView(empty, FrameLayout.LayoutParams(-1, -1))
+        frame.addView(preview, FrameLayout.LayoutParams(-1, -1))
+        body.addView(frame, LinearLayout.LayoutParams(dp(172), dp(344)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            topMargin = dp(20)
+        })
+        val state = TextView(ctx).apply {
+            setTextAppearance(R.style.TextAppearance_Gradation_Footnote)
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        body.addView(state, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         val actions = card()
-        body.addView(actions)
+        (actions.layoutParams as LinearLayout.LayoutParams).topMargin = dp(20)
 
         fun bindActions() {
             val file = BackgroundPhoto.file(ctx, slot).takeIf { it.isFile }
             preview.setImageDrawable(null)
             previewJob?.cancel()
+            empty.visibility = if (file == null) View.VISIBLE else View.INVISIBLE
+            state.text = if (file == null) getString(R.string.rp_page_wallpaper_none) else ""
+            state.visibility = if (file == null) View.VISIBLE else View.GONE
             if (file != null) {
-                val maxEdge = dp(720)
+                val maxEdge = dp(480)
                 previewJob = viewLifecycleOwner.lifecycleScope.launch {
                     val bmp = withContext(Dispatchers.IO) { decodeWallpaperPreview(file.absolutePath, maxEdge) }
                     if (!isAdded || view == null) {
@@ -291,17 +472,17 @@ class RpWallpaperFragment : RpPageFragment() {
                 }
             }
             actions.removeAllViews()
-            actions.addView(row(
-                getString(R.string.rp_wallpaper_change),
-                getString(R.string.rp_wallpaper_change_sub, characterName), null
-            ) { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }.first)
+            row(actions, getString(R.string.rp_wallpaper_change), getString(R.string.rp_wallpaper_change_sub, characterName), chevron = true) {
+                pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }
             if (file != null) {
-                actions.addView(row(
-                    getString(R.string.rp_wallpaper_remove), getString(R.string.rp_wallpaper_remove_sub), null
+                RpPageKit.row(
+                    actions, getString(R.string.rp_wallpaper_remove), getString(R.string.rp_wallpaper_remove_sub),
+                    titleColor = R.color.delete_action
                 ) {
                     BackgroundPhoto.delete(ctx, slot)
                     bindActions()
-                }.first)
+                }
             }
         }
         refresh = ::bindActions
@@ -339,42 +520,28 @@ class RpMemoryFragment : RpPageFragment() {
     private var noteStart = ""
     private var factsStart = ""
 
+    override fun hero() = RpTileArt.Kind.MEMORY to getString(R.string.rp_page_memory_caption, speaker())
+
+    private fun speaker() = characterName.ifBlank { getString(R.string.rp_llm_speaker) }
+
     override fun build(body: LinearLayout) {
         noteStart = prefs.getRpMemory(characterId)
         factsStart = chatViewModel.currentRpFacts()
         val saved = restoredState
-        note = field(body, R.string.rp_memory_note, R.string.rp_memory_hint, saved?.getString(KEY_NOTE) ?: noteStart)
-        facts = field(body, R.string.rp_facts_title, R.string.rp_facts_hint, saved?.getString(KEY_FACTS) ?: factsStart)
-        val saveButton = layoutInflater.inflate(R.layout.view_rp_save_button, body, false)
-        saveButton.setOnClickListener {
-            save()
-            parentFragmentManager.popBackStack()
-        }
-        body.addView(saveButton, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(20) })
+        section(getString(R.string.rp_page_memory_section))
+        note = field(R.string.rp_memory_hint, saved?.getString(KEY_NOTE) ?: noteStart)
+        footnote(getString(R.string.rp_page_memory_foot, speaker()))
+        section(getString(R.string.rp_page_facts_section))
+        facts = field(R.string.rp_facts_hint, saved?.getString(KEY_FACTS) ?: factsStart)
+        footnote(getString(R.string.rp_page_facts_foot))
+        pinSave(::save)
     }
 
-    private fun field(body: LinearLayout, label: Int, hintRes: Int, text: String): EditText {
-        val ctx = requireContext()
-        body.addView(TextView(ctx).apply {
-            setText(label)
-            setTextColor(ContextCompat.getColor(ctx, R.color.xai_ink))
-            textSize = 15f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(dp(4), dp(14), dp(4), 0)
-        })
-        body.addView(hint(getString(hintRes), top = 2))
-        val edit = EditText(ctx).apply {
-            setText(text)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            gravity = Gravity.TOP or Gravity.START
-            minLines = 6
-            background = null
-            setTextColor(ContextCompat.getColor(ctx, R.color.xai_ink))
-            textSize = 15f
-            setPadding(dp(6), dp(8), dp(6), dp(8))
-        }
-        body.addView(card(gap = 6).apply { addView(edit, LinearLayout.LayoutParams(-1, -2)) })
-        return edit
+    private fun field(hintRes: Int, text: String): EditText {
+        val box = layoutInflater.inflate(R.layout.view_rp_page_field, body, false) as TextInputLayout
+        box.hint = getString(hintRes)
+        body.addView(box)
+        return box.findViewById<EditText>(R.id.rpPageFieldInput).apply { setText(text) }
     }
 
     private fun save() {
@@ -412,23 +579,24 @@ class RpMemoryFragment : RpPageFragment() {
 class RpVoiceFragment : RpPageFragment() {
     private var tts: TextToSpeech? = null
 
-    override fun title() = getString(R.string.rp_voice_title, characterName)
+    override fun title() = getString(R.string.rp_panel_voice)
+    override fun hero() = RpTileArt.Kind.VOICE to getString(R.string.rp_page_voice_caption, speaker())
     override fun layoutRes() = R.layout.fragment_rp_voice
 
     private var pending: SharedPreferencesHelper.RpVoice? = null
 
+    private fun speaker() = characterName.ifBlank { getString(R.string.rp_llm_speaker) }
+
     override fun build(body: LinearLayout) {
         pending = restorePending(restoredState) ?: pending
-        requireView().findViewById<View>(R.id.rpSaveButton).setOnClickListener {
-            pending?.let { prefs.saveRpVoice(characterId, it) }
-            parentFragmentManager.popBackStack()
-        }
+        pinSave { pending?.let { prefs.saveRpVoice(characterId, it) } }
         val start = pending ?: prefs.getRpVoice(characterId)
-        // Voices arrive once the engine is up, so the list is bound then.
+        // Default and the steps show at once; the engine's own voices join the list once it is up.
+        RpVoiceDialog.bind(this, requireView(), speaker(), null, start) { pending = it }
         tts = TextToSpeech(requireContext().applicationContext) { status ->
             if (!isAdded || view == null) return@TextToSpeech
-            val engine = tts.takeIf { status == TextToSpeech.SUCCESS }
-            RpVoiceDialog.bind(this, requireView(), characterName, engine, start) { pending = it }
+            val engine = tts.takeIf { status == TextToSpeech.SUCCESS } ?: return@TextToSpeech
+            RpVoiceDialog.bind(this, requireView(), speaker(), engine, pending ?: start) { pending = it }
         }
     }
 

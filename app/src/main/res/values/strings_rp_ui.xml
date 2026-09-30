@@ -16,9 +16,10 @@
     <string name="rp_ui_persona_set">Set</string>
     <string name="rp_ui_persona_off">Off</string>
     <string name="avatar_source_title">Choose a photo</string>
-    <string name="avatar_source_photos">Photos</string>
-    <string name="avatar_source_gallery">Gallery or another app</string>
-    <string name="avatar_source_files">Files</string>
+    <string name="avatar_source_gallery">Gallery</string>
+    <string name="avatar_source_gallery_sub">Your gallery app</string>
+    <string name="avatar_source_photos">Photo picker</string>
+    <string name="avatar_source_photos_sub">Android\'s chooser</string>
     <string name="avatar_crop_title">Frame the photo</string>
     <string name="avatar_crop_hint">Drag and pinch to choose what shows. Double-tap to reset.</string>
     <string name="avatar_crop_cancel">Cancel</string>

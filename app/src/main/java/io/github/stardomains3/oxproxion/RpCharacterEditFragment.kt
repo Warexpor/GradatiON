@@ -148,8 +148,8 @@ class RpCharacterEditFragment : Fragment() {
         }
 
         val avatarFrame = view.findViewById<android.widget.FrameLayout>(R.id.rpAvatarFrame)
-        pickAvatarButton.setOnClickListener { pickImage.launch() }
-        avatarFrame.setOnClickListener { pickImage.launch() }
+        pickAvatarButton.setOnClickListener { pickImage.launch(avatarFrame) }
+        avatarFrame.setOnClickListener { pickImage.launch(avatarFrame) }
         TouchTargets.expand(avatarFrame, view.findViewById(R.id.rpAvatarCameraBadge))
         clearAvatarButton.setOnClickListener {
             pendingAvatarUri = null

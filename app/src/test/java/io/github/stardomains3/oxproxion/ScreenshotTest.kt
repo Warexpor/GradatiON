@@ -671,8 +671,11 @@ class ScreenshotTest {
         val layout = facts.layout
         org.junit.Assert.assertNotNull("facts switch laid out", layout)
         val cut = (0 until layout.lineCount).sumOf { layout.getEllipsisCount(it) }
-        org.junit.Assert.assertEquals("facts row must show the whole sentence", 0, cut)
-        org.junit.Assert.assertTrue(layout.text.toString().endsWith("left alone."))
+        org.junit.Assert.assertEquals("facts row must show its whole label", 0, cut)
+        // The promise that Memory stays put is the footnote under the card, never clipped with the label.
+        val found = ArrayList<View>()
+        root(a).findViewsWithText(found, a.getString(R.string.rp_auto_memory_sub), View.FIND_VIEWS_WITH_TEXT)
+        org.junit.Assert.assertTrue(found.any { it.isShown })
         snap(root(a), "rp_settings_dark")
     }
 
@@ -966,6 +969,49 @@ class ScreenshotTest {
         dismissRpPanel(a)
         a.findViewById<View>(R.id.tabChat).performClick(); idle()
         org.junit.Assert.assertEquals(a.getString(R.string.cd_controls), button.contentDescription)
+    }
+
+    /** Every tile opens its page, and back lands on the sheet exactly where it was. */
+    @Test fun rpPanelPagesDark() = withChat { a, _ ->
+        seedRp()
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        val mira = runBlocking { vm.getRpRepository().getAllCharactersOnce() }.first { it.name == "Mira Vance" }
+        vm.startRpChatWithCharacter(mira); settle()
+        a.findViewById<View>(R.id.controlsButton).performClick(); settle()
+        fun sheetTop(): Int {
+            var v: View = rpPanelGrid(a)
+            while ((v.parent as? View) !is androidx.coordinatorlayout.widget.CoordinatorLayout) v = v.parent as View
+            return IntArray(2).also { v.getLocationInWindow(it) }[1]
+        }
+        val top = sheetTop()
+        val names = listOf(
+            R.string.rp_panel_memory to "memory", R.string.rp_panel_voice to "voice",
+            R.string.rp_panel_layout to "layout", R.string.rp_panel_wallpaper to "wallpaper",
+            R.string.rp_panel_style to "style", R.string.rp_panel_lore to "lore",
+            R.string.rp_panel_persona to "persona", R.string.rp_panel_edit to "edit",
+        )
+        for ((label, name) in names) {
+            val grid = rpPanelGrid(a)
+            (0 until grid.childCount).map { grid.getChildAt(it) }
+                .first { it.contentDescription.toString().startsWith(a.getString(label)) }
+                .performClick(); settle()
+            snap(root(a), "rp_page_${name}_dark")
+            if (name == "persona") {
+                // A photo comes from the gallery app or the photo picker, in a card under the portrait.
+                a.findViewById<View>(R.id.rpPersonaAvatarFrame).performClick(); settle()
+                val found = ArrayList<View>()
+                root(a).findViewsWithText(found, a.getString(R.string.avatar_source_photos), View.FIND_VIEWS_WITH_TEXT)
+                org.junit.Assert.assertTrue("the source card opened", found.isNotEmpty())
+                snap(root(a), "rp_avatar_source_dark")
+                a.onBackPressedDispatcher.onBackPressed(); settle()
+            }
+            a.supportFragmentManager.popBackStack(); settle()
+            org.junit.Assert.assertTrue("panel still up after $name", rpPanelShowing(a))
+            org.junit.Assert.assertEquals("sheet moved after $name", top, sheetTop())
+        }
+        dismissRpPanel(a)
+        a.findViewById<View>(R.id.tabChat).performClick(); idle()
     }
 
     /** Roleplay opens where it was left: on the list, or inside the chat. */

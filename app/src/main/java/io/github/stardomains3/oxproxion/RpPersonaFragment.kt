@@ -80,7 +80,7 @@ class RpPersonaFragment : Fragment() {
         showPortrait()
 
         val frame = view.findViewById<android.widget.FrameLayout>(R.id.rpPersonaAvatarFrame)
-        val pick = View.OnClickListener { pickImage.launch() }
+        val pick = View.OnClickListener { pickImage.launch(frame) }
         frame.setOnClickListener(pick)
         TouchTargets.expand(frame, view.findViewById(R.id.rpPersonaCameraBadge))
         view.findViewById<View>(R.id.rpPersonaPickPhoto).setOnClickListener(pick)
