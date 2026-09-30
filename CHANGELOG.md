@@ -8,7 +8,7 @@
 
 ### Fixed
 - The Persona card in the character panel no longer washes the portrait out, drops the name under the title, or leaves the spacing off; the panel header's avatar is no longer squashed.
-- The pause between the last words of a reply and its tools appearing: the finished reply's markdown and text layout are prepared off the main thread, and a late update of the same reply no longer throws that work away. Needs a phone to confirm.
+- The pause between the last words of a reply and its tools appearing: the swap to the final render used to wait out the 340 ms word fade; it now happens at once. The finished reply's markdown and text layout are also prepared off the main thread, and a late update of the same reply no longer throws that work away.
 
 ## 3.0.0 — liquid glass redesign
 
