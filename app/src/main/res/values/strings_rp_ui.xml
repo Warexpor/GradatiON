@@ -14,6 +14,16 @@
     <string name="rp_ui_backup_value">JSON</string>
     <string name="rp_ui_persona_unset">Not set</string>
     <string name="rp_ui_persona_set">Set</string>
+    <string name="rp_ui_persona_off">Off</string>
+    <string name="avatar_source_title">Choose a photo</string>
+    <string name="avatar_source_gallery">Gallery</string>
+    <string name="avatar_source_gallery_sub">Your gallery app</string>
+    <string name="avatar_source_photos">Photo picker</string>
+    <string name="avatar_source_photos_sub">Android\'s chooser</string>
+    <string name="avatar_crop_title">Frame the photo</string>
+    <string name="avatar_crop_hint">Drag and pinch to choose what shows. Double-tap to reset.</string>
+    <string name="avatar_crop_cancel">Cancel</string>
+    <string name="avatar_crop_done">Use photo</string>
     <string name="rp_ui_lore_none">None active</string>
     <string name="rp_ui_expand">Show backup options</string>
     <string name="rp_ui_collapse">Hide backup options</string>
@@ -39,4 +49,22 @@
     <!-- Persona -->
     <string name="rp_ui_persona_intro">How characters see you. Used in every RP chat.</string>
     <string name="rp_ui_section_you">You</string>
+    <!-- Roleplay home: the characters list you land on -->
+    <string name="rp_home_chats">Characters</string>
+    <string name="rp_home_empty">No characters yet. Add one to start your first story.</string>
+    <string name="rp_home_empty_cta">Add a character</string>
+    <string name="rp_home_start">Tap to start a chat</string>
+    <string name="rp_home_manage">Manage characters</string>
+    <string name="rp_home_back">Characters</string>
+    <string name="rp_home_menu_new">New chat</string>
+    <string name="rp_home_menu_edit">Edit character</string>
+    <string name="rp_home_menu_delete">Delete chat</string>
+    <string name="rp_home_delete_title">Delete this chat?</string>
+    <string name="rp_home_delete_body">Your conversation with %1$s is removed for good.</string>
+    <string name="rp_home_you">You: %1$s</string>
+    <string name="rp_home_no_preview">No messages yet</string>
+    <string name="rp_page_no_character">Pick a character first.</string>
+    <string name="rp_wallpaper_remove_title">Remove wallpaper?</string>
+    <string name="rp_wallpaper_remove_body">The chat with %1$s goes back to your app background.</string>
+    <string name="rp_history_none">No chats yet. Start one below.</string>
 </resources>

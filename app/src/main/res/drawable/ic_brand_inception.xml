@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inception mark (monochrome, tinted at use). Shape from LobeHub icons; the mark belongs to its owner. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M 14.767 1 H 7.884 L 1 7.883 v 6.884 h 6.884 V 7.883 h 6.883 V 1 z M 9.234 23 h 6.882 L 23 16.116 V 9.233 h -6.884 v 6.883 H 9.234 V 23 z" />
+</vector>

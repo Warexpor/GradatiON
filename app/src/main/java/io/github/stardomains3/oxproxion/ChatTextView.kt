@@ -1,25 +1,26 @@
 package io.github.stardomains3.oxproxion
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
-import android.graphics.Shader
+import android.graphics.drawable.Drawable
+import android.os.SystemClock
 import android.text.Layout
 import android.text.Spanned
 import android.util.AttributeSet
+import android.view.MotionEvent
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 
 /**
  * Message text view that paints the rounded shapes behind [ChatMarkdown] code: a card with a
- * hairline and header divider for code blocks (plus a right-aligned "Copy" hint), and a pill
- * behind inline code. Everything else is a plain TextView, so selection and links behave
- * exactly as before.
+ * header row (language label on the left, a bare copy icon on the right, a hairline
+ * under both), and a pill behind inline code. Everything else is a plain TextView, so
+ * selection and links behave exactly as before.
  */
 class ChatTextView @JvmOverloads constructor(
     context: Context,
@@ -28,7 +29,11 @@ class ChatTextView @JvmOverloads constructor(
 ) : AppCompatTextView(context, attrs, defStyleAttr) {
 
     private val density = resources.displayMetrics.density
-    private val cardRadius = 14f * density
+    /** Pixels per sp at the user's font size (what the deprecated scaledDensity was). */
+    private val scaled = android.util.TypedValue.applyDimension(
+        android.util.TypedValue.COMPLEX_UNIT_SP, 1f, resources.displayMetrics
+    )
+    private val cardRadius = 12f * density
     private val pillRadius = 6f * density
     private val pillPadX = 3.5f * density
     private val rect = RectF()
@@ -41,40 +46,66 @@ class ChatTextView @JvmOverloads constructor(
         strokeWidth = density.coerceAtLeast(1f)
         color = ContextCompat.getColor(context, R.color.xai_hairline)
     }
-    private val pillFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.markwon_inline_code_bg)
-    }
-    private val copyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.xai_mute)
-        textSize = 12.5f * resources.displayMetrics.scaledDensity
-        typeface = runCatching { ResourcesCompat.getFont(context, R.font.jakarta_medium) }.getOrNull()
-        textAlign = Paint.Align.RIGHT
-    }
-    private val copyLabel = context.getString(R.string.action_copy)
-    private val sheenColor = ContextCompat.getColor(context, R.color.glass_sheen)
-    private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = density.coerceAtLeast(1f)
-    }
-    private val copyPillFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.glass_chat_action_tint)
-    }
-    private val copyPillRim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
+    private val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         strokeWidth = density.coerceAtLeast(1f)
         color = ContextCompat.getColor(context, R.color.xai_hairline)
     }
+    private val pillFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.markwon_inline_code_bg)
+    }
+    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.xai_mute)
+        textSize = 13f * scaled  // Nothing tappable is under 13sp: the label is part of the copy header
+        typeface = runCatching { ResourcesCompat.getFont(context, R.font.jakarta_medium) }.getOrNull()
+    }
+    private val copyIcon: Drawable? = ContextCompat.getDrawable(context, R.drawable.ic_msg_copy)?.mutate()?.apply {
+        setTint(ContextCompat.getColor(context, R.color.xai_body))
+    }
+    private val checkIcon: Drawable? = ContextCompat.getDrawable(context, R.drawable.ic_msg_check)?.mutate()?.apply {
+        setTint(ContextCompat.getColor(context, R.color.xai_ink))
+    }
+    private val copyPillPressed = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.popover_row_pressed)
+    }
     private val capBounds = Rect()
-    private var shaderTop = Float.NaN
-    private var shaderWidth = -1f
+
+    /** Copy icons' tap areas from the last draw (text-layout coordinates), with the code each copies. */
+    private class CopyChip {
+        val rect = RectF()
+        var code: String = ""
+    }
+    private var markerText: Spanned? = null
+    private var markerLength = -1
+    private var codeBlocks: Array<ChatMarkdown.CodeBlockMarker> = emptyArray()
+    private var inlineCodes: Array<ChatMarkdown.InlineCodeMarker> = emptyArray()
+    private val chips = ArrayList<CopyChip>(4)
+    private var chipCount = 0
+    private var pressedChip = -1
+    private var copiedCode: String? = null
+    private var copiedUntil = 0L
+
+    /** The copy icon turns into a check for a moment; called by the icon and the header span. */
+    fun showCopied(code: String) {
+        copiedCode = code
+        copiedUntil = SystemClock.uptimeMillis() + COPIED_MS
+        invalidate()
+        postDelayed({ invalidate() }, COPIED_MS + 16)
+    }
 
     override fun onDraw(canvas: Canvas) {
         val spanned = text as? Spanned
         val layout = layout
+        chipCount = 0
         if (spanned != null && layout != null) {
-            val blocks = spanned.getSpans(0, spanned.length, ChatMarkdown.CodeBlockMarker::class.java)
-            val inlines = spanned.getSpans(0, spanned.length, ChatMarkdown.InlineCodeMarker::class.java)
+            // The markers only change with the text; a fade tick redraws the same text every frame.
+            if (spanned !== markerText || spanned.length != markerLength) {
+                markerText = spanned
+                markerLength = spanned.length
+                codeBlocks = spanned.getSpans(0, spanned.length, ChatMarkdown.CodeBlockMarker::class.java)
+                inlineCodes = spanned.getSpans(0, spanned.length, ChatMarkdown.InlineCodeMarker::class.java)
+            }
+            val blocks = codeBlocks
+            val inlines = inlineCodes
             if (blocks.isNotEmpty() || inlines.isNotEmpty()) {
                 canvas.save()
                 canvas.translate(totalPaddingLeft.toFloat(), totalPaddingTop.toFloat())
@@ -86,7 +117,55 @@ class ChatTextView @JvmOverloads constructor(
         super.onDraw(canvas)
     }
 
-    private fun drawCard(canvas: Canvas, layout: Layout, text: Spanned, marker: Any) {
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        val x = event.x - totalPaddingLeft
+        val y = event.y - totalPaddingTop + scrollY
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                pressedChip = indexOfChip(x, y)
+                if (pressedChip >= 0) { invalidate(); return true }
+            }
+            MotionEvent.ACTION_MOVE -> if (pressedChip >= 0) {
+                if (!hit(chipAt(pressedChip)?.rect, x, y)) { pressedChip = -1; invalidate() }
+                return true
+            }
+            MotionEvent.ACTION_UP -> if (pressedChip >= 0) {
+                val chip = chipAt(pressedChip)
+                pressedChip = -1
+                if (chip != null && hit(chip.rect, x, y)) {
+                    ChatMarkdown.copyCode(this, chip.code)
+                    showCopied(chip.code)
+                } else invalidate()
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> if (pressedChip >= 0) { pressedChip = -1; invalidate(); return true }
+        }
+        return super.onTouchEvent(event)
+    }
+
+    private fun chipAt(index: Int): CopyChip? = if (index in 0 until chipCount) chips[index] else null
+
+    private fun indexOfChip(x: Float, y: Float): Int {
+        for (i in 0 until chipCount) if (hit(chips[i].rect, x, y)) return i
+        return -1
+    }
+
+    private fun takeChip(src: RectF, code: String): Int {
+        val chip = if (chipCount < chips.size) chips[chipCount] else CopyChip().also { chips.add(it) }
+        chip.rect.set(src)
+        chip.code = code
+        return chipCount.also { chipCount++ }
+    }
+
+    /** Chips are small; take a few dp of slop around them. */
+    private fun hit(r: RectF?, x: Float, y: Float): Boolean {
+        r ?: return false
+        val slop = 8f * density
+        return x >= r.left - slop && x <= r.right + slop && y >= r.top - slop && y <= r.bottom + slop
+    }
+
+    private fun drawCard(canvas: Canvas, layout: Layout, text: Spanned, marker: ChatMarkdown.CodeBlockMarker) {
         val start = text.getSpanStart(marker)
         val end = text.getSpanEnd(marker)
         if (start < 0 || end <= start) return
@@ -102,34 +181,35 @@ class ChatTextView @JvmOverloads constructor(
         }
         val width = layout.width.toFloat()
         rect.set(0f, top, width, bottom)
+        // Flat card: one fill and a hairline edge, no sheen or lit rim.
         canvas.drawRoundRect(rect, cardRadius, cardRadius, cardFill)
-        // Glass: a soft sheen across the top and a rim lit from above.
-        if (shaderTop != top || shaderWidth != width) {
-            shaderTop = top
-            shaderWidth = width
-            sheenPaint.shader = LinearGradient(0f, top, 0f, top + 34f * density,
-                sheenColor, Color.TRANSPARENT, Shader.TileMode.CLAMP)
-            rimPaint.shader = LinearGradient(0f, top, width * 0.35f, top + 60f * density,
-                Color.argb(Color.alpha(sheenColor) * 3 / 2, 255, 255, 255), cardStroke.color, Shader.TileMode.CLAMP)
-        }
-        canvas.drawRoundRect(rect, cardRadius, cardRadius, sheenPaint)
         val inset = cardStroke.strokeWidth / 2f
         rect.inset(inset, inset)
-        canvas.drawRoundRect(rect, cardRadius, cardRadius, rimPaint)
+        canvas.drawRoundRect(rect, cardRadius, cardRadius, cardStroke)
 
-        // Copy chip on the language line: a small glass capsule with the label optically centered.
-        val lineTop = layout.getLineTop(first).toFloat()
-        val lineBottom = lineTop + (layout.getLineBottom(first) - lineTop) / lineSpacingMultiplier.coerceAtLeast(1f)
-        val cy = (lineTop + lineBottom) / 2f
-        copyPaint.getTextBounds("H", 0, 1, capBounds)
-        val textW = copyPaint.measureText(copyLabel)
-        val padX = 9f * density
-        val h = 22f * density
-        val right = width - 8f * density
-        rect.set(right - textW - 2 * padX, cy - h / 2f, right, cy + h / 2f)
-        canvas.drawRoundRect(rect, h / 2f, h / 2f, copyPillFill)
-        canvas.drawRoundRect(rect, h / 2f, h / 2f, copyPillRim)
-        canvas.drawText(copyLabel, right - padX, cy + capBounds.height() / 2f, copyPaint)
+        // Header row: the whole first line, spacing included, so label and icon sit centered.
+        val rowTop = layout.getLineTop(first).toFloat()
+        val rowBottom = layout.getLineBottom(first).toFloat()
+        val cy = (rowTop + rowBottom) / 2f
+        canvas.drawLine(0f, rowBottom, width, rowBottom, dividerPaint)
+        labelPaint.getTextBounds("H", 0, 1, capBounds)
+        canvas.drawText(marker.language, 14f * density, cy + capBounds.height() / 2f, labelPaint)
+
+        // Copy: just the icon, a check for a moment once copied; a soft disc while pressed.
+        val copied = copiedCode == marker.code && SystemClock.uptimeMillis() < copiedUntil
+        val icon = if (copied) checkIcon else copyIcon
+        val iconSize = 18f * density
+        val cx = width - 22f * density
+        val half = 15f * density
+        rect.set(cx - half, cy - half, cx + half, cy + half)
+        val index = takeChip(rect, marker.code)
+        if (pressedChip == index) canvas.drawOval(rect, copyPillPressed)
+        icon?.let {
+            val l = (cx - iconSize / 2f).toInt()
+            val t = (cy - iconSize / 2f).toInt()
+            it.setBounds(l, t, l + iconSize.toInt(), t + iconSize.toInt())
+            it.draw(canvas)
+        }
     }
 
     private fun drawPill(canvas: Canvas, layout: Layout, text: Spanned, marker: Any) {
@@ -155,5 +235,9 @@ class ChatTextView @JvmOverloads constructor(
             )
             canvas.drawRoundRect(rect, pillRadius, pillRadius, pillFill)
         }
+    }
+
+    private companion object {
+        const val COPIED_MS = 1400L
     }
 }

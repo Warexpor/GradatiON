@@ -20,6 +20,34 @@ class RpReplyCleanerTest {
     }
 
     @Test
+    fun keepsProseThatOnlyStartsLikeALeak() {
+        val story = "Instructions were clear, she said.\nNo limits, he whispered.\nFormat your thoughts first."
+        assertEquals(story, RpReplyCleaner.clean(story))
+    }
+
+    @Test
+    fun stripsWholeLineLeaks() {
+        val cleaned = RpReplyCleaner.clean("No limits.\nIMPORTANT: stay in character\nShe nods.")
+        assertEquals("She nods.", cleaned)
+    }
+
+    @Test
+    fun collapsesTheGapAStrippedLineLeaves() {
+        val cleaned = RpReplyCleaner.clean("She smiles.\n\nFormat: *action*\n\n\nHe waves.")
+        assertEquals("She smiles.\n\nHe waves.", cleaned)
+    }
+
+    @Test
+    fun stripsAnUnclosedThinkBlock() {
+        assertEquals("Hello", RpReplyCleaner.clean("Hello<think>still reasoning about what to"))
+    }
+
+    @Test
+    fun stripsReasoningThatOnlyHasAClosingTag() {
+        assertEquals("Hello there", RpReplyCleaner.clean("let me think…</think>Hello there"))
+    }
+
+    @Test
     fun keepsEmoji() {
         val cleaned = RpReplyCleaner.clean("Hi 😊 friend")
         assertTrue(cleaned.contains("😊"))

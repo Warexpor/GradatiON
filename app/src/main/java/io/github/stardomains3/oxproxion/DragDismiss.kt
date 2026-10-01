@@ -83,7 +83,9 @@ class DragDismiss(
                         }.start()
                     onProgress(1f)
                 } else {
-                    panel.animate().translationY(0f).setDuration(420).setInterpolator(Motion.spring).start()
+                    // Back up at the speed it was let go, with a little give, like a sheet.
+                    val fling = Motion.Fling(-ty, if (ty == 0f) 0f else -vy * kotlin.math.sign(ty), response = 0.4f, damping = 0.82f)
+                    panel.animate().translationY(0f).setDuration(fling.duration).setInterpolator(fling).start()
                     onProgress(0f)
                 }
                 return true

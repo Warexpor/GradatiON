@@ -34,8 +34,7 @@ class RpChatDelegate(
         )
         return RpPromptEngine.buildSystemPrompt(
             character = if (isLlm) null else character,
-            persona = prefs.getRpPersona(),
-            lang = prefs.getRpLang(),
+            persona = prefs.activeRpPersona(),
             lore = lore,
             instruction = instruction,
             thirdPerson = prefs.isRpThirdPerson(),
@@ -43,7 +42,7 @@ class RpChatDelegate(
             isLlm = isLlm,
             memory = prefs.getRpMemory(if (isLlm) null else character?.id),
             facts = if (prefs.isRpAutoMemory()) facts else "",
-            userName = prefs.getRpPersonaName(),
+            userName = prefs.activeRpPersonaName(),
             definitionCap = definitionCap
         )
     }
@@ -75,7 +74,7 @@ class RpChatDelegate(
         RpPromptEngine.expandMacros(
             character.greeting.ifBlank { prefs.string(R.string.rp_default_greeting, character.name) },
             character.name,
-            prefs.getRpPersonaName().ifBlank { prefs.string(R.string.rp_you) }
+            prefs.activeRpPersonaName().ifBlank { prefs.string(R.string.rp_you) }
         )
 
     fun sessionTitle(character: RpCharacter?): String {

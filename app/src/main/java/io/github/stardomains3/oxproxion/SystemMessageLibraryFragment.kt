@@ -14,6 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.SearchView
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -23,6 +24,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.button.MaterialButton
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -32,6 +34,7 @@ class SystemMessageLibraryFragment : Fragment() {
 
     private lateinit var systemMessageAdapter: SystemMessageAdapter
     private lateinit var sharedPreferencesHelper: SharedPreferencesHelper
+    private var picked = false
     private val systemMessages = mutableListOf<SystemMessage>()
     private lateinit var searchView: SearchView  // NEW: Reference to SearchView
     private val allSystemMessages = mutableListOf<SystemMessage>()  // NEW: Store full list for filtering
@@ -55,9 +58,9 @@ class SystemMessageLibraryFragment : Fragment() {
                         requireContext().contentResolver.openOutputStream(uri)?.use { outputStream ->
                             outputStream.write(json.toByteArray())
                         }
-                        AppToast.makeText(requireContext(), "System Messages exported successfully", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_system_messages_exported))
                     } catch (e: Exception) {
-                        AppToast.makeText(requireContext(), "Error exporting System Messages", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_export_system_messages_failed))
                     }
                 }
             }
@@ -92,16 +95,16 @@ class SystemMessageLibraryFragment : Fragment() {
                             }
                             sharedPreferencesHelper.saveCustomSystemMessages(currentMessages)
                             loadSystemMessages()
-                            AppToast.makeText(requireContext(), "System Messages imported successfully", AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.notice_system_messages_imported))
                         } else {
                             throw Exception("Failed to read file content.")
                         }
                     } catch (e: SerializationException) {
                         // Log.e("Import", "Import failed due to JSON format", e)
-                        AppToast.makeText(requireContext(), "Import failed. Check file format.", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_import_failed_format))
                     } catch (e: Exception) {
                         //Log.e("Import", "Import failed", e)
-                        AppToast.makeText(requireContext(), "Import failed.", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_import_failed))
                     }
                 }
             }
@@ -118,6 +121,7 @@ class SystemMessageLibraryFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        picked = false
         sharedPreferencesHelper = SharedPreferencesHelper(requireContext())
 
         val toolbar = view.findViewById<MaterialToolbar>(R.id.toolbar)
@@ -127,7 +131,7 @@ class SystemMessageLibraryFragment : Fragment() {
         val searchItem = toolbar.menu.findItem(R.id.action_search)
         if (searchItem != null) {
             searchView = searchItem.actionView as SearchView
-            searchView.queryHint = "Search system messages..."
+            searchView.queryHint = getString(R.string.search_system_messages_hint)
             searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
                 override fun onQueryTextSubmit(query: String?): Boolean {
                     return true
@@ -139,7 +143,7 @@ class SystemMessageLibraryFragment : Fragment() {
                 }
             })
         } else {
-            AppToast.makeText(requireContext(), "Search not available", AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.notice_search_unavailable))
         }
         toolbar.setOnMenuItemClickListener { menuItem ->
             when (menuItem.itemId) {
@@ -170,7 +174,7 @@ class SystemMessageLibraryFragment : Fragment() {
 
     private fun exportSystemMessages() {
         if (sharedPreferencesHelper.getCustomSystemMessages().isEmpty()) {
-            AppToast.makeText(requireContext(), "No system messages to export.", AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.notice_no_system_messages_export))
             return
         }
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -193,10 +197,16 @@ class SystemMessageLibraryFragment : Fragment() {
         val selectedMessage = sharedPreferencesHelper.getSelectedSystemMessage()
         systemMessageAdapter = SystemMessageAdapter(systemMessages, selectedMessage,
             onItemClick = { systemMessage ->
-                sharedPreferencesHelper.saveSelectedSystemMessage(systemMessage)
-                view.postDelayed({
-                    parentFragmentManager.popBackStack()
-                }, 200)
+                // One pick per visit: a second tap (or Back) inside the beat must not pop twice.
+                if (!picked) {
+                    picked = true
+                    sharedPreferencesHelper.saveSelectedSystemMessage(systemMessage)
+                    // Brief beat so the new check registers; cancelled if the view goes first.
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        delay(200)
+                        if (!isStateSaved) parentFragmentManager.popBackStack() else picked = false
+                    }
+                }
             },
             onMenuClick = { anchorView, systemMessage ->
                 showPopupMenu(anchorView, systemMessage)
@@ -266,19 +276,6 @@ class SystemMessageLibraryFragment : Fragment() {
         // Setup background - Important for dismissing when touching outside
         popupWindow.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
         popupWindow.isOutsideTouchable = true
-        val rootView = requireActivity().window.decorView.findViewById<ViewGroup>(android.R.id.content)
-        val dimView = View(requireContext()).apply {
-            setBackgroundColor(Color.argb(140, 0, 0, 0)) // 150 = ~60% opacity
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-        rootView.addView(dimView)
-        // Remove dim when popup is dismissed
-        popupWindow.setOnDismissListener {
-            rootView.removeView(dimView)
-        }
         val editItem = menuView.findViewById<TextView>(R.id.menu_edit)
         val deleteItem = menuView.findViewById<TextView>(R.id.menu_delete)
 
@@ -295,7 +292,7 @@ class SystemMessageLibraryFragment : Fragment() {
         deleteItem.setOnClickListener {
             popupWindow.dismiss()
             if (systemMessage.isDefault) {
-                AppToast.makeText(context, "Default system message cannot be deleted", AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.notice_default_system_message_undeletable))
             } else {
                 showDeleteConfirmationDialog(systemMessage)
             }
@@ -335,37 +332,10 @@ class SystemMessageLibraryFragment : Fragment() {
             // Show below the anchor view (default behavior)
             popupWindow.showAsDropDown(anchorView)
         }
+        MenuDim.behind(popupWindow)
     }
 
 
-    /*private fun showPopupMenu(view: View, systemMessage: SystemMessage) {
-        val popup = PopupMenu(context, view)
-        popup.menuInflater.inflate(R.menu.model_item_menu, popup.menu)
-
-        // Enable edit option for default messages, disable delete
-        if (systemMessage.isDefault) {
-            popup.menu.findItem(R.id.delete_model).isVisible = false
-        }
-
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.edit_model -> {
-                    navigateToEditScreen(systemMessage)
-                    true
-                }
-                R.id.delete_model -> {
-                    if (systemMessage.isDefault) {
-                        AppToast.makeText(context, "Default system message cannot be deleted", AppToast.LENGTH_SHORT).show()
-                    } else {
-                        showDeleteConfirmationDialog(systemMessage)
-                    }
-                    true
-                }
-                else -> false
-            }
-        }
-        popup.show()
-    }*/
 
     private fun navigateToEditScreen(systemMessage: SystemMessage) {
         val fragment = AddEditSystemMessageFragment().apply {

@@ -3,6 +3,7 @@ package io.github.stardomains3.oxproxion.code
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
@@ -17,6 +18,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import io.github.stardomains3.oxproxion.R
 import kotlin.random.Random
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -78,6 +81,12 @@ interface CodeBackend {
     fun rememberLastSeq(sessionId: String, seq: Long) {}
 
     /**
+     * Drop the resume cursor so the next [attach] replays the whole history. For a session whose
+     * transcript is not on the phone (transcripts are memory-only, so after a restart it is not).
+     */
+    fun forgetLastSeq(sessionId: String) {}
+
+    /**
      * Bridge / server version from the last successful ACP `initialize` handshake
      * (`_meta.bridge.version` or `serverInfo.version`). Null when unknown / demo / never connected.
      */
@@ -93,7 +102,12 @@ class BridgeBackend(
     override val host: CodeHost,
     private val transport: CodeTransport,
     private val adapter: HarnessAdapter,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    /**
+     * Inbound frames are parsed (and diffs computed) here, one at a time and in order, so a big
+     * replay never runs on the hub's Main scope. Tests pass Unconfined to stay synchronous.
+     */
+    private val decodeDispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
 ) : CodeBackend {
 
     override val connection: StateFlow<ConnectionState> get() = transport.state
@@ -101,6 +115,10 @@ class BridgeBackend(
     @Volatile private var handshakeError: String? = null
     private var handshakeFailCount = 0
     private var handshakeRetry: Job? = null
+    /** Mirrors the transport's policy: no reconnect while backgrounded unless a turn needs the link. */
+    @Volatile private var appBackgrounded = false
+    /** A handshake retry came due while backgrounded; foregrounding picks it up. */
+    @Volatile private var handshakeRetryDeferred = false
     /** R4: bounded flush retry when send fails while still CONNECTED (queue full). */
     private var outboxFlushRetry: Job? = null
     private var outboxFlushFailCount = 0
@@ -111,6 +129,14 @@ class BridgeBackend(
     private val nextId = AtomicLong(1)
     private val pending = ConcurrentHashMap<Long, CompletableDeferred<JsonElement?>>()
     private val attached = ConcurrentHashMap<String, CodeSessionSummary>()
+    /**
+     * Attached sessions whose reconnect `session/load` has not finished. [ready] no longer waits
+     * for them (each can take [DEFAULT_TIMEOUT_MS]); prompts for these ids queue until the replay
+     * is done so a turn never overtakes its own history.
+     */
+    private val resuming = ConcurrentHashMap.newKeySet<String>()
+    /** Seq-gap reloads per session on this connection; capped so a bridge with odd seqs can't loop. */
+    private val gapReloads = ConcurrentHashMap<String, Int>()
     private val runningSessions = ConcurrentHashMap.newKeySet<String>()
     private val outbox = ArrayDeque<OutboxPrompt>()
     private val outboxLock = Any()
@@ -245,11 +271,30 @@ class BridgeBackend(
         (adapter as? AcpAdapter)?.seedLastSeq(sessionId, seq)
     }
 
-    override fun setAppBackgrounded(backgrounded: Boolean) {
-        transport.setAppBackgrounded(backgrounded)
+    override fun forgetLastSeq(sessionId: String) {
+        (adapter as? AcpAdapter)?.clearLastSeq(sessionId)
     }
 
+    override fun setAppBackgrounded(backgrounded: Boolean) {
+        appBackgrounded = backgrounded
+        transport.setAppBackgrounded(backgrounded)
+        if (!backgrounded && handshakeRetryDeferred) {
+            handshakeRetryDeferred = false
+            if (connection.value == ConnectionState.DISCONNECTED || connection.value == ConnectionState.FAILED) {
+                transport.connect()
+            }
+        }
+    }
+
+    /** Same rule as the transport: a backgrounded app keeps the link only while a turn needs it. */
+    private fun reconnectAllowed(): Boolean =
+        !appBackgrounded || runningSessions.isNotEmpty() || cancelPending.isNotEmpty() ||
+            synchronized(outboxLock) { outbox.isNotEmpty() }
+
     override fun connect() {
+        // A deliberate connect (screen open, tap on the banner) starts the handshake budget over.
+        handshakeFailCount = 0
+        handshakeRetryDeferred = false
         ensureReader()
         ensureLifecycle()
         transport.connect()
@@ -257,7 +302,7 @@ class BridgeBackend(
 
     private fun ensureReader() {
         if (reader != null) return
-        reader = scope.launch {
+        reader = scope.launch(decodeDispatcher) {
             // R6: supervise the collector — one bad frame (or unexpected decode throw)
             // must not leave a CONNECTED dead pipe with no inbound handling.
             while (true) {
@@ -267,6 +312,7 @@ class BridgeBackend(
                             return@collect
                         }
                         for (out in decoded) when (out) {
+                            is AdapterOutput.Gap -> reloadAfterGap(out.sessionId, out.afterSeq)
                             is AdapterOutput.Update -> {
                                 val remapped = remapUserPromptEcho(out)
                                 if (remapped.sessionId in suppressAgent &&
@@ -350,6 +396,8 @@ class BridgeBackend(
                             sessionLoadRetry?.cancel()
                             sessionLoadRetry = null
                             loadFailed.clear()
+                            resuming.clear()
+                            gapReloads.clear()
                             failPending("Disconnected")
                         }
                     }
@@ -368,15 +416,22 @@ class BridgeBackend(
         ready.value = false
         initialized = false
         socketGeneration++
-        val msg = cause.message?.takeIf { it.isNotBlank() } ?: "Handshake failed"
+        val msg = cause.message?.takeIf { it.isNotBlank() } ?: CodeErrors.HANDSHAKE_FAILED
         handshakeError = msg
         failPending(msg)
         handshakeRetry?.cancel()
         transport.close()
         val attempt = handshakeFailCount++
+        // Give up after a few tries; a tap on the banner (or opening the screen) connects again.
+        if (attempt >= MAX_HANDSHAKE_RETRIES) return
         handshakeRetry = scope.launch {
             delay(ReconnectBackoff.delayMs(attempt.coerceAtMost(8), Random.nextDouble()))
             if (lifecycle == null) return@launch
+            if (!reconnectAllowed()) {
+                // Backgrounded with nothing running: stay quiet until the app is back.
+                handshakeRetryDeferred = true
+                return@launch
+            }
             if (connection.value == ConnectionState.DISCONNECTED ||
                 connection.value == ConnectionState.FAILED
             ) {
@@ -393,19 +448,50 @@ class BridgeBackend(
         if (gen != socketGeneration) return
         CodeMachineDetail.parseBridgeVersion(initResult)?.let { bridgeVersion = it }
         initialized = true
-        for (session in attached.values.toList()) {
-            if (gen != socketGeneration) return
-            loadAttachedSession(session)
-        }
-        if (gen != socketGeneration) return
         handshakeFailCount = 0
         handshakeError = null
+        val toResume = attached.values.toList()
+        // Flag the replays before ready flips, so a prompt that sees ready also sees them pending.
+        toResume.forEach { resuming.add(it.id) }
         ready.value = true
         outboxFlushFailCount = 0
         sessionLoadFailCount = 0
         flushCancelPending()
         flushOutbox()
+        // History replays run behind ready (each can take a while); running sessions go first.
+        for (session in toResume.sortedByDescending { it.id in runningSessions }) {
+            if (gen != socketGeneration) return
+            if (attached.containsKey(session.id)) loadAttachedSession(session)
+            resuming.remove(session.id)
+            flushOutbox()
+        }
+        if (gen != socketGeneration) return
         if (loadFailed.isNotEmpty()) scheduleSessionLoadRetry()
+    }
+
+    /**
+     * A seq jump means the transport dropped frames for [sessionId]. Replay from [afterSeq]
+     * (the adapter drops repeats). Capped per connection: a bridge whose seqs are not
+     * consecutive must not turn this into a reload loop.
+     */
+    private fun reloadAfterGap(sessionId: String, afterSeq: Long) {
+        val session = attached[sessionId]
+        val tries = gapReloads.merge(sessionId, 1) { a, b -> a + b } ?: 1 // merge never returns null here
+        if (session == null || tries > MAX_GAP_RELOADS || !ready.value) {
+            (adapter as? AcpAdapter)?.endGap(sessionId)
+            return
+        }
+        scope.launch {
+            try {
+                rawCall({ adapter.loadSession(it, session.id, session.workspace, afterSeq) }, DEFAULT_TIMEOUT_MS)
+            } catch (e: CancellationException) {
+                if (e !is TimeoutCancellationException) throw e
+            } catch (_: Exception) {
+                // The next gap (or the next reconnect) tries again; nothing to show.
+            } finally {
+                (adapter as? AcpAdapter)?.endGap(sessionId)
+            }
+        }
     }
 
     /**
@@ -424,9 +510,10 @@ class BridgeBackend(
             )
             loadFailed.remove(session.id)
             true
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: Exception) {
+            // A timed-out load is a failed resume, not a cancelled job; real cancels (socket drop,
+            // close) still unwind.
+            if (e is CancellationException && e !is TimeoutCancellationException) throw e
             val msg = e.message?.takeIf { it.isNotBlank() } ?: "session/load failed"
             loadFailed[session.id] = msg
             _updates.emit(
@@ -439,8 +526,10 @@ class BridgeBackend(
                         CodeEvent.Notice(
                             "load-fail:${session.id}",
                             System.currentTimeMillis(),
-                            "Resume failed — retrying: $msg",
-                            NoticeLevel.ERROR
+                            "Resume failed, retrying: $msg",
+                            NoticeLevel.ERROR,
+                            textRes = R.string.code_notice_resume_failed,
+                            args = listOf(msg),
                         )
                     )
                 )
@@ -464,7 +553,10 @@ class BridgeBackend(
                     ready.value &&
                     connection.value == ConnectionState.CONNECTED
                 ) {
-                    if (sessionLoadFailCount > 16) break
+                    if (sessionLoadFailCount > MAX_LOAD_RETRIES) {
+                        giveUpResume()
+                        break
+                    }
                     val attempt = sessionLoadFailCount++
                     val wait = ReconnectBackoff.delayMs(attempt.coerceAtMost(6), Random.nextDouble())
                         .coerceAtLeast(50L)
@@ -494,6 +586,57 @@ class BridgeBackend(
                 if (sessionLoadRetry === self) sessionLoadRetry = null
             }
         }
+    }
+
+    /**
+     * Retries are spent: tell each session it could not be resumed and fail what was waiting on
+     * it, instead of leaving prompts queued behind a load that will never finish.
+     */
+    private suspend fun giveUpResume() {
+        val ids = loadFailed.keys.toList()
+        loadFailed.clear()
+        for (id in ids) {
+            _updates.emit(
+                SessionUpdate(
+                    id,
+                    CodeUpdate.Upsert(
+                        CodeEvent.Notice(
+                            "load-giveup:$id", System.currentTimeMillis(),
+                            "Couldn't resume this session. Close and reopen it to try again.",
+                            NoticeLevel.ERROR,
+                            textRes = R.string.code_notice_resume_gave_up,
+                        )
+                    )
+                )
+            )
+            failQueuedPrompts(id)
+        }
+    }
+
+    /**
+     * Drops the prompts still queued for [sessionId] and ends its turn with an error, so the
+     * composer is not stuck on Stop for a message that will never be sent.
+     */
+    private suspend fun failQueuedPrompts(sessionId: String) {
+        val dropped = synchronized(outboxLock) { outbox.removeAll { it.sessionId == sessionId } }
+        if (!dropped) return
+        runningSessions.remove(sessionId)
+        clearPendingUser(sessionId)
+        _updates.emit(
+            SessionUpdate(
+                sessionId,
+                CodeUpdate.Upsert(
+                    CodeEvent.Notice(
+                        "send-fail:${System.currentTimeMillis()}", System.currentTimeMillis(),
+                        "Couldn't send your message. Check the connection and try again.",
+                        NoticeLevel.ERROR,
+                        textRes = R.string.code_notice_send_gave_up,
+                    )
+                )
+            )
+        )
+        _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("error")))
+        refreshKeepAlive()
     }
 
     private fun refreshKeepAlive() {
@@ -614,14 +757,40 @@ class BridgeBackend(
             permissionMode = request.permissionMode, model = request.model
         )
         attached[sid] = summary
-        scope.launch { runCatching { prompt(sid, request.prompt, request.attachments) } }
+        scope.launch {
+            try {
+                prompt(sid, request.prompt, request.attachments)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The session exists but its first prompt never left: end the turn visibly.
+                _updates.emit(SessionUpdate(sid, errorNotice(e.message)))
+                _updates.emit(SessionUpdate(sid, CodeUpdate.TurnDone("error")))
+                runningSessions.remove(sid)
+                refreshKeepAlive()
+            }
+        }
         return summary
     }
+
+    private fun errorNotice(message: String?) = CodeUpdate.Upsert(
+        CodeEvent.Notice(
+            "err:${System.currentTimeMillis()}", System.currentTimeMillis(),
+            message ?: "Turn failed", NoticeLevel.ERROR,
+            textRes = if (message == null) R.string.code_notice_turn_failed else 0,
+        )
+    )
 
     override suspend fun attach(session: CodeSessionSummary) {
         attached[session.id] = session
         session.lastSeq?.let { rememberLastSeq(session.id, it) }
         ensureReady()
+        if (session.id in resuming) {
+            // The reconnect replay is already loading this session; a second load would repeat it.
+            withTimeoutOrNull(DEFAULT_TIMEOUT_MS * 2) { while (session.id in resuming) delay(25) }
+            loadFailed[session.id]?.let { throw IllegalStateException(it) }
+            return
+        }
         val after = peekLastSeq(session.id) ?: session.lastSeq
         rawCall({ adapter.loadSession(it, session.id, session.workspace, after) }, DEFAULT_TIMEOUT_MS)
     }
@@ -640,7 +809,8 @@ class BridgeBackend(
             )
         )
         promptMutex(sessionId).withLock {
-            if (!ready.value || connection.value != ConnectionState.CONNECTED) {
+            // A session still replaying its history waits in the outbox; the resume flushes it.
+            if (!ready.value || connection.value != ConnectionState.CONNECTED || sessionId in resuming) {
                 synchronized(outboxLock) { outbox.addLast(OutboxPrompt(sessionId, text, atts)) }
                 runningSessions.add(sessionId)
                 refreshKeepAlive()
@@ -680,7 +850,7 @@ class BridgeBackend(
                     var skipped = 0
                     while (outbox.isNotEmpty() && skipped < outbox.size) {
                         val head = outbox.first()
-                        if (!loadFailed.containsKey(head.sessionId)) return@synchronized head
+                        if (!loadFailed.containsKey(head.sessionId) && head.sessionId !in resuming) return@synchronized head
                         outbox.removeFirst()
                         outbox.addLast(head)
                         skipped++
@@ -734,7 +904,13 @@ class BridgeBackend(
                     connection.value == ConnectionState.CONNECTED &&
                     synchronized(outboxLock) { outbox.isNotEmpty() }
                 ) {
-                    if (outboxFlushFailCount > 16) break
+                    if (outboxFlushFailCount > MAX_OUTBOX_RETRIES) {
+                        // The link says CONNECTED but will not take the prompt: say so, don't wait forever.
+                        val stuck = synchronized(outboxLock) { outbox.map { it.sessionId }.distinct() }
+                        stuck.forEach { failQueuedPrompts(it) }
+                        outboxFlushFailCount = 0
+                        break
+                    }
                     val attempt = outboxFlushFailCount++
                     val wait = ReconnectBackoff.delayMs(attempt.coerceAtMost(6), Random.nextDouble())
                         .coerceAtLeast(50L)
@@ -833,19 +1009,7 @@ class BridgeBackend(
                 refreshKeepAlive()
                 return DeliverResult.Retry
             }
-            _updates.emit(
-                SessionUpdate(
-                    sessionId,
-                    CodeUpdate.Upsert(
-                        CodeEvent.Notice(
-                            "err:${System.currentTimeMillis()}",
-                            System.currentTimeMillis(),
-                            e.message ?: "Turn failed",
-                            NoticeLevel.ERROR
-                        )
-                    )
-                )
-            )
+            _updates.emit(SessionUpdate(sessionId, errorNotice(e.message)))
             _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("error")))
             runningSessions.remove(sessionId)
             refreshKeepAlive()
@@ -933,8 +1097,9 @@ class BridgeBackend(
                     CodeEvent.Notice(
                         "cancel-pending:${System.currentTimeMillis()}",
                         System.currentTimeMillis(),
-                        "Stop did not reach host — retrying",
-                        NoticeLevel.WARNING
+                        "Stop did not reach host, retrying",
+                        NoticeLevel.WARNING,
+                        textRes = R.string.code_notice_stop_pending,
                     )
                 )
             )
@@ -963,19 +1128,7 @@ class BridgeBackend(
     /** Local Stop accepted only after wire cancel queued (or outbox-only local abort). */
     private suspend fun finalizeAcceptedCancel(sessionId: String) {
         suppressAgent.add(sessionId)
-        _updates.emit(
-            SessionUpdate(
-                sessionId,
-                CodeUpdate.Upsert(
-                    CodeEvent.Notice(
-                        "cancel:${System.currentTimeMillis()}",
-                        System.currentTimeMillis(),
-                        "Stopped",
-                        NoticeLevel.WARNING
-                    )
-                )
-            )
-        )
+        // The "Stopped" row comes from the TurnEnd this produces; a Notice too would say it twice.
         _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("cancelled")))
     }
 
@@ -1018,6 +1171,8 @@ class BridgeBackend(
         suppressAgent.remove(sessionId)
         cancelPending.remove(sessionId)
         loadFailed.remove(sessionId)
+        resuming.remove(sessionId)
+        gapReloads.remove(sessionId)
         clearPendingUser(sessionId)
         deliverGeneration.remove(sessionId)
         inFlightPromptId.remove(sessionId)?.let { rpcId ->
@@ -1060,6 +1215,9 @@ class BridgeBackend(
         suppressAgent.clear()
         cancelPending.clear()
         loadFailed.clear()
+        resuming.clear()
+        gapReloads.clear()
+        handshakeRetryDeferred = false
         synchronized(pendingUserLock) { pendingUserPrompts.clear() }
         answering.clear()
         promptMutexes.clear()
@@ -1070,5 +1228,10 @@ class BridgeBackend(
 
     companion object {
         const val DEFAULT_TIMEOUT_MS = 15_000L
+        /** Handshake attempts after a failed initialize before waiting for a deliberate connect. */
+        const val MAX_HANDSHAKE_RETRIES = 6
+        const val MAX_LOAD_RETRIES = 16
+        const val MAX_OUTBOX_RETRIES = 16
+        const val MAX_GAP_RELOADS = 3
     }
 }

@@ -45,13 +45,13 @@ object CodeApprovalBar {
 
     /** First unanswered approval in transcript order, or null. */
     fun findPending(events: List<CodeEvent>): CodeEvent.Approval? =
-        events.firstOrNull { it is CodeEvent.Approval && it.chosen == null } as? CodeEvent.Approval
+        events.firstOrNull { it is CodeEvent.Approval && it.pending } as? CodeEvent.Approval
 
     /** Unanswered approval requestIds in transcript order (may be more than one). */
     fun pendingRequestIds(events: List<CodeEvent>): List<String> =
         events.mapNotNull { event ->
             val pending = event as? CodeEvent.Approval ?: return@mapNotNull null
-            if (pending.chosen != null) null else pending.requestId
+            if (!pending.pending) null else pending.requestId
         }
 
     /**
@@ -86,7 +86,7 @@ object CodeApprovalBar {
     ): CodeEvent.Approval? {
         for (event in events) {
             val pending = event as? CodeEvent.Approval ?: continue
-            if (pending.chosen != null) continue
+            if (!pending.pending) continue
             val index = indexOfApproval(rows, pending.requestId)
             // Not in the adapter list yet → treat as off-screen.
             if (index < 0 || isOffClearViewport(index)) return pending

@@ -5,7 +5,7 @@ GradatiON is a personal Android client for language models: chat, roleplay with 
 • Code: pair your computers and drive Claude Code, Codex, OpenCode and more; approve edits, read colored diffs, get notified when an agent needs you
 • Voice input in every composer: tap, talk, tap. Words paste into the field and never send by themselves
 • Built-in demo model: try the app with no key or network
-• OpenRouter in the cloud, or Ollama, LM Studio, llama.cpp, MLX LM and Hermes Agent on your LAN
+• OpenRouter in the cloud, or Ollama, LM Studio, llama.cpp, MLX LM, oMLX, Nativ and Hermes Agent on your LAN
 • History with autosave, search, pin, rename, import and export
 • Encrypted chat database; no trackers, analytics or ads
 

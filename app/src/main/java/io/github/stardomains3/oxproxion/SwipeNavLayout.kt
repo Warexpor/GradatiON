@@ -13,11 +13,15 @@ import kotlin.math.abs
  * FrameLayout that recognises deliberate, wide horizontal swipes anywhere on it (not just at an
  * edge) and hands them to [listener]. It is strict on purpose so it never fights scrolling,
  * text selection or taps:
- *  - the finger must travel mostly sideways (|dx| > 1.7 x |dy|) past twice the touch slop
+ *  - the finger must travel mostly sideways (|dx| > 1.5 x |dy|) past 1.5x the touch slop
  *    before the gesture is claimed, and must not have started as a vertical scroll;
  *  - a press held still for a long-press (selection handles, context menus) is never claimed;
- *  - the swipe commits only past [commitFraction] of the width, or a fast fling past half that.
+ *  - the swipe commits when the release, projected ahead by its velocity, lands past
+ *    [commitFraction] of the width, having travelled at least a third of that; a flick back
+ *    the other way always cancels.
  * While claimed, [Listener.onDrag] reports the offset so the UI can follow the finger.
+ * Distances are measured on screen, not in this view's coordinates: the history drawer moves
+ * itself under the finger, and local coordinates would shift with it every step.
  */
 class SwipeNavLayout @JvmOverloads constructor(
     context: Context,
@@ -35,10 +39,16 @@ class SwipeNavLayout @JvmOverloads constructor(
 
     var listener: Listener? = null
     var commitFraction = 0.34f
+    /**
+     * Horizontal finger velocity (px/s, + = rightward) at the release that led to the current
+     * [Listener.onCommit] or [Listener.onCancel], so the settle can carry it on.
+     */
+    var releaseVelocity = 0f
+        private set
 
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private val longPress = ViewConfiguration.getLongPressTimeout().toLong()
-    private val flingMin = ViewConfiguration.get(context).scaledMinimumFlingVelocity * 8f
+    private val flingBack = ViewConfiguration.get(context).scaledMinimumFlingVelocity * 6f
     private var downX = 0f
     private var downY = 0f
     private var downTime = 0L
@@ -49,21 +59,21 @@ class SwipeNavLayout @JvmOverloads constructor(
         val l = listener ?: return false
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                downX = ev.x; downY = ev.y; downTime = SystemClock.uptimeMillis()
+                downX = ev.rawX; downY = ev.rawY; downTime = SystemClock.uptimeMillis()
                 state = if (l.canStart(ev.x, ev.y)) UNDECIDED else REJECTED
-                velocity?.recycle(); velocity = VelocityTracker.obtain().also { it.addMovement(ev) }
+                velocity?.recycle(); velocity = VelocityTracker.obtain().also { track(it, ev) }
             }
             MotionEvent.ACTION_MOVE -> {
-                velocity?.addMovement(ev)
+                velocity?.let { track(it, ev) }
                 if (state != UNDECIDED) return state == DRAGGING
-                val dx = ev.x - downX
-                val dy = ev.y - downY
+                val dx = ev.rawX - downX
+                val dy = ev.rawY - downY
                 when {
                     abs(dy) > slop * 1.5f && abs(dy) >= abs(dx) -> state = REJECTED
-                    SystemClock.uptimeMillis() - downTime > longPress && abs(dx) < slop * 2 -> state = REJECTED
-                    abs(dx) > slop * 2 && abs(dx) > abs(dy) * 1.7f -> {
+                    SystemClock.uptimeMillis() - downTime > longPress && abs(dx) < slop * 1.5f -> state = REJECTED
+                    abs(dx) > slop * 1.5f && abs(dx) > abs(dy) * 1.5f -> {
                         state = DRAGGING
-                        downX = ev.x - (if (dx > 0) slop * 2f else -slop * 2f)
+                        downX = ev.rawX - (if (dx > 0) slop * 1.5f else -slop * 1.5f)
                         parent?.requestDisallowInterceptTouchEvent(true)
                         return true
                     }
@@ -82,7 +92,7 @@ class SwipeNavLayout @JvmOverloads constructor(
             val cancel = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL }
             super.onTouchEvent(cancel)
             cancel.recycle()
-            listener?.onDrag(event.x - downX)
+            listener?.onDrag(event.rawX - downX)
             return true
         }
         if (state != DRAGGING) {
@@ -93,21 +103,35 @@ class SwipeNavLayout @JvmOverloads constructor(
             return handled || undecided
         }
         val l = listener ?: return false
-        velocity?.addMovement(event)
-        val dx = event.x - downX
+        velocity?.let { track(it, event) }
+        val dx = event.rawX - downX
         when (event.actionMasked) {
             MotionEvent.ACTION_MOVE -> l.onDrag(dx)
             MotionEvent.ACTION_UP -> {
                 velocity?.computeCurrentVelocity(1000)
                 val vx = velocity?.xVelocity ?: 0f
-                val far = abs(dx) > width * commitFraction
-                val flung = abs(vx) > flingMin && abs(dx) > width * commitFraction / 2f && (vx > 0) == (dx > 0)
-                if (far || flung) l.onCommit(if (dx > 0) 1 else -1) else l.onCancel()
+                releaseVelocity = vx
+                // Judge where the page is headed, not only where it is: a flick carries it on,
+                // and a flick back the other way means "never mind", however far it got.
+                val flungBack = abs(vx) > flingBack && (vx > 0) != (dx > 0)
+                // A flick still has to travel a bit, so a quick nudge never navigates.
+                val projected = dx + vx * PROJECTION_S
+                val commit = !flungBack && (projected > 0) == (dx > 0) &&
+                    abs(projected) > width * commitFraction && abs(dx) > width * commitFraction / 3f
+                if (commit) l.onCommit(if (dx > 0) 1 else -1) else l.onCancel()
                 reset()
             }
-            MotionEvent.ACTION_CANCEL -> { l.onCancel(); reset() }
+            MotionEvent.ACTION_CANCEL -> { releaseVelocity = 0f; l.onCancel(); reset() }
         }
         return true
+    }
+
+    /** Feeds [e] to [tracker] in screen coordinates, for the same reason as the distances. */
+    private fun track(tracker: VelocityTracker, e: MotionEvent) {
+        val screen = MotionEvent.obtain(e)
+        screen.setLocation(e.rawX, e.rawY)
+        tracker.addMovement(screen)
+        screen.recycle()
     }
 
     private fun reset() {
@@ -120,5 +144,7 @@ class SwipeNavLayout @JvmOverloads constructor(
         const val UNDECIDED = 1
         const val REJECTED = 2
         const val DRAGGING = 3
+        /** How far ahead a release is projected: roughly where a flick would coast to. */
+        const val PROJECTION_S = 0.16f
     }
 }

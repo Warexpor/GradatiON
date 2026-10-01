@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Inactive tabs sit on tertiary so they read clearly quieter; the swipe fades them up to ink. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_selected="true" android:color="@color/xai_ink" />
     <item android:state_pressed="true" android:color="@color/xai_body" />
-    <item android:color="@color/xai_mute" />
+    <item android:color="@color/xai_tertiary" />
 </selector>

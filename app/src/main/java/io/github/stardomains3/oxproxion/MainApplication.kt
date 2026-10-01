@@ -15,14 +15,16 @@ class MainApplication : Application() {
         } catch (e: UnsatisfiedLinkError) {
             throw IllegalStateException("SQLCipher native library failed to load", e)
         }
-        // Keep Code mode's bridge reconnect policy in sync with the whole app lifecycle.
+        // Keep Code mode's bridge reconnect policy in sync with the whole app lifecycle. This must
+        // not build the hub (encrypted hosts, database) for someone who never opens Code: the flag
+        // is remembered, and a hub created later reads it.
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
-                CodeHub.get(this@MainApplication).setAppBackgrounded(false)
+                CodeHub.noteAppBackgrounded(this@MainApplication, false)
             }
 
             override fun onStop(owner: LifecycleOwner) {
-                CodeHub.get(this@MainApplication).setAppBackgrounded(true)
+                CodeHub.noteAppBackgrounded(this@MainApplication, true)
             }
         })
         // Kill leftover sticky "Running" FGS notifs from older builds

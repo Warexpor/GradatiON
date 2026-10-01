@@ -5,7 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlin.coroutines.cancellation.CancellationException
 
 sealed class ChatImportResult {
     data object Success : ChatImportResult()
@@ -15,19 +17,20 @@ sealed class ChatImportResult {
 class SavedChatsViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         private val json = Json { prettyPrint = true }
+        // A backup from a newer version may carry fields this one doesn't know.
+        private val importJson = Json { ignoreUnknownKeys = true }
         private const val MAX_IMPORT_BYTES = 5 * 1024 * 1024
         private const val MAX_IMPORT_MESSAGES = 5000
     }
-    private val repository: ChatRepository
-    private val rpRepository: RpRepository
-    val allSessions: LiveData<List<ChatSession>>
-
-    init {
-        val db = AppDatabase.getDatabase(application)
-        repository = ChatRepository(db.chatDao())
-        rpRepository = RpRepository(db.rpDao())
-        allSessions = repository.allSessions
+    // Lazy, so building the ViewModel never opens the encrypted database on the main thread; the
+    // chat screen's ViewModel has already started that on IO by the time a history screen exists.
+    private val repository: ChatRepository by lazy {
+        ChatRepository(AppDatabase.getDatabase(getApplication()).chatDao())
     }
+    private val rpRepository: RpRepository by lazy {
+        RpRepository(AppDatabase.getDatabase(getApplication()).rpDao())
+    }
+    val allSessions: LiveData<List<ChatSession>> by lazy { repository.allSessions }
 
     fun sessionsForMode(mode: ChatMode): LiveData<List<ChatSession>> =
         repository.sessionsByMode(mode)
@@ -40,7 +43,8 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
                 prefs.saveRpDraftSessionId(mode, null)
             }
         }
-        prefs.clearRpSwipeJson(sessionId)
+        // Fork, swipe alternates and memory facts live in prefs, keyed by the session id.
+        prefs.clearSessionPrefs(sessionId)
     }
 
     fun updateSessionTitle(sessionId: Long, newTitle: String) = viewModelScope.launch {
@@ -77,19 +81,28 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private suspend fun importChatsFromJsonInternal(jsonText: String): ChatImportResult {
-        if (jsonText.length > MAX_IMPORT_BYTES) {
-            return ChatImportResult.Error("Import file too large (max 5 MB)")
+    internal suspend fun importChatsFromJsonInternal(jsonText: String): ChatImportResult {
+        val app = getApplication<Application>()
+        // The limit is in bytes; a string's length counts UTF-16 units, which undercounts non-ASCII text.
+        if (jsonText.length > MAX_IMPORT_BYTES || jsonText.toByteArray(Charsets.UTF_8).size > MAX_IMPORT_BYTES) {
+            return ChatImportResult.Error(app.getString(R.string.import_error_too_large))
+        }
+
+        // Reading the file and writing the database fail for different reasons, so the user is told which.
+        val backup = try {
+            importJson.decodeFromString<ChatBackup>(jsonText)
+        } catch (e: SerializationException) {
+            return ChatImportResult.Error(app.getString(R.string.import_error_format))
+        } catch (e: IllegalArgumentException) {
+            return ChatImportResult.Error(app.getString(R.string.import_error_format))
+        }
+        val totalMessages = backup.sessions.sumOf { it.messages.size }
+        if (totalMessages > MAX_IMPORT_MESSAGES) {
+            return ChatImportResult.Error(app.getString(R.string.import_error_too_many))
         }
 
         return try {
-            val backup = Json.decodeFromString<ChatBackup>(jsonText)
-            val totalMessages = backup.sessions.sumOf { it.messages.size }
-            if (totalMessages > MAX_IMPORT_MESSAGES) {
-                return ChatImportResult.Error("Too many messages (max 5,000)")
-            }
-
-            for (exportedSession in backup.sessions) {
+            val batch = backup.sessions.map { exportedSession ->
                 val characterId = when {
                     !exportedSession.characterExportKey.isNullOrBlank() ->
                         rpRepository.getCharacterByExportKey(exportedSession.characterExportKey)?.id
@@ -111,11 +124,18 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
                         content = exportedMessage.content
                     )
                 }
-                repository.insertSessionAndMessages(session, messages)
+                session to messages
             }
+            // One transaction: a failure part-way leaves the chat list as it was.
+            val newIds = repository.insertImportedSessions(batch)
+            // A new row can take an id a deleted chat used to have; drop that chat's leftovers.
+            val prefs = SharedPreferencesHelper(app)
+            newIds.forEach { prefs.clearSessionPrefs(it) }
             ChatImportResult.Success
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            ChatImportResult.Error("Invalid backup format")
+            ChatImportResult.Error(app.getString(R.string.import_error_database))
         }
     }
 

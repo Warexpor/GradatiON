@@ -32,8 +32,7 @@ object GrokConfirmDialog {
         val actionButton = sheet.findViewById<MaterialButton>(R.id.confirmAction)
         actionButton.text = confirmText
         if (destructive) {
-            // Destructive: red label on a tonal pill (iOS-style), never a red fill
-            actionButton.setTextColor(ContextCompat.getColor(context, R.color.xai_error))
+            actionButton.setTextColor(ContextCompat.getColor(context, R.color.delete_action))
             actionButton.background = ContextCompat.getDrawable(context, R.drawable.bg_glass_button)
         }
 

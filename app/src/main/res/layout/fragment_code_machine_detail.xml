@@ -214,7 +214,7 @@
                 android:layout_height="48dp"
                 android:layout_marginTop="4dp"
                 android:text="@string/code_machine_revoke"
-                android:textColor="@color/xai_error" />
+                android:textColor="@color/delete_action" />
 
             <TextView
                 android:id="@+id/codeMachineRevokeHint"

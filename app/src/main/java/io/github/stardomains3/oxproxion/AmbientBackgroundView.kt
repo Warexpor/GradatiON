@@ -12,12 +12,14 @@ import android.graphics.RenderNode
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.Choreographer
 import android.view.View
 import androidx.annotation.RequiresApi
-import java.util.Calendar
+import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.exp
@@ -91,6 +93,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
         set(value) {
             if (field == value) return
             field = value
+            dirtyPhotoKey()
             retune()
         }
 
@@ -150,6 +153,12 @@ class AmbientBackgroundView @JvmOverloads constructor(
     private val fieldPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val photoPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val washPaint = Paint()
+    private var horizonShader: Shader? = null
+    private var horizonKey = Long.MIN_VALUE
+    private var tintShader: Shader? = null
+    private var tintKey = Long.MIN_VALUE
+    private var canvasColor = 0
+    private var canvasColorNight = -1
     private var ticking = false
     private var windowVisible = true
     private var animTime = 7.5f // seconds of animation; starts mid-flow so the first frame isn't bland
@@ -163,6 +172,8 @@ class AmbientBackgroundView @JvmOverloads constructor(
     // API 31-32 / software canvases.
     private var staticField: Bitmap? = null
     private var staticFieldKey = ""
+    private var staticFieldLoading = ""
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     // PHOTO: processed bitmap, keyed by size + options + file version.
     private var photo: Bitmap? = null
@@ -183,16 +194,22 @@ class AmbientBackgroundView @JvmOverloads constructor(
             val now = SystemClock.uptimeMillis()
             if (canAnimate()) {
                 animTime += min(0.25f, (now - lastTick) / 1000f) * tuning.speed
-                if (tunedAtHour != Calendar.getInstance().get(Calendar.HOUR_OF_DAY) && prefOrOverride() == Style.ADAPTIVE) retune()
+                // Local hour without allocating a Calendar on every frame.
+                if (tunedAtHour != localHourOfDay() && prefOrOverride() == Style.ADAPTIVE) retune()
                 invalidate()
                 lastTick = now
                 Choreographer.getInstance().postFrameCallbackDelayed(this, tuning.frameMs)
             } else {
-                // Battery saver or animations off: hold still, look again in a while.
-                lastTick = now
-                Choreographer.getInstance().postFrameCallbackDelayed(this, IDLE_POLL_MS)
+                // Battery saver or animations off: hold still and stop calling back at all.
+                // updateTicking restarts us when the window regains focus or the power mode flips.
+                ticking = false
             }
         }
+    }
+
+    private val qualityListener = GlassQuality.Listener {
+        updateTicking()
+        invalidate()
     }
 
     init {
@@ -221,15 +238,31 @@ class AmbientBackgroundView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         prefs?.registerOnSharedPreferenceChangeListener(prefListener)
+        GlassQuality.addListener(qualityListener)
         wallpaperLuma = if (isInEditMode) null else BackgroundPhoto.systemWallpaperLuma(context)
         readPref()
     }
 
     override fun onDetachedFromWindow() {
         prefs?.unregisterOnSharedPreferenceChangeListener(prefListener)
+        GlassQuality.removeListener(qualityListener)
         stopTicking()
         fieldNode?.discardDisplayList()
+        // The CPU field is a full-screen-ish bitmap this view alone holds; an in-flight render
+        // for it is dropped by clearing the key it will check on arrival.
+        staticField = null
+        staticFieldKey = ""
+        staticFieldLoading = ""
         super.onDetachedFromWindow()
+    }
+
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (!hasWindowFocus) return
+        // We stop ticking (no polling) when animations are off or battery saver is on, so this
+        // is where a change made in system settings is noticed on return.
+        Motion.refreshAnimations(context)
+        updateTicking()
     }
 
     override fun onVisibilityAggregated(isVisible: Boolean) {
@@ -250,6 +283,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        dirtyPhotoKey()
         requestPhoto()
         invalidate()
     }
@@ -257,13 +291,14 @@ class AmbientBackgroundView @JvmOverloads constructor(
     private fun readPref() {
         prefStyle = Style.fromKey(prefs?.getString(SharedPreferencesHelper.KEY_BACKGROUND_STYLE, Style.OFF.key))
         photoOptions = prefs?.let { BackgroundPhoto.readOptions(it) } ?: BackgroundPhoto.Options()
+        dirtyPhotoKey()
         retune()
     }
 
     private fun prefOrOverride(): Style = styleOverride ?: if (activeSlot() != null) Style.PHOTO else prefStyle
 
     private fun retune() {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val hour = localHourOfDay()
         tunedAtHour = hour
         tuning = tune(prefOrOverride(), mode, isNight(), hour, intensity, photoOptions, wallpaperLuma)
         if (tuning.style == Style.OFF) {
@@ -288,7 +323,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
 
     private fun updateTicking() {
         val run = tuning.field != null && tuning.frameMs > 0 && animated && !scrolling &&
-            isAttachedToWindow && windowVisible && isShown
+            isAttachedToWindow && windowVisible && isShown && canAnimate()
         if (run == ticking) return
         if (run) {
             ticking = true
@@ -320,22 +355,55 @@ class AmbientBackgroundView @JvmOverloads constructor(
 
     /** ADAPTIVE: a soft neutral light from the top (bright wallpaper) or shade at the bottom. */
     private fun drawHorizon(canvas: Canvas, strength: Float) {
+        val night = isNight()
         val a = (abs(strength) * 255).roundToInt().coerceIn(0, 255)
-        val tone = if (isNight()) Color.WHITE else Color.BLACK
-        val c = Color.argb(a, Color.red(tone), Color.green(tone), Color.blue(tone))
-        val h = height.toFloat()
-        washPaint.shader = if (strength > 0f) {
-            LinearGradient(0f, 0f, 0f, h * 0.7f, c, Color.TRANSPARENT, Shader.TileMode.CLAMP)
-        } else {
-            LinearGradient(0f, h * 0.3f, 0f, h, Color.TRANSPARENT, c, Shader.TileMode.CLAMP)
+        val h = height
+        val dir = if (strength > 0f) 1L else 0L
+        val key = (h.toLong() shl 32) xor (a.toLong() shl 8) xor dir xor (if (night) 2L else 0L)
+        if (key != horizonKey) {
+            val tone = if (night) Color.WHITE else Color.BLACK
+            val c = Color.argb(a, Color.red(tone), Color.green(tone), Color.blue(tone))
+            val hf = h.toFloat()
+            horizonShader = if (strength > 0f) {
+                LinearGradient(0f, 0f, 0f, hf * 0.7f, c, Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            } else {
+                LinearGradient(0f, hf * 0.3f, 0f, hf, Color.TRANSPARENT, c, Shader.TileMode.CLAMP)
+            }
+            horizonKey = key
         }
-        canvas.drawRect(0f, 0f, width.toFloat(), h, washPaint)
+        washPaint.shader = horizonShader
+        canvas.drawRect(0f, 0f, width.toFloat(), h.toFloat(), washPaint)
         washPaint.shader = null
     }
 
-    private fun photoKeyNow(): String =
-        "${activeSlot()}:${BackgroundPhoto.version(context, activeSlot())}:${max(1, width / 2)}:${max(1, height / 2)}:" +
-            "${photoOptions.blur}:${photoOptions.color}"
+    private fun canvasTone(): Int {
+        val night = if (isNight()) 1 else 0
+        if (night != canvasColorNight) {
+            canvasColorNight = night
+            canvasColor = context.getColor(R.color.xai_canvas)
+        }
+        return canvasColor
+    }
+
+    /**
+     * The key names the picture, its version and the size and options it was processed for. Building
+     * it touches the disk and prefs, and drawPhoto asks every frame, so it is kept until something
+     * it depends on changes (size, options, slot, a new picture): those all end in [dirtyPhotoKey].
+     */
+    private var photoKeyCached = ""
+    private var photoKeyDirty = true
+
+    private fun dirtyPhotoKey() { photoKeyDirty = true }
+
+    private fun photoKeyNow(): String {
+        if (photoKeyDirty) {
+            val slot = activeSlot()
+            photoKeyCached = "$slot:${BackgroundPhoto.version(context, slot)}:${max(1, width / 2)}:${max(1, height / 2)}:" +
+                "${photoOptions.blur}:${photoOptions.color}"
+            photoKeyDirty = false
+        }
+        return photoKeyCached
+    }
 
     /** Start decoding as soon as size and options are known, not on the first draw. */
     private fun requestPhoto() {
@@ -354,7 +422,7 @@ class AmbientBackgroundView @JvmOverloads constructor(
 
     private fun drawPhoto(canvas: Canvas) {
         val opts = photoOptions
-        val canvasColor = context.getColor(R.color.xai_canvas)
+        val canvasColor = canvasTone()
         requestPhoto()
         val bmp = photo
         if (bmp != null) {
@@ -371,16 +439,21 @@ class AmbientBackgroundView @JvmOverloads constructor(
         }
         // Tint: canvas-toned fades behind the top bar and the composer.
         if (opts.tint) {
-            val h = height.toFloat()
-            val solid = Color.argb(170, Color.red(canvasColor), Color.green(canvasColor), Color.blue(canvasColor))
-            washPaint.shader = LinearGradient(
-                0f, 0f, 0f, h,
-                intArrayOf(solid, Color.TRANSPARENT, Color.TRANSPARENT, solid),
-                floatArrayOf(0f, 0.22f, 0.62f, 1f),
-                Shader.TileMode.CLAMP
-            )
+            val key = (width.toLong() shl 32) xor height.toLong() xor canvasColor.toLong()
+            if (key != tintKey) {
+                val h = height.toFloat()
+                val solid = Color.argb(170, Color.red(canvasColor), Color.green(canvasColor), Color.blue(canvasColor))
+                tintShader = LinearGradient(
+                    0f, 0f, 0f, h,
+                    intArrayOf(solid, Color.TRANSPARENT, Color.TRANSPARENT, solid),
+                    floatArrayOf(0f, 0.22f, 0.62f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+                tintKey = key
+            }
+            washPaint.shader = tintShader
             washPaint.alpha = 255
-            canvas.drawRect(0f, 0f, width.toFloat(), h, washPaint)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), washPaint)
             washPaint.shader = null
         }
     }
@@ -406,6 +479,9 @@ class AmbientBackgroundView @JvmOverloads constructor(
             rc.drawRect(0f, 0f, fw.toFloat(), fh.toFloat(), fieldPaint)
         } finally {
             node.endRecording()
+            // Drop the AGSL from the shared paint: a later software draw (pager snapshot)
+            // would throw if this RuntimeShader were still attached.
+            fieldPaint.shader = null
         }
         canvas.save()
         canvas.scale(width / fw.toFloat(), height / fh.toFloat())
@@ -433,19 +509,53 @@ class AmbientBackgroundView @JvmOverloads constructor(
     private fun drawFieldStatic(canvas: Canvas, style: Style, amp: Float) {
         val fw = max(8, (width / STATIC_DOWNSCALE).roundToInt())
         val fh = max(8, (height / STATIC_DOWNSCALE).roundToInt())
-        val key = "$style:$fw:$fh:$amp:${isNight()}"
-        val bmp = staticField?.takeIf { staticFieldKey == key } ?: renderFieldCpu(style, fw, fh, amp, if (isNight()) 1f else -1f).also {
-            staticField = it
-            staticFieldKey = key
-        }
+        val night = isNight()
+        val key = "$style:$fw:$fh:$amp:$night"
+        // The field is a few hundred thousand fbm evaluations: never on the UI thread. Until the
+        // new one arrives the last one is drawn (stretched to fit), or nothing on the very first frame.
+        if (staticFieldKey != key || staticField == null) requestStaticField(style, fw, fh, amp, if (night) 1f else -1f, key)
+        val bmp = staticField ?: return
+        // Never leave an AGSL on this paint across frames (see drawFieldAgsl).
+        fieldPaint.shader = null
         canvas.save()
-        canvas.scale(width / fw.toFloat(), height / fh.toFloat())
+        canvas.scale(width / bmp.width.toFloat(), height / bmp.height.toFloat())
         canvas.drawBitmap(bmp, 0f, 0f, fieldPaint)
         canvas.restore()
     }
 
+    private fun requestStaticField(style: Style, fw: Int, fh: Int, amp: Float, polarity: Float, key: String) {
+        if (staticFieldLoading == key) return
+        if (renderFieldInline || fw * fh <= SYNC_FIELD_PIXELS) {
+            // Swatch-sized: a few milliseconds, and the picker wants its preview on the first frame.
+            staticField = renderFieldCpu(style, fw, fh, amp, polarity)
+            staticFieldKey = key
+            return
+        }
+        staticFieldLoading = key
+        fieldExecutor.execute {
+            val bmp = renderFieldCpu(style, fw, fh, amp, polarity)
+            mainHandler.post {
+                // Dropped when something newer was asked for, or the view went away meanwhile.
+                if (staticFieldLoading != key) { bmp.recycle(); return@post }
+                staticFieldLoading = ""
+                staticField = bmp
+                staticFieldKey = key
+                invalidate()
+            }
+        }
+    }
+
     companion object {
-        private const val IDLE_POLL_MS = 2000L
+        /** One worker shared by every background view: the CPU field renders one at a time. */
+        private val fieldExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "ambient-field").apply { isDaemon = true }
+        }
+        /** Tests only: render every CPU field inline so a screenshot taken right away has it. */
+        @androidx.annotation.VisibleForTesting
+        var renderFieldInline = false
+
+        /** Fields up to this many pixels are cheap enough to render inline (preview swatches). */
+        private const val SYNC_FIELD_PIXELS = 8_000
         private const val FIELD_DOWNSCALE = 4f
         private const val STATIC_DOWNSCALE = 8f
         /** Fixed moment the static fallback shows. */
@@ -635,3 +745,21 @@ class AmbientBackgroundView @JvmOverloads constructor(
         }
     }
 }
+
+/** Local hour 0..23. Same result as Calendar.HOUR_OF_DAY, without allocating a Calendar. */
+internal fun localHourOfDay(nowMs: Long = System.currentTimeMillis()): Int {
+    // TimeZone.getDefault() clones the zone on every call and this runs once per animation frame,
+    // so the answer is kept for the minute it was computed in (packed so a reader never sees a
+    // minute from one call with the hour of another).
+    val minute = nowMs / 60_000L
+    val memo = hourMemo
+    if (memo ushr 5 == minute) return (memo and 31L).toInt()
+    val offset = TimeZone.getDefault().getOffset(nowMs)
+    var hour = ((nowMs + offset) / 3_600_000L) % 24L
+    if (hour < 0) hour += 24
+    hourMemo = (minute shl 5) or hour
+    return hour.toInt()
+}
+
+@Volatile
+private var hourMemo = Long.MIN_VALUE

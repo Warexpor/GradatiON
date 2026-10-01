@@ -10,8 +10,8 @@
     <color name="code_diff_gutter">#FF575757</color>
     <color name="code_status_on">#FFECECEC</color>
     <color name="code_status_off">#FF575757</color>
-    <color name="code_badge_bg">#FFECECEC</color>
-    <color name="code_badge_fg">#FF111111</color>
+    <color name="code_badge_bg">#24FFFFFF</color>
+    <color name="code_badge_fg">#FFECECEC</color>
     <color name="code_diff_add_fg">#FF3FB950</color>
     <color name="code_diff_del_fg">#FFF85149</color>
 </resources>

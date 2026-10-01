@@ -90,13 +90,15 @@ class CodeAwayNotifier(
                     return
                 }
                 val approval = update.event as? CodeEvent.Approval ?: return
-                if (approval.chosen != null) {
+                if (!approval.pending) {
                     cancelApproval(sessionId, approval.requestId)
                     return
                 }
                 maybePostApproval(sessionId, hostId, sessionTitle, approval)
             }
             is CodeUpdate.TurnDone -> {
+                // The turn is over, so an approval it still had out can't be answered any more.
+                cancelApprovals(sessionId)
                 if (!CodeAwayFormat.shouldNotifyTurnDone(sessionWasRunning, update.stopReason)) return
                 maybePostTurnDone(sessionId, hostId, sessionTitle)
             }
@@ -116,6 +118,13 @@ class CodeAwayNotifier(
         }
         (toRemove + prefKeys).toSet().forEach { key -> cancelKey(key) }
         clearOpenToken(sessionId)
+    }
+
+    /** Drops every approval alert of [sessionId] from the shade, keeping its turn-finished one. */
+    private fun cancelApprovals(sessionId: String) {
+        val prefix = "approval:$sessionId:"
+        val keys = posted.filter { it.startsWith(prefix) } + idPrefs.all.keys.filter { it.startsWith(prefix) }
+        keys.toSet().forEach { cancelKey(it) }
     }
 
     fun cancelApproval(sessionId: String, requestId: String) {

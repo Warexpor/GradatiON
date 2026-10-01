@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Messages from the chat core (ChatViewModel, the stream transport, tools, import). The leading
+     **Error:** marker on a reply bubble is added in code; these carry only the text after it. -->
+<resources>
+    <!-- Errors that land in the reply bubble -->
+    <string name="error_reply_cut_off">The reply was cut off before it finished. Check your connection and try again.</string>
+    <string name="notice_reply_may_be_cut_off">The connection closed early, so the reply may be incomplete</string>
+    <string name="error_model_generation_failed">The model hit an error while generating the reply. Please try again.</string>
+    <string name="error_response_filtered">The response was filtered due to content policies. Please rephrase your query.</string>
+    <string name="error_client_request">Client error: %1$s. Check your input.</string>
+    <string name="error_server_request">Server error: %1$s. Try later.</string>
+    <string name="error_request_timeout">Request timed out after %1$d min. Please try again.</string>
+    <string name="error_network">Network error: Check your connection.</string>
+    <string name="error_unknown">Unknown error occurred</string>
+    <!-- Also the text a reply holds when the model sent nothing, so code compares against it. -->
+    <string name="error_no_response">No response received.</string>
+    <string name="notification_answer_ready">Your answer is ready.</string>
+    <string name="error_lan_cert_changed">The local server\'s certificate changed. Turn Trust self-signed certificates off and on to accept the new one.</string>
+    <string name="notice_chat_db_recovered">Your chat history couldn\'t be opened, so it was set aside and a fresh one started.</string>
+    <string name="error_tool_followup_limit">Tool follow-up recursion limit reached.</string>
+    <string name="error_tool_recursion_limit">Tool recursion limit reached.</string>
+    <string name="error_tool_cancelled">Cancelled before this tool ran.</string>
+
+    <!-- Saving and exporting -->
+    <string name="save_name_required">File name and extension required</string>
+    <string name="save_failed">Save failed</string>
+    <string name="save_failed_detail">Save failed: %1$s</string>
+    <string name="save_file_ok">Saved: %1$s</string>
+    <string name="save_screenshot_ok">Screenshot saved to Downloads</string>
+    <string name="save_txt_ok">TXT saved to Downloads</string>
+    <string name="save_txt_failed">TXT save failed: %1$s</string>
+    <string name="save_markdown_ok">Markdown saved to Downloads</string>
+    <string name="save_text_ok">Text saved to Downloads</string>
+    <string name="save_html_ok">HTML saved to Downloads</string>
+    <string name="save_epub_ok">EPUB saved to Downloads</string>
+    <string name="save_epub_failed">EPUB save failed: %1$s</string>
+    <string name="save_audio_ok">Music saved: %1$s</string>
+    <string name="save_audio_failed">Audio save failed: %1$s</string>
+    <string name="image_download_ok">Image downloaded: %1$s</string>
+    <string name="image_download_failed">Failed to download image: %1$s</string>
+
+    <!-- Transcription, credits, local models -->
+    <string name="transcription_failed">Transcription failed: %1$s - %2$s</string>
+    <string name="transcription_lan_failed">LAN transcription failed: %1$s - %2$s</string>
+    <string name="transcription_empty">No transcription received.</string>
+    <string name="credits_remaining">Remaining credits: %1$s</string>
+    <string name="credits_failed">Failed to retrieve credits.</string>
+    <string name="lan_models_timeout">LAN models timed out (10 s, %1$s). Check the server and endpoint.</string>
+    <string name="lan_models_failed">LAN fetch failed (%1$s): %2$s</string>
+
+    <!-- Import -->
+    <string name="import_error_too_large">Import file too large (max 5 MB)</string>
+    <string name="import_error_too_many">Too many messages (max 5,000)</string>
+    <string name="import_error_format">Invalid backup format</string>
+    <string name="import_error_database">Couldn\'t save the imported chats. Nothing was changed.</string>
+</resources>

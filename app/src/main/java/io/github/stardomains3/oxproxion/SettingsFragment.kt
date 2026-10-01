@@ -4,6 +4,7 @@ import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 
 import android.os.Bundle
 import android.view.View
+import android.widget.TextView
 import androidx.fragment.app.Fragment
 import com.google.android.material.appbar.MaterialToolbar
 
@@ -23,6 +24,8 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
                 .addToBackStack(null)
                 .commit()
         }
+
+        bindValues(view)
 
         val prefs = SharedPreferencesHelper(requireContext())
         view.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsRoleplaySwitch).apply {
@@ -60,9 +63,31 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
         }
     }
 
+    /** The rows that open a section show what is set in it, so the list reads without a tap. */
+    private fun bindValues(view: View) {
+        val ctx = requireContext()
+        val prefs = SharedPreferencesHelper(ctx)
+        val theme = when (prefs.getThemeMode()) {
+            SharedPreferencesHelper.THEME_LIGHT -> R.string.settings_theme_light
+            SharedPreferencesHelper.THEME_DARK -> R.string.settings_theme_dark
+            else -> R.string.settings_theme_system
+        }
+        val engine = VoiceInput.resolve(ctx, prefs)?.let { getString(it.labelRes) } ?: getString(R.string.settings_value_off)
+        bindRowValue(view, R.id.settingsRowAppearance, R.id.settingsRowAppearanceValue, getString(theme))
+        bindRowValue(view, R.id.settingsRowVoice, R.id.settingsRowVoiceValue, engine)
+    }
+
+    private fun bindRowValue(view: View, rowId: Int, valueId: Int, value: String) {
+        view.findViewById<TextView>(valueId).text = value
+        // The value floats over the button, so the button's own label would be all a screen reader hears.
+        val row = view.findViewById<TextView>(rowId)
+        row.contentDescription = getString(R.string.cd_settings_row_value, row.text, value)
+    }
+
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
         if (hidden) return
+        view?.let { bindValues(it) }
         // Code settings has its own switch for the same flag.
         view?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsCodeSwitch)?.isChecked =
             io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store.enabled

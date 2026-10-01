@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion.code
 
+import androidx.annotation.StringRes
 import kotlinx.serialization.Serializable
 
 /*
@@ -186,6 +187,14 @@ data class AvailableCommand(
 /** Option shown on an approval card. [kind] tells the UI which button is which. */
 data class ApprovalOption(val id: String, val label: String, val kind: Kind) {
     enum class Kind { ALLOW_ONCE, ALLOW_ALWAYS, REJECT_ONCE, REJECT_ALWAYS }
+
+    companion object {
+        /**
+         * Stand-in id for the "Deny" the phone adds when a request arrives without options.
+         * It answers with outcome `cancelled` instead of naming an option.
+         */
+        const val CANCEL_ID = ""
+    }
 }
 
 /**
@@ -265,16 +274,27 @@ sealed class CodeEvent {
         val kind: ToolKind = ToolKind.OTHER,
         val options: List<ApprovalOption>,
         /** Set once answered (here or on another device); the card then collapses. */
-        val chosen: ApprovalOption.Kind? = null
-    ) : CodeEvent()
+        val chosen: ApprovalOption.Kind? = null,
+        /** The turn ended while this was unanswered; the agent no longer waits, so no buttons. */
+        val expired: Boolean = false
+    ) : CodeEvent() {
+        /** Still waiting on the user. */
+        val pending: Boolean get() = chosen == null && !expired
+    }
 
     data class Plan(override val key: String, override val at: Long, val entries: List<PlanEntry>) : CodeEvent()
 
+    /**
+     * [textRes] (with [args]) wins over [text] when set, so notices the phone makes up follow the
+     * app language; [text] carries wire messages verbatim and is the fallback.
+     */
     data class Notice(
         override val key: String,
         override val at: Long,
         val text: String,
-        val level: NoticeLevel = NoticeLevel.INFO
+        val level: NoticeLevel = NoticeLevel.INFO,
+        @StringRes val textRes: Int = 0,
+        val args: List<String> = emptyList()
     ) : CodeEvent()
 
     /** End of an agent turn: stop reason plus optional cost/usage line. */

@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,38 +33,26 @@ class ChatDaoOverwriteInstrumentedTest {
 
     @Test
     fun overwriteReplacesMessagesWithoutDuplicating() = runBlocking {
-        val sessionId = 1L
-        val session = ChatSession(id = sessionId, title = "t", modelUsed = "m")
-
-        dao.insertSessionAndMessages(
-            session,
+        val sessionId = dao.insertSessionAndMessages(
+            ChatSession(title = "t", modelUsed = "m"),
             listOf(
-                ChatMessage(sessionId = sessionId, role = "user", content = "\"hi\""),
-                ChatMessage(sessionId = sessionId, role = "assistant", content = "\"hello\"")
+                ChatMessage(sessionId = 0, role = "user", content = "\"hi\""),
+                ChatMessage(sessionId = 0, role = "assistant", content = "\"hello\"")
             )
         )
         assertEquals(2, dao.getMessagesForSession(sessionId).size)
 
-        dao.insertSessionAndMessages(
-            session.copy(title = "t2"),
-            listOf(
-                ChatMessage(sessionId = sessionId, role = "user", content = "\"hi\""),
-                ChatMessage(sessionId = sessionId, role = "assistant", content = "\"hello\""),
-                ChatMessage(sessionId = sessionId, role = "user", content = "\"again\""),
-                ChatMessage(sessionId = sessionId, role = "assistant", content = "\"ok\"")
-            )
+        val longer = listOf(
+            ChatMessage(sessionId = sessionId, role = "user", content = "\"hi\""),
+            ChatMessage(sessionId = sessionId, role = "assistant", content = "\"hello\""),
+            ChatMessage(sessionId = sessionId, role = "user", content = "\"again\""),
+            ChatMessage(sessionId = sessionId, role = "assistant", content = "\"ok\"")
         )
+        val session = ChatSession(id = sessionId, title = "t2", modelUsed = "m")
+        assertTrue(dao.overwriteIfExists(session, longer))
         assertEquals(4, dao.getMessagesForSession(sessionId).size)
 
-        dao.insertSessionAndMessages(
-            session.copy(title = "t2"),
-            listOf(
-                ChatMessage(sessionId = sessionId, role = "user", content = "\"hi\""),
-                ChatMessage(sessionId = sessionId, role = "assistant", content = "\"hello\""),
-                ChatMessage(sessionId = sessionId, role = "user", content = "\"again\""),
-                ChatMessage(sessionId = sessionId, role = "assistant", content = "\"ok\"")
-            )
-        )
+        assertTrue(dao.overwriteIfExists(session, longer))
         assertEquals(4, dao.getMessagesForSession(sessionId).size)
     }
 }

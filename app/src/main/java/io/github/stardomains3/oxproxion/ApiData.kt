@@ -69,11 +69,19 @@ data class FlexibleMessage(
     val reasoning: String? = null,
     val thinking: String? = null,
     @SerialName("image_uri")  // NEW: String for serialization (parse to Uri later)
-    val imageUri: String? = null,  // For user/generated images (original Uri.toString())
-    /** RP only. Kept out of the API body; the chat row stores role and content, so pins live in prefs. */
-    @kotlinx.serialization.Transient
-    val pinned: Boolean = false
+    val imageUri: String? = null  // For user/generated images (original Uri.toString())
 )
+
+/**
+ * The wire form of a transcript message: role, content, tool_calls and tool_call_id only.
+ * [FlexibleMessage] also carries what the UI needs (a generated image's Uri, the reasoning
+ * text, the tools badge), and none of that belongs in a provider request.
+ */
+fun FlexibleMessage.toApiMessage(): FlexibleMessage =
+    if (!toolsUsed && reasoning == null && thinking == null && imageUri == null) this
+    else copy(toolsUsed = false, reasoning = null, thinking = null, imageUri = null)
+
+fun List<FlexibleMessage>.toApiMessages(): List<FlexibleMessage> = map { it.toApiMessage() }
 
 @Serializable
 data class Plugin(
@@ -211,11 +219,6 @@ data class CompletionTokensDetails(
     val reasoning_tokens: Int
 )
 @Serializable
-data class ImageData(
-    val url: String
-    // APIs can also return b64_json or revised_prompt, but we only need the URL
-)
-@Serializable
 data class Tool(
     val type: String,
     val function: FunctionTool? = null
@@ -243,7 +246,8 @@ data class FunctionCall(
 
 @Serializable
 data class ToolCallChunk(
-    val index: Int,
+    // Some servers (and Gemini-style relays) omit the index on whole, unsplit calls.
+    val index: Int? = null,
     val id: String? = null,
     val type: String? = null,
     val function: FunctionCallChunk? = null

@@ -209,7 +209,7 @@ class CodeBridgeBackendTest {
     @Test fun outboxSendsPromptAfterReconnect() = runBlocking {
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -259,7 +259,7 @@ class CodeBridgeBackendTest {
         )
         assertEquals(42L, adapter.lastSeq("s1"))
 
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -291,7 +291,7 @@ class CodeBridgeBackendTest {
 
     @Test fun backgroundFlagForwardsToTransport() {
         val transport = FakeTransport()
-        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope)
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
         backend.setAppBackgrounded(true)
         assertTrue(transport.backgrounded)
         backend.setAppBackgrounded(false)
@@ -302,7 +302,7 @@ class CodeBridgeBackendTest {
     @Test fun listHarnessesParsesBridgeResult() = runBlocking {
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = scope.launch {
             val answered = HashSet<Long>()
             while (true) {
@@ -347,7 +347,7 @@ class CodeBridgeBackendTest {
     @Test fun browseParsesDirectoryEntries() = runBlocking {
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = scope.launch {
             val answered = HashSet<Long>()
             while (true) {
@@ -393,7 +393,7 @@ class CodeBridgeBackendTest {
     @Test fun gitStatusAndDiffParseBridgeResults() = runBlocking {
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = scope.launch {
             val answered = HashSet<Long>()
             while (true) {
@@ -451,7 +451,7 @@ class CodeBridgeBackendTest {
     @Test fun cancelClearsQueuedOutboxAndEmitsTurnDone() = runBlocking {
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -503,7 +503,7 @@ class CodeBridgeBackendTest {
         val transport = FakeTransport()
         transport.failPromptSendOnce = true
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -553,7 +553,7 @@ class CodeBridgeBackendTest {
     @Test fun cancelAbortsInFlightDeliverAndDoesNotTreatAsDelivered() = runBlocking {
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -635,7 +635,7 @@ class CodeBridgeBackendTest {
     @Test fun cancelDuringFlushBeforeSendDoesNotDequeueAsDelivered() = runBlocking {
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -696,7 +696,7 @@ class CodeBridgeBackendTest {
         // H2: failed transport.send must not emit ApprovalAnswered.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -729,7 +729,7 @@ class CodeBridgeBackendTest {
         // H2 follow-up: after a failed send, a later answer can still go out.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -762,7 +762,7 @@ class CodeBridgeBackendTest {
         // AWAY-01: answer() must ensureReady (connect + initialize) when the socket is down.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             assertEquals(ConnectionState.DISCONNECTED, backend.connection.value)
@@ -798,7 +798,7 @@ class CodeBridgeBackendTest {
             "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"x"}}}}"""
         )
         assertEquals(7L, adapter.lastSeq("s1"))
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -839,7 +839,7 @@ class CodeBridgeBackendTest {
         // C1: forget → detach then cancel must not re-seed suppressAgent (load replay stays live).
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -895,7 +895,7 @@ class CodeBridgeBackendTest {
         // no suppressAgent re-seed — so re-attach agent chunks still pass.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -956,7 +956,7 @@ class CodeBridgeBackendTest {
         // E1: cancel session A mid-flush must not orphan session B's queued prompt.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -1007,7 +1007,7 @@ class CodeBridgeBackendTest {
         // dropped by structural == on dequeue — referential === keeps it for flush.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -1058,7 +1058,7 @@ class CodeBridgeBackendTest {
         // AWAY-02: two sessions on one host may share numeric request id "1".
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -1103,7 +1103,7 @@ class CodeBridgeBackendTest {
         // AWAY-02 / M3: same session+request still collapses while the first send is held.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -1149,7 +1149,7 @@ class CodeBridgeBackendTest {
         // R2: initialize JSON-RPC error must not leave CONNECTED + !ready forever.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         var initCount = 0
         val answers = scope.launch {
             val answered = HashSet<Long>()
@@ -1220,7 +1220,7 @@ class CodeBridgeBackendTest {
         // R3: session/cancel send false must not emit TurnDone/suppress as accepted.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -1298,7 +1298,7 @@ class CodeBridgeBackendTest {
         // R3: after failed cancel, reconnect flush resends session/cancel then TurnDone.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -1381,7 +1381,7 @@ class CodeBridgeBackendTest {
         // R3: queue-full while CONNECTED — scheduled flush retries without needing drop.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -1433,7 +1433,7 @@ class CodeBridgeBackendTest {
         val transport = FakeTransport()
         transport.failPromptSendOnce = true
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -1475,7 +1475,7 @@ class CodeBridgeBackendTest {
         // retry with backoff, and do not treat that session as fully resumed meanwhile.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         var loadCount = 0
         val answers = scope.launch {
             val answered = HashSet<Long>()
@@ -1584,7 +1584,7 @@ class CodeBridgeBackendTest {
         // the socket stays CONNECTED — subsequent good frames must still decode.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -1635,7 +1635,7 @@ class CodeBridgeBackendTest {
         // collapse to one UserPrompt after reduce (especially visible after outbox replay).
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()
@@ -1693,7 +1693,7 @@ class CodeBridgeBackendTest {
         // R7: offline optimistic bubble + reconnect outbox deliver + bridge echo → one bubble.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
-        val backend = BridgeBackend(host(), transport, adapter, scope)
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
         val answers = autoAnswer(transport, adapter)
         try {
             backend.connect()

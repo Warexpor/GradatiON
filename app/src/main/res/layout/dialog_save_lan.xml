@@ -18,7 +18,7 @@
             android:id="@+id/dialog_title_lan"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Set LAN Endpoint"
+            android:text="@string/save_lan_title"
             android:textColor="@color/xai_ink"
             android:textAppearance="@style/TextAppearance.Gradation.Headline"
             android:layout_marginBottom="16dp" />
@@ -26,16 +26,18 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Example: http://10.0.0.23:11434"
+            android:text="@string/save_lan_example"
             android:textColor="@color/xai_mute"
-            android:textSize="12sp"
+            android:textSize="13sp"
             android:layout_marginBottom="8dp" />
 
         <!-- Edit field -->
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/edit_text_lan_url_layout"
+            style="@style/Xai.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Enter LAN endpoint URL"
+            android:hint="@string/save_lan_endpoint_hint"
             app:hintTextColor="@color/xai_mute">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -53,17 +55,28 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Select Provider:"
+            android:text="@string/save_lan_select_provider"
             android:textColor="@color/xai_ink"
             android:textSize="14sp"
             android:layout_marginTop="16dp"
             android:layout_marginBottom="8dp" />
 
+        <!-- Shown when Save is tapped with no server type picked. -->
+        <TextView
+            android:id="@+id/lan_provider_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="@string/lan_error_pick_server"
+            android:textColor="@color/xai_error"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@color/xai_canvas_soft"
+            android:background="@drawable/bg_settings_card"
             android:padding="12dp"
             android:layout_marginBottom="16dp">
 
@@ -71,7 +84,7 @@
                 android:id="@+id/checkbox_ollama"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Ollama"
+                android:text="@string/save_lan_ollama"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox"
                 android:layout_marginBottom="8dp" />
@@ -80,7 +93,7 @@
                 android:id="@+id/checkbox_lm_studio"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="LM Studio"
+                android:text="@string/save_lan_lm_studio"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox"
                 android:layout_marginBottom="8dp" />
@@ -89,7 +102,7 @@
                 android:id="@+id/checkbox_llama_cpp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="llama.cpp"
+                android:text="@string/save_lan_llama_cpp"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox"
                 android:layout_marginBottom="8dp" />
@@ -99,28 +112,28 @@
                 android:id="@+id/checkbox_mlx_lm"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="MLX LM"
+                android:text="@string/save_lan_mlx_lm"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox" />
             <CheckBox
                 android:id="@+id/checkbox_hermes_agent"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Hermes Agent"
+                android:text="@string/save_lan_hermes_agent"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox" />
             <CheckBox
                 android:id="@+id/checkbox_olmx"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="oMLX"
+                android:text="@string/save_lan_omlx"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox" />
             <CheckBox
                 android:id="@+id/checkbox_nativ"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Nativ"
+                android:text="@string/save_lan_nativ"
                 android:textColor="@color/xai_ink"
                 style="@style/Widget.App.CheckBox" />
 
@@ -131,24 +144,28 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="LAN API Key (optional)"
+            android:text="@string/save_lan_api_key_label"
             android:textColor="@color/xai_ink"
             android:textSize="14sp"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp" />
 
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/edit_text_lan_api_key_layout"
+            style="@style/Xai.TextInputLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Enter if Required"
+            android:hint="@string/save_lan_enter_if_required"
             app:hintTextColor="@color/xai_mute"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="16dp"
+            app:endIconMode="password_toggle">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/edit_text_lan_api_key"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="text"
+                android:inputType="textPassword"
+                android:importantForAutofill="no"
                 android:imeOptions="actionDone"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp"

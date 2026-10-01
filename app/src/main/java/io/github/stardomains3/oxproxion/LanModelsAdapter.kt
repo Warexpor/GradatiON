@@ -78,7 +78,7 @@ class LanModelsAdapter(
     private fun bindViewHolder(holder: ModelViewHolder, model: LlmModel, @Suppress("UNUSED_PARAMETER") payloads: List<Any>) {
         holder.modelId.text = model.apiIdentifier
         holder.modelName.text = model.displayName
-        holder.modelIcon.setImageResource(R.drawable.ic_lan)
+        holder.modelIcon.setImageResource(ModelBrands.of(model)?.icon ?: R.drawable.ic_local_network)
 
         val isActivelyLoading = loadingModels.contains(model.apiIdentifier)
         val isAdded = isModelInLibrary(model.apiIdentifier)

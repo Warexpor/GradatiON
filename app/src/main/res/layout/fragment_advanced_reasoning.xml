@@ -33,7 +33,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:text="Note: You can set Effort OR Max Reasoning Tokens, not both. Setting Max Reasoning Tokens disables Effort. To use Effort, make sure Max Reasoning Tokens has no value."
+                android:text="@string/advanced_reasoning_note"
                 android:textColor="@color/xai_mute"
                 android:textSize="14sp"
                 android:layout_marginBottom="16dp"
@@ -43,7 +43,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:text="Effort Level:"
+                android:text="@string/advanced_reasoning_effort_level"
                 android:textColor="@color/xai_ink"
                 android:textSize="18sp"
                 android:layout_marginBottom="16dp" />
@@ -72,7 +72,7 @@
                         android:maxLines="1"
                         android:ellipsize="end"
                         app:backgroundTint="@color/toggle_background_selector"
-                        android:text="Minimal"
+                        android:text="@string/advanced_reasoning_minimal"
                         app:strokeColor="@color/xai_hairline"
                         style="?attr/materialButtonOutlinedStyle" />
 
@@ -84,7 +84,7 @@
                         android:maxLines="1"
                         android:ellipsize="end"
                         app:backgroundTint="@color/toggle_background_selector"
-                        android:text="Low"
+                        android:text="@string/advanced_reasoning_low"
                         app:strokeColor="@color/xai_hairline"
                         style="?attr/materialButtonOutlinedStyle" />
 
@@ -96,7 +96,7 @@
                         android:maxLines="1"
                         android:ellipsize="end"
                         app:backgroundTint="@color/toggle_background_selector"
-                        android:text="Medium"
+                        android:text="@string/advanced_reasoning_medium"
                         app:strokeColor="@color/xai_hairline"
                         style="?attr/materialButtonOutlinedStyle" />
 
@@ -108,7 +108,7 @@
                         android:maxLines="1"
                         android:ellipsize="end"
                         app:backgroundTint="@color/toggle_background_selector"
-                        android:text="High"
+                        android:text="@string/advanced_reasoning_high"
                         app:strokeColor="@color/xai_hairline"
                         style="?attr/materialButtonOutlinedStyle" />
 
@@ -129,7 +129,7 @@
                     android:layout_weight="1"
                     android:ellipsize="end"
                     android:maxLines="2"
-                    android:text="Include in Response:"
+                    android:text="@string/advanced_reasoning_include_in_response"
                     android:textColor="@color/xai_ink"
                     android:textSize="16sp" />
 
@@ -144,7 +144,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:text="Max Reasoning Tokens:"
+                android:text="@string/advanced_reasoning_max_reasoning_tokens"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp"
                 android:layout_marginBottom="16dp" />
@@ -159,7 +159,7 @@
                     android:id="@+id/maxTokensEdit"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Optional"
+                    android:hint="@string/advanced_reasoning_optional"
                     android:inputType="number"
                     android:textColor="@color/xai_ink" />
 

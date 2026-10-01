@@ -16,6 +16,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import androidx.core.content.edit
+import androidx.core.net.toUri
 
 class SharedPreferencesHelper(context: Context) {
 
@@ -25,23 +26,30 @@ class SharedPreferencesHelper(context: Context) {
     val mainPrefs: SharedPreferences = appContext.getSharedPreferences(MAIN_PREFS, Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
     private val gson = Gson() // Kept temporarily for migration only
-    interface OnTimeoutChangedListener {
-        fun onTimeoutChanged(newMinutes: Int)
-    }
 
-    private var timeoutListener: OnTimeoutChangedListener? = null
+    /** Decodes a stored JSON value. A corrupt one falls back instead of crashing every screen that reads it. */
+    private inline fun <reified T> decodeOr(key: String, raw: String, fallback: () -> T): T =
+        try {
+            json.decodeFromString<T>(raw)
+        } catch (e: Exception) {
+            Log.w("SharedPrefs", "Unreadable $key (${e.javaClass.simpleName}); using the default")
+            fallback()
+        }
 
-    fun setTimeoutChangedListener(listener: OnTimeoutChangedListener) {
-        this.timeoutListener = listener
-    }
     companion object {
-        private const val KEY_WATERMARK_STT_ENABLED = "watermark_stt_enabled"
 
         private const val KEY_VOICE_INPUT_MODEL = "voice_input_model"
-        private const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // VoiceEngine keys: device, cloud, lan, off
+        private const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // VoiceEngine keys: device, cloud, grok, lan, off
+        /** Encrypted prefs alias for an xAI API key (Grok STT / future Grok voice). */
+        const val XAI_API_KEY_ALIAS = "xai_api_key"
         private const val KEY_THEME_MODE = "theme_mode"
         /** Ambient background style (AmbientBackgroundView.Style.key): off, grain, drift, flow, adaptive. */
         const val KEY_BACKGROUND_STYLE = "background_style"
+        /** Empty-chat app icon: off, plain (flat vector), or liquid (the moving glass, default). */
+        const val KEY_CHAT_MARK = "chat_mark_style"
+        const val CHAT_MARK_OFF = "off"
+        const val CHAT_MARK_PLAIN = "plain"
+        const val CHAT_MARK_LIQUID = "liquid"
         /** Roleplay tab on the main screen; off by default (Settings > Modes). */
         const val KEY_ROLEPLAY_ENABLED = "roleplay_enabled"
         const val THEME_SYSTEM = 0
@@ -63,7 +71,6 @@ class SharedPreferencesHelper(context: Context) {
 
         const val LAN_PROVIDER_HERMES_AGENT = "hermes_agent"  // NEW - Hermes Agent provider
         private const val KEY_AUTO_BACK = "auto_back_enabled"
-        private const val KEY_AUTO_SAVE_CHATS = "auto_save_chats"
         private const val KEY_CHAT_FORK_PREFIX = "chat_fork_"
         private const val KEY_CHAT_FORK_INDEX_PREFIX = "chat_fork_idx_"
         private const val KEY_CHAT_FORK_ANCHOR_PREFIX = "chat_fork_anchor_"
@@ -83,7 +90,8 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_OPENROUTER_TRANSFORMS_ENABLED = "openrouter_transforms_enabled"
         private const val KEY_EXPANDABLE_INPUT = "expandable_input_enabled"
         const val LAN_API_KEY = "lan_api_key"  // NEW
-        private const val KEY_TIMEOUT_MINUTES = "timeout_minutes"
+        /** Request timeout in minutes; the chat clients rebuild themselves when this changes. */
+        const val KEY_TIMEOUT_MINUTES = "timeout_minutes"
         private const val KEY_DISABLE_WEB_SEARCH_AFTER_SEND = "disable_web_search_after_send"
         private const val KEY_SCROLLERS_ENABLED = "scrollers_enabled"
         private const val KEY_CUSTOM_PROMPTS = "custom_prompts"
@@ -110,6 +118,8 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_FONT_FACE_MIGRATED = "font_face_migrated_jakarta"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
         private const val KEY_TRUST_SELF_SIGNED_LAN = "trust_self_signed_lan"
+        private const val KEY_LAN_CERT_PIN_PREFIX = "lan_cert_pin:"
+        private const val KEY_CHAT_DB_RECOVERED = "chat_db_recovered"
         private const val KEY_ALLOW_DESTRUCTIVE_TOOLS = "allow_destructive_tools"
         private const val KEY_HAPTIC_BUTTONS = "haptic_buttons"
         private const val KEY_HAPTIC_RESPONDING = "haptic_responding"
@@ -121,20 +131,40 @@ class SharedPreferencesHelper(context: Context) {
         private const val API_KEYS_PREFS_STORE = "ApiKeysPrefsStore"
         const val MAIN_PREFS = "MainAppPrefs"
         private const val KEY_MODEL_NEW_CHAT = "modelvalenewchat"
-        private const val KEY_MODEL_VALE = "modelvale"
         private const val KEY_CUSTOM_MODELS = "custom_models"
         private const val KEY_DEFAULT_MODELS_SEEDED = "default_models_seeded"
+        private const val KEY_OLD_DEFAULTS_PRUNED = "old_default_models_pruned"
+        private const val KEY_DEMO_CHARACTER_SEEDED = "demo_character_seeded"
+        private const val KEY_DEMO_CHARACTER_AVATAR_REV = "demo_character_avatar_rev"
+        /** Name and id of each model older installs were seeded with. */
+        private val OLD_DEFAULT_MODELS = listOf(
+            "OpenAI: ChatGPT-4o" to "openai/chatgpt-4o-latest",
+            "MoonshotAI: Kimi K2" to "moonshotai/kimi-k2",
+            "xAI: Grok 3" to "x-ai/grok-3",
+            "Mistral: Mistral Medium 3" to "mistralai/mistral-medium-3",
+            "Deepseek: R1 0528" to "deepseek/deepseek-r1-0528",
+            "Deepseek: V3 0324" to "deepseek/deepseek-chat-v3-0324",
+            "Qwen: Qwen3 235B A22B Instruct 2507" to "qwen/qwen3-235b-a22b-2507",
+            "Baidu: ERNIE 4.5 300B A47B" to "baidu/ernie-4.5-300b-a47b",
+            "Google: Gemini 2.5 Flash" to "google/gemini-2.5-flash",
+            "Google: Gemini 2.5 Pro" to "google/gemini-2.5-pro",
+            "xAI: Grok 4" to "x-ai/grok-4",
+            "OpenAI: GPT-4.1" to "openai/gpt-4.1",
+            "Anthropic: Claude Sonnet 4" to "anthropic/claude-sonnet-4",
+            "Perplexity: Sonar Pro" to "perplexity/sonar-pro",
+        )
         private const val KEY_SELECTED_SYSTEM_MESSAGE = "selected_system_message"
         private const val KEY_CUSTOM_SYSTEM_MESSAGES = "custom_system_messages"
         private const val KEY_DEFAULT_SYSTEM_MESSAGES_SEEDED = "default_system_messages_seeded"
         private const val KEY_STREAMING_ENABLED = "streaming_enabled"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val KEY_OPEN_ROUTER_MODELS = "open_router_models"
+        /** One-shot. Old caches had no reasoning flag, so every model read as not reasoning. */
+        private const val KEY_OPEN_ROUTER_REASONING_MIGRATED = "open_router_reasoning_migrated"
         private const val KEY_NOTI_ENABLED = "noti_enabled"
         private const val KEY_EXT_ENABLED = "ext_enabled"
         private const val KEY_EXT_ENABLED2 = "ext_enabled2"
         private const val KEY_REASONING_ENABLED = "reasoning_enabled"
-        private const val KEY_INFO_BAR_DISMISSED = "info_bar_dismissed"
         private const val KEY_SORT_ORDER = "sort_order"
         private const val KEY_MAX_TOKENS = "max_tokens"
         private const val KEY_DEFAULT_SYSTEM_MESSAGE = "default_system_message"
@@ -145,10 +175,14 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_RP_ACTIVE_CHARACTER_ID = "rp_active_character_id"
         private const val KEY_RP_PERSONA = "rp_persona"
         private const val KEY_RP_PERSONA_PRESETS = "rp_persona_presets"
+        private const val KEY_RP_PERSONA_NAME = "rp_persona_name"
+        private const val KEY_RP_PERSONA_PHOTO = "rp_persona_photo"
+        private const val KEY_RP_PERSONA_ENABLED = "rp_persona_enabled"
         private const val KEY_RP_LORE_ENABLED = "rp_lore_enabled"
         private const val KEY_RP_THIRD_PERSON = "rp_third_person"
         private const val KEY_RP_SHOW_THOUGHTS = "rp_show_thoughts"
-        private const val KEY_RP_LANG = "rp_lang"
+        private const val KEY_SHOW_THINKING_BLOCKS = "show_thinking_blocks"
+        private const val KEY_WEB_SEARCH_RETIRED = "web_search_button_retired"
         private const val KEY_RP_LLM_MODE = "rp_llm_mode"
         private const val KEY_RP_DRAFT_SESSION_ASK = "rp_draft_session_ask"
         private const val KEY_RP_DRAFT_SESSION_RP = "rp_draft_session_rp"
@@ -236,14 +270,19 @@ class SharedPreferencesHelper(context: Context) {
         val oldJson = mainPrefs.getString(KEY_OPEN_ROUTER_MODELS, null)
         if (oldJson != null) {
             val type = object : TypeToken<List<LlmModel>>() {}.type
-            val oldModels: List<LlmModel> = gson.fromJson(oldJson, type)
-            saveOpenRouterModels(oldModels)
+            val oldModels: List<LlmModel>? = try {
+                gson.fromJson(oldJson, type)
+            } catch (e: Exception) {
+                Log.w("SharedPrefs", "Unreadable $KEY_OPEN_ROUTER_MODELS (${e.javaClass.simpleName}); skipping migration")
+                null
+            }
+            if (oldModels != null) saveOpenRouterModels(oldModels)
         }
     }
     fun getCustomPrompts(): List<Prompt> {
         val jsonString = mainPrefs.getString(KEY_CUSTOM_PROMPTS, null)
         return if (jsonString != null) {
-            json.decodeFromString(jsonString)
+            decodeOr(KEY_CUSTOM_PROMPTS, jsonString) { emptyList<Prompt>() }
         } else {
             emptyList()
         }
@@ -313,11 +352,47 @@ class SharedPreferencesHelper(context: Context) {
     fun clearOpenRouterModels() {
         mainPrefs.edit { remove(KEY_OPEN_ROUTER_MODELS) }
     }
+    fun getOpenRouterReasoningMigrated(): Boolean =
+        mainPrefs.getBoolean(KEY_OPEN_ROUTER_REASONING_MIGRATED, false)
+    fun saveOpenRouterReasoningMigrated() =
+        mainPrefs.edit { putBoolean(KEY_OPEN_ROUTER_REASONING_MIGRATED, true) }
     fun saveBiometricEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_BIOMETRIC_ENABLED, enabled) }
     fun getBiometricEnabled(): Boolean = mainPrefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
 
     fun getTrustSelfSignedLan(): Boolean = mainPrefs.getBoolean(KEY_TRUST_SELF_SIGNED_LAN, false)
-    fun saveTrustSelfSignedLan(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_TRUST_SELF_SIGNED_LAN, enabled) }
+    fun saveTrustSelfSignedLan(enabled: Boolean) = mainPrefs.edit {
+        putBoolean(KEY_TRUST_SELF_SIGNED_LAN, enabled)
+        // Off forgets what was trusted, so switching it back on pins whatever the server shows then.
+        if (!enabled) clearLanCertPinsIn(this)
+    }
+
+    /** Pinned LAN certificates, keyed by host:port; see [LanCertPins]. */
+    fun lanCertPinStore(): LanCertPins.Store = object : LanCertPins.Store {
+        override fun pinFor(hostPort: String): String? =
+            mainPrefs.getString(KEY_LAN_CERT_PIN_PREFIX + hostPort, null)
+
+        override fun savePin(hostPort: String, pin: String) {
+            mainPrefs.edit { putString(KEY_LAN_CERT_PIN_PREFIX + hostPort, pin) }
+        }
+    }
+
+    fun clearLanCertPins() = mainPrefs.edit { clearLanCertPinsIn(this) }
+
+    private fun clearLanCertPinsIn(editor: SharedPreferences.Editor) {
+        mainPrefs.all.keys.filter { it.startsWith(KEY_LAN_CERT_PIN_PREFIX) }.forEach { editor.remove(it) }
+    }
+
+    /** Set when the chat database could not be opened and a fresh one was started; read once by the UI. */
+    fun markChatDbRecovered() {
+        mainPrefs.edit(commit = true) { putBoolean(KEY_CHAT_DB_RECOVERED, true) }
+    }
+
+    /** True once after [markChatDbRecovered]; clears the flag. */
+    fun consumeChatDbRecovered(): Boolean {
+        if (!mainPrefs.getBoolean(KEY_CHAT_DB_RECOVERED, false)) return false
+        mainPrefs.edit { remove(KEY_CHAT_DB_RECOVERED) }
+        return true
+    }
 
     fun getAllowDestructiveTools(): Boolean = mainPrefs.getBoolean(KEY_ALLOW_DESTRUCTIVE_TOOLS, false)
     fun saveAllowDestructiveTools(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_ALLOW_DESTRUCTIVE_TOOLS, enabled) }
@@ -457,10 +532,17 @@ class SharedPreferencesHelper(context: Context) {
     fun getSafFolderUri(): String? {
         return mainPrefs.getString(SAF_FOLDER_URI, null)
     }
+
+    /** True when the saved tree URI still has read access. */
+    fun hasWorkspaceGrant(): Boolean {
+        val uriString = getSafFolderUri() ?: return false
+        val treeUri = uriString.toUri()
+        return appContext.contentResolver.persistedUriPermissions.any {
+            it.uri == treeUri && it.isReadPermission
+        }
+    }
     fun saveTimeoutMinutes(minutes: Int) {
         mainPrefs.edit { putInt(KEY_TIMEOUT_MINUTES, minutes) }
-        // Notify the listener if it exists
-        timeoutListener?.onTimeoutChanged(minutes)
     }
     fun getScrollProgressEnabled(): Boolean = mainPrefs.getBoolean(KEY_SCROLL_PROGRESS_ENABLED, false)  // Off: a full-width rule under the tabs reads as a glitch
     fun saveScrollProgressEnabled(enabled: Boolean) = mainPrefs.edit {
@@ -468,7 +550,7 @@ class SharedPreferencesHelper(context: Context) {
     }
     fun getSortOrder(): SortOrder {
         val sortOrderName = mainPrefs.getString(KEY_SORT_ORDER, SortOrder.ALPHABETICAL.name)
-        return SortOrder.valueOf(sortOrderName ?: SortOrder.ALPHABETICAL.name)
+        return SortOrder.entries.firstOrNull { it.name == sortOrderName } ?: SortOrder.ALPHABETICAL
     }
     fun getUseCopyButton2(): Boolean {
         return mainPrefs.getBoolean(KEY_USE_COPY_BUTTON2, false)  // false = Dismiss, true = Copy
@@ -478,14 +560,6 @@ class SharedPreferencesHelper(context: Context) {
     }
     fun getAutoBack(): Boolean {
         return mainPrefs.getBoolean(KEY_AUTO_BACK, false)
-    }
-    fun saveAutoBack(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_AUTO_BACK, enabled) }
-    }
-    /** Always-on; preference key retained only for migration compatibility. */
-    fun getAutoSaveChats(): Boolean = true
-    fun saveAutoSaveChats(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_AUTO_SAVE_CHATS, true) }
     }
 
     /** Stashed alternate message tree for one-chat forks (JSON list of FlexibleMessage). */
@@ -514,9 +588,21 @@ class SharedPreferencesHelper(context: Context) {
         }
     }
 
-    fun setOpenRouterInfoDismissed(dismissed: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_INFO_BAR_DISMISSED, dismissed) }
+    /**
+     * Everything kept in prefs for one chat: its fork, swipe alternates and memory facts. Call it
+     * when the chat is deleted, and when a new chat is given an id, so a recycled id never
+     * inherits another chat's leftovers.
+     */
+    fun clearSessionPrefs(sessionId: Long) {
+        mainPrefs.edit {
+            remove("$KEY_CHAT_FORK_INDEX_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_PREFIX$sessionId")
+            remove("$KEY_RP_SWIPE_PREFIX$sessionId")
+            remove("rp_facts_$sessionId")
+        }
     }
+
     fun saveExpandableInput(enabled: Boolean) {
         mainPrefs.edit { putBoolean(KEY_EXPANDABLE_INPUT, enabled) }
     }
@@ -525,9 +611,6 @@ class SharedPreferencesHelper(context: Context) {
         // Defaulting to FALSE or TRUE based on what you prefer.
         // I set it to false so it's opt-in, change to true if you want it on by default.
         return mainPrefs.getBoolean(KEY_EXPANDABLE_INPUT, false)
-    }
-    fun hasDismissedOpenRouterInfo(): Boolean {
-        return mainPrefs.getBoolean(KEY_INFO_BAR_DISMISSED, false)
     }
 
     fun saveOpenRouterModels(models: List<LlmModel>) {
@@ -538,7 +621,7 @@ class SharedPreferencesHelper(context: Context) {
     fun getOpenRouterModels(): List<LlmModel> {
         val jsonString = mainPrefs.getString(KEY_OPEN_ROUTER_MODELS, null)
         return if (jsonString != null) {
-            json.decodeFromString(jsonString)
+            decodeOr(KEY_OPEN_ROUTER_MODELS, jsonString) { emptyList<LlmModel>() }
         } else {
             emptyList()
         }
@@ -632,6 +715,16 @@ class SharedPreferencesHelper(context: Context) {
     fun saveBackgroundStyle(key: String) {
         mainPrefs.edit { putString(KEY_BACKGROUND_STYLE, key) }
     }
+
+    /** Empty-chat icon. Unknown values read as liquid, the shipped default. */
+    fun getChatMarkStyle(): String {
+        val saved = mainPrefs.getString(KEY_CHAT_MARK, CHAT_MARK_LIQUID) ?: CHAT_MARK_LIQUID
+        return if (saved == CHAT_MARK_OFF || saved == CHAT_MARK_PLAIN) saved else CHAT_MARK_LIQUID
+    }
+
+    fun saveChatMarkStyle(style: String) {
+        mainPrefs.edit { putString(KEY_CHAT_MARK, style) }
+    }
     fun hasMigratedMaverick(): Boolean {
         return mainPrefs.getBoolean("migrated_maverick_to_openrouter", false)
     }
@@ -695,11 +788,6 @@ class SharedPreferencesHelper(context: Context) {
     fun saveKeepScreenOnPreference(enabled: Boolean) {
         mainPrefs.edit { putBoolean(KEY_KEEP_SCREEN_ON, enabled) }
     }
-    fun getWatermarkSttEnabled(): Boolean = mainPrefs.getBoolean(KEY_WATERMARK_STT_ENABLED, false)
-
-    fun saveWatermarkSttEnabled(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_WATERMARK_STT_ENABLED, enabled) }
-    }
 
     fun getKeepScreenOnPreference(): Boolean {
         return mainPrefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
@@ -733,8 +821,6 @@ class SharedPreferencesHelper(context: Context) {
     fun saveBotPickerCostFilter(cost: String) = mainPrefs.edit { putString("bot_picker_cost_filter", cost) }
     fun getBotPickerCostFilter(): String = mainPrefs.getString("bot_picker_cost_filter", "ALL") ?: "ALL"
 
-    fun saveBotPickerSourceFilter(source: String) = mainPrefs.edit { putString("bot_picker_source_filter", source) }
-    fun getBotPickerSourceFilter(): String = mainPrefs.getString("bot_picker_source_filter", "ALL") ?: "ALL"
     fun getGeminiAspectRatio(): String? = mainPrefs.getString("gemini_aspect_ratio", null)
 
     fun saveGeminiAspectRatio(ratio: String) {
@@ -743,6 +829,18 @@ class SharedPreferencesHelper(context: Context) {
     // --- API Key Management ---
 
     fun saveApiKey(alias: String, apiKey: String): Boolean {
+        // Keep the old key until the new one proves it decrypts, so a failed save is not a lost key.
+        val oldEncrypted = apiKeysPrefs.getString("${alias}_encrypted", null)
+        val oldIv = apiKeysPrefs.getString("${alias}_iv", null)
+        fun restoreOld() = apiKeysPrefs.edit {
+            if (oldEncrypted != null && oldIv != null) {
+                putString("${alias}_encrypted", oldEncrypted)
+                putString("${alias}_iv", oldIv)
+            } else {
+                remove("${alias}_encrypted")
+                remove("${alias}_iv")
+            }
+        }
         return try {
             val secretKey = getOrCreateSecretKey(alias)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -762,11 +860,13 @@ class SharedPreferencesHelper(context: Context) {
             val roundTrip = getApiKeyFromPrefs(alias)
             if (roundTrip != apiKey) {
                 Log.e("API_KEY_STORAGE", "Round-trip verification failed for $alias")
+                restoreOld()
                 return false
             }
             true
         } catch (e: Exception) {
             Log.e("API_KEY_STORAGE", "Error encrypting $alias", e)
+            restoreOld()
             false
         }
     }
@@ -798,6 +898,18 @@ class SharedPreferencesHelper(context: Context) {
             throw IllegalStateException("Failed to persist chat DB passphrase in Keystore")
         }
         return bytes
+    }
+    /**
+     * Last resort when the chat database cannot be opened with the stored key (Keystore wiped or
+     * restored from a backup): forget the unreadable wrapped passphrase and mint a new one. The
+     * caller has already set the old database aside; nothing here deletes it.
+     */
+    fun resetChatDbPassphrase(): ByteArray {
+        apiKeysPrefs.edit(commit = true) {
+            remove("${CHAT_DB_PASSPHRASE_ALIAS}_encrypted")
+            remove("${CHAT_DB_PASSPHRASE_ALIAS}_iv")
+        }
+        return getOrCreateChatDbPassphrase()
     }
     fun getShowCitations(): Boolean = mainPrefs.getBoolean(KEY_SHOW_CITATIONS, true)  // Default true (show citations)
 
@@ -879,9 +991,6 @@ class SharedPreferencesHelper(context: Context) {
             putBoolean(KEY_SCROLLERS_ENABLED, isEnabled)
         }
     }
-    fun getPreferenceModel(): String? {
-        return mainPrefs.getString(KEY_MODEL_VALE, "mistralai/mistral-medium-3")
-    }
     fun saveMaxTokens(value: String) {
         mainPrefs.edit(commit = true) {
             putString(KEY_MAX_TOKENS, value)
@@ -894,7 +1003,7 @@ class SharedPreferencesHelper(context: Context) {
     fun getCustomModels(): MutableList<LlmModel> {
         val jsonString = mainPrefs.getString(KEY_CUSTOM_MODELS, null)
         return if (jsonString != null) {
-            json.decodeFromString<MutableList<LlmModel>>(jsonString)
+            decodeOr(KEY_CUSTOM_MODELS, jsonString) { mutableListOf<LlmModel>() }
         } else {
             mutableListOf()
         }
@@ -905,31 +1014,35 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit { putString(KEY_CUSTOM_MODELS, jsonString) }
     }
 
+    /**
+     * New installs start with just the demo model (plus the built-in free router); people pick
+     * their own from the catalogs. Installs seeded with the old fourteen defaults lose the ones
+     * left exactly as seeded, except the model in use.
+     */
     fun seedDefaultModelsIfNeeded() {
         ensureDemoModel()
-        if (!mainPrefs.getBoolean(KEY_DEFAULT_MODELS_SEEDED, false)) {
-            val defaultModels = listOf(
-                LlmModel("OpenAI: ChatGPT-4o", "openai/chatgpt-4o-latest", true),
-                LlmModel("MoonshotAI: Kimi K2", "moonshotai/kimi-k2", false),
-                LlmModel("xAI: Grok 3", "x-ai/grok-3", false),
-                LlmModel("Mistral: Mistral Medium 3", "mistralai/mistral-medium-3", true),
-                LlmModel("Deepseek: R1 0528", "deepseek/deepseek-r1-0528", false),
-                LlmModel("Deepseek: V3 0324", "deepseek/deepseek-chat-v3-0324", false),
-                LlmModel("Qwen: Qwen3 235B A22B Instruct 2507", "qwen/qwen3-235b-a22b-2507", false),
-                LlmModel("Baidu: ERNIE 4.5 300B A47B", "baidu/ernie-4.5-300b-a47b", false),
-                LlmModel("Google: Gemini 2.5 Flash", "google/gemini-2.5-flash", true),
-                LlmModel("Google: Gemini 2.5 Pro", "google/gemini-2.5-pro", true),
-                LlmModel("xAI: Grok 4", "x-ai/grok-4", true),
-                LlmModel("OpenAI: GPT-4.1", "openai/gpt-4.1", true),
-                LlmModel("Anthropic: Claude Sonnet 4", "anthropic/claude-sonnet-4", true),
-                LlmModel("Perplexity: Sonar Pro", "perplexity/sonar-pro", false)
-            )
-            val customModels = getCustomModels()
-            customModels.addAll(defaultModels)
-            saveCustomModels(customModels)
-            mainPrefs.edit { putBoolean(KEY_DEFAULT_MODELS_SEEDED, true) }
+        if (mainPrefs.getBoolean(KEY_DEFAULT_MODELS_SEEDED, false) && !mainPrefs.getBoolean(KEY_OLD_DEFAULTS_PRUNED, false)) {
+            val active = getPreferenceModelnew()
+            val old = OLD_DEFAULT_MODELS.toSet()
+            val kept = getCustomModels().filterNot {
+                (it.displayName to it.apiIdentifier) in old && it.apiIdentifier != active
+            }
+            saveCustomModels(kept)
+        }
+        mainPrefs.edit {
+            putBoolean(KEY_DEFAULT_MODELS_SEEDED, true)
+            putBoolean(KEY_OLD_DEFAULTS_PRUNED, true)
         }
     }
+
+    /** The demo character went into the roleplay library once ([DemoCharacter]). */
+    fun isDemoCharacterSeeded(): Boolean = mainPrefs.getBoolean(KEY_DEMO_CHARACTER_SEEDED, false)
+    fun markDemoCharacterSeeded() = mainPrefs.edit { putBoolean(KEY_DEMO_CHARACTER_SEEDED, true) }
+
+    /** Packaged Vesna avatar revision already written ([DemoCharacter.STOCK_AVATAR_REVISION]). */
+    fun demoCharacterAvatarRevision(): Int = mainPrefs.getInt(KEY_DEMO_CHARACTER_AVATAR_REV, 0)
+    fun setDemoCharacterAvatarRevision(revision: Int) =
+        mainPrefs.edit { putInt(KEY_DEMO_CHARACTER_AVATAR_REV, revision) }
 
     /** The built-in demo model is always in the list (first), for new and existing installs. */
     private fun ensureDemoModel() {
@@ -950,7 +1063,7 @@ class SharedPreferencesHelper(context: Context) {
     fun getSelectedSystemMessage(): SystemMessage {
         val jsonString = mainPrefs.getString(KEY_SELECTED_SYSTEM_MESSAGE, null)
         return if (jsonString != null) {
-            json.decodeFromString(jsonString)
+            decodeOr(KEY_SELECTED_SYSTEM_MESSAGE, jsonString) { getDefaultSystemMessage() }
         } else {
             // Return the saved default message instead of creating a new instance
             getDefaultSystemMessage()
@@ -960,7 +1073,7 @@ class SharedPreferencesHelper(context: Context) {
     fun getCustomSystemMessages(): List<SystemMessage> {
         val jsonString = mainPrefs.getString(KEY_CUSTOM_SYSTEM_MESSAGES, null)
         return if (jsonString != null) {
-            json.decodeFromString(jsonString)
+            decodeOr(KEY_CUSTOM_SYSTEM_MESSAGES, jsonString) { emptyList<SystemMessage>() }
         } else {
             emptyList()
         }
@@ -987,12 +1100,14 @@ class SharedPreferencesHelper(context: Context) {
     fun getDefaultSystemMessage(): SystemMessage {
         val jsonString = mainPrefs.getString(KEY_DEFAULT_SYSTEM_MESSAGE, null)
         return if (jsonString != null) {
-            json.decodeFromString(jsonString)
+            decodeOr(KEY_DEFAULT_SYSTEM_MESSAGE, jsonString) { builtInDefaultSystemMessage() }
         } else {
-            // Fallback to the original default
-            SystemMessage("Default", "You are a helpful assistant. Markdown rendering is supported in your response", isDefault = true)
+            builtInDefaultSystemMessage()
         }
     }
+
+    private fun builtInDefaultSystemMessage() =
+        SystemMessage("Default", "You are a helpful assistant. Markdown rendering is supported in your response", isDefault = true)
 
     // Add this method to save the default system message
     fun saveDefaultSystemMessage(systemMessage: SystemMessage) {
@@ -1088,7 +1203,20 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun getRpPersona(): String = mainPrefs.getString(KEY_RP_PERSONA, "") ?: ""
+    /** Whether chats use your persona. Off keeps it saved but sends and shows nothing of it. */
+    fun isRpPersonaEnabled(): Boolean = mainPrefs.getBoolean(KEY_RP_PERSONA_ENABLED, true)
+    fun setRpPersonaEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_PERSONA_ENABLED, enabled) }
+    /** What a chat should use: the persona's description, or nothing while it is off. */
+    fun activeRpPersona(): String = if (isRpPersonaEnabled()) getRpPersona() else ""
+    /** What a chat should call you: the persona's name, or nothing while it is off. */
+    fun activeRpPersonaName(): String = if (isRpPersonaEnabled()) getRpPersonaName() else ""
     fun saveRpPersona(persona: String) = mainPrefs.edit { putString(KEY_RP_PERSONA, persona) }
+    fun saveRpPersonaName(name: String) = mainPrefs.edit { putString(KEY_RP_PERSONA_NAME, name.trim()) }
+    /** Your portrait's file name in [RpAvatarStorage.personaFile]; null shows your initial. */
+    fun getRpPersonaPhoto(): String? = mainPrefs.getString(KEY_RP_PERSONA_PHOTO, null)
+    fun saveRpPersonaPhoto(photo: String?) = mainPrefs.edit {
+        if (photo == null) remove(KEY_RP_PERSONA_PHOTO) else putString(KEY_RP_PERSONA_PHOTO, photo)
+    }
 
     fun getRpPersonaPresets(): List<RpPersonaPreset> {
         val raw = mainPrefs.getString(KEY_RP_PERSONA_PRESETS, null) ?: return emptyList()
@@ -1144,12 +1272,30 @@ class SharedPreferencesHelper(context: Context) {
         putFloat("rp_voice_rate_$k", voice.rate)
     }
 
+    /**
+     * Everything stored per character outside Room, for when the character is deleted. Ids are
+     * never reused by Room's autoincrement, so these would otherwise sit there for good (the
+     * wallpaper photo most visibly, as a file the user can no longer reach).
+     */
+    fun clearRpCharacterPrefs(characterId: Long) {
+        mainPrefs.edit {
+            remove(rpMemoryKey(characterId))
+            remove("rp_layout_$characterId")
+            remove("rp_voice_$characterId")
+            remove("rp_voice_pitch_$characterId")
+            remove("rp_voice_rate_$characterId")
+            remove("rp_lorebook_$characterId")
+        }
+        BackgroundPhoto.delete(appContext, BackgroundPhoto.slotForCharacter(characterId))
+    }
+
     /** Let the model keep each character's Memory up to date as long chats outgrow the API window. */
     fun isRpAutoMemory(): Boolean = mainPrefs.getBoolean("rp_auto_memory", true)
     fun saveRpAutoMemory(on: Boolean) = mainPrefs.edit { putBoolean("rp_auto_memory", on) }
 
-    /** Name of the persona preset currently in use, if the persona text came from one. */
+    /** The name characters call you. Before it was its own field it came from a matching preset. */
     fun getRpPersonaName(): String {
+        mainPrefs.getString(KEY_RP_PERSONA_NAME, null)?.let { return it }
         val persona = getRpPersona().trim()
         if (persona.isEmpty()) return ""
         return getRpPersonaPresets().firstOrNull { it.description.trim() == persona }?.name.orEmpty()
@@ -1164,8 +1310,21 @@ class SharedPreferencesHelper(context: Context) {
     fun isRpShowThoughts(): Boolean = mainPrefs.getBoolean(KEY_RP_SHOW_THOUGHTS, false)
     fun saveRpShowThoughts(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_SHOW_THOUGHTS, enabled) }
 
-    fun getRpLang(): String = mainPrefs.getString(KEY_RP_LANG, "en") ?: "en"
-    fun saveRpLang(lang: String) = mainPrefs.edit { putString(KEY_RP_LANG, lang) }
+    /** Chat shows the model's thinking as a folded block above each reply (the Thoughts tile). */
+    fun isShowThinkingBlocks(): Boolean = mainPrefs.getBoolean(KEY_SHOW_THINKING_BLOCKS, true)
+    fun saveShowThinkingBlocks(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_SHOW_THINKING_BLOCKS, enabled) }
+
+    /**
+     * The chat lost its web search toggle; switch search off once so nobody is left paying for
+     * searches they can no longer see or turn off. Presets can still turn it on.
+     */
+    fun retireWebSearchToggleOnce() {
+        if (mainPrefs.getBoolean(KEY_WEB_SEARCH_RETIRED, false)) return
+        mainPrefs.edit {
+            putBoolean(KEY_WEB_SEARCH_RETIRED, true)
+            putBoolean(KEY_WEB_SEARCH_ENABLED, false)
+        }
+    }
 
     fun isRpLlmMode(): Boolean = mainPrefs.getBoolean(KEY_RP_LLM_MODE, false)
     fun saveRpLlmMode(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_LLM_MODE, enabled) }
@@ -1202,21 +1361,6 @@ class SharedPreferencesHelper(context: Context) {
 
     fun clearRpSwipeJson(sessionId: Long) {
         mainPrefs.edit { remove("$KEY_RP_SWIPE_PREFIX$sessionId") }
-    }
-
-    /** Texts of RP lines the user pinned, so they survive a reload. The message row itself has no pin column. */
-    fun getRpPinKeys(sessionId: Long): Set<String> {
-        val raw = mainPrefs.getString("rp_pins_$sessionId", null) ?: return emptySet()
-        return try {
-            json.decodeFromString<Set<String>>(raw)
-        } catch (_: Exception) {
-            emptySet()
-        }
-    }
-
-    fun saveRpPinKeys(sessionId: Long, keys: Set<String>) = mainPrefs.edit {
-        if (keys.isEmpty()) remove("rp_pins_$sessionId")
-        else putString("rp_pins_$sessionId", json.encodeToString(keys))
     }
 
     /** Facts the model keeps for one chat. Separate from the Memory note the user wrote. */

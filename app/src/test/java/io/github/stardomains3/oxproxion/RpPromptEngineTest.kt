@@ -11,7 +11,6 @@ class RpPromptEngineTest {
         val prompt = RpPromptEngine.buildSystemPrompt(
             character = null,
             persona = "",
-            lang = "en",
             lore = "",
             instruction = "",
             thirdPerson = true,
@@ -28,7 +27,6 @@ class RpPromptEngineTest {
         val prompt = RpPromptEngine.buildSystemPrompt(
             character = char,
             persona = "Alex",
-            lang = "en",
             lore = "",
             instruction = "",
             thirdPerson = false,
@@ -67,7 +65,7 @@ class RpPromptEngineTest {
         val char = RpCharacter(id = 1, name = "Mira", scenario = "{{user}} walks into {{char}}'s garage.",
             examplesJson = """[{"user":"hi","char":"*nods*"},{"user":"bye","char":"later"}]""")
         val prompt = RpPromptEngine.buildSystemPrompt(
-            character = char, persona = "A pilot", lang = "en", lore = "", instruction = "",
+            character = char, persona = "A pilot", lore = "", instruction = "",
             thirdPerson = false, showThoughts = false, isLlm = false,
             memory = "{{user}} owes {{char}} a favor.", userName = "Alex"
         )
@@ -87,7 +85,7 @@ class RpPromptEngineTest {
             examplesJson = """[{"user":"{{user}} waves","char":"{{char}} waves back at {{random_user_2}}"}]"""
         )
         val prompt = RpPromptEngine.buildSystemPrompt(
-            character = char, persona = "A pilot", lang = "en", lore = "", instruction = "",
+            character = char, persona = "A pilot", lore = "", instruction = "",
             thirdPerson = false, showThoughts = false, isLlm = false,
             memory = "Keep the promise.", facts = "Others:\n- Dockmaster: runs the night pier",
             userName = "Alex"
@@ -103,9 +101,57 @@ class RpPromptEngineTest {
     }
 
     @Test
+    fun buildSystemPrompt_expandsMacrosInTheInstruction() {
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = RpCharacter(id = 1, name = "Mira"), persona = "", lore = "",
+            instruction = "{{char}} never lies to {{user}}.", thirdPerson = false, showThoughts = false,
+            isLlm = false, userName = "Alex"
+        )
+        assertTrue(prompt.contains("Additional instruction: Mira never lies to Alex."))
+        assertFalse(prompt.contains("{{"))
+    }
+
+    @Test
+    fun buildSystemPrompt_cutsLongMemoryOnALineBreak() {
+        val line = "- a fact that matters to the story"
+        val memory = (1..400).joinToString("\n") { "$line $it" }
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = RpCharacter(id = 1, name = "Mira"), persona = "", lore = "", instruction = "",
+            thirdPerson = false, showThoughts = false, isLlm = false, memory = memory
+        )
+        val kept = prompt.substringAfter("## Memory (the user asked to keep this true)\n").substringBefore("\n## Response Format")
+        assertTrue(kept.length <= RpPromptEngine.MEMORY_MAX_CHARS)
+        assertTrue("ends on a whole line: $kept", kept.lines().last().matches(Regex("""- a fact that matters to the story \d+""")))
+    }
+
+    @Test
+    fun buildSystemPrompt_loreHeadingIsEnglishOnly() {
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = RpCharacter(id = 1, name = "Mira"), persona = "", lore = "The docks are grey.", instruction = "",
+            thirdPerson = false, showThoughts = false, isLlm = false
+        )
+        assertTrue(prompt.contains("World Lore:\nThe docks are grey."))
+        assertFalse(prompt.contains("Мир"))
+    }
+
+    @Test
+    fun buildSystemPrompt_formatFollowsShowThoughts() {
+        fun prompt(thoughts: Boolean) = RpPromptEngine.buildSystemPrompt(
+            character = RpCharacter(id = 1, name = "Mira"), persona = "", lore = "", instruction = "",
+            thirdPerson = false, showThoughts = thoughts, isLlm = false
+        )
+        assertTrue(prompt(true).contains("You can show inner thoughts in (parentheses)"))
+        assertTrue(prompt(true).endsWith("insufferable about this.)"))
+        assertFalse(prompt(true).contains("no thoughts from the user"))
+        assertTrue(prompt(false).contains("no thoughts from the user"))
+        assertFalse(prompt(false).contains("inner thoughts"))
+        assertTrue(prompt(false).endsWith("the faint smirk.*"))
+    }
+
+    @Test
     fun buildSystemPrompt_blankMemoryAddsNoSection() {
         val prompt = RpPromptEngine.buildSystemPrompt(
-            character = RpCharacter(id = 1, name = "Mira"), persona = "", lang = "en", lore = "",
+            character = RpCharacter(id = 1, name = "Mira"), persona = "", lore = "",
             instruction = "", thirdPerson = false, showThoughts = false, isLlm = false, memory = "  "
         )
         assertFalse(prompt.contains("## Memory"))
@@ -116,12 +162,20 @@ class RpPromptEngineTest {
         val card = "HEAD stays.\n" + "x".repeat(200)
         val prompt = RpPromptEngine.buildSystemPrompt(
             character = RpCharacter(id = 1, name = "Mira", prompt = card),
-            persona = "", lang = "en", lore = "", instruction = "",
+            persona = "", lore = "", instruction = "",
             thirdPerson = false, showThoughts = false, isLlm = false,
             definitionCap = 40
         )
         assertTrue(prompt.contains("HEAD stays."))
         assertFalse(prompt.contains("x".repeat(80)))
         assertTrue(prompt.contains("## Response Format"))
+    }
+
+    @Test
+    fun rewriteDirective_carriesTheNoteOutOfCharacter() {
+        val d = RpPromptEngine.rewriteDirective("  make it shorter  ")
+        assertTrue(d.startsWith("(OOC:"))
+        assertTrue(d.contains("What to change: make it shorter\n"))
+        assertTrue(d.contains("Write only the new version"))
     }
 }

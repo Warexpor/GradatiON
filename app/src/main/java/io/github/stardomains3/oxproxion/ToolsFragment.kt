@@ -3,23 +3,17 @@ package io.github.stardomains3.oxproxion
 import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.res.ColorStateList
-import android.graphics.PorterDuff
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.toColorInt
-import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.appcompat.widget.SwitchCompat
-import kotlin.collections.remove
 
 class ToolsFragment : Fragment(R.layout.fragment_tools) {
 
@@ -35,11 +29,8 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
         locationPermissionLauncher = registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
-            if (isGranted) {
-                AppToast.makeText(requireContext(), "Location permission granted", AppToast.LENGTH_SHORT).show()
-            } else {
-                AppToast.makeText(requireContext(), "Location permission is required for this tool", AppToast.LENGTH_SHORT).show()
-            }
+            // Granting shows on the row itself; only a refusal needs saying.
+            if (!isGranted) GlassNotice.show(requireContext(), getString(R.string.toast_location_permission))
             refreshUI()
         }
 
@@ -56,7 +47,6 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
                 val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 requireContext().contentResolver.takePersistableUriPermission(uri, takeFlags)
                 sharedPreferencesHelper.saveSafFolderUri(uri.toString())
-                AppToast.makeText(requireContext(), "Folder access granted!", AppToast.LENGTH_SHORT).show()
                 refreshUI()
             }
         }
@@ -73,10 +63,6 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
         setupToolsList(view)
     }
 
-    private fun ensureWorkspaceFolderExists() {
-        WorkspacePaths.ensureWorkspaceExists()
-    }
-
     private fun setupToolsList(rootView: View) {
         val container = rootView.findViewById<LinearLayout>(R.id.tools_container)
         container.removeAllViews()
@@ -89,7 +75,7 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
             enabledTools
         }
 
-        var allItems = ToolItem.getAllToolItems(effectiveEnabledSet)
+        var allItems = ToolItem.getAllToolItems(effectiveEnabledSet, requireContext())
 
         // Filter Brave
         val braveApiKey = sharedPreferencesHelper.getApiKeyFromPrefs("brave_search_api_key")
@@ -107,7 +93,7 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
         val notificationManager = requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val hasNotificationPolicy = notificationManager.isNotificationPolicyAccessGranted
         val hasLocationPermission = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        val hasSafPermission = hasFolderPermission()
+        val hasSafPermission = sharedPreferencesHelper.hasWorkspaceGrant()
 
         val inflater = layoutInflater
 
@@ -117,7 +103,7 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
             val titleTv = row.findViewById<TextView>(R.id.text_tool_title)
             val descTv = row.findViewById<TextView>(R.id.text_tool_desc)
             val permissionWarning = row.findViewById<TextView>(R.id.text_permission_warning)
-            checkBox.styleSwitch()
+            checkBox.applyGrokionSwitchStyle()
             titleTv.text = item.displayName
             descTv.text = item.description
 
@@ -145,18 +131,16 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
             checkBox.isEnabled = permissionGranted
 
             if (needsPermission && !permissionGranted) {
-                // 👇 UPDATED: Show oxproxion-specific message for SAF tools
                 if (isSafTool) {
-                    permissionWarning.text = "Tap to select Download/gradation folder"
+                    permissionWarning.text = getString(R.string.tools_select_folder)
                 } else {
-                    permissionWarning.text = "Permission required. Tap to grant."
+                    permissionWarning.text = getString(R.string.tools_permission_required)
                 }
                 permissionWarning.visibility = View.VISIBLE
 
                 row.setOnClickListener {
                     if (isSafTool) {
-                        // 👇 UPDATED: Ensure folder exists before launching picker
-                        ensureWorkspaceFolderExists()
+                        WorkspacePaths.ensureWorkspaceExists()
                         folderPickerLauncher.launch(null)
                     } else if (item.name == "get_location") {
                         locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -180,22 +164,6 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
             container.addView(row)
         }
     }
-
-    // 👇 UPDATED: Oxproxion-specific folder permission check
-    private fun hasFolderPermission(): Boolean {
-        val uriString = sharedPreferencesHelper.getSafFolderUri() ?: return false
-        val treeUri = uriString.toUri()
-        val persistedUriPermissions = requireContext().contentResolver.persistedUriPermissions
-
-        // Check if we have permission AND if it's pointing to the oxproxion folder
-        val hasPermission = persistedUriPermissions.any { it.uri == treeUri && it.isReadPermission }
-
-        // Optional: Verify the URI points to the oxproxion folder
-        // This ensures the user selected the correct folder
-        return hasPermission
-    }
-
-    private fun SwitchCompat.styleSwitch() = applyGrokionSwitchStyle()
 
     private fun refreshUI() {
         val container = view?.findViewById<LinearLayout>(R.id.tools_container)

@@ -9,25 +9,67 @@
     android:background="@color/xai_canvas"
     tools:context=".LanModelsFragment">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        app:title="LAN Models"
-        app:titleTextColor="@color/xai_ink"
-        android:background="@color/xai_canvas"
-        app:navigationIcon="@drawable/is_backarrow"
-        app:navigationIconTint="@color/xai_ink"
-        app:menu="@menu/lan_models_menu" />
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:minHeight="60dp"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="4dp">
+
+        <ImageButton
+            android:id="@+id/lanBack"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_circle_tonal"
+            android:contentDescription="@string/cd_back"
+            android:padding="10dp"
+            android:src="@drawable/is_backarrow"
+            android:stateListAnimator="@animator/glass_press"
+            app:tint="@color/xai_ink" />
+
+        <TextView
+            android:id="@+id/lanTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/model_lan_title"
+            android:textColor="@color/xai_ink"
+            android:textSize="24sp"
+            android:textFontWeight="700" />
+
+        <ImageButton
+            android:id="@+id/lanRefresh"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_circle_tonal"
+            android:contentDescription="@string/action_refresh"
+            android:padding="11dp"
+            android:src="@drawable/ic_refresh"
+            android:stateListAnimator="@animator/glass_press"
+            app:tint="@color/xai_ink" />
+    </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
+        android:fadingEdgeLength="28dp"
+        android:requiresFadingEdge="vertical"
         android:id="@+id/recyclerViewLanModels"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:cacheColorHint="@android:color/transparent"
-        android:background="@color/xai_canvas"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:paddingStart="8dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="24dp"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
         tools:listitem="@layout/list_item_lan_model"
-        android:scrollbars="vertical"/>
+        android:scrollbars="none"/>
 
 </LinearLayout>

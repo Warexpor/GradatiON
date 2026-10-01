@@ -1,22 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Camera badge on the avatar picker: tonal glass bead in a grouped-canvas ring -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
-    <item>
-        <shape android:shape="oval">
-            <solid android:color="@color/xai_canvas_mid" />
-            <stroke android:width="3dp" android:color="@color/xai_grouped" />
-        </shape>
-    </item>
-    <item
-        android:bottom="3dp"
-        android:left="3dp"
-        android:right="3dp"
-        android:top="3dp">
-        <drawable
-            class="io.github.stardomains3.oxproxion.GlassDrawable"
-            app:glassTint="@color/glass_btn_tint"
-            app:glassCornerRadius="-1dp"
-            app:glassOpaqueWithoutBlur="false" />
-    </item>
-</layer-list>
+<!-- Camera badge on the avatar picker: a flat gray dot in a grouped-canvas ring -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/panel_tile_on" />
+    <stroke android:width="3dp" android:color="@color/xai_grouped" />
+</shape>

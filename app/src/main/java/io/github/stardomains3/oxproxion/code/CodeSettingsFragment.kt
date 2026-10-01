@@ -10,6 +10,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -17,8 +18,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.materialswitch.MaterialSwitch
+import androidx.appcompat.widget.SwitchCompat
 import io.github.stardomains3.oxproxion.GlassAlertDialogBuilder
+import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.launch
@@ -32,27 +34,29 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (!::hub.isInitialized) return@registerForActivityResult
-            val sw = view?.findViewById<MaterialSwitch>(R.id.codeNotifyAwaySwitch)
+            val sw = view?.findViewById<SwitchCompat>(R.id.codeNotifyAwaySwitch)
             if (granted) {
                 hub.store.notifyWhenAway = true
                 sw?.isChecked = true
             } else {
                 hub.store.notifyWhenAway = false
                 sw?.isChecked = false
+                // The switch just flipped back by itself; say why, or it reads as a broken toggle.
+                GlassNotice.show(requireContext(), getString(R.string.code_settings_notify_denied))
             }
         }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         hub = CodeHub.get(requireContext())
         view.findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener { parentFragmentManager.popBackStack() }
-        view.findViewById<MaterialSwitch>(R.id.codeShowTabSwitch).apply {
+        view.findViewById<SwitchCompat>(R.id.codeShowTabSwitch).apply {
             isChecked = hub.store.enabled
             setOnCheckedChangeListener { _, on ->
                 hub.store.enabled = on
                 if (!on) hub.store.lastTabWasCode = false
             }
         }
-        view.findViewById<MaterialSwitch>(R.id.codeNotifyAwaySwitch).apply {
+        view.findViewById<SwitchCompat>(R.id.codeNotifyAwaySwitch).apply {
             isChecked = hub.store.notifyWhenAway
             setOnCheckedChangeListener { _, on ->
                 if (on) {
@@ -80,14 +84,22 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
      * Launches the runtime prompt on API 33+ when not yet granted.
      */
     private fun ensureNotificationPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < 33) return true
-        val granted = ContextCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.POST_NOTIFICATIONS,
-        ) == PackageManager.PERMISSION_GRANTED
-        if (granted) return true
-        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        return false
+        if (Build.VERSION.SDK_INT >= 33) {
+            val granted = ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                return false
+            }
+        }
+        // Permission granted but notifications switched off for the whole app: alerts still can't show.
+        if (!NotificationManagerCompat.from(requireContext()).areNotificationsEnabled()) {
+            GlassNotice.show(requireContext(), getString(R.string.code_settings_notify_denied))
+            return false
+        }
+        return true
     }
 
     private fun bindMachines(card: LinearLayout, hosts: List<CodeHost>) {
@@ -112,13 +124,28 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
     private fun bindDefaults(card: LinearLayout) {
         card.removeAllViews()
         val mode = hub.store.defaultPermissionMode
-        addRow(card, R.drawable.ic_code_shield, getString(R.string.code_settings_permission),
+        addRow(card, CodeComposer.permissionIcon(mode), getString(R.string.code_settings_permission),
             getString(CodeComposer.permissionLabel(mode)), chevron = true, valueTrailing = true) {
             val modes = PermissionMode.entries
-            val labels = modes.map { getString(CodeComposer.permissionLabel(it)) + "\n" + getString(CodeComposer.permissionSub(it)) }.toTypedArray()
+            // Same rows as the composer's approvals popover: icon, name, what it means, a check.
+            val rows = object : android.widget.ArrayAdapter<PermissionMode>(requireContext(), R.layout.item_popover_row, modes) {
+                override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                    val v = convertView ?: layoutInflater.inflate(R.layout.item_popover_row, parent, false)
+                    val m = modes[position]
+                    v.findViewById<android.widget.ImageView>(R.id.popoverRowIcon).setImageResource(CodeComposer.permissionIcon(m))
+                    v.findViewById<TextView>(R.id.popoverRowTitle).setText(CodeComposer.permissionLabel(m))
+                    v.findViewById<TextView>(R.id.popoverRowSubtitle).setText(CodeComposer.permissionSub(m))
+                    v.findViewById<View>(R.id.popoverRowCheck).visibility = if (m == mode) View.VISIBLE else View.GONE
+                    v.isSelected = m == mode
+                    // The dialog's list takes the tap, not the row.
+                    v.isClickable = false
+                    v.isFocusable = false
+                    return v
+                }
+            }
             GlassAlertDialogBuilder(requireContext(), R.style.CustomMaterialAlertDialogTheme)
                 .setTitle(R.string.code_settings_permission)
-                .setSingleChoiceItems(labels, modes.indexOf(mode)) { d, which ->
+                .setAdapter(rows) { d, which ->
                     hub.store.defaultPermissionMode = modes[which]
                     d.dismiss()
                     bindDefaults(card)

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- More actions under a reply: three dots in a row, sized to sit with the line icons -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3.9 12 A1.6 1.6 0 1 0 7.1 12 A1.6 1.6 0 1 0 3.9 12 Z M10.4 12 A1.6 1.6 0 1 0 13.6 12 A1.6 1.6 0 1 0 10.4 12 Z M16.9 12 A1.6 1.6 0 1 0 20.1 12 A1.6 1.6 0 1 0 16.9 12 Z" />
+</vector>

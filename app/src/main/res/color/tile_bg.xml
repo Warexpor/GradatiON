@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Legacy tile fill (tiles now use @drawable/bg_glass_tile): never inverts to a solid ink slab -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_selected="true" android:color="@color/glass_btn_selected_tint" />
-    <item android:color="@color/glass_btn_tint" />
-</selector>

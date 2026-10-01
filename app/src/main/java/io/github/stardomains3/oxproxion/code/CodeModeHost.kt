@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion.code
 
+import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -8,8 +9,12 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import io.github.stardomains3.oxproxion.code.store.CodeStore
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import io.github.stardomains3.oxproxion.AppToast
+import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassFrameLayout
 import io.github.stardomains3.oxproxion.GlassIconButton
@@ -30,7 +35,13 @@ import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
  */
 class CodeModeHost(private val fragment: Fragment, private val root: View) {
 
-    private val hub = CodeHub.get(fragment.requireContext())
+    /**
+     * Prefs only. The hub (encrypted hosts, sessions, backends) is built the first time Code is
+     * actually used, so opening the chat does not pay for a mode that is off.
+     */
+    private val store = CodeStore(fragment.requireContext())
+    private val hub by lazy { CodeHub.get(fragment.requireContext()) }
+    private var approvalWatch: Job? = null
     val tab: TextView = root.findViewById(R.id.tabCode)
     private val container: ViewGroup = root.findViewById(R.id.codeModeContainer)
     private val topBar: View = root.findViewById(R.id.topBarGlass)
@@ -47,11 +58,20 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
     var isActive = false
         private set
 
+    /** Some session is blocked on an approval. The dot on the Code tab says so from the other tabs. */
+    private var needsApproval = false
+    private val approvalDot = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(root.context.getColor(R.color.xai_ink))
+    }
+
     /** Called after the tab row changes selection, so ChatFragment can move its indicator. */
     var onTabsChanged: (() -> Unit)? = null
 
     init {
         tab.contentDescription = fragment.getString(R.string.mode_tab_code_a11y)
+        tab.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> placeApprovalDot() }
+        watchApprovals()
         topBar.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
             if (bottom - top != oldBottom - oldTop) home()?.topInset = topBar.height
         }
@@ -66,6 +86,15 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
                 }
             }
         }
+        // A scan that produced no pairing (bad QR, camera denied) says why when the chat is back.
+        fragment.lifecycleScope.launch {
+            fragment.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                CodePairPending.error.collect { message ->
+                    if (message == null) return@collect
+                    CodePairPending.consumeError()?.let { GlassNotice.show(fragment.requireContext(), it) }
+                }
+            }
+        }
         // Away-notification tap: enable Code, switch tab, open the session.
         fragment.lifecycleScope.launch {
             fragment.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -77,10 +106,51 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
         }
     }
 
+    /** Starts following sessions for the tab dot, once Code is on (and never before, so the hub stays unbuilt). */
+    private fun watchApprovals() {
+        if (approvalWatch?.isActive == true || !store.enabled) return
+        approvalWatch = fragment.lifecycleScope.launch {
+            fragment.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                hub.sessions
+                    .map { all -> all.values.any { it.status == SessionStatus.NEEDS_APPROVAL } }
+                    .distinctUntilChanged()
+                    .collect {
+                        needsApproval = it
+                        refreshApprovalDot()
+                    }
+            }
+        }
+    }
+
+    /** Shows the dot only while Code is not the tab on screen (there, the list already says it). */
+    private fun refreshApprovalDot() {
+        val show = needsApproval && !isActive
+        tab.overlay.remove(approvalDot)
+        if (show) {
+            tab.overlay.add(approvalDot)
+            placeApprovalDot()
+        }
+        tab.contentDescription = fragment.getString(
+            if (show) R.string.code_tab_needs_you_a11y else R.string.mode_tab_code_a11y
+        )
+    }
+
+    /** A small disc at the top-end of the label; an overlay, so the tab's size and text never move. */
+    private fun placeApprovalDot() {
+        if (tab.width == 0) return
+        val d = tab.resources.displayMetrics.density
+        val size = (5 * d).toInt()
+        val textW = tab.paint.measureText(tab.text.toString())
+        val left = ((tab.width + textW) / 2f + 1.5f * d).toInt()
+        val cy = (tab.height - tab.paddingBottom + tab.paddingTop) / 2f
+        val top = (cy - tab.textSize * 0.42f - size / 2f).toInt()
+        approvalDot.setBounds(left, top, left + size, top + size)
+    }
+
     /** Enable Code, activate tab, open the queued session from an away notification. */
     private fun onSessionPendingArrived() {
-        hub.store.enabled = true
-        hub.store.lastTabWasCode = true
+        store.enabled = true
+        store.lastTabWasCode = true
         if (!tab.isVisible) refresh(restore = false)
         tab.isVisible = true
         if (!isActive) activate(animate = true)
@@ -107,8 +177,8 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
 
     /** Enable the Code tab, activate it, and show [CodeHostDialog] if a pending pair remains. */
     private fun onPairingArrived() {
-        hub.store.enabled = true
-        hub.store.lastTabWasCode = true
+        store.enabled = true
+        store.lastTabWasCode = true
         if (!tab.isVisible) refresh(restore = false)
         tab.isVisible = true
         if (!isActive) activate(animate = true)
@@ -120,11 +190,7 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
                 CodeHostDialog.show(target, null, taken)
             } else {
                 // Home missing after commitNow — toast + clear; do not re-offer (no tight loop).
-                AppToast.makeText(
-                    fragment.requireContext(),
-                    "Could not open pairing form",
-                    AppToast.LENGTH_SHORT
-                ).show()
+                GlassNotice.show(fragment.requireContext(), fragment.getString(R.string.code_pair_form_failed))
             }
         }
     }
@@ -144,16 +210,18 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
 
     /** Re-reads the setting (e.g. back from Settings). Hides the tab and leaves Code if it was turned off. */
     fun refresh(restore: Boolean = false) {
-        val enabled = hub.store.enabled
+        val enabled = store.enabled
+        if (enabled) watchApprovals()
         tab.isVisible = enabled
         if (!enabled && isActive) deactivate()
-        if (enabled && restore && hub.store.lastTabWasCode && !isActive) activate(animate = false)
+        if (enabled && restore && store.lastTabWasCode && !isActive) activate(animate = false)
     }
 
     fun activate(animate: Boolean = true) {
-        if (isActive || !hub.store.enabled) return
+        if (isActive || !store.enabled) return
         isActive = true
-        hub.store.lastTabWasCode = true
+        refreshApprovalDot()
+        store.lastTabWasCode = true
         val fm = fragment.childFragmentManager
         if (fm.findFragmentByTag(TAG) == null) {
             fm.beginTransaction().replace(R.id.codeModeContainer, CodeHomeFragment().also { it.topInset = topBar.height }, TAG).commitNow()
@@ -180,7 +248,8 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
     fun deactivate() {
         if (!isActive) return
         isActive = false
-        hub.store.lastTabWasCode = false
+        refreshApprovalDot()
+        store.lastTabWasCode = false
         home()?.dismissPopover()
         transcript?.visibility = View.VISIBLE
         chatOnly.forEach { v -> v.visibility = hiddenVisibility.remove(v) ?: View.VISIBLE }

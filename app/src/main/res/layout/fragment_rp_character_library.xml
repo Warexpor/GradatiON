@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- The root frame hosts a card's ⋮ menu; the backdrop layer is what the menu's glass blurs. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rpLibraryRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<io.github.stardomains3.oxproxion.GlassBackdropLayout
+    android:id="@+id/rpLibraryBackdrop"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<LinearLayout
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/xai_grouped"
@@ -52,13 +63,11 @@
                 android:background="@drawable/bg_model_icon_circle">
 
                 <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_gravity="center"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
                     android:contentDescription="@null"
                     android:importantForAccessibility="no"
-                    android:src="@drawable/ic_person"
-                    app:tint="@color/xai_mute" />
+                    android:src="@drawable/ic_avatar_placeholder" />
             </FrameLayout>
 
             <TextView
@@ -90,7 +99,7 @@
         android:text="@string/rp_ui_library_hint"
         android:visibility="gone"
         android:textAppearance="@style/TextAppearance.Gradation.Footnote"
-        android:textSize="12sp" />
+        android:textSize="13sp" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/addRpCharacterButton"
@@ -108,3 +117,5 @@
         app:iconGravity="textStart"
         app:iconTint="@color/xai_ink" />
 </LinearLayout>
+</io.github.stardomains3.oxproxion.GlassBackdropLayout>
+</FrameLayout>

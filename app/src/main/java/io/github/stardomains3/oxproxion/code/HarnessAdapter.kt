@@ -54,6 +54,12 @@ sealed class AdapterOutput {
     data class Update(val sessionId: String, val update: CodeUpdate, val seq: Long? = null) : AdapterOutput()
     /** Reply to a request we sent (matched by JSON-RPC id). */
     data class Result(val id: Long, val result: JsonElement?, val error: String?) : AdapterOutput()
+    /**
+     * Frames for [sessionId] went missing: the next seq seen jumped past `afterSeq + 1` (the transport
+     * drops its oldest frames when a collector falls far behind). Ask the bridge to replay from
+     * [afterSeq]; the adapter drops replayed frames it already delivered.
+     */
+    data class Gap(val sessionId: String, val afterSeq: Long) : AdapterOutput()
     /** Something the phone can't use (yet). Logged, never shown. */
     data class Ignored(val reason: String) : AdapterOutput()
 }
@@ -168,8 +174,13 @@ object TranscriptReducer {
             is CodeUpdate.ApprovalAnswered -> list.map {
                 if (it is CodeEvent.Approval && it.requestId == update.requestId) it.copy(chosen = update.chosen) else it
             }
+            // The turn is over, so whatever it asked and nobody answered can no longer be answered.
             is CodeUpdate.TurnDone -> list.map {
-                if (it is CodeEvent.AgentText && it.streaming) it.copy(streaming = false) else it
+                when {
+                    it is CodeEvent.AgentText && it.streaming -> it.copy(streaming = false)
+                    it is CodeEvent.Approval && it.pending -> it.copy(expired = true)
+                    else -> it
+                }
             } + CodeEvent.TurnEnd("turn:$now", now, update.stopReason, update.summary)
             is CodeUpdate.Title -> list
             is CodeUpdate.SessionInfo -> list
@@ -178,12 +189,18 @@ object TranscriptReducer {
 
     private fun upsert(list: List<CodeEvent>, e: CodeEvent): List<CodeEvent> {
         val i = list.indexOfLast { it.key == e.key }
-        return if (i < 0) list + e else list.toMutableList().also { it[i] = e }
+        if (i < 0) return list + e
+        // A replayed request must not reopen an approval that was already answered or expired.
+        val old = list[i]
+        val next = if (old is CodeEvent.Approval && e is CodeEvent.Approval && !old.pending) {
+            e.copy(chosen = old.chosen, expired = old.expired)
+        } else e
+        return list.toMutableList().also { it[i] = next }
     }
 
     /** Session status as the list and header show it, derived from the transcript tail. */
     fun statusOf(list: List<CodeEvent>, running: Boolean): SessionStatus = when {
-        list.any { it is CodeEvent.Approval && it.chosen == null } -> SessionStatus.NEEDS_APPROVAL
+        list.any { it is CodeEvent.Approval && it.pending } -> SessionStatus.NEEDS_APPROVAL
         running -> SessionStatus.RUNNING
         list.lastOrNull() is CodeEvent.Notice && (list.last() as CodeEvent.Notice).level == NoticeLevel.ERROR -> SessionStatus.ERROR
         else -> SessionStatus.IDLE

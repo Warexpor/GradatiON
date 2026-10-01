@@ -4,13 +4,11 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
-import android.widget.Spinner
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.materialswitch.MaterialSwitch
+import androidx.appcompat.widget.SwitchCompat
 import kotlinx.coroutines.launch
 
 class RpSettingsFragment : Fragment() {
@@ -25,23 +23,28 @@ class RpSettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         prefs = SharedPreferencesHelper(requireContext())
-        view.findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener {
-            parentFragmentManager.popBackStack()
+        view.findViewById<MaterialToolbar>(R.id.toolbar).apply {
+            arguments?.getInt(ARG_TITLE)?.takeIf { it != 0 }?.let(::setTitle)
+            setNavigationOnClickListener { parentFragmentManager.popBackStack() }
         }
-        view.findViewById<MaterialSwitch>(R.id.rpLoreEnabledSwitch).apply {
+        RpPageKit.applyInsets(view)
+        view.findViewById<android.widget.LinearLayout>(R.id.rpPageBody).addView(
+            RpPageKit.intro(requireContext(), getString(R.string.rp_page_style_caption)), 0
+        )
+        view.findViewById<SwitchCompat>(R.id.rpLoreEnabledSwitch).apply {
             isChecked = prefs.isRpLoreEnabled()
             setOnCheckedChangeListener { _, checked -> prefs.saveRpLoreEnabled(checked) }
         }
-        val thirdPersonSwitch = view.findViewById<MaterialSwitch>(R.id.rpThirdPersonSwitch)
+        val thirdPersonSwitch = view.findViewById<SwitchCompat>(R.id.rpThirdPersonSwitch)
         thirdPersonSwitch.isChecked = prefs.isRpThirdPerson()
         thirdPersonSwitch.setOnCheckedChangeListener { _, checked -> prefs.saveRpThirdPerson(checked) }
 
-        view.findViewById<MaterialSwitch>(R.id.rpAutoMemorySwitch).apply {
+        view.findViewById<SwitchCompat>(R.id.rpAutoMemorySwitch).apply {
             isChecked = prefs.isRpAutoMemory()
             setOnCheckedChangeListener { _, checked -> prefs.saveRpAutoMemory(checked) }
         }
 
-        val showThoughtsSwitch = view.findViewById<MaterialSwitch>(R.id.rpShowThoughtsSwitch)
+        val showThoughtsSwitch = view.findViewById<SwitchCompat>(R.id.rpShowThoughtsSwitch)
         showThoughtsSwitch.isChecked = prefs.isRpShowThoughts()
         showThoughtsSwitch.setOnCheckedChangeListener { _, checked -> prefs.saveRpShowThoughts(checked) }
 
@@ -54,7 +57,7 @@ class RpSettingsFragment : Fragment() {
         }
         syncLlmGatedSwitches(prefs.isRpLlmMode())
 
-        val llmSwitch = view.findViewById<MaterialSwitch>(R.id.rpLlmModeSwitch)
+        val llmSwitch = view.findViewById<SwitchCompat>(R.id.rpLlmModeSwitch)
         llmSwitch.isChecked = prefs.isRpLlmMode()
         llmSwitch.setOnCheckedChangeListener { button, checked ->
             if (!button.isPressed) {
@@ -94,11 +97,7 @@ class RpSettingsFragment : Fragment() {
                             chatViewModel.refreshActiveRpCharacter()
                             if (!isAdded) return@launch
                             if (prefs.getRpActiveCharacterId() == null) {
-                                AppToast.makeText(
-                                    requireContext(),
-                                    getString(R.string.rp_select_character),
-                                    AppToast.LENGTH_SHORT
-                                ).show()
+                                GlassNotice.show(requireContext(), getString(R.string.rp_select_character))
                                 chatViewModel.startNewChat()
                             } else {
                                 chatViewModel.startNewRpChatKeepingCharacter()
@@ -125,11 +124,7 @@ class RpSettingsFragment : Fragment() {
                     chatViewModel.refreshActiveRpCharacter()
                     if (!isAdded) return@launch
                     if (prefs.getRpActiveCharacterId() == null) {
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_select_character),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_select_character))
                         if (chatViewModel.isRpMode()) {
                             chatViewModel.startNewChat()
                         }
@@ -139,27 +134,14 @@ class RpSettingsFragment : Fragment() {
                 }
             }
         }
-
-        val langCodes = listOf("en", "ru", "zh")
-        val langLabels = listOf(
-            getString(R.string.rp_lang_en),
-            getString(R.string.rp_lang_ru),
-            getString(R.string.rp_lang_zh)
-        )
-        val spinner = view.findViewById<Spinner>(R.id.rpLangSpinner)
-        spinner.adapter = ArrayAdapter(requireContext(), R.layout.item_rp_spinner, langLabels).apply {
-            setDropDownViewResource(R.layout.item_rp_spinner)
-        }
-        spinner.setSelection(langCodes.indexOf(prefs.getRpLang()).coerceAtLeast(0))
-        spinner.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, v: View?, position: Int, id: Long) {
-                prefs.saveRpLang(langCodes[position])
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-        })
     }
 
     companion object {
-        fun newInstance() = RpSettingsFragment()
+        private const val ARG_TITLE = "title"
+
+        /** [title] names the page after where it was opened from: the panel's Style tile, or RP settings. */
+        fun newInstance(@androidx.annotation.StringRes title: Int = 0) = RpSettingsFragment().apply {
+            arguments = Bundle().apply { putInt(ARG_TITLE, title) }
+        }
     }
 }

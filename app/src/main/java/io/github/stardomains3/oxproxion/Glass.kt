@@ -14,6 +14,7 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Outline
 import android.graphics.Paint
+import android.graphics.Matrix
 import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.RectF
@@ -110,6 +111,17 @@ object GlassQuality {
     private var lowRam = false
     private var initialized = false
 
+    /** Told (on the main thread) when battery saver flips, so live glass and tickers re-evaluate. */
+    fun interface Listener {
+        fun onGlassQualityChanged()
+    }
+
+    // Weak: a view that forgot to unregister must not be kept alive by this singleton.
+    private val listeners = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Listener, Boolean>())
+
+    fun addListener(listener: Listener) { listeners.add(listener) }
+    fun removeListener(listener: Listener) { listeners.remove(listener) }
+
     fun init(context: Context) {
         if (initialized) return
         initialized = true
@@ -122,7 +134,12 @@ object GlassQuality {
                 app,
                 object : BroadcastReceiver() {
                     override fun onReceive(c: Context, intent: Intent) {
-                        powerSave = pm?.isPowerSaveMode == true
+                        val now = pm?.isPowerSaveMode == true
+                        if (now == powerSave) return
+                        powerSave = now
+                        // The level is read at draw time, but glass that is sitting still never
+                        // draws again: poke it, or it keeps its blur until the next touch.
+                        listeners.toList().forEach { it.onGlassQualityChanged() }
                     }
                 },
                 IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED),
@@ -155,7 +172,7 @@ class GlassMaterial(
     private val host: View,
     attrs: AttributeSet?,
     capsuleByDefault: Boolean = false
-) {
+) : GlassQuality.Listener {
 
     private val density = host.resources.displayMetrics.density
 
@@ -210,6 +227,10 @@ class GlassMaterial(
     private val highlight = ContextCompat.getColor(host.context, R.color.glass_highlight)
     private val glowColor = ContextCompat.getColor(host.context, R.color.glass_glow)
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var glowShader: RadialGradient? = null
+    private var glowShaderW = 0
+    private var glowShaderH = 0
+    private val glowMatrix = Matrix()
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val rect = RectF()
@@ -224,6 +245,9 @@ class GlassMaterial(
     private var lastDy = Int.MIN_VALUE
     private var searched = false
     private var effectLevel: GlassQuality.Level? = null
+    /** The compiled lens (API 33+; untyped so the class loads on 31-32), kept across resizes. */
+    private var lensShader: Any? = null
+    private var softBmp: Bitmap? = null
 
     // Touch state
     private var touchX = 0f
@@ -289,14 +313,29 @@ class GlassMaterial(
 
     fun onAttached() {
         host.viewTreeObserver.addOnPreDrawListener(positionWatcher)
+        GlassQuality.addListener(this)
         if (source == null) findSource()
     }
 
+    override fun onGlassQualityChanged() = host.invalidate()
+
     fun onDetached() {
         host.viewTreeObserver.removeOnPreDrawListener(positionWatcher)
+        GlassQuality.removeListener(this)
         pressAnimator?.cancel()
         press = 0f
+        if (interactive) {
+            // A press animation cut off mid-spring would leave the view swollen and off-center
+            // when it comes back (recycled rows, a screen re-shown). Only the press owns these.
+            host.animate().cancel()
+            host.scaleX = 1f
+            host.scaleY = 1f
+            host.translationX = 0f
+            host.translationY = 0f
+        }
         searched = false
+        softBmp?.recycle()
+        softBmp = null
     }
 
     private fun findSource() {
@@ -314,6 +353,7 @@ class GlassMaterial(
             MotionEvent.ACTION_DOWN -> {
                 touchX = event.x
                 touchY = event.y
+                PressRoom.open(host, max(host.width, host.height) * (PRESS_SCALE - 1f) / 2f + 4f * density)
                 animatePress(1f)
             }
             MotionEvent.ACTION_MOVE -> {
@@ -463,7 +503,8 @@ class GlassMaterial(
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun lensEffect(w: Int, h: Int): RenderEffect {
-        val shader = RuntimeShader(LENS_AGSL)
+        // Compiling AGSL is the costly part; a resize or tint change only needs new uniforms.
+        val shader = (lensShader as? RuntimeShader) ?: RuntimeShader(LENS_AGSL).also { lensShader = it }
         val short = min(w, h).toFloat()
         // Bigger glass is "thicker": a wider band and a stronger bend, as Apple describes.
         val band = (short * 0.34f).coerceIn(6f * density, 22f * density)
@@ -489,7 +530,12 @@ class GlassMaterial(
         val scale = SOFTWARE_SCALE
         val bw = max(1, (w * scale).roundToInt())
         val bh = max(1, (h * scale).roundToInt())
-        val bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+        var bmp = softBmp
+        if (bmp == null || bmp.width != bw || bmp.height != bh) {
+            bmp?.recycle()
+            bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+            softBmp = bmp
+        }
         val c = Canvas(bmp)
         c.drawColor(backdropColor)
         c.scale(scale, scale)
@@ -499,19 +545,25 @@ class GlassMaterial(
         boxBlur(bmp, radius)
         rect.set(0f, 0f, w.toFloat(), h.toFloat())
         canvas.drawBitmap(bmp, null, rect, bitmapPaint)
-        bmp.recycle()
     }
 
     private fun drawGlow(canvas: Canvas, w: Int, h: Int) {
         if (press <= 0.001f) return
-        // Light from within, spreading from the fingertip.
-        val r = hypot(w.toFloat(), h.toFloat()) * 0.75f
-        glowPaint.shader = RadialGradient(
-            touchX, touchY, r,
-            intArrayOf(glowColor, withAlpha(glowColor, 0.35f), Color.TRANSPARENT),
-            floatArrayOf(0f, 0.45f, 1f),
-            Shader.TileMode.CLAMP
-        )
+        if (GlassQuality.level == GlassQuality.Level.SOLID) return
+        if (glowShader == null || w != glowShaderW || h != glowShaderH) {
+            val r = hypot(w.toFloat(), h.toFloat()) * 0.75f
+            glowShader = RadialGradient(
+                0f, 0f, r,
+                intArrayOf(glowColor, withAlpha(glowColor, 0.35f), Color.TRANSPARENT),
+                floatArrayOf(0f, 0.45f, 1f),
+                Shader.TileMode.CLAMP
+            )
+            glowShaderW = w
+            glowShaderH = h
+        }
+        glowMatrix.setTranslate(touchX, touchY)
+        glowShader!!.setLocalMatrix(glowMatrix)
+        glowPaint.shader = glowShader
         glowPaint.alpha = (255 * press).roundToInt()
         canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), glowPaint)
     }
@@ -599,14 +651,24 @@ class GlassMaterial(
         fun boxBlur(bmp: Bitmap, radius: Int) {
             val w = bmp.width
             val h = bmp.height
-            val px = IntArray(w * h)
+            val n = w * h
+            val px = blurBuf(pxScratch, n)
+            val tmp = blurBuf(tmpScratch, n)
             bmp.getPixels(px, 0, w, 0, 0, w, h)
-            val tmp = IntArray(w * h)
             repeat(3) {
                 blurPass(px, tmp, w, h, radius, horizontal = true)
                 blurPass(tmp, px, w, h, radius, horizontal = false)
             }
             bmp.setPixels(px, 0, w, 0, 0, w, h)
+        }
+
+        private val pxScratch = ThreadLocal<IntArray>()
+        private val tmpScratch = ThreadLocal<IntArray>()
+
+        private fun blurBuf(slot: ThreadLocal<IntArray>, n: Int): IntArray {
+            val cur = slot.get()
+            if (cur != null && cur.size >= n) return cur
+            return IntArray(n).also { slot.set(it) }
         }
 
         fun blurPass(src: IntArray, dst: IntArray, w: Int, h: Int, r: Int, horizontal: Boolean) {
@@ -635,6 +697,36 @@ class GlassMaterial(
             }
         }
     }
+}
+
+/**
+ * Pressed glass swells past its own bounds. Parents clip to their padding by default, which
+ * sliced the top and bottom off buttons sitting in padded rows, so a press opens just enough
+ * ancestors for the swell to show. Scrolling containers keep their clip: their padding is
+ * where content scrolls out of sight.
+ */
+internal object PressRoom {
+    fun open(view: View, grow: Float) {
+        var l = view.left - grow
+        var t = view.top - grow
+        var r = view.right + grow
+        var b = view.bottom + grow
+        var child = view
+        repeat(MAX_DEPTH) {
+            val p = child.parent as? ViewGroup ?: return
+            if (p is androidx.core.view.ScrollingView || p is android.widget.ScrollView ||
+                p is android.widget.HorizontalScrollView || p is android.widget.AbsListView
+            ) return
+            if (l >= p.paddingLeft && t >= p.paddingTop && r <= p.width - p.paddingRight && b <= p.height - p.paddingBottom) return
+            if (p.clipToPadding) p.clipToPadding = false
+            if (l >= 0f && t >= 0f && r <= p.width && b <= p.height) return
+            if (p.clipChildren) p.clipChildren = false
+            l += p.left; t += p.top; r += p.left; b += p.top
+            child = p
+        }
+    }
+
+    private const val MAX_DEPTH = 4
 }
 
 class GlassFrameLayout @JvmOverloads constructor(

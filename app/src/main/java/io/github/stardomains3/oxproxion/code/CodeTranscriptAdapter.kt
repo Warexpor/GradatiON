@@ -21,6 +21,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -31,7 +32,6 @@ import io.github.stardomains3.oxproxion.ChatMarkdown
 import io.github.stardomains3.oxproxion.IncrementalMarkdown
 import io.github.stardomains3.oxproxion.R
 import io.github.stardomains3.oxproxion.ShimmerText
-import io.github.stardomains3.oxproxion.StreamCursorSpan
 import io.github.stardomains3.oxproxion.StreamFadeSpan
 import io.noties.markwon.Markwon
 import io.noties.markwon.SoftBreakAddsNewLinePlugin
@@ -51,6 +51,7 @@ sealed class TranscriptRow {
 class CodeTranscriptAdapter(
     context: Context,
     private val decodeScope: CoroutineScope,
+    /** Called with the tapped choice; report a send that failed through [approvalFailed]. */
     private val onApproval: (CodeEvent.Approval, ApprovalOption) -> Unit,
     private val onOpenDiff: (CodeEvent.FileDiff) -> Unit,
     private val onOpenToolOutput: (CodeEvent.ToolCall) -> Unit = {}
@@ -71,7 +72,21 @@ class CodeTranscriptAdapter(
     }
 
     private val streams = HashMap<String, StreamState>()
+    /**
+     * Streaming text painted in place by [tryInPlaceStream]. That path skips the differ, so
+     * [getCurrentList] keeps an older row; a rebind (scrolled off and back) reads this instead.
+     */
+    private val paintedInPlace = HashMap<String, CodeEvent.AgentText>()
     private val expanded = HashSet<String>()
+    /**
+     * Commands whose output opened itself while they ran. They stay open after they finish (a
+     * card that folds itself the moment the command ends is a jump); a tap on the row still flips it.
+     */
+    private val autoOpened = HashSet<String>()
+    /** Approvals whose answer is on its way: their buttons stay disabled until it lands or fails. */
+    private val answering = HashSet<String>()
+    /** Parsed markdown of finished agent messages, so a rebind (scroll back) does not reparse on Main. */
+    private val markdownCache = LruCache<String, CharSequence>(MARKDOWN_CACHE_ENTRIES)
 
     /** Normal (false): thoughts and tool output fold to one line. Thinking (true): all open. */
     var verbose: Boolean = false
@@ -80,6 +95,7 @@ class CodeTranscriptAdapter(
             if (field == value) return
             field = value
             expanded.clear()
+            autoOpened.clear()
             notifyDataSetChanged()
         }
     /**
@@ -176,12 +192,13 @@ class CodeTranscriptAdapter(
 
     /** V1: drop StreamState for keys absent from the list or no longer streaming. */
     private fun pruneStreams(list: List<TranscriptRow>) {
-        if (streams.isEmpty()) return
+        if (streams.isEmpty() && paintedInPlace.isEmpty()) return
         val keep = HashSet<String>()
         for (row in list) {
             val e = (row as? TranscriptRow.Event)?.event
             if (e is CodeEvent.AgentText && e.streaming) keep.add(e.key)
         }
+        paintedInPlace.keys.retainAll(keep)
         val it = streams.entries.iterator()
         while (it.hasNext()) {
             val (key, state) = it.next()
@@ -219,7 +236,14 @@ class CodeTranscriptAdapter(
             return false
         }
         bindText(holder, e)
+        paintedInPlace[e.key] = e
         return true
+    }
+
+    /** The newest text for a streaming row: the list's, or a longer one painted in place since. */
+    private fun latest(e: CodeEvent.AgentText): CodeEvent.AgentText {
+        val painted = paintedInPlace[e.key] ?: return e
+        return if (e.streaming && painted.text.length > e.text.length) painted else e
     }
 
     private fun clearStreamBound(holder: TextHolder?) {
@@ -257,18 +281,18 @@ class CodeTranscriptAdapter(
                     val tv = v.findViewById<TextView>(R.id.codeUserText)
                     tv.text = when {
                         e.attachmentCount <= 0 -> e.text
-                        e.text.isBlank() -> v.context.getString(R.string.code_user_with_images, e.attachmentCount)
-                        else -> e.text + v.context.getString(R.string.code_user_images_suffix, e.attachmentCount)
+                        e.text.isBlank() -> v.resources.getQuantityString(R.plurals.code_user_with_images, e.attachmentCount, e.attachmentCount)
+                        else -> e.text + v.resources.getQuantityString(R.plurals.code_user_images_suffix, e.attachmentCount, e.attachmentCount)
                     }
                 }
-                is CodeEvent.AgentText -> bindText(holder as TextHolder, e)
+                is CodeEvent.AgentText -> bindText(holder as TextHolder, latest(e))
                 is CodeEvent.Thought -> bindThought(v, e)
                 is CodeEvent.ToolCall -> bindTool(v, e)
                 is CodeEvent.FileDiff -> bindDiff(v, e)
                 is CodeEvent.Approval -> bindApproval(v, e)
                 is CodeEvent.Plan -> bindPlan(v, e)
                 is CodeEvent.Notice -> (v as TextView).apply {
-                    text = e.text
+                    text = if (e.textRes != 0) context.getString(e.textRes, *e.args.toTypedArray()) else e.text
                     setTextColor(context.getColor(if (e.level == NoticeLevel.ERROR) R.color.xai_ink else R.color.xai_mute))
                 }
                 is CodeEvent.TurnEnd -> v.findViewById<TextView>(R.id.codeTurnText).text =
@@ -311,10 +335,17 @@ class CodeTranscriptAdapter(
             clearStreamBound(holder)
             streams.remove(e.key)?.markdown?.reset()
             holder.stopFadeTicker()
-            tv.text = if (e.text.isEmpty()) "" else ChatMarkdown.polished(markwon.toMarkdown(e.text))
+            tv.text = if (e.text.isEmpty()) "" else renderFinished(e)
         }
         tv.isVisible = e.text.isNotEmpty() || e.streaming || e.images.isEmpty()
         bindAgentImages(holder, e.images)
+    }
+
+    /** Markdown for a finished message, parsed once per (message, length) and then reused. */
+    private fun renderFinished(e: CodeEvent.AgentText): CharSequence {
+        val key = "${e.key}:${e.text.length}"
+        markdownCache.get(key)?.let { return it }
+        return ChatMarkdown.polished(markwon.toMarkdown(e.text)).also { markdownCache.put(key, it) }
     }
 
     /**
@@ -361,8 +392,9 @@ class CodeTranscriptAdapter(
             if (cached != null && !cached.isRecycled) {
                 iv.setImageBitmap(cached)
                 displayedImageKeys.add(key)
-            } else {
-                // Placeholder until async decode posts the bitmap.
+            } else if (img.data.isNotEmpty()) {
+                // Placeholder until async decode posts the bitmap. (Empty data: the session shed
+                // the base64 of an old image to bound memory; nothing left to decode.)
                 requestInlineDecode(holder, gen, key, img, maxEdge)
             }
         }
@@ -495,8 +527,10 @@ class CodeTranscriptAdapter(
         status.isVisible = e.status == ToolStatus.FAILED
         status.setImageResource(R.drawable.ic_code_cross)
         val hasOutput = !e.output.isNullOrBlank()
-        // Commands show their output live while they run; everything else opens on tap.
-        val open = hasOutput && (((e.key in expanded) != verbose) || (e.kind == ToolKind.EXECUTE && e.status == ToolStatus.RUNNING))
+        // Commands show their output live while they run; everything else opens on tap. A running
+        // command's card stays open once it finishes, and a tap folds or opens it either way.
+        if (hasOutput && e.kind == ToolKind.EXECUTE && e.status == ToolStatus.RUNNING) autoOpened.add(e.key)
+        val open = hasOutput && ((e.key in expanded) != (verbose || e.key in autoOpened))
         val raw = e.output.orEmpty()
         v.findViewById<View>(R.id.codeToolOutputScroll).isVisible = open
         val full = v.findViewById<TextView>(R.id.codeToolFull)
@@ -514,16 +548,30 @@ class CodeTranscriptAdapter(
             full.setOnClickListener(null)
         }
         v.findViewById<View>(R.id.codeToolRow).apply {
-            isClickable = hasOutput
-            setOnClickListener {
-                if (!expanded.add(e.key)) expanded.remove(e.key)
-                notifyItemChanged(currentList.indexOfFirst { it.key == e.key })
+            // TalkBack reads the state (the failure cross is decoration, hidden from it).
+            ViewCompat.setStateDescription(this, context.getString(when (e.status) {
+                ToolStatus.PENDING -> R.string.code_tool_state_waiting
+                ToolStatus.RUNNING -> R.string.code_tool_state_running
+                ToolStatus.COMPLETED -> R.string.code_tool_state_done
+                ToolStatus.FAILED -> R.string.code_tool_state_failed
+            }))
+            if (hasOutput) {
+                setOnClickListener {
+                    if (!expanded.add(e.key)) expanded.remove(e.key)
+                    notifyItemChanged(currentList.indexOfFirst { it.key == e.key })
+                }
+                setOnLongClickListener {
+                    onOpenToolOutput(e)
+                    true
+                }
+            } else {
+                // setOnClickListener turns clickable on, even for null; a row with nothing to open must not claim a tap.
+                setOnClickListener(null)
+                setOnLongClickListener(null)
+                isClickable = false
+                isLongClickable = false
             }
-            setOnLongClickListener {
-                if (!hasOutput) return@setOnLongClickListener false
-                onOpenToolOutput(e)
-                true
-            }
+            isFocusable = hasOutput
         }
     }
 
@@ -539,13 +587,26 @@ class CodeTranscriptAdapter(
         val hidden = e.lines.size - CARD_LINES
         more.isVisible = true
         more.text = if (hidden > 0) ctx.getString(R.string.code_session_more_lines, hidden) else ctx.getString(R.string.code_session_show_full_diff)
-        v.findViewById<View>(R.id.codeDiffCard).setOnClickListener { onOpenDiff(e) }
+        v.findViewById<View>(R.id.codeDiffCard).apply {
+            contentDescription = if (e.isNewFile) ctx.getString(R.string.cd_code_diff_card_new, e.path, e.added)
+            else ctx.getString(R.string.cd_code_diff_card, e.path, e.added, e.removed)
+            setOnClickListener { onOpenDiff(e) }
+        }
     }
 
     private fun bindApproval(v: View, e: CodeEvent.Approval) {
         val ctx = v.context
         val card = v.findViewById<View>(R.id.codeApprovalCard)
         val done = v.findViewById<View>(R.id.codeApprovalDone)
+        if (e.chosen == null && e.expired) {
+            // The turn ended without an answer: nothing is waiting any more, so no buttons.
+            card.isVisible = false
+            done.isVisible = true
+            v.findViewById<ImageView>(R.id.codeApprovalDoneIcon).setImageResource(R.drawable.ic_code_cross)
+            v.findViewById<TextView>(R.id.codeApprovalDoneText).text =
+                "${ctx.getString(R.string.code_approval_expired)} · ${e.title}"
+            return
+        }
         if (e.chosen != null) {
             card.isVisible = false
             done.isVisible = true
@@ -584,17 +645,35 @@ class CodeTranscriptAdapter(
                 ApprovalOption.Kind.ALLOW_ONCE -> 3
             }
         }
+        val waiting = e.requestId in answering
         ordered.forEachIndexed { i, opt ->
             val lead = opt.kind == ApprovalOption.Kind.ALLOW_ONCE
             val b = LayoutInflater.from(ctx).inflate(
                 if (lead) R.layout.item_code_button_lead else R.layout.item_code_button, box, false
             ) as MaterialButton
-            b.text = opt.label
-            b.setOnClickListener { onApproval(e, opt) }
-            box.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, (40 * d).toInt()).apply {
+            // The phone's own "Deny" (a request that came without choices) has no label from the wire.
+            b.text = if (opt.id == ApprovalOption.CANCEL_ID) ctx.getString(R.string.code_away_action_deny) else opt.label
+            // One tap sends one answer: every choice goes dead until it lands or fails.
+            b.isEnabled = !waiting
+            b.setOnClickListener {
+                if (!answering.add(e.requestId)) return@setOnClickListener
+                for (k in 0 until box.childCount) box.getChildAt(k).isEnabled = false
+                onApproval(e, opt)
+            }
+            box.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, (44 * d).toInt()).apply {
                 if (i > 0) marginStart = (8 * d).toInt()
             })
         }
+    }
+
+    /** The answer for [requestId] did not go out: give the card its buttons back. */
+    fun approvalFailed(requestId: String) {
+        if (!answering.remove(requestId)) return
+        val i = currentList.indexOfFirst {
+            val ev = (it as? TranscriptRow.Event)?.event
+            ev is CodeEvent.Approval && ev.requestId == requestId
+        }
+        if (i >= 0) notifyItemChanged(i)
     }
 
     private fun bindPlan(v: View, e: CodeEvent.Plan) {
@@ -647,28 +726,17 @@ class CodeTranscriptAdapter(
                     val fades = if (text is Spanned) {
                         text.getSpans(0, text.length, StreamFadeSpan::class.java)
                     } else emptyArray()
-                    val cursors = if (text is Spanned) {
-                        text.getSpans(0, text.length, StreamCursorSpan::class.java)
-                    } else emptyArray()
                     val fadesDone = fades.isEmpty() || fades.all { it.isDone() }
-                    if (fadesDone && cursors.isEmpty()) {
+                    if (fadesDone) {
                         fadeTicker = null
                         if (text is Spannable) {
                             fades.forEach { text.removeSpan(it) }
                         }
                         return
                     }
-                    if (fadesDone && text is Spannable) {
-                        fades.forEach { text.removeSpan(it) }
-                    }
+                    // Word fades need every frame.
                     textView.invalidate()
-                    // Word fades need every frame; the breathing cursor alone is fine at
-                    // ~15fps and saves a full text redraw per frame for the whole stream.
-                    if (fadesDone) {
-                        Choreographer.getInstance().postFrameCallbackDelayed(this, CURSOR_FRAME_MS)
-                    } else {
-                        Choreographer.getInstance().postFrameCallback(this)
-                    }
+                    Choreographer.getInstance().postFrameCallback(this)
                 }
             }
             fadeTicker = ticker
@@ -684,7 +752,7 @@ class CodeTranscriptAdapter(
     private class Simple(v: View) : RecyclerView.ViewHolder(v)
 
     companion object {
-        private const val CURSOR_FRAME_MS = 66L
+        private const val MARKDOWN_CACHE_ENTRIES = 48
         private const val T_USER = 1
         private const val T_TEXT = 2
         private const val T_THOUGHT = 3

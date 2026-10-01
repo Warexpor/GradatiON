@@ -12,9 +12,6 @@
     <color name="xai_mute">#FF8A8A8A</color>
     <color name="xai_tertiary">#FF575757</color>
     <color name="xai_accent_sunset">@color/xai_mute</color>
-    <color name="xai_accent_sunset_soft">#FF979797</color>
-    <color name="xai_accent_dusk">#FF979797</color>
-    <color name="xai_accent_twilight">#FF575757</color>
     <color name="xai_scrim">#99000000</color>
     <color name="markwon_code_text">#FFD9D9D9</color>
     <color name="markwon_inline_code_bg">#17FFFFFF</color>
@@ -22,66 +19,29 @@
     <color name="markwon_blockquote">#FF8A8A8A</color>
     <color name="markwon_table_border">#1FFFFFFF</color>
     <color name="markwon_table_header_bg">#FF1B1B1B</color>
-    <color name="xai_accent_breeze">#FF8A8A8A</color>
-    <color name="xai_accent_midnight">#FF161616</color>
-    <color name="xai_border_outline">#1AFFFFFF</color>
     <color name="xai_icon">#FF979797</color>
-    <color name="xai_icon_active">#FFECECEC</color>
     <color name="xai_selected">#FF242424</color>
-    <color name="xai_row_selected">#FF242424</color>
     <color name="xai_text_highlight">#FF434343</color>
     <color name="xai_error">#FFF0F0F0</color>
-    <color name="xai_success">#FFC8C8C8</color>
+    <!-- Delete actions only. User call: red, but a dim crimson (cool hue, low value) so it never reads orange or loud. -->
+    <color name="delete_action">#FFC4555F</color>
     <color name="xai_progress">#FF8A8A8A</color>
     <color name="xai_link">#FFECECEC</color>
     <color name="xai_send_disabled">#FF242424</color>
-    <color name="xai_send_enabled">#FFECECEC</color>
     <color name="xai_send_icon_enabled">#FFECECEC</color>
 
-    <!-- Grok/X monochrome switch (dark): ON = white track + black thumb -->
-    <color name="trackColorChecked">#FFECECEC</color>
-    <color name="trackColorUnchecked">#FF343434</color>
-    <color name="thumbColorChecked">#FF111111</color>
-    <color name="thumbColorUnchecked">#FFECECEC</color>
-    <color name="trackColorCheckedDisabled">#66ECECEC</color>
-    <color name="trackColorUncheckedDisabled">#66343434</color>
-    <color name="thumbColorDisabled">#99ECECEC</color>
-
-    <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
     <color name="ora">@color/xai_mute</color>
-    <color name="default_color">@color/xai_canvas</color>
-    <color name="focused_color">@color/xai_canvas_mid</color>
-    <color name="pressed_color">@color/xai_canvas_mid</color>
-    <color name="spinner_item_color">@color/xai_canvas_mid</color>
-    <color name="back">@color/xai_canvas</color>
-    <color name="ff">@color/xai_canvas</color>
-    <color name="your_orange_color">@color/xai_mute</color>
-    <color name="your_default_text_color">@color/xai_ink</color>
-    <color name="fab_bg_60">#33242424</color>
-    <color name="chestnut">@color/xai_canvas_mid</color>
-    <color name="ch">@color/xai_canvas_card</color>
-    <color name="tx">@color/xai_body</color>
-    <color name="threetwo">@color/xai_canvas_mid</color>
-    <color name="ic_launcherrobot_background">#FF000000</color>
-    <color name="advanced_reasoning_color">@color/xai_mute</color>
-    <color name="gray">@color/xai_mute</color>
     <color name="xai_grouped">#FF0F0F0F</color>
     <color name="xai_cell">#FF1A1A1A</color>
-    <color name="xai_separator">#FF313131</color>
-    <color name="grad_panel_top">#FF1F1F1F</color>
-    <color name="grad_panel_bottom">#FF171717</color>
     <color name="grad_bubble_top">#FF292929</color>
     <color name="grad_bubble_bottom">#FF202020</color>
-    <color name="grad_send_top">#FFF4F4F4</color>
-    <color name="grad_send_bottom">#FFCBCBCB</color>
     <color name="grad_chip_top">#FF1E1E1E</color>
     <color name="grad_chip_bottom">#FF161616</color>
     <color name="grad_fade_clear">#00111111</color>
     <color name="xai_press_wash">#17FFFFFF</color>
     <!-- Glass materials: translucent tint over live blur -->
     <color name="glass_tint">#B81F1F1F</color>
-    <color name="glass_bar_tint">#C7111111</color>
     <color name="glass_panel_tint">#D11F1F1F</color>
     <color name="glass_edge">#26FFFFFF</color>
     <color name="glass_highlight">#33FFFFFF</color>
@@ -89,19 +49,25 @@
     <color name="glass_shadow_ambient">#40000000</color>
     <color name="glass_shadow_spot">#66000000</color>
     <color name="glass_control_tint">#941E1E1E</color>
-    <color name="grad_top_edge">#EB111111</color>
+    <color name="grad_top_edge">#FA111111</color>
+    <!-- Middle of the top-bar dim: kept dense so the tabs stand clear of the text beneath -->
+    <color name="top_edge_mid">#DB111111</color>
     <color name="glass_sheen">#0DFFFFFF</color>
     <color name="glass_sheet_tint">#D91A1A1A</color>
     <color name="glass_popup_tint">#F21C1C1C</color>
     <color name="glass_control_solid_tint">#FF232323</color>
     <color name="composer_fade_mid">#B3111111</color>
-    <color name="model_pill_pressed">#FF303030</color>
     <color name="glass_popover_tint">#E61F1F1F</color>
     <color name="popover_row_selected">#14FFFFFF</color>
     <color name="popover_row_pressed">#1FFFFFFF</color>
-    <color name="popover_scrim">#33000000</color>
+    <!-- Message ⋮ menu (MessageMenu): denser than the composer pickers -->
+    <color name="glass_menu_tint">#F21F1F1F</color>
+    <!-- Character panel: an opaque sheet, not glass. Tiles sit one step off the sheet. -->
+    <color name="panel_solid">#FF1B1B1B</color>
+    <color name="panel_tile">#FF272727</color>
+    <color name="panel_tile_on">#FF313131</color>
+    <color name="popover_scrim">#4D000000</color>
     <color name="empty_mark">#FF333333</color>
-    <color name="glass_chat_action_tint">#8C222222</color>
     <color name="glass_btn_tint">#17FFFFFF</color>
     <color name="glass_btn_primary_tint">#29FFFFFF</color>
     <color name="glass_btn_selected_tint">#47FFFFFF</color>
@@ -109,15 +75,20 @@
     <color name="segment_thumb">#2BFFFFFF</color>
     <color name="segment_thumb_rim">#40FFFFFF</color>
     <color name="segment_thumb_shadow">#66000000</color>
-    <!-- Glass toggle (GlassSwitch.kt): the bead never changes color; the track says on/off -->
-    <color name="switch_track_off">#1FFFFFFF</color>
-    <color name="switch_track_on">#FF9A9A9A</color>
-    <color name="switch_track_rim">#1FFFFFFF</color>
-    <color name="switch_track_rim_top">#4D000000</color>
-    <color name="switch_bead_top">#F2F5F5F5</color>
-    <color name="switch_bead_mid">#EBECECEC</color>
-    <color name="switch_bead_bottom">#EDF3F3F3</color>
+    <!-- Glass toggle (GlassSwitch.kt): a clear lens pill; the groove says on/off -->
+    <color name="switch_track_off">#14FFFFFF</color>
+    <color name="switch_track_on">#FFA6A6A6</color>
+    <color name="switch_track_shade">#4D000000</color>
+    <color name="switch_track_rim">#14FFFFFF</color>
+    <color name="switch_track_rim_top">#66000000</color>
+    <color name="switch_track_lip">#40FFFFFF</color>
+    <color name="switch_bead_top">#1AFFFFFF</color>
+    <color name="switch_bead_bottom">#05FFFFFF</color>
+    <color name="switch_bead_sheen">#59FFFFFF</color>
     <color name="switch_bead_rim_light">#E6FFFFFF</color>
-    <color name="switch_bead_rim_dark">#33000000</color>
-    <color name="switch_thumb_shadow">#80000000</color>
+    <color name="switch_bead_rim_mid">#33FFFFFF</color>
+    <color name="switch_bead_rim_bottom">#80FFFFFF</color>
+    <color name="switch_lens_tint">#14FFFFFF</color>
+    <color name="switch_lens_edge">#CCFFFFFF</color>
+    <color name="switch_thumb_shadow">#59000000</color>
 </resources>

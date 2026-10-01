@@ -38,15 +38,16 @@ object Diff {
     }
 
     /**
-     * Diffs two file contents into hunks with [context] lines around each change. LCS over lines;
-     * past [maxCells] comparisons it degrades to "everything replaced" rather than stall the UI
-     * thread's caller (call this off the main thread for big files anyway).
+     * Diffs two file contents into hunks with [context] lines around each change. The common
+     * prefix and suffix are trimmed first (edits are usually small and local), then LCS runs over
+     * what is left. Only when that remainder passes [maxCells] comparisons does the changed span
+     * degrade to "everything in it replaced" rather than stall the caller's thread (call this off
+     * the main thread for big files anyway); the untouched prefix and suffix stay context.
      */
     fun between(oldText: String?, newText: String, context: Int = 3, maxCells: Long = 1_000_000L): List<DiffLine> {
         val a = oldText?.split('\n') ?: emptyList()
         val b = newText.split('\n')
-        val ops = if (a.size.toLong() * b.size <= maxCells) lcsOps(a, b) else replaceAll(a, b)
-        return hunks(ops, context)
+        return hunks(ops(a, b, maxCells), context)
     }
 
     fun counts(lines: List<DiffLine>): Pair<Int, Int> =
@@ -54,12 +55,7 @@ object Diff {
 
     // ── internals ─────────────────────────────────────────────────────────────────────────
 
-    private fun replaceAll(a: List<String>, b: List<String>): List<DiffLine> =
-        a.mapIndexed { i, s -> DiffLine(DiffLine.Type.DELETE, i + 1, null, s) } +
-            b.mapIndexed { i, s -> DiffLine(DiffLine.Type.ADD, null, i + 1, s) }
-
-    private fun lcsOps(a: List<String>, b: List<String>): List<DiffLine> {
-        // Trim the common prefix/suffix first: edits are usually small and local.
+    private fun ops(a: List<String>, b: List<String>, maxCells: Long): List<DiffLine> {
         var start = 0
         while (start < a.size && start < b.size && a[start] == b[start]) start++
         var endA = a.size
@@ -67,12 +63,23 @@ object Diff {
         while (endA > start && endB > start && a[endA - 1] == b[endB - 1]) { endA--; endB-- }
         val n = endA - start
         val m = endB - start
+        val out = ArrayList<DiffLine>(a.size + m)
+        for (k in 0 until start) out += DiffLine(DiffLine.Type.CONTEXT, k + 1, k + 1, a[k])
+        if (n.toLong() * m <= maxCells) lcsMiddle(a, b, start, n, m, out) else replaceMiddle(a, b, start, n, m, out)
+        for (k in 0 until a.size - endA) out += DiffLine(DiffLine.Type.CONTEXT, endA + k + 1, endB + k + 1, a[endA + k])
+        return out
+    }
+
+    private fun replaceMiddle(a: List<String>, b: List<String>, start: Int, n: Int, m: Int, out: MutableList<DiffLine>) {
+        for (i in 0 until n) out += DiffLine(DiffLine.Type.DELETE, start + i + 1, null, a[start + i])
+        for (j in 0 until m) out += DiffLine(DiffLine.Type.ADD, null, start + j + 1, b[start + j])
+    }
+
+    private fun lcsMiddle(a: List<String>, b: List<String>, start: Int, n: Int, m: Int, out: MutableList<DiffLine>) {
         val dp = Array(n + 1) { IntArray(m + 1) }
         for (i in n - 1 downTo 0) for (j in m - 1 downTo 0) {
             dp[i][j] = if (a[start + i] == b[start + j]) dp[i + 1][j + 1] + 1 else maxOf(dp[i + 1][j], dp[i][j + 1])
         }
-        val out = ArrayList<DiffLine>(a.size + m)
-        for (k in 0 until start) out += DiffLine(DiffLine.Type.CONTEXT, k + 1, k + 1, a[k])
         var i = 0
         var j = 0
         while (i < n || j < m) {
@@ -87,8 +94,6 @@ object Diff {
                 else -> { out += DiffLine(DiffLine.Type.ADD, null, start + j + 1, b[start + j]); j++ }
             }
         }
-        for (k in 0 until a.size - endA) out += DiffLine(DiffLine.Type.CONTEXT, endA + k + 1, endB + k + 1, a[endA + k])
-        return out
     }
 
     /** Keeps [context] unchanged lines around each change and inserts a hunk header per gap. */

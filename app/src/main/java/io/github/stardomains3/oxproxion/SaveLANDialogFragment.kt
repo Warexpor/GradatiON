@@ -5,12 +5,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import android.widget.CheckBox
+import android.widget.TextView
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import androidx.core.graphics.drawable.toDrawable
 
 class SaveLANDialogFragment : DialogFragment() {
@@ -74,9 +75,16 @@ class SaveLANDialogFragment : DialogFragment() {
             checkboxNativ
         )
 
+        val urlLayout = view.findViewById<TextInputLayout>(R.id.edit_text_lan_url_layout)
+        val keyLayout = view.findViewById<TextInputLayout>(R.id.edit_text_lan_api_key_layout)
+        val providerError = view.findViewById<TextView>(R.id.lan_provider_error)
+        urlLayout.clearErrorOnEdit()
+        keyLayout.clearErrorOnEdit()
+
         providerCheckboxes.forEach { checkbox ->
             checkbox.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) {
+                    providerError.visibility = View.GONE
                     providerCheckboxes
                         .filter { it != checkbox }
                         .forEach { it.isChecked = false }
@@ -92,26 +100,21 @@ class SaveLANDialogFragment : DialogFragment() {
 
             when {
                 raw.isBlank() -> {
-                    editTextUrl.error = "Please enter a LAN endpoint URL"
+                    urlLayout.error = getString(R.string.lan_error_url_blank)
                 }
-                !checkboxOmlx.isChecked && !checkboxOllama.isChecked && !checkboxLmStudio.isChecked && !checkboxLlamaCpp.isChecked && !checkboxMlxLm.isChecked && !checkboxHermesAgent.isChecked &&
-                        !checkboxNativ.isChecked -> {
-                    AppToast.makeText(requireContext(), "Please select a server type", AppToast.LENGTH_SHORT).show()
+                providerCheckboxes.none { it.isChecked } -> {
+                    providerError.visibility = View.VISIBLE
                 }
                 else -> {
                     val endpointError = LanEndpointValidator.validate(raw)
                     if (endpointError != null) {
-                        editTextUrl.error = endpointError
+                        urlLayout.error = getString(endpointError)
                         return@setOnClickListener
                     }
 
                     val keyOk = prefs.setLanApiKey(apiKey?.takeIf { it.isNotBlank() })
                     if (!keyOk) {
-                        AppToast.makeText(
-                            requireContext(),
-                            "Failed to save LAN API key (encryption error). Endpoint not saved.",
-                            AppToast.LENGTH_LONG
-                        ).show()
+                        keyLayout.error = getString(R.string.lan_error_key_encrypt)
                         return@setOnClickListener
                     }
 
@@ -130,7 +133,6 @@ class SaveLANDialogFragment : DialogFragment() {
                     }
                     prefs.setLanProvider(provider)
 
-                    AppToast.makeText(requireContext(), "LAN endpoint, provider, and API key saved", AppToast.LENGTH_SHORT).show()
                     dismiss()
                 }
             }

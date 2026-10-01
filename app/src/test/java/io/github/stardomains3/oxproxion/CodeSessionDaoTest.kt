@@ -159,7 +159,7 @@ class CodeSessionDaoTest {
             )
             .commit()
 
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         val loaded = hub.sessions.value["legacy-1"]
         assertEquals("From prefs", loaded?.summary?.title)
         assertEquals(7L, loaded?.summary?.lastSeq)
@@ -175,7 +175,7 @@ class CodeSessionDaoTest {
             dao.replaceAll(emptyList()) // simulate empty until hub loads — migration flag still set
             dao.upsert(CodeSessionEntity.from(legacy[0].copy(title = "Already in Room")))
         }
-        val hub2 = CodeHub.get(ctx)
+        val hub2 = CodeHub.getLoaded(ctx)
         assertEquals("Already in Room", hub2.sessions.value["legacy-1"]?.summary?.title)
     }
 
@@ -245,7 +245,7 @@ class CodeSessionDaoTest {
             .putBoolean("sessions_migrated_to_room", false)
             .commit()
 
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         assertEquals("Already in Room", hub.sessions.value["room-only"]?.summary?.title)
         assertEquals("From prefs", hub.sessions.value["prefs-only"]?.summary?.title)
         assertEquals(9L, hub.sessions.value["prefs-only"]?.summary?.lastSeq)
@@ -260,7 +260,7 @@ class CodeSessionDaoTest {
 
     @Test
     fun hubPersistSessionsWritesRoom() = runBlocking {
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         // Seed via DAO path used by persist: start with empty, write entity, reload hub.
         val summary = CodeSessionSummary(
             id = "persist-1",
@@ -274,7 +274,7 @@ class CodeSessionDaoTest {
         )
         dao.upsert(CodeSessionEntity.from(summary))
         CodeHub.resetForTesting()
-        val reloaded = CodeHub.get(ctx)
+        val reloaded = CodeHub.getLoaded(ctx)
         assertEquals(11L, reloaded.sessions.value["persist-1"]?.summary?.lastSeq)
         assertEquals("Persisted", reloaded.sessions.value["persist-1"]?.summary?.title)
 

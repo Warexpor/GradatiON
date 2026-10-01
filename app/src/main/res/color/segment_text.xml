@@ -4,5 +4,5 @@
     <item android:state_enabled="false" android:color="@color/xai_tertiary" />
     <item android:state_checked="true" android:color="@color/xai_ink" />
     <item android:state_pressed="true" android:color="@color/xai_body" />
-    <item android:color="@color/xai_mute" />
+    <item android:color="@color/xai_body" />
 </selector>

@@ -75,9 +75,9 @@ object DemoModel {
 
     class Script(val thinking: String?, val text: String)
 
-    /** Background chores (RP memory upkeep) ask without streaming; answer with one JSON reply. */
+    /** Background chores (RP Facts upkeep) ask without streaming; answer with one JSON reply. */
     private fun oneShot(request: okhttp3.Request, userText: String): Response {
-        val text = if ("memory notes" in userText) DEMO_MEMORY else "OK"
+        val text = if ("fact notes" in userText) DEMO_MEMORY else "OK"
         Thread.sleep((300 * pace).toLong())
         val json = buildJsonObject {
             put("id", "demo")
@@ -189,7 +189,7 @@ object DemoModel {
             fun greet(name: String) = "Hello, ${'$'}name"
             ```
 
-            > Tap the icons under this message to copy, share, read aloud, regenerate or edit.
+            > Tap the icons under this message to copy, read aloud, regenerate or edit.
 
             To talk to a real model, add your OpenRouter key in **Settings > Models & API**.
         """.trimIndent()
@@ -256,27 +256,50 @@ object DemoModel {
         """.trimIndent()
     )
 
+    /** Vesna's scene ([DemoCharacter]): picks up from her quiet greeting by the window. */
     private val ROLEPLAY = listOf(
         Script(
             thinking = null,
             text = """
-                *The lantern flickers as she sets it on the table, the rain still dripping from her hood.*
+                *She watches the rain a moment longer, then the glass of it on the pane.*
 
-                "You're late," she says, not unkindly. "I was starting to think the river took you."
+                "I almost left before you arrived. I do that, sometimes."
 
-                *She slides a folded map across the wood and taps a spot circled in red ink.*
+                *A small turn of her head. Enough to find you in the dark.*
 
-                "This is where it happened. Are you still in?"
+                "Stay. Tell me why you came."
             """.trimIndent()
         ),
         Script(
             thinking = null,
             text = """
-                *A slow smile. She leans back, the chair creaking under her.*
+                *Something eases in her shoulders. Not quite a smile.*
 
-                "Good. Then we leave at first light. Bring the rope, and don't tell the innkeeper where we're going."
+                "Good. Most people fill the quiet. You don't."
 
-                *Outside, thunder rolls over the hills like something waking up.*
+                *Outside, thunder rolls far off, soft as a held breath.*
+
+                "There is a place I go when the weather turns like this. Will you walk with me?"
+            """.trimIndent()
+        ),
+        Script(
+            thinking = null,
+            text = """
+                *By the door the rain has thinned to mist. She steps out first and waits.*
+
+                "Keep close. The path is easy to miss."
+
+                *Her voice stays low.* "I will not explain everything. Only what you ask."
+            """.trimIndent()
+        ),
+        Script(
+            thinking = null,
+            text = """
+                *She stops where the road forgets itself — a pale gap in the trees, nothing marked.*
+
+                "This is as far as I bring anyone," she says softly.
+
+                *She looks at you, then away.* "In with me, or back, and we never speak of it?"
             """.trimIndent()
         ),
     )

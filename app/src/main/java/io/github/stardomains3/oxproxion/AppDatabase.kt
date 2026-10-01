@@ -18,7 +18,7 @@ import java.io.RandomAccessFile
         CodeSessionEntity::class
     ],
     version = 4,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -56,12 +56,40 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** True once the database is open; lets callers skip a pointless hop to a background thread. */
+        fun isOpen(): Boolean = INSTANCE != null
+
+        /**
+         * Opens the database, and never crash-loops on one that can't be read (Keystore wiped,
+         * wrong passphrase, corrupt file, failed encrypt step): the old files are moved aside, not
+         * deleted, a fresh database starts, and a flag tells the UI to say so once.
+         * Blocking: call from a background thread.
+         */
         private fun build(context: Context): AppDatabase {
             ensureNativeLoaded()
-            val passphrase = SharedPreferencesHelper(context).getOrCreateChatDbPassphrase()
+            val prefs = SharedPreferencesHelper(context)
+            // One retry first: the Keystore can answer badly for a moment (right after unlock, say),
+            // and setting a healthy database aside for that would look like lost history.
+            for (attempt in 1..2) {
+                try {
+                    return open(context, prefs.getOrCreateChatDbPassphrase())
+                } catch (e: Exception) {
+                    Log.e(TAG, "Chat database could not be opened (attempt $attempt)", e)
+                    if (attempt == 1) Thread.sleep(300)
+                }
+            }
+            val dbFile = context.getDatabasePath(DB_NAME)
+            setAside(dbFile, System.currentTimeMillis())
+            val fresh = open(context, prefs.resetChatDbPassphrase())
+            prefs.markChatDbRecovered()
+            return fresh
+        }
+
+        /** Encrypts a leftover plaintext file, opens Room, and forces the real open so a bad key surfaces here. */
+        private fun open(context: Context, passphrase: ByteArray): AppDatabase {
             encryptPlaintextIfNeeded(context, passphrase)
             val factory = SupportOpenHelperFactory(passphrase.copyOf())
-            return Room.databaseBuilder(context, AppDatabase::class.java, DB_NAME)
+            val db = Room.databaseBuilder(context, AppDatabase::class.java, DB_NAME)
                 .openHelperFactory(factory)
                 .addMigrations(
                     DatabaseMigrations.MIGRATION_1_2,
@@ -69,6 +97,39 @@ abstract class AppDatabase : RoomDatabase() {
                     DatabaseMigrations.MIGRATION_3_4
                 )
                 .build()
+            try {
+                db.openHelper.writableDatabase
+            } catch (e: Exception) {
+                try {
+                    db.close()
+                } catch (_: Exception) {
+                }
+                throw e
+            }
+            return db
+        }
+
+        /**
+         * Moves [dbFile] and its -wal/-shm/-journal next to it as `chat_database.unreadable-<stamp>`
+         * (sidecars keep their suffix after that). Never deletes: the file may still be recoverable.
+         * Returns the moved main file, or null when there was nothing to move.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal fun setAside(dbFile: File, stamp: Long): File? {
+            val target = File(dbFile.path + ".unreadable-$stamp")
+            var moved: File? = null
+            for (suffix in listOf("", "-wal", "-shm", "-journal")) {
+                val from = File(dbFile.path + suffix)
+                if (!from.exists()) continue
+                val to = File(target.path + suffix)
+                if (!from.renameTo(to)) {
+                    // Rename can fail across mounts; a copy that finished is as good as a move.
+                    from.copyTo(to, overwrite = true)
+                    from.delete()
+                }
+                if (suffix.isEmpty()) moved = to
+            }
+            return moved
         }
 
         /**

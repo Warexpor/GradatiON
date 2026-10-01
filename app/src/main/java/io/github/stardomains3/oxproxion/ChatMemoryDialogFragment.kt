@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import android.app.Dialog
+import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -17,21 +18,9 @@ class ChatMemoryDialogFragment : DialogFragment() {
         val prefs = SharedPreferencesHelper(requireContext())
         val currentCount = prefs.getChatMemoryCount()
 
-        val options = arrayOf(
-            "2 messages", "4 messages", "6 messages", "8 messages",
-            "10 messages", "12 messages", "16 messages", "20 messages", "All messages"
-        )
-
-        val checkedItem = when (currentCount) {
-            Int.MAX_VALUE -> 8
-            else -> {
-                val index = options.indexOfFirst {
-                    it.startsWith(currentCount.toString()) &&
-                        (it.length == currentCount.toString().length || it[currentCount.toString().length] == ' ')
-                }
-                if (index >= 0) index else 3
-            }
-        }
+        val counts = COUNTS
+        val options = Array(counts.size) { label(requireContext(), counts[it]) }
+        val checkedItem = counts.indexOf(currentCount).let { if (it >= 0) it else DEFAULT_INDEX }
 
         val ink = ContextCompat.getColor(requireContext(), R.color.xai_ink)
         val adapter = object : ArrayAdapter<String>(
@@ -47,23 +36,28 @@ class ChatMemoryDialogFragment : DialogFragment() {
         }
 
         return GlassAlertDialogBuilder(requireContext(), R.style.CustomMaterialAlertDialogTheme)
-            .setTitle("Chat Memory")
+            .setTitle(R.string.settings_chat_memory)
             .setSingleChoiceItems(adapter, checkedItem) { dialog, which ->
-                val selectedText = options[which]
-                val count = if (selectedText == "All messages") {
-                    Int.MAX_VALUE
-                } else {
-                    selectedText.split(" ")[0].toInt()
-                }
-
+                val count = counts[which]
                 prefs.saveChatMemoryCount(count)
 
                 val button = requireActivity().findViewById<MaterialButton>(R.id.chatMemoryButton)
-                button?.text = if (count == Int.MAX_VALUE) "All messages" else "$count messages"
+                button?.text = label(requireContext(), count)
 
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .create()
+    }
+
+    companion object {
+        /** What the picker offers, in order; [Int.MAX_VALUE] is "all". */
+        private val COUNTS = intArrayOf(2, 4, 6, 8, 10, 12, 16, 20, Int.MAX_VALUE)
+        private const val DEFAULT_INDEX = 3
+
+        /** "8 messages" or "All messages", for the picker and the settings row. */
+        fun label(context: Context, count: Int): String =
+            if (count == Int.MAX_VALUE) context.getString(R.string.chat_memory_all)
+            else context.resources.getQuantityString(R.plurals.chat_memory_messages, count, count)
     }
 }

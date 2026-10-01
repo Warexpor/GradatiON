@@ -35,6 +35,15 @@ class CodeModelSelectionTest {
         assertNull(CodeModelSelection.resolveSelection(emptyList(), null))
     }
 
+    @Test fun listLabelDropsProviderOnly() {
+        assertEquals("claude-sonnet-4", CodeModelSelection.listLabel("anthropic/claude-sonnet-4"))
+        assertEquals("claude/sonnet", CodeModelSelection.listLabel("anthropic/claude/sonnet"))
+        assertEquals("opus", CodeModelSelection.listLabel("provider:opus"))
+        assertEquals("claude-sonnet-4", CodeModelSelection.listLabel("claude-sonnet-4"))
+        assertEquals("anthropic", CodeModelSelection.listProvider("anthropic/claude-sonnet-4"))
+        assertNull(CodeModelSelection.listProvider("claude-sonnet-4"))
+    }
+
     @Test fun pillLabelShortensPathAndProvider() {
         assertEquals("claude-sonnet-4", CodeModelSelection.pillLabel("claude-sonnet-4"))
         assertEquals("sonnet", CodeModelSelection.pillLabel("anthropic/claude/sonnet"))

@@ -12,7 +12,7 @@
         android:id="@+id/dialog_title_timeout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Set Request Timeout"
+        android:text="@string/timeout_set_request_timeout"
         android:textColor="@color/xai_ink"
         android:textAppearance="@style/TextAppearance.Gradation.Headline"
         android:layout_marginBottom="16dp" />
@@ -22,7 +22,7 @@
         android:id="@+id/edit_text_layout_timeout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Minutes (1‑45)"
+        android:hint="@string/timeout_minutes_1_45"
         app:hintTextColor="@color/xai_mute">
 
         <com.google.android.material.textfield.TextInputEditText
@@ -40,7 +40,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="The timeout defines how long the app will wait for the AI response before terminating the request. Longer values allow the model more time to generate answers. Default is 5 minutes."
+        android:text="@string/timeout_help"
         android:textColor="@color/xai_ink"
         android:textSize="14sp"
         android:layout_marginTop="8dp"

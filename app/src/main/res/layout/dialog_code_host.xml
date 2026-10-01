@@ -210,7 +210,7 @@
             android:maxLines="1"
             android:ellipsize="end"
             android:text="@string/code_host_remove"
-            android:textColor="@color/xai_mute"
+            android:textColor="@color/delete_action"
             android:visibility="gone" />
     </LinearLayout>
 </ScrollView>

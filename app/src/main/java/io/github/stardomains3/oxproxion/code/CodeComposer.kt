@@ -22,6 +22,7 @@ import com.google.android.material.button.MaterialButton
 import io.github.stardomains3.oxproxion.AppViewModelFactory
 import io.github.stardomains3.oxproxion.ChatViewModel
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
+import io.github.stardomains3.oxproxion.TouchTargets
 import io.github.stardomains3.oxproxion.GlassLinearLayout
 import io.github.stardomains3.oxproxion.PickerPopover
 import io.github.stardomains3.oxproxion.R
@@ -81,6 +82,8 @@ class CodeComposer(
     private var slashPopover: PickerPopover? = null
 
     init {
+        // Compact pills and buttons keep their size; their hit areas grow to 44dp.
+        TouchTargets.expand(root, agentPill, folderPill, modelPill, permissionPill, attach, mic, send)
         root.glass.source = backdrop
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -171,15 +174,19 @@ class CodeComposer(
                 outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
             }
             val remove = ImageButton(context).apply {
-                val sz = (22 * d).toInt()
-                layoutParams = FrameLayout.LayoutParams(sz, sz, Gravity.TOP or Gravity.END).also {
-                    it.topMargin = (2 * d).toInt()
-                    it.marginEnd = (2 * d).toInt()
-                }
+                // A 44dp hit area around the same 22dp disc. TouchTargets.expand can't do it here:
+                // its padded rect must sit inside the host, and the disc is at the chip's corner.
+                val hit = (44 * d).toInt()
+                val gapSide = (2 * d).toInt()
+                val gapFar = (20 * d).toInt()
+                val pad = (4 * d).toInt()
+                layoutParams = FrameLayout.LayoutParams(hit, hit, Gravity.TOP or Gravity.END)
                 setImageResource(R.drawable.ic_close_x)
-                setBackgroundResource(R.drawable.bg_circle_soft)
+                background = android.graphics.drawable.InsetDrawable(
+                    context.getDrawable(R.drawable.bg_circle_soft), gapFar, gapSide, gapSide, gapFar
+                )
                 contentDescription = context.getString(R.string.cd_code_remove_attachment)
-                setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
+                setPadding(gapFar + pad, gapSide + pad, gapSide + pad, gapFar + pad)
                 setOnClickListener {
                     pendingAttachments.remove(att)
                     refreshAttachStrip()
@@ -201,6 +208,7 @@ class CodeComposer(
         // Home (agent/folder visible) uses a short label so the row fits; session keeps the full name.
         val short = agentPill.isVisible || folderPill.isVisible || modelPill.isVisible
         permissionPill.text = context.getString(if (short) permissionPillLabel(mode) else permissionLabel(mode))
+        permissionPill.setCompoundDrawablesRelativeWithIntrinsicBounds(permissionIcon(mode), 0, R.drawable.ic_expand_more, 0)
     }
 
     /** Opens the anchored glass popover above [anchor] (Grok's model-pill popover). */
@@ -212,6 +220,12 @@ class CodeComposer(
         hint: CharSequence? = null,
     ) {
         dismissSlashPopover()
+        // The glass composer sits above the scrim, so a second tap on the same pill lands on
+        // the pill: fold the card instead of rebuilding it.
+        if (popover?.isOpenOn(anchor) == true) {
+            popover?.dismiss()
+            return
+        }
         popover?.dismiss(animated = false)
         hideKeyboard()
         anchor.isSelected = true
@@ -297,6 +311,7 @@ class CodeComposer(
             PickerPopover.Row(
                 title = context.getString(permissionLabel(m)),
                 subtitle = context.getString(permissionSub(m)),
+                iconRes = permissionIcon(m),
                 selected = m == current,
                 onClick = { onPick(m) }
             )
@@ -308,7 +323,8 @@ class CodeComposer(
         if (models.isEmpty()) return
         pick(modelPill, context.getString(R.string.code_home_pick_model), models.map { m ->
             PickerPopover.Row(
-                title = m,
+                title = CodeModelSelection.listLabel(m),
+                subtitle = CodeModelSelection.listProvider(m),
                 selected = m == current,
                 onClick = { onPick(m) }
             )
@@ -374,6 +390,14 @@ class CodeComposer(
             PermissionMode.FULL_AUTO -> R.string.code_perm_full_pill
         }
 
+        /** One glyph per mode, from most to least hands-on: ask, edit alone, plan, run alone. */
+        fun permissionIcon(m: PermissionMode) = when (m) {
+            PermissionMode.ASK -> R.drawable.ic_code_perm_ask
+            PermissionMode.AUTO_EDIT -> R.drawable.ic_code_perm_edit
+            PermissionMode.PLAN -> R.drawable.ic_code_perm_plan
+            PermissionMode.FULL_AUTO -> R.drawable.ic_code_perm_auto
+        }
+
         fun permissionSub(m: PermissionMode) = when (m) {
             PermissionMode.ASK -> R.string.code_perm_ask_sub
             PermissionMode.AUTO_EDIT -> R.string.code_perm_auto_edit_sub
@@ -414,7 +438,7 @@ class CodeComposer(
             input = input,
             micButton = mic,
             wave = root.findViewById(R.id.codeComposerVoiceWave),
-            swapOut = listOf(root.findViewById(R.id.codeComposerPills)),
+            swapOut = { listOf(root.findViewById(R.id.codeComposerPills)) },
         ) { bytes, format, name -> vm.transcribeAudioForInput(bytes, format, name) }
     }
 

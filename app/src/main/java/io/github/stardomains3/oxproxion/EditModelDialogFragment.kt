@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.EditText
 import androidx.core.graphics.toColorInt
+import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -69,12 +70,16 @@ class EditModelDialogFragment : DialogFragment() {
             switchImage.isChecked  = m.isImageGenerationCapable
             switchTranscription.isChecked = m.isTranscription // NEW
             switchIsFree.isChecked = m.isFree
-            builder.setTitle("Edit Model")
-        } ?: builder.setTitle("Add Model")
+            builder.setTitle(R.string.edit_model_title)
+        } ?: builder.setTitle(R.string.add_model_title)
+
+        // Cloud models are asked for reasoning whenever it's on; only local servers need telling.
+        switchReason.isVisible = switchLan.isChecked
+        switchLan.setOnCheckedChangeListener { _, lan -> switchReason.isVisible = lan }
 
         /* ----------  buttons  ---------- */
         builder.setView(view)
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.action_save) { _, _ ->
                 val name = editName.text.toString().trim()
                 val id   = editApiId.text.toString().trim()
 
@@ -104,7 +109,7 @@ class EditModelDialogFragment : DialogFragment() {
                 existingModel?.let { old -> onModelUpdated?.invoke(old, newModel) }
                     ?: onModelAdded?.invoke(newModel)
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
 
         return builder.create()
     }

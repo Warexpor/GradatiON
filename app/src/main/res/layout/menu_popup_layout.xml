@@ -40,9 +40,9 @@
         android:paddingEnd="20dp"
         android:paddingBottom="14dp"
         android:text="@string/rp_menu_delete"
-        android:textColor="@color/xai_error"
+        android:textColor="@color/delete_action"
         android:textSize="16sp"
         app:drawableStartCompat="@drawable/ic_trash"
-        app:drawableTint="@color/xai_error" />
+        app:drawableTint="@color/delete_action" />
 
 </LinearLayout>

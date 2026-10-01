@@ -1,5 +1,7 @@
 # Code mode: plan for finishing it
 
+> **Historical, superseded.** This plan was written on 2026-09-26, before the bridge connection, the pairing flow, the demo machine and the Thinking view existed. It is kept for the design reasoning only. For what Code mode does today, see the Code section of `README.md`, `DESIGN.md` and `AGENTS.md`, and `docs/handoff.md` for the state of work.
+
 Status (2026-09-26): **UI done, harness foundation done, real connectivity not built.**
 This document is the hand-off. It tells the next agent what exists, how it is meant to work,
 and exactly what to build, in order, to ship Code mode for real.

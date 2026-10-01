@@ -16,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.SearchView
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -48,9 +49,10 @@ class PromptLibraryFragment : Fragment() {
                         requireContext().contentResolver.openOutputStream(uri)?.use { outputStream ->
                             outputStream.write(json.toByteArray())
                         }
-                        AppToast.makeText(requireContext(), "Prompts exported successfully", AppToast.LENGTH_SHORT).show()
+                        // The picker closes onto this same screen, so silence would read as a no-op.
+                        GlassNotice.show(requireContext(), getString(R.string.notice_prompts_exported))
                     } catch (e: Exception) {
-                        AppToast.makeText(requireContext(), "Error exporting prompts", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_export_prompts_failed))
                     }
                 }
             }
@@ -77,12 +79,12 @@ class PromptLibraryFragment : Fragment() {
                             }
                             sharedPreferencesHelper.saveCustomPrompts(currentPrompts)
                             loadPrompts()
-                            AppToast.makeText(requireContext(), "Prompts imported successfully", AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.notice_prompts_imported))
                         } else {
                             throw Exception("Failed to read file content.")
                         }
                     } catch (e: Exception) {
-                        AppToast.makeText(requireContext(), "Import failed. Check file format.", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_import_failed_format))
                     }
                 }
             }
@@ -102,7 +104,7 @@ class PromptLibraryFragment : Fragment() {
 
         val searchItem = toolbar.menu.findItem(R.id.action_search)
         searchView = searchItem.actionView as SearchView
-        searchView.queryHint = "Search prompts..."
+        searchView.queryHint = getString(R.string.search_prompts_hint)
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean = true
             override fun onQueryTextChange(newText: String?): Boolean {
@@ -139,7 +141,7 @@ class PromptLibraryFragment : Fragment() {
 
     private fun exportPrompts() {
         if (sharedPreferencesHelper.getCustomPrompts().isEmpty()) {
-            AppToast.makeText(requireContext(), "No prompts to export.", AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.notice_no_prompts_export))
             return
         }
         val intent = android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -176,7 +178,8 @@ class PromptLibraryFragment : Fragment() {
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Prompt", prompt.prompt)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(requireContext(), "Copied to clipboard: ${prompt.title}", AppToast.LENGTH_SHORT).show()
+                // Android 12 has no system clipboard confirmation, and the screen closes right after.
+                GlassNotice.show(requireContext(), getString(R.string.notice_prompt_copied, prompt.title))
 
                 // Disappear fragments back to ChatFragment
                 clearAllFragmentsAndGoToChat()
@@ -232,15 +235,6 @@ class PromptLibraryFragment : Fragment() {
         popupWindow.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
         popupWindow.isOutsideTouchable = true
 
-        // Dim overlay (same as system)
-        val rootView = requireActivity().window.decorView.findViewById<ViewGroup>(android.R.id.content)
-        val dimView = View(requireContext()).apply {
-            setBackgroundColor(Color.argb(140, 0, 0, 0))
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        }
-        rootView.addView(dimView)
-        popupWindow.setOnDismissListener { rootView.removeView(dimView) }
-
         val editItem = menuView.findViewById<TextView>(R.id.menu_edit)
         val deleteItem = menuView.findViewById<TextView>(R.id.menu_delete)
 
@@ -272,6 +266,7 @@ class PromptLibraryFragment : Fragment() {
         } else {
             popupWindow.showAsDropDown(anchorView)
         }
+        MenuDim.behind(popupWindow)
     }
 
     private fun navigateToEditScreen(prompt: Prompt) {

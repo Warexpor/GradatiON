@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Arcee mark (monochrome, tinted at use). Shape from LobeHub icons; the mark belongs to its owner. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M 13.236 2.377 L 2.751 20.493 H 0 L 11.863 0 l 1.373 2.377 z m 3.554 6.156 l -9.606 11.96 H 4.13 L 15.511 6.32 l 1.279 2.212 z m 6.908 11.96 H 14.05 l 8.406 -2.151 l 1.242 2.15 z m -3.42 -5.922 l -7.843 5.92 H 8.482 l 10.597 -7.997 l 1.2 2.077 z" />
+</vector>

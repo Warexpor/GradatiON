@@ -8,8 +8,10 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -91,9 +93,17 @@ object BackgroundPhoto {
                 app.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
                 var sample = 1
                 while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_EDGE) sample *= 2
-                val src = app.contentResolver.openInputStream(uri)?.use {
+                val decoded = app.contentResolver.openInputStream(uri)?.use {
                     BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
                 } ?: return@runCatching false
+                // Phone photos are stored sideways with an EXIF flag, and re-compressing drops the
+                // flag: turn the pixels upright now or the background ends up rotated for good.
+                val exif = runCatching {
+                    app.contentResolver.openInputStream(uri)?.use {
+                        ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                    }
+                }.getOrNull() ?: ExifInterface.ORIENTATION_NORMAL
+                val src = upright(decoded, exif)
                 val scale = MAX_EDGE / max(src.width, src.height).toFloat()
                 val bmp = if (scale < 1f) {
                     Bitmap.createScaledBitmap(src, (src.width * scale).roundToInt(), (src.height * scale).roundToInt(), true)
@@ -109,6 +119,24 @@ object BackgroundPhoto {
                 done(ok)
             }
         }
+    }
+
+    /** [src] turned so it reads upright for an EXIF [orientation] (the same bitmap when it already does). */
+    internal fun upright(src: Bitmap, orientation: Int): Bitmap {
+        val m = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> m.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> m.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> m.postScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> { m.postRotate(90f); m.postScale(-1f, 1f) }
+            ExifInterface.ORIENTATION_TRANSVERSE -> { m.postRotate(270f); m.postScale(-1f, 1f) }
+            else -> return src
+        }
+        val turned = Bitmap.createBitmap(src, 0, 0, src.width, src.height, m, true)
+        if (turned !== src) src.recycle()
+        return turned
     }
 
     /**
@@ -143,9 +171,11 @@ object BackgroundPhoto {
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         Canvas(out).drawBitmap(src, crop, Rect(0, 0, w, h), paint)
         if (!opts.blur) return out
-        // Blur at quarter size (it is drawn scaled up anyway): three box passes ≈ a gaussian.
-        val small = Bitmap.createScaledBitmap(out, max(1, w / 4), max(1, h / 4), true)
-        boxBlur(small, radius = max(2, small.width / 28), passes = 3)
+        // Blur at a third of the size (it is drawn scaled up anyway): three box passes ≈ a
+        // gaussian of ~1.5% of the width, a frost the photo still reads through. The old
+        // quarter-size, width/28 pass (~3.5%) smeared it into a wash.
+        val small = Bitmap.createScaledBitmap(out, max(1, w / 3), max(1, h / 3), true)
+        boxBlur(small, radius = max(1, small.width / 72), passes = 3)
         return small
     }
 

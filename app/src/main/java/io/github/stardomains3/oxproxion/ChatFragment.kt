@@ -19,7 +19,6 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Resources
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
@@ -28,7 +27,6 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.pdf.PdfRenderer
 import android.media.AudioManager
-import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -40,7 +38,6 @@ import android.os.StrictMode
 import android.print.PrintManager
 import android.provider.MediaStore
 import android.provider.Settings
-import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.text.method.LinkMovementMethod
@@ -51,7 +48,6 @@ import android.util.TypedValue
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -62,17 +58,15 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
+import coil.dispose
 import coil.load
 import android.widget.LinearLayout
 import android.widget.PopupWindow
-import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -93,6 +87,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -100,7 +95,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.snackbar.Snackbar
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.LinkResolverDef
 import io.noties.markwon.Markwon
@@ -121,6 +115,7 @@ import io.noties.markwon.syntax.SyntaxHighlightPlugin
 import io.noties.prism4j.Prism4j
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -138,25 +133,15 @@ import kotlin.ranges.contains
 import kotlin.text.get
 import kotlin.text.set
 
+/** A mode switch's thread load lands within this; the empty-state mark treats it as the switch. */
+private const val MODE_LOAD_WINDOW_MS = 1500L
+
 interface OnKeyboardShortcutListener {
     fun handleKeyDown(keyCode: Int, event: KeyEvent?): Boolean
 }
 class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListener, HistoryPanelHost {
    // private var isFontUpdate = false
     private var menuClosedByTouch = false
-    private lateinit var speechLauncher: ActivityResultLauncher<Intent>
-    private lateinit var textToSpeech: TextToSpeech
-
-    /** Character whose wallpaper the photo picker is choosing (set just before launching it). */
-    private var rpWallpaperFor: Long? = null
-    private val pickRpWallpaper = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        val id = rpWallpaperFor ?: return@registerForActivityResult
-        rpWallpaperFor = null
-        if (uri == null) return@registerForActivityResult
-        BackgroundPhoto.import(requireContext(), uri, BackgroundPhoto.slotForCharacter(id)) { ok ->
-            if (!ok) context?.let { GlassNotice.show(it, getString(R.string.toast_could_not_open_image)) }
-        }
-    }
     private var isSpeaking = false
     private var isShare = false
     private lateinit var chatFrameView: FrameLayout
@@ -184,7 +169,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var selectedAudioBytes: ByteArray? = null
     private var selectedAudioFormat: String? = null
     private var doVolScroll: Boolean = false
-    private var fromWater: Boolean = false
     private lateinit var plusButton: MaterialButton
     private lateinit var btnDecreaseFont: MaterialButton
     private lateinit var btnIncreaseFont: MaterialButton
@@ -204,6 +188,25 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private val askMode = AskModeController()
     private val rpMode = RpModeController()
     private lateinit var modelNameTextView: TextView
+    /** Roleplay's landing screen; see [RpChatsHome]. */
+    private var rpHome: RpChatsHome? = null
+    private var rpHomeOpen = false
+    /** Where Roleplay was last left: on the characters list (true) or inside a chat. Swiping back lands there. */
+    private var rpResumeAtHome = true
+    /** Set when a thread was opened on purpose, so the mode change that follows doesn't put the home over it. */
+    private var rpHomeSuppressed = false
+    private var rpHomeSessions: List<ChatSession> = emptyList()
+    private var rpHomeCharacters: List<RpCharacter> = emptyList()
+    private var rpHomeRefresh: Job? = null
+    private var rpHomeHidComposer = false
+    /** The character sheet, an overlay in this fragment's own view so pages can slide over it and leave it open. */
+    private var rpPanel: RpCharacterPanel.Host? = null
+    /** Back-stack depth when a panel page was opened; the sheet refreshes when the stack is back to it. */
+    private var rpPanelDepth = 0
+    private val rpPanelBackStackListener = androidx.fragment.app.FragmentManager.OnBackStackChangedListener {
+        if (rpPanel?.isShowing == true && parentFragmentManager.backStackEntryCount <= rpPanelDepth) refreshRpPanel()
+    }
+    private var lastSeenChatMode: ChatMode? = null
     private lateinit var modelNameShell: FrameLayout
     private lateinit var tabChat: TextView
     private lateinit var tabRoleplay: TextView
@@ -239,7 +242,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var rightButtonContainer: LinearLayout
     private lateinit var menuButton: MaterialButton
     private lateinit var controlsButton: MaterialButton
-    private var modelChipColorAnimator: ValueAnimator? = null
     private lateinit var backcopyButton: MaterialButton
     private lateinit var backButton: MaterialButton
     private lateinit var progressBar: View
@@ -248,7 +250,86 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var topBarLayout: ConstraintLayout
     private lateinit var streamButton: MaterialButton
     private lateinit var reasoningButton: MaterialButton
-    private var ttsAvailable = true
+    private val ttsAvailable = true
+
+    /** The shared engine's callbacks (a binder thread). The voice page's preview utterances are not ours. */
+    private val ttsProgress = object : UtteranceProgressListener() {
+        override fun onStart(utteranceId: String?) {}
+        override fun onDone(utteranceId: String?) {
+            if (utteranceId?.startsWith("TTS_SAVE_") == true) {
+                val parts = utteranceId.split("_")
+                if (parts.size == 4 && parts[0] == "TTS" && parts[1] == "SAVE") {
+                    val timestamp = parts[2].toLongOrNull() ?: return
+                    val position = parts[3].toIntOrNull() ?: return
+                    // Binder thread: the fragment may be gone by now, so no requireContext().
+                    val appContext = this@ChatFragment.context?.applicationContext ?: return
+                    val tempFile = File(appContext.cacheDir, "temp_tts_${timestamp}.wav")
+                    val fileName = "TTS_${timestamp}_msg${position}.wav"
+
+                    // 🎯 COROUTINES: IO → Main (Structured, Cancellable, No Thread Leaks!)
+                    lifecycleScope.launch(Dispatchers.IO) {  // 🔧 BACKGROUND I/O
+                        var success = false
+                        try {
+                            // 🔍 File ready (onDone guarantees!)
+                            if (!tempFile.exists() || tempFile.length() == 0L) {
+                                throw Exception("TTS file empty (0 bytes)")
+                            }
+
+                            // 🎯 MediaStore Downloads (NO PERMISSIONS)
+                            val contentValues = ContentValues().apply {
+                                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                                put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
+                              //  put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                                put(MediaStore.MediaColumns.RELATIVE_PATH, WorkspacePaths.mediaStoreRelativePath())
+                                put(MediaStore.MediaColumns.IS_PENDING, 1)
+                            }
+
+                            val resolver = appContext.contentResolver
+                            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                                ?: throw Exception("Failed to create MediaStore URI")
+
+                            resolver.openOutputStream(uri)?.use { outputStream ->
+                                tempFile.inputStream().use { inputStream ->
+                                    inputStream.copyTo(outputStream)
+                                }
+                            } ?: throw Exception("Failed to open OutputStream")
+
+                            // ✅ Complete
+                            contentValues.clear()
+                            contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                            resolver.update(uri, contentValues, null, null)
+
+                            success = true
+
+                        } catch (e: Exception) {
+                        } finally {
+                            // 🧹 Cleanup
+                            tempFile.delete()
+                        }
+
+                        if (success) {
+                            noticeFromAnyThread(R.string.tts_saved_to_downloads, fileName)
+                        } else {
+                            noticeFromAnyThread(R.string.tts_save_failed)
+                        }
+                    }
+                }
+            }
+            else if (utteranceId == TTS_SPEAK_ID) {
+                activity?.runOnUiThread { onSpeechFinished() }  // Run on main thread
+            }
+        }
+        @Deprecated("Deprecated in Java")
+        override fun onError(utteranceId: String?) {
+            if (utteranceId?.startsWith("TTS_SAVE_") == true) {
+                noticeFromAnyThread(R.string.toast_tts_synthesis_error)
+            }
+            else if (utteranceId == TTS_SPEAK_ID) {
+                noticeFromAnyThread(R.string.toast_tts_engine_error)
+                activity?.runOnUiThread { onSpeechFinished() }
+            }
+        }
+    }
     private lateinit var dateFmt: SimpleDateFormat
     private lateinit var timeFmt: SimpleDateFormat
     private lateinit var datetimeFmt: SimpleDateFormat
@@ -262,18 +343,15 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var sharedPreferencesHelper: SharedPreferencesHelper
     private lateinit var attachmentPreviewContainer: View
     private lateinit var previewImageView: ImageView
-    private lateinit var centerWatermarkIcon: ImageView
+    private lateinit var centerWatermarkIcon: LiquidMarkView
     private lateinit var emptyStateContainer: FrameLayout
     private lateinit var removeAttachmentButton: ImageButton
     private lateinit var headerContainer: LinearLayout
     private var overlayView: View? = null
-    private lateinit var permissionLauncher: ActivityResultLauncher<String>
     private lateinit var cameraLauncher: ActivityResultLauncher<Intent>
     private var currentCameraUri: Uri? = null
     private lateinit var cameraPermissionLauncher: ActivityResultLauncher<String>
     private lateinit var localNetworkPermissionLauncher: ActivityResultLauncher<String>
-    private lateinit var locationPermissionLauncher: ActivityResultLauncher<String>
-    private lateinit var notificationPolicyLauncher: ActivityResultLauncher<Intent>
     private lateinit var galleryPicker: ActivityResultLauncher<PickVisualMediaRequest>
     private lateinit var legacyGalleryPicker: ActivityResultLauncher<Array<String>>
     private lateinit var folderPickerLauncher: ActivityResultLauncher<Uri?>
@@ -285,12 +363,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val content: String,
         val size: Long
     )
-    private var isScrollersEnabled = false     // 🔥 Cache → NO prefs/VM in onScroll
+    private var isScrollersEnabled = false
     private var isScrollProgressEnabled = false
     private var lastContentLength = 0
-    private var mediaRecorder: MediaRecorder? = null
-    private var voiceRecordFile: File? = null
-    private var isRecording = false
     private lateinit var textFilePicker: ActivityResultLauncher<String>
     private val pendingFiles = mutableListOf<AttachedFile>()
     private val MAX_FILE_SIZE = 3 * 1024 * 1024 // 3MB total
@@ -298,65 +373,20 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     @SuppressLint("ClickableViewAccessibility")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        parentFragmentManager.addOnBackStackChangedListener(rpPanelBackStackListener)
         sharedPreferencesHelper = SharedPreferencesHelper(requireContext())
-        speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            // STT disabled
-            /*
-            if (result.resultCode == Activity.RESULT_OK) {
-                val data = result.data
-                val results = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                if (!results.isNullOrEmpty()) {
-                    val recognizedText = results[0]
-                    chatEditText.setText(recognizedText)
-                    chatEditText.setSelection(chatEditText.text.length)
-                    if (sharedPreferencesHelper.getConversationModeEnabled()) {
-                        sendChatButton.performClick()
-                    }
-                }
-            }
-            */
-        }
-        permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            // STT disabled — mic permission was only used for voice input
-            /*
-            if (isGranted) {
-                startSpeechRecognition()
-            } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_mic_permission), AppToast.LENGTH_SHORT).show()
-            }
-            */
-        }
         cameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
                 launchCamera()
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_camera_permission), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_camera_permission))
             }
         }
         localNetworkPermissionLauncher = registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { isGranted: Boolean ->
-            if (isGranted) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_lan_granted), AppToast.LENGTH_SHORT).show()
-                // Optional: Auto-trigger send or model connection if you interrupted it
-            } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_lan_permission), AppToast.LENGTH_LONG).show()
-                // Optional: Revert model selection to a cloud model
-            }
-        }
-        locationPermissionLauncher = registerForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { isGranted: Boolean ->
-            if (!isGranted) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_location_permission), AppToast.LENGTH_SHORT).show()
-            }
-        }
-
-        notificationPolicyLauncher = registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-        ) { result ->
-            // You could re-check the permission here and update the UI if necessary,
-            // but usually, the user just grants it in Settings and comes back.
+            // Granting needs no word: the system sheet closing is the answer.
+            if (!isGranted) GlassNotice.show(requireContext(), getString(R.string.toast_lan_permission))
         }
 
         cameraLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -370,56 +400,52 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             } ?: result.data?.data  // Fallbacks
 
+            currentCameraUri = null  // Always reset after callback
+            val resolver = requireContext().contentResolver
             if (result.resultCode == Activity.RESULT_OK && imageUri != null) {
-                if (discardAttachmentIfRp()) return@registerForActivityResult
-                try {
-                    // Read raw bytes first (fresh stream, one-time read)
-                    val rawBytes = requireContext().contentResolver.openInputStream(imageUri)?.use { stream ->
-                        stream.readBytes()
-                    } ?: run {
-                        AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_image), AppToast.LENGTH_SHORT).show()
-                        return@registerForActivityResult
+                // A 12 MB photo read and delete on the main thread stalls the sheet closing.
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val rawBytes = withContext(Dispatchers.IO) {
+                        try {
+                            // Read raw bytes first (fresh stream, one-time read)
+                            resolver.openInputStream(imageUri)?.use { it.readBytes() }
+                        } catch (e: Exception) {
+                            null
+                        }
                     }
-
+                    if (rawBytes == null) {
+                        GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_image))
+                        return@launch
+                    }
                     if (rawBytes.size > 12_000_000) {
-                        AppToast.makeText(requireContext(), getString(R.string.toast_image_too_large), AppToast.LENGTH_SHORT).show()
-                        requireContext().contentResolver.delete(imageUri, null, null)
-                        return@registerForActivityResult
+                        GlassNotice.show(requireContext(), getString(R.string.toast_image_too_large))
+                        withContext(Dispatchers.IO) { runCatching { resolver.delete(imageUri, null, null) } }
+                        return@launch
                     }
-
                     selectedImageBytes = rawBytes  // Raw for send (EXIF intact)
                     selectedImageMime = "image/jpeg"
-                    previewImageView.setImageURI(imageUri)  // Use Uri for preview (EXIF auto)
+                    previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
+                    previewImageView.load(imageUri)  // Coil decodes off the main thread and honours EXIF
                     attachmentPreviewContainer.visibility = View.VISIBLE
-                    AppToast.makeText(requireContext(), getString(R.string.toast_photo_saved), AppToast.LENGTH_SHORT).show()
 
-                    // NEW: Set pending as string for FlexibleMessage (MediaStore Uri already persistent)
+                    // Set pending as string for FlexibleMessage (MediaStore Uri already persistent)
                     viewModel.setPendingUserImageUri(imageUri.toString())
 
                     // Notify for gallery refresh
-                    requireContext().contentResolver.notifyChange(imageUri, null)
-                } catch (e: Exception) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_failed_process_photo), AppToast.LENGTH_SHORT).show()
-                    requireContext().contentResolver.delete(imageUri, null, null)
+                    resolver.notifyChange(imageUri, null)
                 }
             } else {
-                // Cancel or error
-                    AppToast.makeText(
-                        requireContext(),
-                        getString(
-                            if (result.resultCode == Activity.RESULT_CANCELED) {
-                                R.string.toast_capture_canceled
-                            } else {
-                                R.string.toast_capture_failed
-                            }
-                        ),
-                        AppToast.LENGTH_SHORT
-                    ).show()
+                // Cancelling needs no word; a failed capture does.
+                if (result.resultCode != Activity.RESULT_CANCELED) {
+                    GlassNotice.show(requireContext(), getString(R.string.toast_capture_failed))
+                }
                 imageUri?.let { uri ->
-                    requireContext().contentResolver.delete(uri, null, null)  // Clean up placeholder
+                    // Clean up the placeholder.
+                    viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                        runCatching { resolver.delete(uri, null, null) }
+                    }
                 }
             }
-            currentCameraUri = null  // Always reset after callback
         }
 
         folderPickerLauncher = registerForActivityResult(
@@ -433,7 +459,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 // Save via your helper
                 sharedPreferencesHelper.saveSafFolderUri(uri.toString())
 
-                AppToast.makeText(requireContext(), getString(R.string.toast_folder_granted), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_folder_granted))
             }
         }
         audioPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -449,19 +475,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             uri?.let { processPdfUri(it) }  // Null-safe: Call if non-null
         }
         textFilePicker = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-            if (uris.isNotEmpty()) {
-                // Process each URI (with size/MIME checks via processTextFile)
-                var successCount = 0
-                var errorCount = 0
-                uris.forEach { uri ->
-                    processTextFile(uri)  // Your updated function—handles one at a time
-                    // Note: Since processTextFile is async, we don't await here; toasts/UI update inside it
-                    // For batch feedback, you could collect results, but simple loop + toasts work fine
-                }
-                // Optional: Single toast after all (but since async, use a counter or LiveData)
-
-                //  AppToast.makeText(requireContext(), "${uris.size} files processed", AppToast.LENGTH_SHORT).show()
-            }
+            // One at a time, with the size and type checks inside processTextFile.
+            uris.forEach { uri -> processTextFile(uri) }
         }
         // --- Initialize Views from fragment_chat.xml ---
         pdfChatButton = view.findViewById(R.id.pdfChatButton)
@@ -534,13 +549,21 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         attachmentButton = view.findViewById(R.id.attachmentButton)
         buttonsContainer = view.findViewById(R.id.buttonsContainer)
         modelNameTextView = view.findViewById(R.id.modelNameTextView)
+        setupRpHome(view, savedInstanceState)
         modelNameShell = view.findViewById(R.id.modelNameShell)
         tabChat = view.findViewById(R.id.tabChat)
         tabRoleplay = view.findViewById(R.id.tabRoleplay)
         modeTabIndicator = view.findViewById(R.id.modeTabIndicator)
+        // A rebuilt view starts the underline at x=0; the old target belongs to the old view.
+        indicatorPlaced = false
+        indicatorTargetX = Float.NaN
+        pager = null
+        pagerOrigin = null
+        pagerBusy = false
         attachmentPreviewContainer = view.findViewById(R.id.attachmentPreviewContainer)
         previewImageView = view.findViewById(R.id.previewImageView)
         centerWatermarkIcon = view.findViewById(R.id.centerWatermarkIcon)
+        applyChatMark()
         emptyStateContainer = view.findViewById(R.id.emptyStateContainer)
         removeAttachmentButton = view.findViewById(R.id.removeAttachmentButton)
         headerContainer = view.findViewById(R.id.headerContainer)
@@ -557,100 +580,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             setSharedText(sharedText)
             arguments?.remove("shared_text") // To prevent re-processing
         }
-        textToSpeech = TextToSpeech(requireContext()) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {}
-                    override fun onDone(utteranceId: String?) {
-                        if (utteranceId?.startsWith("TTS_SAVE_") == true) {
-                            val parts = utteranceId.split("_")
-                            if (parts.size == 4 && parts[0] == "TTS" && parts[1] == "SAVE") {
-                                val timestamp = parts[2].toLongOrNull() ?: return
-                                val position = parts[3].toIntOrNull() ?: return
-                                val context = requireContext()
-                                val tempFile = File(context.cacheDir, "temp_tts_${timestamp}.wav")
-                                val fileName = "TTS_${timestamp}_msg${position}.wav"
-
-                                // 🎯 COROUTINES: IO → Main (Structured, Cancellable, No Thread Leaks!)
-                                lifecycleScope.launch(Dispatchers.IO) {  // 🔧 BACKGROUND I/O
-                                    var success = false
-                                    try {
-                                        // 🔍 File ready (onDone guarantees!)
-                                        if (!tempFile.exists() || tempFile.length() == 0L) {
-                                            throw Exception("TTS file empty (0 bytes)")
-                                        }
-
-                                        // 🎯 MediaStore Downloads (NO PERMISSIONS)
-                                        val contentValues = ContentValues().apply {
-                                            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                                            put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
-                                          //  put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                                            put(MediaStore.MediaColumns.RELATIVE_PATH, WorkspacePaths.mediaStoreRelativePath())
-                                            put(MediaStore.MediaColumns.IS_PENDING, 1)
-                                        }
-
-                                        val resolver = context.contentResolver
-                                        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-                                            ?: throw Exception("Failed to create MediaStore URI")
-
-                                        resolver.openOutputStream(uri)?.use { outputStream ->
-                                            tempFile.inputStream().use { inputStream ->
-                                                inputStream.copyTo(outputStream)
-                                            }
-                                        } ?: throw Exception("Failed to open OutputStream")
-
-                                        // ✅ Complete
-                                        contentValues.clear()
-                                        contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                                        resolver.update(uri, contentValues, null, null)
-
-                                        success = true
-
-                                    } catch (e: Exception) {
-                                    } finally {
-                                        // 🧹 Cleanup
-                                        tempFile.delete()
-                                    }
-
-                                    // 🎯 MAIN THREAD TOAST (Auto-switched!)
-                                    withContext(Dispatchers.Main) {
-                                        val message = if (success) {
-                                            "✅ Saved to Downloads: $fileName"
-                                        } else {
-                                            "❌ Save failed"
-                                        }
-                                        AppToast.makeText(context, message, AppToast.LENGTH_LONG).show()
-                                    }
-                                }
-                            }
-                        }
-                        else {
-                            requireActivity().runOnUiThread { onSpeechFinished() }  // Run on main thread
-                        }
-                    }
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        if (utteranceId?.startsWith("TTS_SAVE_") == true) {
-                            AppToast.makeText(requireContext(), getString(R.string.toast_tts_synthesis_error), AppToast.LENGTH_SHORT).show()
-                        }
-                        else {
-                            requireActivity().runOnUiThread {
-                                AppToast.makeText(
-                                    requireContext(),
-                                    getString(R.string.toast_tts_engine_error),
-                                    AppToast.LENGTH_SHORT
-                                ).show()
-                                onSpeechFinished()
-                            }
-                        }
-                    }
-                })
-                ttsAvailable = true
-            } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_tts_failed), AppToast.LENGTH_SHORT).show()
-                ttsAvailable = false
-            }
-        }
+        // The engine itself starts on first use (TtsHolder); the screen only listens and holds it open.
+        TtsHolder.hold(this)
+        TtsHolder.addListener(ttsProgress)
         val prism4j = Prism4j(ExampleGrammarLocator())
         val isNightMode = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -673,6 +605,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val taskBg = ContextCompat.getColor(requireContext(), R.color.xai_canvas_card)
 
         markwon = Markwon.builder(requireContext())
+            .textSetter { tv, text, type, done -> ChatAdapter.setReplyText(tv, text, type); done.run() }
             // ✅ TablePlugin EARLY with custom theme
             .usePlugin(TablePlugin.create(customTableTheme))
 
@@ -725,7 +658,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             // Chat look: code cards, inline code pills, calmer headings (painted by ChatTextView).
             .usePlugin(ChatMarkdown.plugin(requireContext()))
             .build()
-        // 🔥 Cache formatters (init once)
+        // Formatters are created once; scrolling must not allocate them.
         dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         timeFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
         datetimeFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).apply {
@@ -737,6 +670,23 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         setupRecyclerView()
         setupEdgeToEdge(view)
         setupGlassChrome(view)
+        // Compact glass controls keep their size; their hit areas grow to 44dp.
+        TouchTargets.expand(
+            view.findViewById(R.id.composerDock),
+            menuButton, controlsButton, modelNameTextView, speechButton, sendChatButton,
+            rpReminderButton, rpStreamButton, rpSwipePrevButton, rpSwipeNextButton
+        )
+        TouchTargets.expand(view.findViewById(R.id.extBG), scrollToTopButton, scrollToBottomButton, presetsButton2)
+        TouchTargets.expand(removeAttachmentButton.parent as ViewGroup, removeAttachmentButton)
+        // The extended top bar's toggles and the return buttons under the bar are 40dp discs.
+        TouchTargets.expand(
+            extendedTopBarContainer,
+            view.findViewById(R.id.topReasoningButton), view.findViewById(R.id.topWebSearchButton),
+            view.findViewById(R.id.topStreamButton), view.findViewById(R.id.topConvoButton),
+            view.findViewById(R.id.topToolsButton), view.findViewById(R.id.topPresetsButton),
+            view.findViewById(R.id.topSettingsButton)
+        )
+        TouchTargets.expand(topBarLayout, backcopyButton, backButton, homeButton)
 
         // In onViewCreated(), after initializing chatEditText and before setupClickListeners()
         chatEditText.addTextChangedListener(object : android.text.TextWatcher {
@@ -748,7 +698,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
             override fun afterTextChanged(s: android.text.Editable?) {
-                updateButtonVisibility()
+                updateComposerAccessoryVisibility()
                 updateSendButtonChrome()
             }
         })
@@ -804,7 +754,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     // Only toggle if it's currently OFF to avoid redundant toasts
                     if (viewModel.isStreamingEnabled.value == false) {
                         viewModel.toggleStreaming()
-                        AppToast.makeText(requireContext(), getString(R.string.toast_streaming_music), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.toast_streaming_music))
                     }
                 }
 
@@ -822,14 +772,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     selectedImageBytes = null
                     selectedImageMime = null
                     attachmentPreviewContainer.visibility = View.GONE
-                    AppToast.makeText(requireContext(), getString(R.string.toast_image_removed_no_vision), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_image_removed_no_vision))
                 }
                 // Clear staged audio if model doesn't support transcription
                 if (selectedAudioBytes != null && !viewModel.isTranscriptionModel(model)) {
                     selectedAudioBytes = null
                     selectedAudioFormat = null
                     attachmentPreviewContainer.visibility = View.GONE
-                    AppToast.makeText(requireContext(), getString(R.string.toast_audio_removed_no_transcription), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_audio_removed_no_transcription))
                 }
             }
 
@@ -840,6 +790,18 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
         var appliedComposerMode: ChatMode? = null
         viewModel.chatMode.observe(viewLifecycleOwner) { mode ->
+            val nowRp = mode == ChatMode.RP
+            if (nowRp && lastSeenChatMode != ChatMode.RP) {
+                // Roleplay opens where it was left: the characters list, or the chat you were in.
+                // A thread opened on purpose always wins.
+                rpHomeOpen = !rpHomeSuppressed && rpResumeAtHome
+                rpHomeSuppressed = false
+            } else if (!nowRp) {
+                if (lastSeenChatMode == ChatMode.RP) rpResumeAtHome = rpHomeOpen
+                rpHomeOpen = false
+                rpHomeSuppressed = false
+            }
+            lastSeenChatMode = mode
             updateRpChrome()
             val next = mode ?: ChatMode.ASK
             ambientBackground?.mode = next
@@ -856,20 +818,36 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.rpChromeRefreshEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { updateRpChrome() }
         }
+        viewModel.rpRewriteDone.observe(viewLifecycleOwner) { event ->
+            event.getContentIfNotHandled()?.let { done ->
+                GlassNotice.show(requireContext(), getString(R.string.rp_rewrite_done), getString(R.string.rp_rewrite_undo)) {
+                    viewModel.undoRpRewrite(done)
+                }
+            }
+        }
         viewModel.rpSwipeNav.observe(viewLifecycleOwner) { nav ->
             applyRpSwipeChrome(nav)
         }
-        // Code mode (third tab, on by default, Settings > Modes turns it off) lives in its own package; see CodeModeHost.
+        // Code mode (third tab, off until Settings > Modes) lives in its own package; see CodeModeHost.
         codeMode = io.github.stardomains3.oxproxion.code.CodeModeHost(this, view)
         codeMode.onTabsChanged = {
             val rp = viewModel.isRpMode()
             tabChat.isSelected = !codeMode.isActive && !rp
             tabRoleplay.isSelected = !codeMode.isActive && rp
             placeModeTabIndicator(animate = true)
+            updateRpHome()
         }
         // Tabs slide like the swipe: both pages side by side, never an empty frame between.
         listOf(tabChat, tabRoleplay, codeMode.tab).forEach { tab ->
-            tab.setOnClickListener { pageToTab(tab) }
+            tab.setOnClickListener {
+                // The Roleplay tab, tapped while you're in a chat, goes back to the chats list.
+                if (tab === tabRoleplay && viewModel.isRpMode() && !codeMode.isActive && pager == null) {
+                    hideKeyboard()
+                    openRpHome()
+                } else {
+                    pageToTab(tab)
+                }
+            }
         }
         tabRoleplay.setOnLongClickListener {
             openRpHub()
@@ -877,6 +855,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         tabRoleplay.contentDescription = getString(R.string.mode_tab_roleplay_a11y)
         refreshModeTabs()
+        watchModeSwitches()
         val retab = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             modeTabIndicator.post { placeModeTabIndicator(animate = false) }
         }
@@ -912,22 +891,18 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             presetsButton.isVisible = !isPresetsOnChatScreen && !isTopBarEnabled
         }
         viewModel.chatMessages.observe(viewLifecycleOwner) { messages ->
+            chatAdapter.continuingFrom = viewModel.continuationText
             chatAdapter.setMessages(messages)
+            restoreListSpot()
+            chatRecyclerView.post { updateJumpToBottom() }
             updateSendButtonChrome()
             val hasMessages = messages.isNotEmpty()
-            // STT disabled — watermark never used for hold-to-talk
             centerWatermarkIcon.isClickable = false
-            /*
-            val isFeatureEnabled = sharedPreferencesHelper.getWatermarkSttEnabled()
-            if (hasMessages || !isFeatureEnabled) {
-                centerWatermarkIcon.isClickable = false
-            } else {
-                centerWatermarkIcon.isClickable = true
-            }
-            */
             if(hasMessages){
-                resetChatButton.icon.alpha = 255
-                if (emptyStateContainer.isVisible && emptyStateContainer.alpha > 0f && Motion.areAnimationsEnabled(requireContext())) {
+                // Right after a mode swipe the list is the other mode's thread landing, not a
+                // conversation starting: the mark just goes, or it swells on the new page.
+                val justSwitched = android.os.SystemClock.uptimeMillis() - modeSwitchedAt < MODE_LOAD_WINDOW_MS
+                if (!justSwitched && emptyStateContainer.isVisible && emptyStateContainer.alpha > 0f && Motion.areAnimationsEnabled(requireContext())) {
                     // The mark dissolves into the background as the conversation starts.
                     emptyStateContainer.animate().cancel()
                     emptyStateContainer.animate().alpha(0f).scaleX(1.06f).scaleY(1.06f)
@@ -939,7 +914,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 } else {
                     emptyStateContainer.visibility = View.GONE
                 }
-                resetChatButton.isVisible = true
                 val lastMessage = messages.last()
                 if (lastMessage.role == "assistant" && lastMessage.content is JsonPrimitive) {
                     val contentStr = lastMessage.content.content
@@ -963,13 +937,21 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
             else
             {
-                resetChatButton.icon.alpha = 102
+                val wasHidden = !emptyStateContainer.isVisible
                 emptyStateContainer.animate().cancel()
                 emptyStateContainer.scaleX = 1f
                 emptyStateContainer.scaleY = 1f
                 emptyStateContainer.visibility = View.VISIBLE
                 bindEmptyState(viewModel.isRpMode())
-                emptyStateContainer.alpha = 1f
+                val landing = pager == null && wasHidden &&
+                    android.os.SystemClock.uptimeMillis() - modeSwitchedAt < MODE_LOAD_WINDOW_MS
+                if (landing && Motion.areAnimationsEnabled(requireContext())) {
+                    // An empty thread arriving after the slide settled fades in instead of popping.
+                    emptyStateContainer.alpha = 0f
+                    emptyStateContainer.animate().alpha(1f).setDuration(220).setInterpolator(Motion.easeOut).start()
+                } else {
+                    emptyStateContainer.alpha = 1f
+                }
             }
             if(sharedPreferencesHelper.getScrollersPreference()){
                 chatRecyclerView.post {
@@ -979,24 +961,16 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     scrollToBottomButton.setShownAnimated(canScrollDown)
                 }
             }
-            resetChatButton.isEnabled = hasMessages
+            resetChatButton.isVisible = hasMessages
+            updateMenuRowVisibilities()
            // pdfChatButton.isVisible = hasMessages
             //copyChatButton.isVisible = hasMessages
             buttonsRow2.isVisible = hasMessages
             view?.findViewById<View>(R.id.exportLabel)?.isVisible = hasMessages
         }
 
-        fun areAnimationsEnabled(context: Context): Boolean {
-            val resolver = context.contentResolver
-            return try {
-                val durationScale = Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1.0f)
-                durationScale != 0.0f
-            } catch (e: Exception) {
-                true // Default to true if we can't read settings
-            }
-        }
-
         viewModel.isAwaitingResponse.observe(viewLifecycleOwner) { isAwaiting ->
+            chatAdapter.replyInFlight = isAwaiting
             if (!isAwaiting && sharedPreferencesHelper.getConversationModeEnabled()) {
                 val messages = viewModel.chatMessages.value ?: return@observe
                 if (messages.isNotEmpty()) {
@@ -1070,16 +1044,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         val baseColor = ContextCompat.getColor(requireContext(), R.color.xai_ink)
                         val isError = lastMessage.content
                             .let { it as? JsonPrimitive }?.content?.startsWith("**Error:**") == true
-                        modelChipColorAnimator?.cancel()
+                        // Ink and the error color are the same gray in this palette, so the chip has nothing to flash.
                         modelNameTextView.setTextColor(baseColor)
-                        if (isError) {
-                            val errorColor = ContextCompat.getColor(requireContext(), R.color.xai_error)
-                            modelChipColorAnimator = ValueAnimator.ofArgb(baseColor, errorColor, errorColor, baseColor).apply {
-                                duration = 3200
-                                addUpdateListener { modelNameTextView.setTextColor(it.animatedValue as Int) }
-                                start()
-                            }
-                        }
                         if ( sharedPreferencesHelper.getAnimateBarOnError()) {
                             val borderOverlayView = view.findViewById<View>(R.id.borderOverlayView)
                             val accentColor = ContextCompat.getColor(requireContext(), R.color.xai_mute)
@@ -1096,42 +1062,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
 
-           /* if (!isAwaiting && viewModel.shouldAutoOffWebSearch()) {
-                viewModel.resetWebSearchAutoOff()
-                if (viewModel.isWebSearchEnabled.value == true) {
-                    viewModel.toggleWebSearch()  // Turn it off
-                    AppToast.makeText(requireContext(), getString(R.string.toast_web_search_auto_off), AppToast.LENGTH_SHORT).show()
-                }
-            }*/
-            if (!isAwaiting //&& viewModel.shouldAutoOffWebSearch()
-                &&
+            if (!isAwaiting &&
                 sharedPreferencesHelper.getDisableWebSearchAfterSend() &&
                 viewModel.isWebSearchEnabled.value == true) {
                 viewModel._isWebSearchEnabled.value = false
                 sharedPreferencesHelper.saveWebSearchEnabled(false)
-                //   viewModel.resetWebSearchAutoOff()
-                // viewModel.toggleWebSearch() // Turn it off
-                AppToast.makeText(requireContext(), getString(R.string.toast_web_search_auto_off), AppToast.LENGTH_SHORT).show()
             }
-           /* if (isAwaiting) {
-                if (areAnimationsEnabled(requireContext())) {
-                    // Stop any existing animation first
-                    // (materialButton.icon as? Animatable)?.stop()
-
-                    // Set and start new animated drawable
-                    val avd = AnimatedVectorDrawableCompat.create(requireContext(), R.drawable.avd_rotating_arc)
-                    materialButton.icon = avd
-                    avd?.start()
-                }
-                else {
-                    // Fallback: show static arc or different icon when animations are off
-                    materialButton.setIconResource(R.drawable.ic_stop) // or another static indicator
-                }
-            } else {
-                // Stop animation and reset to original icon
-                (materialButton.icon as? Animatable)?.stop()
-                materialButton.icon = originalSendIcon
-            }*/
         }
 
         viewModel.modelPreferenceToSave.observe(viewLifecycleOwner) { model ->
@@ -1159,7 +1095,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         // --- Credits Observer ---
         viewModel.creditsResult.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { resultMessage ->
-                AppToast.makeText(requireContext(), resultMessage, AppToast.LENGTH_LONG).show()
+                GlassNotice.show(requireContext(), resultMessage)
             }
         }
 
@@ -1242,7 +1178,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         viewModel.toastUiEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { message ->
-                AppToast.makeText(requireContext(), message, AppToast.LENGTH_LONG).show()
+                GlassNotice.show(requireContext(), message)
             }
         }
         viewModel.composerRestoreEvent.observe(viewLifecycleOwner) { event ->
@@ -1261,101 +1197,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
         }
         viewModel.toolUiEvent.observe(viewLifecycleOwner) { event ->
-            event.getContentIfNotHandled()?.let { message ->
-
-                Snackbar.make(requireView(), message, Snackbar.LENGTH_LONG)
-                    .setAction("Open Folder") {
-                        WorkspacePaths.ensureWorkspaceExists()
-                        val path = WorkspacePaths.workspaceDirForRead()
-                        val intent = Intent(Intent.ACTION_VIEW)
-
-                        // Disable StrictMode check for file:// URI
-                        try {
-                            val m = StrictMode::class.java.getMethod("disableDeathOnFileUriExposure")
-                            m.invoke(null)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-
-                        intent.setDataAndType("file://${path.absolutePath}".toUri(), "resource/folder")
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                        // Always show system chooser
-                        val chooserIntent = Intent.createChooser(intent, "Open with File Manager")
-                        startActivity(chooserIntent)
-                    }
-                    .show()
-            }
+            event.getContentIfNotHandled()?.let { message -> showFolderNotice(message) }
         }
-       /* viewModel.toolUiEvent.observe(viewLifecycleOwner) { event ->
-            event.getContentIfNotHandled()?.let { message ->
-
-                val fossifyPackage = "org.fossify.filemanager"
-                val packageManager = requireContext().packageManager
-
-                // 1. Check if app is installed
-                val isInstalled = try {
-                    packageManager.getPackageInfo(fossifyPackage, 0)
-                    true
-                } catch (e: PackageManager.NameNotFoundException) {
-                    false
-                }
-
-                if (isInstalled) {
-                    // 2. App found: Show Snackbar with Action
-                    Snackbar.make(requireView(), message, Snackbar.LENGTH_LONG)
-                        .setAction("Open Folder") {
-                            val path = WorkspacePaths.workspaceDirForRead()
-                            //val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                            val intent = Intent(Intent.ACTION_VIEW)
-                            intent.setPackage(fossifyPackage)
-                            intent.setDataAndType("file://${path.absolutePath}".toUri(), "resource/folder")
-                           // intent.setDataAndType(Uri.fromFile(path), "resource/folder")
-
-                            // --- THIS IS THE FIX ---
-                            // This forces the app to open in its own stack/window
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            // Optional: Clears the file manager if it was already open, so it refreshes to this folder
-                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            // -----------------------
-
-                            // Disable StrictMode check for file:// URI
-                            try {
-                                val m = StrictMode::class.java.getMethod("disableDeathOnFileUriExposure")
-                                m.invoke(null)
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
-
-                            startActivity(intent)
-                        }
-                        .show()
-                } else {
-                    // 3. App not found: Just show the Toast
-                    AppToast.makeText(requireContext(), message, AppToast.LENGTH_SHORT).show()
-                }
-            }
-        }*/
         viewModel.presetAppliedEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let {
                 updateSystemMessageButtonState()
                 convoButton.isSelected = sharedPreferencesHelper.getConversationModeEnabled()
             }
         }
-        /*viewModel.scrollToBottomEvent.observe(viewLifecycleOwner) { event ->
-            event.getContentIfNotHandled()?.let {
-                if (chatAdapter.itemCount > 0) {
-                    chatRecyclerView.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
-                        override fun onPreDraw(): Boolean {
-                            chatRecyclerView.viewTreeObserver.removeOnPreDrawListener(this)
-                            val position = chatAdapter.itemCount - 1
-                            layoutManager.scrollToPositionWithOffset(position, -12)
-                            return true
-                        }
-                    })
-                }
-            }
-        }*/
         viewModel.scrollToBottomEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let {
                 // Grok-style: do not yank the camera when the stream finishes.
@@ -1370,19 +1219,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
         }
-        // STT disabled
-        /*
-        val shouldStartStt = arguments?.getBoolean("start_stt_on_launch", false) ?: false
-        if (shouldStartStt) {
-            arguments?.remove("start_stt_on_launch")
-            hideKeyboard()
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            } else {
-                startSpeechRecognition()
-            }
-        }
-        */
         val selectedFontName = sharedPreferencesHelper.getSelectedFont()
         val typeface = AppFonts.resolveSelectable(requireContext(), selectedFontName)
         chatEditText.typeface = typeface ?: Typeface.DEFAULT
@@ -1423,21 +1259,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         updateExtendedTopBarVisibility(sharedPreferencesHelper.getExtendedTopBarEnabled())
         updateModelSourceIndicator()
         applyChatTextScale()
-        rootView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                // 1. IMPORTANT: Remove the listener immediately so it doesn't fire
-                // every time the layout changes (like when a message arrives)
-                view.viewTreeObserver.removeOnGlobalLayoutListener(this)
-
-                val mode = when (sharedPreferencesHelper.getThemeMode()) {
-                    SharedPreferencesHelper.THEME_LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
-                    SharedPreferencesHelper.THEME_DARK  -> AppCompatDelegate.MODE_NIGHT_YES
-                    else                               -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-                }
-                AppCompatDelegate.setDefaultNightMode(mode)
-
-            }
-        })
         if (viewModel.activeModelIsLan()) {
             checkLocalNetworkPermission()
         }
@@ -1561,7 +1382,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     // Helper to keep the code clean
     private fun applyCollapsedParams(btn: View) {
         val density = resources.displayMetrics.density
-        val size = (38 * density).toInt()
+        val size = (40 * density).toInt()
         val params = LinearLayout.LayoutParams(size, size)
         val gap = when {
             btn === controlsButton -> (8 * density).toInt()
@@ -1622,56 +1443,237 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val frame = root.findViewById<ViewGroup>(R.id.chatFrameView)
         val backdrop = root.findViewById<View>(R.id.chatBackdrop)
         val topBar = root.findViewById<View>(R.id.topBarGlass)
-        val dock = root.findViewById<View>(R.id.composerDock)
+        val dock = root.findViewById<ViewGroup>(R.id.composerDock)
         val code = root.findViewById<View>(R.id.codeModeContainer)
+        val fade = root.findViewById<View>(R.id.composerFade)
+        val list = root.findViewById<View>(R.id.chatRecyclerView)
         val barTop = topBar.paddingTop
         val dockBottom = dock.paddingBottom
         frame.clipToPadding = false
-        ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val bottom = maxOf(bars.bottom, ime.bottom)
-            v.setPadding(bars.left, 0, bars.right, 0)
-            topBar.setPadding(topBar.paddingLeft, barTop + bars.top, topBar.paddingRight, topBar.paddingBottom)
-            // Everything in the chat frame keeps its old place; only the backdrop bleeds out.
-            frame.setPadding(0, bars.top, 0, bottom)
+        // The keyboard is laid out frame by frame from its own animation, never translated: the
+        // composer, the transcript's bottom padding and (when the reader is at the newest message)
+        // its scroll all move in one layout pass. A translate-then-hand-off scheme always left a
+        // frame where one of them was a step behind, which flashed at the end of every slide.
+        var imeAnimating = false
+        var barsTop = 0
+        var barsBottom = 0
+        fun applyKb(kb: Int) {
+            val bottom = barsBottom + kb
+            if (frame.paddingTop != barsTop || frame.paddingBottom != bottom) frame.setPadding(0, barsTop, 0, bottom)
+            // Everything in the chat frame keeps its place; only the backdrop bleeds out.
             (backdrop.layoutParams as ViewGroup.MarginLayoutParams).let { lp ->
-                if (lp.topMargin != -bars.top || lp.bottomMargin != -bottom) {
-                    lp.topMargin = -bars.top
+                if (lp.topMargin != -barsTop || lp.bottomMargin != -bottom) {
+                    lp.topMargin = -barsTop
                     lp.bottomMargin = -bottom
                     backdrop.layoutParams = lp
                 }
             }
-            dock.setPadding(dock.paddingLeft, dock.paddingTop, dock.paddingRight, dockBottom + bottom)
-            code.setPadding(0, 0, 0, bottom)
+            if (dock.paddingBottom != dockBottom + bottom) {
+                dock.setPadding(dock.paddingLeft, dock.paddingTop, dock.paddingRight, dockBottom + bottom)
+            }
+            if (code.paddingBottom != bottom) code.setPadding(0, 0, 0, bottom)
+            if (kb != imePx) {
+                val delta = kb - imePx
+                imePx = kb
+                layTranscriptForKeyboard(delta)
+            }
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            barsTop = bars.top
+            barsBottom = bars.bottom
+            v.setPadding(bars.left, 0, bars.right, 0)
+            topBar.setPadding(topBar.paddingLeft, barTop + bars.top, topBar.paddingRight, topBar.paddingBottom)
+            // Mid-animation these insets are already the end state: the callback owns the keyboard.
+            if (imeAnimating) {
+                applyKb(imePx)
+            } else {
+                imeFollow = !list.canScrollVertically(1)
+                applyKb(maxOf(0, ime.bottom - bars.bottom))
+            }
             WindowInsetsCompat.CONSUMED
         }
+        // The fade under the composer follows where the composer is drawn this frame, not where
+        // a posted layout last put it: scaled from its bottom edge, so it never lags a frame
+        // behind the keyboard (it used to drop away, or stand a keyboard tall, at the handoff).
+        val fadeGap = 28 * resources.displayMetrics.density
+        val empty = root.findViewById<ViewGroup>(R.id.emptyStateContainer)
+        val emptyContent = empty.getChildAt(0) as ViewGroup
+        // Overflow when the room is short draws (then scales) instead of being cut off.
+        emptyContent.clipChildren = false
+        content.viewTreeObserver.addOnPreDrawListener {
+            if (fade.height > 0 && dock.height > 0) {
+                var top = dock.height
+                for (i in 0 until dock.childCount) {
+                    val c = dock.getChildAt(i)
+                    if (c.visibility == View.VISIBLE) top = minOf(top, c.top)
+                }
+                val composerTop = dock.top + top + dock.translationY
+                val want = ((fade.parent as View).height - composerTop + fadeGap).coerceAtLeast(1f)
+                val scale = want / fade.height
+                if (fade.pivotY != fade.height.toFloat()) fade.pivotY = fade.height.toFloat()
+                if (abs(fade.scaleY - scale) > 0.001f) fade.scaleY = scale
+                fitEmptyState(empty, emptyContent, dock.top + top + dock.translationY, fade.parent as View)
+            }
+            true
+        }
+        val imeType = WindowInsetsCompat.Type.ime()
+        ViewCompat.setWindowInsetsAnimationCallback(content, object : androidx.core.view.WindowInsetsAnimationCompat.Callback(
+            androidx.core.view.WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE
+        ) {
+            override fun onPrepare(animation: androidx.core.view.WindowInsetsAnimationCompat) {
+                if (animation.typeMask and imeType == 0) return
+                imeAnimating = true
+                imeFollow = !list.canScrollVertically(1)
+            }
+
+            override fun onProgress(
+                insets: WindowInsetsCompat,
+                runningAnimations: MutableList<androidx.core.view.WindowInsetsAnimationCompat>
+            ): WindowInsetsCompat {
+                if (imeAnimating) applyKb(maxOf(0, insets.getInsets(imeType).bottom - barsBottom))
+                return insets
+            }
+
+            override fun onEnd(animation: androidx.core.view.WindowInsetsAnimationCompat) {
+                if (animation.typeMask and imeType == 0 || !imeAnimating) return
+                imeAnimating = false
+                val ri = ViewCompat.getRootWindowInsets(content)
+                if (ri != null) applyKb(maxOf(0, ri.getInsets(imeType).bottom - barsBottom))
+                else ViewCompat.requestApplyInsets(content)
+            }
+        })
         ViewCompat.requestApplyInsets(content)
+    }
+
+    /** Keyboard height above the nav bar that is laid out right now. */
+    private var imePx = 0
+    /** The transcript's bottom padding without the keyboard: the composer and its margin. */
+    private var listChromePad = -1
+    /** The reader was at the newest message when the keyboard started moving: keep it in view. */
+    private var imeFollow = false
+
+    /**
+     * The keyboard moved by [delta]: grow (or shrink) the transcript's bottom padding by it and,
+     * when following, move the last message by the same amount, all in the coming layout pass.
+     */
+    private fun layTranscriptForKeyboard(delta: Int) {
+        val list = chatRecyclerView
+        if (listChromePad < 0) return
+        val pad = listChromePad + imePx
+        if (list.paddingBottom != pad) list.setPadding(list.paddingLeft, list.paddingTop, list.paddingRight, pad)
+        placeBottomFloaters()
+        if (!imeFollow) return
+        val lm = list.layoutManager as? LinearLayoutManager ?: return
+        val last = (list.adapter?.itemCount ?: 0) - 1
+        val lastView = lm.findViewByPosition(last) ?: return
+        val lp = lastView.layoutParams as ViewGroup.MarginLayoutParams
+        lm.scrollToPositionWithOffset(last, lm.getDecoratedTop(lastView) - lp.topMargin - list.paddingTop - delta)
+    }
+
+    /** The scroll buttons and font controls ride above the composer and the keyboard. */
+    private fun placeBottomFloaters() {
+        val root = view ?: return
+        if (chromeBottom < 0) return
+        listOfNotNull<View>(extBG, fontSizeControlsContainer, root.findViewById(R.id.jumpToBottomButton)).forEach { v ->
+            val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
+            val base = chromeBaseMargins.getOrPut(v) { lp.bottomMargin }
+            if (lp.bottomMargin != base + chromeBottom + imePx) {
+                lp.bottomMargin = base + chromeBottom + imePx
+                v.layoutParams = lp
+            }
+        }
+    }
+
+    private val emptyLoc = IntArray(2)
+    private val chromeLoc = IntArray(2)
+
+    /**
+     * The empty-state mark and greeting sit centred in the room between the top bar and the
+     * composer as it is drawn this frame, and shrink when that room gets short. Run every frame,
+     * so they glide and scale with the keyboard instead of jumping when its posted layout lands.
+     */
+    private fun fitEmptyState(empty: ViewGroup, content: ViewGroup, composerTop: Float, chromeParent: View) {
+        if (!empty.isShown || content.height == 0) return
+        empty.getLocationInWindow(emptyLoc)
+        chromeParent.getLocationInWindow(chromeLoc)
+        val bottom = composerTop + chromeLoc[1] - emptyLoc[1]
+        val lp = content.layoutParams as ViewGroup.MarginLayoutParams
+        // Its natural height: a short room clamps the column, and the rest overflows below it.
+        var natural = 0
+        for (i in 0 until content.childCount) {
+            val c = content.getChildAt(i)
+            if (c.visibility == View.GONE) continue
+            val clp = c.layoutParams as ViewGroup.MarginLayoutParams
+            natural += c.height + clp.topMargin + clp.bottomMargin
+        }
+        natural = maxOf(natural, content.height)
+        val room = bottom - empty.paddingTop - lp.bottomMargin
+        val scale = (room / natural).coerceIn(0.5f, 1f)
+        val target = (empty.paddingTop + bottom - lp.bottomMargin) / 2f
+        val ty = target - (content.top + natural / 2f)
+        content.pivotX = content.width / 2f
+        content.pivotY = natural / 2f
+        if (abs(content.translationY - ty) > 0.5f) content.translationY = ty
+        if (abs(content.scaleX - scale) > 0.001f) {
+            content.scaleX = scale
+            content.scaleY = scale
+        }
     }
 
     private fun setupGlassChrome(root: View) {
         val backdrop = root.findViewById<GlassBackdropLayout>(R.id.chatBackdrop)
         val topGlass = root.findViewById<View>(R.id.topBarGlass)
         topGlass.background?.mutate()?.alpha = 0
+        topBarFade = topGlass.background
         (chatInputContainer as? GlassLinearLayout)?.glass?.source = backdrop
         (headerContainer as? GlassLinearLayout)?.glass?.source = backdrop
         val relayout = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyChromeInsets() }
         topGlass.addOnLayoutChangeListener(relayout)
         root.findViewById<View>(R.id.composerDock).addOnLayoutChangeListener(relayout)
         chatInputContainer.addOnLayoutChangeListener(relayout)
+        // The Controls card hangs off the composer: follow it when it moves or resizes.
+        chatInputContainer.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            if (headerContainer.isVisible) headerContainer.post { placeControlsCard() }
+        }
         rpComposerExtras.addOnLayoutChangeListener(relayout)
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) = updateTopBarEdge()
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                updateTopBarEdge()
+                updateJumpToBottom()
+            }
         })
     }
 
-    /** iOS scroll-edge effect: the fade under the floating controls appears once content is beneath them. */
+    private var topBarFade: android.graphics.drawable.Drawable? = null
+
+    /** The dim under the floating controls; kept at full strength (see [edgeAlphaForList]). */
     private fun updateTopBarEdge() {
-        val fade = view?.findViewById<View>(R.id.topBarGlass)?.background ?: return
-        val under = chatRecyclerView.computeVerticalScrollOffset().toFloat()
-        val a = (255 * (under / (24f * resources.displayMetrics.density)).coerceIn(0f, 1f)).toInt()
-        if (fade.alpha != a) fade.alpha = a
+        val fade = topBarFade
+            ?: view?.findViewById<View>(R.id.topBarGlass)?.background?.also { topBarFade = it }
+            ?: return
+        // A page swipe blends the fade itself (applyPagerProgress); the list below is mid-switch.
+        if (pager != null) return
+        val a = edgeAlphaForList()
+        edgeAnimator?.cancel()
+        if (abs(fade.alpha - a) > 48 && Motion.areAnimationsEnabled(requireContext())) {
+            // A jump (a mode's list landing, a reload) eases over instead of blinking.
+            edgeAnimator = ValueAnimator.ofInt(fade.alpha, a).apply {
+                duration = 240
+                interpolator = Motion.easeOut
+                addUpdateListener { fade.alpha = it.animatedValue as Int }
+                start()
+            }
+        } else if (fade.alpha != a) {
+            fade.alpha = a
+        }
     }
+
+    private var edgeAnimator: ValueAnimator? = null
+
+    /** The dim under the top bar stays on, empty page or not, so the tabs always read apart. */
+    private fun edgeAlphaForList(): Int = 255
 
     private fun applyChromeInsets() {
         val root = view ?: return
@@ -1686,7 +1688,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             contentTop = minOf(contentTop, c.top - lp.topMargin)
         }
         val top = if (topGlass.isVisible) topGlass.height else 0
-        val bottom = (dock.height - contentTop).coerceAtLeast(0)
+        // The keyboard part is laid out frame by frame (layTranscriptForKeyboard), not from here.
+        val bottom = (dock.height - contentTop - imePx).coerceAtLeast(0)
         if (top == chromeTop && bottom == chromeBottom) return
         val grew = if (chromeBottom >= 0) bottom - chromeBottom else 0
         chromeTop = top
@@ -1696,21 +1699,15 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (view == null) return@post
             val d = resources.displayMetrics.density
             val atBottom = !chatRecyclerView.canScrollVertically(1)
+            listChromePad = bottom + (14 * d).toInt()
             chatRecyclerView.setPadding(
                 chatRecyclerView.paddingLeft,
                 top + (8 * d).toInt(),
                 chatRecyclerView.paddingRight,
-                bottom + (14 * d).toInt()
+                listChromePad + imePx
             )
             if (atBottom && grew > 0) chatRecyclerView.post { chatRecyclerView.scrollBy(0, grew) }
-            listOf(headerContainer, attachmentPreviewContainer, extBG, fontSizeControlsContainer).forEach { v ->
-                val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
-                val base = chromeBaseMargins.getOrPut(v) { lp.bottomMargin }
-                if (lp.bottomMargin != base + bottom) {
-                    lp.bottomMargin = base + bottom
-                    v.layoutParams = lp
-                }
-            }
+            placeBottomFloaters()
             (progressBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
                 if (lp.topMargin != top) {
                     lp.topMargin = top
@@ -1718,13 +1715,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
             emptyStateContainer.setPadding(0, top, 0, bottom)
-            root.findViewById<View>(R.id.composerFade)?.let { fade ->
-                val h = bottom + (28 * d).toInt()
-                if (fade.layoutParams.height != h) {
-                    fade.layoutParams.height = h
-                    fade.requestLayout()
-                }
-            }
             updateTopBarEdge()
         }
     }
@@ -1739,15 +1729,134 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     private fun followStreamingEdge() {
         if (!followStream || listDragging || followPending) return
-        followPending = true
-        chatRecyclerView.doOnPreDraw {
-            followPending = false
-            if (!followStream || listDragging) return@doOnPreDraw
-            val last = chatAdapter.itemCount - 1
-            val child = layoutManager.findViewByPosition(last) ?: return@doOnPreDraw
-            val limit = chatRecyclerView.height - chatRecyclerView.paddingBottom
-            val overflow = child.bottom - limit
-            if (overflow > 0) chatRecyclerView.scrollBy(0, overflow)
+        if (!Motion.areAnimationsEnabled(requireContext())) {
+            followPending = true
+            chatRecyclerView.doOnPreDraw {
+                followPending = false
+                val overflow = streamOverflow()
+                if (followStream && !listDragging && overflow > 0) chatRecyclerView.scrollBy(0, overflow)
+            }
+            return
+        }
+        if (followTicker == null) {
+            followLastFrameNs = 0L
+            followTicker = followFrame.also { android.view.Choreographer.getInstance().postFrameCallback(it) }
+        }
+    }
+
+    /** How far the last row's bottom sits below the composer's top edge, in px. */
+    private fun streamOverflow(): Int {
+        val last = chatAdapter.itemCount - 1
+        val child = layoutManager.findViewByPosition(last) ?: return 0
+        return child.bottom - (chatRecyclerView.height - chatRecyclerView.paddingBottom)
+    }
+
+    private var followTicker: android.view.Choreographer.FrameCallback? = null
+    private var followLastFrameNs = 0L
+    private var followCarry = 0f
+
+    /**
+     * Glides toward the growing edge instead of jumping a whole line per wrap: each frame
+     * covers a share of the remaining distance (time constant 50ms, ~90% in 110ms), so a new
+     * line reads as the page easing up. Stops once caught up or when the reader takes over.
+     */
+    private val followFrame = object : android.view.Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            if (view == null || !followStream || listDragging) {
+                followTicker = null
+                return
+            }
+            val overflow = streamOverflow()
+            if (overflow <= 0) {
+                followTicker = null
+                followCarry = 0f
+                return
+            }
+            val dtMs = if (followLastFrameNs == 0L) 16f
+                else ((frameTimeNanos - followLastFrameNs) / 1_000_000f).coerceIn(4f, 50f)
+            followLastFrameNs = frameTimeNanos
+            val share = 1f - kotlin.math.exp(-dtMs / 50f)
+            followCarry += overflow * share
+            val step = followCarry.toInt().coerceAtLeast(1).coerceAtMost(overflow)
+            followCarry = (followCarry - step).coerceAtLeast(0f)
+            chatRecyclerView.scrollBy(0, step)
+            android.view.Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+
+    private var jumpShown = false
+    private var jumpButton: View? = null
+
+    /** The jump button rises in once the latest message is more than a short way below. */
+    private fun updateJumpToBottom() {
+        val b = jumpButton ?: view?.findViewById<View>(R.id.jumpToBottomButton)?.also { jumpButton = it } ?: return
+        val show = chatAdapter.itemCount > 0 && remainingBelow() > 160 * resources.displayMetrics.density
+        if (!show) {
+            // Hide immediately. A page reset cancels the fade and would leave the button up
+            // on a thread that has nothing below.
+            jumpShown = false
+            b.animate().cancel()
+            b.alpha = 0f
+            b.isVisible = false
+            return
+        }
+        if (jumpShown && b.isVisible) return
+        jumpShown = true
+        b.animate().cancel()
+        val lift = 8f * resources.displayMetrics.density
+        if (!Motion.areAnimationsEnabled(requireContext())) {
+            b.isVisible = true
+            b.alpha = 1f
+            return
+        }
+        b.isVisible = true
+        b.translationY = lift
+        b.animate().alpha(1f).translationY(0f).setDuration(260).setInterpolator(Motion.iosOut).start()
+    }
+
+    private fun remainingBelow(): Int = chatRecyclerView.run {
+        computeVerticalScrollRange() - computeVerticalScrollOffset() - computeVerticalScrollExtent()
+    }
+
+    /**
+     * The scroll-down button: an eased glide rather than a cut. From far up, the list dips,
+     * cuts to a screen and a half short of the end, and glides the rest while it comes back.
+     */
+    private fun glideToBottom() {
+        val last = chatAdapter.itemCount - 1
+        if (last < 0) return
+        val rv = chatRecyclerView
+        if (!Motion.areAnimationsEnabled(requireContext()) || rv.height == 0) {
+            layoutManager.scrollToPositionWithOffset(last, -1000000)
+            return
+        }
+        followStream = true
+        rv.stopScroll()
+        val screen = rv.height
+        // The scroll range is an estimate while rows of very different heights are unmeasured, so
+        // one glide can stop half a screen short. Check where it landed and finish the job.
+        fun glide(attempt: Int = 0) {
+            val left = remainingBelow()
+            if (left <= 0 && !rv.canScrollVertically(1)) return
+            if (attempt >= 3) {
+                layoutManager.scrollToPositionWithOffset(last, -1000000)
+                return
+            }
+            val ms = (380 + 180 * left.coerceAtLeast(0) / screen.toFloat()).toInt().coerceIn(380, 680)
+            rv.smoothScrollBy(0, left.coerceAtLeast(screen / 2), Motion.iosOut, ms)
+            rv.postDelayed({
+                if (isAdded && rv.canScrollVertically(1)) glide(attempt + 1)
+            }, ms + 60L)
+        }
+        if (remainingBelow() > screen * 3) {
+            rv.animate().cancel()
+            rv.animate().alpha(0f).setDuration(110).setInterpolator(Motion.easeOut).withEndAction {
+                rv.scrollBy(0, remainingBelow() - (screen * 1.5f).toInt())
+                glide()
+                rv.animate().alpha(1f).setDuration(260).setInterpolator(Motion.easeOut).start()
+            }.start()
+        } else {
+            glide()
         }
     }
 
@@ -1816,15 +1925,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 hideMenu()
                 scrollChatToLatestEnd()
             },
-            onInstructMessage = { _ ->
-                val input = com.google.android.material.textfield.TextInputEditText(requireContext())
-                input.hint = getString(R.string.rp_instruct_hint)
-                input.minLines = 2
-                val wrapper = com.google.android.material.textfield.TextInputLayout(requireContext()).apply {
-                    hint = getString(R.string.rp_instruct)
-                    addView(input)
-                    setPadding(48, 24, 48, 8)
-                }
+            onInstructMessage = { position ->
+                // Rewrite: the title says it; the field only needs its placeholder.
+                val wrapper = layoutInflater.inflate(R.layout.dialog_instruct, null)
+                val input = wrapper.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.instructInput)
                 val dialog = GlassAlertDialogBuilder(
                     requireContext(),
                     R.style.CustomMaterialAlertDialogTheme
@@ -1836,16 +1940,17 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     .create()
                 dialog.setOnShowListener {
                     dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                        hideKeyboardFrom(input)
+                        requireContext().hideKeyboard(input)
                         val text = input.text?.toString()?.trim().orEmpty()
                         if (text.isBlank()) {
                             dialog.dismiss()
                             return@setOnClickListener
                         }
-                        // Keep dialog open on soft-fail so the typed instruct isn't lost.
-                        if (!viewModel.instructLastRpReply(text)) return@setOnClickListener
+                        // Keep dialog open on soft-fail so the typed note isn't lost.
+                        if (!viewModel.rewriteRpReply(position, text)) return@setOnClickListener
                         dialog.dismiss()
-                        scrollChatToLatestEnd()
+                        // The last reply streams in at the end; an earlier one changes where it is.
+                        if (position >= chatAdapter.itemCount - 1) scrollChatToLatestEnd()
                     }
                 }
                 dialog.show()
@@ -1882,30 +1987,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     .addToBackStack(null)
                     .commit()
             },
-            onSaveMarkdown = { position, rawMarkdown ->
-                viewModel.saveMarkdownToDownloads(rawMarkdown)  // Your ViewModel method
-            },
-            onCaptureItemToBitmap = ::captureItemToBitmap,
-            onShowMarkdown = { markdown ->
-                val modelString = viewModel.activeChatModel.value ?: "AI"
-                val modeltoPass = viewModel.getModelDisplayName(modelString)
-                val selectedFontName = sharedPreferencesHelper.getSelectedFont()
-                parentFragmentManager.beginTransaction()
-                    .withGrokStackAnimations()
-                    //.setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out, android.R.anim.fade_in, android.R.anim.fade_out)
-                    .hide(this)  // Hides chat fragment
-                    .add(R.id.fragment_container, MarkdownViewerFragment.newInstance(markdown,selectedFontName,modeltoPass))
-                    .addToBackStack(null)
-                    .commit()
-            },
-            onSaveHtml = { markdown ->
-                // Generate clean HTML (light theme, no custom font)
-                val htmlContent = MarkdownRenderer.toHtmlExp(markdown)
-                viewModel.saveHtmlSingleToDownloads(htmlContent)
-            },
-            onSaveText = {position, text ->
-                viewModel.saveTextToDownloads(text)
-            }, onCollapse = {
+            onCollapse = {
                 if (isScrollProgressEnabled) {
                     updateScrollProgress()
                 }
@@ -1917,9 +1999,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         scrollToTopButton.setShownAnimated(canScrollUp)
                         scrollToBottomButton.setShownAnimated(canScrollDown)
                     }
-            },
-            onSaveAsFile = { content ->
-                showSaveFileDialog(content)
             },
             forkNavStateForPosition = { position ->
                 viewModel.getForkNavForMessage(position)
@@ -1934,21 +2013,18 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
 
         )
-        chatAdapter.onTogglePin = { index ->
-            val pinned = viewModel.toggleMessagePin(index)
-            if (pinned != null) {
-                AppToast.makeText(
-                    requireContext(),
-                    getString(if (pinned) R.string.rp_pin_on else R.string.rp_pin_off),
-                    AppToast.LENGTH_SHORT
-                ).show()
-            }
-        }
+
         chatRecyclerView.apply {
             adapter = chatAdapter
             layoutManager = this@ChatFragment.layoutManager
+            // The list is match_parent; its own size does not depend on message rows.
+            // Skipping that check keeps a streaming rebind from requesting a full layout.
+            setHasFixedSize(true)
+            setItemViewCacheSize(8)
         }
         chatAdapter.onStreamVisualUpdate = { followStreamingEdge() }
+        chatAdapter.showThinking = sharedPreferencesHelper.isShowThinkingBlocks()
+        chatAdapter.onMessageMenu = { anchor, items -> showMessageMenu(anchor, items) }
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 // Freeze the ambient field while the list moves: each frame re-blurs the glass.
@@ -1970,13 +2046,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 if (isScrollProgressEnabled) {
                     updateScrollProgress()
                 }
-                if(isScrollersEnabled)
-                    chatRecyclerView.post {  // Keep post for layout safety
-                        val canScrollUp = chatRecyclerView.canScrollVertically(-1)
-                        val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                        scrollToTopButton.setShownAnimated(canScrollUp)
-                        scrollToBottomButton.setShownAnimated(canScrollDown)
-                    }
+                if (isScrollersEnabled) refreshScrollButtons()
             }
         })
 
@@ -1999,15 +2069,29 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
     }
     override fun onDestroyView() {
+        // Land any slide in flight while its views still exist; its end action must not fire into the next view.
+        if (pager != null) dropPager()
+        finishSettleNow()
+        controlTileOrder = null
+        rpHomeAnim?.cancel()
+        rpHomeAnim = null
+        rpUiWas = null
         ambientBackground = null
+        topBarFade = null
+        jumpButton = null
+        scrollerCanUp = null
+        scrollerCanDown = null
         pickerPopover?.dismiss(animated = false)
-        if (::textToSpeech.isInitialized) {
-            textToSpeech.stop()
-            textToSpeech.shutdown()
-        }
-        mediaRecorder?.release()
-        mediaRecorder = null
-        voiceRecordFile?.delete()
+        // Its scrim and card live in the view being torn down; a menu left open would outlive it.
+        messageMenu?.dismiss(animated = false)
+        parentFragmentManager.removeOnBackStackChangedListener(rpPanelBackStackListener)
+        rpPanel = null
+        TtsHolder.removeListener(ttsProgress)
+        // Leaving mid-reply cuts it off; the engine itself idles out once no screen holds it.
+        if (isSpeaking) TtsHolder.ready()?.stop()
+        isSpeaking = false
+        currentSpeakingPosition = -1
+        TtsHolder.release(this)
         super.onDestroyView()
     }
 
@@ -2027,7 +2111,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         currentTempImageFile = null
         selectedAudioBytes = null
         selectedAudioFormat = null
-        previewImageView.setImageBitmap(null)
+        clearPreview()
         pendingFiles.clear()
         updateAttachmentButton()
         chatAdapter.clearCache()
@@ -2042,10 +2126,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             selectedAudioFormat = null
             attachmentPreviewContainer.visibility = View.GONE
             viewModel.setPendingUserImageUri(null)
-            previewImageView.setImageBitmap(null)
+            clearPreview()
             currentTempImageFile?.delete()
             currentTempImageFile = null
-            AppToast.makeText(requireContext(), getString(R.string.toast_attachment_removed), AppToast.LENGTH_SHORT).show()
         }
         webSearchButton.setOnClickListener {
             //  hideMenu()
@@ -2057,20 +2140,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             showWebSearchEngineDialog()
             true
         }
-       /* toolsButton.setOnLongClickListener {
-            if (!hasFolderPermission()) {
-                val folderPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "oxproxion")
-                if (!folderPath.exists()) folderPath.mkdirs()
-                AppToast.makeText(requireContext(), getString(R.string.toast_gradation_folder), AppToast.LENGTH_LONG).show()
-                folderPickerLauncher.launch(null)
-            } else {
-                val folderPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "oxproxion")
-                if (!folderPath.exists()) folderPath.mkdirs()
-                hideMenu()
-                showToolsSelectionDialog()
-            }
-            true   // consume the long‑click
-        }*/
 
         toolsButton.setOnLongClickListener {
             // Simply open the ToolsFragment
@@ -2088,9 +2157,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
 
         toolsButton.setOnClickListener {
-            if (!hasFolderPermission()) {
+            if (!sharedPreferencesHelper.hasWorkspaceGrant()) {
                 WorkspacePaths.ensureWorkspaceExists()
-                AppToast.makeText(requireContext(), getString(R.string.toast_gradation_folder), AppToast.LENGTH_LONG).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_gradation_folder))
                 folderPickerLauncher.launch(null)
             } else {
                 WorkspacePaths.ensureWorkspaceExists()
@@ -2099,7 +2168,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
         }
         sendChatButton.setOnClickListener {
-            dictation?.finishNow()
+            // A recording still being transcribed would land in the field after the send went out.
+            if (dictation?.finishNow() == false) return@setOnClickListener
             if (sharedPreferencesHelper.getHapticButtons()) {
                 sendChatButton.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
             }
@@ -2154,10 +2224,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     viewModel.continueRpStory()
                     return@setOnClickListener
                 }
-                // RP forbids attachments; reject before file prepend so drafts stay clean.
-                if (viewModel.isRpMode() &&
-                    (selectedImageBytes != null || selectedAudioBytes != null || pendingFiles.isNotEmpty())
-                ) {
+                // RP takes photos only; reject files and audio before file prepend so drafts stay clean.
+                if (viewModel.isRpMode() && (selectedAudioBytes != null || pendingFiles.isNotEmpty())) {
                     GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
                     return@setOnClickListener
                 }
@@ -2189,41 +2257,44 @@ $cleanContent
                 val substitutedSystemPrompt = substituteVariables(systemMessage.prompt)//#subpromptcode
                 //if (prompt.isNotBlank() || selectedImageBytes != null) { //#subpromptcode replaced
                 if (substitutedPrompt.isNotBlank() || selectedImageBytes != null) { //#subpromptcode
-                    /* if (!ForegroundService.isRunningForeground) {
-                         ChatServiceGate.shouldRunService = true
-                         startForegroundService()
-                     }*/
-
-                  /*  if (ForegroundService.isRunningForeground && sharedPreferencesHelper.getNotiPreference()) {
-                        val apiIdentifier = viewModel.activeChatModel.value ?: "Unknown Model"
-                        val displayName = viewModel.getModelDisplayName(apiIdentifier)
-                        ForegroundService.updateNotificationStatusSilently(displayName, "Prompt sent. Awaiting Response.")
-                    }*/
-
                     // RP: validate before clearing the composer so character-gate failures keep the draft.
                     if (viewModel.isRpMode()) {
                         if (!viewModel.canSendRpMessage()) {
-                            AppToast.makeText(requireContext(), getString(R.string.rp_select_character), AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_select_character))
                             return@setOnClickListener
                         }
                         if (viewModel.isAwaitingResponse.value == true) {
-                            AppToast.makeText(requireContext(), getString(R.string.rp_wait_for_reply), AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_wait_for_reply))
                             return@setOnClickListener
                         }
-                        if (!viewModel.sendRpUserMessage(substitutedPrompt)) {
+                        val photo = selectedImageBytes
+                        if (photo == null) {
+                            if (!viewModel.sendRpUserMessage(substitutedPrompt)) return@setOnClickListener
+                            chatEditText.setText("")
+                            chatEditText.text.clear()
                             return@setOnClickListener
                         }
-                        chatEditText.setText("")
-                        chatEditText.text.clear()
+                        val photoMime = selectedImageMime
+                        // A 12 MB photo is a 16 MB string: encode it off the main thread.
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            val base64 = withContext(Dispatchers.Default) { Base64.encodeToString(photo, Base64.NO_WRAP) }
+                            if (!viewModel.sendRpUserMessage(substitutedPrompt, imageUrl = "data:$photoMime;base64,$base64")) return@launch
+                            chatEditText.setText("")
+                            chatEditText.text.clear()
+                            selectedImageBytes = null
+                            selectedImageMime = null
+                            attachmentPreviewContainer.visibility = View.GONE
+                        }
                         return@setOnClickListener
                     }
 
                     chatEditText.setText("")
                     chatEditText.text.clear()
 
-                    val userContent = if (selectedImageBytes != null) {
-                        val base64 = Base64.encodeToString(selectedImageBytes, Base64.NO_WRAP)
-                        val imageUrl = "data:$selectedImageMime;base64,$base64"
+                    val stagedImage = selectedImageBytes
+                    val stagedImageMime = selectedImageMime
+                    fun imageContent(base64: String) = run {
+                        val imageUrl = "data:$stagedImageMime;base64,$base64"
                         buildJsonArray {
                             // if (prompt.isNotBlank()) { //#subpromptcode replaced
                             if (substitutedPrompt.isNotBlank()) { //#subpromptcode
@@ -2250,14 +2321,16 @@ $cleanContent
                                 )
                             )
                         }
-                    } else {
-                        //  JsonPrimitive(prompt) //#subpromptcode replaced
-                        JsonPrimitive(substitutedPrompt)  //#subpromptcode
                     }
-                    //   val systemMessage = sharedPreferencesHelper.getSelectedSystemMessage() //#subpromptcode commentedout
-                    //   viewModel.sendUserMessage(userContent, systemMessage.prompt) //#subpromptcode replaced
-                    viewModel.sendUserMessage(userContent, substitutedSystemPrompt) //#subpromptcode
-                  //  chatEditText.clearFocus()
+                    if (stagedImage != null) {
+                        // A 12 MB photo is a 16 MB string: encode it off the main thread.
+                        lifecycleScope.launch {
+                            val base64 = withContext(Dispatchers.Default) { Base64.encodeToString(stagedImage, Base64.NO_WRAP) }
+                            viewModel.sendUserMessage(imageContent(base64), substitutedSystemPrompt)
+                        }
+                    } else {
+                        viewModel.sendUserMessage(JsonPrimitive(substitutedPrompt), substitutedSystemPrompt) //#subpromptcode
+                    }
                     hideMenu()
                     selectedImageBytes = null
                     selectedImageMime = null
@@ -2274,11 +2347,7 @@ $cleanContent
                     model.contains("image", ignoreCase = true)
 
             if (!isGoogleImageModel) {
-                AppToast.makeText(
-                    requireContext(),
-                    "Image generation parameters only supported for Google image models",
-                    AppToast.LENGTH_SHORT
-                ).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_image_params_google_only))
                 return@setOnClickListener
             }
 
@@ -2302,6 +2371,10 @@ $cleanContent
             hideKeyboard()
             if (viewModel.isRpMode()) showRpCharacterPanel() else showModelPopover()
         }
+        chatAdapter.onSpeakerClick = {
+            hideKeyboard()
+            showRpCharacterPanel()
+        }
 
         systemMessageButton.setOnClickListener {
             hideKeyboard()
@@ -2319,49 +2392,6 @@ $cleanContent
         resetChatButton.setOnClickListener {
             performNewChat()
         }
-        // STT disabled — watermark hold-to-talk
-        centerWatermarkIcon.setOnTouchListener { _, _ -> false }
-        /*
-        centerWatermarkIcon.setOnTouchListener { v, event ->
-            val isFeatureEnabled = sharedPreferencesHelper.getWatermarkSttEnabled()
-            val isChatEmpty = viewModel.chatMessages.value.isNullOrEmpty()
-
-            if (!isFeatureEnabled || !isChatEmpty) {
-                return@setOnTouchListener false
-            }
-
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    } else {
-                        startVoiceRecording()
-                        fromWater = true
-                        v.animate()
-                            .scaleX(2.6f)
-                            .scaleY(2.6f)
-                            .setDuration(300)
-                            .start()
-                    }
-                    true
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (isRecording) {
-                        stopVoiceRecording()
-                    }
-                    v.animate()
-                        .scaleX(1f)
-                        .scaleY(1f)
-                        .setDuration(300)
-                        .start()
-                    true
-                }
-                else -> false
-            }
-        }
-        */
-
-        // IMPORTANT: Remove the OnLongClickListener to prevent conflict with OnTouchListener
         centerWatermarkIcon.setOnLongClickListener { true }
         topReasoningButton.setOnClickListener { reasoningButton.performClick() }
         topWebSearchButton.setOnClickListener { webSearchButton.performClick() }
@@ -2392,6 +2422,7 @@ $cleanContent
         }
         newChatButton.setOnClickListener {
             if (codeMode.isActive) return@setOnClickListener codeMode.onNewPressed()
+            if (rpHome?.isShown == true) return@setOnClickListener openRpCharacterLibrary()
             resetChatButton.performClick()
         }
         newChatButton.setOnLongClickListener {
@@ -2417,6 +2448,11 @@ $cleanContent
         openSavedChatsButton.setOnClickListener {
             hideKeyboard()
             if (codeMode.isActive) return@setOnClickListener codeMode.onMenuPressed()
+            // Roleplay keeps no history of its own: inside a chat this is the way back to the characters.
+            // On the list it goes straight to Settings, the one thing History offered Roleplay.
+            if (viewModel.isRpMode()) {
+                return@setOnClickListener if (rpHome?.isShown == true) openSettingsFromHistory() else openRpHome()
+            }
             openHistoryPanel()
         }
 
@@ -2424,7 +2460,7 @@ $cleanContent
             val messages = viewModel.chatMessages.value ?: emptyList()
 
             if (messages.isEmpty()) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_no_chat_export), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_no_chat_export))
                 return@setOnClickListener
             }
 
@@ -2435,7 +2471,7 @@ $cleanContent
             }, 500)
 
             lifecycleScope.launch {
-                val modelIdentifier = viewModel.activeChatModel.value ?: "Unknown Model"
+                val modelIdentifier = viewModel.activeChatModel.value ?: getString(R.string.unknown_model)
                 val modelName = viewModel.getModelDisplayName(modelIdentifier)
 
                 val filePath = withContext(Dispatchers.IO) {
@@ -2466,36 +2502,9 @@ $cleanContent
 
                 withContext(Dispatchers.Main) {
                     if (filePath != null) {
-                        val rootView = requireView()
-                        val context = rootView.context
-
-                        // Disable StrictMode check for file:// URI
-                        try {
-                            val m = StrictMode::class.java.getMethod("disableDeathOnFileUriExposure")
-                            m.invoke(null)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-
-                        // GradatiON workspace folder (read path may fall back to legacy folders)
-                        val path = WorkspacePaths.workspaceDirForRead()
-
-                        // Create intent to view the folder
-                        val intent = Intent(Intent.ACTION_VIEW)
-                        intent.setDataAndType("file://${path.absolutePath}".toUri(), "resource/folder")
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                        // Create the system chooser intent
-                        val chooserIntent = Intent.createChooser(intent, "Open Folder")
-
-                        // Show Snackbar with the action
-                        Snackbar.make(rootView, "PDF saved to Downloads", Snackbar.LENGTH_LONG)
-                            .setAction("Open Folder") {
-                                context.startActivity(chooserIntent)
-                            }
-                            .show()
+                        showFolderNotice(getString(R.string.toast_pdf_saved))
                     } else {
-                        AppToast.makeText(requireContext(), getString(R.string.toast_pdf_failed), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.toast_pdf_failed))
                     }
                 }
             }
@@ -2519,10 +2528,10 @@ $cleanContent
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Chat History (Markdown)", chatText)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(requireContext(), getString(R.string.toast_chat_copied_md), AppToast.LENGTH_SHORT).show()
+                flashCopied(copyChatButton)
                 true  // Consume the long press
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_copy), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_copy))
                 true
             }
         }
@@ -2533,9 +2542,9 @@ $cleanContent
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Chat History", chatText)
                 clipboard.setPrimaryClip(clip)
-                AppToast.makeText(requireContext(), getString(R.string.toast_chat_copied), AppToast.LENGTH_SHORT).show()
+                flashCopied(copyChatButton)
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_copy), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_copy))
             }
         }
         backButton.setOnLongClickListener {
@@ -2547,7 +2556,7 @@ $cleanContent
             chatEditText.text.clear()
             currentTempImageFile?.delete()
             currentTempImageFile = null
-            previewImageView.setImageBitmap(null)
+            clearPreview()
             // Add to reset logic
             pendingFiles.clear()
             updateAttachmentButton()
@@ -2566,7 +2575,7 @@ $cleanContent
             chatEditText.text.clear()
             currentTempImageFile?.delete()
             currentTempImageFile = null
-            previewImageView.setImageBitmap(null)
+            clearPreview()
             // Add to reset logic
             pendingFiles.clear()
             updateAttachmentButton()
@@ -2595,7 +2604,7 @@ $cleanContent
                 if (chatHtml.isNotBlank()) {
                     printChatHtml(chatHtml)
                 } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_print), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_print))
                 }
             }
         }
@@ -2611,10 +2620,9 @@ $cleanContent
             hideMenu()
             val chatText = viewModel.getFormattedChatHistoryMarkdownandPrint()
             if (chatText.isNotBlank()) {
-                viewModel.saveMarkdownToDownloads(chatText)
-                // No need for local Toast - ViewModel handles UI event via _toolUiEvent
+                viewModel.saveMarkdownToDownloads(chatText)  // The ViewModel reports the save through toolUiEvent.
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_save))
             }
         }
         saveEpubButton.setOnClickListener {
@@ -2627,7 +2635,7 @@ $cleanContent
                     // Call the new ViewModel function
                     viewModel.saveEpubToDownloads(innerHtml)
                 } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_save))
                 }
             }
         }
@@ -2637,7 +2645,7 @@ $cleanContent
             if (chatText.isNotBlank()) {
                 viewModel.saveTxtToDownloads(chatText)
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_save))
             }
             true  // Required for onLongClickListener
         }
@@ -2647,9 +2655,8 @@ $cleanContent
                 val innerHtml = viewModel.getFormattedChatHistoryStyledHtml()
                 if (innerHtml.isNotBlank()) {
                     viewModel.saveHtmlToDownloads(innerHtml)
-                    // VM handles success Toast via _toolUiEvent
                 } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_save), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_save))
                 }
             }
         }
@@ -2658,6 +2665,13 @@ $cleanContent
         controlsButton.setOnClickListener {
             hideKeyboard()
             dismissAttachPopup()
+            // In Roleplay this button is the character menu, like the speaker line; the
+            // controls moved into the + menu.
+            if (viewModel.isRpMode()) {
+                if (headerContainer.isVisible) hideMenu()
+                showRpCharacterPanel()
+                return@setOnClickListener
+            }
             if (headerContainer.isVisible) hideMenu() else showMenu()
         }
         menuButton.setOnClickListener {
@@ -2667,9 +2681,9 @@ $cleanContent
         menuButton.setOnLongClickListener {
             val inputText = chatEditText.text.toString().trim()
             if (inputText.isBlank()) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_no_text_to_correct), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_no_text_to_correct))
             } else if (viewModel.activeChatApiKey.isBlank()) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_api_key_missing), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_api_key_missing))
             } else {
                 menuButton.isSelected = true
                 menuButton.setIconResource(R.drawable.ic_magic)
@@ -2680,12 +2694,7 @@ $cleanContent
                         chatEditText.setText(corrected)
                         chatEditText.setSelection(corrected.length)
                     } else {
-                        AppToast.makeText(
-
-                            requireContext(),
-                            getString(R.string.toast_correction_failed),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.toast_correction_failed))
                     }
                     restoreAttachPlusIcon()
                 }
@@ -2766,7 +2775,7 @@ $cleanContent
                 val intent = Intent(Intent.ACTION_VIEW, "https://openrouter.ai/models".toUri())
                 startActivity(intent)
             } catch (e: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_open_browser_failed), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_open_browser_failed))
             }
             true
         }
@@ -2778,10 +2787,21 @@ $cleanContent
 
             if (isLyria && isStreamEnabled) {
                 // Prevent turning off streaming for Lyria
-                AppToast.makeText(requireContext(), getString(R.string.toast_streaming_required_lyria), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_streaming_required_lyria))
             } else {
                 // Normal toggle for other models or if turning it ON for Lyria
                 viewModel.toggleStreaming()
+            }
+        }
+
+        requireView().findViewById<MaterialButton>(R.id.thoughtsButton).let { thoughts ->
+            thoughts.isSelected = sharedPreferencesHelper.isShowThinkingBlocks()
+            thoughts.setOnClickListener {
+                val show = !sharedPreferencesHelper.isShowThinkingBlocks()
+                sharedPreferencesHelper.saveShowThinkingBlocks(show)
+                thoughts.isSelected = show
+                chatAdapter.showThinking = show
+                chatAdapter.notifyItemRangeChanged(0, chatAdapter.itemCount)
             }
         }
 
@@ -2797,9 +2817,9 @@ $cleanContent
             hideMenu()
 
             val fontOptions = listOf(
-                Pair("Plus Jakarta Sans", R.font.jakarta_regular as Int?),
-                Pair("Inter", R.font.inter_regular),
-                Pair("System Default", null),
+                Pair(getString(R.string.font_plus_jakarta_sans), R.font.jakarta_regular as Int?),
+                Pair(getString(R.string.font_inter), R.font.inter_regular),
+                Pair(getString(R.string.font_system_default), null),
             )
 
             fun fontNameFromRes(fontResId: Int?): String = when (fontResId) {
@@ -2883,7 +2903,6 @@ $cleanContent
             SharedPreferencesHelper(requireContext()).saveSelectedSystemMessage(defaultMessage)
             systemMessageButton.isSelected = false
             updateChatEditTextHint()
-            // AppToast.makeText(requireContext(), "System message reset to default", AppToast.LENGTH_SHORT).show()
             true
         }
 
@@ -2904,13 +2923,11 @@ $cleanContent
             }
         }
 
+        requireView().findViewById<View>(R.id.jumpToBottomButton).setOnClickListener { glideToBottom() }
+
         scrollToBottomButton.setOnClickListener {
             chatRecyclerView.post {
-                val layoutManager = chatRecyclerView.layoutManager as LinearLayoutManager
-                val lastIndex = chatAdapter.itemCount - 1
-                if (lastIndex >= 0) {
-                    layoutManager.scrollToPositionWithOffset(lastIndex, -1000000)  // Bottom-align
-                }
+                glideToBottom()
                 updateScrollButtonsVisibility()
             }
         }
@@ -2939,10 +2956,10 @@ $cleanContent
                     chatEditText.text.replace(start, end, text.toString())
                 } else {
                     // Clipboard item is not text (e.g., image, URI, etc.)
-                    AppToast.makeText(requireContext(), getString(R.string.toast_clipboard_no_text), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_clipboard_no_text))
                 }
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_paste), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_paste))
             }
         }
 
@@ -2960,10 +2977,10 @@ $cleanContent
                     sendChatButton.performClick()
                 } else {
                     // Clipboard item is not text (e.g., image, URI, etc.)
-                    AppToast.makeText(requireContext(), getString(R.string.toast_clipboard_no_text), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_clipboard_no_text))
                 }
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_paste), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_paste))
             }
             true
         }
@@ -2972,7 +2989,8 @@ $cleanContent
             input = chatEditText,
             micButton = speechButton,
             wave = requireView().findViewById(R.id.voiceWave),
-            swapOut = listOf(modelNameTextView),
+            // In Roleplay the pill is gone for good (the character chip replaced it): leave it be.
+            swapOut = { if (viewModel.isRpMode()) emptyList() else listOf(modelNameTextView) },
         ) { bytes, format, name -> viewModel.transcribeAudioForInput(bytes, format, name) }
 
         clearButton.setOnClickListener {
@@ -2997,11 +3015,6 @@ $cleanContent
     fun Context.hideKeyboard(view: View) {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         imm?.hideSoftInputFromWindow(view.windowToken, 0)
-    }
-
-    private fun hideKeyboardFrom(target: View) {
-        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-        imm?.hideSoftInputFromWindow(target.windowToken, 0)
     }
 
     private fun restoreAttachPlusIcon() {
@@ -3052,9 +3065,6 @@ $cleanContent
         dictation?.refresh()
     }
 
-    private fun updateButtonVisibility() {
-        updateComposerAccessoryVisibility()
-    }
     private fun processAudioUri(uri: Uri) {
         if (discardAttachmentIfRp()) return
         lifecycleScope.launch {
@@ -3078,7 +3088,7 @@ $cleanContent
 
 
                 if (formatFromMime !in supportedFormats && extension !in supportedFormats) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_audio_unsupported), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_audio_unsupported))
                     return@launch
                 }
 
@@ -3089,7 +3099,7 @@ $cleanContent
                 }
 
                 if (bytes == null || bytes.size > 25_000_000) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_audio_too_large), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_audio_too_large))
                     return@launch
                 }
                 if (discardAttachmentIfRp()) return@launch
@@ -3098,11 +3108,12 @@ $cleanContent
                 selectedAudioFormat = audioFormat
 
                 // Show audio attachment indicator
+                previewImageView.dispose()
+                previewImageView.scaleType = ImageView.ScaleType.CENTER_INSIDE
                 previewImageView.setImageResource(android.R.drawable.ic_media_play) // or use a custom ic_audio
                 attachmentPreviewContainer.visibility = View.VISIBLE
-                AppToast.makeText(requireContext(), getString(R.string.toast_audio_attached), AppToast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_audio_read_failed, e.message ?: ""), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_audio_read_failed, e.message ?: ""))
             }
         }
     }
@@ -3112,156 +3123,74 @@ $cleanContent
         val context = requireContext()
 
         if (safeText.length < text.length) {
-            AppToast.makeText(context, context.getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(context, context.getString(R.string.toast_tts_text_truncated))
         }
 
-        try {
-            val timestamp = System.currentTimeMillis()
-            val utteranceId = "TTS_SAVE_${timestamp}_${position}"
-            val tempFile = File(context.cacheDir, "temp_tts_${timestamp}.wav")
-            // val fileName = "TTS_${timestamp}_msg${position}.wav"  // For Toast tracking
-
-            val params = Bundle().apply {
-                putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+        TtsHolder.whenReady(context) { tts ->
+            if (!isAdded || view == null) return@whenReady
+            if (tts == null) {
+                GlassNotice.show(context, context.getString(R.string.toast_tts_failed))
+                return@whenReady
             }
+            try {
+                // The voice page's previews leave their pitch and speed on the shared engine.
+                applyReadAloudVoice(tts)
+                val timestamp = System.currentTimeMillis()
+                val utteranceId = "TTS_SAVE_${timestamp}_${position}"
+                val tempFile = File(context.cacheDir, "temp_tts_${timestamp}.wav")
+                // val fileName = "TTS_${timestamp}_msg${position}.wav"  // For Toast tracking
 
-            val result = textToSpeech.synthesizeToFile(
-                safeText,
-                params,
-                tempFile,
-                utteranceId
-            )
+                val params = Bundle().apply {
+                    putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+                }
 
-            when (result) {
-                TextToSpeech.SUCCESS -> {
-                    AppToast.makeText(context, context.getString(R.string.toast_tts_audio_generating), AppToast.LENGTH_SHORT).show()
+                val result = tts.synthesizeToFile(
+                    safeText,
+                    params,
+                    tempFile,
+                    utteranceId
+                )
+
+                // Queued: the save notice follows when the file is written.
+                if (result != TextToSpeech.SUCCESS) {
+                    GlassNotice.show(context, context.getString(R.string.toast_tts_wav_failed, result))
                 }
-                else -> {
-                    AppToast.makeText(context, context.getString(R.string.toast_tts_wav_failed, result), AppToast.LENGTH_SHORT).show()
-                }
+
+            } catch (e: Exception) {
+                GlassNotice.show(context, context.getString(R.string.toast_tts_queue_error, e.message ?: ""))
             }
-
-        } catch (e: Exception) {
-            AppToast.makeText(context, context.getString(R.string.toast_tts_queue_error, e.message ?: ""), AppToast.LENGTH_SHORT).show()
         }
     }
 
     private fun speakText(text: String, position: Int) {
-        applyReadAloudVoice()
-        if (isSpeaking) {
-            if (position == currentSpeakingPosition) {
-                // Stop current speech
-                textToSpeech.stop()
-                onSpeechFinished()
-            } else {
-                // Stop old and start new
-                textToSpeech.stop()
-                onSpeechFinished()
-                // Start new
-                isSpeaking = true
-                currentSpeakingPosition = position
-                chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
-                // flashissue: Update icon directly if holder is attached, else notify
-                updateIconDirectlyOrNotify(position, R.drawable.ic_stop_circle)
-                val safeText = text.take(3900)
-                if (safeText.length < text.length) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
-                }
-                textToSpeech.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, "tts_utterance")
+        if (isSpeaking && position == currentSpeakingPosition) {
+            TtsHolder.ready()?.stop()
+            onSpeechFinished()
+            return
+        }
+        val context = requireContext()
+        // The first read-aloud starts the shared engine; the stop icon waits for it.
+        TtsHolder.whenReady(context) { tts ->
+            if (!isAdded || view == null) return@whenReady
+            if (tts == null) {
+                GlassNotice.show(context, context.getString(R.string.toast_tts_failed))
+                return@whenReady
             }
-        } else {
+            applyReadAloudVoice(tts)
+            if (isSpeaking) {
+                tts.stop()
+                onSpeechFinished()
+            }
             isSpeaking = true
             currentSpeakingPosition = position
             chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
-            updateIconDirectlyOrNotify(position, R.drawable.ic_stop_circle)
+            updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
             val safeText = text.take(3900)
             if (safeText.length < text.length) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_tts_text_truncated), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(context, context.getString(R.string.toast_tts_text_truncated))
             }
-            textToSpeech.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, "tts_utterance")
+            tts.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, TTS_SPEAK_ID)
         }
-    }
-    private fun showSaveFileDialog(content: String) {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_save_file, null)
-        val fileNameInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.fileNameInput)
-        val fileExtensionInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.fileExtensionInput)
-
-        // Smart extension detection from content
-        val detectedExt = when {
-            // === PRIORITY 1: Markdown code fences (explicit language tags) ===
-            content.contains("```html", ignoreCase = true) ||
-                    content.contains("```htm", ignoreCase = true) -> "html"
-
-            content.contains("```kotlin", ignoreCase = true) ||
-                    content.contains("```kt", ignoreCase = true) -> "kt"
-
-            content.contains("```javascript", ignoreCase = true) ||
-                    content.contains("```js", ignoreCase = true) -> "js"
-
-            content.contains("```python", ignoreCase = true) ||
-                    content.contains("```py", ignoreCase = true) -> "py"
-
-            content.contains("```css", ignoreCase = true) -> "css"
-            content.contains("```json", ignoreCase = true) -> "json"
-            content.contains("```java", ignoreCase = true) -> "java"
-            content.contains("```xml", ignoreCase = true) -> "xml"
-            content.contains("```sql", ignoreCase = true) -> "sql"
-            content.contains("```cpp", ignoreCase = true) ||
-                    content.contains("```c++", ignoreCase = true) -> "cpp"
-
-            // === PRIORITY 2: Content-based detection (plain text without fences) ===
-            // HTML FIRST (before JS) because HTML files often contain <script> tags with const/let
-            content.contains("<!DOCTYPE html>", ignoreCase = true) ||
-                    content.contains("<html", ignoreCase = true) -> "html"
-
-            // Kotlin
-            content.contains(" fun ", ignoreCase = true) ||
-                    (content.contains("class ", ignoreCase = true) && content.contains("{")) -> "kt"
-
-            // JavaScript - only if NOT HTML (avoid matching const/let inside <script> tags)
-            !content.contains("<html", ignoreCase = true) &&
-                    (content.contains("const ", ignoreCase = true) || content.contains("let ", ignoreCase = true)) &&
-                    content.contains("{") -> "js"
-
-            // Python
-            content.contains("def ", ignoreCase = true) ||
-                    content.contains("import ", ignoreCase = true) && content.contains(":") -> "py"
-
-            else -> "txt"
-        }
-        fileExtensionInput.setText(detectedExt)
-
-        val dialog = GlassAlertDialogBuilder(requireContext(),
-            R.style.CustomMaterialAlertDialogTheme
-        )
-            .setTitle(R.string.save_as_file_title)
-            .setView(dialogView)
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                val fileName = fileNameInput.text?.toString()?.trim() ?: ""
-                val extension = fileExtensionInput.text?.toString()?.trim() ?: ""
-
-                if (fileName.isNotEmpty() && extension.isNotEmpty()) {
-                    viewModel.saveFileWithName(fileName, extension, content)
-                } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_filename_extension_required), AppToast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton(R.string.action_cancel, null)
-            .show()
-
-        // Apply dim amount like your other dialog
-        dialog.window?.let { GlassDialogs.frost(it) }
-
-        // Optional: Make the Save button disabled until text is entered
-        val saveButton = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
-        fileNameInput.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) {
-                saveButton.isEnabled = !s.isNullOrBlank()
-            }
-        })
-        saveButton.isEnabled = false
     }
     private fun updateIconDirectlyOrNotify(position: Int, @DrawableRes iconRes: Int) {
         val lm = chatRecyclerView.layoutManager as? LinearLayoutManager ?: return
@@ -3285,8 +3214,48 @@ $cleanContent
         chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
         if (pos != -1) {
             // flashissue: Update icon directly if holder is attached, else notify
-            updateIconDirectlyOrNotify(pos, R.drawable.ic_volume_up)
+            updateIconDirectlyOrNotify(pos, R.drawable.ic_msg_speak)
         }
+    }
+
+    /** TextToSpeech calls back on a binder thread: hop to main, and do nothing if the screen is gone. */
+    private fun noticeFromAnyThread(@androidx.annotation.StringRes res: Int, vararg args: Any) {
+        val host = activity ?: return
+        host.runOnUiThread { if (isAdded) GlassNotice.show(host, getString(res, *args)) }
+    }
+
+    /** Says what was saved and offers the workspace folder, for the tools and the chat exports. */
+    private fun showFolderNotice(message: CharSequence) {
+        GlassNotice.show(requireContext(), message, getString(R.string.action_open_folder)) { openWorkspaceFolder() }
+    }
+
+    private fun openWorkspaceFolder() {
+        WorkspacePaths.ensureWorkspaceExists()
+        val path = WorkspacePaths.workspaceDirForRead()
+        // The file manager gets a file:// URI, which StrictMode would otherwise refuse.
+        try {
+            StrictMode::class.java.getMethod("disableDeathOnFileUriExposure").invoke(null)
+        } catch (e: Exception) {
+            // Hidden API gone on this build: the chooser still opens.
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType("file://${path.absolutePath}".toUri(), "resource/folder")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.chooser_open_file_manager)))
+    }
+
+    /** Copy confirmation for a menu icon button: the glyph turns into a check for a moment, with a tick. */
+    private fun flashCopied(button: MaterialButton) {
+        Haptics.tap(button)
+        button.setIconResource(R.drawable.ic_check)
+        button.postDelayed({ if (button.isAttachedToWindow) button.setIconResource(R.drawable.ic_copi) }, 950L)
+    }
+
+    /** Empties the attachment thumbnail, and cancels a Coil load still on its way to it. */
+    private fun clearPreview() {
+        previewImageView.dispose()
+        previewImageView.setImageDrawable(null)
     }
     override fun handleKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
@@ -3379,7 +3348,7 @@ $cleanContent
                     )
                 }
             }
-            group.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            Haptics.tap(group)
             viewModel.checkAdvancedReasoningStatus()
             updateQuickControls()
         }
@@ -3399,7 +3368,7 @@ $cleanContent
         val label = (more as ViewGroup).getChildAt(0) as TextView
         more.setOnClickListener {
             val open = !buttonsContainer.isVisible
-            more.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            Haptics.tap(more)
             label.setText(if (open) R.string.controls_less else R.string.controls_more)
             val anim = Motion.areAnimationsEnabled(requireContext())
             chevron.animate().rotation(if (open) 180f else 0f).setDuration(if (anim) 260 else 0)
@@ -3412,6 +3381,7 @@ $cleanContent
             }
             buttonsContainer.isVisible = open
             if (open) updateMenuRowVisibilities()
+            placeControlsCard()
         }
     }
 
@@ -3422,7 +3392,11 @@ $cleanContent
         val model = viewModel.activeChatModel.value
         root.findViewById<TextView>(R.id.controlsModelName).text =
             model?.let { viewModel.getModelDisplayName(it) } ?: ""
-        val supported = viewModel.isReasoningModel(model)
+        root.findViewById<ImageView>(R.id.controlsModelIcon).setImageResource(
+            model?.let { ModelBrands.of(it)?.icon }
+                ?: if (viewModel.activeModelIsLan()) R.drawable.ic_local_network else R.drawable.ic_cloudnew
+        )
+        val supported = viewModel.canRequestReasoning(model)
         val on = viewModel.isReasoningEnabled.value == true
         val budget = sharedPreferencesHelper.getReasoningMaxTokens()?.takeIf { it > 0 } != null
         val target = when {
@@ -3452,39 +3426,94 @@ $cleanContent
         val anim = Motion.areAnimationsEnabled(requireContext())
         val d = resources.displayMetrics.density
         controlsButton.isSelected = true
-        controlsButton.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+        Haptics.tap(controlsButton)
         overlayView?.visibility = View.VISIBLE
         headerContainer.animate().cancel()
+        placeControlsCard()
         headerContainer.apply {
             visibility = View.VISIBLE
             if (anim) {
-                // Control Center: rises from the composer with a spring, rows settle in behind it.
-                pivotX = width.takeIf { it > 0 }?.div(2f) ?: (resources.displayMetrics.widthPixels / 2f)
-                pivotY = height.takeIf { it > 0 }?.toFloat() ?: (300f * d)
-                alpha = 0f
-                scaleX = 0.94f
-                scaleY = 0.94f
-                translationY = 28f * d
-                animate().alpha(1f).setDuration(160).setInterpolator(Motion.iosOut).start()
-                animate().scaleX(1f).scaleY(1f).translationY(0f)
-                    .setDuration(520).setInterpolator(Motion.spring).start()
+                // Grows up out of the composer like the other popovers; rows settle in behind it.
+                // Measured by placeControlsCard, so this works on the first open too.
+                pivotX = measuredWidth / 2f
+                pivotY = measuredHeight.toFloat()
+                alpha = 0f; scaleX = 0.86f; scaleY = 0.86f; translationY = 14f * d
+                animate().alpha(1f).setDuration(160).setInterpolator(Motion.easeOut).start()
+                controlsCardAnim = android.animation.ObjectAnimator.ofPropertyValuesHolder(
+                    this,
+                    android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, 0f)
+                ).setDuration(460).apply { interpolator = Motion.spring; start() }
                 staggerPanelRows(d)
             } else {
                 alpha = 1f; scaleX = 1f; scaleY = 1f; translationY = 0f
             }
         }
-        (chatFrameView as ViewGroup).bringChildToFront(headerContainer)
+        // The dim now sits over the whole screen, top bar included.
         dimOverlay?.apply {
             animate().cancel()
             alpha = 0f
             visibility = View.VISIBLE
             animate().alpha(0.6f).setDuration(260).setInterpolator(Motion.iosOut).start()
         }
-        animateTopBarDim(0.6f, 260)
         // Fade empty-state (mark + prompt) while menu is open
         if (emptyStateContainer.isVisible) {
             emptyStateContainer.visibility = View.GONE
         }
+    }
+
+    private var controlsCardAnim: android.animation.Animator? = null
+
+    /**
+     * Pin the Controls card above the composer, spanning it edge to edge (the same geometry
+     * [PickerPopover] uses), and cap the "More controls" grid to the room left under the top bar.
+     */
+    private fun placeControlsCard() {
+        val parent = headerContainer.parent as? View ?: return
+        val composer = chatInputContainer
+        if (parent.height == 0 || composer.width == 0) return
+        val d = resources.displayMetrics.density
+        val parentLoc = IntArray(2).also { parent.getLocationInWindow(it) }
+        val composerLoc = IntArray(2).also { composer.getLocationInWindow(it) }
+        val composerTop = composerLoc[1] - parentLoc[1]
+        val gap = (8 * d).toInt()
+        val lp = headerContainer.layoutParams as FrameLayout.LayoutParams
+        val width = composer.width
+        val left = composerLoc[0] - parentLoc[0]
+        val bottom = parent.height - composerTop + gap
+        // Room: from the top bar's bottom edge down to the card's bottom.
+        val bar = view?.findViewById<View>(R.id.topBarGlass)
+        val barBottom = bar?.let { b -> IntArray(2).also { b.getLocationInWindow(it) }[1] - parentLoc[1] + b.height } ?: 0
+        val room = (composerTop - gap - barBottom - gap).coerceAtLeast((200 * d).toInt())
+        val scroll = headerContainer.findViewById<View>(R.id.controlsMoreScroll)
+        val oldScrollHeight = scroll.layoutParams.height
+        // Measure at natural height, then cap.
+        scroll.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+        headerContainer.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val over = headerContainer.measuredHeight - room
+        val scrollHeight = if (over > 0) (scroll.measuredHeight - over).coerceAtLeast(0)
+        else ViewGroup.LayoutParams.WRAP_CONTENT
+        if (lp.width != width || lp.leftMargin != left || lp.bottomMargin != bottom ||
+            lp.gravity != (Gravity.BOTTOM or Gravity.START) || oldScrollHeight != scrollHeight
+        ) {
+            lp.width = width
+            lp.leftMargin = left
+            lp.rightMargin = 0
+            lp.bottomMargin = bottom
+            lp.gravity = Gravity.BOTTOM or Gravity.START
+            scroll.layoutParams = scroll.layoutParams.apply { height = scrollHeight }
+            headerContainer.layoutParams = lp
+        } else {
+            scroll.layoutParams.height = oldScrollHeight
+        }
+        if (over > 0) headerContainer.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
     }
 
     /** Rows of the Controls panel follow the panel in with a slight cascade. */
@@ -3570,7 +3599,10 @@ $cleanContent
         newPopover(menuButton) { open -> if (!open) setAttachPlusOpen(false) }?.show(null, rows, footer)
     }
 
-    /** Roleplay "+": scene tools instead of attachments (files are off in RP by design). */
+    /**
+     * Roleplay "+": a photo for the scene (from the library or the camera) and a scene reminder;
+     * the model's controls and the Roleplay hub sit under the line. Files and audio stay in Chat.
+     */
     private fun showRpPlusPopover() {
         if (pickerPopover?.isShowing == true) {
             pickerPopover?.dismiss()
@@ -3583,17 +3615,25 @@ $cleanContent
                 menuButton.post { showCharacterPopover() }
             }
         }
+        rows += PickerPopover.Row(getString(R.string.grok_attach_gallery), getString(R.string.rp_plus_photo_sub), R.drawable.ic_gallery) {
+            menuButton.post { launchGalleryPicker() }
+        }
+        rows += PickerPopover.Row(getString(R.string.grok_attach_camera), getString(R.string.attach_camera_sub), R.drawable.ic_camera) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            } else {
+                launchCamera()
+            }
+        }
         rows += PickerPopover.Row(getString(R.string.rp_plus_reminder), getString(R.string.rp_plus_reminder_sub), R.drawable.ic_nav_prompts) {
             insertRpReminderTemplate()
         }
-        val streaming = streamButton.isSelected
-        rows += PickerPopover.Row(
-            getString(R.string.rp_plus_stream),
-            getString(if (streaming) R.string.rp_plus_stream_on else R.string.rp_plus_stream_off),
-            R.drawable.ic_stream,
-            selected = streaming
-        ) { streamButton.performClick() }
+        // The composer's old settings button is the character menu here, so the model's controls
+        // (streaming among them) live under +.
         val footer = listOf(
+            PickerPopover.Row(getString(R.string.rp_plus_controls), getString(R.string.rp_plus_controls_sub), R.drawable.ic_sliders) {
+                menuButton.post { showMenu() }
+            },
             PickerPopover.Row(getString(R.string.drawer_nav_roleplay), getString(R.string.rp_plus_home_sub), R.drawable.ic_nav_characters) { openRpHub() }
         )
         setAttachPlusOpen(true)
@@ -3626,19 +3666,14 @@ $cleanContent
     }
 
     private fun processPickedImageUri(uri: Uri) {
-        if (discardAttachmentIfRp()) return
         val model = viewModel.activeChatModel.value
         if (model != null && !viewModel.isVisionModel(model)) {
-            AppToast.makeText(
-                requireContext(),
-                getString(R.string.toast_image_need_vision),
-                AppToast.LENGTH_SHORT
-            ).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_image_need_vision))
         }
         val resolver = requireContext().applicationContext.contentResolver
         val mime = resolver.getType(uri)
         if (mime !in setOf("image/jpeg", "image/png", "image/webp")) {
-            AppToast.makeText(requireContext(), getString(R.string.toast_unsupported_image_format), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_unsupported_image_format))
             return
         }
         viewLifecycleOwner.lifecycleScope.launch {
@@ -3663,17 +3698,17 @@ $cleanContent
             }
             if (!isAdded) return@launch
             if (bytes == null) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_image), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_image))
                 return@launch
             }
             if (bytes.size > maxBytes) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_image_too_large), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_image_too_large))
                 return@launch
             }
-            if (discardAttachmentIfRp()) return@launch
             selectedImageBytes = bytes
             selectedImageMime = mime
-            previewImageView.setImageURI(uri)
+            previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
+            previewImageView.load(uri)  // Coil decodes and downsamples off the main thread
             attachmentPreviewContainer.visibility = View.VISIBLE
             try {
                 val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -3702,14 +3737,19 @@ $cleanContent
         controlsButton.isSelected = false
         dimOverlay?.animate()?.cancel()
         headerContainer.animate().cancel()
+        controlsCardAnim?.cancel()
+        controlsCardAnim = null
         dimOverlay?.animate()?.alpha(0f)?.setDuration(menuMs)?.setInterpolator(Motion.iosIn)?.withEndAction {
             dimOverlay?.visibility = View.GONE
         }?.start()
         if (headerContainer.visibility == View.VISIBLE) animateTopBarDim(0f, menuMs)
-        headerContainer.animate().alpha(0f).scaleX(0.97f).scaleY(0.97f)
-            .translationY(maxOf(headerContainer.translationY, 14f * d))
-            .setDuration(menuMs - 20).setInterpolator(Motion.iosIn).withEndAction {
+        // Shrinks back toward the composer, the way it came (from wherever a drag left it).
+        headerContainer.animate()
+            .alpha(0f).scaleX(0.92f).scaleY(0.92f)
+            .translationY(headerContainer.translationY + 10f * d)
+            .setDuration(menuMs).setInterpolator(Motion.iosIn).withEndAction {
                 headerContainer.visibility = View.GONE
+                headerContainer.alpha = 1f
                 headerContainer.scaleX = 1f
                 headerContainer.scaleY = 1f
                 headerContainer.translationY = 0f
@@ -3726,19 +3766,13 @@ $cleanContent
         }
     }
 
-    private fun scrollToPreviousScreen() {
-        chatRecyclerView.post {
-            val height = chatRecyclerView.height
-            chatRecyclerView.smoothScrollBy(0, -height)
-            updateScrollButtonsVisibility()
-            //AppToast.makeText(requireContext(), "Scrolled up one screen", AppToast.LENGTH_SHORT).show()
-        }
-    }
+    private fun scrollToPreviousScreen() = scrollByScreen(-1)
 
-    private fun scrollToNextScreen() {
+    private fun scrollToNextScreen() = scrollByScreen(1)
+
+    private fun scrollByScreen(direction: Int) {
         chatRecyclerView.post {
-            val height = chatRecyclerView.height
-            chatRecyclerView.smoothScrollBy(0, height)
+            chatRecyclerView.smoothScrollBy(0, direction * chatRecyclerView.height)
             updateScrollButtonsVisibility()
         }
     }
@@ -3753,11 +3787,6 @@ $cleanContent
         }
     }
 
-    private fun formatModelName(modelString: String): String {
-        return modelString.substringAfterLast("/")
-            .substringBefore("@")
-            .substringBefore(":")
-    }
     private fun setupTextFilePicker() {
         attachmentButton.setOnClickListener {
             if (viewModel.isRpMode()) {
@@ -3788,7 +3817,7 @@ $cleanContent
                 return@setOnClickListener
             }
             if (model == null || !viewModel.isVisionModel(model)) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_image_pdf_not_supported), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_image_pdf_not_supported))
                 return@setOnClickListener
             }
 
@@ -3799,7 +3828,7 @@ $cleanContent
             if (supportsPdf) items.add("Choose PDF") // NEW: Add PDF option
 
             GlassAlertDialogBuilder(requireContext())
-                .setTitle("Load Image or PDF")
+                .setTitle(R.string.dialog_load_image_or_pdf)
                 .setItems(items.toTypedArray()) { _, which ->
                     when (which) {
                         0 -> { // Take Photo
@@ -3827,7 +3856,7 @@ $cleanContent
                 return@setOnLongClickListener true
             }
             if (model == null || !viewModel.isVisionModel(model)) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_image_not_supported), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_image_not_supported))
                 return@setOnLongClickListener false
             }
 
@@ -3842,38 +3871,6 @@ $cleanContent
 
     }
 
-    private fun startSpeechRecognition() {
-        // STT disabled
-        /*
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
-        try {
-            speechLauncher.launch(intent)
-        } catch (e: Exception) {
-            AppToast.makeText(requireContext(), getString(R.string.toast_speech_not_supported), AppToast.LENGTH_SHORT).show()
-        }
-        */
-    }
-    private fun startForegroundService() {
-        try {
-            val serviceIntent = Intent(requireContext(), ForegroundService::class.java)
-            val displayName = viewModel.getModelDisplayName(viewModel.activeChatModel.value ?: "Unknown Model")
-            serviceIntent.putExtra("initial_title", displayName)
-            requireContext().startService(serviceIntent)
-        } catch (e: Exception) {
-            // silently ignore — foreground service start is best-effort
-        }
-    }
-
-    private fun stopForegroundService() {
-        try {
-            ForegroundService.stopService()
-        } catch (e: Exception) {
-        }
-    }
     private fun updateModelSourceIndicator() {
         if (viewModel.isRpMode()) {
             // RP chrome owns the chip label + a11y (character / LLM / Characters).
@@ -3935,6 +3932,44 @@ $cleanContent
             topReasoningButton.strokeWidth = 0
         }
     }
+    // Held here: SharedPreferences keeps its change listeners only weakly.
+    private var roleplaySwitchWatcher: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var codeSwitchWatcher: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+
+    /**
+     * Settings can sit on top of the chat without hiding it (opened from the history panel), so
+     * neither onResume nor onHiddenChanged runs when a mode switch flips. Follow the prefs.
+     */
+    private fun watchModeSwitches() {
+        val prefs = sharedPreferencesHelper.mainPrefs
+        val rp = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                SharedPreferencesHelper.KEY_ROLEPLAY_ENABLED -> onModeSwitchChanged()
+                SharedPreferencesHelper.KEY_CHAT_MARK -> applyChatMark()
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(rp)
+        roleplaySwitchWatcher = rp
+        // Prefs only: building the hub here would open the Code database on every chat open.
+        val store = io.github.stardomains3.oxproxion.code.store.CodeStore(requireContext())
+        val code = store.addEnabledListener { onModeSwitchChanged() }
+        codeSwitchWatcher = code
+        viewLifecycleOwner.lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+                prefs.unregisterOnSharedPreferenceChangeListener(rp)
+                store.removeEnabledListener(code)
+                if (roleplaySwitchWatcher === rp) roleplaySwitchWatcher = null
+                if (codeSwitchWatcher === code) codeSwitchWatcher = null
+            }
+        })
+    }
+
+    private fun onModeSwitchChanged() {
+        if (view == null) return
+        refreshModeTabs()
+        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.refreshModeRows()
+    }
+
     /** Roleplay and Code tabs follow Settings > Modes; leaving a disabled Roleplay lands on Chat. */
     private fun refreshModeTabs() {
         if (!::tabRoleplay.isInitialized) return
@@ -3944,13 +3979,17 @@ $cleanContent
             sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, chatEditText.text?.toString().orEmpty())
             viewModel.toggleChatMode()
         }
+        if (!rpOn) closeRpPanel(animated = false)
         if (::codeMode.isInitialized) codeMode.refresh()
         modeTabIndicator.post { placeModeTabIndicator(animate = false) }
     }
 
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
-        if (hidden) pickerPopover?.dismiss(animated = false)
+        if (hidden) {
+            pickerPopover?.dismiss(animated = false)
+            messageMenu?.dismiss(animated = false)
+        }
         if (!hidden) {  // Fragment is now visible
             refreshModeTabs()
             settleSendButton()
@@ -3999,7 +4038,16 @@ $cleanContent
     private fun cancelDrawerAnimation() {
         historyDrawerContainer?.animate()?.cancel()
         historyDrawerScrim?.animate()?.cancel()
+        view?.findViewById<View>(R.id.rootLayout)?.animate()?.cancel()
     }
+
+    /**
+     * Where the chat sits while the history panel's left edge is at [panelX] (-w closed, 0 open):
+     * pinned to the panel's right edge, like the next page of a pager. A slower parallax slide
+     * left both screens' look-alike chrome (round top buttons, bottom capsules) visible at once,
+     * reading as a doubled UI.
+     */
+    private fun historyChatOffset(panelX: Float, w: Float): Float = w + panelX
 
     /**
      * Wide, deliberate swipes across the whole chat, read as pages
@@ -4011,7 +4059,12 @@ $cleanContent
     // beside the current one. Instead: snapshot the current page, switch to the next mode
     // behind the snapshot, and slide the two side by side. Taps and swipes both use it.
 
-    private class Pager(val target: TextView, val origin: TextView, val direction: Int, val shot: ImageView, val w: Float)
+    private class Pager(
+        val target: TextView, val origin: TextView, val direction: Int, val shot: ImageView, val w: Float,
+        /** Scroll-edge fade of the page being left, so the dim under the tabs blends across. */
+        val edgeFrom: Int,
+        val tabColors: android.content.res.ColorStateList,
+    )
 
     private var pager: Pager? = null
     private var pagerOrigin: TextView? = null
@@ -4038,14 +4091,34 @@ $cleanContent
     }
 
     /** The page layers that slide; the top bar and its tabs stay put. */
-    private fun modePages(): List<View> {
+    private fun modePages(): List<View> = allModePages().filter { it.isVisible }
+
+    private fun allModePages(): List<View> {
         val root = view ?: return emptyList()
         return listOfNotNull(
             root.findViewById(R.id.chatFrameView),
             root.findViewById(R.id.composerDock),
             root.findViewById(R.id.composerFade),
-            root.findViewById(R.id.codeModeContainer)
-        ).filter { it.isVisible }
+            root.findViewById(R.id.jumpToBottomButton),
+            root.findViewById(R.id.codeModeContainer),
+            // The characters list is a page too: left out, it sat still while the chat slid past it.
+            root.findViewById(R.id.rpHome)
+        )
+    }
+
+    /**
+     * Park every page layer back at rest. Cancels their animators first: a cancelled slide's
+     * page animators end on the same frame as the snapshot's, and one landing after this reset
+     * would leave the chat (composer included) parked a page off screen.
+     */
+    private fun restModePages() {
+        allModePages().forEach { page ->
+            page.animate().cancel()
+            page.translationX = 0f
+            // The jump button's alpha is its shown state. Forcing 1 brings it back on an empty page.
+            if (page.id != R.id.jumpToBottomButton) page.alpha = 1f
+        }
+        updateJumpToBottom()
     }
 
     /** Switch now, no animation. False when blocked (a reply is still streaming). */
@@ -4063,10 +4136,87 @@ $cleanContent
         codeMode.deactivate()
         if (target != current) {
             sharedPreferencesHelper.saveComposerDraft(current, chatEditText.text?.toString().orEmpty())
+            modeSwitchedAt = android.os.SystemClock.uptimeMillis()
+            captureListSpot()?.let { modeSpots[current] = it }
+            modeThreads[current] = chatAdapter.currentMessages()
+            pendingSpot = modeSpots[target]
             viewModel.toggleChatMode()
+            showCachedThread(target)
         }
         return true
     }
+
+    /** Each mode's thread as last shown, so swiping back paints it in the same frame. */
+    private val modeThreads = HashMap<ChatMode, List<FlexibleMessage>>()
+
+    /**
+     * Put the mode's last-seen thread and scroll spot on screen now, before its reload lands:
+     * the slide shows the right page, and the reload finds nothing to change.
+     */
+    private fun showCachedThread(mode: ChatMode) {
+        val cached = modeThreads[mode] ?: return
+        chatAdapter.setMessages(cached)
+        emptyStateContainer.animate().cancel()
+        emptyStateContainer.scaleX = 1f
+        emptyStateContainer.scaleY = 1f
+        emptyStateContainer.alpha = 1f
+        emptyStateContainer.isVisible = cached.isEmpty()
+        if (cached.isEmpty()) bindEmptyState(mode == ChatMode.RP)
+        val last = cached.lastIndex
+        if (last >= 0) {
+            val spot = modeSpots[mode]
+            if (spot == null || spot.atBottom || spot.position > last) {
+                layoutManager.scrollToPositionWithOffset(last, -1000000)
+            } else {
+                layoutManager.scrollToPositionWithOffset(spot.position, spot.offset)
+            }
+        }
+        pendingSpot = null
+        updateJumpToBottom()
+        chatRecyclerView.post {
+            updateJumpToBottom()
+            if (isScrollersEnabled) {
+                scrollToTopButton.setShownAnimated(chatRecyclerView.canScrollVertically(-1))
+                scrollToBottomButton.setShownAnimated(chatRecyclerView.canScrollVertically(1))
+            }
+        }
+    }
+
+    /** Where the reader was in a mode's thread, so swiping back lands on the same lines. */
+    private data class ListSpot(val sessionId: Long?, val position: Int, val offset: Int, val atBottom: Boolean)
+
+    private val modeSpots = HashMap<ChatMode, ListSpot>()
+    private var pendingSpot: ListSpot? = null
+
+    private fun captureListSpot(): ListSpot? {
+        if (chatAdapter.itemCount == 0) return null
+        val first = layoutManager.findFirstVisibleItemPosition()
+        if (first == RecyclerView.NO_POSITION) return null
+        val top = layoutManager.findViewByPosition(first)?.top ?: 0
+        return ListSpot(
+            viewModel.getCurrentSessionId(), first, top - chatRecyclerView.paddingTop,
+            atBottom = !chatRecyclerView.canScrollVertically(1)
+        )
+    }
+
+    /** The thread that just landed is the one we left: put the reader back where they were. */
+    private fun restoreListSpot() {
+        val spot = pendingSpot ?: return
+        if (android.os.SystemClock.uptimeMillis() - modeSwitchedAt > MODE_LOAD_WINDOW_MS) { pendingSpot = null; return }
+        if (spot.sessionId == null || spot.sessionId != viewModel.getCurrentSessionId()) return
+        pendingSpot = null
+        val last = chatAdapter.itemCount - 1
+        if (last < 0) return
+        // Straight away, not posted: the next layout lands on the spot, with no frame elsewhere.
+        if (spot.atBottom || spot.position > last) {
+            layoutManager.scrollToPositionWithOffset(last, -1000000)
+        } else {
+            layoutManager.scrollToPositionWithOffset(spot.position, spot.offset)
+        }
+    }
+
+    /** When Ask/RP last flipped; the next thread to load belongs to the switch, not to a new chat. */
+    private var modeSwitchedAt = 0L
 
     private fun openPager(target: TextView, direction: Int): Boolean {
         val root = view ?: return false
@@ -4074,12 +4224,13 @@ $cleanContent
         val topBar = root.findViewById<View>(R.id.topBarGlass)
         if (content.width == 0) return false
         val origin = currentTab()
+        val edgeFrom = topBar.background?.alpha ?: 0
         pagerBusy = true
         modePages().forEach { it.animate().cancel(); it.translationX = 0f; it.alpha = 1f }
         // The top bar stays on screen above both pages, so leave it out of the picture.
         val bar = topBar.visibility
         topBar.visibility = View.INVISIBLE
-        val bmp = runCatching { content.drawToBitmap(Bitmap.Config.ARGB_8888) }.getOrNull()
+        val bmp = snapshotPage(content)
         topBar.visibility = bar
         if (bmp == null) { pagerBusy = false; return false }
         val shot = ImageView(requireContext()).apply {
@@ -4100,10 +4251,50 @@ $cleanContent
             pagerBusy = false
             return false
         }
-        target.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
-        pager = Pager(target, origin, direction, shot, content.width.toFloat())
+        Haptics.tap(target)
+        edgeAnimator?.cancel()
+        pager = Pager(target, origin, direction, shot, content.width.toFloat(), edgeFrom, origin.textColors)
         movePager(0f)
         return true
+    }
+
+    /**
+     * How far the slide has come, 0 (old page) to 1 (new page): inactive tabs sit on tertiary
+     * and lighten toward ink with the finger, so the page you're leaving fades and the one
+     * you're entering brightens in lockstep with the underline.
+     */
+    private fun applyPagerProgress(p: Pager, t: Float) {
+        val k = t.coerceIn(0f, 1f)
+        val ink = ContextCompat.getColor(requireContext(), R.color.xai_ink)
+        val dim = ContextCompat.getColor(requireContext(), R.color.xai_tertiary)
+        val eval = android.animation.ArgbEvaluator()
+        p.origin.setTextColor(eval.evaluate(k, ink, dim) as Int)
+        p.target.setTextColor(eval.evaluate(k, dim, ink) as Int)
+        view?.findViewById<View>(R.id.topBarGlass)?.background?.alpha =
+            (p.edgeFrom + (edgeAlphaForList() - p.edgeFrom) * k).toInt()
+    }
+
+    /** Hand the tabs back to their selected-state colors and the fade back to the list. */
+    private fun releasePagerChrome(p: Pager) {
+        p.origin.setTextColor(p.tabColors)
+        p.target.setTextColor(p.tabColors)
+        updateTopBarEdge()
+    }
+
+    /**
+     * The page as it looks on screen. Drawn through the GPU so the composer's glass edge, the
+     * liquid mark and the ambient field come out as they are; a software canvas drops them
+     * (the glow went missing mid-swipe) and is only the fallback.
+     */
+    private fun snapshotPage(content: View): Bitmap? {
+        if (content.isHardwareAccelerated) {
+            runCatching {
+                HardwareRaster.render(content.width, content.height, software = false) { content.draw(it) }
+            }.getOrNull()?.let { return it }
+        }
+        // Software fallback: the liquid mark only has a frame to draw if it read one back.
+        if (::centerWatermarkIcon.isInitialized) centerWatermarkIcon.prepareSnapshot()
+        return runCatching { content.drawToBitmap(Bitmap.Config.ARGB_8888) }.getOrNull()
     }
 
     /** Old page (the snapshot) under the finger, the new one right beside it. */
@@ -4119,10 +4310,14 @@ $cleanContent
             modeTabIndicator.animate().cancel()
             modeTabIndicator.translationX = from + (to - from) * t
         }
+        applyPagerProgress(p, abs(dx) / w)
     }
 
-    /** Finish the slide either way; on cancel the origin mode comes back behind the snapshot. */
-    private fun settlePager(commit: Boolean) {
+    /**
+     * Finish the slide either way; on cancel the origin mode comes back behind the snapshot.
+     * [velocity] is the finger's release speed (px/s); a tab tap has none.
+     */
+    private fun settlePager(commit: Boolean, velocity: Float? = null) {
         val p = pager ?: return
         pager = null
         val w = p.w
@@ -4130,26 +4325,42 @@ $cleanContent
         val shotTo = if (commit) p.direction * w else 0f
         val pageTo = if (commit) 0f else -p.direction * w
         val lineTo = indicatorXFor(if (commit) p.target else p.origin)
-        val done = {
-            if (!commit) switchToTab(p.origin)
-            modePages().forEach { it.translationX = 0f; it.alpha = 1f }
-            // Give an async mode reload a beat to draw before the snapshot goes.
-            p.shot.postDelayed({
-                (p.shot.parent as? ViewGroup)?.removeView(p.shot)
-                (p.shot.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle()
-                p.shot.setImageDrawable(null)
-            }, if (commit) 0L else 120L)
-            pagerBusy = false
-            pagerOrigin = null
-            placeModeTabIndicator(animate = false)
+        var finished = false
+        // Runs once, whichever comes first: the animation ending, or a new gesture landing it
+        // early ([finishSettleNow], which also wants the snapshot gone before it takes another).
+        val done = { immediate: Boolean ->
+            if (!finished) {
+                finished = true
+                settleDone = null
+                p.shot.animate().cancel()
+                if (!commit) switchToTab(p.origin)
+                restModePages()
+                if (immediate) {
+                    removeShot(p.shot)
+                } else {
+                    // Give an async mode reload a beat to draw before the snapshot goes.
+                    lingeringShot = p.shot
+                    p.shot.postDelayed({ removeShot(p.shot) }, if (commit) 0L else 120L)
+                }
+                pagerBusy = false
+                pagerOrigin = null
+                placeModeTabIndicator(animate = false)
+                releasePagerChrome(p)
+            }
         }
-        if (!anim) { done(); return }
-        val duration = 300L
-        p.shot.animate().translationX(shotTo).setDuration(duration).setInterpolator(Motion.iosOut)
-            .withEndAction { done() }.start()
-        modePages().forEach { it.animate().translationX(pageTo).setDuration(duration).setInterpolator(Motion.iosOut).start() }
+        if (!anim) { done(false); return }
+        settleDone = done
+        // A released swipe carries its speed on in one spring shared by every layer, so the
+        // pages stay edge to edge. A tap has no speed to carry and uses the push curve.
+        val fling = velocity?.let { Motion.flingX(p.shot, shotTo, it, response = 0.38f) }
+        val curve: android.animation.TimeInterpolator = fling ?: Motion.iosPush
+        val duration = fling?.duration ?: 340L
+        p.shot.animate().translationX(shotTo).setDuration(duration).setInterpolator(curve)
+            .setUpdateListener { applyPagerProgress(p, abs(p.shot.translationX) / w) }
+            .withEndAction { p.shot.animate().setUpdateListener(null); done(false) }.start()
+        modePages().forEach { it.animate().translationX(pageTo).setDuration(duration).setInterpolator(curve).start() }
         if (lineTo != null) {
-            modeTabIndicator.animate().translationX(lineTo).setDuration(duration).setInterpolator(Motion.iosOut).start()
+            modeTabIndicator.animate().translationX(lineTo).setDuration(duration).setInterpolator(curve).start()
         }
     }
 
@@ -4158,12 +4369,34 @@ $cleanContent
         val p = pager ?: return
         pager = null
         switchToTab(p.origin)
-        modePages().forEach { it.translationX = 0f; it.alpha = 1f }
-        p.shot.postDelayed({
-            (p.shot.parent as? ViewGroup)?.removeView(p.shot)
-            p.shot.setImageDrawable(null)
-        }, 120L)
+        restModePages()
+        releasePagerChrome(p)
+        lingeringShot = p.shot
+        p.shot.postDelayed({ removeShot(p.shot) }, 120L)
         pagerBusy = false
+    }
+
+    /** The settle in flight, if any: finishes it on the spot (see [finishSettleNow]). */
+    private var settleDone: ((Boolean) -> Unit)? = null
+    /** A snapshot waiting out its last frames on screen. */
+    private var lingeringShot: ImageView? = null
+
+    private fun removeShot(shot: ImageView) {
+        (shot.parent as? ViewGroup)?.removeView(shot)
+        (shot.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.recycle()
+        shot.setImageDrawable(null)
+        if (lingeringShot === shot) lingeringShot = null
+    }
+
+    /**
+     * A new touch that turns into a drag while the last slide is still settling: land that slide
+     * now. Left running, its end action would fire mid-drag and reset the pages, the underline
+     * and the mode under the finger, and the new snapshot would include the old one.
+     */
+    private fun finishSettleNow() {
+        settleDone?.invoke(true)
+        lingeringShot?.let { removeShot(it) }
+        rpHomeAnim?.end()
     }
 
     /** Tab tap: the same side-by-side slide as a swipe, in the tabs' order. */
@@ -4174,7 +4407,7 @@ $cleanContent
         val order = modeTabsInOrder()
         val direction = if (order.indexOf(tab) < order.indexOf(from)) 1 else -1
         if (!Motion.areAnimationsEnabled(requireContext())) {
-            if (switchToTab(tab)) tab.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            if (switchToTab(tab)) Haptics.tap(tab)
             placeModeTabIndicator(animate = false)
             return
         }
@@ -4196,18 +4429,33 @@ $cleanContent
             val top = vLoc[1] - rootLoc[1]
             return x >= left && x <= left + v.width && y >= top && y <= top + v.height
         }
+        /**
+         * Top of the bottom bar band (Chat/RP composer and its extras, or Code's composer), in
+         * root coordinates. Everything from there down belongs to the bar: its pills and chips
+         * scroll sideways, so a page swipe must never start on it.
+         */
+        fun bottomBarTop(): Float? {
+            val bars = listOfNotNull(
+                dock, rpComposerExtras, attachmentPreviewContainer,
+                root.findViewById<View>(R.id.codeHomeComposer)
+            ).filter { it.isShown && it.height > 0 }
+            if (bars.isEmpty()) return null
+            root.getLocationInWindow(rootLoc)
+            return bars.minOf { v -> v.getLocationInWindow(vLoc); (vLoc[1] - rootLoc[1]).toFloat() } - 6f * d
+        }
         (root as? SwipeNavLayout)?.listener = object : SwipeNavLayout.Listener {
             override fun canStart(x: Float, y: Float): Boolean =
                 historyDrawerContainer?.visibility != View.VISIBLE &&
                     pickerPopover?.isShowing != true &&
                     !headerContainer.isVisible &&
-                    !inside(topBar, x, y) && !inside(dock, x, y) &&
+                    !inside(topBar, x, y) && y < (bottomBarTop() ?: Float.MAX_VALUE) &&
                     parentFragmentManager.backStackEntryCount == 0
 
             var historyDrag = false
 
             override fun onDrag(dx: Float) {
                 val direction = if (dx > 0) 1 else -1
+                if (pager == null && (settleDone != null || lingeringShot != null || rpHomeAnim != null)) finishSettleNow()
                 if (pagerOrigin == null) pagerOrigin = currentTab()
                 val target = targetFrom(pagerOrigin ?: currentTab(), direction)
                 val toHistory = direction > 0 && target == null
@@ -4239,59 +4487,65 @@ $cleanContent
                 movePager(dx)
             }
 
+            private fun releaseVelocity() = (root as? SwipeNavLayout)?.releaseVelocity ?: 0f
+
             override fun onCommit(direction: Int) {
-                content.performHapticFeedback(android.view.HapticFeedbackConstants.GESTURE_END)
+                Haptics.tap(content, android.view.HapticFeedbackConstants.GESTURE_END)
                 if (historyDrag) {
                     historyDrag = false
                     pagerOrigin = null
-                    settleHistoryDrag()
+                    settleHistoryDrag(releaseVelocity())
                     return
                 }
                 if (pager == null) { onCancel(); return }
-                settlePager(commit = true)
+                settlePager(commit = true, velocity = releaseVelocity())
             }
 
             override fun onCancel() {
+                val v = releaseVelocity()
                 if (historyDrag) {
                     historyDrag = false
                     pagerOrigin = null
-                    cancelHistoryDrag(animate = true)
+                    cancelHistoryDrag(animate = true, velocity = v)
                     return
                 }
-                if (pager != null) { settlePager(commit = false); return }
+                if (pager != null) { settlePager(commit = false, velocity = v); return }
                 pagerOrigin = null
-                modePages().forEach { p ->
-                    p.animate().translationX(0f).alpha(1f).setDuration(420).setInterpolator(Motion.spring).start()
+                modePages().firstOrNull()?.let { first ->
+                    // Springs back from a lean; a little give suits a rubber band.
+                    val fling = Motion.Fling(-first.translationX, v * -kotlin.math.sign(first.translationX), response = 0.36f, damping = 0.8f)
+                    modePages().forEach { p ->
+                        p.animate().translationX(0f).alpha(1f).setDuration(fling.duration).setInterpolator(fling).start()
+                    }
                 }
                 placeModeTabIndicator(animate = true)
             }
         }
         (root as? SwipeNavLayout)?.apply {
-            // Easier than before: shorter pull commits, and a light flick is enough.
-            commitFraction = 0.22f
+            // Slightly lighter pull than before: about a sixth of the width commits.
+            commitFraction = 0.16f
         }
 
         val drawer = historyDrawerContainer as? SwipeNavLayout ?: return
-        drawer.commitFraction = 0.28f
+        drawer.commitFraction = 0.22f
         drawer.listener = object : SwipeNavLayout.Listener {
             override fun onDrag(dx: Float) {
                 cancelDrawerAnimation()
                 val w = drawer.width.coerceAtLeast(1).toFloat()
                 val t = dx.coerceAtMost(0f)
                 drawer.translationX = t
-                content.translationX = w * 0.25f * (1f + t / w)
+                content.translationX = historyChatOffset(t, w)
                 historyDrawerScrim?.alpha = 0.35f * (1f + t / w)
             }
 
             override fun onCommit(direction: Int) {
-                if (direction < 0) closeHistoryPanel() else onCancel()
+                if (direction >= 0) { onCancel(); return }
+                if (!Motion.areAnimationsEnabled(requireContext())) { closeHistoryPanel(animated = false); return }
+                flingHistory(open = false, velocity = drawer.releaseVelocity) { closeHistoryPanel(animated = false) }
             }
 
             override fun onCancel() {
-                val w = drawer.width.coerceAtLeast(1).toFloat()
-                drawer.animate().translationX(0f).setDuration(380).setInterpolator(Motion.spring).start()
-                content.animate().translationX(w * 0.25f).setDuration(380).setInterpolator(Motion.spring).start()
-                historyDrawerScrim?.animate()?.alpha(0.35f)?.setDuration(200)?.start()
+                flingHistory(open = true, velocity = drawer.releaseVelocity) {}
             }
         }
     }
@@ -4310,6 +4564,8 @@ $cleanContent
             ): Boolean {
                 if (e1 == null) return false
                 if (historyDrawerContainer?.visibility == View.VISIBLE) return false
+                // In Roleplay a rightward swipe pages back to Chat; the drawer is not on that path.
+                if (viewModel.isRpMode() && !codeMode.isActive) return false
                 val dx = e2.x - e1.x
                 val dy = e2.y - e1.y
                 if (abs(dx) < abs(dy) * 1.5f) return false
@@ -4475,24 +4731,32 @@ $cleanContent
         val x = dx.coerceIn(0f, w)
         panel.translationX = x - w
         historyDrawerScrim?.alpha = 0.35f * (x / w)
-        view?.findViewById<View>(R.id.rootLayout)?.translationX = x * 0.25f
+        view?.findViewById<View>(R.id.rootLayout)?.translationX = historyChatOffset(x - w, w)
     }
 
-    private fun settleHistoryDrag() {
+    /**
+     * The panel, the chat pinned to its edge and the scrim, all on one spring from the release
+     * [velocity] (px/s, + = rightward), so the chat never drifts off the panel's edge.
+     */
+    private fun flingHistory(open: Boolean, velocity: Float, end: () -> Unit) {
         val panel = historyDrawerContainer ?: return
         val w = (view?.width ?: panel.width).coerceAtLeast(1).toFloat()
-        val ms = resources.getInteger(R.integer.motion_drawer).toLong()
-        historyDrawerScrim?.animate()?.alpha(0.35f)?.setDuration(ms)?.setInterpolator(Motion.iosOut)?.start()
-        panel.animate().translationX(0f).setDuration(ms).setInterpolator(Motion.iosOut)
-            .withEndAction { panel.setLayerType(View.LAYER_TYPE_NONE, null) }.start()
+        val fling = Motion.flingX(panel, if (open) 0f else -w, velocity, response = 0.38f)
+        historyDrawerScrim?.animate()?.alpha(if (open) 0.35f else 0f)?.setDuration(fling.duration)?.setInterpolator(fling)?.start()
         view?.findViewById<View>(R.id.rootLayout)?.animate()
-            ?.translationX(w * 0.25f)?.setDuration(ms)?.setInterpolator(Motion.iosOut)?.start()
+            ?.translationX(historyChatOffset(if (open) 0f else -w, w))?.setDuration(fling.duration)?.setInterpolator(fling)?.start()
+        panel.animate().translationX(if (open) 0f else -w).setDuration(fling.duration).setInterpolator(fling)
+            .withEndAction(end).start()
     }
 
-    private fun cancelHistoryDrag(animate: Boolean) {
+    private fun settleHistoryDrag(velocity: Float = 0f) {
+        val panel = historyDrawerContainer ?: return
+        flingHistory(open = true, velocity = velocity) { panel.setLayerType(View.LAYER_TYPE_NONE, null) }
+    }
+
+    private fun cancelHistoryDrag(animate: Boolean, velocity: Float = 0f) {
         val panel = historyDrawerContainer ?: return
         val scrim = historyDrawerScrim
-        val w = (view?.width ?: panel.width).coerceAtLeast(1).toFloat()
         val root = view?.findViewById<View>(R.id.rootLayout)
         val done = {
             panel.visibility = View.GONE
@@ -4506,10 +4770,10 @@ $cleanContent
             done()
             return
         }
-        scrim?.animate()?.alpha(0f)?.setDuration(260)?.setInterpolator(Motion.iosOut)?.start()
-        root?.animate()?.translationX(0f)?.setDuration(420)?.setInterpolator(Motion.spring)?.start()
-        panel.animate().translationX(-w).setDuration(260).setInterpolator(Motion.iosOut)
-            .withEndAction { done() }.start()
+        flingHistory(open = false, velocity = velocity) {
+            root?.translationX = 0f
+            done()
+        }
     }
 
     private fun openHistoryPanel() {
@@ -4543,8 +4807,10 @@ $cleanContent
             val w = panel.width.coerceAtLeast(1)
             panel.translationX = -w.toFloat()
             panel.visibility = View.VISIBLE
+            val chat = view?.findViewById<View>(R.id.rootLayout)
             if (!anim) {
                 panel.translationX = 0f
+                chat?.translationX = historyChatOffset(0f, w.toFloat())
                 return@post
             }
             panel.setLayerType(View.LAYER_TYPE_HARDWARE, null)
@@ -4557,14 +4823,18 @@ $cleanContent
                 .setInterpolator(Motion.iosPush)
                 .withEndAction { panel.setLayerType(View.LAYER_TYPE_NONE, null) }
                 .start()
-            // Parallax: the chat drifts a little the same way, like an iOS push.
-            view?.findViewById<View>(R.id.rootLayout)?.animate()
-                ?.translationX(w * 0.25f)?.setDuration(drawerMs)?.setInterpolator(Motion.iosPush)?.start()
+            // The chat is the next page: it leaves pinned to the panel's edge.
+            chat?.animate()
+                ?.translationX(historyChatOffset(0f, w.toFloat()))?.setDuration(drawerMs)?.setInterpolator(Motion.iosPush)?.start()
         }
     }
 
     fun onBackPressed(): Boolean {
         if (::codeMode.isInitialized && codeMode.onBackPressed()) return true
+        if (rpPanel?.isShowing == true) {
+            closeRpPanel()
+            return true
+        }
         if (historyDrawerContainer?.visibility == View.VISIBLE) {
             closeHistoryPanel()
             return true
@@ -4599,24 +4869,13 @@ $cleanContent
             if (cameraIntent.resolveActivity(requireContext().packageManager) != null) {
                 cameraLauncher.launch(cameraIntent)
             } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_no_camera_app), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_no_camera_app))
                 requireContext().contentResolver.delete(imageUri, null, null)
                 currentCameraUri = null  // NEW: Clean up
             }
         } ?: run {
-            AppToast.makeText(requireContext(), getString(R.string.toast_could_not_create_image), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_could_not_create_image))
         }
-    }
-    fun startSpeechRecognitionSafely() {
-        // STT disabled
-        /*
-        hideKeyboard()
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        } else {
-            startSpeechRecognition()
-        }
-        */
     }
     private fun processPdfUri(pdfUri: Uri) {
         if (discardAttachmentIfRp()) return
@@ -4632,7 +4891,7 @@ $cleanContent
                     // Direct access fallback (rare)
                     val inputStream = requireContext().contentResolver.openInputStream(pdfUri)
                         ?: run {
-                            AppToast.makeText(requireContext(), getString(R.string.toast_pdf_no_read_access), AppToast.LENGTH_SHORT).show()
+                            GlassNotice.show(requireContext(), getString(R.string.toast_pdf_no_read_access))
                             return@launch
                         }
 
@@ -4651,19 +4910,19 @@ $cleanContent
                 }
 
                 if (parcelFd == null) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_pdf_access_failed), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_pdf_access_failed))
                     return@launch
                 }
 
                 val pdfRenderer = PdfRenderer(parcelFd)
                 when (val pageCount = pdfRenderer.pageCount) {
                     0 -> {
-                        AppToast.makeText(requireContext(), getString(R.string.toast_pdf_no_pages), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.toast_pdf_no_pages))
                         pdfRenderer.close()
                     }
                     1 -> {
                         val bitmap = renderPdfPageToBitmap(pdfRenderer, 0)
-                        processPdfBitmap(bitmap, "Page 1 of 1")
+                        processPdfBitmap(bitmap)
                         pdfRenderer.close()
                     }
                     else -> {
@@ -4674,8 +4933,7 @@ $cleanContent
                     }
                 }
             } catch (e: Exception) {
-                val errorMsg = "Failed to process PDF: ${e.message}"
-                AppToast.makeText(requireContext(), errorMsg, AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.notice_pdf_process_failed, e.message ?: ""))
             } finally {
                 try {
                     parcelFd?.close()
@@ -4724,32 +4982,28 @@ $cleanContent
     }
 
 
-    private suspend fun processPdfBitmap(bitmap: Bitmap, description: String) {
+    private suspend fun processPdfBitmap(bitmap: Bitmap) {
         if (discardAttachmentIfRp()) {
             bitmap.recycle()
             return
         }
-        val byteArrayOutputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
-        val bytes = byteArrayOutputStream.toByteArray()
+        // A page rendered at 2x is several megapixels: PNG-encoding it and writing the preview
+        // file would stall the main thread, so both happen on IO.
+        val tempPngFile = File(requireContext().cacheDir, "pdf_page_${System.currentTimeMillis()}.png")
+        val bytes = withContext(Dispatchers.IO) {
+            val byteArrayOutputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
+            bitmap.recycle()
+            byteArrayOutputStream.toByteArray().also { if (it.size <= 12_000_000) tempPngFile.writeBytes(it) }
+        }
 
         if (bytes.size > 12_000_000) {
-            AppToast.makeText(requireContext(), getString(R.string.toast_pdf_page_too_large), AppToast.LENGTH_SHORT).show()
-            bitmap.recycle()
+            GlassNotice.show(requireContext(), getString(R.string.toast_pdf_page_too_large))
             return
         }
 
         selectedImageBytes = bytes
         selectedImageMime = "image/png"
-
-        // Save PNG to temp file for chat preview
-        val cacheDir = requireContext().cacheDir
-        val tempPngFile = File(cacheDir, "pdf_page_${System.currentTimeMillis()}.png")
-        withContext(Dispatchers.IO) {  // Off UI: Write bytes to file
-            tempPngFile.outputStream().use { out ->
-                out.write(bytes)
-            }
-        }
         currentTempImageFile = tempPngFile  // Track for cleanup
 
         val pngUri = FileProvider.getUriForFile(
@@ -4761,15 +5015,9 @@ $cleanContent
         // Set for ViewModel (enables bubble preview)
         viewModel.setPendingUserImageUri(pngUri.toString())
 
-        val previewBmp = bitmap.copy(Bitmap.Config.ARGB_8888, false)
-        previewImageView.setImageBitmap(previewBmp)
+        previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
+        previewImageView.load(tempPngFile)
         attachmentPreviewContainer.visibility = View.VISIBLE
-
-        AppToast.makeText(requireContext(), getString(R.string.toast_converted_to_image, description), AppToast.LENGTH_SHORT).show()
-
-        // Recycle originals
-        bitmap.recycle()
-        // After copy
     }
 
 
@@ -4781,7 +5029,7 @@ $cleanContent
         pageCount: Int,
         tempPdfFile: File?
     ) {
-        val pageTitles = (1..pageCount).map { "Page $it" }.toTypedArray()
+        val pageTitles = (1..pageCount).map { getString(R.string.pdf_page_n, it) }.toTypedArray()
         var selectedPage = 0
         var converting = false
         val release = {
@@ -4791,16 +5039,16 @@ $cleanContent
         }
 
         GlassAlertDialogBuilder(requireContext())
-            .setTitle("Select PDF Page")
+            .setTitle(R.string.dialog_select_pdf_page)
             .setSingleChoiceItems(pageTitles, 0) { _, which -> selectedPage = which }
-            .setPositiveButton("Convert") { _, _ ->
+            .setPositiveButton(R.string.action_convert) { _, _ ->
                 converting = true
                 lifecycleScope.launch {
                     try {
                         val bitmap = renderPdfPageToBitmap(pdfRenderer, selectedPage)
-                        processPdfBitmap(bitmap, "Page ${selectedPage + 1} of $pageCount")
+                        processPdfBitmap(bitmap)
                     } catch (e: Exception) {
-                        AppToast.makeText(requireContext(), "Render failed: ${e.message}", AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.notice_pdf_render_failed, e.message ?: ""))
                     } finally {
                         release()
                     }
@@ -4852,7 +5100,7 @@ $cleanContent
                 }
 
                 if (!isAllowed) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_unsupported_file, fileName, mimeType), AppToast.LENGTH_LONG).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_unsupported_file, fileName, mimeType))
                     return@launch
                 }
 
@@ -4876,12 +5124,12 @@ $cleanContent
 
                 // Size validation (your existing checks)
                 if (fileSize > MAX_SINGLE_FILE_SIZE) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_file_too_large, fileName, MAX_SINGLE_FILE_SIZE / 1024 / 1024), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_file_too_large, fileName, MAX_SINGLE_FILE_SIZE / 1024 / 1024))
                     return@launch
                 }
 
                 if (currentTotalSize + fileSize > MAX_FILE_SIZE) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_attachments_total_limit, fileName, (currentTotalSize + fileSize) / 1024 / 1024, MAX_FILE_SIZE / 1024 / 1024), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.toast_attachments_total_limit, fileName, (currentTotalSize + fileSize) / 1024 / 1024, MAX_FILE_SIZE / 1024 / 1024))
                     return@launch
                 }
                 if (discardAttachmentIfRp()) return@launch
@@ -4891,10 +5139,9 @@ $cleanContent
 
                 // Update UI (your existing)
                 updateAttachmentButton()
-                AppToast.makeText(requireContext(), getString(R.string.toast_file_attached, fileName), AppToast.LENGTH_SHORT).show()
 
             } catch (e: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_failed_read_file, e.message ?: ""), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_file, e.message ?: ""))
             }
         }
     }
@@ -4980,235 +5227,96 @@ $cleanContent
         }
 
         val builder = GlassAlertDialogBuilder(requireContext())
-            .setTitle("Attached Files (${pendingFiles.size})")
+            .setTitle(getString(R.string.dialog_attached_files, pendingFiles.size))
             .setMessage(filesList)
-            .setPositiveButton("Remove All") { _, _ ->
+            .setPositiveButton(R.string.action_remove_all) { _, _ ->
                 pendingFiles.clear()
                 updateAttachmentButton()
             }
-            .setNegativeButton("Close", null)
+            .setNegativeButton(R.string.action_close, null)
 
         val dialog = builder.show()
 
         // Apply dim amount of 0.8f
         dialog.window?.let { GlassDialogs.frost(it) }
     }
-    private fun showToolsSelectionDialog() {
-        // 1️⃣ Load current state from SharedPreferences
-        val enabledTools = sharedPreferencesHelper.getEnabledTools()
-        val hasStoredPrefs = sharedPreferencesHelper.hasEnabledToolsStored()
-
-        // 2️⃣ Compute effective enabled set for display
-        val effectiveEnabledSet = if (!hasStoredPrefs) {
-            emptySet()
-        } else {
-            enabledTools
-        }
-
-        // 3️⃣ Get ALL items
-        val allItems = ToolItem.getAllToolItems(effectiveEnabledSet)
-
-        // --- NEW LOGIC: FILTERING ---
-        // 4️⃣ Check if Brave API key exists
-        val braveApiKey = sharedPreferencesHelper.getApiKeyFromPrefs("brave_search_api_key")
-        val hasBraveKey = braveApiKey.isNotEmpty()
-
-        // 5️⃣ Filter the list: Keep everything UNLESS it's brave_search and we don't have a key
-        val filteredItems = allItems.filter { item ->
-            if (item.name == "brave_search" || item.name == "brave_news" || item.name == "find_nearby_places") {
-                hasBraveKey // Only keep Brave tools if key exists
-            } else {
-                true // Keep all other tools
-            }
-        }
-        // ----------------------------
-
-        // 6️⃣ Create a mutable copy of the FILTERED list
-        val mutableItems = filteredItems.toMutableList()
-
-        // 7️⃣ Create the dialog
-        val dialog = GlassAlertDialogBuilder(requireContext(),
-            R.style.CustomMaterialAlertDialogTheme
-        )
-            .setTitle("Enable / Disable Tools")
-            .setNegativeButton(R.string.action_cancel, null)
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                // Note: We map from the mutableItems which is already filtered
-                val newEnabledSet = mutableItems
-                    .filter { it.isEnabled }
-                    .map { it.name }
-                    .toSet()
-                sharedPreferencesHelper.saveEnabledTools(newEnabledSet)
-            }
-            .create()
-
-        val scrollView = ScrollView(requireContext()).apply {
-            setPadding(1.dpToPx(), 1.dpToPx(), 1.dpToPx(), 1.dpToPx())
-        }
-        val container = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-
-        // 8️⃣ Loop through the FILTERED list
-        for ((index, item) in mutableItems.withIndex()) {
-            val row = LayoutInflater.from(requireContext()).inflate(
-                R.layout.item_tool_toggle,
-                container,
-                false
-            )
-
-            val checkBox = row.findViewById<CheckBox>(R.id.checkbox_tool)
-            val titleTv = row.findViewById<TextView>(R.id.text_tool_title)
-            val descTv = row.findViewById<TextView>(R.id.text_tool_desc)
-
-            titleTv.text = item.displayName
-            descTv.text = item.description
-            checkBox.isChecked = item.isEnabled
-
-            val stableIndex = index
-
-            // Row click
-            row.setOnClickListener {
-                val currentItem = mutableItems[stableIndex]
-                val newState = !currentItem.isEnabled
-
-                // --- INTERCEPT: set_sound_mode ---
-                if (currentItem.name == "set_sound_mode" && newState) {
-                    val notificationManager = requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-                    // Check if we already have permission
-                    if (!notificationManager.isNotificationPolicyAccessGranted) {
-                        // Permission not granted, open settings
-                        val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                        // Using the launcher defined in onCreate
-                        notificationPolicyLauncher.launch(intent)
-                        return@setOnClickListener // Stop here, don't toggle checkbox yet
-                    }
-                }
-                // ---------------------------------
-
-                // --- INTERCEPT: get_location ---
-                if (currentItem.name == "get_location" && newState) {
-                    val hasPermission = ContextCompat.checkSelfPermission(
-                        requireContext(),
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (!hasPermission) {
-                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                        return@setOnClickListener
-                    }
-                }
-                // -------------------------------
-
-                // Normal toggle behavior
-                mutableItems[stableIndex] = currentItem.copy(isEnabled = newState)
-                checkBox.isChecked = newState
-            }
-
-            // Checkbox click
-            checkBox.setOnCheckedChangeListener { _, isChecked ->
-                mutableItems[stableIndex] = mutableItems[stableIndex].copy(isEnabled = isChecked)
-            }
-
-            val layoutParams = row.layoutParams as LinearLayout.LayoutParams
-            layoutParams.bottomMargin = 1.dpToPx()
-            row.layoutParams = layoutParams
-
-            container.addView(row)
-        }
-
-        scrollView.addView(container)
-        dialog.setView(scrollView)
-        dialog.window?.let { GlassDialogs.frost(it) }
-        dialog.show()
-
-        val titleView = dialog.findViewById<TextView>(androidx.appcompat.R.id.alertTitle)
-        titleView?.paintFlags = titleView.paintFlags.or(Paint.UNDERLINE_TEXT_FLAG)
-    }
-
-
     private fun showWebSearchEngineDialog() {
-        val engines = listOf(
-            "default" to "Default (Native if available, fallback Exa)",
-            "native" to "Native (Provider's built-in search)",
-            "exa" to "Exa (Always use Exa search)",
-            "firecrawl" to "Firecrawl (Always use Firecrawl search. Uses your BYOK credits)",
-            "parallel" to "Parallel (Always use Parallel search)"
-        )
-
-        val currentEngine = sharedPreferencesHelper.getWebSearchEngine()
-        var selectedEngine = currentEngine
-
-        GlassAlertDialogBuilder(requireContext(),
-            R.style.CustomMaterialAlertDialogTheme
-        )
-            .setTitle("Web Search Engine")
-            .setSingleChoiceItems(
-                engines.map { it.second }.toTypedArray(),
-                engines.indexOfFirst { it.first == currentEngine }.takeIf { it >= 0 } ?: 0
-            ) { _, which ->
-                selectedEngine = engines[which].first
-            }
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                sharedPreferencesHelper.saveWebSearchEngine(selectedEngine)
-                showWebSearchContextSizeDialog()
-            }
-            .setNegativeButton(R.string.action_cancel, null)
-            .show()
+        pickOne(
+            title = R.string.dialog_web_search_engine,
+            items = listOf("default", "native", "exa", "firecrawl", "parallel"),
+            labels = intArrayOf(
+                R.string.web_search_engine_default,
+                R.string.web_search_engine_native,
+                R.string.web_search_engine_exa,
+                R.string.web_search_engine_firecrawl,
+                R.string.web_search_engine_parallel,
+            ),
+            current = sharedPreferencesHelper.getWebSearchEngine(),
+            fallbackIndex = 0,
+        ) { engine ->
+            sharedPreferencesHelper.saveWebSearchEngine(engine)
+            showWebSearchContextSizeDialog()
+        }
     }
 
-    // NEW: Dialog for Context Size
     private fun showWebSearchContextSizeDialog() {
-        val sizes = listOf(
-            "low" to "Low (Minimal context, basic queries)",
-            "medium" to "Medium (Moderate context, general queries)",
-            "high" to "High (Extensive context, detailed research)"
-        )
-
-        val currentSize = sharedPreferencesHelper.getWebSearchContextSize()
-        var selectedSize = currentSize
-
-        GlassAlertDialogBuilder(requireContext(),
-            R.style.CustomMaterialAlertDialogTheme
-        )
-            .setTitle("Search Context Size")
-            .setSingleChoiceItems(
-                sizes.map { it.second }.toTypedArray(),
-                sizes.indexOfFirst { it.first == currentSize }.takeIf { it >= 0 } ?: 1 // Default to medium
-            ) { _, which ->
-                selectedSize = sizes[which].first
-            }
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                sharedPreferencesHelper.saveWebSearchContextSize(selectedSize)
-                showWebSearchMaxResultsDialog()
-            }
-            .setNegativeButton(R.string.action_cancel, null)
-            .show()
+        pickOne(
+            title = R.string.dialog_search_context_size,
+            items = listOf("low", "medium", "high"),
+            labels = intArrayOf(
+                R.string.web_search_context_low,
+                R.string.web_search_context_medium,
+                R.string.web_search_context_high,
+            ),
+            current = sharedPreferencesHelper.getWebSearchContextSize(),
+            fallbackIndex = 1,
+        ) { size ->
+            sharedPreferencesHelper.saveWebSearchContextSize(size)
+            showWebSearchMaxResultsDialog()
+        }
     }
+
     private fun showWebSearchMaxResultsDialog() {
-        // Generate list 1 to 20
         val options = (1..20).toList()
-        val optionsStrings = options.map { it.toString() }.toTypedArray()
+        pickOne(
+            title = R.string.dialog_max_search_results,
+            items = options,
+            labels = options.map { it.toString() }.toTypedArray(),
+            currentIndex = options.indexOf(sharedPreferencesHelper.getWebSearchMaxResults()).takeIf { it >= 0 } ?: 4,
+        ) { count ->
+            sharedPreferencesHelper.saveWebSearchMaxResults(count)
+        }
+    }
 
-        val currentMax = sharedPreferencesHelper.getWebSearchMaxResults()
-        var selectedMax = currentMax
-
-        GlassAlertDialogBuilder(requireContext(),
-            R.style.CustomMaterialAlertDialogTheme
+    private fun <T> pickOne(
+        title: Int,
+        items: List<T>,
+        labels: IntArray,
+        current: String,
+        fallbackIndex: Int,
+        onSave: (T) -> Unit,
+    ) {
+        pickOne(
+            title = title,
+            items = items,
+            labels = labels.map { getString(it) }.toTypedArray(),
+            currentIndex = items.indexOfFirst { it.toString() == current }.takeIf { it >= 0 } ?: fallbackIndex,
+            onSave = onSave,
         )
-            // Combine the title and the message here
-            .setTitle("Max Search Results\n(Higher values increase costs)")
-            .setSingleChoiceItems(
-                optionsStrings,
-                options.indexOf(currentMax).takeIf { it >= 0 } ?: 4 // Index 4 is '5'
-            ) { _, which ->
-                selectedMax = options[which]
-            }
-            .setPositiveButton(R.string.action_save) { _, _ ->
-                // Final save step
-                sharedPreferencesHelper.saveWebSearchMaxResults(selectedMax)
-            }
+    }
+
+    private fun <T> pickOne(
+        title: Int,
+        items: List<T>,
+        labels: Array<String>,
+        currentIndex: Int,
+        onSave: (T) -> Unit,
+    ) {
+        var selected = items[currentIndex]
+        GlassAlertDialogBuilder(requireContext(), R.style.CustomMaterialAlertDialogTheme)
+            .setTitle(title)
+            .setSingleChoiceItems(labels, currentIndex) { _, which -> selected = items[which] }
+            .setPositiveButton(R.string.action_save) { _, _ -> onSave(selected) }
             .setNegativeButton(R.string.action_cancel, null)
             .show()
     }
@@ -5220,13 +5328,22 @@ $cleanContent
             else -> String.format("%.1fMB", bytes / 1024f / 1024f)
         }
     }
-    fun Int.dpToPx(): Int = (this * Resources.getSystem().displayMetrics.density).toInt()
-    fun TextView.animateColor(from: Int, to: Int, dur: Long): ValueAnimator? =
-        ValueAnimator.ofArgb(from, to).apply {
-            duration = dur
-            addUpdateListener { setTextColor(it.animatedValue as Int) }
-            start()
-        }
+    private var scrollerCanUp: Boolean? = null
+    private var scrollerCanDown: Boolean? = null
+
+    /** Scroll-button visibility. onScrolled already has a laid-out list, so no posted runnable per pixel. */
+    private fun refreshScrollButtons() {
+        val up = chatRecyclerView.canScrollVertically(-1)
+        val down = chatRecyclerView.canScrollVertically(1)
+        if (up == scrollerCanUp && down == scrollerCanDown) return
+        scrollerCanUp = up
+        scrollerCanDown = down
+        scrollToTopButton.setShownAnimated(up)
+        scrollToBottomButton.setShownAnimated(down)
+    }
+
+    private var progressArmedAt = 0L
+
     private val hideScrollProgress = Runnable {
         if (!Motion.areAnimationsEnabled(requireContext())) { progressBar.alpha = 0f; return@Runnable }
         progressBar.animate().alpha(0f).setDuration(280).setInterpolator(Motion.easeOut).start()
@@ -5242,10 +5359,17 @@ $cleanContent
             progressBar.visibility = View.VISIBLE
             progressBar.scaleX = progress
             // Like an iOS scroll indicator: there while you move, gone once you stop.
-            progressBar.removeCallbacks(hideScrollProgress)
-            progressBar.animate().cancel()
-            progressBar.alpha = 0.6f
-            progressBar.postDelayed(hideScrollProgress, 700)
+            // Reschedule the hide at most every 50ms so a fling does not post a callback per pixel.
+            if (progressBar.alpha < 0.59f) {
+                progressBar.animate().cancel()
+                progressBar.alpha = 0.6f
+            }
+            val now = android.os.SystemClock.uptimeMillis()
+            if (now - progressArmedAt >= 50L) {
+                progressArmedAt = now
+                progressBar.removeCallbacks(hideScrollProgress)
+                progressBar.postDelayed(hideScrollProgress, 700)
+            }
         } else {
             progressBar.visibility = View.GONE
         }
@@ -5257,15 +5381,13 @@ $cleanContent
             if (extendedEnabled) View.VISIBLE else View.GONE
 
         val model = viewModel.activeChatModel.value // Get current model (may be null on startup)
-        val isLan = viewModel.activeModelIsLan()
 
         val buttons = listOf(
             Triple(reasoningButton, topReasoningButton) {
-                model != null && viewModel.isReasoningModel(model)
+                model != null && viewModel.canRequestReasoning(model)
             },
-            Triple(webSearchButton, topWebSearchButton) {
-                !isLan && !viewModel.isRpMode()
-            },
+            // Web search left the chat chrome; presets can still switch it on.
+            Triple(webSearchButton, topWebSearchButton) { false },
             Triple(streamButton, topStreamButton) { true },
             //Triple(convoButton, topConvoButton) { true },
             Triple(toolsButton, topToolsButton) { !viewModel.isRpMode() },
@@ -5311,25 +5433,13 @@ $cleanContent
         val extendedEnabled = sharedPreferencesHelper.getExtendedTopBarEnabled()
         homeButton.visibility = if (extendedEnabled) View.VISIBLE else View.GONE //backcopyButton.isGone &&
     }
-    private fun captureItemToBitmap(position: Int, format: String) {
-        val viewHolder = chatRecyclerView.findViewHolderForAdapterPosition(position) as? ChatAdapter.AssistantViewHolder
-        if (viewHolder != null) {
-            val bitmap = captureViewToBitmapNow(viewHolder.messageContainer)
-            if (bitmap != null) {
-                viewModel.saveBitmapToDownloads(bitmap, format)
-            } else {
-                AppToast.makeText(requireContext(), getString(R.string.toast_failed_capture_view), AppToast.LENGTH_SHORT).show()
-            }
-        } else {
-            AppToast.makeText(requireContext(), getString(R.string.toast_item_not_visible), AppToast.LENGTH_SHORT).show()
-        }
-    }
     fun copyLatestMessage() {
         chatAdapter.getLatestPlainText()?.let { text ->
             if (text.isNotBlank()) {
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Copied", text))
-                AppToast.makeText(requireContext(), getString(R.string.toast_copied), AppToast.LENGTH_SHORT).show()
+                // The app steps aside right after, so a tick is the only confirmation there is time for.
+                Haptics.tap(backcopyButton, android.view.HapticFeedbackConstants.CONFIRM)
             }
         }
     }
@@ -5382,7 +5492,28 @@ $cleanContent
         backButton.visibility = View.VISIBLE
         backcopyButton.visibility = View.VISIBLE
     }
+    /** Tiles in the composer and aux rows, in layout order; captured once because reflow moves them. */
+    private var controlTileOrder: List<View>? = null
+
+    /** Packs the visible tiles into the leading slots so hidden ones leave no holes in the grid. */
+    private fun reflowControlTiles() {
+        val root = view ?: return
+        val slots = listOf(R.id.buttonsRowComposer, R.id.buttonsRowAux).flatMap { id ->
+            val row = root.findViewById<LinearLayout>(id) ?: return
+            (0 until row.childCount).map { row.getChildAt(it) }.filterIsInstance<FrameLayout>()
+        }
+        if (slots.isEmpty()) return
+        val tiles = controlTileOrder
+            ?: slots.flatMap { slot -> (0 until slot.childCount).map { slot.getChildAt(it) } }
+                .also { controlTileOrder = it }
+        val (shown, hidden) = tiles.partition { it.isVisible }
+        slots.forEach { it.removeAllViews() }
+        shown.forEachIndexed { i, tile -> slots[i.coerceAtMost(slots.lastIndex)].addView(tile) }
+        hidden.forEach { slots.last().addView(it) }
+    }
+
     private fun updateMenuRowVisibilities() {
+        reflowControlTiles()
         // Grab the rows in order (excluding buttonsRow2 as we discussed)
         val rows = listOf(
             view?.findViewById<LinearLayout>(R.id.buttonsRow1),
@@ -5398,10 +5529,21 @@ $cleanContent
                 var hasVisibleChild = false
                 // Check every child inside this row
                 for (i in 0 until row.childCount) {
-                    if (row.getChildAt(i).isVisible) {
+                    val child = row.getChildAt(i)
+                    if (child is MaterialButton && child.isVisible) {
                         hasVisibleChild = true
                         break
                     }
+                    if (child is ViewGroup) {
+                        for (j in 0 until child.childCount) {
+                            val nested = child.getChildAt(j)
+                            if (nested is MaterialButton && nested.isVisible) {
+                                hasVisibleChild = true
+                                break
+                            }
+                        }
+                    }
+                    if (hasVisibleChild) break
                 }
 
                 if (hasVisibleChild) {
@@ -5426,113 +5568,6 @@ $cleanContent
         }
     }
     @SuppressLint("MissingPermission")
-    private fun startVoiceRecording() {
-        // STT disabled
-        return
-        /*
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            return
-        }
-
-        try {
-            voiceRecordFile = File(requireContext().cacheDir, "voice_input_${System.currentTimeMillis()}.opus")
-
-            mediaRecorder = MediaRecorder(requireContext()).apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.OGG)
-                setOutputFile(voiceRecordFile!!.absolutePath)
-                setAudioEncoder(MediaRecorder.AudioEncoder.OPUS)
-                setAudioSamplingRate(16000)
-                setAudioEncodingBitRate(32000)
-                //setAudioBitRate(32000)
-                prepare()
-                start()
-            }
-
-            isRecording = true
-            speechButton.setIconResource(R.drawable.ic_stop_circle) // Red mic or recording indicator
-            speechButton.isSelected = true
-            AppToast.makeText(requireContext(), getString(R.string.toast_recording), AppToast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            AppToast.makeText(requireContext(), getString(R.string.toast_recording_failed, e.message ?: ""), AppToast.LENGTH_SHORT).show()
-            voiceRecordFile?.delete()
-            voiceRecordFile = null
-        }
-        */
-    }
-
-    private fun stopVoiceRecording() {
-        // STT disabled
-        return
-        /*
-        try {
-            mediaRecorder?.apply {
-                stop()
-                release()
-            }
-            mediaRecorder = null
-            isRecording = false
-            speechButton.setIconResource(R.drawable.ic_mic) // Original mic icon
-            speechButton.isSelected = false
-
-            voiceRecordFile?.let { file ->
-                if (file.exists() && file.length() > 0) {
-                    processVoiceRecording(file)
-                } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_recording_empty), AppToast.LENGTH_SHORT).show()
-                    file.delete()
-                }
-            }
-        } catch (e: Exception) {
-            isRecording = false
-            speechButton.setIconResource(R.drawable.ic_mic)
-            speechButton.isSelected = false
-        }
-        */
-    }
-
-    private fun processVoiceRecording(file: File) {
-        // STT disabled
-        file.delete()
-        return
-        /*
-        lifecycleScope.launch {
-            try {
-                val audioBytes = withContext(Dispatchers.IO) {
-                    file.readBytes()
-                }
-
-                if(!fromWater) {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_transcribing), AppToast.LENGTH_SHORT).show()
-                }
-                val transcribedText = viewModel.transcribeAudioForInput(
-                    audioBytes = audioBytes,
-                    audioFormat = "opus",
-                    fileName = file.name
-                )
-
-                if (!transcribedText.isNullOrBlank()) {
-                    if(fromWater){
-                        val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Transcribed Text", transcribedText)
-                        clipboard.setPrimaryClip(clip)}
-                    chatEditText.setText(transcribedText)
-                    chatEditText.setSelection(transcribedText.length)
-                    // AppToast.makeText(requireContext(), "Transcription complete", AppToast.LENGTH_SHORT).show()
-                } else {
-                    AppToast.makeText(requireContext(), getString(R.string.toast_transcription_failed), AppToast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                AppToast.makeText(requireContext(), getString(R.string.toast_error_generic, e.message ?: ""), AppToast.LENGTH_SHORT).show()
-            } finally {
-                file.delete()
-                voiceRecordFile = null
-                fromWater = false
-            }
-        }
-        */
-    }
     private fun insertRpReminderTemplate() {
         val prefix = "_(Reminder: "
         val template = "_(Reminder: )_"
@@ -5561,17 +5596,9 @@ $cleanContent
         val historyHasWebp = viewModel.hasWebpInHistory()
         val hasImagesInCurrentChat = viewModel.hasImagesInChat()
         if (!newModelSupportsWebp && (isStagedImageWebp || historyHasWebp)) {
-            AppToast.makeText(
-                requireContext(),
-                getString(R.string.model_switch_no_webp),
-                AppToast.LENGTH_LONG
-            ).show()
+            GlassNotice.show(requireContext(), getString(R.string.model_switch_no_webp))
         } else if (hasImagesInCurrentChat && !viewModel.isVisionModel(modelString)) {
-            AppToast.makeText(
-                requireContext(),
-                getString(R.string.model_switch_no_vision),
-                AppToast.LENGTH_LONG
-            ).show()
+            GlassNotice.show(requireContext(), getString(R.string.model_switch_no_vision))
         } else {
             viewModel.setModel(modelString)
             if (viewModel.activeModelIsLan()) {
@@ -5580,15 +5607,271 @@ $cleanContent
         }
     }
 
+
+    // ── Roleplay home ──────────────────────────────────────────────────────────────────────
+
+    private fun setupRpHome(root: View, savedInstanceState: Bundle?) {
+        parentFragmentManager.setFragmentResultListener(RpChatHistoryFragment.RESULT, viewLifecycleOwner) { _, result ->
+            onRpHistoryPicked(result)
+        }
+        val homeRoot = root.findViewById<View>(R.id.rpHome)
+        rpHome = RpChatsHome(
+            homeRoot,
+            onOpen = { row ->
+                val session = row.sessionId
+                if (session != null) {
+                    viewModel.loadChat(session)
+                    closeRpHome()
+                } else row.character?.let { startRpWith(it, ask = false) }
+            },
+            onMenu = { anchor, row -> showRpHomeMenu(anchor, row) }
+        )
+        rpHomeOpen = savedInstanceState?.getBoolean(STATE_RP_HOME) ?: viewModel.isRpMode()
+        rpResumeAtHome = savedInstanceState?.getBoolean(STATE_RP_RESUME) ?: true
+        lastSeenChatMode = if (viewModel.isRpMode()) ChatMode.RP else null
+        // Keep the first row clear of the floating bar, whatever height it has.
+        val topGlass = root.findViewById<View>(R.id.topBarGlass)
+        topGlass.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> rpHome?.setTopInset(v.height) }
+        val savedChats = ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[SavedChatsViewModel::class.java]
+        savedChats.sessionsForMode(ChatMode.RP).observe(viewLifecycleOwner) { sessions ->
+            rpHomeSessions = sessions.orEmpty()
+            refreshRpHome()
+        }
+        viewModel.getRpRepository().allCharacters.observe(viewLifecycleOwner) { chars ->
+            rpHomeCharacters = chars.orEmpty()
+            refreshRpHome()
+        }
+        viewModel.rpThreadOpenedEvent.observe(viewLifecycleOwner) { event ->
+            if (event.getContentIfNotHandled() != null) {
+                rpHomeSuppressed = true
+                closeRpHome()
+            }
+        }
+    }
+
+    /** Roleplay's characters list: a row each, with the last line of the newest chat if there is one. */
+    private fun refreshRpHome() {
+        val home = rpHome ?: return
+        val sessions = rpHomeSessions
+        val characters = rpHomeCharacters
+        rpHomeRefresh?.cancel()
+        rpHomeRefresh = viewLifecycleOwner.lifecycleScope.launch {
+            val app = requireContext().applicationContext
+            // Normally already open; only a cold first open is worth the hop off Main.
+            val dao = (if (AppDatabase.isOpen()) AppDatabase.getDatabase(app) else withContext(Dispatchers.IO) { AppDatabase.getDatabase(app) }).chatDao()
+            val llm = getString(R.string.rp_llm_speaker)
+            val none = getString(R.string.rp_home_no_preview)
+            val start = getString(R.string.rp_home_start)
+            val heads = RpChatSummaries.build(sessions, characters, emptyMap(), llm, none, start)
+            val previews = heads.mapNotNull { row ->
+                val id = row.sessionId ?: return@mapNotNull null
+                val last = dao.getLastMessage(id)
+                val text = last?.let { RpChatSummaries.previewOf(it.content) }.orEmpty()
+                id to if (last?.role == "user" && text.isNotBlank()) getString(R.string.rp_home_you, text) else text
+            }.toMap()
+            home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none, start))
+            updateRpHome()
+        }
+    }
+
+    private var rpUiWas: Boolean? = null
+    private var rpShowWas = false
+    private var rpHomeAnim: android.animation.ValueAnimator? = null
+
+    /** Whether the home shows follows the mode and [rpHomeOpen]; the composer steps aside while it does. */
+    private fun updateRpHome() {
+        val root = view ?: return
+        val show = rpHomeOpen && viewModel.isRpMode() && !codeMode.isActive
+        val rpUi = viewModel.isRpMode() && !codeMode.isActive
+        // A thread opening from the list (or closing back to it) slides; a mode switch does not.
+        val slide = rpUiWas == true && rpUi && show != rpShowWas && root.isAttachedToWindow &&
+            root.width > 0 && Motion.areAnimationsEnabled(requireContext())
+        val settled = rpHomeAnim == null
+        if (!settled && show != rpShowWas) rpHomeAnim?.end()
+        rpUiWas = rpUi
+        val changed = show != rpShowWas
+        rpShowWas = show
+        val homeView = root.findViewById<View>(R.id.rpHome)
+        if (slide && changed) {
+            slideRpHome(root, homeView, toHome = show)
+        } else if (rpHomeAnim == null) {
+            rpHome?.show(show)
+            // Mid-swipe the list arrives with the other pages, not on top of them.
+            if (show) pager?.let { p -> homeView?.translationX = p.shot.translationX - p.direction * p.w }
+        }
+        // The top bar follows: on the list, Settings and the character manager; inside a chat, the way back to the list.
+        val inThread = rpUi && !show
+        openSavedChatsButton.setIconResource(when {
+            inThread -> R.drawable.ic_chevron_left
+            show -> R.drawable.ic_gear
+            else -> R.drawable.ic_grok_menu
+        })
+        openSavedChatsButton.contentDescription = getString(when {
+            inThread -> R.string.rp_home_back
+            show -> R.string.settings_title
+            else -> R.string.cd_history
+        })
+        newChatButton.setIconResource(if (show) R.drawable.rp_ic_characters else R.drawable.ic_new_chat)
+        newChatButton.contentDescription = getString(if (show) R.string.rp_home_manage else R.string.grok_new_conversation)
+        // While the chat slides away the composer goes with it; it is hidden when the slide ends.
+        if (!(slide && changed && show)) applyRpHomeComposer(root, show)
+    }
+
+    /** Only undo what the home did itself: Code mode hides the same composer for its own reasons. */
+    private fun applyRpHomeComposer(root: View, show: Boolean) {
+        if (show == rpHomeHidComposer) return
+        rpHomeHidComposer = show
+        val state = if (show) View.GONE else View.VISIBLE
+        root.findViewById<View>(R.id.composerDock)?.visibility = state
+        root.findViewById<View>(R.id.composerFade)?.visibility = state
+    }
+
+    /**
+     * The thread slides over the list from the right while the list drifts left and dims (and the
+     * other way round going back). The chat layers borrow a little elevation so they draw above it.
+     */
+    private fun slideRpHome(root: View, home: View?, toHome: Boolean) {
+        home ?: return
+        val w = root.width.toFloat()
+        val d = resources.displayMetrics.density
+        val layers = listOfNotNull(
+            root.findViewById<View>(R.id.chatFrameView),
+            root.findViewById<View>(R.id.composerFade),
+            root.findViewById<View>(R.id.composerDock)
+        )
+        if (!toHome) applyRpHomeComposer(root, false)
+        home.visibility = View.VISIBLE
+        layers.forEach { it.translationZ = 8 * d }
+        // The bar stays put above the sliding layers, which would otherwise draw over it.
+        val bar = root.findViewById<View>(R.id.topBarGlass)
+        bar?.translationZ = 16 * d
+        val parallax = 0.25f * w
+        fun place(p: Float) {
+            // p: 0 = list in front, 1 = thread in front
+            layers.forEach { it.translationX = w * (1f - p) }
+            home.translationX = -parallax * p
+            home.alpha = 1f - 0.5f * p
+        }
+        val from = if (toHome) 1f else 0f
+        val to = 1f - from
+        place(from)
+        rpHomeAnim = android.animation.ValueAnimator.ofFloat(from, to).apply {
+            duration = 380
+            interpolator = Motion.iosOut
+            addUpdateListener { place(it.animatedValue as Float) }
+            val finish = {
+                layers.forEach { it.translationX = 0f; it.translationZ = 0f }
+                bar?.translationZ = 0f
+                home.translationX = 0f
+                home.alpha = 1f
+                rpHomeAnim = null
+                if (view != null) {
+                    rpHome?.show(rpShowWas)
+                    applyRpHomeComposer(root, rpShowWas)
+                }
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) = finish()
+            })
+            start()
+        }
+    }
+
+    /** Back to the chats list. */
+    fun openRpHome() {
+        if (!viewModel.isRpMode()) return
+        rpHomeOpen = true
+        updateRpHome()
+    }
+
+    /** A thread is open: the composer and transcript take over from the list. */
+    fun closeRpHome() {
+        if (!rpHomeOpen) return
+        rpHomeOpen = false
+        updateRpHome()
+    }
+
+    /** The ⋮ on a chats-list row: start over with that character, edit it, or delete the chat. */
+    private fun showRpHomeMenu(anchor: View, row: RpChatSummary) {
+        val root = view as? FrameLayout ?: return
+        messageMenu?.dismiss(animated = false)
+        val items = buildList {
+            if (row.character != null) {
+                // A tap already starts the first chat with a character you have not talked to.
+                if (row.sessionId != null) add(MessageMenu.Item(getString(R.string.rp_home_menu_new), R.drawable.ic_new_chat) { startRpWith(row.character) })
+                add(MessageMenu.Item(getString(R.string.rp_home_menu_edit), R.drawable.ic_msg_edit) { pushRp(RpCharacterEditFragment.newInstance(row.character.id)) })
+            } else if (row.isLlm) {
+                add(MessageMenu.Item(getString(R.string.rp_home_menu_new), R.drawable.ic_new_chat) {
+                    closeRpHome()
+                    viewModel.startRpLlmChat()
+                })
+            }
+            // A character you have not talked to has no chat to delete.
+            val session = row.sessionId
+            if (session != null) add(MessageMenu.Item(getString(R.string.rp_home_menu_delete), R.drawable.ic_msg_delete, destructive = true) {
+                GrokConfirmDialog.show(
+                    fragment = this@ChatFragment,
+                    title = getString(R.string.rp_home_delete_title),
+                    message = getString(R.string.rp_home_delete_body, row.name),
+                    confirmText = getString(R.string.rp_menu_delete),
+                    onConfirm = {
+                        sharedPreferencesHelper.setSessionPinned(session, false)
+                        viewModel.notifySessionDeleted(session)
+                        ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[SavedChatsViewModel::class.java]
+                            .deleteSession(session)
+                    }
+                )
+            })
+        }
+        messageMenu = MessageMenu(root, anchor, root.findViewById(R.id.chatBackdrop)).also { m ->
+            m.onDismiss = { if (messageMenu === m) messageMenu = null }
+            m.show(items, viewLifecycleOwner)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_RP_HOME, rpHomeOpen)
+        outState.putBoolean(STATE_RP_RESUME, rpResumeAtHome)
+    }
+
     private var pickerPopover: PickerPopover? = null
+    private var messageMenu: MessageMenu? = null
+
+    /** The ⋮ on a reply. A second tap on the same ⋮ folds it. */
+    private fun showMessageMenu(anchor: View, items: List<MessageMenu.Item>) {
+        val root = view as? FrameLayout ?: return
+        if (messageMenu?.isOpenOn(anchor) == true) {
+            messageMenu?.dismiss()
+            return
+        }
+        pickerPopover?.dismiss(animated = false)
+        messageMenu?.dismiss(animated = false)
+        anchor.isSelected = true
+        messageMenu = MessageMenu(
+            root, anchor, root.findViewById(R.id.chatBackdrop),
+            topBound = root.findViewById(R.id.topBarGlass),
+            bottomBound = chatInputContainer.takeIf { it.isShown }
+        ).also { m ->
+            m.onDismiss = { anchor.isSelected = false; if (messageMenu === m) messageMenu = null }
+            m.show(items, viewLifecycleOwner)
+        }
+    }
 
     private fun newPopover(
         anchor: View = modelNameTextView,
+        /** Surface the card clears; defaults to the composer. Pass [anchor] to hug a mid-list control. */
+        edge: View = chatInputContainer,
         onOpenChange: (Boolean) -> Unit = { open -> modelNameTextView.isSelected = open }
     ): PickerPopover? {
         val root = view as? FrameLayout ?: return null
+        // Second tap on the control that opened it folds the card.
+        if (pickerPopover?.isOpenOn(anchor) == true) {
+            pickerPopover?.dismiss()
+            return null
+        }
         pickerPopover?.dismiss(animated = false)
-        return PickerPopover(root, anchor, root.findViewById(R.id.chatBackdrop), chatInputContainer).also { p ->
+        return PickerPopover(root, anchor, root.findViewById(R.id.chatBackdrop), edge).also { p ->
             pickerPopover = p
             onOpenChange(true)
             p.onDismiss = { onOpenChange(false); if (pickerPopover === p) pickerPopover = null }
@@ -5600,18 +5883,13 @@ $cleanContent
         val active = viewModel.activeChatModel.value
         val models = (viewModel.getBuiltInModels() + sharedPreferencesHelper.getCustomModels())
             .distinctBy { it.apiIdentifier }
-            .sortedBy { it.displayName.lowercase() }
+            .sortedBy { ModelNames.withoutProvider(it.displayName, it.apiIdentifier).lowercase() }
         val rows = models.map { m ->
             PickerPopover.Row(
-                title = m.displayName,
-                subtitle = modelSubtitle(m),
-                iconRes = when {
-                    m.isLANModel -> R.drawable.ic_lan
-                    m.isImageGenerationCapable -> R.drawable.ic_imgup
-                    m.isVisionCapable -> R.drawable.ic_vision
-                    m.isReasoningCapable -> R.drawable.ic_reasoning
-                    else -> R.drawable.ic_cloud
-                },
+                title = ModelNames.withoutProvider(m.displayName, m.apiIdentifier),
+                subtitle = ModelRow.subtitle(requireContext(), m),
+                iconRes = ModelBrands.of(m)?.icon ?: if (m.isLANModel) R.drawable.ic_local_network else 0,
+                monogram = if (ModelBrands.of(m) == null && !m.isLANModel) ModelRow.monogramFor(m) else null,
                 selected = m.apiIdentifier == active,
                 onClick = { if (m.apiIdentifier != active) applyPickedModel(m.apiIdentifier) }
             )
@@ -5627,20 +5905,8 @@ $cleanContent
         newPopover()?.show(getString(R.string.popover_models_title), rows, footer)
     }
 
-    private fun modelSubtitle(m: LlmModel): String {
-        val parts = ArrayList<String>()
-        parts += if (m.isLANModel) getString(R.string.popover_model_local)
-            else m.apiIdentifier.substringBefore('/', "").ifBlank { getString(R.string.popover_model_cloud) }
-        if (m.isReasoningCapable) parts += getString(R.string.popover_cap_reasoning)
-        if (m.isVisionCapable) parts += getString(R.string.popover_cap_vision)
-        if (m.isImageGenerationCapable) parts += getString(R.string.popover_cap_image)
-        if (m.isTranscription) parts += getString(R.string.popover_cap_audio)
-        if (m.isFree && !m.isLANModel) parts += getString(R.string.popover_cap_free)
-        return parts.joinToString(" · ")
-    }
-
     /** RP pill: switch character in place, plus the roleplay home and the RP model. */
-    private fun showCharacterPopover() {
+    private fun showCharacterPopover(anchor: View = newChatButton) {
         val repo = viewModel.getRpRepository()
         viewLifecycleOwner.lifecycleScope.launch {
             val chars = repo.getAllCharactersOnce().sortedByDescending { it.updatedAt }
@@ -5673,11 +5939,12 @@ $cleanContent
                     onClick = { openBotModelPicker() }
                 )
             )
-            newPopover()?.show(getString(R.string.popover_characters_title), rows, footer)
+            newPopover(anchor = anchor, edge = anchor, onOpenChange = { })
+                ?.show(getString(R.string.popover_characters_title), rows, footer)
         }
     }
 
-    /** Character pill: the panel for the active character, or the picker when there's none yet. */
+    /** Speaker line: the panel for the active character, or the picker when there's none yet. */
     private fun showRpCharacterPanel() {
         val llm = sharedPreferencesHelper.isRpLlmMode()
         val character = viewModel.activeRpCharacter.value
@@ -5691,14 +5958,31 @@ $cleanContent
             .lineSequence().firstOrNull().orEmpty()
         val memory = sharedPreferencesHelper.getRpMemory(memoryId)
         val hasMemory = memory.isNotBlank()
-        val personaName = sharedPreferencesHelper.getRpPersonaName()
+        val personaOn = sharedPreferencesHelper.isRpPersonaEnabled()
+        val personaName = sharedPreferencesHelper.activeRpPersonaName()
+        val cast = character?.takeIf { !llm }
         val tiles = buildList {
-            add(RpCharacterPanel.Tile(R.string.rp_panel_memory, R.drawable.ic_memory, on = hasMemory || viewModel.currentRpFacts().isNotBlank(), preview = memory.takeIf { hasMemory } ?: viewModel.currentRpFacts().takeIf { it.isNotBlank() }) {
-                menuButton.post { showRpMemoryMenu(memoryId, title) }
+            // Three rows of three: the story (its chats, what is remembered, the world), the people
+            // (the character, how they sound, who you are), and how it looks.
+            add(RpCharacterPanel.Tile(R.string.rp_panel_history, RpTileArt.Kind.HISTORY) {
+                pushRp(RpChatHistoryFragment.newInstance(cast?.id))
             })
-            add(RpCharacterPanel.Tile(R.string.rp_panel_history, R.drawable.rp_ic_archive) { openHistoryPanel() })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_memory, RpTileArt.Kind.MEMORY, on = hasMemory || viewModel.currentRpFacts().isNotBlank()) {
+                pushRp(RpMemoryFragment.newInstance(memoryId, title))
+            })
+            val pinnedId = cast?.let { sharedPreferencesHelper.getRpLorebookId(it.id) }
+            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, RpTileArt.Kind.LORE, on = pinnedId != null) {
+                openRpLore(cast)
+            })
+            if (cast != null) {
+                add(RpCharacterPanel.Tile(R.string.rp_panel_edit, RpTileArt.Kind.EDIT) { pushRp(RpCharacterEditFragment.newInstance(cast.id)) })
+            }
             val voice = sharedPreferencesHelper.getRpVoice(memoryId)
-            val tts = if (::textToSpeech.isInitialized) textToSpeech else null
+            // Named voices label as "Voice n" from the engine's list, so a saved one starts it and redraws when it is up.
+            val tts = TtsHolder.ready()
+            if (voice.name != null && tts == null) {
+                TtsHolder.whenReady(requireContext()) { if (it != null && rpPanel?.isShowing == true) refreshRpPanel() }
+            }
             val tweaks = listOfNotNull(
                 when { voice.pitch < 1f -> getString(R.string.rp_voice_low); voice.pitch > 1f -> getString(R.string.rp_voice_high); else -> null },
                 when { voice.rate < 1f -> getString(R.string.rp_voice_slow); voice.rate > 1f -> getString(R.string.rp_voice_fast); else -> null },
@@ -5706,80 +5990,75 @@ $cleanContent
             val voiceName = RpVoiceDialog.label(this@ChatFragment, tts, voice.name)
             val voiceLabel = if (voiceName == null && tweaks.isEmpty()) null
                 else (listOf(voiceName ?: getString(R.string.rp_voice_default)) + tweaks).joinToString(" · ")
-            add(RpCharacterPanel.Tile(R.string.rp_panel_voice, R.drawable.ic_volume_up, on = voiceLabel != null, preview = voiceLabel) {
-                RpVoiceDialog.show(this@ChatFragment, title, tts, voice) { sharedPreferencesHelper.saveRpVoice(memoryId, it) }
+            add(RpCharacterPanel.Tile(R.string.rp_panel_voice, RpTileArt.Kind.VOICE, on = voiceLabel != null, preview = voiceLabel) {
+                pushRp(RpVoiceFragment.newInstance(memoryId, title))
             })
-            val layout = sharedPreferencesHelper.getRpLayout(memoryId)
-            add(RpCharacterPanel.Tile(R.string.rp_panel_layout, R.drawable.ic_rp_layout, preview = getString(layoutLabel(layout))) {
-                menuButton.post { showRpLayoutPicker(memoryId, layout) }
-            })
-            if (character != null && !llm) {
-                val slot = BackgroundPhoto.slotForCharacter(character.id)
+            // The card is the portrait alone; the name would crowd it, and off shows the empty silhouette.
+            val personaPhoto = sharedPreferencesHelper.getRpPersonaPhoto()?.takeIf { personaOn }
+                ?.let { RpAvatarStorage.personaFile(requireContext(), it) }?.takeIf { it.isFile }
+            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, RpTileArt.Kind.PERSONA, image = personaPhoto, letter = personaName.trim().ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
+            if (cast != null) {
+                val slot = BackgroundPhoto.slotForCharacter(cast.id)
                 val wallpaper = BackgroundPhoto.file(requireContext(), slot).takeIf { it.isFile }
-                add(RpCharacterPanel.Tile(R.string.rp_panel_wallpaper, R.drawable.ic_gallery, on = wallpaper != null, image = wallpaper) {
-                    if (wallpaper == null) pickRpWallpaperFor(character.id)
-                    else menuButton.post { showRpWallpaperMenu(character) }
+                add(RpCharacterPanel.Tile(R.string.rp_panel_wallpaper, RpTileArt.Kind.WALLPAPER, on = wallpaper != null, image = wallpaper) {
+                    pushRp(RpWallpaperFragment.newInstance(cast.id, cast.name))
                 })
             }
-            add(RpCharacterPanel.Tile(R.string.rp_panel_persona, R.drawable.rp_ic_persona, preview = personaName.ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
-            add(RpCharacterPanel.Tile(R.string.rp_panel_style, R.drawable.ic_sliders) { pushRp(RpSettingsFragment.newInstance()) })
-            val pinnedId = if (character != null && !llm) sharedPreferencesHelper.getRpLorebookId(character.id) else null
-            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, R.drawable.rp_ic_book, on = pinnedId != null) {
-                menuButton.post { showRpLorePicker(if (llm) null else character?.id) }
-            })
-            if (character != null && !llm) {
-                add(RpCharacterPanel.Tile(R.string.rp_panel_edit, R.drawable.ic_edit) { pushRp(RpCharacterEditFragment.newInstance(character.id)) })
-                add(RpCharacterPanel.Tile(R.string.rp_panel_new_chat, R.drawable.ic_new_chat, header = true) { startRpWith(character) })
+            val layout = sharedPreferencesHelper.getRpLayout(memoryId)
+            val layoutArt = when (layout) {
+                SharedPreferencesHelper.RP_LAYOUT_BUBBLES -> RpTileArt.Kind.LAYOUT_BUBBLES
+                SharedPreferencesHelper.RP_LAYOUT_BOOK -> RpTileArt.Kind.LAYOUT_BOOK
+                else -> RpTileArt.Kind.LAYOUT_CLASSIC
             }
-            add(RpCharacterPanel.Tile(R.string.rp_panel_switch, R.drawable.rp_ic_characters, header = true) { menuButton.post { showCharacterPopover() } })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_layout, layoutArt, spoken = getString(layoutLabel(layout))) {
+                pushRp(RpLayoutFragment.newInstance(memoryId, title))
+            })
+            add(RpCharacterPanel.Tile(R.string.rp_panel_style, RpTileArt.Kind.STYLE) { pushRp(RpSettingsFragment.newInstance(R.string.rp_panel_style)) })
         }
-        RpCharacterPanel.show(this, if (llm) null else character, title, subtitle, tiles)
+        val content = RpCharacterPanel.content(this, cast, title, subtitle, tiles)
+        val host = rpPanel ?: RpCharacterPanel.Host(requireView() as FrameLayout).also { rpPanel = it }
+        hideKeyboard()
+        host.show(content) { if (rpPanel === host) rpPanel = null }
     }
 
-    /** Lore tile: pin a book to this character, or open the library when there is nothing to pin. */
-    private fun showRpLorePicker(characterId: Long?) {
-        if (characterId == null) {
+    /** Rebuild the open sheet in place (a page it opened may have changed a tile), with no slide. */
+    private fun refreshRpPanel() {
+        if (!isAdded || view == null) return
+        // The look this chat was drawn with can have changed too: layout and wallpaper.
+        ambientBackground?.photoSlot = null
+        updateRpChrome()
+        showRpCharacterPanel()
+    }
+
+    private fun closeRpPanel(animated: Boolean = true) {
+        rpPanel?.dismiss(animated)
+    }
+
+    /** Lore tile: pin a book to this character; with no books yet it opens the library instead. */
+    private fun openRpLore(cast: RpCharacter?) {
+        if (cast == null) {
             pushRp(RpLorebookLibraryFragment.newInstance())
             return
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            val books = viewModel.getRpRepository().getAllLorebooksOnce()
+            val any = viewModel.getRpRepository().getAllLorebooksOnce().isNotEmpty()
             if (view == null) return@launch
-            if (books.isEmpty()) {
-                pushRp(RpLorebookLibraryFragment.newInstance())
-                return@launch
-            }
-            val pinned = sharedPreferencesHelper.getRpLorebookId(characterId)
-            val active = books.firstOrNull { it.isActive }
-            val rows = buildList {
-                add(
-                    PickerPopover.Row(
-                        title = getString(R.string.rp_lore_use_active),
-                        subtitle = active?.name ?: getString(R.string.rp_ui_lore_none),
-                        iconRes = R.drawable.rp_ic_book,
-                        selected = pinned == null
-                    ) { sharedPreferencesHelper.saveRpLorebookId(characterId, null) }
-                )
-                books.forEach { book ->
-                    add(
-                        PickerPopover.Row(
-                            title = book.name,
-                            subtitle = if (book.isActive) getString(R.string.rp_lore_active_badge) else null,
-                            iconRes = R.drawable.rp_ic_book,
-                            selected = book.id == pinned
-                        ) { sharedPreferencesHelper.saveRpLorebookId(characterId, book.id) }
-                    )
-                }
-            }
-            val footer = listOf(
-                PickerPopover.Row(
-                    title = getString(R.string.rp_lore_edit),
-                    iconRes = R.drawable.ic_edit,
-                    onClick = { pushRp(RpLorebookLibraryFragment.newInstance()) }
-                )
-            )
-            newPopover()?.show(getString(R.string.rp_panel_lore), rows, footer)
+            pushRp(if (any) RpLorePinFragment.newInstance(cast.id, cast.name) else RpLorebookLibraryFragment.newInstance())
         }
+    }
+
+    /** What the chats page picked: a chat to open, or a fresh one with the same character. */
+    private fun onRpHistoryPicked(result: Bundle) {
+        closeRpPanel(animated = false)
+        if (result.containsKey(RpChatHistoryFragment.OPEN)) {
+            viewModel.loadChat(result.getLong(RpChatHistoryFragment.OPEN))
+            return
+        }
+        val character = viewModel.activeRpCharacter.value
+        if (sharedPreferencesHelper.isRpLlmMode() || character == null) {
+            closeRpHome()
+            viewModel.startRpLlmChat()
+        } else startRpWith(character)
     }
 
     private fun layoutLabel(layout: String) = when (layout) {
@@ -5788,45 +6067,8 @@ $cleanContent
         else -> R.string.rp_layout_classic
     }
 
-    private fun showRpLayoutPicker(characterId: Long?, current: String) {
-        val options = listOf(
-            Triple(SharedPreferencesHelper.RP_LAYOUT_CLASSIC, R.string.rp_layout_classic, R.string.rp_layout_classic_sub),
-            Triple(SharedPreferencesHelper.RP_LAYOUT_BUBBLES, R.string.rp_layout_bubbles, R.string.rp_layout_bubbles_sub),
-            Triple(SharedPreferencesHelper.RP_LAYOUT_BOOK, R.string.rp_layout_book, R.string.rp_layout_book_sub),
-        )
-        val rows = options.map { (key, title, sub) ->
-            PickerPopover.Row(getString(title), getString(sub), R.drawable.ic_rp_layout, selected = key == current) {
-                sharedPreferencesHelper.saveRpLayout(characterId, key)
-                chatAdapter.rpLayout = key
-            }
-        }
-        newPopover()?.show(getString(R.string.rp_panel_layout), rows, emptyList())
-    }
-
-    private fun pickRpWallpaperFor(characterId: Long) {
-        rpWallpaperFor = characterId
-        pickRpWallpaper.launch(
-            androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-        )
-    }
-
-    private fun showRpWallpaperMenu(character: RpCharacter) {
-        val slot = BackgroundPhoto.slotForCharacter(character.id)
-        val rows = listOf(
-            PickerPopover.Row(getString(R.string.rp_wallpaper_change), getString(R.string.rp_wallpaper_change_sub, character.name), R.drawable.ic_gallery) {
-                pickRpWallpaperFor(character.id)
-            },
-            PickerPopover.Row(getString(R.string.rp_wallpaper_remove), getString(R.string.rp_wallpaper_remove_sub), R.drawable.ic_code_trash) {
-                BackgroundPhoto.delete(requireContext(), slot)
-            },
-        )
-        newPopover()?.show(getString(R.string.rp_panel_wallpaper), rows, emptyList())
-    }
-
     /** Before reading aloud: the active character's voice in Roleplay, the phone's default elsewhere. */
-    private fun applyReadAloudVoice() {
-        if (!::textToSpeech.isInitialized) return
-        val tts = textToSpeech
+    private fun applyReadAloudVoice(tts: TextToSpeech) {
         val rp = viewModel.isRpMode()
         val llm = sharedPreferencesHelper.isRpLlmMode()
         val id = viewModel.activeRpCharacter.value?.id
@@ -5839,57 +6081,30 @@ $cleanContent
         }
     }
 
-    private fun showRpMemoryMenu(characterId: Long?, name: String) {
-        val rows = listOf(
-            PickerPopover.Row(
-                title = getString(R.string.rp_memory_note),
-                subtitle = getString(R.string.rp_memory_hint),
-                iconRes = R.drawable.ic_memory
-            ) { editRpMemory(characterId, name) },
-            PickerPopover.Row(
-                title = getString(R.string.rp_facts_title),
-                subtitle = getString(R.string.rp_facts_hint),
-                iconRes = R.drawable.ic_memory
-            ) { editRpFacts(name) }
-        )
-        newPopover()?.show(getString(R.string.rp_panel_memory), rows, emptyList())
-    }
-
-    private fun editRpFacts(name: String) {
-        GrokInputDialog.show(
-            fragment = this,
-            title = getString(R.string.rp_facts_title) + " · " + name,
-            hint = getString(R.string.rp_facts_hint),
-            initialText = viewModel.currentRpFacts(),
-            confirmText = getString(R.string.rp_memory_save),
-            multiline = true
-        ) { text -> viewModel.saveCurrentRpFacts(text) }
-    }
-
-    private fun editRpMemory(characterId: Long?, name: String) {
-        GrokInputDialog.show(
-            fragment = this,
-            title = getString(R.string.rp_memory_title, name),
-            hint = getString(R.string.rp_memory_hint),
-            initialText = sharedPreferencesHelper.getRpMemory(characterId),
-            confirmText = getString(R.string.rp_memory_save),
-            multiline = true
-        ) { text -> sharedPreferencesHelper.saveRpMemory(characterId, text) }
-    }
-
+    /** A full-screen page over the chat and the open panel: it slides in, the panel stays put under it. */
     private fun pushRp(fragment: Fragment) {
+        if (!isAdded || parentFragmentManager.isStateSaved) return
         hideKeyboard()
+        rpPanelDepth = parentFragmentManager.backStackEntryCount
         parentFragmentManager.beginTransaction()
-            .withGrokStackAnimations()
-            .hide(this)
+            .withGrokPushOver()
             .add(R.id.fragment_container, fragment)
             .addToBackStack(null)
             .commit()
     }
 
-    private fun startRpWith(character: RpCharacter) {
-        val start = { carry: Boolean -> viewModel.startRpChatWithCharacter(character, carry) }
-        if (viewModel.currentRpFacts().isNotBlank()) {
+    /**
+     * [ask] is off for the first chat with a character picked from the list: nothing on screen is
+     * being replaced, so there is no chat to confirm over and no facts to carry.
+     */
+    private fun startRpWith(character: RpCharacter, ask: Boolean = true) {
+        val start = { carry: Boolean ->
+            closeRpHome()
+            viewModel.startRpChatWithCharacter(character, carry)
+        }
+        if (!ask) {
+            start(false)
+        } else if (viewModel.currentRpFacts().isNotBlank()) {
             GrokConfirmDialog.show(
                 fragment = this,
                 title = getString(R.string.rp_facts_choice_title),
@@ -5942,7 +6157,17 @@ $cleanContent
         listOf(R.id.emptyGreeting, R.id.emptySubtitle, R.id.emptyAction, R.id.rpHero).forEach {
             root.findViewById<View>(it)?.visibility = View.GONE
         }
-        centerWatermarkIcon.visibility = View.VISIBLE
+        applyChatMark()
+    }
+
+    /** Empty-chat icon: off, the flat vector, or the liquid glass mark. */
+    private fun applyChatMark() {
+        if (!::centerWatermarkIcon.isInitialized) return
+        centerWatermarkIcon.markStyle = when (sharedPreferencesHelper.getChatMarkStyle()) {
+            SharedPreferencesHelper.CHAT_MARK_OFF -> LiquidMarkView.MarkStyle.OFF
+            SharedPreferencesHelper.CHAT_MARK_PLAIN -> LiquidMarkView.MarkStyle.PLAIN
+            else -> LiquidMarkView.MarkStyle.LIQUID
+        }
     }
 
     fun openRpHub() {
@@ -5983,7 +6208,7 @@ $cleanContent
         }
         val x = indicatorXFor(tab) ?: return
         // A layout pass mid-spring toward the same spot must not cut the animation short.
-        if (!animate && kotlin.math.abs(x - indicatorTargetX) < 0.5f) return
+        if (!animate && indicatorPlaced && kotlin.math.abs(x - indicatorTargetX) < 0.5f) return
         indicatorTargetX = x
         modeTabIndicator.animate().cancel()
         if (animate && indicatorPlaced && Motion.areAnimationsEnabled(requireContext())) {
@@ -6019,6 +6244,8 @@ $cleanContent
         bindEmptyState(rp)
         systemMessageButton.visibility = if (rp) View.GONE else View.VISIBLE
         menuButton.visibility = View.VISIBLE
+        controlsButton.setIconResource(if (rp) R.drawable.ic_rp_scene else R.drawable.ic_sliders)
+        controlsButton.contentDescription = getString(if (rp) R.string.cd_rp_scene else R.string.cd_controls)
         restoreAttachPlusIcon()
         menuButton.contentDescription = getString(
             if (rp) R.string.rp_plus_a11y else R.string.attach_content_description
@@ -6051,28 +6278,22 @@ $cleanContent
         }
         reflectToolButtons()
         if (rp) {
-            val hadAttachments = selectedImageBytes != null ||
-                selectedAudioBytes != null ||
-                pendingFiles.isNotEmpty()
-            selectedImageBytes = null
-            selectedImageMime = null
+            // A staged photo goes along to the scene; files and audio stay in Chat.
+            val hadAttachments = selectedAudioBytes != null || pendingFiles.isNotEmpty()
+            if (selectedAudioBytes != null) attachmentPreviewContainer.visibility = View.GONE
             selectedAudioBytes = null
             selectedAudioFormat = null
-            attachmentPreviewContainer.visibility = View.GONE
             pendingFiles.clear()
             updateAttachmentButton()
             if (hadAttachments) {
-                AppToast.makeText(
-                    requireContext(),
-                    getString(R.string.rp_attachments_disabled),
-                    AppToast.LENGTH_SHORT
-                ).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
             }
             applyModelCapabilityChrome(viewModel.activeChatModel.value)
             presetsButton.visibility = View.GONE
             topPresetsButton.visibility = View.GONE
             presetsButton2.visibility = View.GONE
             val charName = activeChar?.name
+            modelNameTextView.visibility = View.GONE
             modelNameTextView.text = when {
                 llm -> getString(R.string.rp_llm_chip)
                 !charName.isNullOrBlank() -> charName
@@ -6085,6 +6306,7 @@ $cleanContent
             }
             applyRpComposerHint()
         } else {
+            modelNameTextView.visibility = View.VISIBLE
             viewModel.activeChatModel.value?.let { modelNameTextView.text = viewModel.getModelDisplayName(it) }
             chatEditText.hint = getString(R.string.grok_composer_hint)
             applyModelCapabilityChrome(viewModel.activeChatModel.value)
@@ -6092,6 +6314,7 @@ $cleanContent
         }
         updateExtendedTopBarVisibility(sharedPreferencesHelper.getExtendedTopBarEnabled())
         updateComposerAccessoryVisibility()
+        updateRpHome()
     }
 
     /** Ask shows the saved tool prefs. Roleplay never does, and does not write them. */
@@ -6158,7 +6381,7 @@ $cleanContent
     }
 
     private fun substituteVariables(input: String): String {
-        if (!input.contains("{{ox")) return input  // 🔥 EARLY EXIT: Instant if no vars (99% cases)
+        if (!input.contains("{{ox")) return input
 
         val now = Date()
         return input.replace(Regex("""\{\{ox(\w+)\}\}""")) { match ->
@@ -6173,29 +6396,6 @@ $cleanContent
         }
     }
 
-    fun captureViewToBitmapNow(view: View): Bitmap? {
-        // If the view is already laid out, use its current size.
-        if (view.width > 0 && view.height > 0) {
-            val bitmap = createBitmap(view.width, view.height)
-            val canvas = Canvas(bitmap)
-            view.draw(canvas)
-            return bitmap
-        }
-
-        // If not laid out, measure and layout manually.
-        val widthSpec = View.MeasureSpec.makeMeasureSpec(view.layoutParams.width, View.MeasureSpec.EXACTLY)
-        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        view.measure(widthSpec, heightSpec)
-        val measuredHeight = view.measuredHeight
-        val heightSpecExact = View.MeasureSpec.makeMeasureSpec(measuredHeight, View.MeasureSpec.EXACTLY)
-        view.measure(widthSpec, heightSpecExact)
-
-        val bitmap = createBitmap(view.measuredWidth, view.measuredHeight)
-        val canvas = Canvas(bitmap)
-        view.layout(0, 0, view.measuredWidth, view.measuredHeight)
-        view.draw(canvas)
-        return bitmap
-    }
     private fun printChatHtml(htmlContent: String) {
         val printManager = requireContext().getSystemService(Context.PRINT_SERVICE) as PrintManager
         val currentModel = viewModel._activeChatModel.value ?: "Unknown"
@@ -6234,36 +6434,31 @@ $cleanContent
                     padding: 0;         
                     max-width: 100%;    
                     font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
-                    font-size: 16px; line-height: 1.5; color: #24292f; background: white;
+                    font-size: 16px; line-height: 1.5; color: #222222; background: white;
                 }
                 .markdown-body { font-size: 16px; line-height: 1.5; }
                 h1 { 
-                    color: #24292f !important; font-size: 2em !important; font-weight: 600 !important; 
+                    color: #222222 !important; font-size: 2em !important; font-weight: 600 !important; 
                     text-decoration: underline !important;
                     border-bottom: none !important;
                     padding-bottom: .3em !important; margin: 0 0 1em 0 !important; 
                 }
-                a { color: #0366d6; text-decoration: none; }
+                a { color: #333333; text-decoration: none; }
                 a:hover, a:focus { text-decoration: underline; }
-                @media print { a { text-decoration: underline !important; color: #0366d6 !important; } }
+                @media print { a { text-decoration: underline !important; color: #333333 !important; } }
                 strong { font-weight: 600; }
                 pre, code { font-family: 'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; font-size: 14px; }
-                code { background: #f6f8fa; border-radius: 6px; padding: .2em .4em; }
-                pre { background: #f6f8fa; border-radius: 6px; padding: 16px; overflow: auto; margin: 1em 0; }
-                blockquote { border-left: 4px solid #dfe2e5; color: #6a737d; padding-left: 1em; margin: 1em 0; }
+                code { background: #f4f4f4; border-radius: 6px; padding: .2em .4em; }
+                pre { background: #f4f4f4; border-radius: 6px; padding: 16px; overflow: auto; margin: 1em 0; }
+                blockquote { border-left: 4px solid #dddddd; color: #6b6b6b; padding-left: 1em; margin: 1em 0; }
                 table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-                th, td { border: 1px solid #d0d7de; padding: .75em; text-align: left; }
-                th { background: #f6f8fa; font-weight: 600; }
-                hr { border: none; border-top: 1px solid #eaecef; height: 0; margin: 1.5em 0; }
+                th, td { border: 1px solid #d4d4d4; padding: .75em; text-align: left; }
+                th { background: #f4f4f4; font-weight: 600; }
+                hr { border: none; border-top: 1px solid #e8e8e8; height: 0; margin: 1.5em 0; }
                 ul, ol { padding-left: 2em; margin: 1em 0; }
                 img { max-width: 100%; height: auto; }
-                del { color: #bd2c00; }
+                del { color: #6b6b6b; }
                 input[type="checkbox"] { margin: 0 .25em 0 0; vertical-align: middle; }
-                
-                /* Screen tweaks */
-                h3[style*="28a745"] + div[style*="background"] {
-                    background: #f8f9fa; border-left-color: #28a745;
-                }
                 
                 /* ✅ PRINT: NO HR LINES. Margins ONLY for spacers */
                 @media print {
@@ -6285,16 +6480,15 @@ $cleanContent
                     }
                     
                     /* ✅ SPACERS VIA MARGINS ONLY: Tiny after USER (flush to assistant). 2em ONLY after ASSISTANT */
-                    div[style*="margin-bottom: 2em"]:has(h3[style*="0366d6"]) {
+                    div[style*="margin-bottom: 2em"]:has(> div[style*="padding: 0.05em"]) {
                         margin-bottom: 0.25em !important;  /* ✅ User → assistant: tight */
                     }
-                    div[style*="margin-bottom: 2em"]:has(h3[style*="28a745"]) {
+                    div[style*="margin-bottom: 2em"]:not(:has(> div[style*="padding: 0.05em"])) {
                         margin-bottom: 2em !important;  /* ✅ Assistant → next user: spacer ONLY here */
                     }
                     
                     /* ✅ ASSISTANT: Plain text (no bg/border) */
-                    h3[style*="28a745"] + div[style*="background: #f6f8fa"],
-                    h3[style*="28a745"] + div {
+                    h3 + div:not([style*="padding: 0.05em"]) {
                         background: none !important;
                         background-color: transparent !important;
                         border: none !important;
@@ -6306,7 +6500,7 @@ $cleanContent
                     }
                     
                     /* USER: Keep bg/border */
-                    h3[style*="0366d6"] + div[style*="background: #f6f8fa"] {
+                    h3 + div[style*="padding: 0.05em"] {
     padding: 0.05em 0.5em !important;  /* ✅ Tight user bg in print */
 }
 
@@ -6323,12 +6517,8 @@ $cleanContent
             loadDataWithBaseURL(null, fullHtml, "text/html", "UTF-8", null)
         }
     }
-    private fun hasFolderPermission(): Boolean {
-        val uriString = sharedPreferencesHelper.getSafFolderUri() ?: return false
-
-        // Verify the permission is actually still held by the OS
-        val treeUri = uriString.toUri()
-        val persistedUriPermissions = requireContext().contentResolver.persistedUriPermissions
-        return persistedUriPermissions.any { it.uri == treeUri && it.isReadPermission }
-    }
 }
+
+private const val TTS_SPEAK_ID = "tts_utterance"
+private const val STATE_RP_HOME = "rp_home_open"
+private const val STATE_RP_RESUME = "rp_resume_at_home"

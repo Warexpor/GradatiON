@@ -4,7 +4,7 @@
 
     <item
         android:id="@+id/menu_advanced_toggle"
-        android:title="Advanced"
+        android:title="@string/action_advanced"
         app:actionViewClass="androidx.appcompat.widget.SwitchCompat"
     app:showAsAction="always" />
 

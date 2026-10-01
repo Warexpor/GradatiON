@@ -12,8 +12,7 @@
     <FrameLayout
         android:id="@+id/codeSessionFrame"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fitsSystemWindows="true">
+        android:layout_height="match_parent">
 
         <io.github.stardomains3.oxproxion.GlassBackdropLayout
             android:id="@+id/codeSessionBackdrop"
@@ -43,6 +42,21 @@
                 android:paddingTop="72dp"
                 android:scrollbars="none" />
         </io.github.stardomains3.oxproxion.GlassBackdropLayout>
+
+        <!-- Empty transcript: loading, waiting for the agent, or a load that failed (tap to retry) -->
+        <TextView
+            android:id="@+id/codeSessionState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:accessibilityLiveRegion="polite"
+            android:gravity="center"
+            android:minHeight="44dp"
+            android:paddingStart="32dp"
+            android:paddingEnd="32dp"
+            android:textColor="@color/xai_mute"
+            android:textSize="15sp"
+            android:visibility="gone" />
 
         <!-- Top: back · title · options, floating over a scroll-edge fade -->
         <FrameLayout
@@ -118,7 +132,7 @@
                         android:gravity="center"
                         android:singleLine="true"
                         android:textColor="@color/xai_mute"
-                        android:textSize="12.5sp" />
+                        android:textSize="13sp" />
                 </LinearLayout>
 
                 <io.github.stardomains3.oxproxion.GlassIconButton
@@ -169,7 +183,10 @@
                 android:layout_marginBottom="8dp"
                 android:ellipsize="end"
                 android:gravity="center"
-                android:maxLines="3"
+                android:clickable="true"
+                android:focusable="true"
+                android:maxLines="5"
+                android:minHeight="44dp"
                 android:paddingStart="16dp"
                 android:paddingTop="8dp"
                 android:paddingEnd="16dp"
@@ -178,6 +195,7 @@
                 android:textSize="13sp"
                 android:visibility="gone"
                 app:glassCornerRadius="18dp"
+                app:glassInteractive="true"
                 app:glassTint="@color/glass_control_tint" />
 
             <!-- Pending approval pin: glass capsule above the composer when the card is off-screen -->
@@ -193,7 +211,7 @@
                 android:focusable="true"
                 android:gravity="center_vertical"
                 android:maxLines="2"
-                android:minHeight="40dp"
+                android:minHeight="44dp"
                 android:paddingStart="14dp"
                 android:paddingTop="10dp"
                 android:paddingEnd="14dp"

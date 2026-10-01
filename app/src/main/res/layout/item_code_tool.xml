@@ -16,7 +16,7 @@
         android:id="@+id/codeToolRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="36dp"
+        android:minHeight="44dp"
         android:background="@drawable/bg_press_svg"
         android:clickable="true"
         android:focusable="true"
@@ -105,7 +105,7 @@
     <TextView
         android:id="@+id/codeToolFull"
         android:layout_width="match_parent"
-        android:layout_height="36dp"
+        android:layout_height="44dp"
         android:layout_marginStart="30dp"
         android:layout_marginBottom="4dp"
         android:background="@drawable/bg_press_svg"

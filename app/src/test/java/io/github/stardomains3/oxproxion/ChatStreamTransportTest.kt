@@ -6,8 +6,11 @@ import androidx.lifecycle.MutableLiveData
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -43,6 +46,107 @@ class ChatStreamTransportTest {
         assertTrue(text.contains("Example"))
         assertTrue(text.contains("https://example.com"))
         assertEquals("", transport.citationsForTest(null))
+    }
+
+    private fun chunk(index: Int?, id: String? = null, name: String? = null, args: String? = null) =
+        ToolCallChunk(index = index, id = id, function = FunctionCallChunk(name = name, arguments = args))
+
+    @Test
+    fun splitToolCallIsAssembledFromFragments() {
+        val buffer = mutableListOf<ToolCall>()
+        absorbToolCallChunks(buffer, listOf(chunk(0, id = "call_1", name = "set_timer", args = "")))
+        absorbToolCallChunks(buffer, listOf(chunk(0, args = "{\"minu")))
+        absorbToolCallChunks(buffer, listOf(chunk(0, args = "tes\":5}")))
+        assertEquals(1, buffer.size)
+        assertEquals("call_1", buffer[0].id)
+        assertEquals("set_timer", buffer[0].function.name)
+        assertEquals("{\"minutes\":5}", buffer[0].function.arguments)
+    }
+
+    @Test
+    fun idArrivingLateIsMerged() {
+        val buffer = mutableListOf<ToolCall>()
+        absorbToolCallChunks(buffer, listOf(chunk(0, name = "wait", args = "{")))
+        absorbToolCallChunks(buffer, listOf(chunk(0, id = "call_9", args = "}")))
+        assertEquals(1, buffer.size)
+        assertEquals("call_9", buffer[0].id)
+        assertEquals("{}", buffer[0].function.arguments)
+    }
+
+    @Test
+    fun nameRepeatedOnEveryFragmentIsNotDoubled() {
+        val buffer = mutableListOf<ToolCall>()
+        absorbToolCallChunks(buffer, listOf(chunk(0, id = "c", name = "wait", args = "{\"a\":")))
+        absorbToolCallChunks(buffer, listOf(chunk(0, name = "wait", args = "1}")))
+        assertEquals("wait", buffer.single().function.name)
+        assertEquals("{\"a\":1}", buffer.single().function.arguments)
+    }
+
+    @Test
+    fun missingIndexDoesNotDropTheCall() {
+        val buffer = mutableListOf<ToolCall>()
+        absorbToolCallChunks(buffer, listOf(chunk(null, id = "a", name = "wait", args = "{}")))
+        absorbToolCallChunks(buffer, listOf(chunk(null, id = "b", name = "set_timer", args = "{}")))
+        assertEquals(listOf("a", "b"), buffer.map { it.id })
+        assertEquals(listOf("wait", "set_timer"), buffer.map { it.function.name })
+    }
+
+    @Test
+    fun serverThatReusesIndexZeroForEveryCallStillGetsSeparateCalls() {
+        val buffer = mutableListOf<ToolCall>()
+        absorbToolCallChunks(buffer, listOf(chunk(0, id = "a", name = "wait", args = "{}")))
+        absorbToolCallChunks(buffer, listOf(chunk(0, id = "b", name = "set_timer", args = "{}")))
+        assertEquals(listOf("a", "b"), buffer.map { it.id })
+    }
+
+    @Test
+    fun twoCallsInOneDeltaAreBothKept() {
+        val buffer = mutableListOf<ToolCall>()
+        absorbToolCallChunks(buffer, listOf(chunk(0, id = "a", name = "wait", args = "{}"), chunk(1, id = "b", name = "x", args = "{}")))
+        assertEquals(2, buffer.size)
+    }
+
+    @Test
+    fun missingIdsAreFilled() {
+        val buffer = mutableListOf<ToolCall>()
+        absorbToolCallChunks(buffer, listOf(chunk(0, name = "wait", args = "{}")))
+        fillMissingToolCallIds(buffer)
+        assertTrue(buffer.single().id.isNotBlank())
+    }
+
+    @Test
+    fun toolCallChunkDecodesWithoutAnIndex() {
+        val parsed = Json { ignoreUnknownKeys = true }.decodeFromString<StreamedChatResponse>(
+            """{"choices":[{"delta":{"tool_calls":[{"id":"x","function":{"name":"wait","arguments":"{}"}}]}}]}"""
+        )
+        assertNull(parsed.choices.single().delta!!.toolCalls!!.single().index)
+    }
+
+    @Test
+    fun requestOmitsUiOnlyMessageFields() {
+        val messages = listOf(
+            FlexibleMessage(role = "user", content = JsonPrimitive("hi"), imageUri = "content://x/1"),
+            FlexibleMessage(
+                role = "assistant",
+                content = JsonPrimitive("hello"),
+                toolsUsed = true,
+                reasoning = "secret chain of thought",
+                thinking = "more thoughts",
+                toolCalls = listOf(ToolCall("c1", "function", FunctionCall("wait", "{}"))),
+            ),
+            FlexibleMessage(role = "tool", content = JsonPrimitive("ok"), toolCallId = "c1"),
+        )
+        val wire = Json { ignoreUnknownKeys = true }
+            .encodeToString(ChatRequest(model = "m", messages = messages.toApiMessages()))
+        assertFalse(wire.contains("image_uri"))
+        assertFalse(wire.contains("reasoning"))
+        assertFalse(wire.contains("thinking"))
+        assertFalse(wire.contains("toolsUsed"))
+        assertFalse(wire.contains("content://x/1"))
+        assertTrue(wire.contains("tool_calls"))
+        assertTrue(wire.contains("tool_call_id"))
+        // The transcript itself keeps what the UI needs.
+        assertEquals("content://x/1", messages[0].imageUri)
     }
 }
 

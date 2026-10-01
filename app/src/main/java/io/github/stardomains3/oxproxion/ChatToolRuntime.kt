@@ -2,13 +2,10 @@ package io.github.stardomains3.oxproxion
 
 import android.Manifest
 import android.app.Application
-import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -23,57 +20,27 @@ import android.provider.CalendarContract
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.viewModelScope
 import com.google.openlocationcode.OpenLocationCode
-import io.github.stardomains3.oxproxion.BuildConfig
-import io.github.stardomains3.oxproxion.SharedPreferencesHelper.Companion.LAN_PROVIDER_LLAMA_CPP
-import io.github.stardomains3.oxproxion.SharedPreferencesHelper.Companion.LAN_PROVIDER_OLLAMA
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.ClientRequestException
-import io.ktor.client.plugins.DefaultRequest
-import io.ktor.client.plugins.ServerResponseException
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.timeout
-import io.ktor.client.request.forms.formData
-import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
-import io.ktor.client.request.post
-import io.ktor.client.request.preparePost
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.Headers
-import io.ktor.http.HttpHeaders
-import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
-import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.readLine
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -84,44 +51,24 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
-import okhttp3.CompressionInterceptor
-import okhttp3.Gzip
-import okhttp3.brotli.BrotliInterceptor
-import org.commonmark.ext.gfm.tables.TablesExtension
-import org.commonmark.parser.Parser
-import org.commonmark.renderer.html.HtmlRenderer
-import org.commonmark.renderer.text.TextContentRenderer
-import java.io.ByteArrayOutputStream
-import java.io.IOException
-import java.net.SocketTimeoutException
 import java.net.URLEncoder
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import java.text.SimpleDateFormat
-import java.util.Base64
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
-import java.util.concurrent.TimeUnit
-import java.util.zip.CRC32
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
-import javax.net.ssl.SSLContext
-import javax.net.ssl.X509TrustManager
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.milliseconds
+
+/** Characters a read_*_file call may return before the text is cut (about 200 KB). */
+private const val READ_FILE_CHAR_LIMIT = 200_000
 
 /**
  * Tool schemas and execution for Ask chat. Lives outside [ChatViewModel] so a test can
@@ -191,7 +138,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 type = "function",
                 function = FunctionTool(
                     name = "make_file",
-                    description = "Creates a text file (e.g., .txt, .md, .html, .json) and saves it to the Download/gradation workspace. Content should be plain text or structured text. **Important:** Use RAW, UNESCAPED content in the 'content' parameter - it gets written directly to disk as-is via OutputStream. No HTML entities, no escaping needed. Only use when the user specifically asks for a file to be made.",
+                    description = "Creates a text file (e.g., .txt, .md, .html, .json) and saves it to the Download/gradation workspace. Content should be plain text or structured text. Content is written to disk byte-for-byte, so pass raw, unescaped text (no HTML entities). Use when the user asks for a file to be created.",
                     parameters = buildJsonObject {
                         put("type", "object")
                         putJsonObject("properties") {
@@ -548,7 +495,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 type = "function",
                 function = FunctionTool(
                     name = "set_alarm",
-                    description = "Sets an alarm for a specific time. Uses 24-hour format (hour 0-23). IMPORTANT: If the user does not explicitly specify AM or PM (or morning/afternoon/evening), you MUST ask them to clarify before calling this tool. For example, if they say 'set alarm for 7:10' or 'set alarm for 7', ask 'Would you like that for 7:10 AM or 7:10 PM?' and wait for their response. Only call this tool once the time is unambiguous.",
+                    description = "Sets an alarm at a 24-hour time (hour 0-23, minute 0-59). A wrong alarm is worse than a question, so if the user gave no AM/PM or time of day, ask which they mean before calling.",
                     parameters = buildJsonObject {
                         put("type", "object")
                         putJsonObject("properties") {
@@ -671,11 +618,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 type = "function",
                 function = FunctionTool(
                     name = "add_calendar_event",
-                    description = "Adds an event to the user's calendar. Provide a title and start date/time; the AI will populate optional fields like location, description, all-day status, and end time as needed (e.g., default end to 1 hour after start for timed events, or next day for all-day). Dates/times should be in ISO 8601 format (e.g., '2023-10-05T14:30:00' for Oct 5, 2023 at 2:30 PM). Current time/date this was sent is: ${
-                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(
-                            Date()
-                        )
-                    }",
+                    description = "Adds an event to the user's calendar. Provide a title and start date/time; the AI will populate optional fields like location, description, all-day status, and end time as needed (e.g., default end to 1 hour after start for timed events, or next day for all-day). Dates/times should be in ISO 8601 format (e.g., '2023-10-05T14:30:00' for Oct 5, 2023 at 2:30 PM). Call get_current_datetime first when the event is relative to now (\"tomorrow\", \"in 2 hours\").",
                     parameters = buildJsonObject {
                         put("type", "object")
                         putJsonObject("properties") {
@@ -773,7 +716,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 type = "function",
                 function = FunctionTool(
                     name = "edit_file",
-                    description = "Overwrites an existing file in the Download/gradation workspace with new content. Use this when the user wants to update, modify, or edit an existing file. IMPORTANT: You must provide the COMPLETE new content of the file, not just the changes. The entire file will be replaced.",
+                    description = "Overwrites an existing file in the Download/gradation workspace with new content. Use this when the user wants to update, modify, or edit an existing file. The whole file is replaced, so pass its complete new content, not a diff.",
                     parameters = buildJsonObject {
                         put("type", "object")
                         putJsonObject("properties") {
@@ -825,7 +768,10 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
         if (!hasStoredPrefs) return emptyList()
 
-        val enabledToolNames = ToolItem.effectiveEnabledTools(sharedPreferencesHelper.getEnabledTools())
+        val enabled = ToolItem.effectiveEnabledTools(sharedPreferencesHelper.getEnabledTools())
+        // The calendar tool needs "now" to resolve relative dates. The clock lives in its own tool, not a
+        // timestamp in the description, so the tools array stays byte-identical and cacheable across turns.
+        val enabledToolNames = if ("add_calendar_event" in enabled) enabled + "get_current_datetime" else enabled
         return allTools.filter { tool ->
             tool.function?.name in enabledToolNames
         }
@@ -835,6 +781,19 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
         val message = "Destructive tool blocked — enable in Settings"
         _toastUiEvent.postValue(Event(message))
         return message
+    }
+
+    /** Decode a tool's JSON arguments. A bad payload becomes [onError]; the tool body stays the same. */
+    private suspend inline fun withToolArgs(
+        raw: String,
+        onError: (Exception) -> String,
+        block: suspend (JsonObject) -> String,
+    ): String = try {
+        block(json.decodeFromString(raw))
+    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+        throw e // Stop must end the tool run, not become a tool error.
+    } catch (e: Exception) {
+        onError(e)
     }
 
     internal suspend fun handleToolCalls(
@@ -856,7 +815,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                         thinkingMessage,
                         FlexibleMessage(
                             role = "assistant",
-                            content = JsonPrimitive("**Error:**\n---\nTool recursion limit reached.")
+                            content = JsonPrimitive("**Error:**\n---\n" + application.getString(R.string.error_tool_recursion_limit))
                         )
                     )
                 }
@@ -864,71 +823,96 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
             return
         }
 
-        // Deduplicate tool calls: Group by name + arguments and execute only once per unique combo
-        val uniqueToolCalls = toolCalls.groupBy { "${it.function.name}:${it.function.arguments}" }
-            .map { it.value.first() }
-        /*  Log.d("ToolCalls", "Received ${toolCalls.size} tool calls; deduplicated to ${uniqueToolCalls.size}")
-        withContext(Dispatchers.Main) {
-            val toolNames = uniqueToolCalls.map { it.function.name }.distinct().joinToString(", ")
-            AppToast.makeText(
-                application.applicationContext,
-                "Handling ${uniqueToolCalls.size} tool calls: $toolNames",
-                AppToast.LENGTH_SHORT
-            ).show()
-        }*/
         val toolResults = mutableListOf<FlexibleMessage>()
+        try {
+            // File and network tools must not run on the main thread.
+            withContext(Dispatchers.IO) { executeToolCalls(toolCalls, toolResults) }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            // Stop mid-run: the assistant turn already cites these ids, and a provider rejects a
+            // transcript where a tool call has no reply, so every later send would fail.
+            withContext(NonCancellable + Dispatchers.Main) {
+                val answered = toolResults.map { it.toolCallId }.toSet()
+                val stubs = toolCalls.filter { it.id !in answered }.map {
+                    FlexibleMessage(
+                        role = "tool",
+                        content = JsonPrimitive(application.getString(R.string.error_tool_cancelled)),
+                        toolCallId = it.id
+                    )
+                }
+                updateMessages { it.addAll(toolResults + stubs) }
+            }
+            throw e
+        }
+        withContext(Dispatchers.Main) {
+            updateMessages { it.addAll(toolResults) }
+        }
+        // All tool calls now continue the conversation to report their status.
+        val messagesForApi = _chatMessages.value?.toMutableList() ?: mutableListOf()
+        val systemMessage = sharedPreferencesHelper.getSelectedSystemMessage().prompt
+        if (messagesForApi.isEmpty() || messagesForApi[0].role != "system") {
+            messagesForApi.add(
+                0,
+                FlexibleMessage(role = "system", content = JsonPrimitive(systemMessage))
+            )
+            // Log.d("ToolDebug", "Re-added system message to continuation payload")
+        }
+        continueConversation(messagesForApi)
+    }
 
-        for (toolCall in uniqueToolCalls) {  // Now looping over uniques only
-            val result: String = when (toolCall.function.name) {
-                "set_timer" -> {
-                    try {
-                        val arguments =
-                            json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val minutes = arguments["minutes"]?.jsonPrimitive?.intOrNull
-                        val title = arguments["title"]?.jsonPrimitive?.contentOrNull
+    /**
+     * Runs the calls in order, appending one `tool` message per call id to [toolResults] as each
+     * finishes. A repeat of the same name and arguments reuses the first result instead of
+     * running again, but still answers its own id: a provider rejects a transcript where a
+     * tool call goes unanswered.
+     */
+    private suspend fun executeToolCalls(
+        toolCalls: List<ToolCall>,
+        toolResults: MutableList<FlexibleMessage>,
+    ) {
+        val resultsByCall = HashMap<String, String>()
+        for (toolCall in toolCalls) {
+            currentCoroutineContext().ensureActive()
+            val callKey = "${toolCall.function.name}:${toolCall.function.arguments}"
+            val result: String = resultsByCall[callKey] ?: when (toolCall.function.name) {
+                "set_timer" -> withToolArgs(toolCall.function.arguments, {
+                    val error = "Failed to set timer: Error parsing arguments."
+                    _toastUiEvent.postValue(Event(error))
+                    error
+                }) { arguments ->
+                    val minutes = arguments["minutes"]?.jsonPrimitive?.intOrNull
+                    val title = arguments["title"]?.jsonPrimitive?.contentOrNull
 
-                        if (minutes != null && minutes > 0) {
-                            val context = application.applicationContext
-                            val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
-                                putExtra(AlarmClock.EXTRA_LENGTH, minutes * 60)
-                                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                                putExtra(
-                                    AlarmClock.EXTRA_MESSAGE,
-                                    title ?: "Timer"
-                                )  // Use custom title or default
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            context.startActivity(intent)
-                            val displayTitle = title ?: "Timer"
-                            _toastUiEvent.postValue(Event("Timer '$displayTitle' set for $minutes minutes."))
-                            "Timer '$displayTitle' was set successfully for $minutes minutes."
-                        } else {
-                            val error = "Failed to set timer: Invalid minutes value."
-                            _toastUiEvent.postValue(Event(error))
-                            error
+                    if (minutes != null && minutes > 0) {
+                        val context = application.applicationContext
+                        val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
+                            putExtra(AlarmClock.EXTRA_LENGTH, minutes * 60)
+                            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                            putExtra(AlarmClock.EXTRA_MESSAGE, title ?: "Timer")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
-                    } catch (e: Exception) {
-                        //   Log.e("ToolCall", "Error executing set_timer", e)
-                        val error = "Failed to set timer: Error parsing arguments."
+                        context.startActivity(intent)
+                        val displayTitle = title ?: "Timer"
+                        _toastUiEvent.postValue(Event("Timer '$displayTitle' set for $minutes minutes."))
+                        "Timer '$displayTitle' was set successfully for $minutes minutes."
+                    } else {
+                        val error = "Failed to set timer: Invalid minutes value."
                         _toastUiEvent.postValue(Event(error))
                         error
                     }
                 }
-                "open_app" -> {
-                    try {
-                        val context = application.applicationContext
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val pm = context.packageManager
+                "open_app" -> withToolArgs(toolCall.function.arguments, {
+                    "Error in open_app: ${it.localizedMessage}"
+                }) { arguments ->
+                    val context = application.applicationContext
+                    val pm = context.packageManager
+                    val settingsAction = arguments["settings_action"]?.jsonPrimitive?.contentOrNull
+                    val appName = arguments["app_name"]?.jsonPrimitive?.contentOrNull?.trim()
+                    val packageName = arguments["package_name"]?.jsonPrimitive?.contentOrNull
 
-                        val settingsAction = arguments["settings_action"]?.jsonPrimitive?.contentOrNull
-                        val appName = arguments["app_name"]?.jsonPrimitive?.contentOrNull?.trim()
-                        val packageName = arguments["package_name"]?.jsonPrimitive?.contentOrNull
-
-                        // 1. Handle Specific Settings Page
-                        if (!settingsAction.isNullOrBlank()) {
-                            if (!ToolExecutorPolicy.isAllowedSettingsAction(settingsAction)) {
-                                "Error: settings_action '$settingsAction' is not allowed."
-                            } else {
+                    if (!settingsAction.isNullOrBlank()) {
+                        if (!ToolExecutorPolicy.isAllowedSettingsAction(settingsAction)) {
+                            "Error: settings_action '$settingsAction' is not allowed."
+                        } else {
                             try {
                                 val intent = Intent(settingsAction).apply {
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -939,90 +923,70 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                             } catch (e: Exception) {
                                 "Error opening settings page '$settingsAction'. It might not exist on this device. Error: ${e.message}"
                             }
+                        }
+                    } else {
+                        var resolvedPackage: String? = null
+                        if (!packageName.isNullOrBlank()) {
+                            resolvedPackage = try {
+                                pm.getPackageInfo(packageName, 0).packageName
+                            } catch (_: Exception) {
+                                null
                             }
                         }
-                        // 2. Handle Standard App Launch
-                        else {
-                            var resolvedPackage: String? = null
-
-                            // Try Package Name first
-                            if (!packageName.isNullOrBlank()) {
-                                resolvedPackage = try {
-                                    pm.getPackageInfo(packageName, 0).packageName
-                                } catch (e: Exception) { null }
-                            }
-
-                            // Try Fuzzy Name Match
-                            if (resolvedPackage == null && !appName.isNullOrBlank()) {
-                                val mainIntent = Intent(Intent.ACTION_MAIN, null).addCategory(Intent.CATEGORY_LAUNCHER)
-                                val apps = pm.queryIntentActivities(mainIntent, 0)
-
-                                val bestMatch = apps.map { it to it.loadLabel(pm).toString() }
-                                    .filter { (_, label) -> label.contains(appName, ignoreCase = true) }
-                                    .minByOrNull { (_, label) ->
-                                        when {
-                                            label.equals(appName, ignoreCase = true) -> 0
-                                            label.startsWith(appName, ignoreCase = true) -> 1
-                                            else -> 2
-                                        }
-                                    }?.first
-
-                                resolvedPackage = bestMatch?.activityInfo?.packageName
-                            }
-
-                            // Launch
-                            if (resolvedPackage != null) {
-                                val launchIntent = pm.getLaunchIntentForPackage(resolvedPackage)
-                                if (launchIntent != null) {
-                                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    context.startActivity(launchIntent)
-                                    "Successfully launched '$appName' (Package: $resolvedPackage)."
-                                } else {
-                                    "Found package '$resolvedPackage', but it has no launcher activity."
-                                }
+                        if (resolvedPackage == null && !appName.isNullOrBlank()) {
+                            val mainIntent = Intent(Intent.ACTION_MAIN, null).addCategory(Intent.CATEGORY_LAUNCHER)
+                            val apps = pm.queryIntentActivities(mainIntent, 0)
+                            val bestMatch = apps.map { it to it.loadLabel(pm).toString() }
+                                .filter { (_, label) -> label.contains(appName, ignoreCase = true) }
+                                .minByOrNull { (_, label) ->
+                                    when {
+                                        label.equals(appName, ignoreCase = true) -> 0
+                                        label.startsWith(appName, ignoreCase = true) -> 1
+                                        else -> 2
+                                    }
+                                }?.first
+                            resolvedPackage = bestMatch?.activityInfo?.packageName
+                        }
+                        if (resolvedPackage != null) {
+                            val launchIntent = pm.getLaunchIntentForPackage(resolvedPackage)
+                            if (launchIntent != null) {
+                                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(launchIntent)
+                                "Successfully launched '$appName' (Package: $resolvedPackage)."
                             } else {
-                                "Could not find an app named '$appName'. Try using 'search_list_apps' to find the package name."
+                                "Found package '$resolvedPackage', but it has no launcher activity."
                             }
+                        } else {
+                            "Could not find an app named '$appName'. Try using 'search_list_apps' to find the package name."
                         }
-                    } catch (e: Exception) {
-                        "Error in open_app: ${e.localizedMessage}"
                     }
                 }
 
-                "search_list_apps" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val query = arguments["query"]?.jsonPrimitive?.contentOrNull ?: ""
-                        val context = application.applicationContext
-                        val pm = context.packageManager
+                "search_list_apps" -> withToolArgs(toolCall.function.arguments, { "Error listing apps: ${it.message}" }) { arguments ->
+                    val query = arguments["query"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val context = application.applicationContext
+                    val pm = context.packageManager
 
-                        val mainIntent = Intent(Intent.ACTION_MAIN, null).addCategory(Intent.CATEGORY_LAUNCHER)
-                        val apps = pm.queryIntentActivities(mainIntent, 0)
+                    val mainIntent = Intent(Intent.ACTION_MAIN, null).addCategory(Intent.CATEGORY_LAUNCHER)
+                    val apps = pm.queryIntentActivities(mainIntent, 0)
 
-                        val results = buildJsonArray {
-                            apps.forEach { resolveInfo ->
-                                val label = resolveInfo.loadLabel(pm).toString()
-                                val pkg = resolveInfo.activityInfo.packageName
-
-                                // Filter by query (search label and package name)
-                                if (label.contains(query, ignoreCase = true) || pkg.contains(query, ignoreCase = true)) {
-                                    add(buildJsonObject {
-                                        put("label", JsonPrimitive(label))
-                                        put("package", JsonPrimitive(pkg))
-                                    })
-                                }
+                    val results = buildJsonArray {
+                        apps.forEach { resolveInfo ->
+                            val label = resolveInfo.loadLabel(pm).toString()
+                            val pkg = resolveInfo.activityInfo.packageName
+                            if (label.contains(query, ignoreCase = true) || pkg.contains(query, ignoreCase = true)) {
+                                add(buildJsonObject {
+                                    put("label", JsonPrimitive(label))
+                                    put("package", JsonPrimitive(pkg))
+                                })
                             }
                         }
+                    }
 
-                        // FIXED: Use .size (property) instead of .size() (function)
-                        // FIXED: Use > 0 instead of > (implicit comparison issue)
-                        if (results.isNotEmpty()) {
-                            "Found matching apps: ${results.toString()}"
-                        } else {
-                            "No apps found matching '$query'."
-                        }
-                    } catch (e: Exception) {
-                        "Error listing apps: ${e.message}"
+                    if (results.isNotEmpty()) {
+                        "Found matching apps: ${results.toString()}"
+                    } else {
+                        "No apps found matching '$query'."
                     }
                 }
                 "get_current_datetime" -> {
@@ -1070,131 +1034,99 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                         "Error getting date/time: ${e.message}"
                     }
                 }
-                "set_sound_mode" -> {
-                    try {
+                "set_sound_mode" -> withToolArgs(toolCall.function.arguments, {
+                    "Error changing sound mode: ${it.localizedMessage}"
+                }) { arguments ->
+                    val audioManager = application.applicationContext
+                        .getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    val targetMode = arguments["mode"]?.jsonPrimitive?.contentOrNull
+                    fun currentMode() = when (audioManager.ringerMode) {
+                        AudioManager.RINGER_MODE_NORMAL -> "normal"
+                        AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
+                        AudioManager.RINGER_MODE_SILENT -> "silent"
+                        else -> "unknown"
+                    }
+                    if (targetMode.isNullOrBlank()) {
+                        "Current sound mode is: ${currentMode()}."
+                    } else {
+                        val newMode = when (targetMode.lowercase()) {
+                            "normal" -> AudioManager.RINGER_MODE_NORMAL
+                            "vibrate" -> AudioManager.RINGER_MODE_VIBRATE
+                            "silent" -> AudioManager.RINGER_MODE_SILENT
+                            else -> -1
+                        }
+                        if (newMode != -1) {
+                            audioManager.ringerMode = newMode
+                            "Sound mode changed to '${targetMode.lowercase()}'. Current mode is now: ${currentMode()}."
+                        } else {
+                            "Error: Invalid mode specified. Use 'normal', 'vibrate', or 'silent'."
+                        }
+                    }
+                }
+                "set_alarm" -> withToolArgs(toolCall.function.arguments, {
+                    "Failed to set alarm: Error parsing arguments."
+                }) { arguments ->
+                    val hour = arguments["hour"]?.jsonPrimitive?.intOrNull
+                    val minutes = arguments["minutes"]?.jsonPrimitive?.intOrNull
+                    val message = arguments["message"]?.jsonPrimitive?.content
+
+                    if (hour != null && hour in 0..23 && minutes != null && minutes in 0..59) {
                         val context = application.applicationContext
-                        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val targetMode = arguments["mode"]?.jsonPrimitive?.contentOrNull
-
-                        // Helper function to read current state
-                        fun getCurrentMode(): String {
-                            return when (audioManager.ringerMode) {
-                                AudioManager.RINGER_MODE_NORMAL -> "normal"
-                                AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
-                                AudioManager.RINGER_MODE_SILENT -> "silent"
-                                else -> "unknown"
-                            }
+                        val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                            putExtra(AlarmClock.EXTRA_HOUR, hour)
+                            putExtra(AlarmClock.EXTRA_MINUTES, minutes)
+                            message?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
+                            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
-
-                        if (targetMode.isNullOrBlank()) {
-                            // Just report current status
-                            "Current sound mode is: ${getCurrentMode()}."
-                        } else {
-                            // Change the mode
-                            val newMode = when (targetMode.lowercase()) {
-                                "normal" -> AudioManager.RINGER_MODE_NORMAL
-                                "vibrate" -> AudioManager.RINGER_MODE_VIBRATE
-                                "silent" -> AudioManager.RINGER_MODE_SILENT
-                                else -> -1
-                            }
-
-                            if (newMode != -1) {
-                                audioManager.ringerMode = newMode
-                                "Sound mode changed to '${targetMode.lowercase()}'. Current mode is now: ${getCurrentMode()}."
-                            } else {
-                                "Error: Invalid mode specified. Use 'normal', 'vibrate', or 'silent'."
-                            }
-                        }
-                    } catch (e: Exception) {
-                        "Error changing sound mode: ${e.localizedMessage}"
+                        context.startActivity(intent)
+                        "Alarm was set successfully for $hour:$minutes."
+                    } else {
+                        "Failed to set alarm: Invalid hour or minutes."
                     }
                 }
-                "set_alarm" -> {
-                    try {
-                        val arguments =
-                            json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val hour = arguments["hour"]?.jsonPrimitive?.intOrNull
-                        val minutes = arguments["minutes"]?.jsonPrimitive?.intOrNull
-                        val message = arguments["message"]?.jsonPrimitive?.content
+                "start_navigation" -> withToolArgs(toolCall.function.arguments, {
+                    "Error launching navigation: ${it.message}"
+                }) { arguments ->
+                    val destination = arguments["destination"]?.jsonPrimitive?.content
+                    val mode = arguments["mode"]?.jsonPrimitive?.content ?: "d"
+                    val avoid = arguments["avoid"]?.jsonPrimitive?.content
 
-                        if (hour != null && hour in 0..23 && minutes != null && minutes in 0..59) {
-                            val context = application.applicationContext
-                            val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
-                                putExtra(AlarmClock.EXTRA_HOUR, hour)
-                                putExtra(AlarmClock.EXTRA_MINUTES, minutes)
-                                message?.let { putExtra(AlarmClock.EXTRA_MESSAGE, it) }
-                                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            context.startActivity(intent)
-                            "Alarm was set successfully for $hour:$minutes."
-                        } else {
-                            val error = "Failed to set alarm: Invalid hour or minutes."
-                            error
+                    if (destination.isNullOrBlank()) {
+                        "Error: destination is required to start navigation."
+                    } else {
+                        val context = application.applicationContext
+                        val encodedDestination = Uri.encode(destination)
+                        var uriString = "google.navigation:q=$encodedDestination&mode=$mode"
+                        if (!avoid.isNullOrBlank()) uriString += "&avoid=$avoid"
+
+                        val mapIntent = Intent(Intent.ACTION_VIEW, uriString.toUri()).apply {
+                            setPackage("com.google.android.apps.maps")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
-                    } catch (e: Exception) {
-                        //   Log.e("ToolCall", "Error executing set_alarm", e)
-                        val error = "Failed to set alarm: Error parsing arguments."
-                        error
-                    }
-                }
-                "start_navigation" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val destination = arguments["destination"]?.jsonPrimitive?.content
-                        val mode = arguments["mode"]?.jsonPrimitive?.content ?: "d" // Default to driving
-                        val avoid = arguments["avoid"]?.jsonPrimitive?.content
-
-                        if (destination.isNullOrBlank()) {
-                            "Error: destination is required to start navigation."
+                        if (mapIntent.resolveActivity(context.packageManager) != null) {
+                            context.startActivity(mapIntent)
+                            "Navigation started to $destination."
                         } else {
-                            val context = application.applicationContext
-
-                            // Encode the destination to safely handle spaces and special characters
-                            val encodedDestination = Uri.encode(destination)
-                            var uriString = "google.navigation:q=$encodedDestination&mode=$mode"
-
-                            if (!avoid.isNullOrBlank()) {
-                                uriString += "&avoid=$avoid"
-                            }
-
-                            val gmmIntentUri = uriString.toUri()
-                            val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri).apply {
-                                setPackage("com.google.android.apps.maps")
+                            val fallbackIntent = Intent(Intent.ACTION_VIEW, "geo:0,0?q=$encodedDestination".toUri()).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
-
-                            // Verify Google Maps is installed before firing
-                            if (mapIntent.resolveActivity(context.packageManager) != null) {
-                                context.startActivity(mapIntent)
-                                val successMsg = "Navigation started to $destination."
-                               // _toastUiEvent.postValue(Event(successMsg))
-                                successMsg
+                            if (fallbackIntent.resolveActivity(context.packageManager) != null) {
+                                context.startActivity(fallbackIntent)
+                                "Google Maps not found. Launched default map app for $destination."
                             } else {
-                                // Fallback to general geo intent if Maps app isn't found
-                                val fallbackUri = "geo:0,0?q=$encodedDestination".toUri()
-                                val fallbackIntent = Intent(Intent.ACTION_VIEW, fallbackUri).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                if (fallbackIntent.resolveActivity(context.packageManager) != null) {
-                                    context.startActivity(fallbackIntent)
-                                    "Google Maps not found. Launched default map app for $destination."
-                                } else {
-                                    "Error: No map application found on the device."
-                                }
+                                "Error: No map application found on the device."
                             }
                         }
-                    } catch (e: Exception) {
-                        "Error launching navigation: ${e.message}"
                     }
                 }
                 "edit_file" -> {
                     if (!sharedPreferencesHelper.getAllowDestructiveTools()) {
                         destructiveToolsBlockedMessage()
-                    } else try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
+                    } else withToolArgs(toolCall.function.arguments, {
+                        Log.e("ToolCall", "Error executing edit_file", it)
+                        "Error editing file: ${it.message}"
+                    }) { arguments ->
                         val filepath = arguments["filepath"]?.jsonPrimitive?.contentOrNull
                         val content = arguments["content"]?.jsonPrimitive?.contentOrNull
                         val mimeType = arguments["mimetype"]?.jsonPrimitive?.contentOrNull
@@ -1202,66 +1134,50 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                         if (filepath.isNullOrBlank() || content == null) {
                             "Error: filepath and content are required."
                         } else {
-                            // Pass null for mimeType if not provided; helper will detect or default
                             editFileViaSaf(filepath, content, mimeType)
                         }
-                    } catch (e: Exception) {
-                        Log.e("ToolCall", "Error executing edit_file", e)
-                        "Error editing file: ${e.message}"
                     }
                 }
 
-                "copy_file" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val sourcePath = arguments["source_filepath"]?.jsonPrimitive?.contentOrNull
-                        val destPath = arguments["destination_path"]?.jsonPrimitive?.contentOrNull
+                "copy_file" -> withToolArgs(toolCall.function.arguments, {
+                    Log.e("ToolCall", "Error executing copy_file", it)
+                    "Error copying file: ${it.message}"
+                }) { arguments ->
+                    val sourcePath = arguments["source_filepath"]?.jsonPrimitive?.contentOrNull
+                    val destPath = arguments["destination_path"]?.jsonPrimitive?.contentOrNull
 
-                        if (sourcePath.isNullOrBlank() || destPath.isNullOrBlank()) {
-                            "Error: Both source_filepath and destination_path are required."
-                        } else {
-                            copyFileViaSaf(sourcePath, destPath)
-                        }
-                    } catch (e: Exception) {
-                        Log.e("ToolCall", "Error executing copy_file", e)
-                        "Error copying file: ${e.message}"
+                    if (sourcePath.isNullOrBlank() || destPath.isNullOrBlank()) {
+                        "Error: Both source_filepath and destination_path are required."
+                    } else {
+                        copyFileViaSaf(sourcePath, destPath)
                     }
                 }
-                "process_plus_code" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val action = arguments["action"]?.jsonPrimitive?.content
-                        val lat = arguments["latitude"]?.jsonPrimitive?.doubleOrNull
-                        val lng = arguments["longitude"]?.jsonPrimitive?.doubleOrNull
-                        val plusCode = arguments["plus_code"]?.jsonPrimitive?.contentOrNull
-
-                        // Pass to the helper logic
-                        performPlusCodeConversion(action, lat, lng, plusCode)
-                    } catch (e: Exception) {
-                        "Error parsing plus code arguments: ${e.message}"
-                    }
+                "process_plus_code" -> withToolArgs(toolCall.function.arguments, {
+                    "Error parsing plus code arguments: ${it.message}"
+                }) { arguments ->
+                    val action = arguments["action"]?.jsonPrimitive?.content
+                    val lat = arguments["latitude"]?.jsonPrimitive?.doubleOrNull
+                    val lng = arguments["longitude"]?.jsonPrimitive?.doubleOrNull
+                    val plusCode = arguments["plus_code"]?.jsonPrimitive?.contentOrNull
+                    performPlusCodeConversion(action, lat, lng, plusCode)
                 }
-                "create_folder" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val folderPath = arguments["folder_path"]?.jsonPrimitive?.content
-                        if (folderPath != null) {
-                            createFolderInWorkspaceViaMediaStore(folderPath)
-                            "Folder '$folderPath' created successfully." // <--- Add this line!
-                        } else {
-                            "Error: No folder_path provided."
-                        }
-                    } catch (e: Exception) {
-                        "Error creating folder: ${e.message}"
+                "create_folder" -> withToolArgs(toolCall.function.arguments, {
+                    "Error creating folder: ${it.message}"
+                }) { arguments ->
+                    val folderPath = arguments["folder_path"]?.jsonPrimitive?.content
+                    if (folderPath != null) {
+                        createFolderInWorkspaceViaMediaStore(folderPath)
+                        "Folder '$folderPath' created successfully."
+                    } else {
+                        "Error: No folder_path provided."
                     }
                 }
 
-
-
-                "add_calendar_event" -> {
-                    try {
-                        val arguments =
-                            json.decodeFromString<JsonObject>(toolCall.function.arguments)
+                "add_calendar_event" -> withToolArgs(toolCall.function.arguments, {
+                    val error = "Failed to add calendar event: ${it.message}"
+                    _toastUiEvent.postValue(Event(error))
+                    error
+                }) { arguments ->
                         val title = arguments["title"]?.jsonPrimitive?.content ?: ""
                         val location = arguments["location"]?.jsonPrimitive?.content ?: ""
                         val description = arguments["description"]?.jsonPrimitive?.content ?: ""
@@ -1353,89 +1269,67 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                             _toastUiEvent.postValue(Event(eventSummary))
                             eventSummary
                         }
-                    } catch (e: Exception) {
-                        val error = "Failed to add calendar event: ${e.message}"
-                        _toastUiEvent.postValue(Event(error))
-                        error
-                    }
                 }
 
-                "make_file" -> {
-                    try {
-                        val args = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val filename = args["filename"]?.jsonPrimitive?.content ?: ""
-                        val content = args["content"]?.jsonPrimitive?.content ?: ""
-                        val mimeType = args["mimetype"]?.jsonPrimitive?.content ?: "text/plain"
-                        val subfolder = args["subfolder"]?.jsonPrimitive?.contentOrNull ?: "" // NEW
+                "make_file" -> withToolArgs(toolCall.function.arguments, {
+                    "Error creating file: ${it.message}"
+                }) { args ->
+                    val filename = args["filename"]?.jsonPrimitive?.content ?: ""
+                    val content = args["content"]?.jsonPrimitive?.content ?: ""
+                    val mimeType = args["mimetype"]?.jsonPrimitive?.content ?: "text/plain"
+                    val subfolder = args["subfolder"]?.jsonPrimitive?.contentOrNull ?: ""
 
-                        if (filename.isBlank() || content.isBlank()) {
-                            "Error: filename or content empty."
-                        } else {
-                            // Use the new function instead of saveFileToDownloads
-                            saveFileToOpenChatWorkspace(filename, content, mimeType, subfolder)
-
-                            val displayPath = WorkspacePaths.displayPath(filename, subfolder)
-                            _toolUiEvent.postValue(Event("File saved to Downloads: $displayPath"))
-                            "File “$filename” successfully created in Downloads/$displayPath."
-                        }
-                    } catch (e: Exception) {
-                        //  Log.e("ToolCall", "make_file failed", e)
-                        "Error creating file: ${e.message}"
+                    if (filename.isBlank() || content.isBlank()) {
+                        "Error: filename or content empty."
+                    } else {
+                        saveFileToOpenChatWorkspace(filename, content, mimeType, subfolder)
+                        val displayPath = WorkspacePaths.displayPath(filename, subfolder)
+                        _toastUiEvent.postValue(Event("File saved to Downloads: $displayPath"))
+                        "File “$filename” successfully created in Downloads/$displayPath."
                     }
                 }
                 "delete_files" -> {
                     if (!sharedPreferencesHelper.getAllowDestructiveTools()) {
                         destructiveToolsBlockedMessage()
-                    } else try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
+                    } else withToolArgs(toolCall.function.arguments, {
+                        "Error deleting files: ${it.message}"
+                    }) { arguments ->
                         val filepaths = parseFilepaths(arguments["filepaths"])
-
                         if (filepaths.isNotEmpty()) {
                             deleteFilesViaSaf(filepaths)
                         } else {
                             "Error: No filepaths provided."
                         }
-                    } catch (e: Exception) {
-                        "Error deleting files: ${e.message}"
                     }
                 }
-                "wait" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val seconds = arguments["seconds"]?.jsonPrimitive?.intOrNull
-                        val reason = arguments["reason"]?.jsonPrimitive?.contentOrNull
+                "wait" -> withToolArgs(toolCall.function.arguments, {
+                    "Error executing wait: ${it.message}"
+                }) { arguments ->
+                    val seconds = arguments["seconds"]?.jsonPrimitive?.intOrNull
+                    val reason = arguments["reason"]?.jsonPrimitive?.contentOrNull
 
-                        if (seconds != null && seconds in 10..600) {
-                            val displayReason = if (!reason.isNullOrBlank()) " ($reason)" else ""
-                            _toastUiEvent.postValue(Event("Waiting for $seconds seconds$displayReason..."))
-
-                            // Use delay to pause execution
-                            delay((seconds * 1000L).milliseconds)
-
-                            "Waited for $seconds seconds successfully$displayReason. The wait has completed."
-                        } else {
-                            "Error: Invalid seconds value. Must be between 10 and 600."
-                        }
-                    } catch (e: Exception) {
-                        "Error executing wait: ${e.message}"
+                    if (seconds != null && seconds in 10..600) {
+                        val displayReason = if (!reason.isNullOrBlank()) " ($reason)" else ""
+                        _toastUiEvent.postValue(Event("Waiting for $seconds seconds$displayReason..."))
+                        delay((seconds * 1000L).milliseconds)
+                        "Waited for $seconds seconds successfully$displayReason. The wait has completed."
+                    } else {
+                        "Error: Invalid seconds value. Must be between 10 and 600."
                     }
                 }
-                "find_nearby_places" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val query = arguments["query"]?.jsonPrimitive?.contentOrNull ?: ""
-                        val location = arguments["location"]?.jsonPrimitive?.contentOrNull
-                        val latitude = arguments["latitude"]?.jsonPrimitive?.doubleOrNull
-                        val longitude = arguments["longitude"]?.jsonPrimitive?.doubleOrNull
-                        val radius = arguments["radius"]?.jsonPrimitive?.intOrNull ?: 5000
+                "find_nearby_places" -> withToolArgs(toolCall.function.arguments, {
+                    "Error finding nearby places: ${it.message}"
+                }) { arguments ->
+                    val query = arguments["query"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val location = arguments["location"]?.jsonPrimitive?.contentOrNull
+                    val latitude = arguments["latitude"]?.jsonPrimitive?.doubleOrNull
+                    val longitude = arguments["longitude"]?.jsonPrimitive?.doubleOrNull
+                    val radius = arguments["radius"]?.jsonPrimitive?.intOrNull ?: 5000
 
-                        if (location.isNullOrBlank() && (latitude == null || longitude == null)) {
-                            "Error: Provide either a 'location' name or 'latitude'/'longitude' coordinates."
-                        } else {
-                            searchNearbyPlaces(query, latitude, longitude, radius, location)
-                        }
-                    } catch (e: Exception) {
-                        "Error finding nearby places: ${e.message}"
+                    if (location.isNullOrBlank() && (latitude == null || longitude == null)) {
+                        "Error: Provide either a 'location' name or 'latitude'/'longitude' coordinates."
+                    } else {
+                        searchNearbyPlaces(query, latitude, longitude, radius, location)
                     }
                 }
                 "get_location" -> {
@@ -1453,100 +1347,68 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                         "Error checking location permissions: ${e.message}"
                     }
                 }
-                "brave_search" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val query = arguments["query"]?.jsonPrimitive?.content
-                        val freshness = arguments["freshness"]?.jsonPrimitive?.contentOrNull
-                        val count = arguments["count"]?.jsonPrimitive?.intOrNull ?: 10
-                        val maxTokens = arguments["max_tokens"]?.jsonPrimitive?.intOrNull ?: 4096
-                        val threshold = arguments["threshold"]?.jsonPrimitive?.contentOrNull
-                        val safesearch = arguments["safesearch"]?.jsonPrimitive?.contentOrNull ?: "moderate"
+                "brave_search" -> withToolArgs(toolCall.function.arguments, {
+                    "Error: Failed to search with Brave LLM Context – ${it.message}"
+                }) { arguments ->
+                    val query = arguments["query"]?.jsonPrimitive?.content
+                    val freshness = arguments["freshness"]?.jsonPrimitive?.contentOrNull
+                    val count = arguments["count"]?.jsonPrimitive?.intOrNull ?: 10
+                    val maxTokens = arguments["max_tokens"]?.jsonPrimitive?.intOrNull ?: 4096
+                    val threshold = arguments["threshold"]?.jsonPrimitive?.contentOrNull
+                    val safesearch = arguments["safesearch"]?.jsonPrimitive?.contentOrNull ?: "moderate"
 
-                        if (query.isNullOrBlank()) {
-                            "Error: No search query provided."
-                        } else {
-                            searchBraveLlmContext(query, freshness, count, maxTokens, threshold, safesearch)
-                        }
-                    } catch (e: Exception) {
-                        "Error: Failed to search with Brave LLM Context – ${e.message}"
+                    if (query.isNullOrBlank()) {
+                        "Error: No search query provided."
+                    } else {
+                        searchBraveLlmContext(query, freshness, count, maxTokens, threshold, safesearch)
                     }
                 }
-                "brave_news" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val query = arguments["query"]?.jsonPrimitive?.content
-                        val freshness = arguments["freshness"]?.jsonPrimitive?.contentOrNull
-                        val count = arguments["count"]?.jsonPrimitive?.intOrNull ?: 20
-                        val safesearch = arguments["safesearch"]?.jsonPrimitive?.contentOrNull ?: "moderate"
+                "brave_news" -> withToolArgs(toolCall.function.arguments, {
+                    "Error: Failed to search Brave News – ${it.message}"
+                }) { arguments ->
+                    val query = arguments["query"]?.jsonPrimitive?.content
+                    val freshness = arguments["freshness"]?.jsonPrimitive?.contentOrNull
+                    val count = arguments["count"]?.jsonPrimitive?.intOrNull ?: 20
+                    val safesearch = arguments["safesearch"]?.jsonPrimitive?.contentOrNull ?: "moderate"
 
-                        if (query.isNullOrBlank()) {
-                            "Error: No news query provided."
-                        } else {
-                            searchBraveNews(query, freshness, count, safesearch)
-                        }
-                    } catch (e: Exception) {
-                        "Error: Failed to search Brave News – ${e.message}"
+                    if (query.isNullOrBlank()) {
+                        "Error: No news query provided."
+                    } else {
+                        searchBraveNews(query, freshness, count, safesearch)
                     }
                 }
-
-                "open_file" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val filepath = arguments["filepath"]?.jsonPrimitive?.content
-                        val mimeType = arguments["mimetype"]?.jsonPrimitive?.content
-
-                        if (filepath != null) {
-                            openFileViaSaf(filepath, mimeType)
-                        } else {
-                            "Error: No filepath provided."
-                        }
-                    } catch (e: Exception) {
-                        "Error opening file: ${e.message}"
+                "open_file" -> withToolArgs(toolCall.function.arguments, {
+                    "Error opening file: ${it.message}"
+                }) { arguments ->
+                    val filepath = arguments["filepath"]?.jsonPrimitive?.content
+                    val mimeType = arguments["mimetype"]?.jsonPrimitive?.content
+                    if (filepath != null) {
+                        openFileViaSaf(filepath, mimeType)
+                    } else {
+                        "Error: No filepath provided."
                     }
                 }
-
-
-                "list_oxproxion_files", "list_grokion_files", "list_gradation_files" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val path = arguments["path"]?.jsonPrimitive?.contentOrNull ?: ""
-                        listOpenChatFilesViaSaf(path)
-                    } catch (e: Exception) {
-                        "Error listing files: ${e.message}"
+                "list_oxproxion_files", "list_grokion_files", "list_gradation_files" -> withToolArgs(
+                    toolCall.function.arguments,
+                    { "Error listing files: ${it.message}" },
+                ) { arguments ->
+                    listOpenChatFilesViaSaf(arguments["path"]?.jsonPrimitive?.contentOrNull ?: "")
+                }
+                "read_oxproxion_file", "read_grokion_file", "read_gradation_file" -> withToolArgs(
+                    toolCall.function.arguments,
+                    { "Error reading file: ${it.message}" },
+                ) { arguments ->
+                    val filepath = arguments["filepath"]?.jsonPrimitive?.content
+                    if (filepath != null) {
+                        readOpenChatFileViaSaf(filepath)
+                    } else {
+                        "Error: No filepath provided."
                     }
                 }
-
-                "read_oxproxion_file", "read_grokion_file", "read_gradation_file" -> {
-                    try {
-                        val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                        val filepath = arguments["filepath"]?.jsonPrimitive?.content
-                        if (filepath != null) {
-                            readOpenChatFileViaSaf(filepath)
-                        } else {
-                            "Error: No filepath provided."
-                        }
-                    } catch (e: Exception) {
-                        "Error reading file: ${e.message}"
-                    }
-                }
-
-
-                /* "generate_pdf" -> {
-                     try {
-                         val arguments = json.decodeFromString<JsonObject>(toolCall.function.arguments)
-                         val content = arguments["content"]?.jsonPrimitive?.content ?: ""
-                         val filename = arguments["filename"]?.jsonPrimitive?.content
-                         pdfToolHandler.handleGeneratePdf(content, filename)
-                     } catch (e: Exception) {
-                         Log.e("ToolCall", "Error executing generate_pdf", e)
-                         "Error: Could not generate PDF."
-                     }
-                 }*/
-
 
                 else -> "Error: Unknown tool call"
             }
+            resultsByCall[callKey] = result
             toolResults.add(
                 FlexibleMessage(
                     role = "tool",
@@ -1555,21 +1417,6 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 )
             )
         }
-        withContext(Dispatchers.Main) {
-            updateMessages { it.addAll(toolResults) }
-        }
-        // All tool calls now continue the conversation to report their status.
-        val messagesForApi = _chatMessages.value?.toMutableList() ?: mutableListOf()
-        val systemMessage = sharedPreferencesHelper.getSelectedSystemMessage().prompt
-        if (messagesForApi.isEmpty() || messagesForApi[0].role != "system") {
-            messagesForApi.add(
-                0,
-                FlexibleMessage(role = "system", content = JsonPrimitive(systemMessage))
-            )
-            // Log.d("ToolDebug", "Re-added system message to continuation payload")
-        }
-      //  messagesForApi.addAll(toolResults)
-        continueConversation(messagesForApi)
     }
 
     private suspend fun fetchCurrentLocation(): String {
@@ -1724,36 +1571,68 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
         }
     }
 
+    /** The granted workspace tree. A missing grant and a tree that will not open stay distinct. */
+    private fun openWorkspaceRoot(): DocumentFile? {
+        val uri = sharedPreferencesHelper.getSafFolderUri() ?: return null
+        return DocumentFile.fromTreeUri(application.applicationContext, uri.toUri())
+    }
+
+    private fun workspaceClosed(missingPermission: String, cannotOpen: String): String =
+        if (sharedPreferencesHelper.getSafFolderUri() == null) missingPermission else cannotOpen
+
+    private fun unsafeWorkspacePath(path: String): Boolean =
+        path.contains('\\') || path.contains("..")
+
+    /** Parent of the last path segment. [second] is the directory name that was missing. */
+    private fun DocumentFile.directoryHolding(parts: List<String>): Pair<DocumentFile?, String?> {
+        var current = this
+        for (i in 0 until parts.size - 1) {
+            val name = parts[i]
+            if (name.isBlank()) continue
+            val next = current.findFile(name)
+            if (next == null || !next.isDirectory) return null to name
+            current = next
+        }
+        return current to null
+    }
+
+    /** File that read and open both look up, or the error those two already shared. */
+    private inline fun withWorkspaceFile(filepath: String, block: (DocumentFile) -> String): String {
+        if (unsafeWorkspacePath(filepath)) {
+            return "Error: Invalid filepath. Backslashes and parent directories (..) are not allowed."
+        }
+        val root = openWorkspaceRoot() ?: return workspaceClosed(
+            "Error: Folder permission not granted. Ask the user to grant folder access.",
+            "Error: Could not access the workspace folder.",
+        )
+        val parts = filepath.split("/")
+        val (dir, missing) = root.directoryHolding(parts)
+        if (dir == null) return "Error: Directory '$missing' not found in path."
+        val file = dir.findFile(parts.last()) ?: return "Error: File '$filepath' not found."
+        if (!file.isFile) return "Error: '$filepath' is not a file."
+        return block(file)
+    }
+
     private suspend fun editFileViaSaf(filepath: String, newContent: String, mimeType: String?): String {
         return withContext(Dispatchers.IO) {
             // 1. Security Checks
-            if (filepath.contains("\\") || filepath.contains("..")) {
+            if (unsafeWorkspacePath(filepath)) {
                 return@withContext "Error: Invalid filepath. Backslashes and parent directories (..) are not allowed."
             }
 
-            val uriString = sharedPreferencesHelper.getSafFolderUri()
-                ?: return@withContext "Error: Folder permission not granted."
-
             try {
-                val context = application.applicationContext
-                val treeUri = uriString.toUri()
-                val rootDocumentFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)
-                    ?: return@withContext "Error: Could not access workspace."
+                val rootDocumentFile = openWorkspaceRoot()
+                    ?: return@withContext workspaceClosed(
+                        "Error: Folder permission not granted.",
+                        "Error: Could not access workspace.",
+                    )
 
                 // 2. Locate the Existing File
                 val pathParts = filepath.split("/")
                 val filename = pathParts.last()
-                var currentDir = rootDocumentFile
-
-                // Traverse directories
-                for (i in 0 until pathParts.size - 1) {
-                    val dirName = pathParts[i]
-                    if (dirName.isBlank()) continue
-                    val nextDir = currentDir.findFile(dirName)
-                    if (nextDir == null || !nextDir.isDirectory) {
-                        return@withContext "Error: Directory '$dirName' not found in path."
-                    }
-                    currentDir = nextDir
+                val (currentDir, missingDir) = rootDocumentFile.directoryHolding(pathParts)
+                if (currentDir == null) {
+                    return@withContext "Error: Directory '$missingDir' not found in path."
                 }
 
                 val targetFile = currentDir.findFile(filename)
@@ -1766,11 +1645,26 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 val finalMimeType = mimeType ?: targetFile.type ?: "text/plain"
 
                 // 4. Overwrite Content
-                // "w" mode truncates the file before writing
-                context.contentResolver.openOutputStream(targetFile.uri, "w")?.use { outputStream ->
-                    outputStream.write(newContent.toByteArray(Charsets.UTF_8))
-                    outputStream.flush()
-                } ?: return@withContext "Error: Could not open file for writing."
+                // Opening for write truncates first, so keep the old bytes in hand and put them
+                // back if the write fails part-way. "wt" asks for truncation outright; plain "w"
+                // leaves the old tail behind on some providers when the new text is shorter.
+                val resolver = application.applicationContext.contentResolver
+                val original = resolver.openInputStream(targetFile.uri)?.use { it.readBytes() }
+                try {
+                    resolver.openOutputStream(targetFile.uri, "wt")?.use { outputStream ->
+                        outputStream.write(newContent.toByteArray(Charsets.UTF_8))
+                        outputStream.flush()
+                    } ?: return@withContext "Error: Could not open file for writing."
+                } catch (e: Exception) {
+                    if (original != null) {
+                        try {
+                            resolver.openOutputStream(targetFile.uri, "wt")?.use { it.write(original) }
+                        } catch (_: Exception) {
+                            // Nothing more can be done; the original error is the one to report.
+                        }
+                    }
+                    throw e
+                }
 
                 "File '$filepath' successfully updated."
 
@@ -1784,34 +1678,23 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
     private suspend fun copyFileViaSaf(sourcePath: String, destinationPath: String): String {
         return withContext(Dispatchers.IO) {
             // 1. Security Checks
-            if (sourcePath.contains("\\") || sourcePath.contains("..") ||
-                destinationPath.contains("\\") || destinationPath.contains("..")) {
+            if (unsafeWorkspacePath(sourcePath) || unsafeWorkspacePath(destinationPath)) {
                 return@withContext "Error: Invalid paths. Backslashes and parent directories (..) are not allowed."
             }
 
-            val uriString = sharedPreferencesHelper.getSafFolderUri()
-                ?: return@withContext "Error: Folder permission not granted. Ask the user to grant folder access."
-
             try {
-                val context = application.applicationContext
-                val treeUri = uriString.toUri()
-                val rootDocumentFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)
-                    ?: return@withContext "Error: Could not access the workspace folder."
+                val rootDocumentFile = openWorkspaceRoot()
+                    ?: return@withContext workspaceClosed(
+                        "Error: Folder permission not granted. Ask the user to grant folder access.",
+                        "Error: Could not access the workspace folder.",
+                    )
 
                 // 2. Locate Source File
                 val sourceParts = sourcePath.split("/")
                 val sourceFilename = sourceParts.last()
-                var currentSourceDir = rootDocumentFile
-
-                // Traverse source directories
-                for (i in 0 until sourceParts.size - 1) {
-                    val dirName = sourceParts[i]
-                    if (dirName.isBlank()) continue
-                    val nextDir = currentSourceDir.findFile(dirName)
-                    if (nextDir == null || !nextDir.isDirectory) {
-                        return@withContext "Error: Source directory '$dirName' not found in path '$sourcePath'."
-                    }
-                    currentSourceDir = nextDir
+                val (currentSourceDir, missingSource) = rootDocumentFile.directoryHolding(sourceParts)
+                if (currentSourceDir == null) {
+                    return@withContext "Error: Source directory '$missingSource' not found in path '$sourcePath'."
                 }
 
                 val sourceFile = currentSourceDir.findFile(sourceFilename)
@@ -1863,8 +1746,8 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 }
 
                 // Perform the byte copy
-                context.contentResolver.openInputStream(sourceFile.uri)?.use { input ->
-                    context.contentResolver.openOutputStream(newDestFile.uri)?.use { output ->
+                application.applicationContext.contentResolver.openInputStream(sourceFile.uri)?.use { input ->
+                    application.applicationContext.contentResolver.openOutputStream(newDestFile.uri)?.use { output ->
                         input.copyTo(output)
                     }
                 } ?: throw Exception("Failed to open streams for copy operation.")
@@ -1885,29 +1768,25 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
         }
     }
 
+    /** "notes.txt" with stamp "20231027_143000" becomes "notes_20231027_143000.txt". */
+    private fun stampedName(filename: String, stamp: String): String {
+        val baseName = filename.substringBeforeLast(".")
+        val extension = filename.substringAfterLast(".", "")
+        return if (extension.isNotBlank()) "${baseName}_$stamp.$extension" else "${baseName}_$stamp"
+    }
+
     /**
      * Generates a unique filename by appending a timestamp if the desired name exists.
      * Example: "notes.txt" -> "notes_20231027_143000.txt"
      */
     private fun generateUniqueFilename(parentDir: androidx.documentfile.provider.DocumentFile, desiredName: String): String {
-        val baseName = desiredName.substringBeforeLast(".")
-        val extension = desiredName.substringAfterLast(".", "")
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-
-        var candidateName = if (extension.isNotEmpty()) {
-            "${baseName}_$timestamp.$extension"
-        } else {
-            "${baseName}_$timestamp"
-        }
+        var candidateName = stampedName(desiredName, timestamp)
 
         // Safety loop: In the extremely rare case of a collision within the same second
         var counter = 1
         while (parentDir.findFile(candidateName) != null) {
-            candidateName = if (extension.isNotEmpty()) {
-                "${baseName}_${timestamp}_$counter.$extension"
-            } else {
-                "${baseName}_${timestamp}_$counter"
-            }
+            candidateName = stampedName(desiredName, "${timestamp}_$counter")
             counter++
         }
 
@@ -2054,7 +1933,6 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
             try {
                 val apiKey = sharedPreferencesHelper.getApiKeyFromPrefs("brave_search_api_key")
 
-
                 val urlBuilder = StringBuilder("https://api.search.brave.com/res/v1/llm/context").apply {
                     append("?q=").append(java.net.URLEncoder.encode(query, "UTF-8"))
                     append("&count=").append(count.coerceIn(1, 50))
@@ -2155,7 +2033,6 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                     append("?q=").append(java.net.URLEncoder.encode(query, "UTF-8"))
                     append("&count=").append(count.coerceIn(1, 50))
 
-
                     val safe = if (safesearch in listOf("off", "moderate", "strict")) safesearch else "moderate"
                     append("&safesearch=").append(safe)
                     if (!freshness.isNullOrBlank()) {
@@ -2241,105 +2118,6 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
         }
     }
 
-    private suspend fun searchBrave(
-        query: String,
-        type: String,
-        freshness: String?,
-        safesearch: String,
-        count: Int
-    ): String {
-        return withContext(Dispatchers.IO) {
-            try {
-
-                val apiKey = sharedPreferencesHelper.getApiKeyFromPrefs("brave_search_api_key")
-                val isNews = type.lowercase() == "news"
-
-                val urlBuilder = StringBuilder("https://api.search.brave.com/res/v1/web/search").apply {
-                    append("?q=").append(java.net.URLEncoder.encode(query, "UTF-8"))
-                    append("&count=").append(count.coerceIn(1, 20))
-                    val safe = if (safesearch in listOf("off", "moderate", "strict")) safesearch else "moderate"
-                    append("&safesearch=").append(safe)
-                    if (isNews) {
-                        append("&result_filter=news")
-                    }
-                    if (!freshness.isNullOrBlank()) {
-                        append("&freshness=").append(java.net.URLEncoder.encode(freshness, "UTF-8"))
-                    }
-                }
-
-                val response = httpClient.get(urlBuilder.toString()) {
-                    header("Accept", "application/json")
-                    header("X-Subscription-Token", apiKey)
-                }
-
-                if (!response.status.isSuccess()) {
-                    val errorBody = try {
-                        response.bodyAsText()
-                    } catch (ex: Exception) {
-                        "No details"
-                    }
-                    return@withContext "Brave Search Error: ${response.status} – $errorBody"
-                }
-
-                val data = response.body<JsonObject>()
-
-                // Parse results based on search type
-                val resultsArray = if (isNews) {
-                    val newsObj = data["news"]?.jsonObject
-                    newsObj?.get("results")?.jsonArray ?: JsonArray(listOf())
-                } else {
-                    val webObj = data["web"]?.jsonObject
-                    webObj?.get("results")?.jsonArray ?: JsonArray(listOf())
-                }
-
-                if (resultsArray.isEmpty()) {
-                    return@withContext "No results found for: $query"
-                }
-
-                val sb = StringBuilder()
-                sb.appendLine("## Brave Search Results (${type.uppercase()}) for: \"$query\"")
-                if (!freshness.isNullOrBlank()) {
-                    val freshnessLabel = when (freshness) {
-                        "pd" -> "Past Day"
-                        "pw" -> "Past Week"
-                        "pm" -> "Past Month"
-                        "py" -> "Past Year"
-                        else -> "Date Range: $freshness"
-                    }
-                    sb.appendLine("Freshness filter: $freshnessLabel")
-                }
-                sb.appendLine()
-
-                resultsArray.forEachIndexed { index, element ->
-                    val result = element.jsonObject
-                    val title = result["title"]?.jsonPrimitive?.content ?: "Untitled"
-                    val url = result["url"]?.jsonPrimitive?.content ?: ""
-                    val description = result["description"]?.jsonPrimitive?.content
-                        ?: result["snippets"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.content
-                        ?: ""
-                    val publisher = result["meta_url"]?.jsonObject?.get("hostname")?.jsonPrimitive?.content
-                        ?: result["profile"]?.jsonObject?.get("name")?.jsonPrimitive?.content
-                        ?: ""
-                    val pageAge = result["age"]?.jsonPrimitive?.content
-                        ?: result["page_age"]?.jsonPrimitive?.content
-                        ?: ""
-
-                    sb.appendLine("### ${index + 1}. $title")
-                    if (publisher.isNotBlank()) sb.appendLine("Source: $publisher")
-                    if (pageAge.isNotBlank()) sb.appendLine("Published: $pageAge")
-                    sb.appendLine("URL: $url")
-                    if (description.isNotBlank()) sb.appendLine("Summary: $description")
-                    sb.appendLine()
-                }
-
-                sb.toString()
-            } catch (e: Exception) {
-                // Log.e("BraveSearch", "Search failed", e)
-                "Error: Brave Search failed – ${e.message}"
-            }
-        }
-    }
-
     private fun saveFileToOpenChatWorkspace(filename: String, content: String, mimeType: String, subfolder: String = "") {
         val context = application.applicationContext
 
@@ -2360,8 +2138,6 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
         // Check if file already exists in that path to prevent MediaStore crash on duplicate names
         // MediaStore throws an error if you insert a file with the exact same name in the same folder.
-        val baseName = filename.substringBeforeLast(".")
-        val extension = filename.substringAfterLast(".", "")
         var finalFilename = filename
 
         val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
@@ -2376,33 +2152,21 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
             null
         )?.use { cursor ->
             if (cursor.moveToFirst()) {
-                // File exists, append timestamp to make it unique
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                finalFilename = if (extension.isNotBlank()) {
-                    "${baseName}_$timestamp.$extension"
-                } else {
-                    "${baseName}_$timestamp"
-                }
+                finalFilename = stampedName(filename, timestamp)
             }
         }
 
         // Update the values with the final filename (in case it was renamed)
         values.put(MediaStore.MediaColumns.DISPLAY_NAME, finalFilename)
-
-        val uri = context.contentResolver
-            .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: throw Exception("MediaStore insert failed")
-
-        context.contentResolver.openOutputStream(uri)?.use { out ->
-            out.write(content.toByteArray())
-        } ?: throw Exception("Cannot open output stream")
+        writeTextDownload(values, content)
     }
 
     private fun createFolderInWorkspaceViaMediaStore(folderPath: String) {
         val context = application.applicationContext
 
         // Security check
-        if (folderPath.contains("\\") || folderPath.contains("..")) {
+        if (unsafeWorkspacePath(folderPath)) {
             throw Exception("Invalid path: Backslashes and parent directories (..) are not allowed.")
         }
 
@@ -2436,13 +2200,14 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
             put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
             put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
             put(MediaStore.MediaColumns.RELATIVE_PATH, WorkspacePaths.mediaStoreRelativePath())
-            //put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
         }
+        writeTextDownload(values, content)
+    }
 
+    private fun writeTextDownload(values: ContentValues, content: String) {
         val uri = application.contentResolver
             .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             ?: throw Exception("MediaStore insert failed")
-
         application.contentResolver.openOutputStream(uri)?.use { out ->
             out.write(content.toByteArray())
         } ?: throw Exception("Cannot open output stream")
@@ -2450,18 +2215,16 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
     private suspend fun listOpenChatFilesViaSaf(path: String = ""): String {
         return withContext(Dispatchers.IO) {
-            val uriString = sharedPreferencesHelper.getSafFolderUri()
-                ?: return@withContext "Error: App does not have permission to read the folder yet. Tell the user to tap the 'Select Folder' button in the app settings to grant access."
-
             try {
-                val context = application.applicationContext
-                val treeUri = uriString.toUri()
-                var currentDir = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)
-                    ?: return@withContext "Error: Could not access the workspace folder."
+                var currentDir = openWorkspaceRoot()
+                    ?: return@withContext workspaceClosed(
+                        "Error: App does not have permission to read the folder yet. Tell the user to tap the 'Select Folder' button in the app settings to grant access.",
+                        "Error: Could not access the workspace folder.",
+                    )
 
                 // Navigate to subfolder if a path was provided
                 if (path.isNotBlank()) {
-                    if (path.contains("\\") || path.contains("..")) {
+                    if (unsafeWorkspacePath(path)) {
                         return@withContext "Error: Invalid path characters."
                     }
                     val parts = path.trim('/').split("/")
@@ -2505,124 +2268,59 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
     private suspend fun readOpenChatFileViaSaf(filepath: String): String {
         return withContext(Dispatchers.IO) {
-            // Block backward slashes and parent directory traversal, but allow forward slashes
-            if (filepath.contains("\\") || filepath.contains("..")) {
-                return@withContext "Error: Invalid filepath. Backslashes and parent directories (..) are not allowed."
-            }
-
-            val uriString = sharedPreferencesHelper.getSafFolderUri()
-                ?: return@withContext "Error: Folder permission not granted. Ask the user to grant folder access."
-
             try {
-                val context = application.applicationContext
-                val treeUri = uriString.toUri()
-                var currentDir = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)
-                    ?: return@withContext "Error: Could not access the workspace folder."
-
-                val pathParts = filepath.split("/")
-                val actualFilename = pathParts.last()
-
-                // Traverse directories if it's a nested path
-                for (i in 0 until pathParts.size - 1) {
-                    val dirName = pathParts[i]
-                    if (dirName.isBlank()) continue
-
-                    val nextDir = currentDir.findFile(dirName)
-                    if (nextDir == null || !nextDir.isDirectory) {
-                        return@withContext "Error: Directory '$dirName' not found in path."
-                    }
-                    currentDir = nextDir
+                withWorkspaceFile(filepath) { targetFile ->
+                    application.applicationContext.contentResolver.openInputStream(targetFile.uri)?.use { inputStream ->
+                        // The reply goes back to the model as one message, so a big file is cut
+                        // short and says so, rather than filling the context window.
+                        val buffer = CharArray(READ_FILE_CHAR_LIMIT + 1)
+                        val reader = inputStream.bufferedReader()
+                        var filled = 0
+                        while (filled < buffer.size) {
+                            val read = reader.read(buffer, filled, buffer.size - filled)
+                            if (read < 0) break
+                            filled += read
+                        }
+                        val truncated = filled > READ_FILE_CHAR_LIMIT
+                        val content = String(buffer, 0, minOf(filled, READ_FILE_CHAR_LIMIT))
+                        if (content.contains('\u0000')) {
+                            return@withWorkspaceFile "Error: Binary files cannot be read. Only text files are supported."
+                        }
+                        val note = if (truncated) {
+                            "\n\n[Truncated: only the first ${READ_FILE_CHAR_LIMIT / 1000} KB of this file is shown.]"
+                        } else {
+                            ""
+                        }
+                        "File: $filepath\n\n$content$note"
+                    } ?: "Error: Could not open input stream."
                 }
-
-                // Find the file in the final directory
-                val targetFile = currentDir.findFile(actualFilename)
-                    ?: return@withContext "Error: File '$filepath' not found."
-
-                if (!targetFile.isFile) return@withContext "Error: '$filepath' is not a file."
-
-                // Limit size to ~10MB
-                if (targetFile.length() > 10 * 1024 * 1024) {
-                    return@withContext "Error: File is too large (max 10MB)."
-                }
-
-                context.contentResolver.openInputStream(targetFile.uri)?.use { inputStream ->
-                    val content = inputStream.bufferedReader().readText()
-
-                    // Check for binary by looking for null bytes
-                    if (content.contains('\u0000')) {
-                        return@withContext "Error: Binary files cannot be read. Only text files are supported."
-                    }
-
-                    return@withContext "File: $filepath\n\n$content"
-                } ?: return@withContext "Error: Could not open input stream."
-
             } catch (e: Exception) {
-                return@withContext "Error reading file: ${e.message}"
+                "Error reading file: ${e.message}"
             }
         }
     }
 
     private suspend fun openFileViaSaf(filepath: String, mimeType: String?): String {
         return withContext(Dispatchers.IO) {
-            // Security check
-            if (filepath.contains("\\") || filepath.contains("..")) {
-                return@withContext "Error: Invalid filepath. Backslashes and parent directories (..) are not allowed."
-            }
-
-            val uriString = sharedPreferencesHelper.getSafFolderUri()
-                ?: return@withContext "Error: Folder permission not granted. Ask the user to grant folder access."
-
             try {
-                val context = application.applicationContext
-                val treeUri = uriString.toUri()
-                var currentDir = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)
-                    ?: return@withContext "Error: Could not access the workspace folder."
-
-                val pathParts = filepath.split("/")
-                val actualFilename = pathParts.last()
-
-                // Traverse directories if it's a nested path
-                for (i in 0 until pathParts.size - 1) {
-                    val dirName = pathParts[i]
-                    if (dirName.isBlank()) continue
-
-                    val nextDir = currentDir.findFile(dirName)
-                    if (nextDir == null || !nextDir.isDirectory) {
-                        return@withContext "Error: Directory '$dirName' not found in path."
+                withWorkspaceFile(filepath) { targetFile ->
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(targetFile.uri, mimeType ?: targetFile.type ?: "*/*")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
-                    currentDir = nextDir
+                    if (intent.resolveActivity(application.applicationContext.packageManager) != null) {
+                        application.applicationContext.startActivity(intent)
+                        "Opening '$filepath'..."
+                    } else {
+                        "Error: No app found to open this file type."
+                    }
                 }
-
-                // Find the file in the final directory
-                val targetFile = currentDir.findFile(actualFilename)
-                    ?: return@withContext "Error: File '$filepath' not found."
-
-                if (!targetFile.isFile) return@withContext "Error: '$filepath' is not a file."
-
-                // Use the DocumentFile's URI directly - SAF grants us persistent access
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(
-                        targetFile.uri,
-                        mimeType ?: targetFile.type ?: "*/*"
-                    )
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-
-                // Check if any app can handle this
-                if (intent.resolveActivity(context.packageManager) != null) {
-                    context.startActivity(intent)
-                    "Opening '$filepath'..."
-                } else {
-                    "Error: No app found to open this file type."
-                }
-
             } catch (e: Exception) {
                 "Error opening file: ${e.message}"
             }
         }
     }
-
     private fun parseFilepaths(element: JsonElement?): List<String> {
         return when (element) {
             is JsonArray -> {
@@ -2656,15 +2354,14 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
     private suspend fun deleteFilesViaSaf(filepaths: List<String>): String {
         return withContext(Dispatchers.IO) {
-            val uriString = sharedPreferencesHelper.getSafFolderUri()
-                ?: return@withContext "Error: Folder permission not granted. Please grant workspace access first."
-
-            val context = application.applicationContext
-            val rootDocumentFile = DocumentFile.fromTreeUri(context, uriString.toUri())
-                ?: return@withContext "Error: Could not access the workspace folder."
+            val rootDocumentFile = openWorkspaceRoot()
+                ?: return@withContext workspaceClosed(
+                    "Error: Folder permission not granted. Please grant workspace access first.",
+                    "Error: Could not access the workspace folder.",
+                )
 
             if (filepaths.size > 9) {
-                return@withContext "Error: Too many files (maximum 15 per request)."
+                return@withContext "Error: Too many files (maximum 9 per request)."
             }
 
             val results = mutableListOf<String>()
@@ -2672,7 +2369,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
             for (filepath in filepaths) {
                 // Security checks
-                if (filepath.contains("\\") || filepath.contains("..") || filepath.isBlank()) {
+                if (filepath.isBlank() || unsafeWorkspacePath(filepath)) {
                     results.add("❌ '$filepath': Invalid or dangerous path")
                     continue
                 }
@@ -2684,26 +2381,14 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 }
 
                 val filename = pathParts.last()
-                var currentDir: DocumentFile = rootDocumentFile
-                var pathError = false
-
-                // Traverse directories
-                for (i in 0 until pathParts.size - 1) {
-                    val dirName = pathParts[i]
-                    val nextDir = currentDir.findFile(dirName)
-
-                    if (nextDir == null || !nextDir.isDirectory) {
-                        results.add("❌ '$filepath': Directory '$dirName' not found")
-                        pathError = true
-                        break
-                    }
-                    currentDir = nextDir
+                val (parent, missingDir) = rootDocumentFile.directoryHolding(pathParts)
+                if (parent == null) {
+                    results.add("❌ '$filepath': Directory '$missingDir' not found")
+                    continue
                 }
 
-                if (pathError) continue
-
                 // Attempt deletion
-                val targetFile = currentDir.findFile(filename)
+                val targetFile = parent.findFile(filename)
                 if (targetFile == null || !targetFile.isFile) {
                     results.add("❌ '$filepath': File not found")
                 } else {

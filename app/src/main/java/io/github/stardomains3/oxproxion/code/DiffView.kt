@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.View
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
@@ -30,17 +31,20 @@ class DiffView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     private val d = resources.displayMetrics.density
+
+    /** [sp] in pixels, following the user's font scale (what the deprecated scaledDensity did). */
+    private fun sp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, v, resources.displayMetrics)
     private val mono = ResourcesCompat.getFont(context, R.font.atkinsonhyperlegiblemono_regular)
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = mono
-        textSize = 12.5f * resources.displayMetrics.scaledDensity
+        textSize = sp(13f)
         color = ContextCompat.getColor(context, R.color.xai_body)
     }
     private val muted = Paint(text).apply { color = ContextCompat.getColor(context, R.color.xai_mute) }
     private val gutter = Paint(text).apply {
         color = ContextCompat.getColor(context, R.color.code_diff_gutter)
         textAlign = Paint.Align.RIGHT
-        textSize = 11f * resources.displayMetrics.scaledDensity
+        textSize = sp(11f)
     }
     private val addMark = Paint(text).apply { color = ContextCompat.getColor(context, R.color.code_diff_add_fg) }
     private val delMark = Paint(text).apply { color = ContextCompat.getColor(context, R.color.code_diff_del_fg) }
@@ -57,19 +61,62 @@ class DiffView @JvmOverloads constructor(
     private val markerW = text.measureText("+") + 8 * d
     private var contentW = 0f
     private val clip = Rect()
+    private val ellipsis = StringBuilder()
+    /** Tab-expanded line text (hunk lines carry their "⋯" lead), built so drawing does not allocate. */
+    private var drawn = emptyList<String>()
+    /** Gutter number of each shown line, as text. */
+    private var numbers = emptyList<String?>()
+    private var builtFor: List<DiffLine>? = null
+    private var builtWrap = true
+    private var builtMax = -1
 
     var maxLines: Int = 0
-        set(value) { field = value; requestLayout(); invalidate() }
+        set(value) {
+            if (field == value) return
+            field = value
+            rebuild()
+        }
     var wrapWidth: Boolean = true
+        set(value) {
+            if (field == value) return
+            field = value
+            rebuild()
+        }
     var lines: List<DiffLine> = emptyList()
         set(value) {
             field = value
-            val maxNo = value.maxOfOrNull { max(it.oldNo ?: 0, it.newNo ?: 0) } ?: 0
-            gutterW = gutter.measureText(maxNo.toString().padStart(2, '8')) + 10 * d
-            contentW = if (wrapWidth) 0f else value.maxOfOrNull { text.measureText(it.text) } ?: 0f
-            requestLayout()
-            invalidate()
+            rebuild()
         }
+
+    /**
+     * Prepares only the lines that will be drawn ([maxLines] truncates the transcript card, so a
+     * 5,000-line diff costs a card 14 lines of work), and skips when nothing changed: the adapter
+     * rebinds the same list on every scroll.
+     */
+    private fun rebuild() {
+        if (builtFor === lines && builtWrap == wrapWidth && builtMax == maxLines) return
+        builtFor = lines
+        builtWrap = wrapWidth
+        builtMax = maxLines
+        val n = shownCount
+        val expanded = ArrayList<String>(n)
+        val nos = ArrayList<String?>(n)
+        var maxNo = 0
+        for (i in 0 until n) {
+            val line = lines[i]
+            val t = if ('\t' in line.text) line.text.replace("\t", "    ") else line.text
+            expanded.add(if (line.type == DiffLine.Type.HUNK) "⋯  $t" else t)
+            val no = line.newNo ?: line.oldNo
+            nos.add(if (line.type == DiffLine.Type.HUNK) null else no?.toString())
+            maxNo = max(maxNo, max(line.oldNo ?: 0, line.newNo ?: 0))
+        }
+        drawn = expanded
+        numbers = nos
+        gutterW = gutter.measureText(maxNo.toString().padStart(2, '8')) + 10 * d
+        contentW = if (wrapWidth) 0f else drawn.maxOfOrNull { text.measureText(it) } ?: 0f
+        requestLayout()
+        invalidate()
+    }
 
     val shownCount get() = if (maxLines > 0) min(maxLines, lines.size) else lines.size
 
@@ -108,21 +155,28 @@ class DiffView @JvmOverloads constructor(
             }
             val by = y + baseline
             if (l.type == DiffLine.Type.HUNK) {
-                canvas.drawText("⋯  ${l.text}", padH, by, muted)
+                canvas.drawText(drawn[i], padH, by, muted)
                 continue
             }
-            (l.newNo ?: l.oldNo)?.let { canvas.drawText(it.toString(), xNo, by, gutter) }
+            numbers[i]?.let { canvas.drawText(it, xNo, by, gutter) }
             when (l.type) {
                 DiffLine.Type.ADD -> canvas.drawText("+", xMark, by, addMark)
                 DiffLine.Type.DELETE -> canvas.drawText("−", xMark, by, delMark)
                 else -> Unit
             }
             val p = text
-            val s = l.text.replace("\t", "    ")
+            val s = drawn[i]
             if (wrapWidth) {
                 val room = w - xText - padH
                 val n = p.breakText(s, true, room, null)
-                canvas.drawText(if (n < s.length) s.substring(0, max(0, n - 1)) + "…" else s, xText, by, p)
+                if (n < s.length) {
+                    ellipsis.setLength(0)
+                    ellipsis.append(s, 0, max(0, n - 1))
+                    ellipsis.append('…')
+                    canvas.drawText(ellipsis, 0, ellipsis.length, xText, by, p)
+                } else {
+                    canvas.drawText(s, xText, by, p)
+                }
             } else {
                 canvas.drawText(s, xText, by, p)
             }

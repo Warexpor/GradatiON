@@ -13,13 +13,15 @@ import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import io.github.stardomains3.oxproxion.AppToast
+import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
 import io.github.stardomains3.oxproxion.GlassTextView
@@ -88,14 +90,21 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             decodeScope = viewLifecycleOwner.lifecycleScope,
             onApproval = { e, opt ->
                 view.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
-                hub.answer(sessionId, e.requestId, opt)
+                hub.answer(sessionId, e.requestId, opt) {
+                    // Nothing went out: the card gets its buttons back, and the person hears why.
+                    if (::adapter.isInitialized) adapter.approvalFailed(e.requestId)
+                    context?.let { GlassNotice.show(it, getString(R.string.code_approval_send_failed)) }
+                }
             },
             onOpenDiff = { e -> openDiff(e) },
             onOpenToolOutput = { e -> openToolOutput(e) },
         )
         list.layoutManager = LinearLayoutManager(requireContext()).apply { stackFromEnd = false }
         adapter.verbose = hub.store.showThinking
+        list.setHasFixedSize(true)
+        list.setItemViewCacheSize(8)
         list.adapter = adapter
+        sessionTopFade = view.findViewById<View>(R.id.codeSessionTop).background
         list.itemAnimator = androidx.recyclerview.widget.DefaultItemAnimator().apply {
             supportsChangeAnimations = false
             addDuration = 220
@@ -108,7 +117,12 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
 
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
                 updateTopEdge()
-                updateApprovalBar()
+                val state = hub.sessions.value[sessionId]
+                if (state !== approvalScanState) {
+                    approvalScanState = state
+                    approvalScanPending = state?.events?.any { it is CodeEvent.Approval && it.pending } == true
+                }
+                if (approvalScanPending) updateApprovalBar(state)
             }
         })
 
@@ -139,6 +153,21 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             if (follow && adapter.itemCount > 0) list.post { followEdge(adapter.itemCount - 1) }
             list.post { updateApprovalBar() }
         }
+        // Edge to edge like chat: the backdrop runs under the system bars; only the chrome and
+        // the transcript's clear area are inset (the list's bottom follows the dock above).
+        val top = view.findViewById<View>(R.id.codeSessionTop)
+        val topPad = top.paddingTop
+        val dockPad = dock.paddingBottom
+        val listTop = list.paddingTop
+        ViewCompat.setOnApplyWindowInsetsListener(frame) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            top.setPadding(bars.left, topPad + bars.top, bars.right, top.paddingBottom)
+            dock.setPadding(bars.left, dock.paddingTop, bars.right, dockPad + maxOf(bars.bottom, ime.bottom))
+            list.setPadding(list.paddingLeft, listTop + bars.top, list.paddingRight, list.paddingBottom)
+            WindowInsetsCompat.CONSUMED
+        }
+        ViewCompat.requestApplyInsets(frame)
         composer.permissionPill.setOnClickListener {
             val cur = hub.sessions.value[sessionId]?.summary?.permissionMode ?: PermissionMode.ASK
             composer.pickPermission(cur) { hub.setPermissionMode(sessionId, it) }
@@ -157,7 +186,8 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                 if (direction > 0) close() else onCancel()
             }
             override fun onCancel() {
-                frame.animate().translationX(0f).setDuration(380).setInterpolator(Motion.spring).start()
+                val fling = Motion.flingX(frame, 0f, (view as SwipeNavLayout).releaseVelocity, response = 0.38f)
+                frame.animate().translationX(0f).setDuration(fling.duration).setInterpolator(fling).start()
             }
         }
 
@@ -171,10 +201,27 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         observe(view)
     }
 
+    override fun onDestroyView() {
+        // An idle session stops being tracked on the machine link once its screen is gone.
+        if (::hub.isInitialized) hub.release(sessionId)
+        // Recycle the rows so their per-row work (the "Working" sweep, stream fades) stops.
+        list.adapter = null
+        sessionTopFade = null
+        super.onDestroyView()
+    }
+
     private fun observe(view: View) {
         val title = view.findViewById<TextView>(R.id.codeSessionTitle)
         val subtitle = view.findViewById<TextView>(R.id.codeSessionSubtitle)
         val banner = view.findViewById<TextView>(R.id.codeSessionBanner)
+        val stateView = view.findViewById<TextView>(R.id.codeSessionState)
+        // Tapping the banner (or the failed-load message) connects again instead of waiting out the backoff.
+        banner.setOnClickListener { hub.hosts.value.find { it.id == hub.sessions.value[sessionId]?.summary?.hostId }?.let { hub.connect(it) } }
+        stateView.setOnClickListener {
+            val host = hub.hosts.value.find { it.id == hub.sessions.value[sessionId]?.summary?.hostId } ?: return@setOnClickListener
+            hub.connect(host)
+            hub.attach(sessionId)
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
@@ -199,6 +246,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                         composer.setPermission(s.summary.permissionMode)
                         composer.availableCommands = s.availableCommands
                         composer.input.hint = getString(R.string.code_session_reply_hint, s.summary.harness.shortName)
+                        bindStateView(stateView, s)
                         render(s)
                     }
                 }
@@ -222,13 +270,35 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                             banner.text = if (c == ConnectionState.CONNECTING) {
                                 getString(R.string.code_status_connecting)
                             } else {
-                                getString(R.string.code_session_offline_banner, h.name)
+                                val err = hub.lastErrorOf(h.id)
+                                buildString {
+                                    append(getString(R.string.code_session_offline_banner, h.name))
+                                    append('\n').append(getString(R.string.code_session_reconnect))
+                                    if (!err.isNullOrBlank()) append('\n').append(err)
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    /**
+     * What the empty transcript says: loading, waiting for the agent's first word, or that the
+     * history could not be loaded (tap to retry). Gone as soon as there is anything to show.
+     */
+    private fun bindStateView(view: TextView, s: CodeSessionState) {
+        val text = when {
+            s.events.isNotEmpty() -> null
+            s.attachError != null -> getString(R.string.code_session_attach_failed)
+            s.attaching || !s.attached -> getString(R.string.code_session_loading)
+            !s.running -> getString(R.string.code_session_empty)
+            else -> null
+        }
+        view.isVisible = text != null
+        if (text != null) view.text = text
+        view.isClickable = s.events.isEmpty() && s.attachError != null
     }
 
     private fun render(s: CodeSessionState) {
@@ -353,8 +423,12 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         if (remaining > 0) list.smoothScrollBy(0, remaining)
     }
 
+    private var sessionTopFade: android.graphics.drawable.Drawable? = null
+    private var approvalScanState: CodeSessionState? = null
+    private var approvalScanPending = true
+
     private fun updateTopEdge() {
-        val fade = view?.findViewById<View>(R.id.codeSessionTop)?.background ?: return
+        val fade = sessionTopFade ?: return
         val under = list.computeVerticalScrollOffset().toFloat()
         val a = (255 * (under / (24f * resources.displayMetrics.density)).coerceIn(0f, 1f)).toInt()
         if (fade.alpha != a) fade.alpha = a
@@ -379,7 +453,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         rows += PickerPopover.Row(getString(R.string.code_session_copy_id), subtitle = sessionId, iconRes = R.drawable.ic_copi) {
             requireContext().getSystemService(ClipboardManager::class.java)
                 ?.setPrimaryClip(ClipData.newPlainText("session", sessionId))
-            AppToast.makeText(requireContext(), getString(R.string.code_session_copied), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.code_session_copied))
         }
         val started = DateUtils.getRelativeTimeSpanString(s.summary.createdAt).toString()
         rows += PickerPopover.Row(getString(R.string.code_session_forget), subtitle = started, iconRes = R.drawable.ic_code_trash) {
@@ -427,16 +501,12 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         viewLifecycleOwner.lifecycleScope.launch {
             for (uri in uris) {
                 if (composer.attachmentCount >= CodePromptImages.MAX_COUNT) {
-                    AppToast.makeText(
-                        requireContext(),
-                        getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT),
-                        AppToast.LENGTH_SHORT
-                    ).show()
+                    GlassNotice.show(requireContext(), getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT))
                     break
                 }
                 val mime = requireContext().contentResolver.getType(uri)?.lowercase()
                 if (mime != null && mime !in setOf("image/jpeg", "image/png", "image/webp")) {
-                    AppToast.makeText(requireContext(), getString(R.string.code_attach_unsupported), AppToast.LENGTH_SHORT).show()
+                    GlassNotice.show(requireContext(), getString(R.string.code_attach_unsupported))
                     continue
                 }
                 val encoded = withContext(Dispatchers.IO) { CodePromptImages.fromUri(requireContext(), uri) }
@@ -444,20 +514,16 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                 val att = when (encoded) {
                     is CodePromptImages.Result.Ok -> encoded.attachment
                     is CodePromptImages.Result.TooLarge -> {
-                        AppToast.makeText(requireContext(), getString(R.string.code_attach_too_large), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.code_attach_too_large))
                         continue
                     }
                     is CodePromptImages.Result.Failed -> {
-                        AppToast.makeText(requireContext(), getString(R.string.code_attach_failed), AppToast.LENGTH_SHORT).show()
+                        GlassNotice.show(requireContext(), getString(R.string.code_attach_failed))
                         continue
                     }
                 }
                 if (!composer.addAttachment(att)) {
-                    AppToast.makeText(
-                        requireContext(),
-                        getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT),
-                        AppToast.LENGTH_SHORT
-                    ).show()
+                    GlassNotice.show(requireContext(), getString(R.string.code_attach_limit, CodePromptImages.MAX_COUNT))
                     break
                 }
             }

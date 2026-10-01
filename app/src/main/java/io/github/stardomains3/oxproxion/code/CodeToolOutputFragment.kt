@@ -14,7 +14,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.appbar.MaterialToolbar
-import io.github.stardomains3.oxproxion.AppToast
+import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -93,12 +93,12 @@ class CodeToolOutputFragment : Fragment(R.layout.fragment_code_tool_output) {
 
     private fun copyStored() {
         if (stored.isBlank()) {
-            AppToast.makeText(requireContext(), getString(R.string.toast_nothing_to_copy), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.toast_nothing_to_copy))
             return
         }
         requireContext().getSystemService(ClipboardManager::class.java)
             ?.setPrimaryClip(ClipData.newPlainText("tool-output", stored))
-        AppToast.makeText(requireContext(), getString(R.string.code_session_copied), AppToast.LENGTH_SHORT).show()
+        GlassNotice.show(requireContext(), getString(R.string.code_session_copied))
     }
 
     companion object {

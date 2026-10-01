@@ -103,10 +103,12 @@ class PresetEditFragment : Fragment() {
         streamingSwitch.isChecked = false // default: off
         reasoningSwitch.isChecked = true // default: on
         conversationSwitch.isChecked = false // default: off
+        titleInput.inputLayout()?.clearErrorOnEdit()
+        modelAutoComplete.inputLayout()?.clearErrorOnEdit()
     }
 
     private fun setupToolbar() {
-        toolbar.title = if (editingPreset == null) "Create Preset" else "Edit Preset"
+        toolbar.title = getString(if (editingPreset == null) R.string.preset_edit_create_title else R.string.preset_edit_edit_title)
         toolbar.setNavigationOnClickListener {
             parentFragmentManager.popBackStack()
         }
@@ -123,7 +125,11 @@ class PresetEditFragment : Fragment() {
 
     private fun setupModelAutoComplete() {
         val allModels = getAllModels()
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, allModels.map { it.displayName })
+        val adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_dropdown_item_1line,
+            allModels.map { ModelNames.withoutProvider(it.displayName, it.apiIdentifier) },
+        )
         modelAutoComplete.setAdapter(adapter)
 
         // Use TextWatcher for immediate updates (like working EditPresetFragment)
@@ -134,7 +140,9 @@ class PresetEditFragment : Fragment() {
                 val selectedModelName = s?.toString()?.trim().orEmpty()
                 if (selectedModelName.isNotEmpty()) {
                     val allModels = getAllModels()
-                    val selectedModel = allModels.find { it.displayName == selectedModelName }
+                    val selectedModel = allModels.find {
+                        ModelNames.withoutProvider(it.displayName, it.apiIdentifier) == selectedModelName
+                    } ?: allModels.find { it.displayName == selectedModelName }
                     selectedModel?.let {
                         selectedModelIdentifier = it.apiIdentifier
                         updateSwitchVisibility()
@@ -155,8 +163,9 @@ class PresetEditFragment : Fragment() {
 
         // Set model text
         val allModels = getAllModels()
-        val modelDisplayName = allModels.find { it.apiIdentifier.equals(preset.modelIdentifier, ignoreCase = true) }?.displayName
-            ?: "Missing: ${preset.modelIdentifier}"
+        val matched = allModels.find { it.apiIdentifier.equals(preset.modelIdentifier, ignoreCase = true) }
+        val modelDisplayName = matched?.let { ModelNames.withoutProvider(it.displayName, it.apiIdentifier) }
+            ?: getString(R.string.preset_model_missing, preset.modelIdentifier)
         modelAutoComplete.setText(modelDisplayName, false)
         selectedModelIdentifier = preset.modelIdentifier
 
@@ -181,7 +190,7 @@ class PresetEditFragment : Fragment() {
         val modelId = selectedModelIdentifier ?: return
 
         // --- Reasoning ---
-        val isReasoning = viewModel.isReasoningModel(modelId)
+        val isReasoning = viewModel.canRequestReasoning(modelId)
         // Reset if hidden
         if (!isReasoning) {
             reasoningSwitch.isChecked = false
@@ -194,21 +203,13 @@ class PresetEditFragment : Fragment() {
             webSearchSwitch.isChecked = false
         }
         webSearchSwitch.visibility = if (isLan) View.GONE else View.VISIBLE
-
-        // Reset if hidden
-
-    }
-    private fun updateReasoningVisibility() {
-        val modelId = selectedModelIdentifier ?: return
-        val isReasoning = viewModel.isReasoningModel(modelId)
-        reasoningSwitch.visibility = if (isReasoning) View.VISIBLE else View.GONE
     }
 
     private fun getAllModels(): List<LlmModel> {
         val builtIn = viewModel.getBuiltInModels()
         val custom = prefs.getCustomModels()
         return (builtIn + custom).distinctBy { it.apiIdentifier.lowercase() }
-            .sortedBy { it.displayName.lowercase() }
+            .sortedBy { ModelNames.withoutProvider(it.displayName, it.apiIdentifier).lowercase() }
     }
 
     private fun getAllSystemMessages(): List<SystemMessage> {
@@ -219,7 +220,9 @@ class PresetEditFragment : Fragment() {
 
     private fun getSelectedModel(): LlmModel? {
         val modelName = modelAutoComplete.text.toString().trim()
-        return getAllModels().find { it.displayName == modelName }
+        return getAllModels().find {
+            ModelNames.withoutProvider(it.displayName, it.apiIdentifier) == modelName
+        } ?: getAllModels().find { it.displayName == modelName }
     }
 
     private fun getSelectedSystemMessage(): SystemMessage? {
@@ -230,16 +233,16 @@ class PresetEditFragment : Fragment() {
     private fun save() {
         val title = titleInput.text?.toString()?.trim().orEmpty()
         if (title.isEmpty()) {
-            titleInput.error = "Title is required"
+            titleInput.inputLayout()?.error = getString(R.string.preset_edit_title_required)
             return
         }
 
         val model = getSelectedModel()
         if (model == null) {
-            // Show error but don't block - allow saving with missing model (shows as "Missing: ...")
+            // A name that no longer matches a model still saves (it shows as "Missing: ..."); a blank one can't.
             val modelName = modelAutoComplete.text.toString().trim()
             if (modelName.isEmpty()) {
-                // Still empty, show error
+                modelAutoComplete.inputLayout()?.error = getString(R.string.preset_edit_model_required)
                 return
             }
         }
@@ -266,10 +269,14 @@ class PresetEditFragment : Fragment() {
         val repo = PresetRepository(requireContext())
         repo.upsert(preset)
 
-        AppToast.makeText(requireContext(),
-            if (editingPreset == null) "Preset created" else "Preset saved",
-            AppToast.LENGTH_SHORT).show()
         parentFragmentManager.popBackStack()
+    }
+
+    /** The TextInputLayout around this field, where errors show. */
+    private fun View.inputLayout(): com.google.android.material.textfield.TextInputLayout? {
+        var p = parent
+        while (p != null && p !is com.google.android.material.textfield.TextInputLayout) p = p.parent
+        return p as? com.google.android.material.textfield.TextInputLayout
     }
 
     companion object {

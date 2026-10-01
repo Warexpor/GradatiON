@@ -84,7 +84,7 @@ internal object CodeSessionFolder {
         if (update is CodeUpdate.AvailableCommands) {
             return state.copy(availableCommands = update.commands)
         }
-        val events = TranscriptReducer.apply(state.events, update, now)
+        val events = bounded(TranscriptReducer.apply(state.events, update, now), update)
         val running = when (update) {
             // B1/H1: only a *stale* local-cancel TurnDone (superseded by a newer prompt) keeps
             // running. Natural ACP stopReason=="cancelled" (no ignore stamp) clears running.
@@ -131,6 +131,35 @@ internal object CodeSessionFolder {
 
     fun needsPersist(update: CodeUpdate): Boolean =
         update is CodeUpdate.TurnDone || update is CodeUpdate.SessionInfo
+
+    /** Transcripts live in memory only, so a long session must not grow without bound. */
+    const val MAX_EVENTS = 1500
+    /** After hitting [MAX_EVENTS], cut back to this so the next trim is many updates away. */
+    private const val KEEP_EVENTS = 1200
+    /** Newest inline agent images that keep their base64; older ones show as gaps, not megabytes. */
+    const val MAX_LIVE_IMAGES = 6
+
+    /** Trims the oldest events past [MAX_EVENTS] and sheds the base64 of all but the newest images. */
+    internal fun bounded(events: List<CodeEvent>, update: CodeUpdate): List<CodeEvent> {
+        var out = events
+        if (out.size > MAX_EVENTS) out = out.subList(out.size - KEEP_EVENTS, out.size).toList()
+        if (update !is CodeUpdate.ImageChunk) return out
+        var seen = 0
+        var result: MutableList<CodeEvent>? = null
+        for (i in out.indices.reversed()) {
+            val e = out[i] as? CodeEvent.AgentText ?: continue
+            if (e.images.isEmpty()) continue
+            val kept = e.images.asReversed().map { img ->
+                seen++
+                if (seen > MAX_LIVE_IMAGES && img.data.isNotEmpty()) img.copy(data = "") else img
+            }.asReversed()
+            if (kept != e.images) {
+                val m = result ?: out.toMutableList().also { result = it }
+                m[i] = e.copy(images = kept)
+            }
+        }
+        return result ?: out
+    }
 }
 
 /** Result of folding a drain batch onto the sessions map. [sessions] is null when nothing matched. */

@@ -1,3 +1,5 @@
+import java.time.Duration
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,9 +9,6 @@ plugins {
 }
 configurations.all {
     exclude(group = "org.jetbrains", module = "annotations-java5")
-}
-
-configurations.all {
     resolutionStrategy.eachDependency {
         if (requested.group == "com.atlassian.commonmark") {
             useTarget("org.commonmark:${requested.name}:${libs.versions.commonmark.get()}")
@@ -17,17 +16,24 @@ configurations.all {
         }
     }
 }
+val appVersionMajor = 3
+val appVersionMinor = 0
+val appVersionPatch = 0
+
 android {
     namespace = "io.github.stardomains3.oxproxion"
     compileSdk = 37
 
     defaultConfig {
-        // Own id so Grokion is not treated as oxproxion (no false "update" prompts)
-        applicationId = "io.github.warexpor.grokion"
+        // Own id, separate from upstream oxproxion. Renamed off grokion; existing
+        // grokion installs do not update into this id.
+        applicationId = "io.github.warexpor.gradation"
         minSdk = 31
         targetSdk = 36
-        versionCode = 242
-        versionName = "2.1.134-rp"
+        // One place to bump. versionCode is derived (3.0.0 -> 30000, 3.4.2 -> 30402), so it can only
+        // grow with the version, and Android never refuses an update as a downgrade.
+        versionCode = appVersionMajor * 10000 + appVersionMinor * 100 + appVersionPatch
+        versionName = "$appVersionMajor.$appVersionMinor.$appVersionPatch"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -93,6 +99,18 @@ android {
     }
     buildFeatures {
         buildConfig = true
+        viewBinding = false
+    }
+    // A release APK signed with anything but the release key cannot update an installed release,
+    // so refuse to build one rather than produce it quietly unsigned or debug-signed.
+    gradle.taskGraph.whenReady {
+        val releaseBuild = allTasks.any { it.project == project && Regex("^(assemble|bundle|package)Release$").matches(it.name) }
+        if (releaseBuild && releaseStoreFile == null) {
+            throw GradleException(
+                "Release builds must be signed with the release key. Run scripts/release.sh " +
+                    "(see docs/RELEASING.md), or pass the -Pgradation.* signing properties."
+            )
+        }
     }
     // Prefer installed build-tools (avoid AGP auto-download of 35.0.0 when offline/proxy)
     buildToolsVersion = "36.0.0"
@@ -105,15 +123,35 @@ android {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
-    buildFeatures {
-        viewBinding = true
+    lint {
+        // Only the checks that guard the resource and accessibility rules; everything else stays quiet.
+        checkOnly += setOf("UnusedResources", "HardcodedText", "ContentDescription", "SmallSp", "ClickableViewAccessibility")
+        abortOnError = false
     }
+    // Room exports one schema JSON per version (commit them); MigrationTestHelper reads them from
+    // the test assets, so the migration test can build an old database and migrate it.
+    // Robolectric reads the merged assets of the variant under test, not the test source set's, so
+    // the debug build (never shipped: users get dev or release) carries them for the unit tests.
+    sourceSets.getByName("debug").assets.srcDir("$projectDir/schemas")
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all { test ->
-            // `-Pfast`: logic tests only (~20 s). The screenshot classes are ~90% of the run;
-            // keep them for UI changes and before a push.
-            if (project.hasProperty("fast")) test.filter.excludeTestsMatching("*ScreenshotTest")
+            // The screenshot tests write PNGs outside the declared outputs, so a cache hit would skip them.
+            test.outputs.doNotCacheIf("screenshots are side effects") { true }
+            // Logic tests only by default (~20 s): the screenshot classes are ~85% of the run.
+            // `-Pfull` adds them (UI changes, and always before a release). Naming tests with
+            // `--tests` runs exactly those, screenshots included. `-Pfast` is kept as a no-op.
+            val named = gradle.startParameter.taskNames.any { it == "--tests" || it.startsWith("--tests=") }
+            if (!project.hasProperty("full") && !named) test.filter.excludeTestsMatching("*ScreenshotTest")
+            // Robolectric keeps every booted Android around: one JVM for the whole run ran out of heap
+            // and then hung for minutes. Two JVMs in parallel, each recycled every 40 test classes.
+            test.maxParallelForks = 2
+            test.setForkEvery(40)
+            test.maxHeapSize = "2g"
+            // A hung test fails the run instead of stalling it (the full suite takes ~4 min).
+            test.timeout.set(Duration.ofMinutes(8))
+
         }
     }
     packaging {
@@ -127,6 +165,10 @@ android {
         }
     }
 
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -167,7 +209,6 @@ dependencies {
     implementation(libs.ktor.client.auth)
     implementation(libs.json)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.ktor.client.android)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.runtime)
@@ -182,6 +223,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.room.testing)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.junit)

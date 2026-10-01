@@ -29,6 +29,6 @@ class StreamFadeSpan(
     }
 
     companion object {
-        const val DURATION_MS = 340L
+        const val DURATION_MS = 220L
     }
 }

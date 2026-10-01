@@ -46,7 +46,6 @@
     <string name="code_pair_missing_token">Pairing QR is missing the token</string>
     <string name="code_pair_bad_fingerprint">Pairing QR has an invalid TLS fingerprint</string>
     <string name="code_pair_pin_requires_wss">TLS fingerprint requires a wss:// address (not ws://)</string>
-    <string name="code_pair_saved">Machine added</string>
     <string name="code_host_test_wrong_token">Wrong pairing token</string>
     <string name="code_host_test_unreachable">Can\'t reach the bridge. Check Tailscale, Wi-Fi, or your SSH tunnel.</string>
     <string name="code_host_remove_confirm">Remove %1$s? Sessions keep running on the machine; they just disappear from this phone.</string>
@@ -127,7 +126,6 @@
     <string name="code_session_copied">Copied</string>
     <string name="code_session_show_full_diff">Show full diff</string>
     <string name="code_session_more_lines">%1$d more lines</string>
-    <string name="code_session_output">Output</string>
     <string name="code_session_plan">Plan</string>
     <string name="code_session_new_file">new file</string>
     <string name="code_session_offline_banner">%1$s is offline. The agent keeps working there; you\'ll catch up when it\'s back.</string>
@@ -189,20 +187,65 @@
     <string name="cd_code_back">Back</string>
     <string name="cd_code_send">Send</string>
     <string name="cd_code_stop">Stop the agent</string>
-    <string name="cd_code_settings">Code settings</string>
     <string name="cd_code_attach">Attach image</string>
     <string name="cd_code_agent_image">Agent image</string>
     <string name="cd_code_remove_attachment">Remove image</string>
     <string name="cd_code_model">Model</string>
     <string name="cd_code_model_selected">Model, %1$s</string>
-    <string name="code_user_with_images">%1$d image(s)</string>
-    <string name="code_user_images_suffix"> · %1$d image(s)</string>
+    <plurals name="code_user_with_images">
+        <item quantity="one">%1$d image</item>
+        <item quantity="other">%1$d images</item>
+    </plurals>
+    <plurals name="code_user_images_suffix">
+        <item quantity="one"> · %1$d image</item>
+        <item quantity="other"> · %1$d images</item>
+    </plurals>
     <string name="code_attach_limit">You can attach up to %1$d images</string>
     <string name="code_attach_too_large">Image is too large</string>
     <string name="code_attach_unsupported">Unsupported image format</string>
     <string name="code_attach_failed">Couldn\'t read that image</string>
-    <string name="code_verbosity_thinking">Show thinking</string>
+    <string name="code_verbosity_thinking">Thinking view</string>
     <string name="code_verbosity_thinking_hint">Open every thought and tool output</string>
     <string name="code_verbosity_normal">Normal view</string>
     <string name="code_verbosity_normal_hint">Fold thoughts and output to one line</string>
+
+    <!-- Approval state -->
+    <string name="code_approval_expired">Expired</string>
+    <string name="code_approval_send_failed">Couldn\'t send your answer. Check the connection and try again.</string>
+
+    <!-- Notices the phone writes into a transcript -->
+    <string name="code_notice_resume_failed">Resume failed, retrying: %1$s</string>
+    <string name="code_notice_turn_failed">Turn failed</string>
+    <string name="code_notice_stop_pending">Stop did not reach the host. Retrying…</string>
+    <string name="code_notice_send_gave_up">Couldn\'t send your message. Check the connection and try again.</string>
+    <string name="code_notice_resume_gave_up">Couldn\'t resume this session. Close and reopen it to try again.</string>
+
+    <!-- Transport errors (resolved by CodeHub; the raw codes never reach the screen) -->
+    <string name="code_error_invalid_address">Invalid address</string>
+    <string name="code_error_token_rejected">The bridge rejected the pairing token</string>
+    <string name="code_error_handshake">Handshake failed</string>
+
+    <!-- Session loading states -->
+    <string name="code_session_loading">Loading the session…</string>
+    <string name="code_session_attach_failed">Couldn\'t load this session. Tap to try again.</string>
+    <string name="code_session_reconnect">Tap to reconnect</string>
+
+    <!-- Tool rows and diff cards (TalkBack) -->
+    <string name="code_tool_state_waiting">Waiting</string>
+    <string name="code_tool_state_running">Running</string>
+    <string name="code_tool_state_done">Done</string>
+    <string name="code_tool_state_failed">Failed</string>
+    <string name="cd_code_diff_card">Changes to %1$s: %2$d added, %3$d removed</string>
+    <string name="cd_code_diff_card_new">New file %1$s: %2$d lines</string>
+
+    <!-- Forgetting a session -->
+    <string name="code_home_forget_active">This session is still working or waiting for you. Remove it from this phone anyway? It keeps going on the machine.</string>
+    <string name="code_home_undo">Undo</string>
+
+    <!-- Away alerts -->
+    <string name="code_settings_notify_denied">Notifications are off for GradatiON, so alerts can\'t show. Turn them on in system settings, then try again.</string>
+    <string name="code_tab_needs_you_a11y">Code mode. An agent is waiting for your approval</string>
+
+    <!-- Pairing -->
+    <string name="code_pair_form_failed">Couldn\'t open the pairing form</string>
 </resources>

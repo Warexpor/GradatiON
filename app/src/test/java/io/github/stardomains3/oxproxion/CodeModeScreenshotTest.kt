@@ -85,12 +85,12 @@ class CodeModeScreenshotTest {
         push(a, CodeSessionFragment.newInstance(id))
         idle(12)
         assertTrue("demo should be waiting on an approval",
-            CodeHub.get(ctx).sessions.value[id]!!.events.any { it is CodeEvent.Approval && it.chosen == null })
+            CodeHub.getLoaded(ctx).sessions.value[id]!!.events.any { it is CodeEvent.Approval && it.chosen == null })
         snap(root(a), "code_session_approval_dark")
     }
 
     @Test fun codeSessionDoneDark() = withCode { a, _ ->
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         val id = startDemo("Add a follow-system option to the theme setting")
         push(a, CodeSessionFragment.newInstance(id))
         idle(12)
@@ -103,7 +103,7 @@ class CodeModeScreenshotTest {
 
     /** Thinking verbosity: every thought and tool output opens; Normal folds them back. */
     @Test fun codeSessionThinkingDark() = withCode { a, _ ->
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         hub.store.showThinking = true
         val id = startDemo("Add a follow-system option to the theme setting")
         push(a, CodeSessionFragment.newInstance(id))
@@ -126,12 +126,104 @@ class CodeModeScreenshotTest {
     }
 
     @Test fun codeDiffDark() = withCode { a, _ ->
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         val id = startDemo("Add a follow-system option to the theme setting")
         idle(12)
         val diff = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.FileDiff>().single()
         push(a, CodeDiffFragment.newInstance(id, diff.key))
         snap(root(a), "code_diff_dark")
+    }
+
+    /** Binds one transcript row straight through the adapter (the live list follows the bottom edge). */
+    private fun bindRow(a: MainActivity, match: (CodeEvent) -> Boolean): android.view.View {
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val adapter = list.adapter as io.github.stardomains3.oxproxion.code.CodeTranscriptAdapter
+        val pos = adapter.currentList.indexOfFirst {
+            val e = (it as? io.github.stardomains3.oxproxion.code.TranscriptRow.Event)?.event
+            e != null && match(e)
+        }
+        assertTrue("row present in the transcript", pos >= 0)
+        val holder = adapter.onCreateViewHolder(list, adapter.getItemViewType(pos))
+        adapter.onBindViewHolder(holder, pos)
+        return holder.itemView
+    }
+
+    /** Audit 9 + 12: approval buttons are 44dp, and one tap locks all of them until the answer lands. */
+    @Test fun codeApprovalButtonsAre44dpAndLockOnTap() = withCode { a, _ ->
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        assertEquals("state view is gone once there is a transcript",
+            View.GONE, root(a).findViewById<View>(R.id.codeSessionState).visibility)
+        val row = bindRow(a) { it is CodeEvent.Approval }
+        val box = row.findViewById<android.view.ViewGroup>(R.id.codeApprovalButtons)
+        val min = (44 * ctx.resources.displayMetrics.density).toInt()
+        assertTrue(box.childCount >= 2)
+        for (i in 0 until box.childCount) {
+            assertTrue("button $i is at least 44dp", box.getChildAt(i).layoutParams.height >= min)
+            assertTrue("button $i starts enabled", box.getChildAt(i).isEnabled)
+        }
+        box.getChildAt(box.childCount - 1).performClick()
+        for (i in 0 until box.childCount) {
+            assertEquals("button $i locks after a tap", false, box.getChildAt(i).isEnabled)
+        }
+    }
+
+    /** Audit 2: an approval the turn outlived reads "Expired" and has no buttons. */
+    @Test fun codeUnansweredApprovalExpiresWhenStopped() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        hub.cancel(id)
+        idle(4)
+        val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+        assertTrue("the approval expired with the turn", approval.expired)
+        val row = bindRow(a) { it is CodeEvent.Approval }
+        assertEquals(View.GONE, row.findViewById<View>(R.id.codeApprovalCard).visibility)
+        val done = row.findViewById<android.widget.TextView>(R.id.codeApprovalDoneText)
+        assertTrue(done.text.toString().startsWith(ctx.getString(R.string.code_approval_expired)))
+        // Audit 15: Stop shows once (the turn-end row), not as a notice as well.
+        val stopped = hub.sessions.value[id]!!.events.count {
+            it is CodeEvent.Notice && it.text == "Stopped"
+        }
+        assertEquals(0, stopped)
+    }
+
+    /** Audit 12 + 14: tool rows, thought headers and "full output" clear 44dp and speak their state. */
+    @Test fun codeTranscriptRowsAreTappableAndDescribed() = withCode { a, _ ->
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val min = 44 * ctx.resources.displayMetrics.density
+        val tool = bindRow(a) { it is CodeEvent.ToolCall }
+        assertTrue(tool.findViewById<View>(R.id.codeToolRow).minimumHeight >= min.toInt())
+        assertTrue(tool.findViewById<View>(R.id.codeToolFull).layoutParams.height >= min.toInt())
+        assertTrue("tool row announces its state",
+            !androidx.core.view.ViewCompat.getStateDescription(tool.findViewById(R.id.codeToolRow)).isNullOrBlank())
+        val thought = bindRow(a) { it is CodeEvent.Thought }
+        assertTrue(thought.findViewById<View>(R.id.codeThoughtHeader).minimumHeight >= min.toInt())
+        val diff = bindRow(a) { it is CodeEvent.FileDiff }
+        val path = (CodeHub.getLoaded(ctx).sessions.value[id]!!.events.filterIsInstance<CodeEvent.FileDiff>().first()).path
+        assertTrue("diff card is described for TalkBack",
+            diff.findViewById<View>(R.id.codeDiffCard).contentDescription.toString().contains(path))
+    }
+
+    /** Audit 20: from another tab, a session waiting on approval puts a cue on the Code tab. */
+    @Test fun codeTabFlagsPendingApprovalFromOtherTabs() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        idle(12)
+        val tab = a.findViewById<View>(R.id.tabCode)
+        assertEquals("no cue while Code is the tab on screen",
+            ctx.getString(R.string.mode_tab_code_a11y), tab.contentDescription)
+        a.findViewById<View>(R.id.tabChat).performClick()
+        idle()
+        assertEquals(ctx.getString(R.string.code_tab_needs_you_a11y), tab.contentDescription)
+        val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+        hub.answer(id, approval.requestId, approval.options.first { it.id == "allow" })
+        idle(16)
+        assertEquals(ctx.getString(R.string.mode_tab_code_a11y), tab.contentDescription)
     }
 
     @Test fun codeSettingsDark() = withCode { a, _ ->
@@ -196,7 +288,7 @@ class CodeModeScreenshotTest {
     }
 
     @Test fun codeTabHiddenWhenDisabled() {
-        CodeHub.get(ctx).store.enabled = false
+        CodeHub.getLoaded(ctx).store.enabled = false
         launch { a, _ ->
             assertEquals(View.GONE, a.findViewById<View>(R.id.tabCode).visibility)
         }
@@ -206,6 +298,27 @@ class CodeModeScreenshotTest {
         a.findViewById<View>(R.id.codeComposerAgent).performClick()
         idle(3)
         snap(root(a), "code_harness_picker_dark")
+    }
+
+    @Test fun codeApprovalsPickerDark() = withCode { a, _ ->
+        a.findViewById<View>(R.id.codeComposerPermission).performClick()
+        idle(3)
+        val rows = a.findViewById<android.view.ViewGroup>(R.id.popoverRows)
+        assertEquals(PermissionMode.entries.size, rows.childCount)
+        for (i in 0 until rows.childCount) {
+            val icon = rows.getChildAt(i).findViewById<android.widget.ImageView>(R.id.popoverRowIcon)
+            assertTrue("approval row $i needs its icon", icon.isShown && icon.drawable != null)
+        }
+        snap(root(a), "code_approvals_picker_dark")
+    }
+
+    /** The composer sits above the popover's scrim: a second tap on the pill must fold the card. */
+    @Test fun codePillSecondTapFolds() = withCode { a, _ ->
+        val pill = a.findViewById<View>(R.id.codeComposerAgent)
+        pill.performClick(); idle(3)
+        assertTrue(a.findViewById<View>(R.id.popoverRows)?.isShown == true)
+        pill.performClick(); idle(3)
+        assertTrue("card should be gone", a.findViewById<View>(R.id.popoverRows) == null)
     }
 
     @Test fun codeTabSwitchesAndComesBack() = withCode { a, _ ->
@@ -226,23 +339,23 @@ class CodeModeScreenshotTest {
     // ── helpers ───────────────────────────────────────────────────────────────────────────
 
     private fun startDemo(prompt: String): String = runBlocking {
-        CodeHub.get(ctx).startSession(
+        CodeHub.getLoaded(ctx).startSession(
             NewSessionRequest("demo", HarnessKind.CLAUDE_CODE, "~/code/GradatiON", prompt, PermissionMode.ASK)
         ).getOrThrow()
     }
 
     /** Code enabled, last tab Code, optionally the demo machine (which lists two past sessions). */
     private fun withCode(demo: Boolean = true, seedSessions: Boolean = true, block: (MainActivity, ChatFragment) -> Unit) {
-        val hub = CodeHub.get(ctx)
+        val hub = CodeHub.getLoaded(ctx)
         hub.store.enabled = true
         hub.store.lastTabWasCode = true
         if (demo) {
             hub.addDemoHost()
-            if (!seedSessions) CodeHub.get(ctx).sessions.value.keys.toList().forEach { hub.forget(it) }
+            if (!seedSessions) CodeHub.getLoaded(ctx).sessions.value.keys.toList().forEach { hub.forget(it) }
         }
         launch { a, chat ->
             if (demo && !seedSessions) {
-                CodeHub.get(ctx).sessions.value.keys.toList().forEach { hub.forget(it) }
+                CodeHub.getLoaded(ctx).sessions.value.keys.toList().forEach { hub.forget(it) }
                 idle()
             }
             block(a, chat)

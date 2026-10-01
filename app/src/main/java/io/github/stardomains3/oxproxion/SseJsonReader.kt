@@ -2,22 +2,27 @@ package io.github.stardomains3.oxproxion
 
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readLine
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Shared SSE / NDJSON payload reader for chat streaming.
  * Extracted from ChatViewModel — behavior preserved.
  */
 object SseJsonReader {
+    /** Why a read returned. [CLOSED] is the server hanging up without saying it was finished. */
+    enum class End { DONE, STOPPED, CLOSED }
+
     /**
      * Reads SSE (`data:` lines, blank-line delimited) with NDJSON fallback.
      * Stops after OpenAI-style `[DONE]`, or when [shouldStop] returns true, so keep-alive
-     * connections do not leave the UI stuck on Stop.
+     * connections do not leave the UI stuck on Stop. A network failure flushes what was
+     * buffered and is then rethrown, so a half-received reply never passes for a whole one.
      */
     suspend fun forEachJsonPayload(
         channel: ByteReadChannel,
         onPayload: suspend (String) -> Unit,
         shouldStop: (() -> Boolean)? = null
-    ) {
+    ): End {
         val dataLines = mutableListOf<String>()
         var sawDone = false
         suspend fun flushData(): Boolean {
@@ -57,9 +62,25 @@ object SseJsonReader {
                     dataLines.isNotEmpty() -> dataLines.add(line)
                 }
             }
+            // A channel closed by a network failure reads as "closed" above; report the cause.
+            channel.closedCause?.let { throw it }
             flushData()
-        } catch (_: Exception) {
-            flushData()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            try {
+                flushData()
+            } catch (c: CancellationException) {
+                throw c
+            } catch (_: Exception) {
+                // The original failure is the one worth reporting.
+            }
+            throw e
+        }
+        return when {
+            sawDone -> End.DONE
+            shouldStop?.invoke() == true -> End.STOPPED
+            else -> End.CLOSED
         }
     }
 }

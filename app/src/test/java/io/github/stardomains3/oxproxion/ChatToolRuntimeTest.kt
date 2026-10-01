@@ -70,7 +70,7 @@ class ChatToolRuntimeTest {
     }
 
     @Test
-    fun duplicateToolCallsRunOnce() {
+    fun duplicateToolCallsEachGetTheirOwnReply() {
         val host = FakeToolHost(app, SharedPreferencesHelper(app))
         pump {
             ChatToolRuntime(host).handleToolCalls(
@@ -81,11 +81,13 @@ class ChatToolRuntimeTest {
                 thinkingMessage = null,
             )
         }
-        assertEquals(1, host.messages.count { it.role == "tool" })
-        assertEquals(
-            "Error: Unknown tool call",
-            (host.messages.single { it.role == "tool" }.content as JsonPrimitive).jsonPrimitive.content,
-        )
+        // The provider rejects a transcript where a tool_call id has no reply, so a repeated
+        // call reuses the first result but still answers under its own id.
+        val replies = host.messages.filter { it.role == "tool" }
+        assertEquals(listOf("a", "b"), replies.map { it.toolCallId })
+        replies.forEach {
+            assertEquals("Error: Unknown tool call", (it.content as JsonPrimitive).jsonPrimitive.content)
+        }
     }
 
     @Test

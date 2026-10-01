@@ -49,6 +49,19 @@ class CodePairConnectTest {
     }
 
     @Test
+    fun transport_token_code_is_wrong_token() {
+        // The transport leaves a code, not English, in lastError; it must still read as a bad token.
+        assertEquals(
+            Outcome.WRONG_TOKEN,
+            CodePairConnect.classifyError(io.github.stardomains3.oxproxion.code.CodeErrors.TOKEN_REJECTED),
+        )
+        assertEquals(
+            Outcome.UNREACHABLE,
+            CodePairConnect.classifyError(io.github.stardomains3.oxproxion.code.CodeErrors.INVALID_ADDRESS),
+        )
+    }
+
+    @Test
     fun http_codes_in_error() {
         assertEquals(Outcome.WRONG_TOKEN, CodePairConnect.classifyError("HTTP 401"))
         assertEquals(Outcome.WRONG_TOKEN, CodePairConnect.classifyError("HTTP 403"))

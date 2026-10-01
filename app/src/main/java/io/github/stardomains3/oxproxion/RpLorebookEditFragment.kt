@@ -70,11 +70,7 @@ class RpLorebookEditFragment : Fragment() {
                     val book = chatViewModel.getRpRepository().getLorebookById(lorebookId)
                     if (!isAdded) return@launch
                     if (book == null) {
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_lorebook_gone),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_lorebook_gone))
                         parentFragmentManager.popBackStack()
                         return@launch
                     }
@@ -92,7 +88,7 @@ class RpLorebookEditFragment : Fragment() {
             if (!saveButton.isEnabled) return@setOnClickListener
             val name = nameInput.text?.toString()?.trim().orEmpty()
             if (name.isBlank()) {
-                AppToast.makeText(requireContext(), getString(R.string.rp_name_required), AppToast.LENGTH_SHORT).show()
+                GlassNotice.show(requireContext(), getString(R.string.rp_name_required))
                 return@setOnClickListener
             }
             saveButton.isEnabled = false
@@ -102,11 +98,7 @@ class RpLorebookEditFragment : Fragment() {
                     val existing = if (lorebookId > 0) repo.getLorebookById(lorebookId) else null
                     if (lorebookId > 0 && existing == null) {
                         if (isAdded) {
-                            AppToast.makeText(
-                                requireContext(),
-                                getString(R.string.rp_lorebook_gone),
-                                AppToast.LENGTH_SHORT
-                            ).show()
+                            GlassNotice.show(requireContext(), getString(R.string.rp_lorebook_gone))
                             parentFragmentManager.popBackStack()
                         }
                         return@launch
@@ -127,18 +119,14 @@ class RpLorebookEditFragment : Fragment() {
                             } else {
                                 getString(R.string.rp_lore_activated_disabled)
                             }
-                            AppToast.makeText(requireContext(), msg, AppToast.LENGTH_LONG).show()
+                            GlassNotice.show(requireContext(), msg)
                         }
                     }
                     if (isAdded) parentFragmentManager.popBackStack()
                 } catch (_: Exception) {
                     if (isAdded) {
                         saveButton.isEnabled = true
-                        AppToast.makeText(
-                            requireContext(),
-                            getString(R.string.rp_save_failed),
-                            AppToast.LENGTH_SHORT
-                        ).show()
+                        GlassNotice.show(requireContext(), getString(R.string.rp_save_failed))
                     }
                 }
             }

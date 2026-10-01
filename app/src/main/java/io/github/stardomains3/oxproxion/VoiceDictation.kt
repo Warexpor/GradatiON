@@ -1,7 +1,10 @@
 package io.github.stardomains3.oxproxion
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
@@ -18,8 +21,8 @@ import com.google.android.material.button.MaterialButton
 
 /**
  * Puts [VoiceInput] into a composer: tap the mic, talk, tap again, and the words land in [input]
- * at the cursor. Nothing is ever sent. While listening the mic turns into a "done" check whose
- * glass swells with your voice, [swapOut] (the model pill, say) gives way to a [VoiceWaveView],
+ * at the cursor. Nothing is ever sent. While listening the mic turns into a steady "done"
+ * check, [swapOut] (the model pill, say) gives way to a [VoiceWaveView] that follows the voice,
  * and words still being recognized show in a dimmer gray until they settle.
  *
  * Must be created in onViewCreated or earlier (it registers the mic permission request).
@@ -29,7 +32,8 @@ class VoiceDictation(
     private val input: EditText,
     private val micButton: MaterialButton,
     private val wave: VoiceWaveView,
-    private val swapOut: List<View>,
+    /** Asked each time the wave shows or hides, so a view that is hidden on purpose stays hidden. */
+    private val swapOut: () -> List<View>,
     transcribe: suspend (ByteArray, String, String) -> Result<String>,
 ) : VoiceInput.Listener {
 
@@ -40,8 +44,29 @@ class VoiceDictation(
     private val animate get() = Motion.areAnimationsEnabled(context)
 
     private val permission = fragment.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) engine.start()
-        else GlassNotice.show(context, context.getString(R.string.toast_mic_permission))
+        if (granted) {
+            engine.start()
+        } else if (!fragment.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
+            // Just refused, yet the system won't ask again: only the app's settings can turn it on.
+            GrokConfirmDialog.show(
+                fragment = fragment,
+                title = context.getString(R.string.voice_mic_blocked_title),
+                message = context.getString(R.string.voice_mic_blocked_message),
+                confirmText = context.getString(R.string.action_open_app_settings),
+                onConfirm = { openAppSettings() },
+                destructive = false,
+            )
+        } else {
+            GlassNotice.show(context, context.getString(R.string.toast_mic_permission))
+        }
+    }
+
+    private fun openAppSettings() {
+        runCatching {
+            fragment.startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+            )
+        }
     }
 
     // The span of [input] this dictation owns: separator + settled words + words in flight.
@@ -50,13 +75,13 @@ class VoiceDictation(
     private var settled = StringBuilder()
     private var pending = ""
     private var capitalize = false
-    private var level = 0f
     /** Last state we were told about; the UI follows this, not the engine's internals. */
     private var state = VoiceInput.State.IDLE
 
     val isActive: Boolean get() = state != VoiceInput.State.IDLE
 
     init {
+        // Idle starts, listening finishes, and a tap while transcribing gives that up (engine.toggle).
         micButton.setOnClickListener {
             if (state == VoiceInput.State.IDLE) begin() else engine.toggle()
         }
@@ -80,6 +105,11 @@ class VoiceDictation(
             onError(context.getString(R.string.voice_unavailable))
             return
         }
+        // A missing key or model should say so now, before the mic permission prompt and a recording.
+        engine.preflightError()?.let {
+            onError(context.getString(it))
+            return
+        }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             permission.launch(Manifest.permission.RECORD_AUDIO)
         } else {
@@ -87,8 +117,21 @@ class VoiceDictation(
         }
     }
 
-    /** Keep what was heard and stop now, e.g. before sending. */
-    fun finishNow() = engine.finishNow()
+    /** True while a recording is being turned into text. */
+    val isTranscribing: Boolean get() = state == VoiceInput.State.TRANSCRIBING
+
+    /**
+     * Keep what was heard and stop now, before sending. Returns true when the caller may go on
+     * and send. A Phone dictation has its words immediately, but a recording still has to be
+     * transcribed: then this says so and returns false, so the message isn't sent without the
+     * words the user just spoke (they land in the composer when the text is ready).
+     */
+    fun finishNow(): Boolean {
+        engine.finishNow()
+        if (!isTranscribing) return true
+        GlassNotice.show(context, context.getString(R.string.voice_still_transcribing))
+        return false
+    }
 
     // ── VoiceInput.Listener ─────────────────────────────────────────────────────────────
 
@@ -109,10 +152,11 @@ class VoiceDictation(
             VoiceInput.State.TRANSCRIBING -> {
                 haptic()
                 wave.mode = VoiceWaveView.Mode.WORKING
-                micButton.isEnabled = false
+                // Transcribing can take minutes on a slow link: the button becomes a way out.
+                micButton.isEnabled = true
                 micButton.isSelected = false
-                micButton.setIconResource(R.drawable.ic_mic)
-                micButton.contentDescription = context.getString(R.string.cd_voice_transcribing)
+                micButton.setIconResource(R.drawable.ic_close_x)
+                micButton.contentDescription = context.getString(R.string.cd_voice_cancel_transcribing)
                 settleMic()
             }
             VoiceInput.State.IDLE -> {
@@ -148,13 +192,9 @@ class VoiceDictation(
     }
 
     override fun onLevel(level: Float) {
+        // Only the wave follows the voice. The check stays still: it is the button that ends
+        // dictation, and a target that swells under the finger is harder to hit.
         wave.setLevel(level)
-        this.level += (level - this.level) * 0.5f
-        if (!animate || state != VoiceInput.State.LISTENING) return
-        // The glass disc breathes with the voice; kept small so the row never jumps.
-        val s = 1f + 0.14f * this.level
-        micButton.scaleX = s
-        micButton.scaleY = s
     }
 
     override fun onError(message: String) {
@@ -223,8 +263,9 @@ class VoiceDictation(
     // ── Chrome ──────────────────────────────────────────────────────────────────────────
 
     private fun showWave(show: Boolean) {
-        val outViews = if (show) swapOut else listOf(wave)
-        val inViews = if (show) listOf(wave) else swapOut
+        val pill = swapOut()
+        val outViews = if (show) pill else listOf(wave)
+        val inViews = if (show) listOf(wave) else pill
         outViews.forEach { v ->
             v.animate().cancel()
             if (!animate) { v.visibility = View.GONE; return@forEach }
@@ -242,7 +283,6 @@ class VoiceDictation(
     }
 
     private fun settleMic() {
-        level = 0f
         if (!animate) {
             micButton.scaleX = 1f
             micButton.scaleY = 1f

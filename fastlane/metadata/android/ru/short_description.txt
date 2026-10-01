@@ -1,1 +1,1 @@
-GradatiON — чат с OpenRouter и LAN-моделями (Ollama, LM Studio, Hermes)
+Чат, ролевые игры и агенты для кода в одном спокойном клиенте Liquid Glass

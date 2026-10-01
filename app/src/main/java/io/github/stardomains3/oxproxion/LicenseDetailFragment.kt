@@ -38,8 +38,8 @@ class LicenseDetailFragment : Fragment() {
         }
 
         val args = requireArguments()
-        val libraryName = args.getString(ARG_LIBRARY_NAME) ?: "License"
-        val licenseContent = args.getString(ARG_LICENSE_CONTENT) ?: "License text unavailable"
+        val libraryName = args.getString(ARG_LIBRARY_NAME) ?: getString(R.string.license_fallback_title)
+        val licenseContent = args.getString(ARG_LICENSE_CONTENT) ?: getString(R.string.license_text_unavailable)
 
         toolbar.title = libraryName  // ← DYNAMIC: "androidx-core-ktx License" or just libraryName
         view.findViewById<TextView>(R.id.licenseContent).text = licenseContent

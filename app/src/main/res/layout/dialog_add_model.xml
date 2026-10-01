@@ -15,7 +15,7 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Model Name"
+            android:hint="@string/add_model_model_name"
             app:hintTextColor="@color/xai_mute">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -29,7 +29,7 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="API Identifier"
+            android:hint="@string/add_model_api_identifier"
             android:layout_marginTop="8dp"
             app:hintTextColor="@color/xai_mute">
 
@@ -46,7 +46,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Vision Capable"
+            android:text="@string/add_model_vision_capable"
             android:textColor="@color/xai_ink" />
 
         <androidx.appcompat.widget.SwitchCompat
@@ -54,7 +54,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Reasoning Capable"
+            android:text="@string/add_model_reasoning_capable"
             android:textColor="@color/xai_ink" />
 
         <androidx.appcompat.widget.SwitchCompat
@@ -62,7 +62,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="LAN Model"
+            android:text="@string/add_model_lan_model"
             android:textColor="@color/xai_ink" />
 
         <androidx.appcompat.widget.SwitchCompat
@@ -70,7 +70,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Image Generation"
+            android:text="@string/add_model_image_generation"
             android:textColor="@color/xai_ink" />
 
         <androidx.appcompat.widget.SwitchCompat
@@ -78,7 +78,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Transcription"
+            android:text="@string/add_model_transcription"
             android:textColor="@color/xai_ink" />
 
         <androidx.appcompat.widget.SwitchCompat
@@ -86,7 +86,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Is Free Model"
+            android:text="@string/add_model_is_free_model"
             android:textColor="@color/xai_ink" />
 
     </LinearLayout>

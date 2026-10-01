@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings, settings dialogs and voice-input feedback. -->
+<resources>
+    <!-- Local network server dialog -->
+    <string name="lan_error_url_blank">Enter a LAN endpoint URL</string>
+    <string name="lan_error_url_invalid">That isn\'t a valid URL</string>
+    <string name="lan_error_url_scheme">The URL must start with http:// or https://</string>
+    <string name="lan_error_url_host">The URL needs a host name or address</string>
+    <string name="lan_error_url_http_public">HTTP only works for localhost, private addresses (10.x, 172.16–31.x, 192.168.x), link-local addresses and .local names. Use HTTPS for other hosts.</string>
+    <string name="lan_error_pick_server">Pick a server type</string>
+    <string name="lan_error_key_encrypt">Couldn\'t save the API key (encryption error), so nothing was saved</string>
+
+    <!-- Other settings dialogs -->
+    <string name="timeout_error_range">Enter a whole number from %1$d to %2$d</string>
+    <string name="maxtokens_error_range">Enter a number from 1 to 999,999</string>
+    <string name="autosend_title">Auto send</string>
+    <string name="autosend_message">Send this text to GradatiON now?\n\n%1$s</string>
+    <string name="chat_memory_all">All messages</string>
+    <plurals name="chat_memory_messages">
+        <item quantity="one">%d message</item>
+        <item quantity="other">%d messages</item>
+    </plurals>
+
+    <!-- Presets and libraries -->
+    <string name="preset_not_applied_model">Preset not applied: the model \"%1$s\" no longer exists</string>
+    <string name="preset_not_applied_message">Preset not applied: its saved system message wasn\'t found</string>
+    <string name="notice_prompts_exported">Prompts exported</string>
+    <string name="notice_prompts_imported">Prompts imported</string>
+    <string name="notice_prompt_copied">Copied: %1$s</string>
+    <string name="notice_system_messages_exported">System messages exported</string>
+    <string name="notice_system_messages_imported">System messages imported</string>
+    <string name="notice_search_unavailable">Search isn\'t available</string>
+    <string name="notice_chats_exported">Chats exported</string>
+    <string name="notice_chats_imported">Chats imported</string>
+
+    <string name="preset_edit_create_title">Create preset</string>
+    <string name="preset_edit_edit_title">Edit preset</string>
+    <string name="preset_model_missing">Missing: %1$s</string>
+    <string name="preset_edit_title_required">Title is required</string>
+    <string name="preset_edit_model_required">Pick a model</string>
+    <string name="search_system_messages_hint">Search system messages…</string>
+    <string name="search_prompts_hint">Search prompts…</string>
+
+    <!-- Local models list -->
+    <string name="lan_models_permission_needed">Allow local network access to list models from your server</string>
+    <string name="lan_models_empty_running">No %1$s models found.\nMake sure %1$s is running and has models loaded.</string>
+    <string name="lan_models_empty_installed">No %1$s models found.\nMake sure %1$s is installed and has models pulled.</string>
+    <string name="lan_models_empty_generic">No models found</string>
+    <string name="lan_model_load_refused">The server didn\'t load the model</string>
+    <string name="lan_model_load_failed">Couldn\'t load the model: %1$s</string>
+    <string name="lan_model_unload_refused">The server didn\'t unload the model</string>
+    <string name="lan_model_unload_failed">Couldn\'t unload the model: %1$s</string>
+
+    <!-- Licenses -->
+    <string name="license_text_unavailable">License text unavailable</string>
+    <string name="licenses_unavailable">The license list couldn\'t be loaded</string>
+    <string name="license_fallback_title">License</string>
+
+    <!-- Voice input -->
+    <string name="voice_need_model">Set a transcription model in Settings &gt; Voice</string>
+    <string name="voice_need_openrouter_key">Add your OpenRouter API key in Settings &gt; Models to use Cloud voice</string>
+    <string name="voice_need_xai_key">Add an xAI API key in Settings &gt; Voice to use Grok voice</string>
+    <string name="voice_need_lan_endpoint">Set your local server address in Settings &gt; Models to use Local voice</string>
+    <string name="voice_error_idle">Stopped listening after a long silence</string>
+    <string name="voice_still_transcribing">Still turning your recording into text. Send once the words appear.</string>
+    <string name="cd_voice_cancel_transcribing">Cancel transcription</string>
+    <string name="voice_mic_blocked_title">Microphone is off</string>
+    <string name="voice_mic_blocked_message">Turn on the microphone for GradatiON in the app\'s settings to dictate.</string>
+    <string name="action_open_app_settings">Open settings</string>
+
+    <!-- Values shown at the end of a settings row -->
+    <string name="settings_value_off">Off</string>
+    <string name="settings_value_saved">Saved</string>
+    <string name="settings_value_not_set">Not set</string>
+    <string name="settings_value_minutes">%1$d min</string>
+    <string name="cd_settings_row_value">%1$s, %2$s</string>
+</resources>

@@ -2,16 +2,14 @@ package io.github.stardomains3.oxproxion
 
 import android.content.Intent
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
-import android.widget.TextView
-import android.widget.Toast
 import androidx.core.net.toUri
 import androidx.recyclerview.widget.RecyclerView
 
+/** Catalog rows: a plus until the model is in your list, then a check. */
 class OpenRouterModelsAdapter(
     private var models: List<LlmModel>,
+    private val isAdded: (LlmModel) -> Boolean,
     private val onItemClicked: (LlmModel) -> Unit
 ) : RecyclerView.Adapter<OpenRouterModelsAdapter.ModelViewHolder>() {
 
@@ -20,51 +18,34 @@ class OpenRouterModelsAdapter(
         notifyDataSetChanged()
     }
 
-    class ModelViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val modelId: TextView = view.findViewById(R.id.textModelName)
-        val modelName: TextView = view.findViewById(R.id.textModelDisplayName)
-        val modelIcon: ImageView = view.findViewById(R.id.iconModelType)
-        val openIcon: ImageView = view.findViewById(R.id.iconORweb)
+    fun markAdded(apiIdentifier: String) {
+        val i = models.indexOfFirst { it.apiIdentifier == apiIdentifier }
+        if (i >= 0) notifyItemChanged(i)
     }
+
+    class ModelViewHolder(val row: ModelRowViews) : RecyclerView.ViewHolder(row.root)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ModelViewHolder {
         val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.list_item_open_router_model, parent, false)
-        return ModelViewHolder(view)
+            .inflate(R.layout.list_item_model, parent, false)
+        return ModelViewHolder(ModelRowViews(view))
     }
 
     override fun onBindViewHolder(holder: ModelViewHolder, position: Int) {
         val model = models[position]
-        holder.modelId.text = model.apiIdentifier
-        holder.modelName.text = model.displayName
-
-        val iconRes = when {
-            model.isTranscription -> R.drawable.ic_mic
-            model.isImageGenerationCapable -> R.drawable.ic_palette
-            model.isVisionCapable -> R.drawable.ic_vision
-            else -> R.drawable.ic_person
-        }
-        holder.modelIcon.setImageResource(iconRes)
-
-        holder.itemView.setOnClickListener {
-            onItemClicked(model)
-        }
-        holder.openIcon.setOnClickListener {
-            val url = "https://openrouter.ai/${model.apiIdentifier}"
-            val intent = Intent(Intent.ACTION_VIEW).setData(url.toUri())
-            try {
-                holder.itemView.context.startActivity(intent)
-            } catch (e: Exception) {
-                AppToast.makeText(holder.itemView.context, "Could not open browser.", AppToast.LENGTH_SHORT).show()
-            }
-        }
+        val added = isAdded(model)
+        holder.row.bind(model, selected = false, trailingIcon = if (added) R.drawable.ic_check else R.drawable.ic_code_plus)
+        holder.row.trailing.alpha = if (added) 1f else 0.7f
+        holder.row.trailing.contentDescription = holder.itemView.context.getString(
+            if (added) R.string.cd_model_added else R.string.model_picker_add
+        )
+        holder.itemView.setOnClickListener { onItemClicked(model) }
         holder.itemView.setOnLongClickListener {
-            val url = "https://openrouter.ai/${model.apiIdentifier}"
-            val intent = Intent(Intent.ACTION_VIEW).setData(url.toUri())
+            val ctx = holder.itemView.context
             try {
-                holder.itemView.context.startActivity(intent)
-            } catch (e: Exception) {
-                AppToast.makeText(holder.itemView.context, "Could not open browser.", AppToast.LENGTH_SHORT).show()
+                ctx.startActivity(Intent(Intent.ACTION_VIEW, "https://openrouter.ai/${model.apiIdentifier}".toUri()))
+            } catch (_: Exception) {
+                GlassNotice.show(ctx, ctx.getString(R.string.toast_open_browser_failed))
             }
             true
         }

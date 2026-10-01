@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -17,6 +18,14 @@ class LanEndpointValidatorTest {
     @Test
     fun rejectsPublicHttpIp() {
         assertNotNull(LanEndpointValidator.validate("http://8.8.8.8:80"))
+        assertEquals(R.string.lan_error_url_http_public, LanEndpointValidator.validate("http://8.8.8.8:80"))
+    }
+
+    @Test
+    fun saysWhatIsWrongAsAResource() {
+        assertEquals(R.string.lan_error_url_blank, LanEndpointValidator.validate("  "))
+        assertEquals(R.string.lan_error_url_scheme, LanEndpointValidator.validate("ftp://192.168.1.2"))
+        assertEquals(R.string.lan_error_url_host, LanEndpointValidator.validate("http:///v1"))
     }
 
     @Test

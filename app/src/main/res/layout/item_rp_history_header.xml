@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Top of the chats page: who the chats are with and how many there are -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingTop="4dp"
+    android:paddingBottom="12dp">
+
+    <FrameLayout
+        android:layout_width="88dp"
+        android:layout_height="88dp">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/rpHistoryAvatar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/rp_bg_monogram"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop"
+            app:shapeAppearanceOverlay="@style/XaiShapePill" />
+
+        <TextView
+            android:id="@+id/rpHistoryMonogram"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fontFamily="@font/app_sans"
+            android:gravity="center"
+            android:importantForAccessibility="no"
+            android:textColor="@color/xai_mute"
+            android:textFontWeight="600"
+            android:textSize="34sp" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/rpHistoryName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:ellipsize="end"
+        android:fontFamily="@font/app_sans"
+        android:singleLine="true"
+        android:textColor="@color/xai_ink"
+        android:textFontWeight="700"
+        android:textSize="26sp" />
+
+    <TextView
+        android:id="@+id/rpHistoryCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/app_sans"
+        android:textColor="@color/xai_mute"
+        android:textSize="14sp" />
+</LinearLayout>

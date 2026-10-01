@@ -11,7 +11,7 @@
         android:id="@+id/dialog_titlemaxtokens"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Set Max Tokens"
+        android:text="@string/save_maxtokens_set_max_tokens"
         android:textColor="@color/xai_ink"
         android:textAppearance="@style/TextAppearance.Gradation.Headline"
         android:layout_marginBottom="16dp" />
@@ -19,7 +19,7 @@
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Enter Max Tokens"
+        android:hint="@string/save_maxtokens_enter_max_tokens"
         app:hintTextColor="@color/xai_mute"
         android:id="@+id/edit_text_lay_maxtokens">
 
@@ -32,14 +32,13 @@
             android:digits="0123456789"
 
             android:textColor="@color/xai_ink"
-            android:text="12000"
             android:singleLine="true" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Max tokens limit the length of the AI's response. A higher number allows longer replies but may increase costs. Default is 12000."
+        android:text="@string/save_maxtokens_help"
         android:textColor="@color/xai_ink"
         android:textSize="14sp"
         android:layout_marginTop="8dp"

@@ -1,0 +1,739 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/advancedSection"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:text="@string/settings_libraries"
+        android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/toolsButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_manage_tools"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_tools"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/promptsButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_prompt_library"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_prompts"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/presetsButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_presets"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_presets"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/systemMessagesButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_system_messages"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_tune"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/rpGradationButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_gradation_rp"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_gradation_mark"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="8dp"
+        android:text="@string/settings_generation"
+        android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/maxTokensButton"
+                style="@style/Widget.Grokion.Button.Text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:minHeight="56dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="@string/settings_max_tokens"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp"
+                app:backgroundTint="@android:color/transparent"
+                app:icon="@drawable/ic_ruler"
+                app:iconGravity="start"
+                app:iconPadding="16dp"
+                app:iconSize="22dp"
+                app:iconTint="@color/xai_ink"
+                app:rippleColor="@color/press_ripple_none" />
+
+            <TextView
+                android:id="@+id/maxTokensValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="16dp"
+                android:ellipsize="middle"
+                android:importantForAccessibility="no"
+                android:maxWidth="130dp"
+                android:singleLine="true"
+                android:textAppearance="@style/TextAppearance.Gradation.RowValue" />
+        </FrameLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/timeoutButton"
+                style="@style/Widget.Grokion.Button.Text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="start|center_vertical"
+                android:minHeight="56dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="@string/settings_timeout"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp"
+                app:backgroundTint="@android:color/transparent"
+                app:icon="@drawable/ic_timeout"
+                app:iconGravity="start"
+                app:iconPadding="16dp"
+                app:iconSize="22dp"
+                app:iconTint="@color/xai_ink"
+                app:rippleColor="@color/press_ripple_none" />
+
+            <TextView
+                android:id="@+id/timeoutValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="16dp"
+                android:ellipsize="middle"
+                android:importantForAccessibility="no"
+                android:maxWidth="130dp"
+                android:singleLine="true"
+                android:textAppearance="@style/TextAppearance.Gradation.RowValue" />
+        </FrameLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/inferenceParamsButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_inference"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_param"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:id="@+id/chatMemoryRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_summariz"
+                app:tint="@color/xai_ink" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_chat_memory"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/chatMemoryButton"
+                style="@style/Widget.Grokion.Button.Text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:minHeight="48dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="0dp"
+                android:textAppearance="@style/TextAppearance.Gradation.RowValue"
+                android:textColor="@color/xai_mute"
+                android:textSize="15sp"
+                app:backgroundTint="@android:color/transparent"
+                app:rippleColor="@color/press_ripple_none" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/advancedReasoningButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_advanced_reasoning"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_reasoning"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="8dp"
+        android:text="@string/settings_chat_chrome"
+        android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_power_tools_bar"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/powerToolsBarSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_expandable_input"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/expandableInputSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_scroll_buttons"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/scrollButtonsSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_scroll_progress"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/scrollProgressSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                app:useMaterialThemeColors="true" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_volume_scroll"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/volumeScrollSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_presets_on_chat"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/presetsExtendedSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_animate_border"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/animateBarOnErrorSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                app:useMaterialThemeColors="true" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_citations"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/showCitationsSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_openrouter_transform"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/openRouterTransformsSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:visibility="gone"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="16dp"
+            android:background="@color/xai_hairline" />
+
+        <!-- Web search left the chat chrome, so its auto-off switch has nothing to act on. -->
+        <LinearLayout
+            android:visibility="gone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_auto_disable_web"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/autoDisableWebSearchSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                app:useMaterialThemeColors="true" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

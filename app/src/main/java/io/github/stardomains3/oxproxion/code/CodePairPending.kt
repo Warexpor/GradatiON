@@ -30,6 +30,24 @@ object CodePairPending {
 
     fun peek(): CodePairing.Result? = _pending.value
 
+    private val _error = MutableStateFlow<String?>(null)
+    /** Why a scan produced no pairing (bad QR, camera denied), for [CodeModeHost] to show. */
+    val error: StateFlow<String?> = _error
+
+    fun offerError(message: String) {
+        _error.value = message
+    }
+
+    /** Take and clear the scan error; null if none waiting. */
+    fun consumeError(): String? {
+        var taken: String? = null
+        _error.update { cur ->
+            taken = cur
+            null
+        }
+        return taken
+    }
+
     fun clear() {
         _pending.value = null
     }

@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Shader
+import android.view.View
+import android.view.ViewTreeObserver
 import android.view.animation.LinearInterpolator
 import android.widget.TextView
 
@@ -13,6 +15,11 @@ import android.widget.TextView
  * sheen. The base text keeps its muted color; a brighter band of [highlight] travels over it.
  */
 object ShimmerText {
+
+    private class ShimmerHooks(
+        val attach: View.OnAttachStateChangeListener,
+        val visibility: ViewTreeObserver.OnPreDrawListener,
+    )
 
     fun start(view: TextView, highlight: Int, periodMs: Long = 1600L) {
         stop(view)
@@ -39,11 +46,51 @@ object ShimmerText {
                 view.invalidate()
             }
         }
+        val syncPause = {
+            if (view.isAttachedToWindow && view.isShown && view.windowVisibility == View.VISIBLE) {
+                animator.resume()
+            } else {
+                animator.pause()
+            }
+        }
+        val visibilityDraw = object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                syncPause()
+                return true
+            }
+        }
+        val pauser = object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = syncPause()
+            override fun onViewDetachedFromWindow(v: View) = animator.pause()
+        }
+        view.addOnAttachStateChangeListener(pauser)
+        view.viewTreeObserver.addOnPreDrawListener(visibilityDraw)
         view.setTag(R.id.tag_shimmer_animator, animator)
+        view.setTag(R.id.tag_shimmer_pauser, ShimmerHooks(pauser, visibilityDraw))
         animator.start()
+        syncPause()
+    }
+
+    /**
+     * [start] on the next frame, once layout has given the label a width. A [stop] before then
+     * wins, so a reply that lands in the same frame never leaves a sweep on a hidden row.
+     */
+    fun post(view: TextView, highlight: Int) {
+        view.setTag(R.id.tag_shimmer_pending, true)
+        view.post {
+            if (view.getTag(R.id.tag_shimmer_pending) == true) start(view, highlight)
+        }
     }
 
     fun stop(view: TextView) {
+        view.setTag(R.id.tag_shimmer_pending, null)
+        (view.getTag(R.id.tag_shimmer_pauser) as? ShimmerHooks)?.let { hooks ->
+            view.removeOnAttachStateChangeListener(hooks.attach)
+            if (view.viewTreeObserver.isAlive) {
+                view.viewTreeObserver.removeOnPreDrawListener(hooks.visibility)
+            }
+        }
+        view.setTag(R.id.tag_shimmer_pauser, null)
         (view.getTag(R.id.tag_shimmer_animator) as? ValueAnimator)?.cancel()
         view.setTag(R.id.tag_shimmer_animator, null)
         if (view.paint.shader != null) {

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code home: which machine you're driving (tap to switch), and Code settings -->
+<!-- Code home: which machine you're driving (tap to switch). Code settings live behind the
+     top bar's left button, so there is no second gear here. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -8,7 +9,7 @@
     android:orientation="horizontal"
     android:paddingStart="16dp"
     android:paddingTop="6dp"
-    android:paddingEnd="10dp"
+    android:paddingEnd="16dp"
     android:paddingBottom="6dp">
 
     <LinearLayout
@@ -16,7 +17,6 @@
         android:layout_width="0dp"
         android:layout_height="38dp"
         android:layout_weight="1"
-        android:layout_marginEnd="8dp"
         android:background="@drawable/bg_model_pill"
         android:clickable="true"
         android:focusable="true"
@@ -70,14 +70,4 @@
             android:src="@drawable/ic_expand_more"
             app:tint="@color/xai_body" />
     </LinearLayout>
-
-    <ImageButton
-        android:id="@+id/codeHomeSettings"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:background="@drawable/bg_press_svg"
-        android:contentDescription="@string/cd_code_settings"
-        android:scaleType="centerInside"
-        android:src="@drawable/ic_settings_stroke"
-        app:tint="@color/xai_body" />
 </LinearLayout>

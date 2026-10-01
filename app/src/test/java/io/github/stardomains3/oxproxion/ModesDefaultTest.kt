@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Fresh install: main screen shows Chat and Code, Roleplay is opt-in, Code runs full auto. */
+/** Fresh install: main screen shows Chat only. Roleplay and Code are opt-in; Code runs full auto. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = ScreenshotApp::class, sdk = [35])
 class ModesDefaultTest {
@@ -34,8 +34,8 @@ class ModesDefaultTest {
         assertTrue(prefs.isRoleplayEnabled())
     }
 
-    @Test fun codeOnByDefault() {
-        assertTrue(store().enabled)
+    @Test fun codeOffByDefault() {
+        assertFalse(store().enabled)
     }
 
     @Test fun newCodeSessionsDefaultToFullAuto() {

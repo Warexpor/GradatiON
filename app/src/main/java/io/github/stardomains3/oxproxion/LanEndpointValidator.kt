@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion
 
+import androidx.annotation.StringRes
 import java.net.URI
 
 /**
@@ -7,23 +8,24 @@ import java.net.URI
  * `.local` hosts (homelab). Blocks cleartext to public IP literals.
  */
 object LanEndpointValidator {
-    /** @return error message, or null if valid */
-    fun validate(rawUrl: String): String? {
+    /** @return a string resource for the problem, or null if valid (text lives in strings, not here). */
+    @StringRes
+    fun validate(rawUrl: String): Int? {
         val url = rawUrl.trim()
-        if (url.isBlank()) return "Please enter a LAN endpoint URL"
+        if (url.isBlank()) return R.string.lan_error_url_blank
         val uri = try {
             URI(url)
         } catch (_: Exception) {
-            return "Invalid URL"
+            return R.string.lan_error_url_invalid
         }
         val scheme = uri.scheme?.lowercase()
         if (scheme != "http" && scheme != "https") {
-            return "URL must use http:// or https://"
+            return R.string.lan_error_url_scheme
         }
         val host = uri.host?.trim().orEmpty()
-        if (host.isEmpty()) return "URL must include a host"
+        if (host.isEmpty()) return R.string.lan_error_url_host
         if (scheme == "http" && !isPrivateOrLocalHost(host)) {
-            return "HTTP LAN endpoints must use localhost, a private IP (10/8, 172.16–31, 192.168), link-local, or a .local name. Use HTTPS for other hosts."
+            return R.string.lan_error_url_http_public
         }
         return null
     }

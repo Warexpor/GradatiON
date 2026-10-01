@@ -12,7 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
-import io.github.stardomains3.oxproxion.AppToast
+import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.launch
@@ -100,7 +100,7 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
     private fun askCommit() {
         val prompt = getString(R.string.code_changes_prompt_commit)
         if (!hub.prompt(sessionId, prompt)) {
-            AppToast.makeText(requireContext(), getString(R.string.code_changes_busy), AppToast.LENGTH_SHORT).show()
+            GlassNotice.show(requireContext(), getString(R.string.code_changes_busy))
             return
         }
         parentFragmentManager.popBackStack(CodeSessionFragment.BACK_STACK_TAG, 0)

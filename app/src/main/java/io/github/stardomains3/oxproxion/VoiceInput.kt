@@ -6,12 +6,15 @@ import android.media.MediaRecorder
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import androidx.annotation.StringRes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -23,14 +26,29 @@ enum class VoiceEngine(val key: String) {
     DEVICE("device"),
     /** Record, then OpenRouter's transcription endpoint (costs credits). */
     CLOUD("cloud"),
+    /** Record, then xAI Grok Speech-to-Text (`POST /v1/stt`). */
+    GROK("grok"),
     /** Record, then the local server's `/v1/audio/transcriptions` (whisper and friends). */
     LAN("lan"),
     OFF("off");
 
     companion object {
+        /** Latest Grok STT model from https://docs.x.ai/developers/model-capabilities/audio/speech-to-text */
+        const val GROK_STT_MODEL = "grok-voice-transcribe-2.0"
+
         fun fromKey(key: String?): VoiceEngine = entries.firstOrNull { it.key == key } ?: DEVICE
     }
 }
+
+/** The engine's name as Settings shows it. */
+val VoiceEngine.labelRes: Int
+    get() = when (this) {
+        VoiceEngine.DEVICE -> R.string.voice_engine_phone
+        VoiceEngine.CLOUD -> R.string.voice_engine_cloud
+        VoiceEngine.GROK -> R.string.voice_engine_grok
+        VoiceEngine.LAN -> R.string.voice_engine_local
+        VoiceEngine.OFF -> R.string.settings_value_off
+    }
 
 /**
  * Tap-to-start, tap-to-finish dictation. Never sends anything by itself: finished text goes to
@@ -74,6 +92,10 @@ class VoiceInput(
     private var stopping = false
     private var lastPartial = ""
     private val stopTimeout = Runnable { finishDevice() }
+    /** Sessions in a row that heard nothing, busy retries in a row, and when words last arrived. */
+    private var silentRestarts = 0
+    private var busyRetries = 0
+    private var lastHeardAt = 0L
 
     // Recording engines
     private var recorder: MediaRecorder? = null
@@ -96,16 +118,34 @@ class VoiceInput(
         when (state) {
             State.IDLE -> start()
             State.LISTENING -> finish()
-            State.TRANSCRIBING -> Unit
+            // A tap while words are being transcribed gives up on them.
+            State.TRANSCRIBING -> cancel()
         }
     }
 
+    /**
+     * What stops the picked engine from working at all (no key, no model, no server), as a
+     * string resource, or null when it is ready. Checked before recording so a missing key is
+     * reported up front instead of after the audio has been recorded and uploaded.
+     */
+    @StringRes
+    fun preflightError(): Int? = resolveEngine()?.let { preflight(it, prefs) }
+
     fun start() {
         if (state != State.IDLE) return
-        when (val engine = resolveEngine()) {
+        val engine = resolveEngine()
+        if (engine == null) {
+            listener.onError(context.getString(R.string.voice_unavailable))
+            return
+        }
+        preflight(engine, prefs)?.let {
+            listener.onError(context.getString(it))
+            return
+        }
+        when (engine) {
             VoiceEngine.DEVICE -> startDevice()
-            VoiceEngine.CLOUD, VoiceEngine.LAN -> startRecording(engine)
-            else -> listener.onError(context.getString(R.string.voice_unavailable))
+            VoiceEngine.CLOUD, VoiceEngine.GROK, VoiceEngine.LAN -> startRecording(engine)
+            VoiceEngine.OFF -> listener.onError(context.getString(R.string.voice_unavailable))
         }
     }
 
@@ -121,20 +161,35 @@ class VoiceInput(
         }
     }
 
-    /** Stop right now, keeping the words already heard; nothing is transcribed afterwards. */
+    /**
+     * Stop right now and keep what was said: the device recognizer commits the words it has,
+     * a recording is sent off to be transcribed (state becomes [State.TRANSCRIBING]). Used when
+     * the user sends or leaves mid-dictation, so their words are never thrown away.
+     */
     fun finishNow() {
         if (recognizer != null) {
             finishDevice()
         } else if (recorder != null) {
-            stopRecording(transcribeIt = false)
+            stopRecording(transcribeIt = true)
         }
     }
 
-    fun release() {
-        finishNow()
+    /** Give up on this dictation: stop listening or drop a transcription in flight, keep nothing. */
+    fun cancel() {
+        main.removeCallbacks(busyRetry)
+        if (recognizer != null) {
+            discardDevice()
+        } else if (recorder != null) {
+            stopRecording(transcribeIt = false)
+        }
         transcribeJob?.cancel()
+        transcribeJob = null
+        listener.onLevel(0f)
         state = State.IDLE
     }
+
+    /** The screen is going away; nothing should outlive it. */
+    fun release() = cancel()
 
     // ── Device recognizer ───────────────────────────────────────────────────────────────
 
@@ -146,9 +201,22 @@ class VoiceInput(
         recognizer = r
         stopping = false
         lastPartial = ""
+        heard()
         r.setRecognitionListener(deviceListener)
         state = State.LISTENING
-        r.startListening(recognizerIntent())
+        // Some recognizer services throw (service gone, permission revoked) instead of calling onError.
+        runCatching { r.startListening(recognizerIntent()) }.onFailure {
+            discardDevice()
+            state = State.IDLE
+            listener.onError(context.getString(R.string.voice_error_generic))
+        }
+    }
+
+    /** Something was heard, so the silence counters start over. */
+    private fun heard() {
+        lastHeardAt = SystemClock.uptimeMillis()
+        silentRestarts = 0
+        busyRetries = 0
     }
 
     private fun recognizerIntent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -162,10 +230,44 @@ class VoiceInput(
         putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
     }
 
+    /**
+     * Start another session after a pause ended the last one. A silent room would loop this
+     * forever (and a recognizer that errors instantly would spin), so it stops after a few empty
+     * sessions in a row or a long stretch with nothing heard.
+     */
     private fun restartDevice() {
         val r = recognizer ?: return
+        if (++silentRestarts > MAX_SILENT_RESTARTS || SystemClock.uptimeMillis() - lastHeardAt > IDLE_CEILING_MS) {
+            finishDevice()
+            listener.onError(context.getString(R.string.voice_error_idle))
+            return
+        }
         lastPartial = ""
         runCatching { r.startListening(recognizerIntent()) }.onFailure { finishDevice() }
+    }
+
+    /** The recognizer was still busy: try again shortly, a few times, then give up. */
+    private val busyRetry = Runnable {
+        val r = recognizer ?: return@Runnable
+        lastPartial = ""
+        runCatching { r.startListening(recognizerIntent()) }.onFailure {
+            finishDevice()
+            listener.onError(context.getString(R.string.voice_error_generic))
+        }
+    }
+
+    /** End the device session without keeping the words heard so far. */
+    private fun discardDevice() {
+        main.removeCallbacks(stopTimeout)
+        main.removeCallbacks(busyRetry)
+        val r = recognizer ?: return
+        recognizer = null
+        lastPartial = ""
+        runCatching { r.cancel() }
+        runCatching { r.destroy() }
+        stopping = false
+        listener.onPartial("")
+        listener.onLevel(0f)
     }
 
     private fun commitPartial() {
@@ -176,6 +278,7 @@ class VoiceInput(
 
     private fun finishDevice() {
         main.removeCallbacks(stopTimeout)
+        main.removeCallbacks(busyRetry)
         val r = recognizer ?: return
         recognizer = null
         commitPartial()
@@ -188,7 +291,7 @@ class VoiceInput(
 
     private val deviceListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) = Unit
-        override fun onBeginningOfSpeech() = Unit
+        override fun onBeginningOfSpeech() = heard()
         override fun onRmsChanged(rmsdB: Float) {
             // Recognizers report roughly -2 dB (silence) to 10 dB (loud speech).
             listener.onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
@@ -198,11 +301,15 @@ class VoiceInput(
         override fun onPartialResults(partialResults: Bundle?) {
             val text = partialResults?.bestResult() ?: return
             if (text.isBlank()) return
+            heard()
             lastPartial = text
             listener.onPartial(text)
         }
         override fun onResults(results: Bundle?) {
-            results?.bestResult()?.takeIf { it.isNotBlank() }?.let { lastPartial = it }
+            results?.bestResult()?.takeIf { it.isNotBlank() }?.let {
+                heard()
+                lastPartial = it
+            }
             commitPartial()
             if (stopping) finishDevice() else restartDevice()
         }
@@ -214,7 +321,15 @@ class VoiceInput(
                     commitPartial()
                     restartDevice()
                 }
-                error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> main.postDelayed({ restartDevice() }, 120)
+                error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                    if (++busyRetries > MAX_BUSY_RETRIES) {
+                        finishDevice()
+                        listener.onError(context.getString(R.string.voice_error_generic))
+                    } else {
+                        main.removeCallbacks(busyRetry)
+                        main.postDelayed(busyRetry, BUSY_RETRY_MS * busyRetries)
+                    }
+                }
                 else -> {
                     finishDevice()
                     listener.onError(context.getString(errorText(error)))
@@ -273,6 +388,9 @@ class VoiceInput(
         transcribeJob = scope.launch {
             val bytes = withContext(Dispatchers.IO) { file.readBytes().also { file.delete() } }
             val result = transcribe(bytes, "ogg", file.name)
+            // Cancelled while the request was in flight: cancel() already reset the state.
+            if (!isActive) return@launch
+            transcribeJob = null
             state = State.IDLE
             result.onSuccess { if (it.isNotBlank()) listener.onCommit(it.trim()) }
                 .onFailure { listener.onError(it.message ?: context.getString(R.string.voice_error_generic)) }
@@ -282,6 +400,33 @@ class VoiceInput(
     companion object {
         private const val LEVEL_TICK_MS = 66L
         private const val STOP_GRACE_MS = 1_500L
+        /** Empty device sessions tolerated in a row; each lasts a few seconds of silence. */
+        private const val MAX_SILENT_RESTARTS = 8
+        /** Stop after this long without a word, however the sessions ended. */
+        private const val IDLE_CEILING_MS = 90_000L
+        private const val MAX_BUSY_RETRIES = 5
+        private const val BUSY_RETRY_MS = 120L
+
+        /**
+         * Why [engine] can't start yet, or null. Recording engines need their credentials and
+         * a model up front; the phone's recognizer needs nothing.
+         */
+        @StringRes
+        fun preflight(engine: VoiceEngine, prefs: SharedPreferencesHelper): Int? = when (engine) {
+            VoiceEngine.CLOUD -> when {
+                prefs.getVoiceInputModel().isBlank() -> R.string.voice_need_model
+                prefs.getApiKeyFromPrefs("openrouter_api_key").isBlank() -> R.string.voice_need_openrouter_key
+                else -> null
+            }
+            VoiceEngine.GROK ->
+                if (prefs.getApiKeyFromPrefs(SharedPreferencesHelper.XAI_API_KEY_ALIAS).isBlank()) R.string.voice_need_xai_key else null
+            VoiceEngine.LAN -> when {
+                prefs.getVoiceInputModel().isBlank() -> R.string.voice_need_model
+                prefs.getLanEndpoint().isNullOrBlank() -> R.string.voice_need_lan_endpoint
+                else -> null
+            }
+            VoiceEngine.DEVICE, VoiceEngine.OFF -> null
+        }
 
         /** Tests only: pretend the phone does (true) or doesn't (false) have a recognizer. */
         @androidx.annotation.VisibleForTesting

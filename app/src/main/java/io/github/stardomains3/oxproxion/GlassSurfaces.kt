@@ -61,6 +61,19 @@ class GlassDrawable() : Drawable() {
      */
     var selectedTint: Int? = null
 
+    /**
+     * A blurred picture of the screen behind this card's window, for windows the system won't
+     * blur across ([GlassDialogs]). Painted inside the card only, lined up with the screen.
+     */
+    var frost: Frost? = null
+        set(value) { field = value; invalidateSelf() }
+
+    /** [bitmap] is the activity window at [scale]; [host] is the view this drawable paints in. */
+    class Frost(val bitmap: android.graphics.Bitmap, val scale: Float, val host: View, val origin: IntArray)
+
+    private val frostPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val hostLoc = IntArray(2)
+
     private var density = 1f
     private var highlight = Color.argb(0x33, 255, 255, 255)
     private var edge = Color.argb(0x26, 255, 255, 255)
@@ -172,8 +185,20 @@ class GlassDrawable() : Drawable() {
         val tint = if (sel != null && selection > 0f) blend(glassTint, sel, selection) else glassTint
         // Disabled controls fade back into the surface instead of greying out a slab.
         val mul = if (enabled) alphaMul else alphaMul * 45 / 100
+        frost?.takeIf { !solid && !it.bitmap.isRecycled }?.let { f ->
+            f.host.getLocationOnScreen(hostLoc)
+            canvas.save()
+            canvas.clipPath(path)
+            canvas.translate((f.origin[0] - hostLoc[0]).toFloat(), (f.origin[1] - hostLoc[1]).toFloat())
+            canvas.scale(1f / f.scale, 1f / f.scale)
+            frostPaint.alpha = mul
+            canvas.drawBitmap(f.bitmap, 0f, 0f, frostPaint)
+            canvas.restore()
+        }
         fill.color = if (solid) Color.argb(max(Color.alpha(tint), 0xF5), Color.red(tint), Color.green(tint), Color.blue(tint)) else tint
-        fill.alpha = fill.alpha * mul / 255
+        // Over a frost the tint can be lighter: the blur already keeps text legible.
+        val frostFactor = if (frost != null && !solid) FROSTED_TINT else 1f
+        fill.alpha = (fill.alpha * mul / 255 * frostFactor).toInt()
         canvas.drawPath(path, fill)
         sheenPaint.alpha = mul
         canvas.drawPath(path, sheenPaint)
@@ -209,7 +234,14 @@ class GlassDrawable() : Drawable() {
         if (!isStateful) return false
         var changed = false
         val p = interactive && state.contains(android.R.attr.state_pressed)
-        if (p != pressed) { pressed = p; changed = true }
+        if (p != pressed) {
+            pressed = p
+            changed = true
+            val host = callback as? View
+            if (p && host?.stateListAnimator != null) {
+                PressRoom.open(host, max(host.width, host.height) * (ANIMATOR_PRESS_SCALE - 1f) / 2f + 2f * density)
+            }
+        }
         // Views always report state_enabled while enabled; an empty set means "no state yet".
         val en = state.isEmpty() || state.contains(android.R.attr.state_enabled)
         if (en != enabled) { enabled = en; changed = true }
@@ -278,6 +310,11 @@ class GlassDrawable() : Drawable() {
         Color.argb((Color.alpha(c) * f).toInt(), Color.red(c), Color.green(c), Color.blue(c))
 
     companion object {
+        private const val FROSTED_TINT = 0.82f
+
+        /** Peak scale in `animator/glass_press.xml`. */
+        private const val ANIMATOR_PRESS_SCALE = 1.08f
+
         fun sheet(context: Context, topOnly: Boolean = false): GlassDrawable =
             GlassDrawable(
                 context,

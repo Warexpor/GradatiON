@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The check sits on the ink-filled box (button_tint), so it takes the canvas color to show -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <item android:color="@color/xai_ink" app:state_indeterminate="true"/>
-    <item android:color="@color/xai_ink" android:state_checked="true"/>
+    <item android:color="@color/xai_canvas" app:state_indeterminate="true"/>
+    <item android:color="@color/xai_canvas" android:state_checked="true"/>
     <item android:color="@color/xai_mute" android:state_checked="false"/>
 </selector>

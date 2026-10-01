@@ -12,7 +12,9 @@ object RpLore {
     private const val SCAN_CHARS = 4_000
     private val header = Regex("""(?m)^[ \t]*\[keys:[ \t]*(.*?)[ \t]*][ \t]*$""")
 
-    data class Entry(val keys: List<String>, val text: String)
+    data class Entry(val keys: List<String>, val text: String) {
+        internal val matchers: List<KeyMatcher> by lazy { keys.map(::KeyMatcher) }
+    }
 
     fun parse(content: String): List<Entry> {
         if (content.isBlank()) return emptyList()
@@ -48,7 +50,7 @@ object RpLore {
         fun take(haystack: String) {
             entries.forEachIndexed { i, entry ->
                 if (i in picked) return@forEachIndexed
-                if (entry.keys.isEmpty() || entry.keys.any { keyHits(it, haystack) }) picked += i
+                if (entry.keys.isEmpty() || entry.matchers.any { it.hits(haystack) }) picked += i
             }
         }
         take(scan)
@@ -74,15 +76,27 @@ object RpLore {
      * A single word must sit on its own, so "dock" does not fire inside "docks", while
      * "Mira" still matches "Mira's". A phrase matches anywhere.
      */
-    fun keyHits(key: String, haystack: String): Boolean {
-        val token = key.trim()
-        if (token.isEmpty() || haystack.isEmpty()) return false
-        val escaped = Regex.escape(token)
-        val pattern = if (token.any { it.isWhitespace() }) {
-            Regex(escaped, RegexOption.IGNORE_CASE)
-        } else {
-            Regex("""(?<![\p{L}\p{N}])$escaped(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE)
+    fun keyHits(key: String, haystack: String): Boolean = KeyMatcher(key).hits(haystack)
+
+    /** Scripts written without spaces between words, where a key is always glued to its neighbours. */
+    private val unspacedScripts = setOf(
+        Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA,
+        Character.UnicodeScript.HANGUL, Character.UnicodeScript.THAI, Character.UnicodeScript.LAO,
+        Character.UnicodeScript.KHMER, Character.UnicodeScript.MYANMAR
+    )
+
+    /** A key compiled once, so a scan does not rebuild its regex for every entry and every pass. */
+    internal class KeyMatcher(key: String) {
+        private val token = key.trim()
+        private val escaped = Regex.escape(token)
+        private val pattern: Regex? = when {
+            token.isEmpty() -> null
+            // A word boundary never exists inside unspaced text, so these keys match anywhere.
+            token.any { it.isWhitespace() } || token.codePoints().anyMatch { Character.UnicodeScript.of(it) in unspacedScripts } ->
+                Regex(escaped, RegexOption.IGNORE_CASE)
+            else -> Regex("""(?<![\p{L}\p{N}])$escaped(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE)
         }
-        return pattern.containsMatchIn(haystack)
+
+        fun hits(haystack: String) = pattern != null && haystack.isNotEmpty() && pattern.containsMatchIn(haystack)
     }
 }
