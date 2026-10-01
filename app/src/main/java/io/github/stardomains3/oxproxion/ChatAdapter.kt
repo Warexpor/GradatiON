@@ -981,7 +981,7 @@ class ChatAdapter(
                         if (inline != null) showInlinePhoto(inline, fileUri, maxW, maxH, d)
                         else hideUserPhoto()
                     }
-                } else {
+                } else if (inline != null) {
                     showInlinePhoto(inline, "inline:${inline.hashCode()}", maxW, maxH, d)
                 }
             } else {

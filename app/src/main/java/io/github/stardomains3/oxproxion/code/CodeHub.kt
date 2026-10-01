@@ -80,6 +80,9 @@ class CodeHub internal constructor(context: Context) {
     /** Session ids the user renamed. Bridge titles must not replace those. */
     private val pinnedTitles = HashSet(store.pinnedSessionTitles())
 
+    /** Unsent composer lines, keyed by session. Lost with the process, same as the transcript. */
+    private val composerDrafts = HashMap<String, CodeComposerDrafts.Draft>()
+
     /** Local away notifications (§5.6); no sticky FGS. */
     val awayNotifier = CodeAwayNotifier(appContext, store) { hostId ->
         // Real CONNECTED only (demo included once its backend is up). No isDemo bypass —
@@ -604,6 +607,7 @@ class CodeHub internal constructor(context: Context) {
 
     fun forget(sessionId: String) {
         pinnedTitles.remove(sessionId)
+        composerDrafts.remove(sessionId)
         store.unpinSessionTitle(sessionId)
         awayNotifier.cancelSession(sessionId) // A5
         // M2: stop an in-flight turn so keepalive / outbox do not outlive the row.
@@ -625,6 +629,17 @@ class CodeHub internal constructor(context: Context) {
         }
         _sessions.value = _sessions.value - sessionId
         persistSessions()
+    }
+
+    /** The line (and pictures) left in this session's composer, if the screen was closed on them. */
+    fun sessionDraft(sessionId: String): CodeComposerDrafts.Draft? = composerDrafts[sessionId]
+
+    fun parkSessionDraft(sessionId: String, text: String, attachments: List<PromptAttachment>) {
+        CodeComposerDrafts.park(composerDrafts, sessionId, text, attachments)
+    }
+
+    fun clearSessionDraft(sessionId: String) {
+        composerDrafts.remove(sessionId)
     }
 
     /** Phone-local title edit; persists via the session index in Room. The bridge cannot replace it. */

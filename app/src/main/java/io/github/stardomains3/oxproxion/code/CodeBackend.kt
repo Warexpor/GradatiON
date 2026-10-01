@@ -149,7 +149,15 @@ class BridgeBackend(
     private var reader: Job? = null
     private var lifecycle: Job? = null
     private var initialized = false
-    private var socketGeneration = 0
+    /** Bumped when the socket drops or the handshake fails, so a queued client reply cannot land on the next link. */
+    @Volatile private var socketGeneration = 0
+    /**
+     * JSON-RPC replies the phone owes the agent (a session/update ack, or "method not found"
+     * for a file or terminal request). A full send queue used to drop these and leave the turn stuck.
+     */
+    private val replyOutbox = ArrayDeque<PendingReply>()
+    private val replyLock = Any()
+    private var replyFlushJob: Job? = null
     /** From initialize `_meta.bridge.version` / `serverInfo.version`; kept across reconnect until close. */
     @Volatile private var bridgeVersion: String? = null
     /** From `agentCapabilities.promptCapabilities.image`. Omitted stays true. */
@@ -212,6 +220,8 @@ class BridgeBackend(
         @Volatile var option: ApprovalOption?,
         val done: CompletableDeferred<Unit> = CompletableDeferred(),
     )
+
+    private class PendingReply(val frame: String, val generation: Int)
 
     /** Outcome of [deliverPrompt]: aborts must not outbox-requeue. */
     private enum class DeliverResult {
@@ -355,7 +365,7 @@ class BridgeBackend(
                                 if (out.error != null) d.completeExceptionally(IllegalStateException(out.error))
                                 else d.complete(out.result)
                             }
-                            is AdapterOutput.Reply -> transport.send(out.frame)
+                            is AdapterOutput.Reply -> offerReply(out.frame)
                             is AdapterOutput.Ignored -> Unit
                         }
                     }
@@ -365,6 +375,72 @@ class BridgeBackend(
                 } catch (_: Throwable) {
                     delay(50)
                 }
+            }
+        }
+    }
+
+    /**
+     * Send a client reply now, or keep it until the queue accepts it. A reply from a socket
+     * that has already dropped is not kept: the agent will ask again on the new link.
+     */
+    private fun offerReply(frame: String) {
+        val gen = socketGeneration
+        if (connection.value == ConnectionState.CONNECTED && transport.send(frame)) return
+        if (connection.value != ConnectionState.CONNECTED || gen != socketGeneration) return
+        synchronized(replyLock) {
+            while (replyOutbox.size >= MAX_PENDING_REPLIES) replyOutbox.removeFirst()
+            replyOutbox.addLast(PendingReply(frame, gen))
+        }
+        scheduleReplyFlush()
+    }
+
+    private fun clearReplies() {
+        synchronized(replyLock) { replyOutbox.clear() }
+    }
+
+    private fun flushReplies() {
+        while (connection.value == ConnectionState.CONNECTED) {
+            val item = synchronized(replyLock) { replyOutbox.firstOrNull() } ?: return
+            if (item.generation != socketGeneration) {
+                synchronized(replyLock) {
+                    if (replyOutbox.firstOrNull() === item) replyOutbox.removeFirst()
+                }
+                continue
+            }
+            if (!transport.send(item.frame)) return
+            synchronized(replyLock) {
+                if (replyOutbox.firstOrNull() === item) replyOutbox.removeFirst()
+            }
+        }
+    }
+
+    /** One worker, so a full OkHttp queue does not send the same error twice. */
+    private fun scheduleReplyFlush() {
+        if (replyFlushJob?.isActive == true) return
+        if (synchronized(replyLock) { replyOutbox.isEmpty() }) return
+        replyFlushJob = scope.launch {
+            val self = coroutineContext[Job]
+            var fails = 0
+            try {
+                while (lifecycle != null && synchronized(replyLock) { replyOutbox.isNotEmpty() }) {
+                    if (connection.value != ConnectionState.CONNECTED) break
+                    val before = synchronized(replyLock) { replyOutbox.size }
+                    flushReplies()
+                    val after = synchronized(replyLock) { replyOutbox.size }
+                    if (after == 0) break
+                    if (after < before) {
+                        fails = 0
+                        continue
+                    }
+                    fails++
+                    if (fails > MAX_ANSWER_RETRIES) {
+                        clearReplies()
+                        break
+                    }
+                    delay(20L shl fails.coerceAtMost(5))
+                }
+            } finally {
+                if (replyFlushJob === self) replyFlushJob = null
             }
         }
     }
@@ -426,6 +502,9 @@ class BridgeBackend(
                             loadFailed.clear()
                             resuming.clear()
                             gapReloads.clear()
+                            replyFlushJob?.cancel()
+                            replyFlushJob = null
+                            clearReplies()
                             failPending("Disconnected")
                         }
                     }
@@ -1442,6 +1521,9 @@ class BridgeBackend(
         cancelFlushJob = null
         answerFlushJob?.cancel()
         answerFlushJob = null
+        replyFlushJob?.cancel()
+        replyFlushJob = null
+        clearReplies()
         failQueuedAnswers("Closed")
         lifecycle?.cancel()
         lifecycle = null
@@ -1482,5 +1564,7 @@ class BridgeBackend(
         const val MAX_ANSWER_RETRIES = 4
         /** How long [answer] waits before unlocking the card. The choice stays queued after this. */
         const val ANSWER_WAIT_MS = 8_000L
+        /** Client replies waiting on a full send queue. Older ones drop so a stuck agent cannot grow this without bound. */
+        const val MAX_PENDING_REPLIES = 32
     }
 }

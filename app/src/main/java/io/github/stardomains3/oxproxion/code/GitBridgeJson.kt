@@ -40,10 +40,15 @@ object GitBridgeJson {
         return GitDiffResult((o["unified"] as? JsonPrimitive)?.contentOrNull.orEmpty())
     }
 
-    /** Compact status letter for list rows (porcelain XY → one glyph). */
+    /**
+     * Compact status letter for list rows. Porcelain is two columns (` M`, `R `);
+     * a longer token such as `R100` is a similarity score, so the first letter is the status.
+     */
     fun statusLetter(status: String): String {
         val trimmed = status.trim()
         if (trimmed == "??" || trimmed == "?") return "?"
+        if (trimmed == "!!" || trimmed == "!") return "!"
+        if (trimmed.length > 2 && trimmed[0].isLetter()) return trimmed[0].toString()
         val y = status.getOrNull(1)?.takeIf { it != ' ' }
         val x = status.getOrNull(0)?.takeIf { it != ' ' }
         return (y ?: x ?: '?').toString()

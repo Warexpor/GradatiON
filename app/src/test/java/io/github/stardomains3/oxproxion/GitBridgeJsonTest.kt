@@ -77,5 +77,8 @@ class GitBridgeJsonTest {
         assertEquals("A", GitBridgeJson.statusLetter("A "))
         assertEquals("D", GitBridgeJson.statusLetter(" D"))
         assertTrue(GitBridgeJson.statusLetter("  ").isNotEmpty())
+        assertEquals("R", GitBridgeJson.statusLetter("R100"))
+        assertEquals("C", GitBridgeJson.statusLetter("C075"))
+        assertEquals("!", GitBridgeJson.statusLetter("!!"))
     }
 }

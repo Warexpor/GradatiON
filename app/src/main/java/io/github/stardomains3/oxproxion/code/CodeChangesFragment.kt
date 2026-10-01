@@ -37,6 +37,8 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
     /** Full status from the bridge. The list shows [rows], which is this set after the filter. */
     private val allFiles = ArrayList<GitFileStatus>()
     private val rows = ArrayList<GitFileStatus>()
+    /** Bumped on each load so a slow reply cannot paint over a newer tap. */
+    private var loadGen = 0
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         hub = CodeHub.get(requireContext())
@@ -66,19 +68,25 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
     }
 
     private fun reload() {
+        val gen = ++loadGen
+        hint.setOnClickListener(null)
+        hint.isClickable = false
         hint.text = getString(R.string.code_changes_loading)
         hint.isVisible = true
         filter.isVisible = false
         setActionsEnabled(commit = false, revert = false)
         viewLifecycleOwner.lifecycleScope.launch {
             val result = hub.gitStatusResult(sessionId)
+            if (gen != loadGen || !isAdded) return@launch
             val status = result.getOrNull()
             if (result.isFailure || status == null) {
                 allFiles.clear()
                 rows.clear()
                 list.adapter?.notifyDataSetChanged()
-                hint.text = getString(R.string.code_changes_failed)
+                hint.text = getString(R.string.code_changes_failed) + "\n" + getString(R.string.code_changes_tap_retry)
                 hint.isVisible = true
+                hint.isClickable = true
+                hint.setOnClickListener { reload() }
                 filter.isVisible = false
                 toolbar.subtitle = null
                 setActionsEnabled(commit = false, revert = false)
