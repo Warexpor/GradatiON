@@ -1011,7 +1011,7 @@ class ScreenshotTest {
             prefs.saveChatMemoryCount(oldBudget)
             prefs.saveRpAutoMemory(true)
             prefs.saveRpMemory(null, "")
-            a.findViewById<View>(R.id.tabChat).performClick(); idle()
+            a.findViewById<View>(R.id.tabChat).performClick(); settle()
         }
     }
 
@@ -1071,7 +1071,7 @@ class ScreenshotTest {
             a.supportFragmentManager.fragments.any { it is SettingsFragment && it.isVisible })
         org.junit.Assert.assertNotEquals("history stays shut", View.VISIBLE, a.findViewById<View>(R.id.historyDrawerContainer).visibility)
         a.supportFragmentManager.popBackStackImmediate(); settle()
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
         org.junit.Assert.assertEquals(View.GONE, home.visibility)
         org.junit.Assert.assertEquals(a.getString(R.string.cd_history), topLeft.contentDescription)
     }
@@ -1089,7 +1089,7 @@ class ScreenshotTest {
         aurelia.performClick(); settle()
         org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.rpHome).visibility)
         org.junit.Assert.assertEquals("Aurelia", vm.activeRpCharacter.value?.name)
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
     /** In Roleplay the composer's settings button is the character menu; the controls moved under +. */
@@ -1114,7 +1114,7 @@ class ScreenshotTest {
             org.junit.Assert.assertEquals("tile $i is square", tile.width, tile.height)
         }
         dismissRpPanel(a)
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
         org.junit.Assert.assertEquals(a.getString(R.string.cd_controls), button.contentDescription)
     }
 
@@ -1158,7 +1158,7 @@ class ScreenshotTest {
             org.junit.Assert.assertEquals("sheet moved after $name", top, sheetTop())
         }
         dismissRpPanel(a)
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
     /** Roleplay opens where it was left: on the list, or inside the chat. */
@@ -1185,7 +1185,7 @@ class ScreenshotTest {
         a.findViewById<View>(R.id.tabChat).performClick(); settle()
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
         org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
     /** A chat's ⋮ on the list: new chat, edit the character, delete (set apart, in the dim red). */
@@ -1201,7 +1201,7 @@ class ScreenshotTest {
         }
         org.junit.Assert.assertEquals(listOf("New chat", "Edit character", "Delete chat"), labels)
         snap(root(a), "rp_home_menu_dark")
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
     /** The panel's History tile lists this character's chats, newest first, with a fresh one last. */
@@ -1244,7 +1244,7 @@ class ScreenshotTest {
         org.junit.Assert.assertNotEquals(opened, vm.getCurrentSessionId())
         // Picking a chat lands in it: the sheet closes instead of staying over the new chat.
         org.junit.Assert.assertFalse("panel closes after picking a chat", rpPanelShowing(a))
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
     @Test fun rpHomeEmptyDark() = withChat { a, _ ->
@@ -1253,7 +1253,7 @@ class ScreenshotTest {
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
         org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.rpHomeEmpty).visibility)
         snap(root(a), "rp_home_empty_dark")
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
     @Test @Config(qualifiers = LIGHT)
@@ -1261,7 +1261,7 @@ class ScreenshotTest {
         seedRp(); seedRpChats()
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
         snap(root(a), "rp_home_light")
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
     /** RP with the demo model: a character reply, then Continue on an empty composer takes the next beat. */
@@ -1324,14 +1324,14 @@ class ScreenshotTest {
         snapDialog(a, "rp_character_panel_dark", sharp = true)
         dismissRpPanel(a)
         // Re-apply RP chrome (the panel reads prefs; the chat reads them on mode change).
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
         val bg = a.findViewById<AmbientBackgroundView>(R.id.ambientBackground)
         org.junit.Assert.assertEquals(BackgroundPhoto.slotForCharacter(mira.id), bg.photoSlot)
         snap(root(a), "rp_conversation_bubbles_dark")
         SharedPreferencesHelper(a).saveRpLayout(mira.id, SharedPreferencesHelper.RP_LAYOUT_CLASSIC)
         BackgroundPhoto.delete(ctx, BackgroundPhoto.slotForCharacter(mira.id))
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
     @Test fun demoModelStreamsWithoutKey() = withChat { a, _ ->
@@ -1374,12 +1374,12 @@ class ScreenshotTest {
     // ---- Grok-form chrome: mode tabs, anchored popover, pull-to-dismiss ----
 
     @Test fun chatRoleplayTabDark() = withChat { a, _ ->
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); idle()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
         org.junit.Assert.assertTrue(a.findViewById<View>(R.id.tabRoleplay).isSelected)
         org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.emptyAction).visibility)
         snap(root(a), "chat_rp_empty_dark")
         // Mode persists across tests; leave the app in Chat.
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
     @Test fun manageModelsFromPopoverDark() = withChat { a, _ ->
@@ -1450,7 +1450,7 @@ class ScreenshotTest {
         val w = root.width.toFloat()
         val y = root.height * 0.45f
         // Mode persists across tests; start from Chat.
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
         swipe(root, w * 0.85f, w * 0.15f, y)
         org.junit.Assert.assertTrue("left swipe → Roleplay", a.findViewById<View>(R.id.tabRoleplay).isSelected)
         swipe(root, w * 0.15f, w * 0.85f, y)
@@ -1699,7 +1699,7 @@ class ScreenshotTest {
         idle()
         org.junit.Assert.assertTrue(a.findViewById<View>(R.id.tabRoleplay).isSelected)
         org.junit.Assert.assertEquals(0f, a.findViewById<View>(R.id.chatFrameView).translationX, 0.5f)
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
     @Test fun swipeRightFromChatPullsHistory() = withChat { a, chat ->
@@ -1727,7 +1727,7 @@ class ScreenshotTest {
 
     /** Mid-swipe the tab highlight is part way: neither tab is fully lit, neither fully dim. */
     @Test fun tabHighlightFollowsTheSwipe() = withChat { a, chat ->
-        a.findViewById<View>(R.id.tabChat).performClick(); idle()
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
         val root = chat.requireView()
         drag(root, -root.width * 0.5f, release = false, stepMs = 40L)
         val ink = androidx.core.content.ContextCompat.getColor(a, R.color.xai_ink)

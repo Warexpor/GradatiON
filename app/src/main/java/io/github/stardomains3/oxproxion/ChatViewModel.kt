@@ -510,6 +510,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val lanModels: LiveData<List<LlmModel>> = _lanModels
     private var lanFetchJob: Job? = null
 
+    private fun isThinkingBubble(message: FlexibleMessage): Boolean =
+        message.role == "assistant" &&
+            (message.content as? JsonPrimitive)?.contentOrNull?.let(ThinkingPlaceholder::matches) == true
+
     private fun isAssistantPlaceholder(message: FlexibleMessage): Boolean {
         if (message.role != "assistant") return false
         val text = (message.content as? JsonPrimitive)?.contentOrNull ?: return false
@@ -954,7 +958,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             characterId = sessionCharacterId(),
             isLlm = sessionIsLlm(),
             model = _activeChatModel.value ?: "",
-            messages = (_chatMessages.value ?: emptyList()).map { it.copy() },
+            // A reply still pending when the chat is left has only its placeholder. Saving it
+            // reopens a bubble that never resolves, and a new chat gets a row from it.
+            messages = (_chatMessages.value ?: emptyList()).filterNot(::isThinkingBubble).map { it.copy() },
             draftFacts = if (id == null) draftRpFacts else null,
             draftAtCapture = sharedPreferencesHelper.getRpDraftSessionId(ChatMode.fromStorage(mode)),
             fork = if (stashedForkTail.isEmpty() || forkIndex < 0) null else CapturedFork(
@@ -1096,7 +1102,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         if (!chatSaveSerial.isCurrent(ticket)) return
-        releaseDroppedScenePhotos(previousPhotos, messagesToSave, snap.swipe)
+        releaseDroppedScenePhotos(previousPhotos, messagesToSave + snap.fork?.messages.orEmpty(), snap.swipe)
         if (
             ChatSaveGate.decide(
                 epochAtSchedule = snap.epoch,
@@ -1352,7 +1358,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return if (changed) out else messages
     }
 
-    /** A picture this save no longer names. Another chat, or another version of this reply, keeps it. */
+    /**
+     * A picture this save no longer names. Another chat, another version of this reply, or the
+     * other branch ([messages] includes the stashed fork) keeps it.
+     */
     private suspend fun releaseDroppedScenePhotos(
         previous: List<String>,
         messages: List<FlexibleMessage>,
