@@ -46,6 +46,8 @@ class ChatRepository(private val chatDao: ChatDao) {
     suspend fun getAllSessionsWithMessages(): List<SessionWithMessages> {
         return chatDao.getAllSessionsWithMessages()
     }
+
+    suspend fun getAllSessionsOnce(): List<ChatSession> = chatDao.getAllSessionsOnce()
     suspend fun searchSessions(query: String, mode: ChatMode = ChatMode.ASK): List<ChatSession> {
         // Escape LIKE's wildcards so a search for "50%" or "a_b" matches the text, not everything.
         val escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
