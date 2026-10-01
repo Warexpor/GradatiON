@@ -1,3 +1,13 @@
+# Handoff (2026-10-01, code diffs, tool cards, deny)
+
+On `cursor/code-diff-hunks-tools-ed98`, targeting `gradation/app-pass`. Code mode only:
+- A unified diff no longer drops a change whose text starts with `-- ` or `++ `. Those lines look like `--- ` / `+++ ` file headers. The header is still dropped before a hunk, after the hunk's declared line counts are used up, and when the path is git's (`a/`, `b/`, `/dev/null`, or a tab and a timestamp). The next file in the same patch still starts cleanly.
+- A shell tool whose `command` is the program and whose `args` are a list shows the whole line. An argument with a space is quoted. `rawInput` sent as a JSON string is read the same way. A Read that only names `target_file` (or `filePath`) still shows the path.
+- A `tool_call_update` with no earlier `tool_call` still makes a card. A later update that names a kind sets the icon; a status-only update leaves the kind alone.
+- An approval option whose kind is `reject` or `deny`, or whose name starts with Deny or Reject, is a deny. The away-notification Allow action will not pick it.
+
+Phone: open a diff that deletes a `-- comment` line (the line should be there, in red). On a Bash card whose command was `git` plus args, the line under the title should be the full command. Deny a request whose button says Deny.
+
 # Handoff (2026-10-01, RP photos, Continue, and the panel)
 
 On `cursor/rp-photos-scene-menus-c189`, targeting `gradation/app-pass`.

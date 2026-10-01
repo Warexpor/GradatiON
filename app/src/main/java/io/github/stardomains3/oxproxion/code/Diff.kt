@@ -13,17 +13,21 @@ object Diff {
 
     /**
      * Parses unified diff text into lines. Git preamble (rename, mode, index) is dropped so it
-     * is not drawn as file content. A `---` / `+++` header needs the space git puts before the
-     * path: a real line that starts with `++` or `--` stays a change. Carriage returns are
-     * stripped so a Windows patch still matches hunk headers.
+     * is not drawn as file content. A deleted line whose text starts with `-- ` is `--- ` on
+     * the wire, the same shape as a file header, so headers are recognized only outside a hunk,
+     * once that hunk's declared counts are used up, or when the path looks like git's (`a/`,
+     * `b/`, `/dev/null`, or a tab and a timestamp). Carriage returns are stripped so a Windows
+     * patch still matches hunk headers.
      */
     fun parseUnified(text: String): List<DiffLine> {
         val out = ArrayList<DiffLine>()
         var oldNo = 0
         var newNo = 0
+        var oldLeft = 0
+        var newLeft = 0
         var inHunk = false
         var skippingBinary = false
-        val hunk = Regex("""^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$""")
+        val hunk = Regex("""^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$""")
         for (raw in text.lineSequence()) {
             val line = raw.trimEnd('\r')
             if (line.startsWith("diff ")) {
@@ -32,25 +36,45 @@ object Diff {
                 continue
             }
             if (skippingBinary) continue
+            val hunkDone = inHunk && oldLeft == 0 && newLeft == 0
             when {
                 line.startsWith("@@") -> {
                     val m = hunk.find(line) ?: continue
                     oldNo = m.groupValues[1].toInt()
-                    newNo = m.groupValues[2].toInt()
+                    newNo = m.groupValues[3].toInt()
+                    oldLeft = hunkCount(m.groupValues[2])
+                    newLeft = hunkCount(m.groupValues[4])
                     inHunk = true
-                    out += DiffLine(DiffLine.Type.HUNK, null, null, m.groupValues[3].trim())
+                    out += DiffLine(DiffLine.Type.HUNK, null, null, m.groupValues[5].trim())
                 }
-                isPreamble(line) -> Unit
+                isMetaPreamble(line) -> Unit
+                isFileHeader(line) && (!inHunk || hunkDone || isGitPathHeader(line)) -> inHunk = false
                 line.startsWith("Binary files ") || line.startsWith("GIT binary patch") -> {
                     inHunk = false
                     skippingBinary = line.startsWith("GIT binary patch")
                     out += DiffLine(DiffLine.Type.HUNK, null, null, line)
                 }
-                line.startsWith("+") -> out += DiffLine(DiffLine.Type.ADD, null, newNo++, line.substring(1))
-                line.startsWith("-") -> out += DiffLine(DiffLine.Type.DELETE, oldNo++, null, line.substring(1))
-                line.startsWith(" ") -> out += DiffLine(DiffLine.Type.CONTEXT, oldNo++, newNo++, line.substring(1))
+                line.startsWith("+") -> {
+                    out += DiffLine(DiffLine.Type.ADD, null, newNo++, line.substring(1))
+                    if (inHunk && newLeft > 0) newLeft--
+                }
+                line.startsWith("-") -> {
+                    out += DiffLine(DiffLine.Type.DELETE, oldNo++, null, line.substring(1))
+                    if (inHunk && oldLeft > 0) oldLeft--
+                }
+                line.startsWith(" ") -> {
+                    out += DiffLine(DiffLine.Type.CONTEXT, oldNo++, newNo++, line.substring(1))
+                    if (inHunk) {
+                        if (oldLeft > 0) oldLeft--
+                        if (newLeft > 0) newLeft--
+                    }
+                }
                 line.isEmpty() && out.isNotEmpty() -> Unit
-                inHunk -> out += DiffLine(DiffLine.Type.CONTEXT, oldNo++, newNo++, line)
+                inHunk -> {
+                    out += DiffLine(DiffLine.Type.CONTEXT, oldNo++, newNo++, line)
+                    if (oldLeft > 0) oldLeft--
+                    if (newLeft > 0) newLeft--
+                }
                 else -> Unit
             }
         }
@@ -100,20 +124,41 @@ object Diff {
         return sawNew && !sawDelete
     }
 
+    /** Omitted hunk count means one line. An explicit `0` stays zero. */
+    private fun hunkCount(raw: String): Int = if (raw.isEmpty()) 1 else raw.toInt()
+
     /**
-     * Git metadata that is not a hunk body. File headers are `--- a/path` / `+++ b/path`
-     * (space or tab after the dashes), not a content line that itself starts with dashes.
+     * Git metadata that is never a hunk body. `---` / `+++` are not here: a deleted `-- comment`
+     * is written `--- comment`, so those lines are classified in [isFileHeader].
      */
-    private fun isPreamble(line: String): Boolean {
-        if (line.startsWith("--- ") || line.startsWith("---\t") ||
-            line.startsWith("+++ ") || line.startsWith("+++\t") ||
-            line.startsWith("index ") || line.startsWith("\\ No newline")
-        ) return true
+    private fun isMetaPreamble(line: String): Boolean {
+        if (line.startsWith("index ") || line.startsWith("\\ No newline")) return true
         return line.startsWith("similarity ") || line.startsWith("dissimilarity ") ||
             line.startsWith("rename from") || line.startsWith("rename to") ||
             line.startsWith("copy from") || line.startsWith("copy to") ||
             line.startsWith("old mode") || line.startsWith("new mode") ||
             line.startsWith("deleted file mode") || line.startsWith("new file mode")
+    }
+
+    /** `--- path` / `+++ path`, including a tab before a timestamp. Not `---- comment`. */
+    private fun isFileHeader(line: String): Boolean = fileHeaderRest(line) != null
+
+    /**
+     * A header git would emit for the next file, as opposed to a change whose text starts
+     * with `-- ` or `++ `. `a/` and `b/` prefixes, `/dev/null`, and a tab (timestamp) count.
+     */
+    private fun isGitPathHeader(line: String): Boolean {
+        val rest = fileHeaderRest(line) ?: return false
+        return rest.startsWith("a/") || rest.startsWith("b/") ||
+            rest.startsWith("\"a/") || rest.startsWith("\"b/") ||
+            rest.startsWith("/dev/null") || rest.startsWith("\"/dev/null") ||
+            '\t' in rest
+    }
+
+    private fun fileHeaderRest(line: String): String? = when {
+        line.startsWith("--- ") || line.startsWith("+++ ") ||
+            line.startsWith("---\t") || line.startsWith("+++\t") -> line.substring(4)
+        else -> null
     }
 
     // ── internals ─────────────────────────────────────────────────────────────────────────

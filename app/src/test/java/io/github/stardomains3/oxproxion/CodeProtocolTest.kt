@@ -228,6 +228,63 @@ class CodeProtocolTest {
         assertEquals("./gradlew :app:testDebugUnitTest", (list.single() as CodeEvent.ToolCall).detail)
     }
 
+    @Test fun executeDetailJoinsCommandAndArgs() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Bash","kind":"execute","status":"pending",
+               "rawInput":{"command":"git","args":["commit","-m","hello world"]}}"""
+        )))
+        assertEquals("git commit -m \"hello world\"", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
+    @Test fun stringifiedRawInputStillShowsTheCommand() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Bash","kind":"execute","status":"pending",
+               "rawInput":"{\"command\":\"npm test\"}"}"""
+        )))
+        assertEquals("npm test", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
+    @Test fun readDetailAcceptsTargetFile() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"r1","title":"Read","kind":"read","status":"completed",
+               "rawInput":{"target_file":"src/A.kt"}}"""
+        )))
+        assertEquals("src/A.kt", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
+    @Test fun toolUpdateWithoutAFirstCallStillShowsTheCard() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call_update","toolCallId":"late","title":"Bash","kind":"execute","status":"in_progress",
+               "rawInput":{"command":"npm test"}}"""
+        )))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals("tool:late", tool.key)
+        assertEquals(ToolKind.EXECUTE, tool.kind)
+        assertEquals("npm test", tool.detail)
+        assertEquals(ToolStatus.RUNNING, tool.status)
+    }
+
+    @Test fun toolUpdateSetsKindWhenTheFirstCallOmittedIt() {
+        val list = fold(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Bash","status":"pending"}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"t1","kind":"execute","status":"completed","rawInput":{"command":"npm test"}}"""),
+        ))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals(ToolKind.EXECUTE, tool.kind)
+        assertEquals("npm test", tool.detail)
+        assertEquals(ToolStatus.COMPLETED, tool.status)
+    }
+
+    @Test fun statusOnlyUpdateKeepsTheKind() {
+        val list = fold(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Read","kind":"read","status":"pending","rawInput":{"file_path":"A.kt"}}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"t1","status":"completed"}"""),
+        ))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals(ToolKind.READ, tool.kind)
+        assertEquals("A.kt", tool.detail)
+    }
+
     @Test fun readDetailIncludesLineAndCapsExtraLocations() {
         val list = fold(listOf(update(
             """{"sessionUpdate":"tool_call","toolCallId":"r1","title":"Read","kind":"read","status":"completed",
@@ -499,6 +556,52 @@ class CodeProtocolTest {
             """.trimIndent()
         )
         assertTrue(pureRename.isEmpty())
+    }
+
+    @Test fun parseUnifiedKeepsDashCommentsAndTheNextFile() {
+        // A deleted SQL/Lua comment is `--- comment` on the wire, the same prefix as a file header.
+        val lines = Diff.parseUnified(
+            """
+            --- a/one.sql
+            +++ b/one.sql
+            @@ -1,3 +1,3 @@
+            --- old comment
+            +-- new comment
+             stay
+            --- a/two.sql
+            +++ b/two.sql
+            @@ -1 +1 @@
+            -old
+            +new
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf(
+                DiffLine.Type.HUNK,
+                DiffLine.Type.DELETE,
+                DiffLine.Type.ADD,
+                DiffLine.Type.CONTEXT,
+                DiffLine.Type.HUNK,
+                DiffLine.Type.DELETE,
+                DiffLine.Type.ADD,
+            ),
+            lines.map { it.type }
+        )
+        assertEquals("-- old comment", lines[1].text)
+        assertEquals("-- new comment", lines[2].text)
+        assertEquals("stay", lines[3].text)
+        assertEquals("old", lines[5].text)
+        assertEquals("new", lines[6].text)
+
+        val addedHeading = Diff.parseUnified(
+            """
+            @@ -1 +1 @@
+            -title
+            +++ A heading
+            """.trimIndent()
+        )
+        assertEquals("++ A heading", addedHeading[2].text)
+        assertEquals(DiffLine.Type.ADD, addedHeading[2].type)
     }
 
     @Test fun textAndUserKeysDeriveFromBridgeSeq() {
@@ -812,6 +915,23 @@ class CodeProtocolTest {
         val approval = list.filterIsInstance<CodeEvent.Approval>().single()
         assertFalse(approval.expired)
         assertEquals(ApprovalOption.Kind.ALLOW_ONCE, approval.chosen)
+    }
+
+    @Test fun rejectKindIsNotTreatedAsAllow() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":9,"method":"session/request_permission","params":{"sessionId":"s1",
+            "options":[
+              {"optionId":"no","name":"Deny","kind":"reject"},
+              {"optionId":"never","name":"Don't allow","kind":"unknown"},
+              {"optionId":"yes","name":"Allow","kind":"allow"}
+            ]}}""")
+        val approval = ((out.single() as AdapterOutput.Update).update as CodeUpdate.Upsert).event as CodeEvent.Approval
+        assertEquals(ApprovalOption.Kind.REJECT_ONCE, approval.options[0].kind)
+        assertEquals(ApprovalOption.Kind.REJECT_ONCE, approval.options[1].kind)
+        assertEquals(ApprovalOption.Kind.ALLOW_ONCE, approval.options[2].kind)
+
+        val resolved = acp.decode("""{"jsonrpc":"2.0","method":"bridge/permissionResolved","params":{"sessionId":"s1","requestId":"9","optionKind":"deny"}}""")
+        val upd = (resolved.single() as AdapterOutput.Update).update as CodeUpdate.ApprovalAnswered
+        assertEquals(ApprovalOption.Kind.REJECT_ONCE, upd.chosen)
     }
 
     @Test fun requestWithoutOptionsOffersDenyThatCancels() {
