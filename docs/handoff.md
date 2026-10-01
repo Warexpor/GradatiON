@@ -1,3 +1,12 @@
+# Handoff (2026-10-01, code tool kinds and the session line)
+
+On `cursor/code-tool-kinds-preview-b6a3`, targeting `gradation/app-pass`. Code mode only:
+- A tool kind of Bash, shell, grep, write, or Read (any case) is a shell, a search, or an edit. The icon matches, a search shows the query rather than the folder, and a long file read still keeps the start. A status of error ends the spinner as a failure. done is finished. cancelled stops the spinner and is not a failure mark. A status this app does not know leaves the previous one.
+- A log in stderr, a list of lines, a bare string, or a single content object is shown. A diff sent as one object still opens.
+- The session list shows the tool title and command while that tool is still running, then goes back to the last reply. snake_case in that reply stays snake_case. A preview the bridge sends still wins.
+
+Phone: run a command the agent reports as Bash (the card should be a terminal, and it should stop spinning when the command fails). Search for a word (the line under the title should be the word). Leave a session while a tool is running and look at the list (it should name that tool).
+
 # Handoff (2026-10-01, chat saves and photo files)
 
 On `cursor/stability-save-order-2f15`, targeting `gradation/app-pass`.

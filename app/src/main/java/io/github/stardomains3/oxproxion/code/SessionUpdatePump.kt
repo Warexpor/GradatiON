@@ -68,8 +68,12 @@ internal class SessionUpdatePump(
  */
 internal object CodeSessionFolder {
 
-    /** Markdown punctuation stripped from list previews. */
-    private val MARKDOWN_MARKS = Regex("[`*_#>]+")
+    /** Markdown around a list preview. An underscore inside an identifier stays. */
+    private val MD_STARS = Regex("\\*+")
+    private val MD_TICKS = Regex("`+")
+    private val MD_EDGE_UNDERSCORE = Regex("(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])")
+    private val MD_HEADING = Regex("^#+\\s*")
+    private const val PREVIEW_CHARS = 140
 
     fun apply(
         state: CodeSessionState,
@@ -107,13 +111,12 @@ internal object CodeSessionFolder {
             }
             else -> state.running
         }
-        val fromText = (events.lastOrNull { it is CodeEvent.AgentText } as? CodeEvent.AgentText)
-            ?.text?.lineSequence()?.lastOrNull { it.isNotBlank() }?.replace(MARKDOWN_MARKS, "")?.trim()?.take(140)
+        val fromActivity = listPreview(events)
         val summary = when (update) {
             is CodeUpdate.SessionInfo -> state.summary.copy(
                 updatedAt = now,
                 title = incomingTitle(state.summary.title, update.title, keepLocalTitle),
-                preview = update.preview ?: fromText ?: state.summary.preview,
+                preview = update.preview ?: fromActivity ?: state.summary.preview,
                 branch = update.branch ?: state.summary.branch,
                 permissionMode = update.permissionMode ?: state.summary.permissionMode,
                 lastSeq = liveSeq ?: state.summary.lastSeq
@@ -125,7 +128,7 @@ internal object CodeSessionFolder {
             )
             else -> state.summary.copy(
                 updatedAt = now,
-                preview = fromText ?: state.summary.preview,
+                preview = fromActivity ?: state.summary.preview,
                 lastSeq = liveSeq ?: state.summary.lastSeq
             )
         }
@@ -134,6 +137,44 @@ internal object CodeSessionFolder {
 
     fun needsPersist(update: CodeUpdate): Boolean =
         update is CodeUpdate.TurnDone || update is CodeUpdate.SessionInfo
+
+    /**
+     * One line for the session list. A tool that is still running (and is later than the
+     * last reply) is what the agent is doing now. Otherwise the last reply, with the
+     * marks taken off and `snake_case` left intact.
+     */
+    private fun listPreview(events: List<CodeEvent>): String? {
+        val lastLiveTool = events.indexOfLast {
+            it is CodeEvent.ToolCall &&
+                (it.status == ToolStatus.RUNNING || it.status == ToolStatus.PENDING)
+        }
+        val lastText = events.indexOfLast { it is CodeEvent.AgentText }
+        if (lastLiveTool >= 0 && lastLiveTool > lastText) {
+            return toolActivity(events[lastLiveTool] as CodeEvent.ToolCall)
+        }
+        val text = (events.getOrNull(lastText) as? CodeEvent.AgentText)?.text ?: return null
+        val line = text.lineSequence().lastOrNull { it.isNotBlank() } ?: return null
+        return prosePreview(line).ifEmpty { null }
+    }
+
+    private fun toolActivity(tool: CodeEvent.ToolCall): String? {
+        val title = tool.title.trim()
+        val detail = tool.detail?.lineSequence()?.firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+        val line = when {
+            title.isNotEmpty() && detail.isNotEmpty() -> "$title · $detail"
+            title.isNotEmpty() -> title
+            else -> detail
+        }
+        return line.take(PREVIEW_CHARS).ifEmpty { null }
+    }
+
+    private fun prosePreview(line: String): String {
+        val stripped = MD_EDGE_UNDERSCORE.replace(
+            MD_TICKS.replace(MD_STARS.replace(line.trim(), ""), ""),
+            "",
+        )
+        return MD_HEADING.replace(stripped, "").trim().take(PREVIEW_CHARS)
+    }
 
     /** Blank wire titles are ignored. A pinned local title stays. */
     private fun incomingTitle(current: String, incoming: String?, keepLocal: Boolean): String {

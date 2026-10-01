@@ -558,6 +558,7 @@ class CodeTranscriptAdapter(
                 ToolStatus.RUNNING -> R.string.code_tool_state_running
                 ToolStatus.COMPLETED -> R.string.code_tool_state_done
                 ToolStatus.FAILED -> R.string.code_tool_state_failed
+                ToolStatus.CANCELLED -> R.string.code_session_stopped
             }))
             if (hasOutput) {
                 setOnClickListener {

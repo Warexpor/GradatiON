@@ -184,7 +184,7 @@ data class NewSessionRequest(
 )
 
 enum class ToolKind { READ, EDIT, EXECUTE, SEARCH, FETCH, THINK, DELETE, MOVE, OTHER }
-enum class ToolStatus { PENDING, RUNNING, COMPLETED, FAILED }
+enum class ToolStatus { PENDING, RUNNING, COMPLETED, FAILED, CANCELLED }
 enum class PlanStatus { PENDING, IN_PROGRESS, COMPLETED }
 enum class NoticeLevel { INFO, WARNING, ERROR }
 
