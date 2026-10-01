@@ -29,7 +29,7 @@ The top bar has a menu button, the mode tabs and a new-chat button {{ic_new_chat
 ## Chat
 
 ### History
-The menu button (top left) or a swipe from the left edge opens **History** {{ic_schats}}. It lists your saved chats, pinned ones first, with search at the top. The ⋮ on a row pins, renames or deletes. Chat and Roleplay chats are listed separately. Tap a chat to reopen it.
+The menu button (top left) or a swipe right on the chat opens **History** {{ic_schats}}. It lists your saved chats, pinned ones first, with search at the top. The ⋮ on a row pins, renames or deletes. Chat and Roleplay chats are listed separately. Tap a chat to reopen it.
 
 ### Composer
 *   **+** {{ic_plus}} attaches a photo, a file or a document, or opens the tools manager. A row appears while files are attached, so you can review or remove them.

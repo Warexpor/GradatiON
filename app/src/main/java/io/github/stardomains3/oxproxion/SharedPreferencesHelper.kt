@@ -118,6 +118,8 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_FONT_FACE_MIGRATED = "font_face_migrated_jakarta"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
         private const val KEY_TRUST_SELF_SIGNED_LAN = "trust_self_signed_lan"
+        private const val KEY_LAN_CERT_PIN_PREFIX = "lan_cert_pin:"
+        private const val KEY_CHAT_DB_RECOVERED = "chat_db_recovered"
         private const val KEY_ALLOW_DESTRUCTIVE_TOOLS = "allow_destructive_tools"
         private const val KEY_HAPTIC_BUTTONS = "haptic_buttons"
         private const val KEY_HAPTIC_RESPONDING = "haptic_responding"
@@ -358,7 +360,39 @@ class SharedPreferencesHelper(context: Context) {
     fun getBiometricEnabled(): Boolean = mainPrefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
 
     fun getTrustSelfSignedLan(): Boolean = mainPrefs.getBoolean(KEY_TRUST_SELF_SIGNED_LAN, false)
-    fun saveTrustSelfSignedLan(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_TRUST_SELF_SIGNED_LAN, enabled) }
+    fun saveTrustSelfSignedLan(enabled: Boolean) = mainPrefs.edit {
+        putBoolean(KEY_TRUST_SELF_SIGNED_LAN, enabled)
+        // Off forgets what was trusted, so switching it back on pins whatever the server shows then.
+        if (!enabled) clearLanCertPinsIn(this)
+    }
+
+    /** Pinned LAN certificates, keyed by host:port; see [LanCertPins]. */
+    fun lanCertPinStore(): LanCertPins.Store = object : LanCertPins.Store {
+        override fun pinFor(hostPort: String): String? =
+            mainPrefs.getString(KEY_LAN_CERT_PIN_PREFIX + hostPort, null)
+
+        override fun savePin(hostPort: String, pin: String) {
+            mainPrefs.edit { putString(KEY_LAN_CERT_PIN_PREFIX + hostPort, pin) }
+        }
+    }
+
+    fun clearLanCertPins() = mainPrefs.edit { clearLanCertPinsIn(this) }
+
+    private fun clearLanCertPinsIn(editor: SharedPreferences.Editor) {
+        mainPrefs.all.keys.filter { it.startsWith(KEY_LAN_CERT_PIN_PREFIX) }.forEach { editor.remove(it) }
+    }
+
+    /** Set when the chat database could not be opened and a fresh one was started; read once by the UI. */
+    fun markChatDbRecovered() {
+        mainPrefs.edit(commit = true) { putBoolean(KEY_CHAT_DB_RECOVERED, true) }
+    }
+
+    /** True once after [markChatDbRecovered]; clears the flag. */
+    fun consumeChatDbRecovered(): Boolean {
+        if (!mainPrefs.getBoolean(KEY_CHAT_DB_RECOVERED, false)) return false
+        mainPrefs.edit { remove(KEY_CHAT_DB_RECOVERED) }
+        return true
+    }
 
     fun getAllowDestructiveTools(): Boolean = mainPrefs.getBoolean(KEY_ALLOW_DESTRUCTIVE_TOOLS, false)
     fun saveAllowDestructiveTools(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_ALLOW_DESTRUCTIVE_TOOLS, enabled) }
@@ -864,6 +898,18 @@ class SharedPreferencesHelper(context: Context) {
             throw IllegalStateException("Failed to persist chat DB passphrase in Keystore")
         }
         return bytes
+    }
+    /**
+     * Last resort when the chat database cannot be opened with the stored key (Keystore wiped or
+     * restored from a backup): forget the unreadable wrapped passphrase and mint a new one. The
+     * caller has already set the old database aside; nothing here deletes it.
+     */
+    fun resetChatDbPassphrase(): ByteArray {
+        apiKeysPrefs.edit(commit = true) {
+            remove("${CHAT_DB_PASSPHRASE_ALIAS}_encrypted")
+            remove("${CHAT_DB_PASSPHRASE_ALIAS}_iv")
+        }
+        return getOrCreateChatDbPassphrase()
     }
     fun getShowCitations(): Boolean = mainPrefs.getBoolean(KEY_SHOW_CITATIONS, true)  // Default true (show citations)
 

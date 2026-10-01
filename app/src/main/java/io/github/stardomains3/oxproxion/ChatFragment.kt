@@ -142,8 +142,6 @@ interface OnKeyboardShortcutListener {
 class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListener, HistoryPanelHost {
    // private var isFontUpdate = false
     private var menuClosedByTouch = false
-    private lateinit var textToSpeech: TextToSpeech
-
     private var isSpeaking = false
     private var isShare = false
     private lateinit var chatFrameView: FrameLayout
@@ -252,7 +250,86 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var topBarLayout: ConstraintLayout
     private lateinit var streamButton: MaterialButton
     private lateinit var reasoningButton: MaterialButton
-    private var ttsAvailable = true
+    private val ttsAvailable = true
+
+    /** The shared engine's callbacks (a binder thread). The voice page's preview utterances are not ours. */
+    private val ttsProgress = object : UtteranceProgressListener() {
+        override fun onStart(utteranceId: String?) {}
+        override fun onDone(utteranceId: String?) {
+            if (utteranceId?.startsWith("TTS_SAVE_") == true) {
+                val parts = utteranceId.split("_")
+                if (parts.size == 4 && parts[0] == "TTS" && parts[1] == "SAVE") {
+                    val timestamp = parts[2].toLongOrNull() ?: return
+                    val position = parts[3].toIntOrNull() ?: return
+                    // Binder thread: the fragment may be gone by now, so no requireContext().
+                    val appContext = this@ChatFragment.context?.applicationContext ?: return
+                    val tempFile = File(appContext.cacheDir, "temp_tts_${timestamp}.wav")
+                    val fileName = "TTS_${timestamp}_msg${position}.wav"
+
+                    // 🎯 COROUTINES: IO → Main (Structured, Cancellable, No Thread Leaks!)
+                    lifecycleScope.launch(Dispatchers.IO) {  // 🔧 BACKGROUND I/O
+                        var success = false
+                        try {
+                            // 🔍 File ready (onDone guarantees!)
+                            if (!tempFile.exists() || tempFile.length() == 0L) {
+                                throw Exception("TTS file empty (0 bytes)")
+                            }
+
+                            // 🎯 MediaStore Downloads (NO PERMISSIONS)
+                            val contentValues = ContentValues().apply {
+                                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                                put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
+                              //  put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                                put(MediaStore.MediaColumns.RELATIVE_PATH, WorkspacePaths.mediaStoreRelativePath())
+                                put(MediaStore.MediaColumns.IS_PENDING, 1)
+                            }
+
+                            val resolver = appContext.contentResolver
+                            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                                ?: throw Exception("Failed to create MediaStore URI")
+
+                            resolver.openOutputStream(uri)?.use { outputStream ->
+                                tempFile.inputStream().use { inputStream ->
+                                    inputStream.copyTo(outputStream)
+                                }
+                            } ?: throw Exception("Failed to open OutputStream")
+
+                            // ✅ Complete
+                            contentValues.clear()
+                            contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                            resolver.update(uri, contentValues, null, null)
+
+                            success = true
+
+                        } catch (e: Exception) {
+                        } finally {
+                            // 🧹 Cleanup
+                            tempFile.delete()
+                        }
+
+                        if (success) {
+                            noticeFromAnyThread(R.string.tts_saved_to_downloads, fileName)
+                        } else {
+                            noticeFromAnyThread(R.string.tts_save_failed)
+                        }
+                    }
+                }
+            }
+            else if (utteranceId == TTS_SPEAK_ID) {
+                activity?.runOnUiThread { onSpeechFinished() }  // Run on main thread
+            }
+        }
+        @Deprecated("Deprecated in Java")
+        override fun onError(utteranceId: String?) {
+            if (utteranceId?.startsWith("TTS_SAVE_") == true) {
+                noticeFromAnyThread(R.string.toast_tts_synthesis_error)
+            }
+            else if (utteranceId == TTS_SPEAK_ID) {
+                noticeFromAnyThread(R.string.toast_tts_engine_error)
+                activity?.runOnUiThread { onSpeechFinished() }
+            }
+        }
+    }
     private lateinit var dateFmt: SimpleDateFormat
     private lateinit var timeFmt: SimpleDateFormat
     private lateinit var datetimeFmt: SimpleDateFormat
@@ -503,91 +580,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             setSharedText(sharedText)
             arguments?.remove("shared_text") // To prevent re-processing
         }
-        textToSpeech = TextToSpeech(requireContext()) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {}
-                    override fun onDone(utteranceId: String?) {
-                        if (utteranceId?.startsWith("TTS_SAVE_") == true) {
-                            val parts = utteranceId.split("_")
-                            if (parts.size == 4 && parts[0] == "TTS" && parts[1] == "SAVE") {
-                                val timestamp = parts[2].toLongOrNull() ?: return
-                                val position = parts[3].toIntOrNull() ?: return
-                                // Binder thread: the fragment may be gone by now, so no requireContext().
-                                val appContext = this@ChatFragment.context?.applicationContext ?: return
-                                val tempFile = File(appContext.cacheDir, "temp_tts_${timestamp}.wav")
-                                val fileName = "TTS_${timestamp}_msg${position}.wav"
-
-                                // 🎯 COROUTINES: IO → Main (Structured, Cancellable, No Thread Leaks!)
-                                lifecycleScope.launch(Dispatchers.IO) {  // 🔧 BACKGROUND I/O
-                                    var success = false
-                                    try {
-                                        // 🔍 File ready (onDone guarantees!)
-                                        if (!tempFile.exists() || tempFile.length() == 0L) {
-                                            throw Exception("TTS file empty (0 bytes)")
-                                        }
-
-                                        // 🎯 MediaStore Downloads (NO PERMISSIONS)
-                                        val contentValues = ContentValues().apply {
-                                            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                                            put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
-                                          //  put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                                            put(MediaStore.MediaColumns.RELATIVE_PATH, WorkspacePaths.mediaStoreRelativePath())
-                                            put(MediaStore.MediaColumns.IS_PENDING, 1)
-                                        }
-
-                                        val resolver = appContext.contentResolver
-                                        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-                                            ?: throw Exception("Failed to create MediaStore URI")
-
-                                        resolver.openOutputStream(uri)?.use { outputStream ->
-                                            tempFile.inputStream().use { inputStream ->
-                                                inputStream.copyTo(outputStream)
-                                            }
-                                        } ?: throw Exception("Failed to open OutputStream")
-
-                                        // ✅ Complete
-                                        contentValues.clear()
-                                        contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                                        resolver.update(uri, contentValues, null, null)
-
-                                        success = true
-
-                                    } catch (e: Exception) {
-                                    } finally {
-                                        // 🧹 Cleanup
-                                        tempFile.delete()
-                                    }
-
-                                    if (success) {
-                                        noticeFromAnyThread(R.string.tts_saved_to_downloads, fileName)
-                                    } else {
-                                        noticeFromAnyThread(R.string.tts_save_failed)
-                                    }
-                                }
-                            }
-                        }
-                        else {
-                            activity?.runOnUiThread { onSpeechFinished() }  // Run on main thread
-                        }
-                    }
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        if (utteranceId?.startsWith("TTS_SAVE_") == true) {
-                            noticeFromAnyThread(R.string.toast_tts_synthesis_error)
-                        }
-                        else {
-                            noticeFromAnyThread(R.string.toast_tts_engine_error)
-                            activity?.runOnUiThread { onSpeechFinished() }
-                        }
-                    }
-                })
-                ttsAvailable = true
-            } else {
-                noticeFromAnyThread(R.string.toast_tts_failed)
-                ttsAvailable = false
-            }
-        }
+        // The engine itself starts on first use (TtsHolder); the screen only listens and holds it open.
+        TtsHolder.hold(this)
+        TtsHolder.addListener(ttsProgress)
         val prism4j = Prism4j(ExampleGrammarLocator())
         val isNightMode = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -1380,7 +1375,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     // Helper to keep the code clean
     private fun applyCollapsedParams(btn: View) {
         val density = resources.displayMetrics.density
-        val size = (38 * density).toInt()
+        val size = (40 * density).toInt()
         val params = LinearLayout.LayoutParams(size, size)
         val gap = when {
             btn === controlsButton -> (8 * density).toInt()
@@ -1995,10 +1990,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         messageMenu?.dismiss(animated = false)
         parentFragmentManager.removeOnBackStackChangedListener(rpPanelBackStackListener)
         rpPanel = null
-        if (::textToSpeech.isInitialized) {
-            textToSpeech.stop()
-            textToSpeech.shutdown()
-        }
+        TtsHolder.removeListener(ttsProgress)
+        // Leaving mid-reply cuts it off; the engine itself idles out once no screen holds it.
+        if (isSpeaking) TtsHolder.ready()?.stop()
+        isSpeaking = false
+        currentSpeakingPosition = -1
+        TtsHolder.release(this)
         super.onDestroyView()
     }
 
@@ -3021,53 +3018,71 @@ $cleanContent
             GlassNotice.show(context, context.getString(R.string.toast_tts_text_truncated))
         }
 
-        try {
-            val timestamp = System.currentTimeMillis()
-            val utteranceId = "TTS_SAVE_${timestamp}_${position}"
-            val tempFile = File(context.cacheDir, "temp_tts_${timestamp}.wav")
-            // val fileName = "TTS_${timestamp}_msg${position}.wav"  // For Toast tracking
-
-            val params = Bundle().apply {
-                putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+        TtsHolder.whenReady(context) { tts ->
+            if (!isAdded || view == null) return@whenReady
+            if (tts == null) {
+                GlassNotice.show(context, context.getString(R.string.toast_tts_failed))
+                return@whenReady
             }
+            try {
+                // The voice page's previews leave their pitch and speed on the shared engine.
+                applyReadAloudVoice(tts)
+                val timestamp = System.currentTimeMillis()
+                val utteranceId = "TTS_SAVE_${timestamp}_${position}"
+                val tempFile = File(context.cacheDir, "temp_tts_${timestamp}.wav")
+                // val fileName = "TTS_${timestamp}_msg${position}.wav"  // For Toast tracking
 
-            val result = textToSpeech.synthesizeToFile(
-                safeText,
-                params,
-                tempFile,
-                utteranceId
-            )
+                val params = Bundle().apply {
+                    putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+                }
 
-            // Queued: the save notice follows when the file is written.
-            if (result != TextToSpeech.SUCCESS) {
-                GlassNotice.show(context, context.getString(R.string.toast_tts_wav_failed, result))
+                val result = tts.synthesizeToFile(
+                    safeText,
+                    params,
+                    tempFile,
+                    utteranceId
+                )
+
+                // Queued: the save notice follows when the file is written.
+                if (result != TextToSpeech.SUCCESS) {
+                    GlassNotice.show(context, context.getString(R.string.toast_tts_wav_failed, result))
+                }
+
+            } catch (e: Exception) {
+                GlassNotice.show(context, context.getString(R.string.toast_tts_queue_error, e.message ?: ""))
             }
-
-        } catch (e: Exception) {
-            GlassNotice.show(context, context.getString(R.string.toast_tts_queue_error, e.message ?: ""))
         }
     }
 
     private fun speakText(text: String, position: Int) {
-        applyReadAloudVoice()
         if (isSpeaking && position == currentSpeakingPosition) {
-            textToSpeech.stop()
+            TtsHolder.ready()?.stop()
             onSpeechFinished()
             return
         }
-        if (isSpeaking) {
-            textToSpeech.stop()
-            onSpeechFinished()
+        val context = requireContext()
+        // The first read-aloud starts the shared engine; the stop icon waits for it.
+        TtsHolder.whenReady(context) { tts ->
+            if (!isAdded || view == null) return@whenReady
+            if (tts == null) {
+                GlassNotice.show(context, context.getString(R.string.toast_tts_failed))
+                return@whenReady
+            }
+            applyReadAloudVoice(tts)
+            if (isSpeaking) {
+                tts.stop()
+                onSpeechFinished()
+            }
+            isSpeaking = true
+            currentSpeakingPosition = position
+            chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
+            updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
+            val safeText = text.take(3900)
+            if (safeText.length < text.length) {
+                GlassNotice.show(context, context.getString(R.string.toast_tts_text_truncated))
+            }
+            tts.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, TTS_SPEAK_ID)
         }
-        isSpeaking = true
-        currentSpeakingPosition = position
-        chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
-        updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
-        val safeText = text.take(3900)
-        if (safeText.length < text.length) {
-            GlassNotice.show(requireContext(), getString(R.string.toast_tts_text_truncated))
-        }
-        textToSpeech.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, "tts_utterance")
     }
     private fun updateIconDirectlyOrNotify(position: Int, @DrawableRes iconRes: Int) {
         val lm = chatRecyclerView.layoutManager as? LinearLayoutManager ?: return
@@ -5526,7 +5541,9 @@ $cleanContent
         val characters = rpHomeCharacters
         rpHomeRefresh?.cancel()
         rpHomeRefresh = viewLifecycleOwner.lifecycleScope.launch {
-            val dao = AppDatabase.getDatabase(requireContext().applicationContext).chatDao()
+            val app = requireContext().applicationContext
+            // Normally already open; only a cold first open is worth the hop off Main.
+            val dao = (if (AppDatabase.isOpen()) AppDatabase.getDatabase(app) else withContext(Dispatchers.IO) { AppDatabase.getDatabase(app) }).chatDao()
             val llm = getString(R.string.rp_llm_speaker)
             val none = getString(R.string.rp_home_no_preview)
             val start = getString(R.string.rp_home_start)
@@ -5846,7 +5863,11 @@ $cleanContent
                 add(RpCharacterPanel.Tile(R.string.rp_panel_edit, RpTileArt.Kind.EDIT) { pushRp(RpCharacterEditFragment.newInstance(cast.id)) })
             }
             val voice = sharedPreferencesHelper.getRpVoice(memoryId)
-            val tts = if (::textToSpeech.isInitialized) textToSpeech else null
+            // Named voices label as "Voice n" from the engine's list, so a saved one starts it and redraws when it is up.
+            val tts = TtsHolder.ready()
+            if (voice.name != null && tts == null) {
+                TtsHolder.whenReady(requireContext()) { if (it != null && rpPanel?.isShowing == true) refreshRpPanel() }
+            }
             val tweaks = listOfNotNull(
                 when { voice.pitch < 1f -> getString(R.string.rp_voice_low); voice.pitch > 1f -> getString(R.string.rp_voice_high); else -> null },
                 when { voice.rate < 1f -> getString(R.string.rp_voice_slow); voice.rate > 1f -> getString(R.string.rp_voice_fast); else -> null },
@@ -5932,9 +5953,7 @@ $cleanContent
     }
 
     /** Before reading aloud: the active character's voice in Roleplay, the phone's default elsewhere. */
-    private fun applyReadAloudVoice() {
-        if (!::textToSpeech.isInitialized) return
-        val tts = textToSpeech
+    private fun applyReadAloudVoice(tts: TextToSpeech) {
         val rp = viewModel.isRpMode()
         val llm = sharedPreferencesHelper.isRpLlmMode()
         val id = viewModel.activeRpCharacter.value?.id
@@ -6303,36 +6322,31 @@ $cleanContent
                     padding: 0;         
                     max-width: 100%;    
                     font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
-                    font-size: 16px; line-height: 1.5; color: #24292f; background: white;
+                    font-size: 16px; line-height: 1.5; color: #222222; background: white;
                 }
                 .markdown-body { font-size: 16px; line-height: 1.5; }
                 h1 { 
-                    color: #24292f !important; font-size: 2em !important; font-weight: 600 !important; 
+                    color: #222222 !important; font-size: 2em !important; font-weight: 600 !important; 
                     text-decoration: underline !important;
                     border-bottom: none !important;
                     padding-bottom: .3em !important; margin: 0 0 1em 0 !important; 
                 }
-                a { color: #0366d6; text-decoration: none; }
+                a { color: #333333; text-decoration: none; }
                 a:hover, a:focus { text-decoration: underline; }
-                @media print { a { text-decoration: underline !important; color: #0366d6 !important; } }
+                @media print { a { text-decoration: underline !important; color: #333333 !important; } }
                 strong { font-weight: 600; }
                 pre, code { font-family: 'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; font-size: 14px; }
-                code { background: #f6f8fa; border-radius: 6px; padding: .2em .4em; }
-                pre { background: #f6f8fa; border-radius: 6px; padding: 16px; overflow: auto; margin: 1em 0; }
-                blockquote { border-left: 4px solid #dfe2e5; color: #6a737d; padding-left: 1em; margin: 1em 0; }
+                code { background: #f4f4f4; border-radius: 6px; padding: .2em .4em; }
+                pre { background: #f4f4f4; border-radius: 6px; padding: 16px; overflow: auto; margin: 1em 0; }
+                blockquote { border-left: 4px solid #dddddd; color: #6b6b6b; padding-left: 1em; margin: 1em 0; }
                 table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-                th, td { border: 1px solid #d0d7de; padding: .75em; text-align: left; }
-                th { background: #f6f8fa; font-weight: 600; }
-                hr { border: none; border-top: 1px solid #eaecef; height: 0; margin: 1.5em 0; }
+                th, td { border: 1px solid #d4d4d4; padding: .75em; text-align: left; }
+                th { background: #f4f4f4; font-weight: 600; }
+                hr { border: none; border-top: 1px solid #e8e8e8; height: 0; margin: 1.5em 0; }
                 ul, ol { padding-left: 2em; margin: 1em 0; }
                 img { max-width: 100%; height: auto; }
-                del { color: #bd2c00; }
+                del { color: #6b6b6b; }
                 input[type="checkbox"] { margin: 0 .25em 0 0; vertical-align: middle; }
-                
-                /* Screen tweaks */
-                h3[style*="28a745"] + div[style*="background"] {
-                    background: #f8f9fa; border-left-color: #28a745;
-                }
                 
                 /* ✅ PRINT: NO HR LINES. Margins ONLY for spacers */
                 @media print {
@@ -6354,16 +6368,15 @@ $cleanContent
                     }
                     
                     /* ✅ SPACERS VIA MARGINS ONLY: Tiny after USER (flush to assistant). 2em ONLY after ASSISTANT */
-                    div[style*="margin-bottom: 2em"]:has(h3[style*="0366d6"]) {
+                    div[style*="margin-bottom: 2em"]:has(> div[style*="padding: 0.05em"]) {
                         margin-bottom: 0.25em !important;  /* ✅ User → assistant: tight */
                     }
-                    div[style*="margin-bottom: 2em"]:has(h3[style*="28a745"]) {
+                    div[style*="margin-bottom: 2em"]:not(:has(> div[style*="padding: 0.05em"])) {
                         margin-bottom: 2em !important;  /* ✅ Assistant → next user: spacer ONLY here */
                     }
                     
                     /* ✅ ASSISTANT: Plain text (no bg/border) */
-                    h3[style*="28a745"] + div[style*="background: #f6f8fa"],
-                    h3[style*="28a745"] + div {
+                    h3 + div:not([style*="padding: 0.05em"]) {
                         background: none !important;
                         background-color: transparent !important;
                         border: none !important;
@@ -6375,7 +6388,7 @@ $cleanContent
                     }
                     
                     /* USER: Keep bg/border */
-                    h3[style*="0366d6"] + div[style*="background: #f6f8fa"] {
+                    h3 + div[style*="padding: 0.05em"] {
     padding: 0.05em 0.5em !important;  /* ✅ Tight user bg in print */
 }
 
@@ -6394,5 +6407,6 @@ $cleanContent
     }
 }
 
+private const val TTS_SPEAK_ID = "tts_utterance"
 private const val STATE_RP_HOME = "rp_home_open"
 private const val STATE_RP_RESUME = "rp_resume_at_home"

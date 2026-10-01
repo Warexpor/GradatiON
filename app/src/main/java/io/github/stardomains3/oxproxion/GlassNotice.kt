@@ -56,7 +56,7 @@ object GlassNotice {
             textSize = 14f
             maxLines = 3
             gravity = Gravity.CENTER
-            setPadding((18 * d).toInt(), (11 * d).toInt(), (18 * d).toInt(), (11 * d).toInt())
+            setPadding((16 * d).toInt(), (12 * d).toInt(), (16 * d).toInt(), (12 * d).toInt())
             background = GlassDrawable(activity, ContextCompat.getColor(activity, R.color.glass_sheet_tint), -1f)
             elevation = 8 * d
             isClickable = true

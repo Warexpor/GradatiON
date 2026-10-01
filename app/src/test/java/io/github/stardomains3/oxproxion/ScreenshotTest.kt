@@ -1069,6 +1069,12 @@ class ScreenshotTest {
         history.performClick(); settle()
         val page = a.supportFragmentManager.fragments.filterIsInstance<RpChatHistoryFragment>().single().requireView()
         val list = page.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHistoryList)
+        // Rows are built from Room queries on its own thread; a busy run needs more than one settle.
+        waitFor(5000) {
+            (0 until (list.adapter?.itemCount ?: 0)).count {
+                list.findViewHolderForAdapterPosition(it)?.itemView?.findViewById<View>(R.id.rpHistoryPreview) != null
+            } >= 2
+        }
         val previews = mutableListOf<String>()
         val current = mutableListOf<Boolean>()
         for (i in 0 until list.adapter!!.itemCount) {
@@ -1330,6 +1336,10 @@ class ScreenshotTest {
     @Test fun settingsAppearanceDark() = withChat { a, _ ->
         SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.DRIFT.key)
         openSettingsRow(a, R.id.settingsRowAppearance); settle(); snap(root(a), "settings_appearance_dark")
+        // Only the open section is inflated; the others are never built.
+        org.junit.Assert.assertNotNull(a.findViewById<View>(R.id.appearanceSection))
+        for (id in listOf(R.id.voiceSection, R.id.hapticsSection, R.id.modelsSection, R.id.advancedSection, R.id.dataSection))
+            org.junit.Assert.assertNull(a.findViewById<View>(id))
         SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
     }
 

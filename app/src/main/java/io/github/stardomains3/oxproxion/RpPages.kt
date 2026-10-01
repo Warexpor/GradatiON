@@ -598,7 +598,8 @@ class RpMemoryFragment : RpPageFragment() {
 
 /** Voice, pitch and speed for reading this character aloud; every tap previews, Save keeps it, back discards. */
 class RpVoiceFragment : RpPageFragment() {
-    private var tts: TextToSpeech? = null
+    /** The engine the list was last bound to; the shared one can be rebuilt while the app is in the background. */
+    private var boundEngine: TextToSpeech? = null
 
     override fun title() = getString(R.string.rp_panel_voice)
     override fun intro() = getString(R.string.rp_page_voice_caption, speaker())
@@ -617,17 +618,22 @@ class RpVoiceFragment : RpPageFragment() {
         val start = pending ?: prefs.getRpVoice(characterId)
         // Default and the steps show at once; the engine's own voices join the list once it is up.
         RpVoiceDialog.bind(this, requireView(), speaker(), null, start) { pending = it }
-        var created: TextToSpeech? = null
-        created = TextToSpeech(requireContext().applicationContext) { status ->
-            if (!isAdded || view == null) {
-                // onDestroyView already dropped the field, so this engine would otherwise never be released.
-                runCatching { created?.shutdown() }
-                return@TextToSpeech
-            }
-            val engine = tts.takeIf { status == TextToSpeech.SUCCESS } ?: return@TextToSpeech
-            RpVoiceDialog.bind(this, requireView(), speaker(), engine, pending ?: start) { pending = it }
+        TtsHolder.hold(this)
+        bindEngine()
+    }
+
+    private fun bindEngine() {
+        TtsHolder.whenReady(requireContext()) { engine ->
+            if (!isAdded || view == null || engine == null || engine === boundEngine) return@whenReady
+            boundEngine = engine
+            RpVoiceDialog.bind(this, requireView(), speaker(), engine, pending ?: prefs.getRpVoice(characterId)) { pending = it }
         }
-        tts = created
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Back from the background, the shared engine may have been let go and rebuilt.
+        if (boundEngine != null) bindEngine()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -636,8 +642,10 @@ class RpVoiceFragment : RpPageFragment() {
     }
 
     override fun onDestroyView() {
-        runCatching { tts?.stop(); tts?.shutdown() }
-        tts = null
+        // A preview may still be talking; the engine is shared, so only this page's voice is stopped.
+        runCatching { boundEngine?.stop() }
+        boundEngine = null
+        TtsHolder.release(this)
         super.onDestroyView()
     }
 

@@ -336,34 +336,6 @@ class SystemMessageLibraryFragment : Fragment() {
     }
 
 
-    /*private fun showPopupMenu(view: View, systemMessage: SystemMessage) {
-        val popup = PopupMenu(context, view)
-        popup.menuInflater.inflate(R.menu.model_item_menu, popup.menu)
-
-        // Enable edit option for default messages, disable delete
-        if (systemMessage.isDefault) {
-            popup.menu.findItem(R.id.delete_model).isVisible = false
-        }
-
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.edit_model -> {
-                    navigateToEditScreen(systemMessage)
-                    true
-                }
-                R.id.delete_model -> {
-                    if (systemMessage.isDefault) {
-                        GlassNotice.show(requireContext(), getString(R.string.notice_default_system_message_undeletable))
-                    } else {
-                        showDeleteConfirmationDialog(systemMessage)
-                    }
-                    true
-                }
-                else -> false
-            }
-        }
-        popup.show()
-    }*/
 
     private fun navigateToEditScreen(systemMessage: SystemMessage) {
         val fragment = AddEditSystemMessageFragment().apply {

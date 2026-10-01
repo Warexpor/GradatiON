@@ -287,16 +287,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return buildChatClient(writeTimeoutMs = 30_000L, connectTimeoutMs = 30_000L) {
             connectionPool(okhttp3.ConnectionPool(3, 90, TimeUnit.SECONDS))
             if (trustSelfSignedLan) {
-                val trustAllCerts = object : X509TrustManager {
+                // The handshake has to let an unknown certificate through, or first use could never
+                // happen. LanCertPinInterceptor runs before any byte of the request is written and
+                // refuses everything but the certificate pinned for that host:port.
+                val acceptForHandshake = object : X509TrustManager {
                     override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
                     override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
                     override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
                 }
-                val sslContext = SSLContext.getInstance("SSL")
-                sslContext.init(null, arrayOf(trustAllCerts), SecureRandom())
+                val sslContext = SSLContext.getInstance("TLS")
+                sslContext.init(null, arrayOf(acceptForHandshake), SecureRandom())
 
-                sslSocketFactory(sslContext.socketFactory, trustAllCerts)
+                sslSocketFactory(sslContext.socketFactory, acceptForHandshake)
+                // Self-signed LAN certificates rarely carry the right name; the pin is the identity.
                 hostnameVerifier { _, _ -> true }
+                addNetworkInterceptor(
+                    LanCertPinInterceptor(
+                        LanCertPins(sharedPreferencesHelper.lanCertPinStore()),
+                        str(R.string.error_lan_cert_changed)
+                    )
+                )
             }
         }
     }
@@ -317,9 +327,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return ""
     }
 
-    private val repository: ChatRepository
-    private val rpRepository: RpRepository
-    private val rpDelegate: RpChatDelegate
+    // Opening the encrypted database costs real time (Keystore, key derivation, maybe a one-off
+    // encrypt of an old plaintext file), so init only starts it on IO; these are first touched on
+    // that thread or after [dbWarmup], never by constructing the ViewModel on Main.
+    private val repository: ChatRepository by lazy {
+        ChatRepository(AppDatabase.getDatabase(getApplication()).chatDao())
+    }
+    private val rpRepo: RpRepository by lazy {
+        RpRepository(AppDatabase.getDatabase(getApplication()).rpDao())
+    }
+    private val rpDelegate: RpChatDelegate by lazy { RpChatDelegate(rpRepo, sharedPreferencesHelper) }
+    private val dbWarmup: Job? = if (AppDatabase.isOpen()) null else viewModelScope.launch(Dispatchers.IO) {
+        try {
+            AppDatabase.getDatabase(getApplication())
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Chat database unavailable", e)
+        }
+    }
     private val rpSwipeStore: RpSwipeStore
     private var currentSessionId: Long? = null
 
@@ -486,7 +510,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun mergeContinuation(base: String, piece: FlexibleMessage): FlexibleMessage {
         if (piece.role != "assistant" || piece.toolCalls != null) return piece
         val text = (piece.content as? JsonPrimitive)?.contentOrNull ?: return piece
-        if (text.startsWith("**Error:**") || text == "No response received.") {
+        if (text.startsWith("**Error:**") || text == str(R.string.error_no_response)) {
             _toastUiEvent.postValue(Event(text.removePrefix("**Error:**").trim().trimStart('-').trim().ifBlank { text }))
             return piece.copy(content = JsonPrimitive(base))
         }
@@ -614,11 +638,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val sharedPreferencesHelper: SharedPreferencesHelper = SharedPreferencesHelper(application)
 
     init {
-        val chatDao = AppDatabase.getDatabase(application).chatDao()
-        repository = ChatRepository(chatDao)
-        val rpDao = AppDatabase.getDatabase(application).rpDao()
-        rpRepository = RpRepository(rpDao)
-        rpDelegate = RpChatDelegate(rpRepository, sharedPreferencesHelper)
         rpSwipeStore = RpSwipeStore(sharedPreferencesHelper)
         // Drop any instruct left by a killed mid-regen process.
         sharedPreferencesHelper.saveRpPendingInstruct(null)
@@ -629,9 +648,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, "")
         _chatMode.value = sharedPreferencesHelper.getChatMode()
         viewModelScope.launch(Dispatchers.IO) {
-            DemoCharacter.seedOnce(rpRepository, sharedPreferencesHelper, getApplication())
+            DemoCharacter.seedOnce(rpRepo, sharedPreferencesHelper, getApplication())
+        }
+        // Tell the user once if the chat database had to be replaced (see AppDatabase.build).
+        viewModelScope.launch {
+            dbWarmup?.join()
+            if (sharedPreferencesHelper.consumeChatDbRecovered()) {
+                _toastUiEvent.postValue(Event(str(R.string.notice_chat_db_recovered)))
+            }
         }
         sessionTransitionJob = viewModelScope.launch {
+            dbWarmup?.join()
             refreshActiveRpCharacter()
             restoreDraftOrNewChat(_chatMode.value ?: ChatMode.ASK)
         }
@@ -764,9 +791,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val existingId = if (!saveAsNew && rowExists && openSessionId != null) openSessionId else null
             if (epoch != sessionEpoch) return@launch
 
-            val sessionId = existingId ?: repository.getNextSessionId()
+            // A new chat gets its id from the database (id 0 here); the DAO fills in the messages' ids.
             val session = ChatSession(
-                id = sessionId,
+                id = existingId ?: 0L,
                 title = title,
                 modelUsed = modelAtSave,
                 mode = modeAtSave,
@@ -776,14 +803,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val chatMessages = withContext(Dispatchers.Default) {
                 messagesToSave.map {
                     ChatMessage(
-                        sessionId = sessionId,
+                        sessionId = existingId ?: 0L,
                         role = it.role,
                         content = json.encodeToString(JsonElement.serializer(), it.content)
                     )
                 }
             }
             if (epoch != sessionEpoch) return@launch
-            ChatSessionSaver.save(repository, session, chatMessages)
+            // Null: the open chat was deleted while this save waited. Nothing was written.
+            val sessionId = ChatSessionSaver.save(repository, existingId, session, chatMessages)
+                ?: return@launch
             if (
                 ChatSaveGate.decide(
                     epochAtSchedule = epoch,
@@ -1005,7 +1034,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         val sessionCharId = it.characterId
                         val validCharId = sessionCharId?.let { cid ->
-                            if (rpRepository.getCharacterById(cid) != null) cid else null
+                            if (rpRepo.getCharacterById(cid) != null) cid else null
                         }
                         preservedSessionCharacterId =
                             if (sessionCharId != null && validCharId == null) sessionCharId else null
@@ -1897,13 +1926,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Terminal error path — keep the Error bubble; Stop must not treat it as mid-stream.
         discardableRpAssistantInFlight = false
+        // Ktor can wrap what an OkHttp interceptor threw, so look down the cause chain.
+        val lanCertChange = generateSequence(e) { it.cause }.filterIsInstance<LanCertChangedException>().firstOrNull()
         if (wasRpRegen) {
             removeAssistantPlaceholder(thinkingMessage)
             restoreRpSwipeAltIfMissingAssistant()
-            val shortMsg = when (e) {
-                is TimeoutCancellationException, is SocketTimeoutException ->
+            val shortMsg = when {
+                lanCertChange != null -> lanCertChange.message ?: str(R.string.error_lan_cert_changed)
+                e is TimeoutCancellationException || e is SocketTimeoutException ->
                     getApplication<Application>().getString(R.string.rp_regen_timeout)
-                is IOException ->
+                e is IOException ->
                     getApplication<Application>().getString(R.string.rp_regen_network)
                 else ->
                     e.localizedMessage?.takeIf { it.isNotBlank() }
@@ -1912,7 +1944,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _toastUiEvent.postValue(Event(shortMsg))
             return
         }
-        val errorMsg = when (e) {
+        val errorMsg = if (lanCertChange != null) {
+            ERROR_BUBBLE_PREFIX + (lanCertChange.message ?: str(R.string.error_lan_cert_changed))
+        } else when (e) {
             is ClientRequestException -> {
                 // Handle in a coroutine scope
                 var errorText = ERROR_BUBBLE_PREFIX + str(R.string.error_client_request, e.response.status)
@@ -2471,7 +2505,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     "user" -> {
                         append("""
                         <div style="margin: 0; padding: 0;">
-                            <p style="margin: 0 0 0.2em 0; font-weight: bold; color: #0366d6;">User:</p>
+                            <p style="margin: 0 0 0.2em 0; font-weight: bold; color: #222222;">User:</p>
                             <div style="margin: 0; padding: 0;">
                                 $contentHtml
                             </div>
@@ -2482,7 +2516,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     "assistant" -> {
                         append("""
                         <div style="margin: 0; padding: 0;">
-                            <p style="margin: 0 0 0.2em 0; font-weight: bold; color: #28a745;">Assistant:</p>
+                            <p style="margin: 0 0 0.2em 0; font-weight: bold; color: #666666;">Assistant:</p>
                             <div style="margin: 0; padding: 0;">
                                 $contentHtml
                             </div>
@@ -2555,7 +2589,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 |/* CODE BLOCK STYLE */
 |pre {
 |background: transparent;
-|border-left: 4px solid #28a745;
+|border-left: 4px solid #888888;
 |padding: 5px 5px 5px 10px;
 |overflow-x: auto;
 |white-space: pre-wrap;
@@ -3185,7 +3219,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         buildString {
             append("""
-            <h1 style="color: #24292f; font-size: 2em; font-weight: 600; border-bottom: 1px solid #eaecef; padding-bottom: .3em; margin: 0 0 1em 0;">Chat with ${escapeHtmlText(currentModel)}</h1>
+            <h1 style="color: #222222; font-size: 2em; font-weight: 600; border-bottom: 1px solid #dddddd; padding-bottom: .3em; margin: 0 0 1em 0;">Chat with ${escapeHtmlText(currentModel)}</h1>
             <div style="margin-top: 2em;"></div>
         """.trimIndent())
 
@@ -3202,8 +3236,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     "user" -> {
                         append("""
                         <div style="margin-bottom: 2em;">
-                            <h3 style="color: #0366d6; margin-bottom: 0.5em;">👤 User</h3>
-                            <div style="background: #f6f8fa; padding: 0.05em 0.5em; border-radius: 6px; border-left: 4px solid #0366d6;">
+                            <h3 style="color: #222222; margin-bottom: 0.5em;">👤 User</h3>
+                            <div style="background: #f2f2f2; padding: 0.05em 0.5em; border-radius: 6px; border-left: 4px solid #444444;">
                                 $contentHtml
                             </div>
                             ${extractAndEmbedUserImages(message.content, resolver)}
@@ -3213,14 +3247,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     "assistant" -> {
                         val textDiv = if (rawText.isNotBlank()) {
                             """
-                            <div style="background: #f6f8fa; padding: 1em; border-radius: 6px; border-left: 4px solid #28a745;">
+                            <div style="background: #f2f2f2; padding: 1em; border-radius: 6px; border-left: 4px solid #888888;">
                                 $contentHtml
                             </div>
                         """.trimIndent()
                         } else ""
                         append("""
                         <div style="margin-bottom: 2em;">
-                            <h3 style="color: #28a745; margin-bottom: 0.5em;">🤖 Assistant</h3>
+                            <h3 style="color: #666666; margin-bottom: 0.5em;">🤖 Assistant</h3>
                             $textDiv
                             ${message.imageUri?.let { embedGeneratedImage(it, resolver) } ?: ""}
                         </div>
@@ -3229,7 +3263,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (index < messages.size - 1) {
-                    append("<hr style='border: none; border-top: 1px solid #eaecef; margin: 2em 0;'>")
+                    append("<hr style='border: none; border-top: 1px solid #dddddd; margin: 2em 0;'>")
                 }
             }
         }.replace(
@@ -3316,7 +3350,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     wrappers.forEach(wrapper => {
         const btn = document.createElement('button');
         btn.className = 'copy-btn';
-        btn.textContent = '📋 Copy';
+        btn.textContent = 'Copy';
         btn.title = 'Copy code to clipboard';
         btn.addEventListener('click', e => {
             e.stopPropagation();
@@ -3345,12 +3379,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             const success = () => {
                 const orig = btn.textContent;
-                btn.textContent = '✅ Copied!'; btn.style.background = '#28a745';
+                btn.textContent = 'Copied'; btn.style.background = '#555555';
                 setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 2000);
             };
             const fail = () => {
-                btn.textContent = '❌ Failed';
-                setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+                btn.textContent = 'Failed';
+                setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
             };
             
             copyFn(text);
@@ -3373,22 +3407,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             padding: 0;         
             max-width: 100%;    
             font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
-            font-size: 16px; line-height: 1.5; color: #24292f; background: white;
+            font-size: 16px; line-height: 1.5; color: #222222; background: white;
         }
         .markdown-body { font-size: 16px; line-height: 1.5; }
         
         /* ✅ TITLE: Underline only, no border (always) */
         h1 { 
-            color: #24292f !important; font-size: 2em !important; font-weight: 600 !important; 
+            color: #222222 !important; font-size: 2em !important; font-weight: 600 !important; 
             text-decoration: underline !important;
             border-bottom: none !important;
             padding-bottom: .3em !important; margin: 0 0 1em 0 !important; 
         }
         
-        /* ✅ LINKS: Blue. WRAP LONG URLs (break-all for citations/URLs on mobile/narrow screens) */
+        /* ✅ LINKS: Dark gray, underlined. WRAP LONG URLs (break-all for citations/URLs on mobile/narrow screens) */
         a { 
-            color: #0366d6; 
-            text-decoration: none; 
+            color: #333333; 
+            text-decoration: underline; 
             word-break: break-all !important;     /* ✅ Breaks long URLs at chars */
             overflow-wrap: break-word !important; /* ✅ Fallback for older browsers */
             hyphens: none !important;             /* ✅ Optional: hyphenate if possible */
@@ -3397,8 +3431,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         
         strong { font-weight: 600; }
         pre, code { font-family: 'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; font-size: 14px; }
-        code { background: #f6f8fa; border-radius: 6px; padding: .2em .4em; }
-        pre { background: #f6f8fa; border-radius: 6px; padding: 16px; overflow: auto; margin: 1em 0; }
+        code { background: #f2f2f2; border-radius: 6px; padding: .2em .4em; }
+        pre { background: #f2f2f2; border-radius: 6px; padding: 16px; overflow: auto; margin: 1em 0; }
         .code-wrapper {
             position: relative !important;
             margin: 1em 0 !important;
@@ -3431,29 +3465,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 .copy-btn:active {
     transform: scale(0.98);
 }
-        blockquote { border-left: 4px solid #dfe2e5; color: #6a737d; padding-left: 1em; margin: 1em 0; }
+        blockquote { border-left: 4px solid #dddddd; color: #666666; padding-left: 1em; margin: 1em 0; }
         table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-        th, td { border: 1px solid #d0d7de; padding: .75em; text-align: left; }
-        th { background: #f6f8fa; font-weight: 600; }
+        th, td { border: 1px solid #cccccc; padding: .75em; text-align: left; }
+        th { background: #f2f2f2; font-weight: 600; }
         ul, ol { padding-left: 2em; margin: 1em 0; }
         img { max-width: 100%; height: auto; }
-        del { color: #bd2c00; }
+        del { color: #666666; }
         input[type="checkbox"] { margin: 0 .25em 0 0; vertical-align: middle; }
         
         /* ✅ CHAT: Print look BAKED IN (always: no HR, spacers only after assistant, assistant plain text) */
         hr { display: none !important; }  /* ✅ No lines ever */
         
         /* Spacers: Tiny after user, 2em only after assistant */
-        div[style*="margin-bottom: 2em"]:has(h3[style*="0366d6"]) {
+        /* A user turn is told from a reply by the inline padding on its content div, not by color. */
+        div[style*="margin-bottom: 2em"]:has(> div[style*="padding: 0.05em"]) {
             margin-bottom: 0.25em !important;  /* User → assistant: tight */
         }
-        div[style*="margin-bottom: 2em"]:has(h3[style*="28a745"]) {
+        div[style*="margin-bottom: 2em"]:not(:has(> div[style*="padding: 0.05em"])) {
             margin-bottom: 2em !important;  /* Assistant → next: spacer only */
         }
         
         /* Assistant: Plain text (no bg/border/padding minimal) */
-        h3[style*="28a745"] + div[style*="background: #f6f8fa"],
-        h3[style*="28a745"] + div {
+        h3 + div:not([style*="padding: 0.05em"]) {
             background: none !important;
             background-color: transparent !important;
             border: none !important;
@@ -3465,7 +3499,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         
         /* User: Unchanged (keeps bg/border) – no overrides */
-        h3[style*="0366d6"] + div[style*="background: #f6f8fa"] { /* Keeps inline */ }
+        h3 + div[style*="padding: 0.05em"] { /* Keeps inline */ }
         
         /* ✅ PRINT: Just page tweaks (look is already print-perfect). Links wrap too */
         @media print {
@@ -3478,7 +3512,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             h1 { page-break-after: avoid; }
             a { 
                 text-decoration: underline !important; 
-                color: #0366d6 !important; 
+                color: #333333 !important; 
                 word-break: break-all !important; 
                 overflow-wrap: break-word !important; 
             }
@@ -4182,7 +4216,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         draftRpFacts = if (persist) facts else null
         _composerRestoreEvent.value = Event("")
         if (llm || charId == null) return
-        val character = rpRepository.getCharacterById(charId) ?: return
+        val character = rpRepo.getCharacterById(charId) ?: return
         _activeRpCharacter.value = character
         val greeting = rpDelegate.greetingMessage(character)
         _chatMessages.value = listOf(
@@ -4206,6 +4240,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun getRpRepository(): RpRepository = rpRepository
+    fun getRpRepository(): RpRepository = rpRepo
 
 }

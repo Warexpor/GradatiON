@@ -494,7 +494,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
             )
             return
         }
-        val responseText = message.content ?: "No response received."
+        val responseText = message.content ?: application.getString(R.string.error_no_response)
 
         val reasoningForDisplay = message.reasoning_details
             ?.firstOrNull { it.type == "reasoning.text" }
@@ -534,7 +534,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     finalContent
                 }
                 sharedPreferencesHelper.saveLastAiResponseForChannel(2, truncatedResponse)
-                ForegroundService.updateNotificationStatus(application, displayName, "Your answer is ready.")
+                ForegroundService.updateNotificationStatus(application, displayName, application.getString(R.string.notification_answer_ready))
             }
         }
     }
@@ -722,7 +722,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                 } else {
                     withContext(Dispatchers.Main) {
                         val rawContent = (accumulatedResponse + citationsMarkdown)
-                            .takeIf { it.isNotBlank() } ?: "No response received."
+                            .takeIf { it.isNotBlank() } ?: application.getString(R.string.error_no_response)
                         val finalContent = finalizeAssistantContent(rawContent)
                         streamFinalContent = finalContent
                         updateMessages { list ->
@@ -744,14 +744,14 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     val apiIdentifier = activeChatModel.value ?: "Unknown Model"
                     val displayName = getModelDisplayName(apiIdentifier)
                     val notiBody = streamFinalContent
-                        ?: accumulatedResponse.ifBlank { "No response received." }
+                        ?: accumulatedResponse.ifBlank { application.getString(R.string.error_no_response) }
                     val truncatedResponse = if (notiBody.length > 3900) {
                         notiBody.take(3900) + "..."
                     } else {
                         notiBody
                     }
                     sharedPreferencesHelper.saveLastAiResponseForChannel(2, truncatedResponse)
-                    ForegroundService.updateNotificationStatus(application, displayName, "Your answer is ready.")
+                    ForegroundService.updateNotificationStatus(application, displayName, application.getString(R.string.notification_answer_ready))
                 }
             }
         } catch (e: Throwable) {

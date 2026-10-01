@@ -45,7 +45,7 @@ the state of work in progress in `docs/handoff.md`.
   Lens edge on Android 13+, plain blur on 12, and a solid frosted fill
   on battery saver or low-RAM phones.
 - Performance is a hard rule: few blur layers, animations pause offscreen, and backgrounds run at 12 to 15fps.
-- Plus Jakarta Sans for the UI and Michroma for the wordmark. Nothing tappable under 13sp. Fix text
+- Plus Jakarta Sans for the UI and Iceland for the History wordmark. Nothing tappable under 13sp. Fix text
   centering in the font metrics, not per view.
 - Showcase images (README `screenshots/`, fastlane) are dark theme only.
 - Grok screenshots are references for layout and feel only, never for visuals.
@@ -64,5 +64,3 @@ the state of work in progress in `docs/handoff.md`.
 Reply in TL;DR form: short, answer first, no long explanations unless asked.
 - Never add Claude attribution to git commits or PRs: no "Co-Authored-By: Claude" trailer, no "Generated with Claude Code" line.
 - Use the built-in Edit/Write/Read tools for file changes instead of Python scripts or shell workarounds, unless the tools can't handle it (binary files, big batch edits).
-- Only when running as Opus 5.5 (Haiku or Sonnet sessions ignore this rule and do the work themselves): act as an orchestrator: for big multi-step or parallelizable tasks, delegate the work to `worker` subagents (Sonnet 5.5, effort high, set in `.claude/agents/worker.md`) without asking, run independent ones in parallel, and review their results before reporting. Handle quick, small tasks yourself.
- In Cursor, delegate to `generalPurpose` subagents on Composer 2.5 instead of `worker` (Cursor has no "auto" for subagents).

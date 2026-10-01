@@ -19,7 +19,6 @@
     <string name="cd_attached_image">Attached image</string>
     <string name="cd_generated_image">Generated image</string>
     <string name="notice_biometrics_unavailable">Biometrics unavailable. Continuing without the lock.</string>
-    <string name="notice_auth_error">Couldn\'t unlock</string>
     <string name="notice_preset_not_found">Preset not found (ID: %1$s)</string>
     <string name="notice_preset_model_missing">Preset not applied: the model \"%1$s\" no longer exists.</string>
     <string name="notice_preset_system_message_missing">Preset not applied: the system message \"%1$s\" no longer exists.</string>

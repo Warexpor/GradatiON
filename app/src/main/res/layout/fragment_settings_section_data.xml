@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/dataSection"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_settings_card"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_biometrics"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/biometricsSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_notifications"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/notificationsSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                app:useMaterialThemeColors="true" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_copy_instead_dismiss"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/copyOrdismissSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_copy_instead_open"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/copyOropenSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_keep_screen_on"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/keepScreenOnSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <Space
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_destructive_file_tools"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp" 
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/allowDestructiveToolsSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/importHistoryButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/grok_history_import"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_import"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/exportHistoryButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/grok_history_export"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_export"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/helpButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_help"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_help"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="54dp"
+            android:background="@color/xai_hairline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/licensesButton"
+            style="@style/Widget.Grokion.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/settings_licenses"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            app:backgroundTint="@android:color/transparent"
+            app:icon="@drawable/ic_licenses"
+            app:iconGravity="start"
+            app:iconPadding="16dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/xai_ink"
+            app:rippleColor="@color/press_ripple_none" />
+    </LinearLayout>
+</LinearLayout>

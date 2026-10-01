@@ -3,9 +3,14 @@ package io.github.stardomains3.oxproxion
 import android.app.Application
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -52,16 +57,64 @@ class ChatSaveOverwriteTest {
         )
         assertEquals(2, dao.countMessages(id))
 
-        dao.insertSessionAndMessages(
-            ChatSession(id = id, title = "t", modelUsed = "m"),
+        val written = dao.overwriteIfExists(
+            ChatSession(id = id, title = "t2", modelUsed = "m"),
             listOf(
                 message("user", "hi"), message("assistant", "hello"),
                 message("user", "again"), message("assistant", "ok"),
             ),
         )
+        assertTrue(written)
         assertEquals(4, dao.countMessages(id))
         assertEquals(1, dao.getAllSessionsWithMessages().size)
+        assertEquals("t2", dao.getSessionById(id)!!.title)
         assertEquals("ok", dao.getLastMessage(id)!!.content.trim('"'))
+    }
+
+    @Test
+    fun concurrentNewSavesGetDistinctIds() = runBlocking {
+        val ids = (1..12).map { n ->
+            async(Dispatchers.Default) {
+                dao.insertSessionAndMessages(
+                    ChatSession(title = "chat $n", modelUsed = "m"),
+                    listOf(message("user", "q$n"), message("assistant", "a$n")),
+                )
+            }
+        }.awaitAll()
+
+        assertEquals(12, ids.toSet().size)
+        assertEquals(12, dao.getAllSessionsWithMessages().size)
+        ids.forEach { assertEquals(2, dao.countMessages(it)) }
+    }
+
+    @Test
+    fun aLateOverwriteDoesNotBringBackADeletedChat() = runBlocking {
+        val id = dao.insertSessionAndMessages(
+            ChatSession(title = "gone", modelUsed = "m"),
+            listOf(message("user", "hi"), message("assistant", "hello")),
+        )
+        dao.deleteSession(id)
+
+        val written = dao.overwriteIfExists(
+            ChatSession(id = id, title = "gone", modelUsed = "m"),
+            listOf(message("user", "hi"), message("assistant", "hello"), message("user", "more")),
+        )
+
+        assertFalse(written)
+        assertNull(dao.getSessionById(id))
+        assertEquals(0, dao.countMessages(id))
+        assertEquals(0, dao.getAllSessionsWithMessages().size)
+    }
+
+    @Test
+    fun idsAreNotReusedAfterDeletingTheNewestChat() = runBlocking {
+        dao.insertSessionAndMessages(ChatSession(title = "a", modelUsed = "m"), listOf(message("user", "a")))
+        val newest = dao.insertSessionAndMessages(ChatSession(title = "b", modelUsed = "m"), listOf(message("user", "b")))
+        dao.deleteSession(newest)
+
+        val next = dao.insertSessionAndMessages(ChatSession(title = "c", modelUsed = "m"), listOf(message("user", "c")))
+
+        assertTrue("id $next was handed out before ($newest)", next > newest)
     }
 
     @Test

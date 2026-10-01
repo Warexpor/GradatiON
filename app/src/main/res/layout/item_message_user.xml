@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:paddingStart="40dp"
-    android:paddingEnd="6dp"
+    android:paddingEnd="8dp"
     android:paddingTop="8dp"
     android:paddingBottom="4dp">
 
@@ -24,8 +24,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/bg_user_message"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:paddingTop="12dp"
             android:paddingBottom="12dp"
             android:clickable="true"

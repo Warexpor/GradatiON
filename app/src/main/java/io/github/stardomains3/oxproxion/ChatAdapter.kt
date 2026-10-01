@@ -1362,7 +1362,7 @@ class ChatAdapter(
                 val d = itemView.resources.displayMetrics.density
                 if (bubble) {
                     messageContainer.setBackgroundResource(R.drawable.bg_rp_bubble)
-                    messageContainer.setPadding((14 * d).toInt(), (10 * d).toInt(), (14 * d).toInt(), (10 * d).toInt())
+                    messageContainer.setPadding((16 * d).toInt(), (12 * d).toInt(), (16 * d).toInt(), (12 * d).toInt())
                 } else {
                     messageContainer.setBackgroundResource(R.drawable.bg_ai_message)
                     val p = (4 * d).toInt()

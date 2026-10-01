@@ -281,8 +281,8 @@ class CodeTranscriptAdapter(
                     val tv = v.findViewById<TextView>(R.id.codeUserText)
                     tv.text = when {
                         e.attachmentCount <= 0 -> e.text
-                        e.text.isBlank() -> v.context.getString(R.string.code_user_with_images, e.attachmentCount)
-                        else -> e.text + v.context.getString(R.string.code_user_images_suffix, e.attachmentCount)
+                        e.text.isBlank() -> v.resources.getQuantityString(R.plurals.code_user_with_images, e.attachmentCount, e.attachmentCount)
+                        else -> e.text + v.resources.getQuantityString(R.plurals.code_user_images_suffix, e.attachmentCount, e.attachmentCount)
                     }
                 }
                 is CodeEvent.AgentText -> bindText(holder as TextHolder, latest(e))

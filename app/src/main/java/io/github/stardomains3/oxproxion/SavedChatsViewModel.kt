@@ -22,16 +22,15 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         private const val MAX_IMPORT_BYTES = 5 * 1024 * 1024
         private const val MAX_IMPORT_MESSAGES = 5000
     }
-    private val repository: ChatRepository
-    private val rpRepository: RpRepository
-    val allSessions: LiveData<List<ChatSession>>
-
-    init {
-        val db = AppDatabase.getDatabase(application)
-        repository = ChatRepository(db.chatDao())
-        rpRepository = RpRepository(db.rpDao())
-        allSessions = repository.allSessions
+    // Lazy, so building the ViewModel never opens the encrypted database on the main thread; the
+    // chat screen's ViewModel has already started that on IO by the time a history screen exists.
+    private val repository: ChatRepository by lazy {
+        ChatRepository(AppDatabase.getDatabase(getApplication()).chatDao())
     }
+    private val rpRepository: RpRepository by lazy {
+        RpRepository(AppDatabase.getDatabase(getApplication()).rpDao())
+    }
+    val allSessions: LiveData<List<ChatSession>> by lazy { repository.allSessions }
 
     fun sessionsForMode(mode: ChatMode): LiveData<List<ChatSession>> =
         repository.sessionsByMode(mode)

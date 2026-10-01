@@ -19,9 +19,13 @@ class ChatRepository(private val chatDao: ChatDao) {
         return chatDao.getSessionById(sessionId)
     }
 
-    suspend fun insertSessionAndMessages(session: ChatSession, messages: List<ChatMessage>) {
+    /** A chat with no row yet: returns the id the database generated. */
+    suspend fun insertSessionAndMessages(session: ChatSession, messages: List<ChatMessage>): Long =
         chatDao.insertSessionAndMessages(session, messages)
-    }
+
+    /** Saves an open chat again; false (and nothing written) when it was deleted meanwhile. */
+    suspend fun overwriteIfExists(session: ChatSession, messages: List<ChatMessage>): Boolean =
+        chatDao.overwriteIfExists(session, messages)
 
     /** All or nothing; returns the new session ids in order. */
     suspend fun insertImportedSessions(batch: List<Pair<ChatSession, List<ChatMessage>>>): List<Long> =
@@ -37,12 +41,6 @@ class ChatRepository(private val chatDao: ChatDao) {
 
     suspend fun deleteSession(sessionId: Long) {
         chatDao.deleteSession(sessionId)
-    }
-
-    // New method to get the next available session ID (max + 1, or 1 if none)
-    suspend fun getNextSessionId(): Long {
-        val maxId = chatDao.getMaxSessionId() ?: 0L
-        return maxId + 1
     }
 
     suspend fun getAllSessionsWithMessages(): List<SessionWithMessages> {

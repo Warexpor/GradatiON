@@ -312,31 +312,6 @@
         <item name="android:stateListAnimator">@animator/press_scale</item>
     </style>
 
-    <!-- Segmented / toggle chips: gray track, filled selection -->
-    <style name="Widget.Grokion.Button.OutlinedToggle" parent="Widget.Material3.Button.OutlinedButton">
-        <item name="checkedIconTint">@color/xai_ink</item>
-        <item name="iconTint">@color/xai_ink</item>
-        <item name="android:textColor">@color/xai_ink</item>
-        <item name="android:textAppearance">@style/TextAppearance.Gradation.Label</item>
-        <item name="android:textSize">15sp</item>
-        <item name="strokeColor">@color/xai_hairline</item>
-        <item name="backgroundTint">@color/toggle_background_selector</item>
-        <item name="rippleColor">@color/press_ripple_none</item>
-        <item name="checkedIconVisible">false</item>
-        <item name="materialThemeOverlay">@style/ThemeOverlay.Grokion.ToggleButton</item>
-    </style>
-
-
-
-    <style name="ThemeOverlay.Grokion.ToggleButton" parent="">
-        <item name="colorPrimary">@color/xai_ink</item>
-        <item name="colorOnPrimary">@color/xai_canvas</item>
-        <item name="colorOnContainer">@color/xai_ink</item>
-        <item name="colorOnSurface">@color/xai_ink</item>
-        <item name="colorSecondary">@color/xai_ink</item>
-        <item name="colorOnSecondary">@color/xai_canvas</item>
-    </style>
-
     <style name="Widget.App.CheckBox" parent="Widget.Material3.CompoundButton.CheckBox">
         <item name="buttonTint">@color/button_tint</item>
         <item name="buttonIconTint">@color/button_icon_tint</item>

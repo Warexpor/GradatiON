@@ -25,6 +25,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 /**
@@ -88,7 +90,9 @@ class RpChatHistoryFragment : Fragment() {
     }
 
     private suspend fun build(sessions: List<ChatSession>): List<Item> {
-        val dao = AppDatabase.getDatabase(requireContext().applicationContext).chatDao()
+        val app = requireContext().applicationContext
+        // Normally already open; only a cold first open is worth the hop off Main.
+        val dao = (if (AppDatabase.isOpen()) AppDatabase.getDatabase(app) else withContext(Dispatchers.IO) { AppDatabase.getDatabase(app) }).chatDao()
         val current = chatViewModel.getCurrentSessionId()
         val items = mutableListOf<Item>(Item.Header(sessions.size))
         if (sessions.isEmpty()) items += Item.Empty

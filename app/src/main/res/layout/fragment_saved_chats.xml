@@ -69,48 +69,53 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/historyNavCode"
             style="@style/Widget.Gradation.DrawerRow"
+            app:iconSize="24dp"
             android:text="@string/drawer_nav_code"
             app:icon="@drawable/ic_code_terminal" />
         <View
             android:id="@+id/historyNavCodeDivider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginStart="54dp"
+            android:layout_marginStart="56dp"
             android:background="@color/xai_hairline" />
         <com.google.android.material.button.MaterialButton
             android:id="@+id/historyNavRoleplay"
             style="@style/Widget.Gradation.DrawerRow"
+            app:iconSize="24dp"
             android:text="@string/drawer_nav_roleplay"
             app:icon="@drawable/ic_nav_characters" />
         <View
             android:id="@+id/historyNavRoleplayDivider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginStart="54dp"
+            android:layout_marginStart="56dp"
             android:background="@color/xai_hairline" />
         <com.google.android.material.button.MaterialButton
             android:id="@+id/historyNavModels"
             style="@style/Widget.Gradation.DrawerRow"
+            app:iconSize="24dp"
             android:text="@string/drawer_nav_models"
             app:icon="@drawable/ic_nav_models" />
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginStart="54dp"
+            android:layout_marginStart="56dp"
             android:background="@color/xai_hairline" />
         <com.google.android.material.button.MaterialButton
             android:id="@+id/historyNavPrompts"
             style="@style/Widget.Gradation.DrawerRow"
+            app:iconSize="24dp"
             android:text="@string/drawer_nav_prompts"
             app:icon="@drawable/ic_nav_prompts" />
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginStart="54dp"
+            android:layout_marginStart="56dp"
             android:background="@color/xai_hairline" />
         <com.google.android.material.button.MaterialButton
             android:id="@+id/historyNavPresets"
             style="@style/Widget.Gradation.DrawerRow"
+            app:iconSize="24dp"
             android:text="@string/drawer_nav_presets"
             app:icon="@drawable/ic_presets" />
     </LinearLayout>

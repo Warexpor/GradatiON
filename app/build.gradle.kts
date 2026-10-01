@@ -123,9 +123,15 @@ android {
     }
     lint {
         // Only the checks that guard the resource and accessibility rules; everything else stays quiet.
-        checkOnly += setOf("UnusedResources", "HardcodedText", "ContentDescription", "TouchTargetSizeCheck")
+        checkOnly += setOf("UnusedResources", "HardcodedText", "ContentDescription", "SmallSp", "ClickableViewAccessibility")
         abortOnError = false
     }
+    // Room exports one schema JSON per version (commit them); MigrationTestHelper reads them from
+    // the test assets, so the migration test can build an old database and migrate it.
+    // Robolectric reads the merged assets of the variant under test, not the test source set's, so
+    // the debug build (never shipped: users get dev or release) carries them for the unit tests.
+    sourceSets.getByName("debug").assets.srcDir("$projectDir/schemas")
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all { test ->
@@ -150,6 +156,10 @@ android {
         }
     }
 
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -190,7 +200,6 @@ dependencies {
     implementation(libs.ktor.client.auth)
     implementation(libs.json)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.ktor.client.android)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.runtime)
@@ -205,6 +214,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.room.testing)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.junit)
