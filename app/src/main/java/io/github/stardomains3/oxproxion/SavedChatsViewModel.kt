@@ -175,4 +175,7 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
     suspend fun searchSessions(query: String, mode: ChatMode = ChatMode.ASK): List<ChatSession> {
         return repository.searchSessions(query, mode)
     }
+
+    suspend fun lastMessagePrefixes(sessionIds: List<Long>): List<ChatMessage> =
+        repository.lastMessagePrefixes(sessionIds)
 }

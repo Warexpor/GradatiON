@@ -58,6 +58,23 @@ interface ChatDao {
     @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY id DESC LIMIT 1")
     suspend fun getLastMessage(sessionId: Long): ChatMessage?
 
+    /**
+     * The newest message of each session, with content cut to the first 480 characters.
+     * A photo is stored as a multi-megabyte data URL; a history row only needs the opening.
+     */
+    @Query(
+        """
+        SELECT id, sessionId, role, substr(content, 1, 480) AS content
+        FROM chat_messages
+        WHERE id IN (
+            SELECT MAX(id) FROM chat_messages
+            WHERE sessionId IN (:sessionIds)
+            GROUP BY sessionId
+        )
+        """
+    )
+    suspend fun lastMessagePrefixes(sessionIds: List<Long>): List<ChatMessage>
+
     @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId")
     suspend fun countMessages(sessionId: Long): Int
 

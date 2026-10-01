@@ -49,4 +49,38 @@ class KeyboardFollowTest {
     @Test fun no_list_yet_does_not_scroll() {
         assertEquals(0, KeyboardFollow.scroll(100, 0, 40, 20, slack))
     }
+
+    @Test fun composer_growth_leaves_a_short_thread_put() {
+        val oldPad = 200
+        val newPad = 280
+        val lastBottom = 240
+        assertEquals(0, KeyboardFollow.composerScroll(true, lastBottom, height, newPad, oldPad, slack))
+    }
+
+    @Test fun composer_growth_moves_a_pinned_message_by_the_growth() {
+        val oldPad = 200
+        val newPad = 280
+        val lastBottom = height - oldPad
+        assertEquals(80, KeyboardFollow.composerScroll(true, lastBottom, height, newPad, oldPad, slack))
+    }
+
+    @Test fun composer_growth_moves_only_the_covered_amount() {
+        val oldPad = 200
+        val newPad = 280
+        val lastBottom = height - newPad + 30
+        assertEquals(30, KeyboardFollow.composerScroll(true, lastBottom, height, newPad, oldPad, slack))
+    }
+
+    @Test fun composer_shrink_rides_a_pinned_message_back_down() {
+        val oldPad = 280
+        val newPad = 200
+        val lastBottom = height - oldPad
+        assertEquals(-80, KeyboardFollow.composerScroll(true, lastBottom, height, newPad, oldPad, slack))
+    }
+
+    @Test fun composer_resize_does_not_follow_when_scrolled_away_or_before_the_first_measure() {
+        val lastBottom = height - 200
+        assertEquals(0, KeyboardFollow.composerScroll(false, lastBottom, height, 280, 200, slack))
+        assertEquals(0, KeyboardFollow.composerScroll(true, -1, height, 280, 200, slack))
+    }
 }

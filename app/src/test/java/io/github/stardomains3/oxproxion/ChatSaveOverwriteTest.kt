@@ -143,6 +143,26 @@ class ChatSaveOverwriteTest {
     }
 
     @Test
+    fun lastMessagePrefixKeepsTheOpeningOfTheNewestMessage() = runBlocking {
+        val tail = "TAIL_MARKER"
+        val body = "a".repeat(2000) + tail
+        val id = dao.insertSessionAndMessages(
+            ChatSession(title = "p", modelUsed = "m"),
+            listOf(
+                message("user", "older"),
+                ChatMessage(sessionId = 0, role = "assistant", content = "\"$body\""),
+            ),
+        )
+        val repository = ChatRepository(dao)
+        assertTrue(repository.lastMessagePrefixes(emptyList()).isEmpty())
+        val row = repository.lastMessagePrefixes(listOf(id)).single()
+        assertEquals("assistant", row.role)
+        assertTrue(row.content.length <= 480)
+        assertTrue(row.content.startsWith("\"aaa"))
+        assertFalse(row.content.contains(tail))
+    }
+
+    @Test
     fun exportThenImportRoundTrips() = runBlocking {
         val first = dao.insertSessionAndMessages(
             ChatSession(title = "Trip", modelUsed = "openrouter/free"),
