@@ -165,16 +165,18 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
             // One transaction: a failure part-way leaves the chat list as it was.
             val newIds = repository.insertImportedSessions(batch)
             // A new row can take an id a deleted chat used to have; drop that chat's leftovers.
+            // Facts and pins are one commit, not a series of apply() calls.
             val prefs = SharedPreferencesHelper(app)
-            newIds.forEachIndexed { index, id ->
-                prefs.clearSessionPrefs(id)
-                val exported = backup.sessions[index]
-                if (!exported.facts.isNullOrBlank()) {
-                    prefs.saveRpFacts(id, exported.facts.take(RpPromptEngine.MEMORY_MAX_CHARS))
+            prefs.applyImportedChatMetadata(
+                newIds.mapIndexed { index, id ->
+                    val exported = backup.sessions[index]
+                    ImportedChatMeta(
+                        id = id,
+                        facts = exported.facts?.take(RpPromptEngine.MEMORY_MAX_CHARS)?.takeIf { it.isNotBlank() },
+                        pinned = exported.pinned,
+                    )
                 }
-                if (exported.pinned) prefs.setSessionPinned(id, true)
-                else if (prefs.isSessionPinned(id)) prefs.setSessionPinned(id, false)
-            }
+            )
             ChatImportResult.Success
         } catch (e: CancellationException) {
             throw e
