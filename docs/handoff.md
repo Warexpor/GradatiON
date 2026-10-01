@@ -1,3 +1,9 @@
+# Handoff (2026-10-01, Cursor request ids)
+
+On `cursor/code-cursor-request-ids-387f`, targeting `gradation/app-pass`. Code mode only:
+- A Cursor question or plan remembers its JSON-RPC id so a failed send can be built again. Agents restart that counter. The next permission that reuses the id used to be answered in the question's shape, so Allow never reached the agent. The permission takes the id back. A question that becomes a plan (or the other way around) uses the new shape. Closing the session drops its questions. A skipped question does not keep an older plan's id.
+- Phone: on Cursor Agent, answer a question, then approve a command (the command should run). Reject a plan, then approve a command. Leave the session after a question you have not answered and come back to a new one.
+
 # Handoff (2026-10-01, code ACP chunks, diffs, Cursor questions)
 
 On `cursor/code-acp-cursor-tools-2966`, targeting `gradation/app-pass`. Code mode only:
