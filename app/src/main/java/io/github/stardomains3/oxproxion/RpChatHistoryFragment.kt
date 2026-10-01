@@ -4,6 +4,7 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.content.res.ColorStateList
 import android.os.Bundle
+import android.util.Log
 import android.text.format.DateFormat
 import android.text.format.DateUtils
 import android.view.Gravity
@@ -28,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Calendar
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Every chat with one character, from the character panel's History tile. A portrait header,
@@ -75,8 +77,15 @@ class RpChatHistoryFragment : Fragment() {
                 .sortedByDescending { it.timestamp }
             buildJob?.cancel()
             buildJob = viewLifecycleOwner.lifecycleScope.launch {
-                if (characterId != LLM && character == null) character = chatViewModel.getRpRepository().getCharacterById(characterId)
-                adapter.submit(build(mine))
+                try {
+                    if (characterId != LLM && character == null) character = chatViewModel.getRpRepository().getCharacterById(characterId)
+                    adapter.submit(build(mine))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("RpChatHistory", "History list failed", e)
+                    if (isAdded) GlassNotice.show(requireContext(), getString(R.string.notice_history_load_failed))
+                }
             }
         }
     }

@@ -63,4 +63,12 @@ object ComposerDrafts {
                 .associateTo(linkedMapOf()) { it.k to it.t }
         }.getOrDefault(linkedMapOf())
     }
+
+    /** False when [raw] is present and this version cannot decode it. Blank is readable. */
+    fun readable(raw: String): Boolean {
+        if (raw.isBlank()) return true
+        return runCatching {
+            json.decodeFromString(ListSerializer(Entry.serializer()), raw)
+        }.isSuccess
+    }
 }

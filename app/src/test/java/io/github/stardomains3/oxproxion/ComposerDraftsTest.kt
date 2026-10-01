@@ -60,6 +60,9 @@ class ComposerDraftsTest {
     @Test fun a_broken_blob_decodes_as_no_drafts() {
         assertTrue(ComposerDrafts.decode("").isEmpty())
         assertTrue(ComposerDrafts.decode("{not json").isEmpty())
+        assertTrue(ComposerDrafts.readable(""))
+        assertTrue(ComposerDrafts.readable("[]"))
+        assertFalse(ComposerDrafts.readable("{not json"))
     }
 }
 

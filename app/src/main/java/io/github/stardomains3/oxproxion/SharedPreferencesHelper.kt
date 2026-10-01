@@ -695,6 +695,29 @@ class SharedPreferencesHelper(context: Context) {
         }
     }
 
+    /**
+     * Facts and pins for chats just imported. One commit, so a kill between the database write
+     * and the next preference flush does not leave the chats without the notes that came with them.
+     * Fork and swipe leftovers for a recycled id are cleared in that same edit.
+     */
+    internal fun applyImportedChatMetadata(entries: List<ImportedChatMeta>) {
+        if (entries.isEmpty()) return
+        val pins = getPinnedSessionIds().toMutableSet()
+        mainPrefs.edit(commit = true) {
+            for (entry in entries) {
+                val id = entry.id
+                remove("$KEY_CHAT_FORK_INDEX_PREFIX$id")
+                remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$id")
+                remove("$KEY_CHAT_FORK_PREFIX$id")
+                remove("$KEY_RP_SWIPE_PREFIX$id")
+                remove("rp_facts_$id")
+                if (!entry.facts.isNullOrBlank()) putString("rp_facts_$id", entry.facts)
+                if (entry.pinned) pins += id else pins -= id
+            }
+            putStringSet(KEY_PINNED_SESSION_IDS, pins.map { it.toString() }.toSet())
+        }
+    }
+
     fun saveExpandableInput(enabled: Boolean) {
         mainPrefs.edit { putBoolean(KEY_EXPANDABLE_INPUT, enabled) }
     }
@@ -947,9 +970,19 @@ class SharedPreferencesHelper(context: Context) {
             val ivString = Base64.encodeToString(iv, Base64.DEFAULT)
             val encryptedKeyString = Base64.encodeToString(encryptedApiKey, Base64.DEFAULT)
 
-            apiKeysPrefs.edit(commit = durable) {
-                putString("${alias}_encrypted", encryptedKeyString)
-                putString("${alias}_iv", ivString)
+            val editor = apiKeysPrefs.edit()
+            editor.putString("${alias}_encrypted", encryptedKeyString)
+            editor.putString("${alias}_iv", ivString)
+            // commit() can return false when the write did not land. apply() hides that, and a
+            // lost chat-database passphrase is a database that can never be opened again.
+            val written = if (durable) editor.commit() else {
+                editor.apply()
+                true
+            }
+            if (!written) {
+                Log.e("API_KEY_STORAGE", "Could not commit $alias")
+                restoreOld()
+                return false
             }
 
             val roundTrip = getApiKeyFromPrefs(alias)
@@ -999,11 +1032,25 @@ class SharedPreferencesHelper(context: Context) {
         val iv = apiKeysPrefs.getString("${CHAT_DB_PASSPHRASE_ALIAS}_iv", null)
         if (encrypted.isNullOrBlank() && iv.isNullOrBlank()) return false
         val prefix = chatDbPassphraseArchivePrefix(stamp)
-        apiKeysPrefs.edit(commit = true) {
-            if (!encrypted.isNullOrBlank()) putString("${prefix}_encrypted", encrypted)
-            if (!iv.isNullOrBlank()) putString("${prefix}_iv", iv)
-        }
-        return true
+        val editor = apiKeysPrefs.edit()
+        if (!encrypted.isNullOrBlank()) editor.putString("${prefix}_encrypted", encrypted)
+        if (!iv.isNullOrBlank()) editor.putString("${prefix}_iv", iv)
+        return editor.commit()
+    }
+
+    /** True when a wrapped passphrase was stored for [stamp]. Does not copy the active key. */
+    fun hasArchivedChatDbPassphrase(stamp: Long): Boolean {
+        val prefix = chatDbPassphraseArchivePrefix(stamp)
+        val encrypted = apiKeysPrefs.getString("${prefix}_encrypted", null)
+        val iv = apiKeysPrefs.getString("${prefix}_iv", null)
+        return !encrypted.isNullOrBlank() || !iv.isNullOrBlank()
+    }
+
+    /** True when a wrapped chat-database passphrase is stored, even if it cannot be decrypted. */
+    fun hasWrappedChatDbPassphrase(): Boolean {
+        val encrypted = apiKeysPrefs.getString("${CHAT_DB_PASSPHRASE_ALIAS}_encrypted", null)
+        val iv = apiKeysPrefs.getString("${CHAT_DB_PASSPHRASE_ALIAS}_iv", null)
+        return !encrypted.isNullOrBlank() || !iv.isNullOrBlank()
     }
 
     /**
@@ -1497,7 +1544,12 @@ class SharedPreferencesHelper(context: Context) {
         ComposerDrafts.decode(mainPrefs.getString(KEY_ASK_COMPOSER_DRAFTS, "") ?: "")
 
     fun saveAskComposerDrafts(store: Map<String, String>) {
-        mainPrefs.edit {
+        val archive = "$KEY_ASK_COMPOSER_DRAFTS.unreadable"
+        val raw = mainPrefs.getString(KEY_ASK_COMPOSER_DRAFTS, null)
+        // decode() turns a broken blob into "no drafts". The next save would then replace it.
+        val torn = raw?.takeIf { !mainPrefs.contains(archive) && !ComposerDrafts.readable(it) }
+        mainPrefs.edit(commit = true) {
+            torn?.let { putString(archive, it) }
             if (store.isEmpty()) remove(KEY_ASK_COMPOSER_DRAFTS)
             else putString(KEY_ASK_COMPOSER_DRAFTS, ComposerDrafts.encode(store))
         }
@@ -1558,4 +1610,11 @@ class SharedPreferencesHelper(context: Context) {
     fun string(@androidx.annotation.StringRes resId: Int, vararg args: Any): String =
         appContext.getString(resId, *args)
 }
+
+/** Pin and fact notes carried with one imported chat. [facts] is already trimmed. */
+internal data class ImportedChatMeta(
+    val id: Long,
+    val facts: String?,
+    val pinned: Boolean,
+)
 

@@ -103,8 +103,12 @@ class ChatDatabaseRecoveryTest {
             .commit()
 
         val helper = SharedPreferencesHelper(app)
+        assertTrue(helper.hasWrappedChatDbPassphrase())
         assertTrue(helper.archiveChatDbPassphrase(42L))
+        assertTrue(helper.hasArchivedChatDbPassphrase(42L))
+        assertFalse(helper.hasArchivedChatDbPassphrase(43L))
         helper.discardActiveChatDbPassphrase()
+        assertFalse(helper.hasWrappedChatDbPassphrase())
 
         val prefix = SharedPreferencesHelper.chatDbPassphraseArchivePrefix(42L)
         assertEquals("wrapped-key", prefs.getString("${prefix}_encrypted", null))
@@ -112,6 +116,61 @@ class ChatDatabaseRecoveryTest {
         assertNull(prefs.getString("chat_db_passphrase_encrypted", null))
         assertNull(prefs.getString("chat_db_passphrase_iv", null))
         assertFalse(helper.archiveChatDbPassphrase(43L))
+    }
+
+    @Test
+    fun aFailedArchiveDoesNotReplaceThePassphrase() {
+        assertFalse(AppDatabase.replacesPassphraseAfterRecovery(archiveSaved = false, wrappedPresent = true))
+        assertTrue(AppDatabase.replacesPassphraseAfterRecovery(archiveSaved = true, wrappedPresent = true))
+        assertTrue(AppDatabase.replacesPassphraseAfterRecovery(archiveSaved = false, wrappedPresent = false))
+    }
+
+    @Test
+    fun aMissingDatabaseIsRestoredFromThePlaintextCopy() {
+        val db = File(tmp.root, "chat_database")
+        val backup = File(tmp.root, "chat_database.pre_sqlcipher")
+        backup.writeBytes(sqliteHeader("rest"))
+        assertTrue(AppDatabase.shouldRestorePlaintextBackup(db))
+        assertTrue(AppDatabase.restorePlaintextBackup(db))
+        assertEquals("rest", String(db.readBytes().copyOfRange(16, db.length().toInt()), Charsets.US_ASCII))
+        assertFalse(backup.exists())
+    }
+
+    @Test
+    fun anEmptyDatabaseFileIsRestoredFromThePlaintextCopy() {
+        val db = tmp.newFile("chat_database")
+        File(tmp.root, "chat_database.pre_sqlcipher").writeBytes(sqliteHeader("old"))
+        assertTrue(AppDatabase.shouldRestorePlaintextBackup(db))
+        assertTrue(AppDatabase.restorePlaintextBackup(db))
+        assertEquals("old", String(db.readBytes().copyOfRange(16, db.length().toInt()), Charsets.US_ASCII))
+    }
+
+    @Test
+    fun aPresentDatabaseIsNotReplacedByThePlaintextCopy() {
+        val db = tmp.newFile("chat_database")
+        db.writeBytes(sqliteHeader("live"))
+        File(tmp.root, "chat_database.pre_sqlcipher").writeBytes(sqliteHeader("old"))
+        assertFalse(AppDatabase.shouldRestorePlaintextBackup(db))
+    }
+
+    @Test
+    fun aWalSidecarBlocksRestoringOverAMissingMainFile() {
+        val db = File(tmp.root, "chat_database")
+        File(db.path + "-wal").writeText("wal")
+        File(tmp.root, "chat_database.pre_sqlcipher").writeBytes(sqliteHeader("old"))
+        assertFalse(AppDatabase.shouldRestorePlaintextBackup(db))
+    }
+
+    @Test
+    fun thePlaintextCopyStaysUntilEncryptIsConfirmed() {
+        val db = tmp.newFile("chat_database")
+        val backup = File(tmp.root, "chat_database.pre_sqlcipher").apply { writeText("plain") }
+        AppDatabase.discardPlaintextBackupIfConfirmed(db)
+        assertEquals("plain", backup.readText())
+        AppDatabase.confirmPlaintextBackupDisposable(db)
+        AppDatabase.discardPlaintextBackupIfConfirmed(db)
+        assertFalse(backup.exists())
+        assertFalse(File(tmp.root, "chat_database.encrypt_ok").exists())
     }
 
     @Test
@@ -175,4 +234,7 @@ class ChatDatabaseRecoveryTest {
             app.getString(R.string.notice_chat_db_recovered)
         )
     }
+
+    private fun sqliteHeader(tail: String): ByteArray =
+        "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII) + tail.toByteArray(Charsets.US_ASCII)
 }

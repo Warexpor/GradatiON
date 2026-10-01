@@ -802,6 +802,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val stripImages = hasImagesInChat() || hasGeneratedImagesInChat()
 
         viewModelScope.launch {
+            try {
             val rowExists = if (!saveAsNew && openSessionId != null) {
                 repository.getSessionById(openSessionId) != null
             } else {
@@ -883,6 +884,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 draftRpFacts = null
             }
             persistForkToPrefs()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Could not save the open chat", e)
+                _toastUiEvent.postValue(Event(str(R.string.notice_chat_save_failed)))
+            }
         }
     }
 
@@ -927,6 +934,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
+            try {
             if (epoch != sessionEpoch) return@launch
             if (sessionIdAtSave != null && currentSessionId != null && currentSessionId != sessionIdAtSave) {
                 return@launch
@@ -983,6 +991,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (epoch != sessionEpoch) return@launch
             if (finalTitle.isNotBlank() && epoch == sessionEpoch) {
                 saveCurrentChat(finalTitle)
+            }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Could not save the open chat", e)
+                _toastUiEvent.postValue(Event(str(R.string.notice_chat_save_failed)))
             }
         }
     }

@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, encrypt crash and draft archive)
+
+On `cursor/stability-data-guards-3c8a`, targeting `gradation/app-pass`.
+- A kill during the plaintext-to-SQLCipher step used to let the next launch create an empty database and delete `chat_database.pre_sqlcipher`. The copy is restored when the main file is missing or empty, and it is deleted only after the encrypted file has opened (`chat_database.encrypt_ok`). A failed passphrase archive no longer mints a new key over the only blob.
+- Imported pins and fact notes are one commit. A composer-draft blob this version cannot read is copied to `ask_composer_drafts.unreadable` before a save replaces it. A short slice of a long message fails the read instead of skipping characters. A database error while saving a chat, or while History is building its rows, shows a notice instead of closing the app.
+- Phone: install over a build that already has chats (they should still open). Export chats, delete one, import, and confirm the pin and the fact notes.
+
 # Handoff (2026-10-01, code handshake, tools, diffs)
 
 On `cursor/code-handshake-tools-diffs-0462`, targeting `gradation/app-pass`. Code mode only:

@@ -5,6 +5,7 @@ import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 
 import android.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -26,6 +27,7 @@ import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 class SavedChatsFragment : Fragment() {
 
@@ -199,6 +201,7 @@ class SavedChatsFragment : Fragment() {
         val generation = ++filterGeneration
         filterJob?.cancel()
         filterJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
             val mode = viewModel.chatMode.value ?: ChatMode.ASK
             val drafts = if (mode == ChatMode.ASK) prefs.getAskComposerDrafts() else emptyMap()
             val filtered = if (query.isEmpty()) {
@@ -282,6 +285,13 @@ class SavedChatsFragment : Fragment() {
                 mode == ChatMode.RP -> R.string.rp_history_empty
                 else -> R.string.grok_history_empty_title
             })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SavedChats", "History list failed", e)
+                if (generation != filterGeneration || !isAdded) return@launch
+                GlassNotice.show(requireContext(), getString(R.string.notice_history_load_failed))
+            }
         }
     }
 

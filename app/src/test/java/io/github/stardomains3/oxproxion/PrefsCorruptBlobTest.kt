@@ -57,6 +57,21 @@ class PrefsCorruptBlobTest {
     }
 
     @Test
+    fun savingOverAnUnreadableDraftArchivesIt() {
+        val prefs = helper()
+        prefs.mainPrefs.edit().putString("ask_composer_drafts", "{torn").commit()
+
+        prefs.saveAskComposerDrafts(mapOf("4" to "still writing"))
+
+        assertEquals("{torn", prefs.mainPrefs.getString("ask_composer_drafts.unreadable", null))
+        assertEquals("still writing", prefs.getAskComposerDrafts()["4"])
+
+        prefs.saveAskComposerDrafts(emptyMap())
+        assertEquals("{torn", prefs.mainPrefs.getString("ask_composer_drafts.unreadable", null))
+        assertTrue(prefs.getAskComposerDrafts().isEmpty())
+    }
+
+    @Test
     fun aReadableEmptyModelListStillGetsTheDemoModel() {
         val prefs = helper()
 
