@@ -273,12 +273,11 @@ class AcpAdapter : HarnessAdapter {
                 decodeSessionStatus(params, bridgeSeq(params, obj))
             }
             method == "cursor/update_todos" || method == "cursor/ask_question" || method == "cursor/create_plan" -> {
-                val cursorMethod = method ?: return ignored("no method")
                 val params = obj["params"] as? JsonObject ?: return ignored("no params")
                 val sid = sessionOf(params).orEmpty()
                 val seq = bridgeSeq(params, obj)
                 if (sid.isNotEmpty()) noteSeq(sid, seq)
-                cursor.handle(cursorMethod, sid, idEl, params, seq, System.currentTimeMillis())
+                cursor.handle(method, sid, idEl, params, seq, System.currentTimeMillis())
             }
             method == null && idEl != null -> {
                 val id = rpcLongId(idEl) ?: return ignored("non-numeric id")
