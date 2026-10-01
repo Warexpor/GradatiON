@@ -1,3 +1,12 @@
+# Handoff (2026-10-01, chat search and bubbles)
+
+On `cursor/chat-search-and-bubbles-ab1f`, targeting `gradation/app-pass`.
+- History search ignores a photo's bytes and the JSON keys around a caption, and trims the query. A message that is just the word "text" still matches. The preview window is taken from that same stripped text, so it is not a slice of base64.
+- A file URI is tried first. When that load fails, or there is no file (a reopened chat), the bubble draws the JPEG stored in the message and drops the tap that would have opened the dead link.
+- A long message you sent has a Show more / Show less label under the bubble. Two copies of the same long message fold separately.
+- Ask leaves the composer alone when a send is refused. A photo send hides the chip immediately but keeps the file URI until the message takes it, and puts the line back if the send is refused.
+- Phone: search History for "image" (photo chats with no caption should stay out; a caption that says image should show). Open a chat you sent a photo in (the picture is in the bubble). Send a long note and tap Show more.
+
 # Handoff (2026-10-01, encrypt crash and draft archive)
 
 On `cursor/stability-data-guards-3c8a`, targeting `gradation/app-pass`.

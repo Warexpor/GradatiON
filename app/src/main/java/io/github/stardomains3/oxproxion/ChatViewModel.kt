@@ -1317,15 +1317,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         toolRecursionDepth = 0
         var userMessage = FlexibleMessage(role = "user", content = userContent)
 
-        pendingUserImageUri?.let { uriStr ->
-            userMessage = userMessage.copy(imageUri = uriStr)
-            pendingUserImageUri = null
-        }
+        // Keep the URI if the send is refused, so the picture is still staged.
+        val attachedUri = pendingUserImageUri
+        if (attachedUri != null) userMessage = userMessage.copy(imageUri = attachedUri)
 
         if (!bindChatEndpoint()) {
             _isAwaitingResponse.value = false
             return false
         }
+        pendingUserImageUri = null
 
         // Only wipe alts once the send is known to proceed (after early returns above).
         if (clearRpSwipeOnStart && isRpMode()) {
@@ -3188,6 +3188,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun setPendingUserImageUri(uriStr: String?) {
         pendingUserImageUri = uriStr
     }
+
+    /** The file URI for a photo still staged, so a refused send can put it back. */
+    fun pendingImageUri(): String? = pendingUserImageUri
     fun isImageGenerationModel(modelIdentifier: String?): Boolean {
         if (modelIdentifier == null) return false
 

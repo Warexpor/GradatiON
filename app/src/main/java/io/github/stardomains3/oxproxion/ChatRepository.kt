@@ -55,7 +55,9 @@ class ChatRepository(private val chatDao: ChatDao) {
 
     suspend fun getAllSessionsOnce(): List<ChatSession> = chatDao.getAllSessionsOnce()
     suspend fun searchSessions(query: String, mode: ChatMode = ChatMode.ASK): List<ChatSession> {
-        val sessionIds = chatDao.searchSessionIds(likeContains(query), mode.storageValue)
+        val needle = query.trim()
+        if (needle.isEmpty()) return emptyList()
+        val sessionIds = chatDao.searchSessionIds(likeContains(needle), mode.storageValue)
         return sessionIds.mapNotNull { chatDao.getSessionById(it) }
     }
 

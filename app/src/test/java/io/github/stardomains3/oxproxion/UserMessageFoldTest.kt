@@ -26,6 +26,13 @@ class UserMessageFoldTest {
         assertEquals("one\ntwo\nthree…", UserMessageFold.collapse(text, maxChars = 500))
     }
 
+    @Test fun two_copies_of_a_long_message_fold_on_their_own() {
+        val same = { i: Int -> i == 0 || i == 2 }
+        assertEquals(0, UserMessageFold.earlierCopies(0, same))
+        assertEquals(0, UserMessageFold.earlierCopies(1, same))
+        assertEquals(1, UserMessageFold.earlierCopies(2, same))
+    }
+
     @Test fun many_short_lines_still_stop_at_three() {
         val text = (1..80).joinToString("\n") { "hi" }
         assertTrue(text.length > 150)

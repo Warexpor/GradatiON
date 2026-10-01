@@ -36,12 +36,27 @@ interface ChatDao {
 
     @Query("SELECT * FROM chat_sessions WHERE mode = :mode ORDER BY timestamp DESC")
     fun getSessionsByMode(mode: String): LiveData<List<ChatSession>>
-    @Query("""
-    SELECT DISTINCT s.id 
-    FROM chat_sessions s 
-    LEFT JOIN chat_messages m ON s.id = m.sessionId 
-    WHERE (s.title LIKE :query ESCAPE '\' OR m.content LIKE :query ESCAPE '\') AND s.mode = :mode
-""")
+    @Query(
+        """
+        SELECT DISTINCT s.id
+        FROM chat_sessions s
+        LEFT JOIN chat_messages m ON s.id = m.sessionId
+        WHERE (s.title LIKE :query ESCAPE '\' OR
+            replace(replace(replace(replace(replace(replace(replace(replace(
+                CASE WHEN instr(m.content, 'data:image') > 0
+                THEN substr(m.content, 1, instr(m.content, 'data:image') - 1)
+                ELSE m.content END,
+                '"type":"text"', ' '),
+                '"type": "text"', ' '),
+                '"type":"image_url"', ' '),
+                '"type": "image_url"', ' '),
+                '"image_url"', ' '),
+                '"text":', ' '),
+                '"url":', ' '),
+                '"type":', ' ')
+            LIKE :query ESCAPE '\') AND s.mode = :mode
+        """
+    )
     /** [query] is a LIKE pattern whose `%`, `_` and `\` are escaped with `\` (see [ChatRepository.searchSessions]). */
     suspend fun searchSessionIds(query: String, mode: String): List<Long>
 
@@ -117,14 +132,37 @@ interface ChatDao {
 
     /**
      * The newest message in each session that matches [pattern], cut to a window around
-     * [needle]. History only needs the line that matched, not a multi-megabyte photo.
+     * [needle]. The match ignores a photo's bytes and the JSON keys around a caption.
+     * Lowercasing the raw row used to copy a whole picture into memory.
      */
     @Query(
         """
         SELECT m.sessionId AS sessionId, m.role AS role,
             substr(
-                m.content,
-                MAX(1, instr(lower(m.content), lower(:needle)) - 48),
+                replace(replace(replace(replace(replace(replace(replace(replace(
+                    CASE WHEN instr(m.content, 'data:image') > 0
+                    THEN substr(m.content, 1, instr(m.content, 'data:image') - 1)
+                    ELSE m.content END,
+                    '"type":"text"', ' '),
+                    '"type": "text"', ' '),
+                    '"type":"image_url"', ' '),
+                    '"type": "image_url"', ' '),
+                    '"image_url"', ' '),
+                    '"text":', ' '),
+                    '"url":', ' '),
+                    '"type":', ' '),
+                MAX(1, instr(lower(replace(replace(replace(replace(replace(replace(replace(replace(
+                    CASE WHEN instr(m.content, 'data:image') > 0
+                    THEN substr(m.content, 1, instr(m.content, 'data:image') - 1)
+                    ELSE m.content END,
+                    '"type":"text"', ' '),
+                    '"type": "text"', ' '),
+                    '"type":"image_url"', ' '),
+                    '"type": "image_url"', ' '),
+                    '"image_url"', ' '),
+                    '"text":', ' '),
+                    '"url":', ' '),
+                    '"type":', ' ')), lower(:needle)) - 48),
                 :span
             ) AS content
         FROM chat_messages m
@@ -132,7 +170,19 @@ interface ChatDao {
             SELECT sessionId, MAX(id) AS mid
             FROM chat_messages
             WHERE sessionId IN (:sessionIds)
-              AND content LIKE :pattern ESCAPE '\'
+              AND replace(replace(replace(replace(replace(replace(replace(replace(
+                    CASE WHEN instr(content, 'data:image') > 0
+                    THEN substr(content, 1, instr(content, 'data:image') - 1)
+                    ELSE content END,
+                    '"type":"text"', ' '),
+                    '"type": "text"', ' '),
+                    '"type":"image_url"', ' '),
+                    '"type": "image_url"', ' '),
+                    '"image_url"', ' '),
+                    '"text":', ' '),
+                    '"url":', ' '),
+                    '"type":', ' ')
+                  LIKE :pattern ESCAPE '\'
             GROUP BY sessionId
         ) hit ON m.id = hit.mid
         """

@@ -49,6 +49,15 @@ class ChatPhotoTest {
         assertEquals(ChatPhoto.DpBox(0, 0, 0, 0), ChatPhoto.captionInsets(hasPhoto = false, photoOnly = false))
     }
 
+    @Test fun a_file_uri_wins_and_a_data_url_is_the_stored_picture() {
+        val data = "data:image/jpeg;base64,AAAA"
+        assertEquals(ChatPhoto.BubbleSource.File("content://photo/1"), ChatPhoto.bubbleSource("content://photo/1", data))
+        assertEquals(ChatPhoto.BubbleSource.Embedded(data), ChatPhoto.bubbleSource(null, data))
+        assertEquals(ChatPhoto.BubbleSource.Embedded(data), ChatPhoto.bubbleSource(data, data))
+        assertEquals(null, ChatPhoto.bubbleSource(null, null))
+        assertEquals(null, ChatPhoto.bubbleSource("  ", "https://example.com/x"))
+    }
+
     @Test fun quarter_turn_flag_swaps_the_measured_sides() {
         val file = File.createTempFile("photo", ".jpg")
         val wide = Bitmap.createBitmap(40, 20, Bitmap.Config.ARGB_8888)
