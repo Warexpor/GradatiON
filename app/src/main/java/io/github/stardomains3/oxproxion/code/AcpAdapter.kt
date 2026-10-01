@@ -31,8 +31,8 @@ import java.util.concurrent.atomic.AtomicLong
  * tool calls from ACP toolCallId, approvals from the JSON-RPC request id, plans from session id.
  * `session/load` accepts `_meta.afterSeq` so TranscriptReducer upserts stay idempotent on replay.
  *
- * Not yet: the terminal and fs client methods (the bridge answers those on the machine itself),
- * current_mode_update.
+ * Not yet: the terminal and fs client methods (the bridge answers those on the machine itself).
+ * `current_mode_update` syncs the approval pill ([CodeUpdate.SessionInfo.permissionMode]).
  * Slash commands: `available_commands_update` → [CodeUpdate.AvailableCommands].
  * Prompt images: [prompt] accepts [PromptAttachment] → ACP `type: image` content blocks.
  * Agent images: `agent_message_chunk` with `type: image` (data+mimeType) → [CodeUpdate.ImageChunk].
@@ -356,6 +356,12 @@ class AcpAdapter : HarnessAdapter {
                 val arr = u["availableCommands"] as? JsonArray
                     ?: return ignored("available_commands_update without availableCommands array")
                 CodeUpdate.AvailableCommands(parseAvailableCommands(arr))
+            }
+            "current_mode_update" -> {
+                // The harness (or another client) changed mode. Unknown ids must not snap the pill to Ask.
+                val mode = PermissionMode.fromAcpModeId(u.str("currentModeId") ?: u.str("modeId"))
+                    ?: return ignored("current_mode_update unknown mode")
+                CodeUpdate.SessionInfo(permissionMode = mode)
             }
             else -> null
         }

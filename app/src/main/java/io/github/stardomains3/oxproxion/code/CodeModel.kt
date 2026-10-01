@@ -107,6 +107,22 @@ enum class PermissionMode(val id: String) {
 
     companion object {
         fun fromId(id: String?): PermissionMode = entries.find { it.id == id } ?: ASK
+
+        /**
+         * ACP `currentModeId` / `modeId`, or null when it is not a mode this phone shows.
+         * Unknown ids stay null so a foreign mode does not snap the pill back to Ask.
+         * Accepts this app's ids and the ones Claude Code / Codex ACP publish.
+         */
+        fun fromAcpModeId(id: String?): PermissionMode? {
+            val key = id?.trim()?.lowercase()?.replace('_', '-') ?: return null
+            return when (key) {
+                "ask", "default" -> ASK
+                "auto-edit", "acceptedits" -> AUTO_EDIT
+                "plan" -> PLAN
+                "full-auto", "bypasspermissions", "dontask" -> FULL_AUTO
+                else -> entries.find { it.id == key }
+            }
+        }
     }
 }
 
@@ -302,6 +318,14 @@ sealed class CodeEvent {
         override val key: String,
         override val at: Long,
         val stopReason: String,
-        val summary: String? = null
+        val summary: String? = null,
+        val usage: TurnUsage? = null,
     ) : CodeEvent()
 }
+
+/** Token and cost counts a bridge may attach to a finished turn. Absent fields were not reported. */
+data class TurnUsage(
+    val inputTokens: Long? = null,
+    val outputTokens: Long? = null,
+    val costUsd: Double? = null,
+)

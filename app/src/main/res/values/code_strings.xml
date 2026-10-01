@@ -121,6 +121,12 @@
     <string name="code_session_thinking">Thinking</string>
     <string name="code_session_stop">Stop</string>
     <string name="code_session_stopped">Stopped</string>
+    <string name="code_turn_max_tokens">Stopped at the token limit</string>
+    <string name="code_turn_max_requests">Stopped after too many steps</string>
+    <string name="code_turn_refusal">The agent refused</string>
+    <string name="code_turn_error">Turn failed</string>
+    <string name="code_turn_usage_in">%1$s in</string>
+    <string name="code_turn_usage_out">%1$s out</string>
     <string name="code_session_forget">Remove from this phone</string>
     <string name="code_session_copy_id">Copy session id</string>
     <string name="code_session_copied">Copied</string>

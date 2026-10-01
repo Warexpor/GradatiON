@@ -32,7 +32,11 @@ sealed class CodeUpdate {
     /** An approval was answered, here or elsewhere. */
     data class ApprovalAnswered(val requestId: String, val chosen: ApprovalOption.Kind) : CodeUpdate()
 
-    data class TurnDone(val stopReason: String, val summary: String? = null) : CodeUpdate()
+    data class TurnDone(
+        val stopReason: String,
+        val summary: String? = null,
+        val usage: TurnUsage? = null,
+    ) : CodeUpdate()
 
     data class Title(val title: String) : CodeUpdate()
 
@@ -41,7 +45,9 @@ sealed class CodeUpdate {
         val status: SessionStatus? = null,
         val title: String? = null,
         val preview: String? = null,
-        val branch: String? = null
+        val branch: String? = null,
+        /** ACP `current_mode_update`: the harness changed approval mode. Null leaves the pill as it is. */
+        val permissionMode: PermissionMode? = null,
     ) : CodeUpdate()
 
     /** ACP `available_commands_update`: slash commands for the composer picker. */
@@ -181,7 +187,7 @@ object TranscriptReducer {
                     it is CodeEvent.Approval && it.pending -> it.copy(expired = true)
                     else -> it
                 }
-            } + CodeEvent.TurnEnd("turn:$now", now, update.stopReason, update.summary)
+            } + CodeEvent.TurnEnd("turn:$now", now, update.stopReason, update.summary, update.usage)
             is CodeUpdate.Title -> list
             is CodeUpdate.SessionInfo -> list
             is CodeUpdate.AvailableCommands -> list
