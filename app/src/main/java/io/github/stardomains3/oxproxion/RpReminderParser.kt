@@ -1,8 +1,11 @@
 package io.github.stardomains3.oxproxion
 
 object RpReminderParser {
-    /** Stops at the closing `)_`, so a note may contain parentheses. Every note is kept. */
-    private val reminderRegex = Regex("""_\(Reminder:\s*(.*?)\)_""", RegexOption.DOT_MATCHES_ALL)
+    /** Stops at the closing `)_`, so a note may contain parentheses. Every note is kept. The label matches in any case. */
+    private val reminderRegex = Regex(
+        """_\(Reminder:\s*(.*?)\)_""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    )
 
     data class Parsed(
         val userText: String,
