@@ -37,6 +37,8 @@ object HistoryList {
     )
 
     private const val DAY_MS = 24L * 60 * 60 * 1000
+    /** One preview line. Longer unsent text is cut, with the match kept in view. */
+    private const val DRAFT_LINE = 160
     /** Today plus the six days before it. Matches the Roleplay history page. */
     private const val WEEK_DAYS = 6
 
@@ -136,6 +138,48 @@ object HistoryList {
         val index = items.indexOfFirst { it is HistoryListItem.Session && it.open }
         if (index <= 0) return index
         return if (items[index - 1] is HistoryListItem.Header) index - 1 else index
+    }
+
+    /**
+     * The line under a title. An unsent draft replaces the last message, unless [query]
+     * already hits that message: the search result stays, and a title-only hit still
+     * shows the draft so the unsent line is not hidden.
+     */
+    fun rowPreview(messageLine: String, draft: String, query: String, draftLabel: (String) -> String): String {
+        val folded = draft.replace(Regex("\\s+"), " ").trim()
+        if (folded.isEmpty()) return messageLine
+        val needle = query.trim()
+        if (needle.isNotEmpty() && messageLine.contains(needle, ignoreCase = true)) return messageLine
+        val body = if (needle.isEmpty() || !folded.contains(needle, ignoreCase = true)) {
+            if (folded.length <= DRAFT_LINE) folded else folded.take(DRAFT_LINE).trimEnd() + "…"
+        } else {
+            clipAround(folded, folded.indexOf(needle, ignoreCase = true), needle.length)
+        }
+        return draftLabel(body)
+    }
+
+    /** Saved chats whose unsent text contains [query]. The unsaved slot has no row. */
+    fun draftMatchIds(drafts: Map<String, String>, query: String): Set<Long> {
+        val needle = query.trim()
+        if (needle.isEmpty()) return emptySet()
+        return drafts.mapNotNullTo(HashSet()) { (key, text) ->
+            val id = key.toLongOrNull() ?: return@mapNotNullTo null
+            if (id > 0L && text.contains(needle, ignoreCase = true)) id else null
+        }
+    }
+
+    /** [matched] plus chats the database search missed because the words are only in a draft. */
+    fun withDraftMatches(
+        matched: List<ChatSession>,
+        all: List<ChatSession>,
+        drafts: Map<String, String>,
+        query: String,
+    ): List<ChatSession> {
+        val ids = draftMatchIds(drafts, query)
+        if (ids.isEmpty()) return matched
+        val have = matched.mapTo(HashSet()) { it.id }
+        val extra = all.filter { it.id in ids && it.id !in have }
+        return if (extra.isEmpty()) matched else matched + extra
     }
 
     /** Marks [openId] and carries [query] onto each row so a search rebinds the highlight. */

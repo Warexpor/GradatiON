@@ -21,6 +21,18 @@ object AskComposerDraft {
         data class Switch(val from: Long?, val to: Long?) : Effect()
     }
 
+    /**
+     * The field should take this thread's stored draft. [userEdited] is typing since
+     * the view was restored. An empty field, or one that still holds the single
+     * Ask snapshot from the last mode switch, is not that typing: the snapshot is
+     * one string for every chat, so it can be a line from a different thread.
+     * Text the view itself restored (a rotation, a share) is left alone.
+     */
+    fun takeStoredDraft(field: String, userEdited: Boolean, modeSnapshot: String): Boolean {
+        if (userEdited) return false
+        return field.isEmpty() || field == modeSnapshot
+    }
+
     fun bind(state: State, mode: ChatMode, sessionId: Long?): Pair<State, Effect> {
         if (state.bound) return state to Effect.None
         return State(bound = true, mode = mode, sessionId = sessionId) to Effect.Bind(sessionId)

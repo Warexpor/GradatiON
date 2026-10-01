@@ -1299,8 +1299,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     }
 
     /**
-     * The first id is the thread we restored, not a switch. An empty field takes that
-     * thread's unsent text; a field the view already restored is left as it is.
+     * The first id is the thread we restored, not a switch. An empty field, or one that
+     * only holds the last mode-switch snapshot, takes this thread's unsent text. A field
+     * the view already restored is left as it is.
      */
     private fun bindAskComposerIfRestored() {
         if (!composerStateRestored || viewModel.sessionReady.value != true || askComposer.bound) return
@@ -1313,7 +1314,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         if (mode != ChatMode.ASK) return
         if (promoted) {
             promoteAskDraft(id)
-        } else if (chatEditText.text.isNullOrEmpty()) {
+        } else if (AskComposerDraft.takeStoredDraft(
+                field = chatEditText.text?.toString().orEmpty(),
+                userEdited = askComposerDirty,
+                modeSnapshot = sharedPreferencesHelper.getComposerDraft(ChatMode.ASK),
+            )
+        ) {
             applyAskDraft(id)
         }
     }
@@ -1328,10 +1334,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             ComposerDrafts.remember(sharedPreferencesHelper.getAskComposerDrafts(), sessionId, text)
         )
         askComposerDirty = false
+        mirrorAskModeDraft(text)
     }
 
     private fun applyAskDraft(sessionId: Long?) {
         val text = ComposerDrafts.text(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
+        // The mode snapshot is one string. Keep it equal to the thread now on screen,
+        // including when that thread's draft is empty and the snapshot is a sent line.
+        mirrorAskModeDraft(text)
         if (chatEditText.text?.toString() == text) {
             askComposerDirty = false
             return
@@ -1348,6 +1358,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.rekey(sharedPreferencesHelper.getAskComposerDrafts(), from = null, to = sessionId, text = text)
         )
+        mirrorAskModeDraft(text)
     }
 
     /** Leave the previous thread's text (and staged photo) behind, and show this thread's. */
@@ -1367,6 +1378,30 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         askComposerDirty = true
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.remember(sharedPreferencesHelper.getAskComposerDrafts(), id, "")
+        )
+        mirrorAskModeDraft("")
+    }
+
+    /** The Ask snapshot follows the open thread, so a later restore does not bring back another chat's line. */
+    private fun mirrorAskModeDraft(text: String) {
+        if (viewModel.isRpMode()) return
+        if (askComposer.bound && askComposer.mode != ChatMode.ASK) return
+        sharedPreferencesHelper.saveComposerDraft(ChatMode.ASK, text)
+    }
+
+    /** History discarded this thread's unsent text. The open field has to drop it too, or the next pause writes it back. */
+    override fun forgetUnsentDraft(sessionId: Long) {
+        val open = !viewModel.isRpMode() && askComposer.bound &&
+            ComposerDrafts.key(askComposer.sessionId) == ComposerDrafts.key(sessionId)
+        if (open && ::chatEditText.isInitialized) {
+            suppressDraftDirty = true
+            chatEditText.setText("")
+            suppressDraftDirty = false
+            askComposerDirty = false
+            mirrorAskModeDraft("")
+        }
+        sharedPreferencesHelper.saveAskComposerDrafts(
+            ComposerDrafts.drop(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
         )
     }
 
@@ -4966,15 +5001,13 @@ $cleanContent
         val scrim = historyDrawerScrim ?: return
         if (panel.visibility == View.VISIBLE) return
         cancelDrawerAnimation()
+        parkOpenDraft()
         if (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) == null) {
             childFragmentManager.beginTransaction()
                 .replace(R.id.historyDrawerContainer, SavedChatsFragment.newEmbedded())
                 .commitNow()
         }
-        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.let {
-            it.refreshModeRows()
-            it.onDrawerOpened()
-        }
+        prepareHistoryList()
         val lp = panel.layoutParams as FrameLayout.LayoutParams
         lp.width = ViewGroup.LayoutParams.MATCH_PARENT
         lp.gravity = Gravity.START
@@ -5038,22 +5071,32 @@ $cleanContent
         }
     }
 
+    /** Park the open line first, so the drawer's first load already includes it. */
+    private fun parkOpenDraft() {
+        parkAskDraft(if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId())
+    }
+
+    private fun prepareHistoryList() {
+        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.let {
+            it.refreshModeRows()
+            it.onDrawerOpened()
+        }
+    }
+
     private fun openHistoryPanel() {
         // Full-screen history overlay (Grok ref: covers Ask entirely; >> / back / swipe dismiss)
         val panel = historyDrawerContainer ?: return
         val scrim = historyDrawerScrim ?: return
         if (panel.visibility == View.VISIBLE) return
         cancelDrawerAnimation()
+        parkOpenDraft()
 
         if (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) == null) {
             childFragmentManager.beginTransaction()
                 .replace(R.id.historyDrawerContainer, SavedChatsFragment.newEmbedded())
                 .commitNow()
         }
-        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.let {
-            it.refreshModeRows()
-            it.onDrawerOpened()
-        }
+        prepareHistoryList()
 
         val drawerMs = resources.getInteger(R.integer.motion_drawer).toLong()
         val anim = Motion.areAnimationsEnabled(requireContext())

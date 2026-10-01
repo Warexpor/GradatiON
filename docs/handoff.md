@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, history shows unsent lines)
+
+On `cursor/chat-drafts-history-9b5f`, targeting `gradation/app-pass`.
+- History (Ask) shows an unsent composer line as "Draft: …" instead of the last message, and search finds chats by that text. Long-press has Discard draft. Deleting the chat drops the line. Opening the drawer parks the open field first so the current line is in the list.
+- A cold start no longer puts the last Ask↔Roleplay snapshot back into the composer when this thread's draft is different, including after a send. The snapshot is updated to the thread on screen whenever a draft is parked or restored.
+- Phone: type in one chat, open History (the row says Draft), search a word from that line, discard it (the composer clears if that chat is open). Leave the app on a different chat's unsent line, kill it, and confirm that line is the one restored.
+
 # Handoff (2026-10-01, stream and voice bounds)
 
 On `cursor/stream-voice-stability-d087`, targeting `gradation/app-pass`.

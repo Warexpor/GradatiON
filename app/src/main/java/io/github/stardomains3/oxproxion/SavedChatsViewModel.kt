@@ -39,8 +39,10 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         repository.sessionsByMode(mode)
 
     fun deleteSession(sessionId: Long) = viewModelScope.launch {
-        repository.deleteSession(sessionId)
         val prefs = SharedPreferencesHelper(getApplication())
+        // Before the row goes: the open chat just parked its field under this id.
+        prefs.saveAskComposerDrafts(ComposerDrafts.drop(prefs.getAskComposerDrafts(), sessionId))
+        repository.deleteSession(sessionId)
         listOf(ChatMode.ASK, ChatMode.RP).forEach { mode ->
             if (prefs.getRpDraftSessionId(mode) == sessionId) {
                 prefs.saveRpDraftSessionId(mode, null)

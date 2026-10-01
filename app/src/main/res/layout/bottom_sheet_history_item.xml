@@ -57,6 +57,27 @@
         app:iconPadding="16dp"
         app:iconSize="22dp"
         app:rippleColor="@color/press_ripple_none" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/menu_discard_draft"
+        style="@style/Widget.Grokion.Button.Text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="start|center_vertical"
+        android:minHeight="56dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="@string/grok_history_discard_draft"
+        android:textColor="@color/xai_ink"
+        android:textSize="16sp"
+        android:visibility="gone"
+        app:icon="@drawable/ic_close_x"
+        app:iconTint="@color/xai_ink"
+        app:iconGravity="start"
+        app:iconPadding="16dp"
+        app:iconSize="22dp"
+        app:rippleColor="@color/press_ripple_none" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/menu_delete"
         style="@style/Widget.Grokion.Button.Text"
