@@ -317,15 +317,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             (item as? JsonObject)?.get("type")?.jsonPrimitive?.contentOrNull == "image_url"
         } ?: false
 
-    fun getMessageText(content: JsonElement): String {
-        if (content is JsonPrimitive) return content.content
-        if (content is JsonArray) {
-            return content.firstNotNullOfOrNull { item ->
-                (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.content == "text" }?.get("text")?.jsonPrimitive?.content
-            } ?: ""
-        }
-        return ""
-    }
+    fun getMessageText(content: JsonElement): String = MessageContent.text(content)
 
     // Opening the encrypted database costs real time (Keystore, key derivation, maybe a one-off
     // encrypt of an old plaintext file), so init only starts it on IO; these are first touched on
@@ -895,7 +887,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             is JsonArray -> {
                 // Filter out objects where "type" == "image_url"
                 val filteredItems = element.filterNot { item ->
-                    (item as? JsonObject)?.get("type")?.jsonPrimitive?.contentOrNull == "image_url"
+                    MessageContent.partType(item) == "image_url"
                 }.map { removeImagesFromJsonElement(it) }  // Recurse for any nested structures
                 JsonArray(filteredItems)
             }
@@ -1127,9 +1119,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val hasText = contentText.isNotEmpty() && !ThinkingPlaceholder.matches(contentText)
             if (!includeImages) return@filter hasText
             val hasImage = when (message.role) {
-                "user" -> (message.content as? JsonArray)?.any {
-                    it.jsonObject["type"]?.jsonPrimitive?.content == "image_url"
-                } == true
+                "user" -> MessageContent.hasImage(message.content)
                 "assistant" -> !message.imageUri.isNullOrEmpty()
                 else -> false
             }
@@ -1624,14 +1614,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         // Restore pendingUserImageUri from the message content if not already set
         if (pendingUserImageUri == null) {
-            val contentArray = userMessage.content as? JsonArray
-            val imageUrl = contentArray?.find { item ->
-                (item as? JsonObject)?.get("type")?.jsonPrimitive?.contentOrNull == "image_url"
-            }?.jsonObject?.get("image_url")?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
-
-            if (imageUrl != null) {
-                pendingUserImageUri = imageUrl
-            }
+            pendingUserImageUri = MessageContent.imageUrl(userMessage.content)
         }
 
         // CRITICAL: Attach the image URI to the user message for the API call
@@ -2294,12 +2277,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun hasWebpInHistory(): Boolean {
         val messages = _chatMessages.value ?: return false
-        return messages.any {
-            val contentArray = it.content as? JsonArray
-            contentArray?.any { element ->
-                val imageUrl = element.jsonObject["image_url"]?.jsonObject?.get("url")?.jsonPrimitive?.content
-                imageUrl?.startsWith("data:image/webp") == true
-            } == true
+        return messages.any { message ->
+            MessageContent.imageUrls(message.content).any { it.startsWith("data:image/webp") }
         }
     }
     fun checkRemainingCredits() {
@@ -2481,9 +2460,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         var hasText = false
         var hasImage = false
         for (item in array) {
-            val type = (item as? JsonObject)?.get("type")?.jsonPrimitive?.contentOrNull ?: continue
-            if (type == "text") hasText = true
-            if (type == "image_url") hasImage = true
+            when (MessageContent.partType(item)) {
+                "text" -> hasText = true
+                "image_url" -> hasImage = true
+            }
         }
         if (!hasImage || hasText) return content
         return buildJsonArray {
@@ -3291,17 +3271,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
 
     private fun extractAndEmbedUserImages(content: JsonElement, resolver: ContentResolver): String {
-        if (content !is JsonArray) return ""
-        val imagesHtml = content.mapNotNull { item ->
-            val imgObj = item as? JsonObject ?: return@mapNotNull null
-            val type = imgObj["type"]?.jsonPrimitive?.content
-            if (type != "image_url") return@mapNotNull null
-            val urlObj = imgObj["image_url"]?.jsonObject ?: return@mapNotNull null
-            val dataUrl = urlObj["url"]?.jsonPrimitive?.content ?: return@mapNotNull null
-            if (!dataUrl.startsWith("data:image/")) return@mapNotNull null
-            "<br><img src='$dataUrl' style='max-width: 100%; height: auto; border-radius: 6px; margin-top: 1em;'>"
-        }.joinToString("")
-        return imagesHtml
+        return MessageContent.imageUrls(content)
+            .filter { it.startsWith("data:image/") }
+            .joinToString("") { dataUrl ->
+                "<br><img src='$dataUrl' style='max-width: 100%; height: auto; border-radius: 6px; margin-top: 1em;'>"
+            }
     }
 
     private fun embedGeneratedImage(imageUriStr: String, resolver: ContentResolver): String? {

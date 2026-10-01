@@ -1,11 +1,6 @@
 package io.github.stardomains3.oxproxion
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 
 /** One row of the Roleplay characters list: a character and the chat you would pick up with them. */
 data class RpChatSummary(
@@ -95,14 +90,10 @@ object RpChatSummaries {
 
     /** A stored message as one line of plain text: markdown marks and line breaks folded away. */
     fun previewOf(storedContent: String): String {
-        val element = try { json.parseToJsonElement(storedContent) } catch (_: Exception) { JsonPrimitive(storedContent) }
-        val text = when (element) {
-            is JsonPrimitive -> element.contentOrNull.orEmpty()
-            is JsonArray -> element.firstNotNullOfOrNull { item ->
-                (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.contentOrNull == "text" }
-                    ?.get("text")?.jsonPrimitive?.contentOrNull
-            }.orEmpty()
-            else -> ""
+        val text = try {
+            MessageContent.text(json.parseToJsonElement(storedContent))
+        } catch (_: Exception) {
+            storedContent
         }
         return text.replace(Regex("[*_#>`~]"), "").replace(Regex("\\s+"), " ").trim()
     }

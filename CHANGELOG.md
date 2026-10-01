@@ -35,6 +35,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A chat message whose text or image part is not a string (null, a number, or an object) no longer crashes when the chat is opened, when History or Roleplay shows the last line, or when the chat is exported to PDF or HTML. That part is skipped.
+- A single stream event larger than 4 MB is refused instead of being read until the app runs out of memory. A reply that runs past a million and a half characters stops, keeps what arrived, and says it was cut off. Tool-call arguments stop growing past 2 MB, and a generated audio clip past 12 MB is not decoded.
+- Voice input stops after five minutes and keeps what was heard. A recording past 8 MB is dropped instead of being loaded whole and uploaded. A late result from the phone's recognizer, after dictation already finished, no longer pastes the same phrase again.
 - Roleplay lore keys written as `{{char}}` or `{{user}}` match the people in the chat, and one entry can still pull the next when the link is a name. A key with a trailing period, or a header typed with fullwidth brackets, still matches. Speech style is scanned with the personality and the scenario, so a key that only appears in how they talk is not lost once the chat is long.
 - Continue starts a new paragraph after a sentence that ends in 。！？, including a line that closes on 「」, and it does not insert a space into Japanese, Chinese or Korean. A scene reminder still counts when there is a space before the colon, or a fullwidth colon.
 - A reply that arrives wrapped in a plain code fence is shown as the story. A scene note echoed at the start of a reply is left out when the story continues after it. Character lists show the names in a tagline instead of `{{char}}` or `{{user}}`.

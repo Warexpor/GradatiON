@@ -119,12 +119,10 @@ object DemoModel {
 
     private fun lastUserText(body: String): String {
         val messages = Json.parseToJsonElement(body).jsonObject["messages"]?.jsonArray ?: return ""
-        val last = messages.lastOrNull { it.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "user" } ?: return ""
-        return when (val c = last.jsonObject["content"]) {
-            is JsonPrimitive -> c.contentOrNull.orEmpty()
-            is JsonArray -> c.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }.joinToString(" ")
-            else -> ""
-        }
+        val last = messages.lastOrNull {
+            (it as? JsonObject)?.get("role")?.let { role -> (role as? JsonPrimitive)?.contentOrNull } == "user"
+        } as? JsonObject ?: return ""
+        return textOf(last["content"])
     }
 
     /** Medium speed: small uneven chunks every ~40ms, like a real model on a good day. */
@@ -205,12 +203,14 @@ object DemoModel {
     /** The assistant text the rewrite is about: the last assistant turn before the note. */
     fun previousAssistant(body: String): String = runCatching {
         val messages = Json.parseToJsonElement(body).jsonObject["messages"]?.jsonArray ?: return ""
-        val lastUser = messages.indexOfLast { it.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "user" }
+        val lastUser = messages.indexOfLast {
+            (it as? JsonObject)?.get("role")?.let { role -> (role as? JsonPrimitive)?.contentOrNull } == "user"
+        }
         if (lastUser <= 0) return ""
         val prev = messages.subList(0, lastUser).lastOrNull {
-            it.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "assistant"
-        } ?: return ""
-        textOf(prev.jsonObject["content"])
+            (it as? JsonObject)?.get("role")?.let { role -> (role as? JsonPrimitive)?.contentOrNull } == "assistant"
+        } as? JsonObject ?: return ""
+        textOf(prev["content"])
     }.getOrDefault("")
 
     /**
@@ -229,15 +229,19 @@ object DemoModel {
     }
 
     private fun textOf(content: kotlinx.serialization.json.JsonElement?): String = when (content) {
+        null -> ""
         is JsonPrimitive -> content.contentOrNull.orEmpty()
-        is JsonArray -> content.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }.joinToString("\n")
+        is JsonArray -> content.mapNotNull { part ->
+            (part as? JsonObject)?.get("text")?.let { (it as? JsonPrimitive)?.contentOrNull }
+        }.joinToString("\n")
         else -> ""
     }
 
     private fun systemTextOf(body: String): String {
         val messages = Json.parseToJsonElement(body).jsonObject["messages"]?.jsonArray ?: return ""
-        return messages.filter { it.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "system" }
-            .joinToString("\n") { textOf(it.jsonObject["content"]) }
+        return messages.mapNotNull { it as? JsonObject }
+            .filter { (it["role"] as? JsonPrimitive)?.contentOrNull == "system" }
+            .joinToString("\n") { textOf(it["content"]) }
     }
 
     /**

@@ -18,15 +18,33 @@ internal class StreamAccum {
     private var generation = 0
     private var snapshotted = -1
 
+    /** Set once either buffer has been cut. The stream should stop asking for more. */
+    var capped: Boolean = false
+        private set
+
     fun appendContent(text: String) {
         if (text.isEmpty()) return
-        content.append(text)
-        generation++
+        appendCapped(content, text)
     }
 
     fun appendReasoning(text: String) {
         if (text.isEmpty()) return
-        reasoning.append(text)
+        appendCapped(reasoning, text)
+    }
+
+    private fun appendCapped(buffer: StringBuilder, text: String) {
+        val cap = maxCharsForTest ?: MAX_CHARS
+        if (buffer.length >= cap) {
+            capped = true
+            return
+        }
+        val room = cap - buffer.length
+        if (text.length > room) {
+            buffer.append(text, 0, room)
+            capped = true
+        } else {
+            buffer.append(text)
+        }
         generation++
     }
 
@@ -60,5 +78,12 @@ internal class StreamAccum {
 
     companion object {
         const val INTERVAL_NS = 12_000_000L
+
+        /** Well past a normal reply. Past this, more tokens are dropped instead of filling the heap. */
+        const val MAX_CHARS = 1_500_000
+
+        /** Tests shrink the cap. Null in production. */
+        @androidx.annotation.VisibleForTesting
+        var maxCharsForTest: Int? = null
     }
 }

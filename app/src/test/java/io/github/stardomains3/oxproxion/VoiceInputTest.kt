@@ -90,6 +90,14 @@ class VoiceInputTest {
         for (e in VoiceEngine.entries) assertTrue(e.name, ctx.getString(e.labelRes).isNotBlank())
     }
 
+    @Test fun aClipPastTheByteCapIsNotReadable() {
+        assertTrue(VoiceClip.readable(1))
+        assertTrue(VoiceClip.readable(VoiceClip.MAX_BYTES))
+        assertFalse(VoiceClip.readable(0))
+        assertFalse(VoiceClip.readable(VoiceClip.MAX_BYTES + 1))
+        assertEquals(5 * 60 * 1000L, VoiceClip.MAX_DURATION_MS)
+    }
+
     @Test fun unknownKeysReadAsPhone() {
         assertEquals(VoiceEngine.DEVICE, VoiceEngine.fromKey("whatever"))
         assertEquals(VoiceEngine.DEVICE, VoiceEngine.fromKey(null))

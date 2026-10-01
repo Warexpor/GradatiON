@@ -605,7 +605,9 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                 val accumulatedAnnotations = mutableListOf<Annotation>()
                 val accumulatedImages = mutableListOf<String>()
                 val audioBuffer = StringBuilder()
+                var audioOverflow = false
                 var streamAborted = false
+                var overCap = false
                 var streamEnd = SseJsonReader.End.CLOSED
 
                 val pump = StreamUiPump(viewModelScope) { partial ->
@@ -613,8 +615,8 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                 }
                 activeStreamPump = pump
                 pump.drive {
-                    streamEnd = forEachSseJsonPayload(channel, shouldStop = { streamAborted }) { jsonString ->
-                        if (streamAborted) return@forEachSseJsonPayload
+                    streamEnd = forEachSseJsonPayload(channel, shouldStop = { streamAborted || overCap }) { jsonString ->
+                        if (streamAborted || overCap) return@forEachSseJsonPayload
                         val chunk = parseStreamChunk(jsonString) ?: return@forEachSseJsonPayload
 
                         chunk.error?.let { apiError ->
@@ -639,8 +641,15 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                             return@forEachSseJsonPayload
                         }
                         val delta = choice?.delta ?: return@forEachSseJsonPayload
-                        if (captureAudio) delta.audio?.data?.let { audioBuffer.append(it) }
-                        if (fold.absorb(delta)) fold.publish(pump)
+                        if (captureAudio) {
+                            delta.audio?.data?.let { chunk ->
+                                if (!appendAudioChunk(audioBuffer, chunk)) audioOverflow = true
+                            }
+                        }
+                        if (fold.absorb(delta)) {
+                            fold.publish(pump)
+                            if (fold.capped()) overCap = true
+                        }
                         absorbToolDelta(toolCallBuffer, delta)
                         accumulatedAnnotations.addAll(delta.annotations ?: emptyList())
                         delta.images?.forEach { accumulatedImages.add(it.image_url.url) }
@@ -649,6 +658,9 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                 }
 
                 if (streamAborted) return@execute
+                if (overCap) {
+                    _toastUiEvent.postValue(Event(application.getString(R.string.toast_response_truncated_max_tokens)))
+                }
                 // Hung up with neither [DONE] nor a finish reason: what arrived may be only part of a reply.
                 // Keep the text (some LAN servers just close the socket) and say so; error out only when
                 // nothing came at all.
@@ -686,7 +698,9 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                 } else {
                     emptyList()
                 }
-                if (audioBuffer.isNotEmpty()) {
+                if (audioOverflow) {
+                    _toolUiEvent.postValue(Event(application.getString(R.string.save_audio_too_large)))
+                } else if (audioBuffer.isNotEmpty()) {
                     try {
                         val audioBytes = Base64.getDecoder().decode(audioBuffer.toString())
                         val filename = "lyria_${System.currentTimeMillis()}.mp3"
@@ -776,7 +790,19 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
  * call whole, and some reuse index 0 for every call. A new id (or, without an index, a second
  * name) starts a new call; the id is taken from whichever fragment carries it first.
  */
+internal const val MAX_TOOL_ARGUMENT_CHARS = 2 * 1024 * 1024
+internal const val MAX_TOOL_CALLS = 64
+
+/** Tests shrink these. Null in production. */
+@androidx.annotation.VisibleForTesting
+internal var maxToolArgumentCharsForTest: Int? = null
+
+@androidx.annotation.VisibleForTesting
+internal var maxToolCallsForTest: Int? = null
+
 internal fun absorbToolCallChunks(buffer: MutableList<ToolCall>, chunks: List<ToolCallChunk>?) {
+    val maxArgs = maxToolArgumentCharsForTest ?: MAX_TOOL_ARGUMENT_CHARS
+    val maxCalls = maxToolCallsForTest ?: MAX_TOOL_CALLS
     chunks?.forEach { chunk ->
         val fragmentName = chunk.function?.name.orEmpty()
         val fragmentArgs = chunk.function?.arguments.orEmpty()
@@ -795,11 +821,12 @@ internal fun absorbToolCallChunks(buffer: MutableList<ToolCall>, chunks: List<To
             if (idChanged || wholeCallWithoutIndex) slot = -1
         }
         if (slot < 0) {
+            if (buffer.size >= maxCalls) return@forEach
             buffer.add(
                 ToolCall(
                     id = fragmentId.orEmpty(),
                     type = chunk.type ?: "function",
-                    function = FunctionCall(name = fragmentName, arguments = fragmentArgs),
+                    function = FunctionCall(name = fragmentName, arguments = fragmentArgs.take(maxArgs)),
                 )
             )
         } else {
@@ -810,16 +837,33 @@ internal fun absorbToolCallChunks(buffer: MutableList<ToolCall>, chunks: List<To
             } else {
                 existing.function.name + fragmentName
             }
+            val room = maxArgs - existing.function.arguments.length
+            val extra = if (room <= 0) "" else fragmentArgs.take(room)
             buffer[slot] = existing.copy(
                 id = existing.id.ifBlank { fragmentId.orEmpty() },
                 function = existing.function.copy(
                     name = name,
-                    arguments = existing.function.arguments + fragmentArgs,
+                    arguments = existing.function.arguments + extra,
                 ),
             )
         }
     }
 }
+
+/** Appends [chunk] until [max] characters. False once the buffer is full, so a long clip is not decoded. */
+internal fun appendAudioChunk(buffer: StringBuilder, chunk: String, max: Int = MAX_AUDIO_B64_CHARS): Boolean {
+    if (chunk.isEmpty()) return buffer.length < max
+    if (buffer.length >= max) return false
+    val room = max - buffer.length
+    if (chunk.length > room) {
+        buffer.append(chunk, 0, room)
+        return false
+    }
+    buffer.append(chunk)
+    return true
+}
+
+private const val MAX_AUDIO_B64_CHARS = 12 * 1024 * 1024
 
 /** A provider that never sent an id still needs one, because each tool reply must cite its call. */
 internal fun fillMissingToolCallIds(buffer: MutableList<ToolCall>) {
@@ -840,6 +884,7 @@ private class StreamFold {
 
     fun content(): String = text.content()
     fun reasoning(): String = text.reasoning()
+    fun capped(): Boolean = text.capped
 
     /** True when this delta added reply or reasoning text. */
     fun absorb(delta: StreamedDelta): Boolean {

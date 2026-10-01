@@ -107,6 +107,48 @@ class ChatStreamTransportTest {
     }
 
     @Test
+    fun toolArgumentsStopGrowingPastTheCap() {
+        maxToolArgumentCharsForTest = 8
+        try {
+            val buffer = mutableListOf<ToolCall>()
+            absorbToolCallChunks(buffer, listOf(chunk(0, id = "a", name = "write", args = "12345")))
+            absorbToolCallChunks(buffer, listOf(chunk(0, args = "67890EXTRA")))
+            assertEquals("12345678", buffer.single().function.arguments)
+        } finally {
+            maxToolArgumentCharsForTest = null
+        }
+    }
+
+    @Test
+    fun extraToolCallsPastTheCapAreDropped() {
+        maxToolCallsForTest = 2
+        try {
+            val buffer = mutableListOf<ToolCall>()
+            absorbToolCallChunks(
+                buffer,
+                listOf(
+                    chunk(null, id = "a", name = "one", args = "{}"),
+                    chunk(null, id = "b", name = "two", args = "{}"),
+                    chunk(null, id = "c", name = "three", args = "{}"),
+                ),
+            )
+            assertEquals(listOf("a", "b"), buffer.map { it.id })
+        } finally {
+            maxToolCallsForTest = null
+        }
+    }
+
+    @Test
+    fun audioChunksStopAtTheCap() {
+        val buffer = StringBuilder()
+        assertTrue(appendAudioChunk(buffer, "abcd", max = 6))
+        assertFalse(appendAudioChunk(buffer, "efgh", max = 6))
+        assertEquals("abcdef", buffer.toString())
+        assertFalse(appendAudioChunk(buffer, "z", max = 6))
+        assertEquals(6, buffer.length)
+    }
+
+    @Test
     fun missingIdsAreFilled() {
         val buffer = mutableListOf<ToolCall>()
         absorbToolCallChunks(buffer, listOf(chunk(0, name = "wait", args = "{}")))
