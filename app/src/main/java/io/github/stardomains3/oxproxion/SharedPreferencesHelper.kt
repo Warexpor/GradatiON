@@ -723,6 +723,16 @@ class SharedPreferencesHelper(context: Context) {
                 remove("rp_facts_$id")
                 if (!entry.facts.isNullOrBlank()) putString("rp_facts_$id", entry.facts)
                 if (entry.pinned) pins += id else pins -= id
+                // A backup from before these fields leaves them null. The removes above already
+                // dropped a recycled id's copy. An unreadable blob is written back as it was.
+                if (entry.forkIndex != null && entry.forkIndex >= 0 && !entry.forkMessages.isNullOrBlank()) {
+                    putInt("$KEY_CHAT_FORK_INDEX_PREFIX$id", entry.forkIndex)
+                    putInt("$KEY_CHAT_FORK_ANCHOR_PREFIX$id", entry.forkAnchor ?: -1)
+                    putString("$KEY_CHAT_FORK_PREFIX$id", entry.forkMessages)
+                }
+                if (!entry.swipeJson.isNullOrBlank()) {
+                    putString("$KEY_RP_SWIPE_PREFIX$id", entry.swipeJson)
+                }
             }
             putStringSet(KEY_PINNED_SESSION_IDS, pins.map { it.toString() }.toSet())
         }
@@ -1416,7 +1426,7 @@ class SharedPreferencesHelper(context: Context) {
         val id = mainPrefs.getLong("rp_lorebook_$characterId", -1L)
         return if (id < 0) null else id
     }
-    fun saveRpLorebookId(characterId: Long, lorebookId: Long?) = mainPrefs.edit {
+    fun saveRpLorebookId(characterId: Long, lorebookId: Long?) = mainPrefs.edit(commit = true) {
         if (lorebookId == null || lorebookId < 0) remove("rp_lorebook_$characterId")
         else putLong("rp_lorebook_$characterId", lorebookId)
     }
@@ -1428,7 +1438,7 @@ class SharedPreferencesHelper(context: Context) {
     fun getPendingRpLorebookName(characterId: Long): String? =
         mainPrefs.getString(pendingLorebookKey(characterId), null)?.trim()?.takeIf { it.isNotEmpty() }
 
-    fun savePendingRpLorebookName(characterId: Long, name: String?) = mainPrefs.edit {
+    fun savePendingRpLorebookName(characterId: Long, name: String?) = mainPrefs.edit(commit = true) {
         if (name.isNullOrBlank()) remove(pendingLorebookKey(characterId))
         else putString(pendingLorebookKey(characterId), name.trim())
     }
@@ -1450,7 +1460,9 @@ class SharedPreferencesHelper(context: Context) {
     fun getRpLayout(characterId: Long?): String =
         mainPrefs.getString("rp_layout_" + (characterId?.toString() ?: "llm"), RP_LAYOUT_CLASSIC) ?: RP_LAYOUT_CLASSIC
     fun saveRpLayout(characterId: Long?, layout: String) =
-        mainPrefs.edit { putString("rp_layout_" + (characterId?.toString() ?: "llm"), layout) }
+        mainPrefs.edit(commit = true) {
+            putString("rp_layout_" + (characterId?.toString() ?: "llm"), layout)
+        }
 
     /** Read-aloud voice per character: a system TTS voice name (null = engine default), pitch and speed. */
     data class RpVoice(val name: String?, val pitch: Float, val rate: Float)
@@ -1462,7 +1474,7 @@ class SharedPreferencesHelper(context: Context) {
             mainPrefs.getFloat("rp_voice_rate_$k", 1f)
         )
     }
-    fun saveRpVoice(characterId: Long?, voice: RpVoice) = mainPrefs.edit {
+    fun saveRpVoice(characterId: Long?, voice: RpVoice) = mainPrefs.edit(commit = true) {
         val k = characterId?.toString() ?: "llm"
         if (voice.name == null) remove("rp_voice_$k") else putString("rp_voice_$k", voice.name)
         putFloat("rp_voice_pitch_$k", voice.pitch)
@@ -1475,7 +1487,7 @@ class SharedPreferencesHelper(context: Context) {
      * ([DbPrefQuarantine]). The wallpaper is removed here because this character is gone.
      */
     fun clearRpCharacterPrefs(characterId: Long) {
-        mainPrefs.edit {
+        mainPrefs.edit(commit = true) {
             remove(rpMemoryKey(characterId))
             remove("rp_layout_$characterId")
             remove("rp_voice_$characterId")
@@ -1535,7 +1547,8 @@ class SharedPreferencesHelper(context: Context) {
 
     fun saveRpDraftSessionId(mode: ChatMode, sessionId: Long?) {
         val key = if (mode == ChatMode.ASK) KEY_RP_DRAFT_SESSION_ASK else KEY_RP_DRAFT_SESSION_RP
-        mainPrefs.edit {
+        // commit: this is which chat opens next. apply() can still be in flight when the process dies.
+        mainPrefs.edit(commit = true) {
             if (sessionId == null) remove(key) else putLong(key, sessionId)
         }
     }
@@ -1626,5 +1639,9 @@ internal data class ImportedChatMeta(
     val id: Long,
     val facts: String?,
     val pinned: Boolean,
+    val forkIndex: Int? = null,
+    val forkAnchor: Int? = null,
+    val forkMessages: String? = null,
+    val swipeJson: String? = null,
 )
 

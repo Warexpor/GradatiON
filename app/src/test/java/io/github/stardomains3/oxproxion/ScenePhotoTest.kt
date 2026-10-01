@@ -169,6 +169,10 @@ class ScenePhotoTest {
         assertTrue(ScenePhoto.completeJpeg(dest))
         assertFalse(File(dir, "done.jpg.partial").exists())
         assertTrue(jpeg.contentEquals(dest.readBytes()))
+        val again = tinyJpeg()
+        ScenePhoto.writeAtomically(dest, again)
+        assertTrue(again.contentEquals(dest.readBytes()))
+        assertFalse(File(dir, "done.jpg.partial").exists())
     }
 
     private fun tinyJpeg(): ByteArray {

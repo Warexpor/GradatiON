@@ -21,7 +21,16 @@ data class ExportedChatSession(
     val timestamp: Long? = null,
     /** Fact notes for this chat. Null means the backup does not carry them. */
     val facts: String? = null,
-    val pinned: Boolean = false
+    val pinned: Boolean = false,
+    /**
+     * The other branch of an edited chat, and the other versions of a roleplay reply.
+     * Null means a backup from before these fields. The messages are the JSON already stored
+     * for that chat, so a blob this version cannot read is still carried.
+     */
+    val forkIndex: Int? = null,
+    val forkAnchor: Int? = null,
+    val forkMessages: String? = null,
+    val swipe: String? = null
 )
 
 @Serializable
@@ -44,6 +53,10 @@ internal object ChatBackupWriter {
         characterExportKey: String?,
         facts: String?,
         pinned: Boolean,
+        forkIndex: Int?,
+        forkAnchor: Int?,
+        forkMessages: String?,
+        swipeJson: String?,
         emitMessages: suspend (emit: suspend (ChatMessage) -> Unit) -> Unit,
     ) {
         out.append("{\"title\":")
@@ -75,6 +88,18 @@ internal object ChatBackupWriter {
             out.append(json.encodeToString(facts))
         }
         if (pinned) out.append(",\"pinned\":true")
+        if (forkIndex != null && forkIndex >= 0 && !forkMessages.isNullOrBlank()) {
+            out.append(",\"forkIndex\":")
+            out.append(forkIndex.toString())
+            out.append(",\"forkAnchor\":")
+            out.append((forkAnchor ?: -1).toString())
+            out.append(",\"forkMessages\":")
+            out.append(json.encodeToString(forkMessages))
+        }
+        if (!swipeJson.isNullOrBlank()) {
+            out.append(",\"swipe\":")
+            out.append(json.encodeToString(swipeJson))
+        }
         out.append('}')
     }
 }

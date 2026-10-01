@@ -72,12 +72,18 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
             if (index > 0) out.append(',')
             try {
                 val exportKey = session.characterId?.let { rpRepository.getCharacterById(it)?.exportKey }
+                val forkJson = prefs.getChatForkMessagesJson(session.id)
+                val forkIndex = prefs.getChatForkIndex(session.id)
                 ChatBackupWriter.writeSession(
                     out,
                     session,
                     characterExportKey = exportKey,
                     facts = prefs.getRpFacts(session.id).takeIf { it.isNotBlank() },
                     pinned = prefs.isSessionPinned(session.id),
+                    forkIndex = forkIndex.takeIf { it >= 0 && !forkJson.isNullOrBlank() },
+                    forkAnchor = prefs.getChatForkAnchor(session.id),
+                    forkMessages = forkJson?.takeIf { it.isNotBlank() && forkIndex >= 0 },
+                    swipeJson = prefs.getRpSwipeJson(session.id)?.takeIf { it.isNotBlank() },
                 ) { emit ->
                     repository.forEachMessage(session.id, emit)
                 }
@@ -177,6 +183,10 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
                         id = id,
                         facts = exported.facts?.take(RpPromptEngine.MEMORY_MAX_CHARS)?.takeIf { it.isNotBlank() },
                         pinned = exported.pinned,
+                        forkIndex = exported.forkIndex,
+                        forkAnchor = exported.forkAnchor,
+                        forkMessages = exported.forkMessages?.takeIf { it.isNotBlank() },
+                        swipeJson = exported.swipe?.takeIf { it.isNotBlank() },
                     )
                 }
             )

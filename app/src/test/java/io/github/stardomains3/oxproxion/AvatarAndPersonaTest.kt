@@ -14,6 +14,7 @@ import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -100,6 +101,9 @@ class AvatarAndPersonaTest {
         BitmapFactory.decodeFile(RpAvatarStorage.avatarFile(ctx, 42L).absolutePath, bounds)
         assertEquals(8, bounds.outWidth)
         assertEquals(24, bounds.outHeight)
+        val kept = RpAvatarStorage.avatarFile(ctx, 42L).readBytes()
+        assertNull(RpAvatarStorage.saveFromBase64(ctx, "!!!!", 42L))
+        assertTrue(kept.contentEquals(RpAvatarStorage.avatarFile(ctx, 42L).readBytes()))
     }
 
     /** The crop screen must inflate: the crop view needs the (Context, AttributeSet) constructor. */

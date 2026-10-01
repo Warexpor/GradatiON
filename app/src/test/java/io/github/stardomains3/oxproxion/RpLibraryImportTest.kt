@@ -244,7 +244,11 @@ class RpLibraryImportTest {
         val kept = 3L
         val slot = BackgroundPhoto.slotForCharacter(kept)
         assertEquals("", RpWallpaperBackup.encode(BackgroundPhoto.file(app, slot)))
+        assertFalse(BackgroundPhoto.writeBytes(app, slot, byteArrayOf(1, 2, 3, 4)))
+        assertFalse(BackgroundPhoto.file(app, slot).exists())
         assertTrue(BackgroundPhoto.writeBytes(app, slot, jpeg))
+        assertFalse(BackgroundPhoto.writeBytes(app, slot, jpeg.copyOf(8)))
+        assertTrue(jpeg.contentEquals(BackgroundPhoto.file(app, slot).readBytes()))
         val encoded = RpWallpaperBackup.encode(BackgroundPhoto.file(app, slot))
         assertFalse(encoded.isNullOrBlank())
 

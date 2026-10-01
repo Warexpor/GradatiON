@@ -818,6 +818,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * Transcript and identity captured when a save is scheduled. Later code must not re-read
      * the open chat: by then the user may be looking at a different one.
      */
+    /** The other branch, captured with the transcript. A later save must not read the live one. */
+    private data class CapturedFork(
+        val index: Int,
+        val anchor: Int,
+        val messages: List<FlexibleMessage>,
+    )
+
     private data class ChatPersistSnapshot(
         val epoch: Long,
         val sessionId: Long?,
@@ -827,19 +834,31 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val model: String,
         val messages: List<FlexibleMessage>,
         val draftFacts: String?,
+        /** Which chat this mode would reopen, at the moment the snapshot was taken. */
+        val draftAtCapture: Long?,
+        val fork: CapturedFork?,
+        val swipe: RpSwipeState?,
     )
 
     private fun captureSnapshot(): ChatPersistSnapshot {
         val id = currentSessionId
+        val mode = sessionModeValue()
         return ChatPersistSnapshot(
             epoch = sessionEpoch,
             sessionId = id,
-            mode = sessionModeValue(),
+            mode = mode,
             characterId = sessionCharacterId(),
             isLlm = sessionIsLlm(),
             model = _activeChatModel.value ?: "",
             messages = (_chatMessages.value ?: emptyList()).map { it.copy() },
             draftFacts = if (id == null) draftRpFacts else null,
+            draftAtCapture = sharedPreferencesHelper.getRpDraftSessionId(ChatMode.fromStorage(mode)),
+            fork = if (stashedForkTail.isEmpty() || forkIndex < 0) null else CapturedFork(
+                index = forkIndex,
+                anchor = forkAnchorAssistantIndex,
+                messages = stashedForkTail.map { it.copy() },
+            ),
+            swipe = rpSwipeState.takeIf { it.alts.isNotEmpty() },
         )
     }
 
@@ -938,6 +957,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         snap.draftFacts?.let { facts ->
             sharedPreferencesHelper.saveRpFacts(sessionId, facts)
             if (sessionEpoch == snap.epoch) draftRpFacts = null
+        }
+        // The row did not exist when this snapshot was taken, so the fork and the other
+        // reply versions had nowhere to be written. Leaving the chat must not drop them,
+        // and the mode the user left should reopen this chat rather than the one before it.
+        if (snap.sessionId == null) {
+            persistCapturedFork(sessionId, snap.fork)
+            persistCapturedSwipe(sessionId, snap.swipe)
+            parkMintedDraft(sessionId, snap)
         }
         if (
             ChatSaveGate.decide(
@@ -2391,20 +2418,51 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             sharedPreferencesHelper.clearChatFork(sessionId)
             return
         }
+        persistCapturedFork(
+            sessionId,
+            CapturedFork(forkIndex, forkAnchorAssistantIndex, stashedForkTail)
+        )
+    }
+
+    private fun persistCapturedFork(sessionId: Long, fork: CapturedFork?) {
+        if (fork == null || fork.messages.isEmpty() || fork.index < 0) {
+            sharedPreferencesHelper.clearChatFork(sessionId)
+            return
+        }
         try {
             val encoded = json.encodeToString(
-                kotlinx.serialization.builtins.ListSerializer(FlexibleMessage.serializer()),
-                stashedForkTail
+                ListSerializer(FlexibleMessage.serializer()),
+                fork.messages
             )
-            sharedPreferencesHelper.saveChatFork(
-                sessionId,
-                forkIndex,
-                forkAnchorAssistantIndex,
-                encoded
-            )
-        } catch (_: Exception) {
-            // ponytail: fork persist best-effort
+            sharedPreferencesHelper.saveChatFork(sessionId, fork.index, fork.anchor, encoded)
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Could not save the other branch of chat $sessionId", e)
         }
+    }
+
+    private fun persistCapturedSwipe(sessionId: Long, swipe: RpSwipeState?) {
+        if (swipe == null || swipe.alts.isEmpty()) {
+            sharedPreferencesHelper.clearRpSwipeJson(sessionId)
+            return
+        }
+        rpSwipeStore.save(sessionId, swipe)
+    }
+
+    private fun parkMintedDraft(sessionId: Long, snap: ChatPersistSnapshot) {
+        val mode = ChatMode.fromStorage(snap.mode)
+        val draftNow = sharedPreferencesHelper.getRpDraftSessionId(mode)
+        if (!ChatSaveGate.parkMintedDraft(
+                snapshotMode = snap.mode,
+                liveMode = sessionModeValue(),
+                epochAtCapture = snap.epoch,
+                liveEpoch = sessionEpoch,
+                liveSessionId = currentSessionId,
+                mintedId = sessionId,
+                draftAtCapture = snap.draftAtCapture,
+                draftNow = draftNow,
+            )
+        ) return
+        sharedPreferencesHelper.saveRpDraftSessionId(mode, sessionId)
     }
 
     private fun loadForkFromPrefs(sessionId: Long) {

@@ -316,6 +316,18 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun aFailedMoveLeavesTheSourceAndNoPartialDestination() {
+        val root = tmp.newFolder("failed-move")
+        val from = File(root, "from").apply { writeText("history") }
+        val blocked = File(root, "not-a-directory").apply { writeText("x") }
+        val to = File(blocked, "child")
+        assertThrows(Exception::class.java) { ChatDbVault.moveReplacing(from, to) }
+        assertEquals("history", from.readText())
+        assertFalse(to.exists())
+        assertEquals("x", blocked.readText())
+    }
+
+    @Test
     fun aRecoveredFileAlreadyInTheVaultIsLeftBesideTheLiveDatabase() {
         val databases = tmp.newFolder("split-databases")
         val vault = tmp.newFolder("split-vault")

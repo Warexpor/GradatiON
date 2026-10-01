@@ -5,8 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
+import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
 
 object RpAvatarStorage {
     private const val DIR = "rp_avatars"
@@ -75,7 +75,8 @@ object RpAvatarStorage {
                 ?: return null
             val dir = File(context.filesDir, PERSONA_DIR).apply { mkdirs() }
             val name = "persona_${System.currentTimeMillis()}.jpg"
-            FileOutputStream(File(dir, name)).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+            val file = File(dir, name)
+            if (!writeJpegBytes(bitmap, file)) return null
             name
         } catch (_: Exception) {
             null
@@ -89,10 +90,26 @@ object RpAvatarStorage {
 
     private fun writeJpeg(bitmap: Bitmap, characterId: Long, context: Context): String? {
         val file = avatarFile(context, characterId)
-        FileOutputStream(file).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
-        }
+        if (!writeJpegBytes(bitmap, file)) return null
         return Uri.fromFile(file).toString()
+    }
+
+    /**
+     * Compress, then replace [file] only when the JPEG is finished. A kill mid-write used to
+     * leave a short file at the real name, and the next save treated that as the portrait.
+     */
+    private fun writeJpegBytes(bitmap: Bitmap, file: File): Boolean {
+        val bytes = ByteArrayOutputStream().use { out ->
+            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)) return false
+            out.toByteArray()
+        }
+        if (!ScenePhoto.completeJpeg(bytes)) return false
+        return try {
+            ScenePhoto.writeAtomically(file, bytes)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun decodeSampled(bytes: ByteArray): Bitmap? {

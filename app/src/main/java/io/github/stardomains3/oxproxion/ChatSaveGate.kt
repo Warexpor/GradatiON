@@ -75,4 +75,29 @@ object ChatSaveGate {
         messagesEmpty || !hasAssistant -> AutoSaveKind.Skip
         else -> AutoSaveKind.FirstSaveNeedsAssistant
     }
+
+    /**
+     * A chat that had no row yet just received [mintedId]. Point that mode back at it when the
+     * user has already left for the other mode, and the pointer is still the one captured with
+     * the snapshot. Staying on the chat, starting a new one, or opening a different chat in the
+     * same mode leaves the pointer alone.
+     */
+    fun parkMintedDraft(
+        snapshotMode: String,
+        liveMode: String,
+        epochAtCapture: Long,
+        liveEpoch: Long,
+        liveSessionId: Long?,
+        mintedId: Long,
+        draftAtCapture: Long?,
+        draftNow: Long?,
+    ): Boolean {
+        if (mintedId <= 0L) return false
+        if (liveSessionId == mintedId) return false
+        // Still the chat on screen. The save attaches and points the draft itself.
+        if (epochAtCapture == liveEpoch && liveSessionId == null) return false
+        // New chat, or a delete, stays in this mode and clears the pointer on purpose.
+        if (snapshotMode == liveMode) return false
+        return draftNow == draftAtCapture
+    }
 }
