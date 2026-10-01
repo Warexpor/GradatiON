@@ -122,6 +122,11 @@ class ChatAdapter(
     var currentSpeakingPosition = -1
     /** A reply is being generated: the last assistant row keeps its action icons hidden. */
     var replyInFlight = false
+    /**
+     * False after the transcript is replaced. A frame already queued for the old tail
+     * must not be written onto whatever row is last now.
+     */
+    private var acceptStreamFrames = false
     /** Opens a reply's ⋮ menu anchored to its button; the host owns the popover. */
     var onMessageMenu: ((View, List<MessageMenu.Item>) -> Unit)? = null
 
@@ -262,22 +267,21 @@ class ChatAdapter(
         // Apply SSE updates at full speed (conflated = latest only; no artificial delay).
         scope.launch(Dispatchers.Main) {
             for (newMessage in updateChannel) {
-                if (messages.isNotEmpty()) {
-                    messages[messages.size - 1] = newMessage
-                    val text = getMessageText(newMessage.content)
-                    if (!ThinkingPlaceholder.matches(text) && text.isNotBlank()) {
-                        if (streamReveal.displayed().isEmpty()) beginStream()
-                        val from = continuingFrom
-                        if (from != null && from.isNotBlank() && streamReveal.displayed().isEmpty() && text.startsWith(from)) {
-                            seedContinuation(from)
-                        }
-                        streamReveal.setTarget(text)
+                if (!acceptStreamFrames || messages.isEmpty()) continue
+                messages[messages.size - 1] = newMessage
+                val text = getMessageText(newMessage.content)
+                if (!ThinkingPlaceholder.matches(text) && text.isNotBlank()) {
+                    if (streamReveal.displayed().isEmpty()) beginStream()
+                    val from = continuingFrom
+                    if (from != null && from.isNotBlank() && streamReveal.displayed().isEmpty() && text.startsWith(from)) {
+                        seedContinuation(from)
                     }
-                    // Holder already painting via Choreographer — skip notify. Rebind+markwon
-                    // every token races stick-to-bottom scrollBy and flashes the UI.
-                    if (streamRevealBoundHolder == null || ThinkingPlaceholder.matches(text) || text.isBlank()) {
-                        notifyItemChanged(messages.size - 1, "STREAMING")
-                    }
+                    streamReveal.setTarget(text)
+                }
+                // Holder already painting via Choreographer — skip notify. Rebind+markwon
+                // every token races stick-to-bottom scrollBy and flashes the UI.
+                if (streamRevealBoundHolder == null || ThinkingPlaceholder.matches(text) || text.isBlank()) {
+                    notifyItemChanged(messages.size - 1, "STREAMING")
                 }
             }
         }
@@ -385,6 +389,7 @@ class ChatAdapter(
         // nothing to redraw, and rebinding would replay the last reply's reveal.
         if (!isUserApplyingEdit && newMessages.isNotEmpty() && newMessages == messages) return
         if (isUserApplyingEdit) {
+            acceptStreamFrames = false
             applyEditUpdate(newMessages)
             return // Stop here, don't run the rest
         }
@@ -394,6 +399,7 @@ class ChatAdapter(
         }
 
         if (newMessages.isEmpty()) {
+            acceptStreamFrames = false
             messages.clear()
             resetStreamRender()
             streamRevealBoundHolder = null
@@ -404,6 +410,7 @@ class ChatAdapter(
         // PERFECT CASE: Only 1 new message added
         if (messages.size == newMessages.size - 1 &&
             sameMessages(messages, newMessages, messages.size)) {
+            acceptStreamFrames = false
             addMessage(newMessages.last())
             return
         }
@@ -412,11 +419,20 @@ class ChatAdapter(
         // Identity first: a stream copies the list but keeps the earlier message objects.
         if (messages.size == newMessages.size && messages.isNotEmpty() &&
             sameMessages(messages, newMessages, messages.size - 1)) {
+            acceptStreamFrames = true
             updateLastMessage(newMessages.last())
             return
         }
 
-        // Fallback: Full refresh
+        // Fallback: Full refresh. A shorter list is a cut: drop a reveal that belonged to the tail.
+        val shrunk = newMessages.size < messages.size
+        acceptStreamFrames = false
+        if (shrunk) {
+            pendingStreamFinalize = false
+            finalizeToken++
+            resetStreamRender()
+            streamRevealBoundHolder = null
+        }
         messages.clear()
         messages.addAll(newMessages)
         notifyDataSetChanged()

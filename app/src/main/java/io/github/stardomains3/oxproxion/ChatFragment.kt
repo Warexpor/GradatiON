@@ -1010,8 +1010,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
             if (!isAwaiting) {// && sharedPreferencesHelper.getStreamingPreference()) {
                 chatAdapter.finalizeStreaming()
-                // Autosave always on: persist with LLM title when streaming completes
-                viewModel.autoSaveChat()
+                // Autosave always on: persist with LLM title when streaming completes.
+                // A cut stops the reply first and saves the shortened list itself.
+                if (!viewModel.consumeSkipIdleAutosave()) viewModel.autoSaveChat()
             }
             applyRpSwipeChrome(viewModel.rpSwipeNav.value)
             sendChatButton.isEnabled = true

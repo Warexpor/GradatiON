@@ -457,6 +457,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var networkJob: Job? = null
     /** Main-thread coalescer for the in-flight stream; cancelled synchronously on Stop. */
     private var activeStreamPump: StreamUiPump? = null
+    /**
+     * A cut stopped the reply before shortening the list. The idle autosave would
+     * otherwise persist the transcript from before that cut.
+     */
+    private var skipNextIdleAutosave = false
     /** Index of the in-flight assistant placeholder / streaming bubble in `_chatMessages`. */
     private var streamingAssistantIndex: Int = -1
     /**
@@ -1911,7 +1916,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 // hear that the request ran out of time rather than see the bubble vanish.
                 handleError(e, thinkingMessage)
             } catch (e: CancellationException) {
+                val cancelled = coroutineContext[Job]
                 withContext(Dispatchers.Main) {
+                    // Send, or a regenerate, may already own the list. Removing "the"
+                    // placeholder then deletes the new one: every thinking bubble is
+                    // the same object, so the lookup matches whichever is on screen.
+                    if (!StreamTurn.applyCancelCleanup(networkJob, cancelled)) return@withContext
                     val wasRpRegen = pendingRpSwipeAppend
                     val discardPartial = discardableRpAssistantInFlight
                     pendingRpSwipeAppend = false
@@ -2354,6 +2364,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * True once, when the reply that just went idle was stopped so the transcript
+     * could be shortened. The caller saves what remains.
+     */
+    fun consumeSkipIdleAutosave(): Boolean {
+        if (!skipNextIdleAutosave) return false
+        skipNextIdleAutosave = false
+        return true
+    }
+
+    /**
+     * Edit, delete, and regenerate drop the tail. A token still in flight would be
+     * written onto that shorter list, and Stop's idle save would persist the list
+     * from before the cut. Stop first, without saving yet.
+     */
+    private fun stopTurnBeforeCut() {
+        val running = networkJob?.isActive == true || activeStreamPump != null
+        if (!running) return
+        skipNextIdleAutosave = true
+        cancelCurrentRequest(restoreSwipeAlt = false)
+        streamingAssistantIndex = -1
+        // The screen consumes the skip while it is observing. If it did not, the
+        // next reply that actually finishes still has to be saved.
+        skipNextIdleAutosave = false
+    }
+
+    /**
      * Stash messages from [startIndex] as the alternate branch, then truncate.
      * One fork per chat: restoring swaps the active tail with the stash.
      */
@@ -2362,6 +2398,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         clearComposerEditMark()
         val current = _chatMessages.value?.toMutableList() ?: return
         if (startIndex < 0 || startIndex >= current.size) return
+        // Stop does not change the messages. The copy above is still the tail to fork.
+        stopTurnBeforeCut()
         val discarded = current.subList(startIndex, current.size)
             .filterNot { isAssistantPlaceholder(it) }
             .map { it.copy() }
@@ -2456,8 +2494,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteMessageAt(index: Int) {
+        val size = _chatMessages.value?.size ?: return
+        if (index < 0 || index >= size) return
+        stopTurnBeforeCut()
         val current = _chatMessages.value?.toMutableList() ?: return
-        if (index < 0 || index >= current.size) return
+        if (index >= current.size) return
         current.subList(index, current.size).clear()
         _chatMessages.value = current
         syncRpSwipeAfterTranscriptChange()
@@ -2466,6 +2507,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Truncate for RP user-edit without creating an Ask-mode fork or leaving stale swipe state. */
     fun truncateForRpEdit(startIndex: Int) {
+        val size = _chatMessages.value?.size ?: return
+        if (startIndex < 0 || startIndex >= size) return
+        stopTurnBeforeCut()
         truncateWithoutFork(startIndex)
         clearForkMemory()
         clearRpSwipeMemory()
