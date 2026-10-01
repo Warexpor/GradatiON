@@ -47,7 +47,7 @@ class ToolOutputTextTest {
         assertTrue(head.endsWith("…"))
         assertTrue(tail.endsWith("END"))
         assertTrue(tail.startsWith("…"))
-        assertEquals(text, ToolOutputText.clip("read", "short", 8))
+        assertEquals("short", ToolOutputText.clip("read", "short", 8))
     }
 
     @Test fun keptEndDistinguishesHeadAndTail() {

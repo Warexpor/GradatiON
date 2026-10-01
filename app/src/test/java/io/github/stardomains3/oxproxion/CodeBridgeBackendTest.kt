@@ -800,7 +800,9 @@ class CodeBridgeBackendTest {
                 "permission reply must leave the device",
                 transport.sent.any { it.contains("\"id\":42") || it.contains("\"id\":\"42\"") },
             )
-            assertTrue(collected.any { it.update is CodeUpdate.ApprovalAnswered })
+            withTimeout(3_000) {
+                while (collected.none { it.update is CodeUpdate.ApprovalAnswered }) delay(10)
+            }
             collectJob.cancel()
         } finally {
             answers.cancel()
