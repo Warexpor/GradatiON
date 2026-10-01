@@ -1,6 +1,8 @@
 package io.github.stardomains3.oxproxion
 
 import io.github.stardomains3.oxproxion.code.ApprovalOption
+import io.github.stardomains3.oxproxion.code.CodeErrors
+import io.github.stardomains3.oxproxion.code.PromptAttachment
 import io.github.stardomains3.oxproxion.code.AcpAdapter
 import io.github.stardomains3.oxproxion.code.BridgeBackend
 import io.github.stardomains3.oxproxion.code.BrowseEntry
@@ -798,7 +800,9 @@ class CodeBridgeBackendTest {
                 "permission reply must leave the device",
                 transport.sent.any { it.contains("\"id\":42") || it.contains("\"id\":\"42\"") },
             )
-            assertTrue(collected.any { it.update is CodeUpdate.ApprovalAnswered })
+            withTimeout(3_000) {
+                while (collected.none { it.update is CodeUpdate.ApprovalAnswered }) delay(10)
+            }
             collectJob.cancel()
         } finally {
             answers.cancel()
@@ -1998,5 +2002,218 @@ class CodeBridgeBackendTest {
         }
     }
 
+    @Test fun authenticateRunsBeforeTheLinkIsReady() = runBlocking {
+        val transport = FakeTransport()
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
+        val answers = scriptedHandshake(
+            transport,
+            """{"protocolVersion":1,"authMethods":[{"id":"agent-login","name":"Agent login"}]}""",
+        )
+        try {
+            backend.connect()
+            withTimeout(3_000) { backend.listSessions() }
+            val methods = transport.sent.map { sentMethod(it) }
+            val initAt = methods.indexOf("initialize")
+            val authAt = methods.indexOf("authenticate")
+            assertTrue(initAt >= 0 && authAt > initAt)
+            assertTrue(transport.sent[authAt].contains("agent-login"))
+            assertNull(backend.lastError)
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
 
+    @Test fun authenticateMethodNotFoundStillBecomesReady() = runBlocking {
+        val transport = FakeTransport()
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
+        val answers = scriptedHandshake(
+            transport,
+            """{"protocolVersion":1,"authMethods":[{"id":"agent-login","name":"Agent login"}]}""",
+            onAuthenticate = { id ->
+                """{"jsonrpc":"2.0","id":$id,"error":{"code":-32601,"message":"Method not found"}}"""
+            },
+        )
+        try {
+            backend.connect()
+            withTimeout(3_000) { backend.listSessions() }
+            assertTrue(transport.sent.any { sentMethod(it) == "authenticate" })
+            assertNull(backend.lastError)
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun refusedAuthenticateRetries() = runBlocking {
+        val transport = FakeTransport()
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
+        val answers = scriptedHandshake(
+            transport,
+            """{"protocolVersion":1,"authMethods":[{"id":"agent-login","name":"Agent login"}]}""",
+            onAuthenticate = { id ->
+                """{"jsonrpc":"2.0","id":$id,"error":{"code":-32000,"message":"Sign in required"}}"""
+            },
+        )
+        try {
+            backend.connect()
+            withTimeout(5_000) {
+                while (transport.connectCount < 2) delay(10)
+            }
+            assertEquals("Sign in required", backend.lastError)
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun newerProtocolDoesNotRetry() = runBlocking {
+        val transport = FakeTransport()
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
+        val answers = scriptedHandshake(transport, """{"protocolVersion":2}""")
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (backend.lastError != CodeErrors.PROTOCOL_VERSION) delay(10)
+            }
+            delay(800)
+            assertEquals(1, transport.connectCount)
+            assertTrue(transport.sent.none { sentMethod(it) == "session/load" })
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun terminalOnlyLoginDoesNotRetry() = runBlocking {
+        val transport = FakeTransport()
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
+        val answers = scriptedHandshake(
+            transport,
+            """{"protocolVersion":1,"authMethods":[{"id":"term","name":"Terminal","type":"terminal"}]}""",
+        )
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (backend.lastError != CodeErrors.AUTH_TERMINAL) delay(10)
+            }
+            delay(800)
+            assertEquals(1, transport.connectCount)
+            assertTrue(transport.sent.none { sentMethod(it) == "authenticate" })
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun imageCapabilityFalseSendsTheTextWithoutThePicture() = runBlocking {
+        val transport = FakeTransport()
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
+        val answers = scriptedHandshake(
+            transport,
+            """{"protocolVersion":1,"agentCapabilities":{"promptCapabilities":{"image":false}}}""",
+        )
+        val collected = CopyOnWriteArrayList<SessionUpdate>()
+        val collectJob = scope.launch { backend.updates.collect { collected += it } }
+        try {
+            backend.connect()
+            withTimeout(3_000) { backend.listSessions() }
+            val promptJob = scope.launch {
+                backend.prompt("s1", "see this", listOf(PromptAttachment("image/png", "AAAA")))
+            }
+            withTimeout(3_000) {
+                while (transport.sent.none { sentMethod(it) == "session/prompt" }) delay(10)
+            }
+            val frame = transport.sent.last { sentMethod(it) == "session/prompt" }
+            assertTrue(frame.contains("see this"))
+            assertFalse(frame.contains("\"image\""))
+            assertTrue(collected.any { su ->
+                val ev = (su.update as? CodeUpdate.Upsert)?.event
+                ev is CodeEvent.Notice && ev.text.contains("pictures")
+            })
+            promptJob.cancel()
+        } finally {
+            collectJob.cancel()
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun pictureOnlyPromptIsNotSentWhenImagesAreRefused() = runBlocking {
+        val transport = FakeTransport()
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
+        val answers = scriptedHandshake(
+            transport,
+            """{"protocolVersion":1,"agentCapabilities":{"promptCapabilities":{"image":false}}}""",
+        )
+        val collected = CopyOnWriteArrayList<SessionUpdate>()
+        val collectJob = scope.launch { backend.updates.collect { collected += it } }
+        try {
+            backend.connect()
+            withTimeout(3_000) { backend.listSessions() }
+            backend.prompt("s1", "  ", listOf(PromptAttachment("image/png", "AAAA")))
+            withTimeout(3_000) {
+                while (collected.none { it.update is CodeUpdate.TurnDone }) delay(10)
+            }
+            assertTrue(transport.sent.none { sentMethod(it) == "session/prompt" })
+        } finally {
+            collectJob.cancel()
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun readerRejectsAForwardedFileRead() = runBlocking {
+        val transport = FakeTransport()
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
+        val answers = autoAnswer(transport, AcpAdapter())
+        try {
+            backend.connect()
+            withTimeout(3_000) { backend.listSessions() }
+            transport.deliver("""{"jsonrpc":"2.0","id":44,"method":"fs/read_text_file","params":{"path":"a.kt"}}""")
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("Method not found") && it.contains("44") }) delay(10)
+            }
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    private fun sentMethod(frame: String): String =
+        runCatching {
+            json.parseToJsonElement(frame).jsonObject["method"]?.jsonPrimitive?.content
+        }.getOrNull().orEmpty()
+
+    /**
+     * Answers initialize with [initializeResult] and authenticate via [onAuthenticate].
+     * Other calls get an empty result so listSessions can prove the link is ready.
+     */
+    private fun scriptedHandshake(
+        transport: FakeTransport,
+        initializeResult: String,
+        onAuthenticate: (Long) -> String = { id -> """{"jsonrpc":"2.0","id":$id,"result":{}}""" },
+    ): Job = scope.launch {
+        val answered = HashSet<Long>()
+        while (true) {
+            for (frame in transport.sent.toList()) {
+                val obj = runCatching { json.parseToJsonElement(frame).jsonObject }.getOrNull() ?: continue
+                val id = obj["id"]?.jsonPrimitive?.longOrNull ?: continue
+                if (!answered.add(id)) continue
+                val method = obj["method"]?.jsonPrimitive?.content ?: continue
+                val payload = when (method) {
+                    "initialize" -> """{"jsonrpc":"2.0","id":$id,"result":$initializeResult}"""
+                    "authenticate" -> onAuthenticate(id)
+                    "session/prompt" -> {
+                        answered.remove(id)
+                        continue
+                    }
+                    "bridge/listSessions" -> """{"jsonrpc":"2.0","id":$id,"result":{"sessions":[]}}"""
+                    else -> """{"jsonrpc":"2.0","id":$id,"result":{}}"""
+                }
+                transport.deliver(payload)
+            }
+            delay(5)
+        }
+    }
 }

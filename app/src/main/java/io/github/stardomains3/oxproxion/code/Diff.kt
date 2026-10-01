@@ -65,10 +65,14 @@ object Diff {
      * the main thread for big files anyway); the untouched prefix and suffix stay context.
      */
     fun between(oldText: String?, newText: String, context: Int = 3, maxCells: Long = 1_000_000L): List<DiffLine> {
-        val a = oldText?.split('\n') ?: emptyList()
-        val b = newText.split('\n')
+        val a = oldText?.let { linesOf(it) } ?: emptyList()
+        val b = linesOf(newText)
         return hunks(ops(a, b, maxCells), context)
     }
+
+    /** `\r\n` and a bare `\r` become `\n`, so a Windows file is not a change on every line. */
+    private fun linesOf(text: String): List<String> =
+        text.replace("\r\n", "\n").replace('\r', '\n').split('\n')
 
     fun counts(lines: List<DiffLine>): Pair<Int, Int> =
         lines.count { it.type == DiffLine.Type.ADD } to lines.count { it.type == DiffLine.Type.DELETE }

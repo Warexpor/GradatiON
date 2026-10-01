@@ -74,7 +74,15 @@ class AcpAdapter : HarnessAdapter {
             put("fs", buildJsonObject { put("readTextFile", false); put("writeTextFile", false) })
             put("terminal", false)
         })
-        put("clientInfo", buildJsonObject { put("name", "GradatiON"); put("version", "1") })
+        put("clientInfo", buildJsonObject {
+            put("name", "GradatiON")
+            put("title", "GradatiON")
+            put("version", "1")
+        })
+    })
+
+    override fun authenticate(id: Long, methodId: String) = request(id, "authenticate", buildJsonObject {
+        put("methodId", methodId)
     })
 
     override fun newSession(id: Long, request: NewSessionRequest) = request(id, "session/new", buildJsonObject {
@@ -226,7 +234,9 @@ class AcpAdapter : HarnessAdapter {
         return when {
             method == "session/update" -> {
                 val params = obj["params"] as? JsonObject ?: return ignored("no params")
-                decodeUpdate(params, bridgeSeq(params, obj))
+                val updates = decodeUpdate(params, bridgeSeq(params, obj))
+                // A few agents send this notification as a request. Ack it so they do not wait.
+                if (idEl is JsonPrimitive) updates + AdapterOutput.Reply(rpcResult(idEl)) else updates
             }
             method == "session/request_permission" && idEl != null -> {
                 val params = obj["params"] as? JsonObject ?: return ignored("no params")
@@ -241,13 +251,38 @@ class AcpAdapter : HarnessAdapter {
                 decodeSessionStatus(params, bridgeSeq(params, obj))
             }
             method == null && idEl != null -> {
-                val id = (idEl as? JsonPrimitive)?.longOrNull ?: return ignored("non-numeric id")
+                val id = rpcLongId(idEl) ?: return ignored("non-numeric id")
                 val err = obj["error"]?.let { (it as? JsonObject)?.str("message") ?: it.toString() }
                 listOf(AdapterOutput.Result(id, obj["result"], err))
             }
+            // fs/* and terminal/* are answered on the computer. If one is forwarded here,
+            // an error response unblocks the agent; ignoring it leaves the turn stuck.
+            method != null && idEl is JsonPrimitive ->
+                listOf(AdapterOutput.Reply(rpcError(idEl, -32601, "Method not found")))
             else -> ignored("method $method")
         }
     }
+
+    /** JSON-RPC id, including a number a proxy rewrote as a string. */
+    private fun rpcLongId(idEl: JsonElement?): Long? {
+        val p = idEl as? JsonPrimitive ?: return null
+        return p.longOrNull ?: p.contentOrNull?.toLongOrNull()
+    }
+
+    private fun rpcResult(id: JsonElement) = buildJsonObject {
+        put("jsonrpc", "2.0")
+        put("id", id)
+        put("result", JsonObject(emptyMap()))
+    }.toString()
+
+    private fun rpcError(id: JsonElement, code: Int, message: String) = buildJsonObject {
+        put("jsonrpc", "2.0")
+        put("id", id)
+        put("error", buildJsonObject {
+            put("code", code)
+            put("message", message)
+        })
+    }.toString()
 
     private fun decodePermissionResolved(params: JsonObject, seq: Long?): List<AdapterOutput> {
         val sid = params.str("sessionId") ?: return ignored("permissionResolved without session")
@@ -393,7 +428,7 @@ class AcpAdapter : HarnessAdapter {
             title = u.str("title") ?: "Tool call",
             detail = detailOf(u),
             status = toolStatus(u.str("status")) ?: ToolStatus.PENDING,
-            output = textContent(u["content"])
+            output = textContent(u["content"], u.str("kind"))
         )), seq)
         diffs(callId, u["content"], now).forEach {
             result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it), seq)
@@ -408,8 +443,9 @@ class AcpAdapter : HarnessAdapter {
             callId = callId,
             status = toolStatus(u.str("status")),
             title = u.str("title"),
-            detail = detailOf(u),
-            output = textContent(u["content"])
+            // A location-only update must not wipe the command the tool_call already showed.
+            detail = detailForUpdate(u),
+            output = textContent(u["content"], u.str("kind"))
         ), seq)
         diffs(callId, u["content"], now).forEach {
             result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it), seq)
@@ -508,6 +544,23 @@ class AcpAdapter : HarnessAdapter {
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────
 
+    /**
+     * Detail worth applying on `tool_call_update`. Null keeps the previous line.
+     * A later frame that only repeats the working folder used to replace `npm test`.
+     */
+    private fun detailForUpdate(u: JsonObject): String? {
+        val raw = u["rawInput"] as? JsonObject
+        val specific = commandOf(raw) != null ||
+            firstRaw(raw, "pattern", "query", "url") != null ||
+            firstRaw(raw, "file_path", "path") != null
+        val hasLine = (u["locations"] as? JsonArray).orEmpty().any { e ->
+            val line = (e as? JsonObject)?.str("line")?.toIntOrNull()
+            line != null && line > 0
+        }
+        if (!specific && !hasLine) return null
+        return detailOf(u)
+    }
+
     private fun detailOf(u: JsonObject): String? {
         val locations = (u["locations"] as? JsonArray).orEmpty().mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
@@ -546,13 +599,13 @@ class AcpAdapter : HarnessAdapter {
         return null
     }
 
-    private fun textContent(content: JsonElement?): String? {
+    private fun textContent(content: JsonElement?, kind: String?): String? {
         val arr = content as? JsonArray ?: return null
         val text = arr.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             toolOutputPiece(o)
         }.joinToString("\n")
-        return text.ifEmpty { null }?.let { if (it.length > MAX_OUTPUT) "…" + it.takeLast(MAX_OUTPUT) else it }
+        return text.ifEmpty { null }?.let { ToolOutputText.clip(kind, it, MAX_OUTPUT) }
     }
 
     /**
@@ -576,6 +629,19 @@ class AcpAdapter : HarnessAdapter {
             val o = e as? JsonObject ?: return@mapNotNull null
             if (o.str("type") != "diff") return@mapNotNull null
             val path = o.str("path") ?: return@mapNotNull null
+            val unified = o.str("diff")?.takeIf { it.isNotBlank() }
+                ?: o.str("patch")?.takeIf { it.isNotBlank() }
+            val newEl = o["newText"]
+            val hasNew = newEl is JsonPrimitive && newEl !is JsonNull
+            // Some agents send a unified patch instead of old/new file text.
+            if (!hasNew && unified != null) {
+                val lines = Diff.parseUnified(unified)
+                if (lines.isEmpty()) return@mapNotNull null
+                val (add, del) = Diff.counts(lines)
+                return@mapNotNull CodeEvent.FileDiff(
+                    "diff:$callId:$path", now, callId, path, lines, add, del, isNewFile = false,
+                )
+            }
             // A non-string old/new text used to throw out of decode and drop the tool call with it.
             val old = when (val el = o["oldText"]) {
                 null, is JsonNull -> null
@@ -633,7 +699,7 @@ class AcpAdapter : HarnessAdapter {
     }
 
     companion object {
-        /** Tool output kept per call (tail). No bridge full-log RPC yet; phone shows this only. */
+        /** Tool output kept per call. Reads keep the head; shell logs keep the tail. */
         const val MAX_OUTPUT = 4000
         private val SEQ_METHODS = setOf(
             "session/update", "session/request_permission", "bridge/permissionResolved", "bridge/sessionStatus",

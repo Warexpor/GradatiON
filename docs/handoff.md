@@ -1,3 +1,12 @@
+# Handoff (2026-10-01, code handshake, tools, diffs)
+
+On `cursor/code-handshake-tools-diffs-0462`, targeting `gradation/app-pass`. Code mode only:
+- After the socket opens, an agent login advertised by `initialize` is completed with `authenticate`. "Method not found" still continues (the pairing token already authenticated). A newer protocol version, or a login that needs a terminal, stops instead of retrying. A file or terminal request that reaches the phone is answered so the agent is not stuck.
+- A tool update that only repeats the working folder keeps the command. Long reads keep the start; long shell output keeps the end. A unified `diff` block is shown. CRLF file text is not a rewrite of every line.
+- Changes: committing one file names that file. Reverting one file asks first.
+
+Phone: drop the link and come back. On a shell card, confirm the command stays after the tool finishes. Open a long file read (the start is on the card) and a long test log (the end is). On Changes, open one tracked file and cancel Revert.
+
 # Handoff (2026-10-01, RP photos, rewrite, and names)
 
 On `cursor/rp-photos-rewrite-greeting-737a`, targeting `gradation/app-pass`.

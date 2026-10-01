@@ -272,6 +272,8 @@ class CodeHub internal constructor(context: Context) {
         CodeErrors.INVALID_ADDRESS -> appContext.getString(R.string.code_error_invalid_address)
         CodeErrors.TOKEN_REJECTED -> appContext.getString(R.string.code_error_token_rejected)
         CodeErrors.HANDSHAKE_FAILED -> appContext.getString(R.string.code_error_handshake)
+        CodeErrors.PROTOCOL_VERSION -> appContext.getString(R.string.code_error_protocol)
+        CodeErrors.AUTH_TERMINAL -> appContext.getString(R.string.code_error_auth_terminal)
         else -> raw
     }
 

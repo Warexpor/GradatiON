@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import io.github.stardomains3.oxproxion.GlassNotice
+import io.github.stardomains3.oxproxion.GrokConfirmDialog
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -43,10 +44,18 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
         toolbar.title = CodeComposer.folderName(path)
         toolbar.subtitle = path.substringBeforeLast('/', "").ifBlank { path }
 
-        commitBtn.setOnClickListener { ask(getString(R.string.code_changes_prompt_commit)) }
+        commitBtn.setOnClickListener {
+            ask(getString(R.string.code_changes_prompt_commit_file, path))
+        }
         revertBtn.isVisible = tracked
         revertBtn.setOnClickListener {
-            ask(getString(R.string.code_changes_prompt_revert, path))
+            GrokConfirmDialog.show(
+                this,
+                getString(R.string.code_changes_revert_file_title),
+                getString(R.string.code_changes_revert_file_message, CodeComposer.folderName(path)),
+                getString(R.string.code_changes_revert_all_confirm),
+                onConfirm = { ask(getString(R.string.code_changes_prompt_revert, path)) },
+            )
         }
 
         hint.text = getString(R.string.code_changes_diff_loading)

@@ -152,6 +152,10 @@ class BridgeBackend(
     private var socketGeneration = 0
     /** From initialize `_meta.bridge.version` / `serverInfo.version`; kept across reconnect until close. */
     @Volatile private var bridgeVersion: String? = null
+    /** From `agentCapabilities.promptCapabilities.image`. Omitted stays true. */
+    @Volatile private var acceptsPromptImages = true
+    /** One "can't take pictures" notice per session until the next handshake. */
+    private val imageNoticeSent = ConcurrentHashMap.newKeySet<String>()
     /** Bumped on cancel so in-flight deliverPrompt/flush abort and do not dequeue. */
     private val deliverGeneration = ConcurrentHashMap<String, AtomicLong>()
     /** RPC id of the in-flight session/prompt, so cancel can complete it. */
@@ -351,6 +355,7 @@ class BridgeBackend(
                                 if (out.error != null) d.completeExceptionally(IllegalStateException(out.error))
                                 else d.complete(out.result)
                             }
+                            is AdapterOutput.Reply -> transport.send(out.frame)
                             is AdapterOutput.Ignored -> Unit
                         }
                     }
@@ -435,7 +440,7 @@ class BridgeBackend(
      * [ready] stays false (operations would wait up to 30s). Clear readiness, surface
      * the error, drop the socket, and schedule a backoff reconnect.
      */
-    private fun failHandshake(cause: Throwable) {
+    private fun failHandshake(cause: Throwable, retry: Boolean = true) {
         ready.value = false
         initialized = false
         socketGeneration++
@@ -445,8 +450,9 @@ class BridgeBackend(
         handshakeRetry?.cancel()
         transport.close()
         val attempt = handshakeFailCount++
-        // Give up after a few tries; a tap on the banner (or opening the screen) connects again.
-        if (attempt >= MAX_HANDSHAKE_RETRIES) return
+        // A version or login the phone cannot do will not start working on the next try.
+        // A tap on the banner (or opening the screen) connects again.
+        if (!retry || attempt >= MAX_HANDSHAKE_RETRIES) return
         handshakeRetry = scope.launch {
             delay(ReconnectBackoff.delayMs(attempt.coerceAtMost(8), Random.nextDouble()))
             if (lifecycle == null) return@launch
@@ -469,6 +475,30 @@ class BridgeBackend(
         val gen = socketGeneration
         val initResult = rawCall({ adapter.initialize(it) }, DEFAULT_TIMEOUT_MS) as? JsonObject
         if (gen != socketGeneration) return
+        when (val step = AcpHandshake.decide(initResult)) {
+            is AcpHandshake.Decision.UnsupportedVersion -> {
+                failHandshake(IllegalStateException(CodeErrors.PROTOCOL_VERSION), retry = false)
+                return
+            }
+            is AcpHandshake.Decision.NeedsTerminal -> {
+                failHandshake(IllegalStateException(CodeErrors.AUTH_TERMINAL), retry = false)
+                return
+            }
+            is AcpHandshake.Decision.Authenticate -> {
+                try {
+                    rawCall({ adapter.authenticate(it, step.methodId) }, DEFAULT_TIMEOUT_MS)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The bridge authenticated the socket and does not implement authenticate.
+                    if (!AcpHandshake.isSkippableAuthError(e.message)) throw e
+                }
+                if (gen != socketGeneration) return
+            }
+            AcpHandshake.Decision.Ready -> Unit
+        }
+        acceptsPromptImages = AcpHandshake.acceptsImages(initResult)
+        imageNoticeSent.clear()
         CodeMachineDetail.parseBridgeVersion(initResult)?.let { bridgeVersion = it }
         initialized = true
         handshakeFailCount = 0
@@ -960,6 +990,42 @@ class BridgeBackend(
     }
 
     /**
+     * Pictures the agent said it will not accept are dropped here, once the handshake
+     * has reported that. A picture with no text ends the turn. Null means do not send.
+     */
+    private suspend fun attachmentsForAgent(
+        sessionId: String,
+        text: String,
+        attachments: List<PromptAttachment>,
+    ): List<PromptAttachment>? {
+        if (attachments.isEmpty() || acceptsPromptImages) return attachments
+        if (imageNoticeSent.add(sessionId)) {
+            val only = text.isBlank()
+            _updates.emit(
+                SessionUpdate(
+                    sessionId,
+                    CodeUpdate.Upsert(
+                        CodeEvent.Notice(
+                            "img-unsupported:$sessionId",
+                            System.currentTimeMillis(),
+                            if (only) "This agent can't take pictures."
+                            else "This agent can't take pictures. The text was sent without them.",
+                            NoticeLevel.WARNING,
+                            textRes = if (only) R.string.code_notice_images_only_unsupported
+                            else R.string.code_notice_images_unsupported,
+                        )
+                    )
+                )
+            )
+        }
+        if (text.isBlank()) {
+            finishTurn(sessionId, "error")
+            return null
+        }
+        return emptyList()
+    }
+
+    /**
      * @return [DeliverResult.Done] if accepted (turn finished, terminal error, or on-wire after
      * send); [DeliverResult.Retry] if deliver failed before accept (outbox-requeue);
      * [DeliverResult.Aborted] for Cancelled / Detached / deliver-stale (never requeue).
@@ -986,10 +1052,16 @@ class BridgeBackend(
         var sendCompleted = false
         try {
             if (isDeliverStale(sessionId, gen)) return DeliverResult.Aborted
+            val wireAttachments = attachmentsForAgent(sessionId, text, attachments)
+            if (wireAttachments == null) {
+                runningSessions.remove(sessionId)
+                refreshKeepAlive()
+                return DeliverResult.Done
+            }
             // Frame build embeds multi-MB base64; keep it (and send) off Hub Main.immediate.
             val sendOk = withContext(Dispatchers.IO) {
                 if (isDeliverStale(sessionId, gen)) return@withContext null
-                val frame = adapter.prompt(id, sessionId, text, attachments)
+                val frame = adapter.prompt(id, sessionId, text, wireAttachments)
                 if (!transport.send(frame)) {
                     throw IllegalStateException(transport.lastError ?: "Not connected")
                 }
@@ -1380,6 +1452,8 @@ class BridgeBackend(
         handshakeError = null
         handshakeFailCount = 0
         bridgeVersion = null
+        acceptsPromptImages = true
+        imageNoticeSent.clear()
         attached.clear()
         runningSessions.clear()
         deliverGeneration.clear()
