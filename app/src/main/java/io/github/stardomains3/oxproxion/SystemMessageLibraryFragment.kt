@@ -86,7 +86,7 @@ class SystemMessageLibraryFragment : Fragment() {
                             }
                         }
                         if (jsonString != null) {
-                            val importedMessages = Json.decodeFromString<List<SystemMessage>>(jsonString)
+                            val importedMessages = LibraryBackup.systemMessages(jsonString)
                             val currentMessages = sharedPreferencesHelper.getCustomSystemMessages().toMutableList()
                             // Fetch the single default message for duplicate checking
                             val defaultMessage = sharedPreferencesHelper.getDefaultSystemMessage()

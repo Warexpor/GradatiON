@@ -81,7 +81,7 @@ class PromptLibraryFragment : Fragment() {
                             }
                         }
                         if (jsonString != null) {
-                            val importedPrompts = Json.decodeFromString<List<Prompt>>(jsonString)
+                            val importedPrompts = LibraryBackup.prompts(jsonString)
                             val currentPrompts = sharedPreferencesHelper.getCustomPrompts().toMutableList()
 
                             importedPrompts.forEach { importedPrompt ->

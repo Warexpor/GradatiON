@@ -43,9 +43,10 @@ class ChatRepository(private val chatDao: ChatDao) {
         chatDao.deleteSession(sessionId)
     }
 
-    suspend fun getAllSessionsWithMessages(): List<SessionWithMessages> {
-        return chatDao.getAllSessionsWithMessages()
-    }
+    suspend fun getAllSessionsWithMessages(): List<SessionWithMessages> =
+        chatDao.getAllSessionsOnce().map { session ->
+            SessionWithMessages(session, getMessagesForSession(session.id))
+        }
 
     suspend fun getAllSessionsOnce(): List<ChatSession> = chatDao.getAllSessionsOnce()
     suspend fun searchSessions(query: String, mode: ChatMode = ChatMode.ASK): List<ChatSession> {

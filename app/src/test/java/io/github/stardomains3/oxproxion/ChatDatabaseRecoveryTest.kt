@@ -151,6 +151,23 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun aTakenRecoveryFileNameUsesTheNextFreeOne() {
+        File(tmp.root, "chat_database.recovered-5").writeText("taken")
+        assertEquals("chat_database.recovered-6", AppDatabase.recoveredFileName(tmp.root, 5L))
+        assertEquals("chat_database.recovered-7", AppDatabase.recoveredFileName(tmp.root, 7L))
+    }
+
+    @Test
+    fun anUnsafeDatabaseFileNameIsIgnored() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().putString("chat_db_file", "../chat_database").commit()
+        assertEquals(AppDatabase.DB_NAME, prefs.chatDbFileName())
+        prefs.saveChatDbFileName("chat_database.recovered-5")
+        assertEquals("chat_database.recovered-5", prefs.chatDbFileName())
+    }
+
+    @Test
     fun theRecoveryNoticeTextIsTheAgreedOne() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         assertEquals(

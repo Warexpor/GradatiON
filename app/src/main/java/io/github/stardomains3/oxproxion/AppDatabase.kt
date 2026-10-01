@@ -69,25 +69,26 @@ abstract class AppDatabase : RoomDatabase() {
         private fun build(context: Context): AppDatabase {
             ensureNativeLoaded()
             val prefs = SharedPreferencesHelper(context)
-            val dbFile = context.getDatabasePath(DB_NAME)
+            val dbName = prefs.chatDbFileName()
+            val dbFile = context.getDatabasePath(dbName)
             val pending = prefs.recoveryPendingStamp()
             // A previous launch moved the file aside and died before the fresh database existed.
             // Opening now would create an empty file with the old key and hide the failure.
             if (pending != null && !dbFile.exists()) {
                 Log.w(TAG, "Chat database recovery was interrupted; starting a fresh database")
-                return openFreshAfterRecovery(context, prefs)
+                return openFreshAfterRecovery(context, prefs, dbName)
             }
             val passphrase = try {
                 prefs.getOrCreateChatDbPassphrase()
             } catch (e: Exception) {
                 Log.e(TAG, "Chat database passphrase could not be read", e)
-                return recover(context, prefs)
+                return recover(context, prefs, dbName)
             }
             // One retry first: the Keystore can answer badly for a moment (right after unlock, say),
             // and setting a healthy database aside for that would look like lost history.
             for (attempt in 1..2) {
                 try {
-                    val db = open(context, passphrase)
+                    val db = open(context, passphrase, dbName)
                     if (pending != null) finishInterruptedRecovery(prefs, dbFile, pending, db)
                     return db
                 } catch (e: Exception) {
@@ -95,7 +96,7 @@ abstract class AppDatabase : RoomDatabase() {
                     if (attempt == 1) Thread.sleep(300)
                 }
             }
-            return recover(context, prefs)
+            return recover(context, prefs, dbName)
         }
 
         /**
@@ -121,12 +122,12 @@ abstract class AppDatabase : RoomDatabase() {
             false
         }
 
-        private fun recover(context: Context, prefs: SharedPreferencesHelper): AppDatabase {
-            val dbFile = context.getDatabasePath(DB_NAME)
+        private fun recover(context: Context, prefs: SharedPreferencesHelper, dbName: String): AppDatabase {
+            val dbFile = context.getDatabasePath(dbName)
             // A half-finished encrypt leaves the plaintext copy. Prefer that over an empty database.
             if (restorePlaintextBackup(dbFile)) {
                 try {
-                    val db = open(context, prefs.getOrCreateChatDbPassphrase())
+                    val db = open(context, prefs.getOrCreateChatDbPassphrase(), dbName)
                     prefs.clearRecoveryPending()
                     return db
                 } catch (e: Exception) {
@@ -137,27 +138,54 @@ abstract class AppDatabase : RoomDatabase() {
             // Copy the wrapped passphrase before anything deletes it. The set-aside file is
             // unreadable without this blob, and recovery used to throw the only copy away.
             prefs.archiveChatDbPassphrase(stamp)
-            val moved = setAside(dbFile, stamp)
+            val moved = try {
+                setAside(dbFile, stamp)
+            } catch (e: Exception) {
+                // The corrupt file is still in place. Opening it again next launch would crash-loop,
+                // so the app switches to a new file and leaves this one where it is.
+                Log.e(TAG, "Could not move the chat database aside; opening a new file", e)
+                val directory = dbFile.parentFile ?: throw e
+                val fallback = recoveredFileName(directory, stamp)
+                prefs.saveChatDbFileName(fallback)
+                prefs.markRecoveryPending(stamp)
+                return openFreshAfterRecovery(context, prefs, fallback)
+            }
             val actual = stampOf(moved) ?: stamp
             if (actual != stamp) prefs.archiveChatDbPassphrase(actual)
             prefs.markRecoveryPending(actual)
-            return openFreshAfterRecovery(context, prefs)
+            return openFreshAfterRecovery(context, prefs, dbName)
         }
 
-        private fun openFreshAfterRecovery(context: Context, prefs: SharedPreferencesHelper): AppDatabase {
-            val fresh = open(context, prefs.resetChatDbPassphrase())
+        private fun openFreshAfterRecovery(
+            context: Context,
+            prefs: SharedPreferencesHelper,
+            dbName: String
+        ): AppDatabase {
+            val fresh = open(context, prefs.resetChatDbPassphrase(), dbName)
             prefs.markChatDbRecovered()
             return fresh
+        }
+
+        /**
+         * Name of a new database file when the unreadable one cannot be moved aside.
+         * A stamp that is already taken uses the next free one.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal fun recoveredFileName(directory: File, stamp: Long): String {
+            var s = stamp
+            while (File(directory, "$DB_NAME.recovered-$s").exists()) s++
+            return "$DB_NAME.recovered-$s"
         }
 
         private fun stampOf(moved: File?): Long? =
             moved?.name?.substringAfterLast("unreadable-", "")?.toLongOrNull()
 
         /** Encrypts a leftover plaintext file, opens Room, and forces the real open so a bad key surfaces here. */
-        private fun open(context: Context, passphrase: ByteArray): AppDatabase {
-            encryptPlaintextIfNeeded(context, passphrase)
+        private fun open(context: Context, passphrase: ByteArray, dbName: String): AppDatabase {
+            val dbFile = context.getDatabasePath(dbName)
+            encryptPlaintextIfNeeded(dbFile, passphrase)
             val factory = SupportOpenHelperFactory(passphrase.copyOf())
-            val db = Room.databaseBuilder(context, AppDatabase::class.java, DB_NAME)
+            val db = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
                 .openHelperFactory(factory)
                 .addMigrations(
                     DatabaseMigrations.MIGRATION_1_2,
@@ -175,7 +203,7 @@ abstract class AppDatabase : RoomDatabase() {
                 throw e
             }
             // The encrypted file opened. The plaintext copy kept for a crash mid-encrypt can go.
-            discardPlaintextBackup(context.getDatabasePath(DB_NAME))
+            discardPlaintextBackup(dbFile)
             return db
         }
 
@@ -262,8 +290,7 @@ abstract class AppDatabase : RoomDatabase() {
          * Already-encrypted (or corrupt) files must not enter this path — probing
          * them with an empty key throws and used to crash cold start.
          */
-        private fun encryptPlaintextIfNeeded(context: Context, passphrase: ByteArray) {
-            val dbFile = context.getDatabasePath(DB_NAME)
+        private fun encryptPlaintextIfNeeded(dbFile: File, passphrase: ByteArray) {
             if (!dbFile.exists() || dbFile.length() == 0L) return
             if (!isPlaintextSqliteHeader(dbFile)) return
 

@@ -22,8 +22,9 @@ class SharedPreferencesHelper(context: Context) {
 
     private val appContext = context.applicationContext
     private val apiKeysPrefs: SharedPreferences =
-        appContext.getSharedPreferences(API_KEYS_PREFS_STORE, Context.MODE_PRIVATE)
-    val mainPrefs: SharedPreferences = appContext.getSharedPreferences(MAIN_PREFS, Context.MODE_PRIVATE)
+        TolerantPrefs(appContext.getSharedPreferences(API_KEYS_PREFS_STORE, Context.MODE_PRIVATE))
+    val mainPrefs: SharedPreferences =
+        TolerantPrefs(appContext.getSharedPreferences(MAIN_PREFS, Context.MODE_PRIVATE))
     private val json = Json { ignoreUnknownKeys = true }
     private val gson = Gson() // Kept temporarily for migration only
 
@@ -156,6 +157,8 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_CHAT_DB_RECOVERED = "chat_db_recovered"
         /** Stamp of a recovery that has moved the database aside and not finished opening a fresh one. */
         private const val KEY_CHAT_DB_RECOVERY_STAMP = "chat_db_recovery_stamp"
+        /** File name under the databases directory when the original chat_database could not be moved. */
+        private const val KEY_CHAT_DB_FILE = "chat_db_file"
         private const val KEY_ALLOW_DESTRUCTIVE_TOOLS = "allow_destructive_tools"
         private const val KEY_HAPTIC_BUTTONS = "haptic_buttons"
         private const val KEY_HAPTIC_RESPONDING = "haptic_responding"
@@ -458,9 +461,29 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit(commit = true) { putLong(KEY_CHAT_DB_RECOVERY_STAMP, stamp) }
     }
 
-    fun recoveryPendingStamp(): Long? =
-        if (mainPrefs.contains(KEY_CHAT_DB_RECOVERY_STAMP)) mainPrefs.getLong(KEY_CHAT_DB_RECOVERY_STAMP, 0L)
-        else null
+    fun recoveryPendingStamp(): Long? {
+        // A wrong type must not read as stamp 0, which would look like a real interrupted recovery.
+        val value = mainPrefs.all[KEY_CHAT_DB_RECOVERY_STAMP]
+        return value as? Long
+    }
+
+    /**
+     * Which file Room opens. The default is [AppDatabase.DB_NAME]. A recovery that could not move
+     * the unreadable file stores a new name here so the next launch does not open the bad one again.
+     * Anything that is not a single safe file name is ignored.
+     */
+    fun chatDbFileName(): String {
+        val name = mainPrefs.getString(KEY_CHAT_DB_FILE, null)?.trim().orEmpty()
+        if (name.isEmpty()) return AppDatabase.DB_NAME
+        val safe = name.length <= 80 &&
+            name.startsWith(AppDatabase.DB_NAME) &&
+            name.all { it.isLetterOrDigit() || it == '.' || it == '_' || it == '-' }
+        return if (safe) name else AppDatabase.DB_NAME
+    }
+
+    fun saveChatDbFileName(name: String) {
+        mainPrefs.edit(commit = true) { putString(KEY_CHAT_DB_FILE, name) }
+    }
 
     fun clearRecoveryPending() {
         mainPrefs.edit(commit = true) { remove(KEY_CHAT_DB_RECOVERY_STAMP) }
@@ -587,14 +610,9 @@ class SharedPreferencesHelper(context: Context) {
     }
     fun saveEnabledTools(tools: Set<String>) {
         try {
-            val jsonStr = json.encodeToString(tools)
-            mainPrefs.edit {
-                putString(KEY_ENABLED_TOOLS, jsonStr)
-            }  // Async save (efficient, non-blocking)
-            // Log.d("SharedPreferencesHelper", "Saved enabled tools: $tools")
+            putStoredJson(KEY_ENABLED_TOOLS, tools)
         } catch (e: Exception) {
-            //  Log.e("SharedPreferencesHelper", "Failed to save enabled tools: $tools", e)
-            // Optional: You could add a user-facing error (e.g., Toast) here if needed
+            Log.e("SharedPrefs", "Failed to save enabled tools", e)
         }
     }
     fun saveSafFolderUri(uri: String) {

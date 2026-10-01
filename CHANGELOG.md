@@ -30,6 +30,10 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A chat message longer than Android's cursor window (a large attached file) no longer crashes when the chat is opened, when History or Roleplay asks for the last line, or when chats are exported. The text is read in slices. Opening a chat that the database cannot return shows a notice instead of closing the app.
+- A preference stored as the wrong type (a restored backup, or a key whose type changed) no longer crash-loops launch. The value is left in place and the default is used. A chat fork this version cannot read is left in place instead of being deleted. Saving the tool list archives an unreadable copy first, the same way the model list does.
+- If the chat database cannot be opened and the file cannot be moved aside, the app starts a new database file instead of crash-looping on the same one. The old file stays where it is.
+- A backup saved by Notepad as Unicode (UTF-16) imports. Prompt and system-message files from a newer version, with fields this version does not know, import instead of being rejected.
 - History search stays above the keyboard. The drawer takes the same insets as the chat, so the field is not covered.
 - A long message's Show more control sits under the bubble. It used to live in the action row, which stays hidden until you tap the bubble, and the cutoff said "continued" in English.
 - Code: coming back to the app reconnects at once instead of waiting out a backoff that started while it was away, and a reconnect whose socket open fails keeps trying. ACP `session_info_update` sets the session title. A name you edited stays; one you did not picks up the agent's title on the next session list. Tool output includes text sent as an embedded file resource, and a terminal snapshot when the bridge includes one. Away-notification taps no longer share one target across sessions, and an earlier alert for the same session still opens after a later one is posted.

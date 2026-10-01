@@ -59,11 +59,45 @@ interface ChatDao {
     @Query("SELECT * FROM chat_sessions")
     suspend fun getAllSessionsOnce(): List<ChatSession>
 
-    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY id ASC")
-    suspend fun getMessagesForSession(sessionId: Long): List<ChatMessage>
+    /**
+     * Id, role and character length only. The text itself is loaded by [getMessagesForSession],
+     * in slices when one row would not fit in Android's cursor window.
+     */
+    @Query(
+        """
+        SELECT id, sessionId, role, length(content) AS contentLength
+        FROM chat_messages
+        WHERE sessionId = :sessionId
+        ORDER BY id ASC
+        """
+    )
+    suspend fun messageHeads(sessionId: Long): List<ChatMessageHead>
 
-    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY id DESC LIMIT 1")
-    suspend fun getLastMessage(sessionId: Long): ChatMessage?
+    @Query(
+        """
+        SELECT id, sessionId, role, length(content) AS contentLength
+        FROM chat_messages
+        WHERE sessionId = :sessionId
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    )
+    suspend fun lastMessageHead(sessionId: Long): ChatMessageHead?
+
+    @Query("SELECT content FROM chat_messages WHERE id = :id")
+    suspend fun messageContent(id: Long): String?
+
+    /** [startInclusive] is 1-based, matching SQLite substr. */
+    @Query("SELECT substr(content, :startInclusive, :length) AS content FROM chat_messages WHERE id = :id")
+    suspend fun messageContentSlice(id: Long, startInclusive: Int, length: Int): String?
+
+    @Transaction
+    suspend fun getMessagesForSession(sessionId: Long): List<ChatMessage> =
+        messageHeads(sessionId).map { it.load(this) }
+
+    @Transaction
+    suspend fun getLastMessage(sessionId: Long): ChatMessage? =
+        lastMessageHead(sessionId)?.load(this)
 
     /**
      * The newest message of each session, with content cut to the first 480 characters.
@@ -158,3 +192,15 @@ interface ChatDao {
     suspend fun insertImportedSessions(batch: List<Pair<ChatSession, List<ChatMessage>>>): List<Long> =
         batch.map { (session, messages) -> insertSessionAndMessages(session, messages) }
 }
+
+internal suspend fun ChatMessageHead.load(dao: ChatDao): ChatMessage =
+    ChatMessage(
+        id = id,
+        sessionId = sessionId,
+        role = role,
+        content = ChatMessageText.read(
+            sqliteLength = contentLength,
+            full = { dao.messageContent(id).orEmpty() },
+            slice = { start, len -> dao.messageContentSlice(id, start, len).orEmpty() }
+        )
+    )
