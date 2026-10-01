@@ -75,6 +75,35 @@ class RpLoreTest {
     }
 
     @Test
+    fun barFullwidthCommaAndQuotesAreNotPartOfTheKey() {
+        val book = """
+            [keys: "locket" | grey haven，pier]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "People still say grey haven.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+    }
+
+    @Test
+    fun aLongConstantBlockStillLeavesRoomForAMatch() {
+        val book = "C".repeat(20_000) + "\n\n[keys: locket]\nThe locket opens at dawn."
+        val out = RpLore.select(book, "She holds the locket.", maxChars = 12_000)
+        assertTrue(out.contains("opens at dawn"))
+        assertTrue(out.contains("C"))
+        assertTrue(out.length <= 12_000)
+    }
+
+    @Test
+    fun aShortConstantStaysBesideALongMatch() {
+        val book = "Greyhaven sits on a cliff.\n\n[keys: locket]\n" + "L".repeat(20_000)
+        val out = RpLore.select(book, "the locket", maxChars = 1_000)
+        assertTrue(out.startsWith("Greyhaven sits on a cliff."))
+        assertTrue(out.contains("L"))
+        assertTrue(out.length <= 1_000)
+    }
+
+    @Test
     fun entryCanPullAnother() {
         val linked = """
             [keys: map]
@@ -160,5 +189,44 @@ class RpLoreTest {
         val out = RpLore.clipTail(text, 30)
         assertTrue(out.startsWith("Mira"))
         assertFalse(out.endsWith("wor"))
+    }
+
+    @Test
+    fun aLongMemoryDoesNotHideFacts() {
+        val scan = RpLore.sceneScan(
+            pinned = listOf("Mira", "The docks flood"),
+            recent = listOf("x".repeat(6_000)),
+            notes = listOf("m".repeat(5_000), "The locket stays shut")
+        )
+        assertTrue(RpLore.keyHits("Mira", scan))
+        assertTrue(RpLore.keyHits("docks", scan))
+        assertTrue(RpLore.keyHits("locket", scan))
+        assertTrue(scan.length <= 4_000)
+    }
+
+    @Test
+    fun aShortFactDoesNotCutTheScenario() {
+        val scenario = "The docks " + "s".repeat(900)
+        val scan = RpLore.sceneScan(
+            pinned = listOf("Mira", scenario),
+            recent = listOf("x".repeat(6_000)),
+            notes = listOf("The locket stays shut")
+        )
+        assertTrue(scan.contains("s".repeat(900)))
+        assertTrue(RpLore.keyHits("locket", scan))
+        assertTrue(scan.length <= 4_000)
+    }
+
+    @Test
+    fun sceneScanKeepsTheReplyBeingRewritten() {
+        val scan = RpLore.sceneScan(
+            pinned = listOf("Mira"),
+            recent = listOf("z".repeat(6_000)),
+            focus = listOf("p".repeat(4_000), "She still has the locket.")
+        )
+        assertTrue(RpLore.keyHits("Mira", scan))
+        assertTrue(RpLore.keyHits("locket", scan))
+        assertFalse(scan.contains("p".repeat(4_000)))
+        assertTrue(scan.length <= 4_000)
     }
 }

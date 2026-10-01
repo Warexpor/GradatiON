@@ -54,6 +54,14 @@ class RpReminderParserTest {
     }
 
     @Test
+    fun reminderLabelMatchesInAnyCase() {
+        val parsed = RpReminderParser.parse("Hello _(reminder: stay tense)_ there")
+        assertEquals("stay tense", parsed.reminder)
+        assertEquals("Hello  there", parsed.userText)
+        assertEquals("one\ntwo", RpReminderParser.parse("_(REMINDER: one)_ _(Reminder: two)_").reminder)
+    }
+
+    @Test
     fun aNoteMayContainParentheses() {
         val parsed = RpReminderParser.parse("Hello _(Reminder: stay (tense))_ there")
         assertEquals("stay (tense)", parsed.reminder)

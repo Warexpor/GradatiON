@@ -110,6 +110,42 @@ class RpAutoMemoryTest {
         assertTrue(t.contains("The locket is warm."))
     }
 
+    @Test fun promptExpandsNamesInTheMemoryNote() {
+        val p = RpAutoMemory.prompt("Mira", "Sam", "{{user}} owes {{char}} nothing", "{{char}} waits", "Sam: hi")
+        assertTrue(p.contains("Sam owes Mira nothing"))
+        assertTrue(p.contains("Mira waits"))
+        assertFalse(p.contains("{{"))
+    }
+
+    @Test fun cleanDropsACopiedLineAfterNamesReplaceMacros() {
+        assertEquals(
+            "- They leave at dawn",
+            RpAutoMemory.clean(
+                "- Sam owes Mira nothing.\n- They leave at dawn",
+                userMemory = "{{user}} owes {{char}} nothing",
+                charName = "Mira",
+                userName = "Sam"
+            )
+        )
+        assertNull(
+            RpAutoMemory.clean(
+                "- sam owes mira nothing",
+                userMemory = "Sam owes Mira nothing",
+                charName = "Mira",
+                userName = "Sam"
+            )
+        )
+        assertEquals(
+            "- Sam owes Mira nothing else",
+            RpAutoMemory.clean(
+                "- Sam owes Mira nothing else",
+                userMemory = "Sam owes Mira nothing",
+                charName = "Mira",
+                userName = "Sam"
+            )
+        )
+    }
+
     @Test fun cleanDropsAnUnclosedThinkAndCopiedMemory() {
         assertEquals("- They leave at dawn", RpAutoMemory.clean("- They leave at dawn\n<think>still scratching"))
         assertNull(RpAutoMemory.clean("<think>the facts never got written"))

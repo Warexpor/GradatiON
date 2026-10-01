@@ -6,14 +6,23 @@ package io.github.stardomains3.oxproxion
  * Text before the first `[keys: …]` line is always included, so an old book that is one
  * block of prose still goes in whole. A block under `[keys: docks, grey haven]` is included
  * only when the scan mentions one of those keys. Entries keep pulling each other until
- * nothing new matches, so a chain of three still arrives together.
+ * nothing new matches, so a chain of three still arrives together. A long always-on block
+ * is cut so a block that actually matched still fits.
  */
 object RpLore {
     private const val SCAN_CHARS = 4_000
-    /** Name, scenario, memory and facts stay in the scan even when the chat is long. */
+    /** Name, scenario and the other card text, plus Memory and facts, stay even when the chat is long. */
     private const val PIN_CHARS = 1_500
+    /**
+     * When the card text is long enough to fill the pin, Memory and facts still keep this much
+     * between them. A short card gives them whatever is left instead.
+     */
+    private const val NOTES_CHARS = 800
+    /** The reply a rewrite is changing, so its keys still match after the chat has moved on. */
+    private const val FOCUS_CHARS = 1_500
     private val header = Regex("""(?m)^[ \t]*\[keys:[ \t]*(.*?)[ \t]*][ \t]*$""")
-    private val keySplit = Regex("[,;、]")
+    private val keySplit = Regex("[,;、，|]")
+    private val wrappingQuotes = setOf('"', '\'', '“', '”', '「', '」', '«', '»')
 
     data class Entry(val keys: List<String>, val text: String) {
         internal val matchers: List<KeyMatcher> by lazy { keys.map(::KeyMatcher) }
@@ -30,7 +39,7 @@ object RpLore {
         val head = content.substring(0, marks.first().range.first).trim()
         if (head.isNotEmpty()) out += Entry(emptyList(), head)
         marks.forEachIndexed { i, mark ->
-            val keys = mark.groupValues[1].split(keySplit).map { it.trim() }.filter { it.isNotEmpty() }
+            val keys = mark.groupValues[1].split(keySplit).map(::cleanKey).filter { it.isNotEmpty() }
             val start = mark.range.last + 1
             val end = marks.getOrNull(i + 1)?.range?.first ?: content.length
             val text = content.substring(start, end).trim()
@@ -57,20 +66,92 @@ object RpLore {
     }
 
     /**
-     * [pinned] is the part that must survive a long chat: the character's name and scenario,
-     * who the user is, the Memory note, and this chat's facts. [recent] is the conversation,
-     * newest last, and fills whatever of [maxChars] the pin did not use.
+     * [pinned] is the card: name, scenario and the rest, kept from the start so the setting
+     * survives a long chat. [notes] is the Memory note and this chat's facts. They share the
+     * pin, and a long Memory note cannot use it all, so a fact still matches. [focus] is a
+     * beat that has to match even when [recent] (newest last) would have pushed it out — the
+     * reply a rewrite is changing. [recent] fills whatever of [maxChars] is left.
      */
-    fun sceneScan(pinned: List<String>, recent: List<String>, maxChars: Int = SCAN_CHARS): String {
+    fun sceneScan(
+        pinned: List<String>,
+        recent: List<String>,
+        maxChars: Int = SCAN_CHARS,
+        focus: List<String> = emptyList(),
+        notes: List<String> = emptyList()
+    ): String {
         if (maxChars <= 0) return ""
-        val pin = clipTail(join(pinned), minOf(PIN_CHARS, maxChars))
-        val room = maxChars - pin.length - if (pin.isEmpty()) 0 else 1
-        val scene = if (room <= 0) "" else scanOf(recent, room)
-        return when {
-            pin.isEmpty() -> scene
-            scene.isEmpty() -> pin
-            else -> pin + "\n" + scene
+        val pinBudget = minOf(PIN_CHARS, maxChars)
+        val noteParts = notes.map { it.trim() }.filter { it.isNotEmpty() }
+        val noteCap = minOf(NOTES_CHARS, pinBudget / 2)
+        val noteNeed = if (noteParts.isEmpty()) 0 else minOf(joinedLen(noteParts), noteCap)
+        val reserveSep = if (noteNeed > 0) 1 else 0
+        val identity = clipTail(join(pinned), (pinBudget - noteNeed - reserveSep).coerceAtLeast(0))
+        val notesRoom = (pinBudget - identity.length - if (identity.isEmpty() || noteParts.isEmpty()) 0 else 1)
+            .coerceAtLeast(0)
+        val noteText = if (noteParts.isEmpty()) "" else share(noteParts, notesRoom)
+        val pin = when {
+            identity.isEmpty() -> noteText
+            noteText.isEmpty() -> identity
+            else -> identity + "\n" + noteText
         }
+        var room = maxChars - pin.length - if (pin.isEmpty()) 0 else 1
+        val focusText = if (room <= 0) "" else share(focus, minOf(FOCUS_CHARS, room))
+        room -= focusText.length + if (focusText.isEmpty()) 0 else 1
+        val scene = if (room <= 0) "" else scanOf(recent, room)
+        return listOf(pin, focusText, scene).filter { it.isNotEmpty() }.joinToString("\n")
+    }
+
+    /**
+     * Give every part a turn at [budget]. A short part takes only what it needs and the
+     * spare goes to the longer ones, so the second note is not dropped just because the
+     * first is long. Each part keeps its start, cut on a line when it has to be cut.
+     */
+    fun share(parts: List<String>, budget: Int): String {
+        val items = parts.map { it.trim() }.filter { it.isNotEmpty() }
+        if (items.isEmpty() || budget <= 0) return ""
+        if (items.size == 1) return clipTail(items[0], budget)
+        val seps = items.size - 1
+        if (budget <= seps) return clipTail(items.first(), budget)
+        var left = budget - seps
+        val caps = IntArray(items.size)
+        val open = items.indices.toMutableList()
+        while (open.isNotEmpty() && left > 0) {
+            val shareSize = left / open.size
+            val extra = left % open.size
+            val finished = ArrayList<Int>()
+            var consumed = 0
+            open.forEachIndexed { n, i ->
+                val grant = shareSize + if (n < extra) 1 else 0
+                if (grant > 0 && items[i].length <= grant) {
+                    caps[i] = items[i].length
+                    finished += i
+                    consumed += items[i].length
+                }
+            }
+            if (finished.isEmpty()) {
+                open.forEachIndexed { n, i ->
+                    caps[i] = shareSize + if (n < extra) 1 else 0
+                }
+                break
+            }
+            open.removeAll(finished.toSet())
+            left -= consumed
+        }
+        return items.mapIndexed { i, text -> clipTail(text, caps[i]) }
+            .filter { it.isNotEmpty() }
+            .joinToString("\n")
+    }
+
+    private fun joinedLen(parts: List<String>): Int =
+        parts.sumOf { it.length } + (parts.size - 1).coerceAtLeast(0)
+
+    /** Quotes around a key are not part of the word, so `"locket"` still matches locket. */
+    private fun cleanKey(raw: String): String {
+        val k = raw.trim()
+        if (k.length >= 2 && k.first() in wrappingQuotes && k.last() in wrappingQuotes) {
+            return k.substring(1, k.length - 1).trim()
+        }
+        return k
     }
 
     /** Keep the start. Step back to a line, then a word, so a pinned fact is not cut in half. */
@@ -110,19 +191,59 @@ object RpLore {
             if (picked.size == before) break
         }
 
-        val sb = StringBuilder()
-        for (i in picked.sorted()) {
-            val piece = entries[i].text.trim()
-            if (piece.isEmpty()) continue
-            val nextLen = if (sb.isEmpty()) piece.length else sb.length + 2 + piece.length
-            if (nextLen > maxChars) {
-                if (sb.isEmpty()) return piece
+        return fitPicked(entries, picked.sorted(), maxChars)
+    }
+
+    /**
+     * Book order, within [maxChars]. A matched block is kept even when the always-on preface
+     * is longer than the budget: the preface is cut to the room the matches leave, and a short
+     * preface is kept beside a match that has to be cut.
+     */
+    private fun fitPicked(entries: List<Entry>, order: List<Int>, maxChars: Int): String {
+        if (maxChars <= 0) return ""
+        val texts = order.map { it to entries[it].text.trim() }.filter { it.second.isNotEmpty() }
+        if (texts.isEmpty()) return ""
+        val open = texts.filter { entries[it.first].keys.isEmpty() }
+        val keyed = texts.filter { entries[it.first].keys.isNotEmpty() }
+        val openRaw = joinedLen(open.map { it.second })
+        val reserve = if (open.isEmpty() || keyed.isEmpty()) 0 else minOf(openRaw, maxChars / 3)
+        val reserveSep = if (reserve > 0) 2 else 0
+        val kept = LinkedHashMap<Int, String>()
+        var keyedLen = 0
+        var keyedCount = 0
+        val keyedBudget = (maxChars - reserve - reserveSep).coerceAtLeast(0)
+        for ((i, text) in keyed) {
+            val add = text.length + if (keyedCount == 0) 0 else 2
+            if (keyedLen + add > keyedBudget) {
+                if (keyedCount == 0 && keyedBudget > 0) {
+                    val piece = clipTail(text, keyedBudget)
+                    if (piece.isNotEmpty()) {
+                        kept[i] = piece
+                        keyedLen = piece.length
+                    }
+                }
                 break
             }
-            if (sb.isNotEmpty()) sb.append("\n\n")
-            sb.append(piece)
+            kept[i] = text
+            keyedLen += add
+            keyedCount++
         }
-        return sb.toString()
+        val gap = if (kept.isNotEmpty() && open.isNotEmpty()) 2 else 0
+        var openRoom = (maxChars - keyedLen - gap).coerceAtLeast(0)
+        var openCount = 0
+        for ((i, text) in open) {
+            if (openRoom <= 0) break
+            val sep = if (openCount == 0) 0 else 2
+            val room = openRoom - sep
+            if (room <= 0) break
+            val piece = if (text.length <= room) text else clipTail(text, room)
+            if (piece.isEmpty()) break
+            kept[i] = piece
+            openRoom -= sep + piece.length
+            openCount++
+            if (piece.length < text.length) break
+        }
+        return texts.mapNotNull { (i, _) -> kept[i] }.joinToString("\n\n")
     }
 
     /**

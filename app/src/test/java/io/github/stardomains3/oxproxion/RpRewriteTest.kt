@@ -22,6 +22,12 @@ class RpRewriteTest {
     }
 
     @Test
+    fun loreFocusKeepsTheReplyAndDropsABlankTurn() {
+        assertEquals(listOf("She waits.", "He answers."), RpRewrite.loreFocus(" He answers. ", " She waits. "))
+        assertEquals(listOf("He answers."), RpRewrite.loreFocus("He answers.", "  "))
+    }
+
+    @Test
     fun snippetIsTheFirstLineWithoutMarks() {
         val reply = "\n*She waits.*\n\n\"You're late.\""
         assertEquals("She waits.", RpRewrite.snippet(reply))

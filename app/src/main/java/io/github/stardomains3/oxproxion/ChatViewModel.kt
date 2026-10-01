@@ -3691,7 +3691,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 isReasoningModel = isReasoningModel(modelId),
                 client = if (demo) demoHttpClient else if (isLan) lanHttpClient else null
             )
-            val note = RpAutoMemory.clean(reply, userMemory)
+            val note = RpAutoMemory.clean(reply, userMemory, charName, userName)
             // The user may have switched chats meanwhile; the note belongs to the one it was built for.
             withContext(Dispatchers.Main) {
                 val sameChat = sessionEpoch == launchEpoch &&
@@ -3919,13 +3919,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * What lore keys are matched against. The character's name and scenario, the persona's
-     * name, the Memory note and this chat's facts stay even when the chat is long. The open
-     * chat and [extra] (the line about to be sent, a scene reminder, a rewrite note) fill
-     * the rest, newest last.
+     * What lore keys are matched against. The character's name, scenario, greeting, personality
+     * and description stay from the front, so a long chat does not forget the setting. Memory
+     * and this chat's facts share the rest of that pin, so a long Memory note cannot hide a fact.
+     * [focus] is a beat that must still match after it leaves the recent window (the reply a
+     * rewrite is changing). The open chat and [extra] (the line about to be sent, a scene
+     * reminder, a rewrite note) fill whatever is left, newest last.
      */
-    private fun rpLoreScan(vararg extra: String): String {
+    private fun rpLoreScan(vararg extra: String, focus: List<String> = emptyList()): String {
         val pinned = ArrayList<String>()
+        val notes = ArrayList<String>()
         val recent = ArrayList<String>()
         val llm = sharedPreferencesHelper.isRpLlmMode()
         val char = if (llm) null else _activeRpCharacter.value
@@ -3934,17 +3937,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         fun expand(text: String) = RpPromptEngine.expandMacros(text, charName, userName)
         if (char != null) {
             if (char.name.isNotBlank()) pinned += char.name
+            val persona = sharedPreferencesHelper.activeRpPersonaName()
+            if (persona.isNotBlank()) pinned += persona
+            // Scenario and personality before the long fields, so a clip keeps the setting and cuts the tail.
             if (char.scenario.isNotBlank()) pinned += expand(char.scenario)
+            if (char.personality.isNotBlank()) pinned += expand(char.personality)
+            if (char.greeting.isNotBlank()) pinned += expand(char.greeting)
+            if (char.prompt.isNotBlank()) pinned += expand(char.prompt)
+            if (char.instruction.isNotBlank()) pinned += expand(char.instruction)
+        } else {
+            val persona = sharedPreferencesHelper.activeRpPersonaName()
+            if (persona.isNotBlank()) pinned += persona
         }
-        val persona = sharedPreferencesHelper.activeRpPersonaName()
-        if (persona.isNotBlank()) pinned += persona
         if (llm || char != null) {
             val memory = sharedPreferencesHelper.getRpMemory(if (llm) null else char!!.id)
-            if (memory.isNotBlank()) pinned += expand(memory)
+            if (memory.isNotBlank()) notes += expand(memory)
         }
         if (sharedPreferencesHelper.isRpAutoMemory()) {
             val facts = currentRpFacts()
-            if (facts.isNotBlank()) pinned += expand(facts)
+            if (facts.isNotBlank()) notes += expand(facts)
         }
         _chatMessages.value.orEmpty().forEach { msg ->
             if ((msg.role == "user" || msg.role == "assistant") && !isAssistantPlaceholder(msg)) {
@@ -3953,7 +3964,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         extra.forEach { if (it.isNotBlank()) recent += expand(it) }
-        return RpLore.sceneScan(pinned, recent)
+        return RpLore.sceneScan(pinned, recent, focus = focus.map { expand(it) }, notes = notes)
     }
 
     /** History is cut before the card. Null means the whole definition still fits. */
@@ -4107,6 +4118,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val messages = _chatMessages.value ?: return false
         val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
         val lastUserIndex = messages.indexOfLast { it.role == "user" }
+        // Taken before the reply is removed, so lore keys that live only in it still match.
+        val focusedReply = if (lastAssistantIndex > lastUserIndex) {
+            getMessageText(messages[lastAssistantIndex].content)
+        } else {
+            ""
+        }
         if (lastUserIndex < 0) {
             _toastUiEvent.postValue(
                 Event(getApplication<Application>().getString(R.string.rp_need_user_turn))
@@ -4153,7 +4170,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val systemPrompt = rpDelegate.buildSystemPrompt(
                     character = rpDelegate.getActiveCharacter(),
                     extraInstruction = null,
-                    loreScan = rpLoreScan(rewrite.orEmpty()),
+                    loreScan = rpLoreScan(rewrite.orEmpty(), focus = RpRewrite.loreFocus(focusedReply)),
                     definitionCap = rpDefinitionCap(),
                     facts = currentRpFacts()
                 )
@@ -4204,6 +4221,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (original.isBlank() || isNonSwipeableRpAssistantText(original)) return false
         val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
         val lastUserIndex = messages.indexOfLast { it.role == "user" }
+        val preceding = messages.subList(0, position).lastOrNull {
+            (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it)
+        }?.let { getMessageText(it.content) }.orEmpty()
         if (RpRewrite.streamsAsNewSwipe(position, lastAssistantIndex, lastUserIndex)) {
             return regenerateLastRpReply(rewrite = note)
         }
@@ -4221,7 +4241,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val systemPrompt = rpDelegate.buildSystemPrompt(
                     character = rpDelegate.getActiveCharacter(),
                     extraInstruction = null,
-                    loreScan = rpLoreScan(note),
+                    loreScan = rpLoreScan(note, focus = RpRewrite.loreFocus(original, preceding)),
                     definitionCap = rpDefinitionCap(),
                     facts = currentRpFacts()
                 )

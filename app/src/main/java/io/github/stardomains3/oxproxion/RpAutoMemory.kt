@@ -105,11 +105,13 @@ object RpAutoMemory {
     }
 
     fun prompt(charName: String, userName: String, userMemory: String, facts: String, transcript: String): String = buildString {
+        val memory = shownMemory(userMemory, charName, userName)
+        val shownFacts = shownMemory(facts, charName, userName)
         append("You keep the fact notes for an ongoing story between ")
         append(charName).append(" and ").append(userName).append(".\n\n")
         append("Memory the user wrote (already kept; do not repeat it and do not change it):\n")
-        append(userMemory.ifBlank { "(empty)" }).append("\n\n")
-        append("Current facts:\n").append(facts.ifBlank { "(empty)" }).append("\n\n")
+        append(memory.ifBlank { "(empty)" }).append("\n\n")
+        append("Current facts:\n").append(shownFacts.ifBlank { "(empty)" }).append("\n\n")
         append("Recent story:\n```\n").append(transcript).append("\n```\n\n")
         append("Rewrite the facts so they hold what the story needs later. Use exactly these sections, ")
         append("and omit a section if it has nothing:\n")
@@ -124,9 +126,11 @@ object RpAutoMemory {
     /**
      * The model's reply as a memory note, or null when it isn't usable.
      * [userMemory] is the note the user wrote; lines copied from it are dropped, because that
-     * note already rides in every prompt and must not be saved again as facts.
+     * note already rides in every prompt and must not be saved again as facts. [charName] and
+     * [userName] expand {{char}} and {{user}} first, so a copied line still matches after the
+     * names replace the placeholders.
      */
-    fun clean(reply: String?, userMemory: String = ""): String? {
+    fun clean(reply: String?, userMemory: String = "", charName: String = "", userName: String = ""): String? {
         if (reply.isNullOrBlank()) return null
         var t = reply.trim()
         if (t.startsWith("Error:")) return null
@@ -138,7 +142,7 @@ object RpAutoMemory {
         t = t.trim()
         // The opening fence can carry a language tag ("```text"); it must go with it, not become a fact.
         t = t.replace(Regex("^```[A-Za-z0-9_-]*[ \\t]*\\n?"), "").removeSuffix("```").trim()
-        val protected = memoryLines(userMemory)
+        val protected = memoryLines(shownMemory(userMemory, charName, userName))
         val lines = t.lines().map { it.trim() }.filter { it.isNotEmpty() }
             .map { if (it.startsWith("* ") || it.startsWith("• ")) "- " + it.drop(2) else it }
             .filterNot { repeatsMemory(it, protected) }
@@ -150,13 +154,21 @@ object RpAutoMemory {
         return if (note[MEMORY_CHARS] == '\n') cut else cut.substringBeforeLast('\n', cut)
     }
 
+    /** The Memory note as the story sees it: card placeholders replaced with this chat's names. */
+    fun shownMemory(userMemory: String, charName: String, userName: String): String =
+        RpPromptEngine.expandMacros(userMemory, charName, userName)
+
     private fun memoryLines(userMemory: String): Set<String> =
         userMemory.lines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
 
+    /** A dash, a bullet, or a final period is still the same line the user already wrote. */
+    private fun bareFact(line: String): String =
+        line.trim().removePrefix("- ").removePrefix("* ").removePrefix("• ").trim().trimEnd('.', '。').trim()
+
     private fun repeatsMemory(line: String, protected: Set<String>): Boolean {
         if (protected.isEmpty()) return false
-        if (line in protected) return true
-        val bare = line.removePrefix("- ").trim()
-        return bare in protected || "- $bare" in protected
+        val bare = bareFact(line)
+        if (bare.isEmpty()) return false
+        return protected.any { bareFact(it).equals(bare, ignoreCase = true) }
     }
 }

@@ -10,6 +10,14 @@ object RpRewrite {
     fun streamsAsNewSwipe(position: Int, lastAssistantIndex: Int, lastUserIndex: Int): Boolean =
         lastUserIndex >= 0 && position == lastAssistantIndex && position > lastUserIndex
 
+    /**
+     * What a rewrite still has to match lore against. The reply being changed comes last so a
+     * short one is kept whole; the turn before it is there when that beat has already scrolled
+     * out of the recent scene.
+     */
+    fun loreFocus(reply: String, preceding: String = ""): List<String> =
+        listOf(preceding, reply).map { it.trim() }.filter { it.isNotEmpty() }
+
     /** First line of the reply, markdown marks stripped, so the dialog shows which bubble the note is for. */
     fun snippet(reply: String, limit: Int = 90): String {
         val line = reply.lineSequence()

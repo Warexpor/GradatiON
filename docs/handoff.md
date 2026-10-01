@@ -1,3 +1,11 @@
+# Handoff (2026-10-01, RP lore budget, rewrite focus, fact copies)
+
+On `cursor/rp-lore-rewrite-memory-b423`, targeting `gradation/app-pass`.
+- A long always-on lore block is cut so the entry that matched still fits, and a short always-on block stays beside a long match (`RpLore.fitPicked`). Memory and this chat's facts share the pin, so a long Memory note cannot hide a fact. The card's personality, greeting and description are in that pin too, after the name and scenario.
+- Rewriting a reply scans that reply (and, for an in-place rewrite, the turn before it) even when the latest reply was removed to stream a new swipe (`RpRewrite.loreFocus`).
+- Fact notes expand `{{char}}` and `{{user}}` before dropping a copied Memory line, and a dash or a final period does not make the copy look new. `_(reminder:)_` matches in any case. Keys may be separated with `|` or a fullwidth comma, and quotes around a key are ignored.
+- Phone: on a long chat, mention a lore key only in Facts (not the recent scene) and confirm the entry arrives; rewrite the greeting after the chat is long and confirm lore from that greeting still applies.
+
 # Handoff (2026-10-01, code tool detail and changes)
 
 On `cursor/code-tool-detail-search-7caa`, targeting `gradation/app-pass`. Code mode only:
