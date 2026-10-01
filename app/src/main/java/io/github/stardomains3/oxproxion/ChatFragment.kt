@@ -1450,40 +1450,49 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val barTop = topBar.paddingTop
         val dockBottom = dock.paddingBottom
         frame.clipToPadding = false
-        // The keyboard's rise is animated, not laid out: while it moves the layout keeps the
-        // bars-only inset and the composer (and the transcript, when it is at the bottom) are
-        // translated by the keyboard's live height, so nothing relayouts per frame. When it
-        // settles the real inset is applied in one go, landing exactly where the translation was.
+        // The keyboard is laid out frame by frame from its own animation, never translated: the
+        // composer, the transcript's bottom padding and (when the reader is at the newest message)
+        // its scroll all move in one layout pass. A translate-then-hand-off scheme always left a
+        // frame where one of them was a step behind, which flashed at the end of every slide.
         var imeAnimating = false
-        var listFollows = false
-        ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val bottom = if (imeAnimating) bars.bottom else maxOf(bars.bottom, ime.bottom)
-            v.setPadding(bars.left, 0, bars.right, 0)
-            topBar.setPadding(topBar.paddingLeft, barTop + bars.top, topBar.paddingRight, topBar.paddingBottom)
-            // Everything in the chat frame keeps its old place; only the backdrop bleeds out.
-            frame.setPadding(0, bars.top, 0, bottom)
+        var barsTop = 0
+        var barsBottom = 0
+        fun applyKb(kb: Int) {
+            val bottom = barsBottom + kb
+            if (frame.paddingTop != barsTop || frame.paddingBottom != bottom) frame.setPadding(0, barsTop, 0, bottom)
+            // Everything in the chat frame keeps its place; only the backdrop bleeds out.
             (backdrop.layoutParams as ViewGroup.MarginLayoutParams).let { lp ->
-                if (lp.topMargin != -bars.top || lp.bottomMargin != -bottom) {
-                    lp.topMargin = -bars.top
+                if (lp.topMargin != -barsTop || lp.bottomMargin != -bottom) {
+                    lp.topMargin = -barsTop
                     lp.bottomMargin = -bottom
                     backdrop.layoutParams = lp
                 }
             }
-            dock.setPadding(dock.paddingLeft, dock.paddingTop, dock.paddingRight, dockBottom + bottom)
-            code.setPadding(0, 0, 0, bottom)
-            WindowInsetsCompat.CONSUMED
+            if (dock.paddingBottom != dockBottom + bottom) {
+                dock.setPadding(dock.paddingLeft, dock.paddingTop, dock.paddingRight, dockBottom + bottom)
+            }
+            if (code.paddingBottom != bottom) code.setPadding(0, 0, 0, bottom)
+            if (kb != imePx) {
+                val delta = kb - imePx
+                imePx = kb
+                layTranscriptForKeyboard(delta)
+            }
         }
-        fun lift(insets: WindowInsetsCompat?): Float {
-            insets ?: return 0f
-            val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            return -maxOf(0, ime.bottom - sys.bottom).toFloat()
-        }
-        fun move(offset: Float) {
-            dock.translationY = offset
-            list.translationY = if (listFollows) offset else 0f
+            barsTop = bars.top
+            barsBottom = bars.bottom
+            v.setPadding(bars.left, 0, bars.right, 0)
+            topBar.setPadding(topBar.paddingLeft, barTop + bars.top, topBar.paddingRight, topBar.paddingBottom)
+            // Mid-animation these insets are already the end state: the callback owns the keyboard.
+            if (imeAnimating) {
+                applyKb(imePx)
+            } else {
+                imeFollow = !list.canScrollVertically(1)
+                applyKb(maxOf(0, ime.bottom - bars.bottom))
+            }
+            WindowInsetsCompat.CONSUMED
         }
         // The fade under the composer follows where the composer is drawn this frame, not where
         // a posted layout last put it: scaled from its bottom edge, so it never lags a frame
@@ -1516,68 +1525,65 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             override fun onPrepare(animation: androidx.core.view.WindowInsetsAnimationCompat) {
                 if (animation.typeMask and imeType == 0) return
                 imeAnimating = true
-                listFollows = !list.canScrollVertically(1)
-                // Hiding lays out at the end state at once: start the translation where the keyboard is.
-                move(lift(ViewCompat.getRootWindowInsets(content)))
+                imeFollow = !list.canScrollVertically(1)
             }
 
             override fun onProgress(
                 insets: WindowInsetsCompat,
                 runningAnimations: MutableList<androidx.core.view.WindowInsetsAnimationCompat>
             ): WindowInsetsCompat {
-                if (!imeAnimating) return insets
-                move(lift(insets))
-                if (code.isVisible) {
-                    val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-                    code.setPadding(0, 0, 0, maxOf(sys.bottom, insets.getInsets(imeType).bottom))
-                }
+                if (imeAnimating) applyKb(maxOf(0, insets.getInsets(imeType).bottom - barsBottom))
                 return insets
             }
 
             override fun onEnd(animation: androidx.core.view.WindowInsetsAnimationCompat) {
                 if (animation.typeMask and imeType == 0 || !imeAnimating) return
                 imeAnimating = false
-                // Hand the pose from translation to layout on one frame. Dropping the translation
-                // here, before the new inset is laid out (and before the transcript's padding and
-                // scroll, which are posted, catch up), showed one frame of the old layout: the
-                // composer and the text flashed through each other.
                 val ri = ViewCompat.getRootWindowInsets(content)
-                val target = dockBottom + maxOf(
-                    ri?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())?.bottom ?: 0,
-                    ri?.getInsets(imeType)?.bottom ?: 0
-                )
-                val pending = dock.paddingBottom != target
-                val listPad = list.paddingBottom
-                ViewCompat.requestApplyInsets(content)
-                if (!pending) {
-                    listFollows = false
-                    move(0f)
-                    return
-                }
-                var frames = 0
-                content.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
-                    override fun onPreDraw(): Boolean {
-                        // A new keyboard animation owns the pose now.
-                        if (imeAnimating) {
-                            content.viewTreeObserver.removeOnPreDrawListener(this)
-                            return true
-                        }
-                        frames++
-                        val dockLanded = dock.paddingBottom == target && !dock.isLayoutRequested
-                        if (dockLanded) dock.translationY = 0f
-                        val listLanded = !listFollows ||
-                            (list.paddingBottom != listPad && !list.isLayoutRequested && !list.canScrollVertically(1))
-                        if ((dockLanded && listLanded) || frames > 8) {
-                            listFollows = false
-                            move(0f)
-                            content.viewTreeObserver.removeOnPreDrawListener(this)
-                        }
-                        return true
-                    }
-                })
+                if (ri != null) applyKb(maxOf(0, ri.getInsets(imeType).bottom - barsBottom))
+                else ViewCompat.requestApplyInsets(content)
             }
         })
         ViewCompat.requestApplyInsets(content)
+    }
+
+    /** Keyboard height above the nav bar that is laid out right now. */
+    private var imePx = 0
+    /** The transcript's bottom padding without the keyboard: the composer and its margin. */
+    private var listChromePad = -1
+    /** The reader was at the newest message when the keyboard started moving: keep it in view. */
+    private var imeFollow = false
+
+    /**
+     * The keyboard moved by [delta]: grow (or shrink) the transcript's bottom padding by it and,
+     * when following, move the last message by the same amount, all in the coming layout pass.
+     */
+    private fun layTranscriptForKeyboard(delta: Int) {
+        val list = chatRecyclerView
+        if (listChromePad < 0) return
+        val pad = listChromePad + imePx
+        if (list.paddingBottom != pad) list.setPadding(list.paddingLeft, list.paddingTop, list.paddingRight, pad)
+        placeBottomFloaters()
+        if (!imeFollow) return
+        val lm = list.layoutManager as? LinearLayoutManager ?: return
+        val last = (list.adapter?.itemCount ?: 0) - 1
+        val lastView = lm.findViewByPosition(last) ?: return
+        val lp = lastView.layoutParams as ViewGroup.MarginLayoutParams
+        lm.scrollToPositionWithOffset(last, lm.getDecoratedTop(lastView) - lp.topMargin - list.paddingTop - delta)
+    }
+
+    /** The scroll buttons and font controls ride above the composer and the keyboard. */
+    private fun placeBottomFloaters() {
+        val root = view ?: return
+        if (chromeBottom < 0) return
+        listOfNotNull<View>(extBG, fontSizeControlsContainer, root.findViewById(R.id.jumpToBottomButton)).forEach { v ->
+            val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
+            val base = chromeBaseMargins.getOrPut(v) { lp.bottomMargin }
+            if (lp.bottomMargin != base + chromeBottom + imePx) {
+                lp.bottomMargin = base + chromeBottom + imePx
+                v.layoutParams = lp
+            }
+        }
     }
 
     private val emptyLoc = IntArray(2)
@@ -1682,7 +1688,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             contentTop = minOf(contentTop, c.top - lp.topMargin)
         }
         val top = if (topGlass.isVisible) topGlass.height else 0
-        val bottom = (dock.height - contentTop).coerceAtLeast(0)
+        // The keyboard part is laid out frame by frame (layTranscriptForKeyboard), not from here.
+        val bottom = (dock.height - contentTop - imePx).coerceAtLeast(0)
         if (top == chromeTop && bottom == chromeBottom) return
         val grew = if (chromeBottom >= 0) bottom - chromeBottom else 0
         chromeTop = top
@@ -1692,21 +1699,15 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (view == null) return@post
             val d = resources.displayMetrics.density
             val atBottom = !chatRecyclerView.canScrollVertically(1)
+            listChromePad = bottom + (14 * d).toInt()
             chatRecyclerView.setPadding(
                 chatRecyclerView.paddingLeft,
                 top + (8 * d).toInt(),
                 chatRecyclerView.paddingRight,
-                bottom + (14 * d).toInt()
+                listChromePad + imePx
             )
             if (atBottom && grew > 0) chatRecyclerView.post { chatRecyclerView.scrollBy(0, grew) }
-            listOfNotNull<View>(extBG, fontSizeControlsContainer, root.findViewById(R.id.jumpToBottomButton)).forEach { v ->
-                val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
-                val base = chromeBaseMargins.getOrPut(v) { lp.bottomMargin }
-                if (lp.bottomMargin != base + bottom) {
-                    lp.bottomMargin = base + bottom
-                    v.layoutParams = lp
-                }
-            }
+            placeBottomFloaters()
             (progressBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
                 if (lp.topMargin != top) {
                     lp.topMargin = top
