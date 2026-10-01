@@ -767,8 +767,8 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- A staged photo (or audio): a small rounded thumbnail at the top of the composer,
-                     with its remove badge on the corner. -->
+                <!-- A staged photo (or audio): a thumbnail at the top of the composer that keeps
+                     the picture's shape. The remove control is a 44dp target; the disc sits on the corner. -->
                 <FrameLayout
                     android:id="@+id/attachmentPreviewContainer"
                     android:layout_width="wrap_content"
@@ -778,8 +778,6 @@
                     android:layout_marginBottom="4dp"
                     android:clipChildren="false"
                     android:clipToPadding="false"
-                    android:paddingTop="6dp"
-                    android:paddingEnd="6dp"
                     android:visibility="gone"
                     tools:visibility="visible">
 
@@ -795,14 +793,15 @@
 
                     <ImageButton
                         android:id="@+id/removeAttachmentButton"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
                         android:layout_gravity="top|end"
-                        android:layout_marginTop="-6dp"
-                        android:layout_marginEnd="-6dp"
-                        android:background="@drawable/bg_circle_soft"
-                        android:contentDescription="@string/cd_close"
-                        android:padding="6dp"
+                        android:background="@drawable/bg_attachment_remove"
+                        android:contentDescription="@string/cd_remove_attachment"
+                        android:paddingStart="23dp"
+                        android:paddingTop="5dp"
+                        android:paddingEnd="5dp"
+                        android:paddingBottom="23dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_close_x"
                         app:tint="@color/xai_ink" />
