@@ -17,6 +17,8 @@ import kotlinx.serialization.json.put
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.util.UUID
 
 /**
@@ -122,12 +124,62 @@ object ScenePhoto {
      * also carries the JPEG, which is what shows if this file is gone.
      */
     fun store(context: Context, jpeg: ByteArray): Uri? = try {
+        if (!completeJpeg(jpeg)) return null
         val dir = File(context.filesDir, DIR).apply { mkdirs() }
         val file = File(dir, "${UUID.randomUUID()}.jpg")
-        file.writeBytes(jpeg)
+        // A kill mid-write used to leave a short file that the next open trusted, so the
+        // JPEG stored in the message was never put back.
+        writeAtomically(file, jpeg)
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     } catch (_: Exception) {
         null
+    }
+
+    /** True when [bytes] is a JPEG that starts with SOI and ends with EOI. */
+    fun completeJpeg(bytes: ByteArray): Boolean {
+        if (bytes.size < 4) return false
+        if (bytes[0] != 0xFF.toByte() || bytes[1] != 0xD8.toByte()) return false
+        return bytes[bytes.size - 2] == 0xFF.toByte() && bytes[bytes.size - 1] == 0xD9.toByte()
+    }
+
+    /** True when [file] is a finished JPEG. A short file from a killed write is not. */
+    fun completeJpeg(file: File): Boolean {
+        if (!file.isFile || file.length() < 4L) return false
+        return try {
+            RandomAccessFile(file, "r").use { raf ->
+                val start = ByteArray(2)
+                raf.readFully(start)
+                if (start[0] != 0xFF.toByte() || start[1] != 0xD8.toByte()) return false
+                raf.seek(raf.length() - 2)
+                val end = ByteArray(2)
+                raf.readFully(end)
+                end[0] == 0xFF.toByte() && end[1] == 0xD9.toByte()
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Writes [bytes] to a side file, syncs it, then renames it over [destination].
+     * A crash leaves the side file, not a truncated picture at the real name.
+     */
+    internal fun writeAtomically(destination: File, bytes: ByteArray) {
+        val dir = destination.parentFile ?: throw java.io.IOException("no directory")
+        val tmp = File(dir, "${destination.name}.partial")
+        try {
+            FileOutputStream(tmp).use { out ->
+                out.write(bytes)
+                out.fd.sync()
+            }
+            if (!tmp.renameTo(destination)) {
+                tmp.copyTo(destination, overwrite = true)
+                tmp.delete()
+            }
+        } catch (e: Exception) {
+            tmp.delete()
+            throw e
+        }
     }
 
     /** A picture the model sent, kept as a file we own and as the JPEG already in the message. */
@@ -159,7 +211,7 @@ object ScenePhoto {
     /** True when [uriString] still opens. A missing cache file is not a picture we can put back. */
     fun canRead(context: Context, uriString: String): Boolean {
         val owned = ownedFile(context, uriString)
-        if (owned != null) return owned.isFile && owned.length() > 0L
+        if (owned != null) return completeJpeg(owned)
         return readLimited(context, uriString) != null
     }
 
@@ -171,10 +223,10 @@ object ScenePhoto {
     fun settle(context: Context, uriString: String?, embedded: ByteArray?): String? {
         val current = uriString?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("data:", ignoreCase = true) }
         val owned = current?.let { ownedFile(context, it) }
-        if (owned != null && owned.isFile && owned.length() > 0L && under(context.filesDir, owned)) {
+        if (owned != null && completeJpeg(owned) && under(context.filesDir, owned)) {
             return current
         }
-        val fromFile = owned?.takeIf { it.isFile && it.length() > 0L }?.readBytes()
+        val fromFile = owned?.takeIf { completeJpeg(it) }?.readBytes()
         val payload = fromFile ?: embedded?.let { encode(it) }
         if (payload != null) {
             store(context, payload)?.toString()?.let { return it }

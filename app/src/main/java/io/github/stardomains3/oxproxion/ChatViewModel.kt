@@ -69,6 +69,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.SerialName
@@ -358,8 +360,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var rpSwipeRestoreToken = 0
     /** Cancels overlapping load / mode switch / character start / cold-start restore. */
     private var sessionTransitionJob: Job? = null
-    /** Bumped when the open session/mode identity changes; aborts in-flight autosaves. */
+    /**
+     * Bumped when the open session/mode identity changes. An in-flight save still writes
+     * the snapshot it took; this only stops that save from attaching to the chat that replaced it.
+     */
     private var sessionEpoch = 0L
+    /** Older snapshots of one chat must not overwrite a newer one. */
+    private val chatSaveSerial = ChatSaveSerial()
+    private val chatSaveMutex = Mutex()
+    private val pendingSaves = ArrayList<Job>()
     /** RP prompt-build before network starts; Stop must cancel this and clear early awaiting. */
     private var rpPrepJob: Job? = null
     /**
@@ -756,12 +765,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun beginSessionTransition(block: suspend () -> Unit): Job {
         // Restore mid-regen first so a truncated hole isn't autosaved into the old session.
         cancelCurrentRequest(restoreSwipeAlt = true)
+        // The snapshot is taken here. The epoch bump must not drop it: the load waits until it lands.
+        autoSaveChat(allowNetworkTitle = false)
         sessionEpoch++
         val epoch = sessionEpoch
         rpMemoryJob?.cancel() // Its note was written for the chat being left.
         sessionTransitionJob?.cancel()
         val job = viewModelScope.launch {
             try {
+                // The leaving chat's snapshot is already queued. Land it before this block
+                // changes mode, character, or the open transcript.
+                awaitPendingSaves()
                 block()
             } finally {
                 // The cold-start launch skips ready when a transition cancels it.
@@ -800,99 +814,54 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return session.title
     }
 
+    /**
+     * Transcript and identity captured when a save is scheduled. Later code must not re-read
+     * the open chat: by then the user may be looking at a different one.
+     */
+    private data class ChatPersistSnapshot(
+        val epoch: Long,
+        val sessionId: Long?,
+        val mode: String,
+        val characterId: Long?,
+        val isLlm: Boolean,
+        val model: String,
+        val messages: List<FlexibleMessage>,
+        val draftFacts: String?,
+    )
+
+    private fun captureSnapshot(): ChatPersistSnapshot {
+        val id = currentSessionId
+        return ChatPersistSnapshot(
+            epoch = sessionEpoch,
+            sessionId = id,
+            mode = sessionModeValue(),
+            characterId = sessionCharacterId(),
+            isLlm = sessionIsLlm(),
+            model = _activeChatModel.value ?: "",
+            messages = (_chatMessages.value ?: emptyList()).map { it.copy() },
+            draftFacts = if (id == null) draftRpFacts else null,
+        )
+    }
+
     fun saveCurrentChat(title: String, saveAsNew: Boolean = false) {
-        // Snapshot identity at schedule time so a later Ask↔RP / load cannot rewrite the wrong row.
-        val epoch = sessionEpoch
-        val openSessionId = currentSessionId
-        val modeAtSave = sessionModeValue()
-        val characterIdAtSave = sessionCharacterId()
-        val isLlmAtSave = sessionIsLlm()
-        val modelAtSave = _activeChatModel.value ?: ""
-        val messagesSnapshot = (_chatMessages.value ?: emptyList()).map { it.copy() }
+        launchChatSave(captureSnapshot(), saveAsNew, title)
+    }
 
-        viewModelScope.launch {
+    /**
+     * Writes [snap] even if the open chat has moved on. A newer snapshot of the same chat
+     * supersedes this one. The row is attached to the screen only when this is still that chat.
+     * Queued on the main looper, not started inline, so a leave that bumps the epoch in this
+     * same call is visible before a title request starts.
+     */
+    private fun launchChatSave(snap: ChatPersistSnapshot, saveAsNew: Boolean, preparedTitle: String?) {
+        val ticket = chatSaveSerial.claim(snap.sessionId, snap.epoch, saveAsNew)
+        val job = viewModelScope.launch(Dispatchers.Main) {
             try {
-            val rowExists = if (!saveAsNew && openSessionId != null) {
-                repository.getSessionById(openSessionId) != null
-            } else {
-                false
-            }
-            when (
-                ChatSaveGate.decide(
-                    epochAtSchedule = epoch,
-                    currentEpoch = sessionEpoch,
-                    openSessionId = openSessionId,
-                    liveSessionId = currentSessionId,
-                    rowExists = rowExists,
-                    saveAsNew = saveAsNew
-                )
-            ) {
-                ChatSaveGate.Outcome.Abort -> return@launch
-                ChatSaveGate.Outcome.ProceedExisting,
-                ChatSaveGate.Outcome.ProceedAllocateNew -> Unit
-            }
-
-            // Serializing the whole transcript is the heavy part, and autosave fires the moment a
-            // reply lands, so it runs off the main thread instead of stalling the last frames.
-            // The JPEG stays in the row: a reopened chat has no file URI until this puts it back.
-            val messagesToSave = withContext(Dispatchers.Default) {
-                messagesSnapshot.map { message ->
-                    message.copy(content = MessageContent.forStorage(message.content, message.imageUri))
+                val title = preparedTitle ?: titleForSnapshot(snap, allowNetworkTitle = true)
+                if (title.isBlank()) return@launch
+                chatSaveMutex.withLock {
+                    writeSnapshot(ticket, snap, saveAsNew, title)
                 }
-            }
-
-            val existingId = if (!saveAsNew && rowExists && openSessionId != null) openSessionId else null
-            if (epoch != sessionEpoch) return@launch
-
-            // A new chat gets its id from the database (id 0 here); the DAO fills in the messages' ids.
-            val session = ChatSession(
-                id = existingId ?: 0L,
-                title = title,
-                modelUsed = modelAtSave,
-                mode = modeAtSave,
-                characterId = characterIdAtSave,
-                isLlm = isLlmAtSave
-            )
-            val chatMessages = withContext(Dispatchers.Default) {
-                messagesToSave.map {
-                    ChatMessage(
-                        sessionId = existingId ?: 0L,
-                        role = it.role,
-                        content = json.encodeToString(JsonElement.serializer(), it.content)
-                    )
-                }
-            }
-            if (epoch != sessionEpoch) return@launch
-            // Names before the write, so a picture this save dropped can be removed afterwards.
-            val previousPhotos = if (existingId != null) repository.scenePhotoNames(existingId) else emptyList()
-            // Null: the open chat was deleted while this save waited. Nothing was written.
-            val sessionId = ChatSessionSaver.save(repository, existingId, session, chatMessages)
-                ?: return@launch
-            releaseDroppedScenePhotos(previousPhotos, messagesSnapshot)
-            if (
-                ChatSaveGate.decide(
-                    epochAtSchedule = epoch,
-                    currentEpoch = sessionEpoch,
-                    openSessionId = openSessionId,
-                    liveSessionId = currentSessionId,
-                    rowExists = true,
-                    saveAsNew = saveAsNew
-                ) == ChatSaveGate.Outcome.Abort
-            ) {
-                return@launch
-            }
-            assignOpenSession(sessionId, promoted = openSessionId == null)
-            sharedPreferencesHelper.saveRpDraftSessionId(
-                ChatMode.fromStorage(modeAtSave),
-                sessionId
-            )
-            // First autosave often mints the id after swipe alts were seeded in-memory only.
-            persistRpSwipeState()
-            draftRpFacts?.let {
-                sharedPreferencesHelper.saveRpFacts(sessionId, it)
-                draftRpFacts = null
-            }
-            persistForkToPrefs()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -900,87 +869,126 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _toastUiEvent.postValue(Event(str(R.string.notice_chat_save_failed)))
             }
         }
+        synchronized(pendingSaves) { pendingSaves.add(job) }
+        job.invokeOnCompletion { synchronized(pendingSaves) { pendingSaves.remove(job) } }
     }
 
-    fun autoSaveChat() {
-        val epoch = sessionEpoch
-        val messages = _chatMessages.value ?: emptyList()
-        val modeAtSave = _chatMode.value ?: ChatMode.ASK
-        val isLlmAtSave = modeAtSave == ChatMode.RP && sharedPreferencesHelper.isRpLlmMode()
-        val sessionIdAtSave = currentSessionId
-        val hasAssistant = messages.any { it.role == "assistant" }
+    /** Opening a chat waits until scheduled saves have landed, so it cannot read a stale row. */
+    private suspend fun awaitPendingSaves() {
+        while (true) {
+            val job = synchronized(pendingSaves) { pendingSaves.firstOrNull { it.isActive } } ?: return
+            job.join()
+        }
+    }
 
+    private suspend fun writeSnapshot(
+        ticket: ChatSaveSerial.Ticket,
+        snap: ChatPersistSnapshot,
+        saveAsNew: Boolean,
+        title: String
+    ) {
+        if (!chatSaveSerial.isCurrent(ticket)) return
+        val existing = if (saveAsNew) null else snap.sessionId ?: chatSaveSerial.mintedId(ticket)
+        val rowExists = existing != null && repository.getSessionById(existing) != null
+        val outcome = ChatSaveGate.persist(
+            ticketCurrent = true,
+            saveAsNew = saveAsNew,
+            existingId = existing,
+            rowExists = rowExists
+        )
+        val existingId = when (outcome) {
+            ChatSaveGate.Outcome.Abort -> return
+            ChatSaveGate.Outcome.ProceedExisting -> existing
+            ChatSaveGate.Outcome.ProceedAllocateNew -> null
+        }
+        // Encoding a long transcript is the heavy part, and autosave fires as a reply lands.
+        // The JPEG stays in the row: a reopened chat has no file URI until this puts it back.
+        val messagesToSave = withContext(Dispatchers.Default) {
+            snap.messages.map { message ->
+                message.copy(content = MessageContent.forStorage(message.content, message.imageUri))
+            }
+        }
+        if (!chatSaveSerial.isCurrent(ticket)) return
+        val session = ChatSession(
+            id = existingId ?: 0L,
+            title = title,
+            modelUsed = snap.model,
+            mode = snap.mode,
+            characterId = snap.characterId,
+            isLlm = snap.isLlm
+        )
+        val chatMessages = withContext(Dispatchers.Default) {
+            messagesToSave.map {
+                ChatMessage(
+                    sessionId = existingId ?: 0L,
+                    role = it.role,
+                    content = json.encodeToString(JsonElement.serializer(), it.content)
+                )
+            }
+        }
+        if (!chatSaveSerial.isCurrent(ticket)) return
+        // Names before the write, so a picture this save dropped can be removed afterwards.
+        val previousPhotos = if (existingId != null) repository.scenePhotoNames(existingId) else emptyList()
+        // Null: the open chat was deleted while this save waited. Nothing was written.
+        val sessionId = ChatSessionSaver.save(repository, existingId, session, chatMessages)
+            ?: return
+        if (existingId == null) chatSaveSerial.noteMinted(ticket, sessionId)
+        if (!chatSaveSerial.isCurrent(ticket)) return
+        releaseDroppedScenePhotos(previousPhotos, messagesToSave)
+        snap.draftFacts?.let { facts ->
+            sharedPreferencesHelper.saveRpFacts(sessionId, facts)
+            if (sessionEpoch == snap.epoch) draftRpFacts = null
+        }
+        if (
+            ChatSaveGate.decide(
+                epochAtSchedule = snap.epoch,
+                currentEpoch = sessionEpoch,
+                openSessionId = snap.sessionId,
+                liveSessionId = currentSessionId,
+                rowExists = true,
+                saveAsNew = saveAsNew
+            ) == ChatSaveGate.Outcome.Abort
+        ) {
+            return
+        }
+        assignOpenSession(sessionId, promoted = snap.sessionId == null)
+        sharedPreferencesHelper.saveRpDraftSessionId(
+            ChatMode.fromStorage(snap.mode),
+            sessionId
+        )
+        // First autosave often mints the id after swipe alts were seeded in-memory only.
+        persistRpSwipeState()
+        persistForkToPrefs()
+    }
+
+    fun autoSaveChat() = autoSaveChat(allowNetworkTitle = true)
+
+    /**
+     * @param allowNetworkTitle false when the user is leaving this chat. The snapshot still
+     * writes; a title request must not hold the next chat's load on the network.
+     */
+    private fun autoSaveChat(allowNetworkTitle: Boolean) {
+        val snap = captureSnapshot()
+        val hasAssistant = snap.messages.any { it.role == "assistant" }
         when (
             ChatSaveGate.autoSaveKind(
-                sessionId = sessionIdAtSave,
+                sessionId = snap.sessionId,
                 hasAssistant = hasAssistant,
-                messagesEmpty = messages.isEmpty()
+                messagesEmpty = snap.messages.isEmpty()
             )
         ) {
             ChatSaveGate.AutoSaveKind.Skip -> return
             ChatSaveGate.AutoSaveKind.ReuseExisting,
             ChatSaveGate.AutoSaveKind.FirstSaveNeedsAssistant -> Unit
         }
-
-        viewModelScope.launch {
+        val ticket = chatSaveSerial.claim(snap.sessionId, snap.epoch, saveAsNew = false)
+        val job = viewModelScope.launch(Dispatchers.Main) {
             try {
-            if (epoch != sessionEpoch) return@launch
-            if (sessionIdAtSave != null && currentSessionId != null && currentSessionId != sessionIdAtSave) {
-                return@launch
-            }
-
-            // Already saved — reuse existing title (including empty / user-only after truncate).
-            // RP: one-shot upgrade when still on bare character/LLM label after the first user turn.
-            if (sessionIdAtSave != null) {
-                val existing = repository.getSessionById(sessionIdAtSave)
-                val reusedTitle = existing?.title
-                if (existing != null && !reusedTitle.isNullOrBlank()) {
-                    if (epoch != sessionEpoch) return@launch
-                    val titleToSave = if (modeAtSave == ChatMode.RP) {
-                        maybeUpgradeRpSessionTitle(reusedTitle, messages, isLlmAtSave)
-                    } else {
-                        reusedTitle
-                    }
-                    saveCurrentChat(titleToSave)
-                    return@launch
+                val title = titleForSnapshot(snap, allowNetworkTitle)
+                if (title.isBlank()) return@launch
+                chatSaveMutex.withLock {
+                    writeSnapshot(ticket, snap, saveAsNew = false, title)
                 }
-                // Row gone — don't mint.
-                if (existing == null) return@launch
-            }
-
-            // First save — still requires an assistant message (greeting or reply).
-            if (messages.isEmpty() || !hasAssistant) return@launch
-
-            val finalTitle = if (modeAtSave == ChatMode.RP) {
-                // Skip title LLM — character name (+ first user snippet) or LLM label/snippet.
-                buildRpAutosaveTitle(messages, isLlmAtSave)
-            } else {
-                // A failed title request returns null; a cancelled one must keep cancelling.
-                val title = try {
-                    getSuggestedChatTitle()
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    null
-                }
-                if (epoch != sessionEpoch) return@launch
-                if (title.isNullOrBlank()) {
-                    val firstUserMsg = messages.firstOrNull { it.role == "user" }
-                    if (firstUserMsg != null) {
-                        val raw = getMessageText(firstUserMsg.content).trim()
-                        if (raw.length > 60) raw.take(57) + "..." else raw
-                    } else {
-                        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
-                            .format(java.util.Date())
-                    }
-                } else {
-                    title
-                }
-            }
-            if (epoch != sessionEpoch) return@launch
-            if (finalTitle.isNotBlank() && epoch == sessionEpoch) {
-                saveCurrentChat(finalTitle)
-            }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -988,6 +996,48 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _toastUiEvent.postValue(Event(str(R.string.notice_chat_save_failed)))
             }
         }
+        synchronized(pendingSaves) { pendingSaves.add(job) }
+        job.invokeOnCompletion { synchronized(pendingSaves) { pendingSaves.remove(job) } }
+    }
+
+    private suspend fun titleForSnapshot(snap: ChatPersistSnapshot, allowNetworkTitle: Boolean): String {
+        val sessionId = snap.sessionId
+        if (sessionId != null) {
+            val existing = repository.getSessionById(sessionId) ?: return ""
+            val reused = existing.title
+            if (reused.isNotBlank()) {
+                return if (snap.mode == ChatMode.RP.storageValue) {
+                    maybeUpgradeRpSessionTitle(reused, snap.messages, snap.isLlm)
+                } else {
+                    reused
+                }
+            }
+        }
+        if (snap.messages.isEmpty() || snap.messages.none { it.role == "assistant" }) return ""
+        if (snap.mode == ChatMode.RP.storageValue) {
+            return buildRpAutosaveTitle(snap.messages, snap.isLlm)
+        }
+        // The chat was left, or this flush is only so the next screen can load. A local title
+        // is enough; the name can be edited later.
+        if (!allowNetworkTitle || sessionEpoch != snap.epoch) return localChatTitle(snap.messages)
+        val title = try {
+            getSuggestedChatTitle(snap.messages)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        return if (title.isNullOrBlank()) localChatTitle(snap.messages) else title
+    }
+
+    private fun localChatTitle(messages: List<FlexibleMessage>): String {
+        val firstUserMsg = messages.firstOrNull { it.role == "user" }
+        if (firstUserMsg != null) {
+            val raw = getMessageText(firstUserMsg.content).trim()
+            if (raw.isNotEmpty()) return if (raw.length > 60) raw.take(57) + "..." else raw
+        }
+        return java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+            .format(java.util.Date())
     }
 
     /** RP session title from character/LLM label plus optional first user snippet. */
@@ -1038,6 +1088,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun loadChatInternal(sessionId: Long) {
+        awaitPendingSaves()
         if (networkJob?.isActive == true) {
             _isChatLoading.value = false
             return
@@ -2168,6 +2219,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startNewChat() {
         // Abort in-flight load/restore so it cannot resurrect a cleared transcript.
+        // Drop a partial reply first, then snapshot what remains, then leave.
+        cancelCurrentRequest(restoreSwipeAlt = false)
+        autoSaveChat(allowNetworkTitle = false)
         sessionTransitionJob?.cancel()
         sessionTransitionJob = null
         sessionEpoch++
@@ -2407,13 +2461,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun supportsWebp(modelName: String): Boolean {
         return !modelName.lowercase().contains("grok")
     }
-    suspend fun getSuggestedChatTitle(): String? {
+    suspend fun getSuggestedChatTitle(source: List<FlexibleMessage>? = null): String? {
+        val messages = source ?: _chatMessages.value.orEmpty()
         if (DemoModel.isDemo(_activeChatModel.value)) {
-            val first = _chatMessages.value.orEmpty().firstOrNull { it.role == "user" }
+            val first = messages.firstOrNull { it.role == "user" }
             return DemoModel.titleFor(first?.let { getMessageText(it.content) }.orEmpty())
         }
         // A title needs the gist, not the whole chat: the opening turns, capped.
-        val chatContent = _chatMessages.value.orEmpty()
+        val chatContent = messages
             .filter { (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it) }
             .take(TITLE_SOURCE_MESSAGES)
             .joinToString("\n\n") { message ->

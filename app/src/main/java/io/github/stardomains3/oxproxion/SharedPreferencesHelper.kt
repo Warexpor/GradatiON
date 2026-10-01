@@ -658,7 +658,8 @@ class SharedPreferencesHelper(context: Context) {
 
     /** Stashed alternate message tree for one-chat forks (JSON list of FlexibleMessage). */
     fun saveChatFork(sessionId: Long, forkIndex: Int, anchorIndex: Int, messagesJson: String) {
-        mainPrefs.edit {
+        // commit: the other branch of this chat is gone if the process dies before apply() flushes.
+        mainPrefs.edit(commit = true) {
             putInt("$KEY_CHAT_FORK_INDEX_PREFIX$sessionId", forkIndex)
             putInt("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId", anchorIndex)
             putString("$KEY_CHAT_FORK_PREFIX$sessionId", messagesJson)
@@ -675,7 +676,7 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.getString("$KEY_CHAT_FORK_PREFIX$sessionId", null)
 
     fun clearChatFork(sessionId: Long) {
-        mainPrefs.edit {
+        mainPrefs.edit(commit = true) {
             remove("$KEY_CHAT_FORK_INDEX_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_PREFIX$sessionId")
@@ -1568,11 +1569,11 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.getString("$KEY_RP_SWIPE_PREFIX$sessionId", null)
 
     fun saveRpSwipeJson(sessionId: Long, jsonText: String) {
-        mainPrefs.edit { putString("$KEY_RP_SWIPE_PREFIX$sessionId", jsonText) }
+        mainPrefs.edit(commit = true) { putString("$KEY_RP_SWIPE_PREFIX$sessionId", jsonText) }
     }
 
     fun clearRpSwipeJson(sessionId: Long) {
-        mainPrefs.edit { remove("$KEY_RP_SWIPE_PREFIX$sessionId") }
+        mainPrefs.edit(commit = true) { remove("$KEY_RP_SWIPE_PREFIX$sessionId") }
     }
 
     /** Facts the model keeps for one chat. Separate from the Memory note the user wrote. */

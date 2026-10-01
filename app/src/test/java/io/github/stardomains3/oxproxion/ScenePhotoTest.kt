@@ -6,11 +6,13 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.util.Base64
 import androidx.test.core.app.ApplicationProvider
+import androidx.core.content.FileProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -21,6 +23,14 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
 class ScenePhotoTest {
+    @Before fun resetFileProviderCache() {
+        // FileProvider remembers the first test's files directory and then rejects the next one.
+        val cache = FileProvider::class.java.getDeclaredField("sCache")
+        cache.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        (cache.get(null) as MutableMap<Any, Any>).clear()
+    }
+
     @Test fun encodeShrinksAWidePicture() {
         val bmp = Bitmap.createBitmap(2000, 80, Bitmap.Config.ARGB_8888)
         bmp.eraseColor(Color.DKGRAY)
@@ -110,6 +120,36 @@ class ScenePhotoTest {
         assertFalse(file.exists())
         assertTrue(other.exists())
         assertTrue(sneaky.exists())
+    }
+
+    @Test fun aTruncatedPhotoIsRebuiltFromTheMessage() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val jpeg = tinyJpeg()
+        assertTrue(ScenePhoto.completeJpeg(jpeg))
+        val dir = File(context.filesDir, "scene_photos").apply { mkdirs() }
+        val torn = File(dir, "torn.jpg")
+        torn.writeBytes(jpeg.copyOf(jpeg.size / 2))
+        val uri = "content://${context.packageName}.fileprovider/owned/scene_photos/torn.jpg"
+        assertFalse(ScenePhoto.completeJpeg(torn))
+        assertFalse(ScenePhoto.canRead(context, uri))
+        val rebuilt = ScenePhoto.settle(context, uri, jpeg)
+        assertNotNull(rebuilt)
+        assertTrue(rebuilt != uri)
+        val restored = ScenePhoto.ownedFile(context, rebuilt!!)
+        assertNotNull(restored)
+        assertTrue(ScenePhoto.completeJpeg(restored!!))
+        assertFalse(File(dir, "torn.jpg.partial").exists())
+    }
+
+    @Test fun anAtomicWriteLeavesNoPartialFile() {
+        val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "atomic-photo")
+        dir.mkdirs()
+        val dest = File(dir, "done.jpg")
+        val jpeg = tinyJpeg()
+        ScenePhoto.writeAtomically(dest, jpeg)
+        assertTrue(ScenePhoto.completeJpeg(dest))
+        assertFalse(File(dir, "done.jpg.partial").exists())
+        assertTrue(jpeg.contentEquals(dest.readBytes()))
     }
 
     private fun tinyJpeg(): ByteArray {
