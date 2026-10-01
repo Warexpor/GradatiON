@@ -155,10 +155,10 @@ object HistoryList {
         val needle = query.trim()
         if (needle.isEmpty()) return ""
         val parsed = preview(role, window, youLabel, photoLabel)
-        if (parsed.contains(needle, ignoreCase = true)) return parsed
-        val readable = readableWindow(window)
         // A slice of a photo's data URL is one long token. It is not a line of the chat.
-        if (readable.length > 40 && !readable.contains(' ')) return ""
+        if (isChatLine(parsed) && parsed.contains(needle, ignoreCase = true)) return parsed
+        val readable = readableWindow(window)
+        if (!isChatLine(readable)) return ""
         val at = readable.indexOf(needle, ignoreCase = true)
         if (at < 0) return ""
         val body = clipAround(readable, at, needle.length)
@@ -178,6 +178,12 @@ object HistoryList {
             if (later >= 0) return later
         }
         return text.indexOf(needle, ignoreCase = true)
+    }
+
+    /** A sentence or a short token. A spaceless run is a piece of a data URL. */
+    private fun isChatLine(text: String): Boolean {
+        val body = text.substringAfter(": ", text).trim()
+        return body.isNotEmpty() && (body.length <= 40 || body.contains(' '))
     }
 
     private fun readableWindow(raw: String): String {

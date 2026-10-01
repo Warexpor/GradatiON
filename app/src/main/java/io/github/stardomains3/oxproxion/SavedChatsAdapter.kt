@@ -72,6 +72,7 @@ class SavedChatsAdapter(
         private val overflowButton: ImageButton = itemView.findViewById(R.id.iconEditt)
         private val ink = ContextCompat.getColor(itemView.context, R.color.xai_ink)
         private val mute = ContextCompat.getColor(itemView.context, R.color.xai_mute)
+        private val timeFace = timestampTextView.typeface ?: Typeface.DEFAULT
         private var currentSession: ChatSession? = null
 
         init {
@@ -104,11 +105,11 @@ class SavedChatsAdapter(
             if (item.open) {
                 timestampTextView.setText(R.string.rp_history_current)
                 timestampTextView.setTextColor(ink)
-                timestampTextView.textFontWeight = 600
+                timestampTextView.typeface = Typeface.create(timeFace, 600, false)
             } else {
                 timestampTextView.text = formatHistoryTimestamp(session.timestamp)
                 timestampTextView.setTextColor(mute)
-                timestampTextView.textFontWeight = 400
+                timestampTextView.typeface = Typeface.create(timeFace, 400, false)
             }
             if (item.preview.isBlank()) {
                 previewTextView.visibility = View.GONE
