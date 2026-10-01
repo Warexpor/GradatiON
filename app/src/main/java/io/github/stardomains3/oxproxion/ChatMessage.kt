@@ -22,3 +22,11 @@ data class ChatMessage(
     val role: String,
     val content: String
 )
+
+/** A message row without its text. [contentLength] is SQLite's character count. */
+data class ChatMessageHead(
+    val id: Long,
+    val sessionId: Long,
+    val role: String,
+    val contentLength: Long
+)

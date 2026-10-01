@@ -2,6 +2,7 @@ package io.github.stardomains3.oxproxion
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.viewModelScope
@@ -64,7 +65,14 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         out.append("{\"sessions\":[")
         sessions.forEachIndexed { index, session ->
             if (index > 0) out.append(',')
-            out.append(json.encodeToString(exportedSession(session)))
+            try {
+                out.append(json.encodeToString(exportedSession(session)))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SavedChats", "Could not export \"${session.title}\"", e)
+                throw e
+            }
         }
         out.append("]}")
     }

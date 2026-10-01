@@ -34,6 +34,24 @@ class ImportBoundsTest {
         assertEquals("{\"sessions\":[]}", ImportBounds.readUtf8(ByteArrayInputStream(bytes), maxBytes = 100))
     }
 
+    @Test
+    fun decodesNotepadUtf16() {
+        val body = "{\"sessions\":[]}"
+        val le = byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + body.toByteArray(Charsets.UTF_16LE)
+        val be = byteArrayOf(0xFE.toByte(), 0xFF.toByte()) + body.toByteArray(Charsets.UTF_16BE)
+
+        assertEquals(body, ImportBounds.readUtf8(ByteArrayInputStream(le), maxBytes = 200))
+        assertEquals(body, ImportBounds.readUtf8(ByteArrayInputStream(be), maxBytes = 200))
+    }
+
+    @Test
+    fun rejectsUtf32() {
+        val bytes = byteArrayOf(0xFF.toByte(), 0xFE.toByte(), 0, 0, 0x7B, 0, 0, 0)
+        assertThrows(java.io.IOException::class.java) {
+            ImportBounds.readUtf8(ByteArrayInputStream(bytes), maxBytes = 100)
+        }
+    }
+
     private class ChunkedStream(private val payload: ByteArray, private val chunk: Int) : InputStream() {
         var position = 0
             private set

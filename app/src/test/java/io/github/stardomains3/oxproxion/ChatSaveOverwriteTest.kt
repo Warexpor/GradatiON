@@ -256,4 +256,29 @@ class ChatSaveOverwriteTest {
         assertTrue(viewModel.importChatsFromJsonInternal(exported) is ChatImportResult.Success)
         assertEquals(listOf("Trip"), dao.getAllSessionsWithMessages().map { it.session.title })
     }
+
+    @Test
+    fun aLongMessageIsReadBackInSlicesAndRoundTrips() = runBlocking {
+        val body = "abcdefghij" + "\uD83D\uDE00" + "XYZ"
+        ChatMessageText.safeCharsForTest = 10
+        ChatMessageText.sliceCharsForTest = 4
+        try {
+            dao.insertSessionAndMessages(
+                ChatSession(title = "long", modelUsed = "m"),
+                listOf(ChatMessage(sessionId = 0, role = "user", content = body)),
+            )
+            assertEquals(body, dao.getMessagesForSession(dao.getAllSessionsOnce().single().id).single().content)
+            assertEquals(body, dao.getLastMessage(dao.getAllSessionsOnce().single().id)!!.content)
+
+            val viewModel = SavedChatsViewModel(app)
+            val exported = viewModel.getChatsAsJson()
+            dao.getAllSessionsWithMessages().forEach { dao.deleteSession(it.session.id) }
+            assertTrue(viewModel.importChatsFromJsonInternal(exported) is ChatImportResult.Success)
+            val restored = dao.getMessagesForSession(dao.getAllSessionsOnce().single().id).single()
+            assertEquals(body, restored.content)
+        } finally {
+            ChatMessageText.safeCharsForTest = null
+            ChatMessageText.sliceCharsForTest = null
+        }
+    }
 }

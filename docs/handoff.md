@@ -1,3 +1,11 @@
+# Handoff (2026-10-01, cursor window, wrong-type prefs, stuck recovery)
+
+On `cursor/stability-db-prefs-81e2`, targeting `gradation/app-pass`.
+- A message longer than the cursor window is read with SQLite `substr` slices (`ChatMessageText`, `ChatDao.getMessagesForSession` / `getLastMessage`). Opening a chat catches a database error and shows `notice_chat_open_failed`.
+- `TolerantPrefs` turns a ClassCastException on a preference into the default and leaves the stored value. A corrupt chat fork is no longer deleted (`ForkLoad`). Tool-list saves archive an unreadable blob. If recovery cannot move `chat_database` aside, the next open uses `chat_database.recovered-<stamp>` (`chat_db_file`).
+- Imports accept a UTF-16 BOM. Prompt and system-message imports ignore unknown JSON fields.
+- Phone: open a chat that has a large text attachment, export chats, and import a Notepad "Unicode" backup.
+
 # Handoff (2026-10-01, chat history and message list)
 
 On `cursor/chat-history-message-polish-4044`, targeting `gradation/app-pass`.

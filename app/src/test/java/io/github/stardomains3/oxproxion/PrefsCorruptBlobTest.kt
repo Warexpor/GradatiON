@@ -91,6 +91,41 @@ class PrefsCorruptBlobTest {
     }
 
     @Test
+    fun aWrongTypeDoesNotCrashAndTheValueStays() {
+        val prefs = helper()
+        prefs.mainPrefs.edit()
+            .putString("font_size", "nope")
+            .putString("pinned_session_ids", "1")
+            .putString("chat_db_recovery_stamp", "soon")
+            .commit()
+
+        assertEquals(100, prefs.getFontSize())
+        assertTrue(prefs.getPinnedSessionIds().isEmpty())
+        assertNull(prefs.recoveryPendingStamp())
+        assertEquals("nope", prefs.mainPrefs.all["font_size"])
+    }
+
+    @Test
+    fun constructingTheHelperSurvivesAWrongTypeMigrationFlag() {
+        app.getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, Context.MODE_PRIVATE)
+            .edit().putString("has_migrated_to_kotlin_serialization", "yes").commit()
+
+        val prefs = helper()
+        assertEquals(100, prefs.getFontSize())
+    }
+
+    @Test
+    fun savingToolsArchivesAnUnreadableList() {
+        val prefs = helper()
+        prefs.mainPrefs.edit().putString("enabled_tools", "{torn").commit()
+
+        prefs.saveEnabledTools(setOf("read"))
+
+        assertEquals("{torn", prefs.mainPrefs.getString("enabled_tools.unreadable", null))
+        assertEquals(setOf("read"), prefs.getEnabledTools())
+    }
+
+    @Test
     fun takingADeletedCharacterDoesNotReplaceAnUnreadableRemap() {
         val prefs = helper()
         prefs.mainPrefs.edit().putString("rp_deleted_char_remap", "{torn").commit()

@@ -1055,6 +1055,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             loadForkFromPrefs(sessionId)
             loadRpSwipeForSession(sessionId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Could not open chat $sessionId", e)
+            _toastUiEvent.value = Event(str(R.string.notice_chat_open_failed))
         } finally {
             _isChatLoading.value = false
         }
@@ -2220,28 +2225,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         clearForkMemory()
         val idx = sharedPreferencesHelper.getChatForkIndex(sessionId)
         val raw = sharedPreferencesHelper.getChatForkMessagesJson(sessionId) ?: return
-        if (idx < 0 || raw.isBlank()) return
-        try {
-            val decoded = json.decodeFromString(
-                kotlinx.serialization.builtins.ListSerializer(FlexibleMessage.serializer()),
-                raw
-            )
-            if (decoded.isNotEmpty()) {
-                forkIndex = idx
-                stashedForkTail = decoded
-                forkDisplayVariant = 2
-                forkAnchorAssistantIndex = sharedPreferencesHelper.getChatForkAnchor(sessionId)
-                if (forkAnchorAssistantIndex < 0) {
-                    val msgs = _chatMessages.value.orEmpty()
-                    forkAnchorAssistantIndex = msgs.indices.firstOrNull { i ->
-                        i >= idx && msgs[i].role == "assistant" && !isAssistantPlaceholder(msgs[i])
-                    } ?: idx
-                }
-                _hasChatFork.postValue(true)
-            }
-        } catch (_: Exception) {
-            sharedPreferencesHelper.clearChatFork(sessionId)
+        if (idx < 0) return
+        val decoded = ForkLoad.messages(raw) ?: return
+        forkIndex = idx
+        stashedForkTail = decoded
+        forkDisplayVariant = 2
+        forkAnchorAssistantIndex = sharedPreferencesHelper.getChatForkAnchor(sessionId)
+        if (forkAnchorAssistantIndex < 0) {
+            val msgs = _chatMessages.value.orEmpty()
+            forkAnchorAssistantIndex = msgs.indices.firstOrNull { i ->
+                i >= idx && msgs[i].role == "assistant" && !isAssistantPlaceholder(msgs[i])
+            } ?: idx
         }
+        _hasChatFork.postValue(true)
     }
 
     fun hasWebpInHistory(): Boolean {
