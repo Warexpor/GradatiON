@@ -86,8 +86,8 @@ sealed class AdapterOutput {
  * Translates between one wire protocol and the core model. Pluggable per harness family:
  *
  * - [AcpAdapter]: Agent Client Protocol (JSON-RPC). The bridge speaks it for OpenCode (`opencode acp`),
- *   Grok Build (`grok agent stdio`), Cursor CLI (`agent acp`), Pi (`pi-acp`), and the published ACP
- *   wrappers for Claude Code and Codex. This is the
+ *   Grok Build (`grok agent stdio`), Cursor Agent (`cursor-agent` or `agent acp`), Pi (`pi-acp`),
+ *   and the published ACP wrappers for Claude Code and Codex. This is the
  *   default and the only one the phone strictly needs when a bridge is in the middle.
  * - Direct adapters (planned, optional): OpenCode's HTTP/SSE server, Codex app-server, Claude
  *   Agent SDK stream-json. Only for setups without the bridge.

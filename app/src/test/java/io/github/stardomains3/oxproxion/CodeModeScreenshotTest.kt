@@ -258,7 +258,7 @@ class CodeModeScreenshotTest {
         org.junit.Assert.assertEquals("bridge example is clipped", 0, exampleCut)
         org.junit.Assert.assertTrue(example.text.toString().contains("7878/v1"))
         org.junit.Assert.assertTrue("every default agent is on the card",
-            listOf("Grok Build", "Cursor CLI", "Pi").all { it in labels })
+            listOf("Grok Build", "Cursor Agent", "Pi").all { it in labels })
         for (i in 0 until agents.childCount) {
             val pill = agents.getChildAt(i) as? android.widget.TextView ?: continue
             org.junit.Assert.assertTrue("${pill.text} is clipped",

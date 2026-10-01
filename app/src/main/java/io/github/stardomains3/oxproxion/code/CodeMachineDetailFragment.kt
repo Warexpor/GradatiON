@@ -198,7 +198,7 @@ class CodeMachineDetailFragment : Fragment(R.layout.fragment_code_machine_detail
         )
         val models = CodeMachineDetail.harnessModelCountLabel(info.models.size)
         val sub = listOfNotNull(avail, models).joinToString(" · ")
-        val s = android.text.SpannableStringBuilder(info.name).append('\n')
+        val s = android.text.SpannableStringBuilder(info.label).append('\n')
         val start = s.length
         s.append(sub)
         s.setSpan(

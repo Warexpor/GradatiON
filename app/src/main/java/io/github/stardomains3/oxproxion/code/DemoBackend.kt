@@ -61,7 +61,7 @@ class DemoBackend(
         HarnessInfo("codex", "Codex CLI", available = true),
         HarnessInfo("opencode", "OpenCode", available = true),
         HarnessInfo("grok-build", "Grok Build", available = true),
-        HarnessInfo("cursor-cli", "Cursor CLI", available = false),
+        HarnessInfo("cursor-cli", "Cursor Agent", available = false),
         HarnessInfo("pi", "Pi", available = false)
     )
 

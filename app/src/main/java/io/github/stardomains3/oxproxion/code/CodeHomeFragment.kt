@@ -402,7 +402,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                         else -> null
                     }
                     PickerPopover.Row(
-                        info.name,
+                        info.label,
                         subtitle = subtitle,
                         iconRes = info.kind.iconRes,
                         selected = info.kind == harness

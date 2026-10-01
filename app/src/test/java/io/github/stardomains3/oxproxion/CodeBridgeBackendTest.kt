@@ -365,6 +365,8 @@ class CodeBridgeBackendTest {
             assertEquals(HarnessInfo("opencode", "OpenCode", true, listOf("gpt-5")), list[0])
             assertEquals(HarnessKind.OPENCODE, list[0].kind)
             assertEquals(HarnessInfo("cursor-cli", "Cursor CLI", false), list[1])
+            assertEquals(HarnessKind.CURSOR_CLI, list[1].kind)
+            assertEquals("Cursor Agent", list[1].label)
             assertFalse(list[1].available)
             assertTrue(transport.sent.any { it.contains("bridge/listHarnesses") })
         } finally {
