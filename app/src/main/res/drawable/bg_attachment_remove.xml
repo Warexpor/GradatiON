@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 44dp hit target; the disc sits on the photo's top-end corner. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/bg_circle_soft"
+    android:insetLeft="20dp"
+    android:insetTop="2dp"
+    android:insetRight="2dp"
+    android:insetBottom="20dp" />

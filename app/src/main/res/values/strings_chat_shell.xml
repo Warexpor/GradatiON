@@ -16,8 +16,11 @@
     <string name="a11y_show_message_actions">Show message actions</string>
     <string name="a11y_hide_message_actions">Hide message actions</string>
     <string name="cd_attachment_preview">Attachment preview</string>
+    <string name="cd_remove_attachment">Remove attachment</string>
+    <string name="cd_audio_attachment">Audio attachment</string>
     <string name="cd_attached_image">Attached image</string>
     <string name="cd_generated_image">Generated image</string>
+    <string name="a11y_view_photo">View photo</string>
     <string name="notice_biometrics_unavailable">Biometrics unavailable. Continuing without the lock.</string>
     <string name="notice_preset_not_found">Preset not found (ID: %1$s)</string>
     <string name="notice_preset_model_missing">Preset not applied: the model \"%1$s\" no longer exists.</string>

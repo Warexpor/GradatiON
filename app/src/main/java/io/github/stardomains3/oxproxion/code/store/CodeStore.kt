@@ -95,9 +95,10 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
      */
     fun peekLegacySessions(): List<CodeSessionSummary>? {
         if (prefs.getBoolean(KEY_SESSIONS_MIGRATED, false)) return null
-        return prefs.getString(KEY_SESSIONS, null)?.let {
-            runCatching { json.decodeFromString(ListSerializer(CodeSessionSummary.serializer()), it) }.getOrNull()
-        } ?: emptyList()
+        val raw = prefs.getString(KEY_SESSIONS, null) ?: return emptyList()
+        // A decode failure must throw. Swallowing it used to look like "nothing to import", and the
+        // caller then deleted the only copy of the session list.
+        return json.decodeFromString(ListSerializer(CodeSessionSummary.serializer()), raw)
     }
 
     /**
