@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, chat stream cut)
+
+On `cursor/chat-stream-cut-a1c1`, targeting `gradation/app-pass`. Chat only:
+- Edit, delete, and regenerate shorten the transcript. A reply that was still arriving used to keep writing onto that shorter list, so the bubble could show up with no message above it. The turn is stopped first. The partial reply stays on the other branch when you were editing. Cancel puts that turn back. The save that runs when a reply goes idle does not write the list from before the cut.
+- Stop's own cleanup runs a moment later. Send in that moment (Stop, then Send on the same button) used to let the stopped turn delete the new reply's placeholder, because every thinking bubble is the same object. A turn that is no longer the one on screen does not touch the list.
+- Phone: send a message and tap Edit on it while the reply is still arriving (the reply stops, Editing shows, Cancel puts that turn back, including whatever had already arrived). Tap Stop, then Send straight away (one new reply, it is not dropped). Delete a message while a reply is arriving (the reply stops, and it does not come back under the messages you kept).
+
 # Handoff (2026-10-01, RP edit keeps the photo)
 
 On `cursor/rp-edit-photo-e6ba`, targeting `gradation/app-pass`.
