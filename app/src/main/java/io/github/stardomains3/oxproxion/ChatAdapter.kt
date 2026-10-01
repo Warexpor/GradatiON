@@ -757,10 +757,12 @@ class ChatAdapter(
         view.scaleType = ImageView.ScaleType.CENTER_CROP
         if (view.getTag(tagKey) == tag && view.drawable != null && view.layoutParams.width > 0) {
             view.visibility = View.VISIBLE
+            onFramed(view.layoutParams.width, view.layoutParams.height)
             return
         }
         view.setTag(tagKey, tag)
         view.setImageDrawable(null)
+        clearPhotoTap(view)
         view.visibility = View.VISIBLE
         val request = ImageRequest.Builder(view.context)
             .data(data)
@@ -787,6 +789,14 @@ class ChatAdapter(
             })
             .build()
         view.context.imageLoader.enqueue(request)
+    }
+
+    private fun clearPhotoTap(view: View) {
+        view.setOnClickListener(null)
+        ViewCompat.removeAccessibilityAction(
+            view,
+            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_CLICK.id,
+        )
     }
 
     private fun wirePhotoOpen(view: View, uri: android.net.Uri) {
@@ -874,7 +884,7 @@ class ChatAdapter(
 
         /** The picture stored on the message, when the file link is missing or will not open. */
         private fun showInlinePhoto(base64: String, tag: String, maxW: Int, maxH: Int, density: Float) {
-            imageView.setOnClickListener(null)
+            clearPhotoTap(imageView)
             imageView.setImageDrawable(null)
             imageView.setTag(R.id.userImageView, tag)
             imageView.visibility = View.VISIBLE
@@ -895,7 +905,8 @@ class ChatAdapter(
         private fun hideUserPhoto() {
             imageView.visibility = View.GONE
             imageView.setTag(R.id.userImageView, null)
-            imageView.setOnClickListener(null)
+            imageView.setImageDrawable(null)
+            clearPhotoTap(imageView)
             messageTextView.maxWidth = Int.MAX_VALUE
         }
 
@@ -955,13 +966,21 @@ class ChatAdapter(
             }
 
             // A data URL is not a file. The picture then comes from the message itself,
-            // which is also how a photo shows after its file is gone. A file that fails to
-            // load falls back the same way, and drops the tap that would have opened the dead link.
+            // which is also how a photo shows after its file is gone. The tap that opens
+            // the file is attached only after that file has drawn. A failure falls back
+            // to the stored JPEG, or drops the frame when there is nothing to show.
             val fileUri = message.imageUri?.takeUnless { it.startsWith("data:") }.orEmpty()
             val inline = getImageBase64(message.content)
             val d = itemView.resources.displayMetrics.density
             val maxW = (240 * d).toInt()
             val maxH = (300 * d).toInt()
+            fun applyFrame() {
+                val hasPhoto = imageView.visibility == View.VISIBLE
+                val photoOnly = hasPhoto && rawUserContent.isBlank()
+                messageTextView.visibility = if (photoOnly) View.GONE else View.VISIBLE
+                applyDpBox(messageContainer, ChatPhoto.containerInsets(hasPhoto, photoOnly))
+                applyDpBox(messageTextView, ChatPhoto.captionInsets(hasPhoto, photoOnly))
+            }
             if (fileUri.isNotEmpty() || inline != null) {
                 // Until the picture's own width is known, don't let the caption blow the bubble out past the cap.
                 messageTextView.maxWidth = maxW
@@ -971,12 +990,16 @@ class ChatAdapter(
                         val inlineTag = "inline:${inline?.hashCode()}"
                         loadFramedPhoto(
                             imageView, userImageUri, R.id.userImageView, fileUri, maxW, maxH,
-                            onFramed = { w, _ -> messageTextView.maxWidth = captionWidthForPhoto(w, maxW, d) },
+                            onFramed = { w, _ ->
+                                messageTextView.maxWidth = captionWidthForPhoto(w, maxW, d)
+                                wirePhotoOpen(imageView, userImageUri)
+                            },
                             onFailed = {
                                 if (inline != null) showInlinePhoto(inline, inlineTag, maxW, maxH, d)
+                                else hideUserPhoto()
+                                applyFrame()
                             },
                         )
-                        wirePhotoOpen(imageView, userImageUri)
                     } catch (e: Exception) {
                         if (inline != null) showInlinePhoto(inline, fileUri, maxW, maxH, d)
                         else hideUserPhoto()
@@ -989,11 +1012,7 @@ class ChatAdapter(
             }
             // A photo sent on its own is just the picture, in a slim frame. With a caption, the
             // picture keeps a 4dp rim and the words stay on the same inset as a text bubble.
-            val hasPhoto = imageView.visibility == View.VISIBLE
-            val photoOnly = hasPhoto && rawUserContent.isBlank()
-            messageTextView.visibility = if (photoOnly) View.GONE else View.VISIBLE
-            applyDpBox(messageContainer, ChatPhoto.containerInsets(hasPhoto, photoOnly))
-            applyDpBox(messageTextView, ChatPhoto.captionInsets(hasPhoto, photoOnly))
+            applyFrame()
 
             copyButtonuser.setOnClickListener {
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -1476,15 +1495,21 @@ class ChatAdapter(
                     val d = itemView.resources.displayMetrics.density
                     loadFramedPhoto(
                         generatedImageView, generatedUri, R.id.generatedImageView, generatedUriStr,
-                        (280 * d).toInt(), (300 * d).toInt()
+                        (280 * d).toInt(), (300 * d).toInt(),
+                        onFramed = { _, _ -> wirePhotoOpen(generatedImageView, generatedUri) },
+                        onFailed = {
+                            clearPhotoTap(generatedImageView)
+                            generatedImageView.setImageDrawable(null)
+                            generatedImageView.visibility = View.GONE
+                        },
                     )
-                    wirePhotoOpen(generatedImageView, generatedUri)
                 } catch (e: Exception) {
                     generatedImageView.visibility = View.GONE
                 }
             } else {
                 generatedImageView.visibility = View.GONE
                 generatedImageView.setTag(R.id.generatedImageView, null)
+                clearPhotoTap(generatedImageView)
             }
 
             // 6. BUTTON LISTENERS
