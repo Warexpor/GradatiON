@@ -35,6 +35,20 @@ class UserMessageFoldTest {
         assertEquals(1, UserMessageFold.earlierCopies(2, sameAs(2)))
     }
 
+    @Test fun a_trailing_newline_is_not_another_line() {
+        val text = "one\ntwo\nthree\n"
+        assertFalse(UserMessageFold.isLong(text, maxChars = 500))
+        assertEquals(text, UserMessageFold.collapse(text, maxChars = 500))
+    }
+
+    @Test fun a_long_token_after_a_short_word_keeps_the_window() {
+        val text = "See " + "https://example.com/" + "a".repeat(200)
+        val cut = UserMessageFold.collapse(text, maxChars = 80)
+        assertTrue(cut.endsWith("…"))
+        assertTrue(cut.startsWith("See https://"))
+        assertTrue(cut.length > 20)
+    }
+
     @Test fun many_short_lines_still_stop_at_three() {
         val text = (1..80).joinToString("\n") { "hi" }
         assertTrue(text.length > 150)

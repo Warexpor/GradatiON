@@ -1053,6 +1053,10 @@ class ChatAdapter(
     ) : RecyclerView.ViewHolder(itemView) {
 
         val messageTextView: TextView = itemView.findViewById(R.id.messageTextView)
+
+        /** The reply as words. Skips the language name and padding painted into a code card. */
+        private fun replyPlainText(): String = ChatMarkdown.readable(messageTextView.text)
+
         private val copyButton: ImageButton = itemView.findViewById(R.id.copyButton)
         val ttsButton: ImageButton = itemView.findViewById(R.id.ttsButton)
         private val regenerateButton: ImageButton = itemView.findViewById(R.id.regenerateButton)
@@ -1553,15 +1557,17 @@ class ChatAdapter(
             ) View.VISIBLE else View.GONE
             copyButton.setOnClickListener {
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("Copied Text", messageTextView.text.toString())
+                val clip = ClipData.newPlainText("Copied Text", replyPlainText())
                 clipboard.setPrimaryClip(clip)
                 Haptics.tap(copyButton, android.view.HapticFeedbackConstants.CONFIRM)
                 CopyFeedbackAnimator.play(copyButton)
             }
 
             copyButton.setOnLongClickListener {
-                val reasoning = reasoningSource(message).let { if (it.isBlank()) "" else "\n\n$it" }
-                val fullRawMarkdown = ensureTableSpacing(reasoning + text)
+                val reasoning = reasoningSource(message).trim()
+                val fullRawMarkdown = ensureTableSpacing(
+                    if (reasoning.isEmpty()) text else "$reasoning\n\n$text"
+                )
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Copied Markdown", fullRawMarkdown)
                 clipboard.setPrimaryClip(clip)
@@ -1583,7 +1589,7 @@ class ChatAdapter(
             )
 
             ttsButton.setOnClickListener {
-                val textToSpeak = messageTextView.text.toString()
+                val textToSpeak = replyPlainText()
                 if (textToSpeak.isNotEmpty()) {
                     ForegroundService.stopTtsSpeaking()
                     onSpeakText(textToSpeak, position)
@@ -1593,7 +1599,7 @@ class ChatAdapter(
             }
 
             ttsButton.setOnLongClickListener {
-                val textToSpeak = messageTextView.text.toString()
+                val textToSpeak = replyPlainText()
                 if (textToSpeak.isNotEmpty()) {
                     ForegroundService.stopTtsSpeaking()
                     onSynthesizeToWavFile(textToSpeak, position)
