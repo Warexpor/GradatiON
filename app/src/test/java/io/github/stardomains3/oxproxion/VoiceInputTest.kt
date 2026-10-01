@@ -91,11 +91,11 @@ class VoiceInputTest {
     }
 
     @Test fun aClipPastTheByteCapIsNotReadable() {
-        assertTrue(VoiceInput.VoiceClip.readable(1))
-        assertTrue(VoiceInput.VoiceClip.readable(VoiceInput.VoiceClip.MAX_BYTES))
-        assertFalse(VoiceInput.VoiceClip.readable(0))
-        assertFalse(VoiceInput.VoiceClip.readable(VoiceInput.VoiceClip.MAX_BYTES + 1))
-        assertEquals(5 * 60 * 1000L, VoiceInput.VoiceClip.MAX_DURATION_MS)
+        assertTrue(VoiceClip.readable(1))
+        assertTrue(VoiceClip.readable(VoiceClip.MAX_BYTES))
+        assertFalse(VoiceClip.readable(0))
+        assertFalse(VoiceClip.readable(VoiceClip.MAX_BYTES + 1))
+        assertEquals(5 * 60 * 1000L, VoiceClip.MAX_DURATION_MS)
     }
 
     @Test fun unknownKeysReadAsPhone() {

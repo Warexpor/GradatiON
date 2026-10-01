@@ -450,16 +450,6 @@ class VoiceInput(
     }
 
     companion object {
-        /**
-         * A recording the phone can turn into text. Longer than this is not loaded into memory:
-         * the upload is the raw bytes, then a base64 copy, and an unbounded clip used to exhaust the heap.
-         */
-        internal object VoiceClip {
-            const val MAX_BYTES = 8L * 1024 * 1024
-            const val MAX_DURATION_MS = 5 * 60 * 1000L
-            fun readable(lengthBytes: Long): Boolean = lengthBytes in 1..MAX_BYTES
-        }
-
         private const val LEVEL_TICK_MS = 66L
         private const val STOP_GRACE_MS = 1_500L
         /** Empty device sessions tolerated in a row; each lasts a few seconds of silence. */
@@ -533,4 +523,14 @@ class VoiceInput(
             else -> R.string.voice_error_generic
         }
     }
+}
+
+/**
+ * A recording the phone can turn into text. Longer than this is not loaded into memory:
+ * the upload is the raw bytes, then a base64 copy, and an unbounded clip used to exhaust the heap.
+ */
+internal object VoiceClip {
+    const val MAX_BYTES = 8L * 1024 * 1024
+    const val MAX_DURATION_MS = 5 * 60 * 1000L
+    fun readable(lengthBytes: Long): Boolean = lengthBytes in 1..MAX_BYTES
 }
