@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- History shows the line you have not sent yet, as "Draft: …", in place of the last message. Search finds that text even when it is not in a sent message. Long-press offers Discard draft. Deleting the chat drops the unsent line too.
 - Code: the Changes screen filters the file list by path. The line under the title says how many of those files are already tracked and how many are new.
 - Each Chat thread keeps the message you were typing. Open another chat, or start a new one, and that text is there when you come back. A photo or file staged on the composer stays with the thread you attached it to, instead of being sent into the next one. A chat that is saved for the first time keeps the line you have already started.
 - Roleplay lore also matches the character's personality, greeting and description. Rewriting a reply still matches lore from that reply, and from the turn just before it, after the chat has moved on.
@@ -35,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Opening Chat again uses that thread's unsent text. The single line remembered from the last switch into Roleplay no longer comes back in its place, including after the message was sent.
 - A chat message whose text or image part is not a string (null, a number, or an object) no longer crashes when the chat is opened, when History or Roleplay shows the last line, or when the chat is exported to PDF or HTML. That part is skipped.
 - A single stream event larger than 4 MB is refused instead of being read until the app runs out of memory. A reply that runs past a million and a half characters stops, keeps what arrived, and says it was cut off. Tool-call arguments stop growing past 2 MB, and a generated audio clip past 12 MB is not decoded.
 - Voice input stops after five minutes and keeps what was heard. A recording past 8 MB is dropped instead of being loaded whole and uploaded. A late result from the phone's recognizer, after dictation already finished, no longer pastes the same phrase again.

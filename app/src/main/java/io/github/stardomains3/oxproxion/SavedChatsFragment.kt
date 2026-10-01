@@ -198,16 +198,23 @@ class SavedChatsFragment : Fragment() {
         filterJob?.cancel()
         filterJob = viewLifecycleOwner.lifecycleScope.launch {
             val mode = viewModel.chatMode.value ?: ChatMode.ASK
+            val drafts = if (mode == ChatMode.ASK) prefs.getAskComposerDrafts() else emptyMap()
             val filtered = if (query.isEmpty()) {
                 allSessions
             } else {
-                savedChatsViewModel.searchSessions(query, mode)
+                HistoryList.withDraftMatches(
+                    matched = savedChatsViewModel.searchSessions(query, mode),
+                    all = allSessions,
+                    drafts = drafts,
+                    query = query,
+                )
             }
             val ids = filtered.map { it.id }
             val prefixes = savedChatsViewModel.lastMessagePrefixes(ids)
             val photo = getString(R.string.history_preview_photo)
             val you = getString(R.string.history_preview_you)
             val youLabel = { text: String -> you.replace("%1\$s", text) }
+            val draftLabel = { text: String -> getString(R.string.history_preview_draft, text) }
             val previews = prefixes.associate { message ->
                 message.sessionId to HistoryList.preview(
                     role = message.role,
@@ -221,6 +228,16 @@ class SavedChatsFragment : Fragment() {
                 for (hit in savedChatsViewModel.searchWindows(ids, query)) {
                     val line = HistoryList.searchLine(hit.role, hit.content, query, youLabel, photo)
                     if (line.isNotEmpty()) previews[hit.sessionId] = line
+                }
+            }
+            if (mode == ChatMode.ASK) {
+                for (session in filtered) {
+                    previews[session.id] = HistoryList.rowPreview(
+                        messageLine = previews[session.id].orEmpty(),
+                        draft = drafts[ComposerDrafts.key(session.id)].orEmpty(),
+                        query = query,
+                        draftLabel = draftLabel,
+                    )
                 }
             }
             val items = HistoryList.present(
@@ -268,6 +285,7 @@ class SavedChatsFragment : Fragment() {
     /** The drawer just opened. Bring the chat that is on screen into view. */
     fun onDrawerOpened() {
         scrollToOpen = true
+        if (::searchView.isInitialized) filterSessions(searchView.query?.toString().orEmpty())
         scrollOpenRow()
     }
 
@@ -314,6 +332,18 @@ class SavedChatsFragment : Fragment() {
         pinButton.setOnClickListener {
             dialog.dismiss()
             prefs.setSessionPinned(session.id, !pinned)
+            filterSessions(searchView.query?.toString().orEmpty())
+        }
+        val discard = sheet.findViewById<View>(R.id.menu_discard_draft)
+        val ask = (viewModel.chatMode.value ?: ChatMode.ASK) != ChatMode.RP
+        val unsent = if (ask) ComposerDrafts.text(prefs.getAskComposerDrafts(), session.id) else ""
+        discard.isVisible = unsent.isNotBlank()
+        discard.setOnClickListener {
+            dialog.dismiss()
+            val host = (parentFragment as? HistoryPanelHost)
+                ?: parentFragmentManager.fragments.filterIsInstance<HistoryPanelHost>().firstOrNull()
+            if (host != null) host.forgetUnsentDraft(session.id)
+            else prefs.saveAskComposerDrafts(ComposerDrafts.drop(prefs.getAskComposerDrafts(), session.id))
             filterSessions(searchView.query?.toString().orEmpty())
         }
 

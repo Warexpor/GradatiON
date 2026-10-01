@@ -14,6 +14,7 @@
     <string name="grok_history_unpin">Unpin</string>
     <string name="grok_history_rename">Rename</string>
     <string name="grok_history_delete">Delete</string>
+    <string name="grok_history_discard_draft">Discard draft</string>
     <string name="grok_history_import">Import</string>
     <string name="grok_history_export">Export</string>
     <string name="grok_history_more">More</string>
@@ -214,6 +215,7 @@
     <string name="history_section_earlier">Earlier</string>
     <string name="history_preview_you">You: %1$s</string>
     <string name="history_preview_photo">Photo</string>
+    <string name="history_preview_draft">Draft: %1$s</string>
     <string name="rp_attachments_disabled">Roleplay takes photos only, not files or audio</string>
     <string name="rp_llm_wipe_title">Enable LLM mode?</string>
     <string name="rp_llm_wipe_body">This starts a new RP chat in LLM mode (no character card) and clears the current transcript. Your selected character is kept for when you turn LLM mode off.</string>

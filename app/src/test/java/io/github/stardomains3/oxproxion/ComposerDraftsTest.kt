@@ -43,6 +43,20 @@ class ComposerDraftsTest {
         assertEquals(stored["10"], again["10"])
     }
 
+    @Test fun deleting_a_chat_drops_its_draft_and_leaves_the_unsaved_slot() {
+        val stored = ComposerDrafts.remember(
+            ComposerDrafts.remember(emptyMap(), null, "not sent"),
+            4L,
+            "keep me",
+        )
+        val dropped = ComposerDrafts.drop(stored, 8L)
+        assertEquals(stored.keys.toList(), dropped.keys.toList())
+        val gone = ComposerDrafts.drop(stored, 4L)
+        assertEquals("", ComposerDrafts.text(gone, 4L))
+        assertEquals("not sent", ComposerDrafts.text(gone, null))
+        assertEquals(listOf(ComposerDrafts.NEW), gone.keys.toList())
+    }
+
     @Test fun a_broken_blob_decodes_as_no_drafts() {
         assertTrue(ComposerDrafts.decode("").isEmpty())
         assertTrue(ComposerDrafts.decode("{not json").isEmpty())
@@ -80,6 +94,14 @@ class AskComposerDraftTest {
         val (back, backEffect) = AskComposerDraft.change(rp, ChatMode.ASK, 3L, promoted = false)
         assertTrue(backEffect is AskComposerDraft.Effect.None)
         assertEquals(3L, back.sessionId)
+    }
+
+    @Test fun a_mode_snapshot_is_not_this_threads_typing() {
+        assertTrue(AskComposerDraft.takeStoredDraft(field = "", userEdited = false, modeSnapshot = "old"))
+        assertTrue(AskComposerDraft.takeStoredDraft(field = "old", userEdited = false, modeSnapshot = "old"))
+        assertFalse(AskComposerDraft.takeStoredDraft(field = "from the view", userEdited = false, modeSnapshot = "old"))
+        assertFalse(AskComposerDraft.takeStoredDraft(field = "old", userEdited = true, modeSnapshot = "old"))
+        assertFalse(AskComposerDraft.takeStoredDraft(field = "", userEdited = true, modeSnapshot = ""))
     }
 
     @Test fun a_change_before_bind_is_ignored() {

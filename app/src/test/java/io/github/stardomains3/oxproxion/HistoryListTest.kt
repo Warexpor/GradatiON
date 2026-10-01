@@ -165,6 +165,34 @@ class HistoryListTest {
         assertEquals("lantern", pinned.query)
     }
 
+    @Test fun an_unsent_draft_replaces_the_last_line_unless_the_message_matches() {
+        val label = { text: String -> "Draft: $text" }
+        assertEquals("Draft: still writing", HistoryList.rowPreview("You: sent", "still\nwriting", "", label))
+        assertEquals("You: lantern", HistoryList.rowPreview("You: lantern", "other words", "lantern", label))
+        assertEquals(
+            "Draft: the lantern stays",
+            HistoryList.rowPreview("You: sent", "the lantern stays", "lantern", label),
+        )
+        assertEquals("Draft: still writing", HistoryList.rowPreview("You: sent", "still writing", "title", label))
+        assertEquals("You: sent", HistoryList.rowPreview("You: sent", "  \n", "", label))
+        val long = "word ".repeat(30) + "lantern" + " tail".repeat(20)
+        val clipped = HistoryList.rowPreview("sent", long, "lantern", label)
+        assertTrue(clipped.startsWith("Draft: …"))
+        assertTrue(clipped.contains("lantern"))
+        assertEquals(clipped.indexOf("lantern"), HistoryList.emphasisAt(clipped, "lantern"))
+    }
+
+    @Test fun search_includes_a_chat_whose_only_match_is_the_draft() {
+        val drafts = mapOf("new" to "no row", "4" to "the lantern", "9" to "nothing")
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "LANTERN"))
+        assertTrue(HistoryList.draftMatchIds(drafts, "  ").isEmpty())
+        val all = listOf(session(4, now, "notes"), session(9, now, "other"))
+        val matched = listOf(session(9, now, "other"))
+        assertEquals(listOf(9L, 4L), HistoryList.withDraftMatches(matched, all, drafts, "lantern").map { it.id })
+        assertEquals(matched, HistoryList.withDraftMatches(matched, all, drafts, "nothing"))
+        assertEquals(matched, HistoryList.withDraftMatches(matched, all, drafts, "   "))
+    }
+
     @Test fun the_open_chat_scrolls_up_to_its_section_header() {
         val shown = HistoryList.present(
             HistoryList.build(

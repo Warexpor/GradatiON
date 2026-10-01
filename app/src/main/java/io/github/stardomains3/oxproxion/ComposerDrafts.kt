@@ -44,6 +44,15 @@ object ComposerDrafts {
     fun rekey(store: Map<String, String>, from: Long?, to: Long?, text: String): Map<String, String> =
         remember(remember(store, from, ""), to, text)
 
+    /** Drop one saved chat. The unsaved slot stays; a missing id leaves [store] as it is. */
+    fun drop(store: Map<String, String>, sessionId: Long): Map<String, String> {
+        val id = key(sessionId)
+        if (id == NEW || id !in store) return store
+        val kept = LinkedHashMap<String, String>(store.size)
+        store.forEach { (k, v) -> if (k != id) kept[k] = v }
+        return kept
+    }
+
     fun encode(store: Map<String, String>): String =
         json.encodeToString(ListSerializer(Entry.serializer()), store.map { (k, t) -> Entry(k, t) })
 
