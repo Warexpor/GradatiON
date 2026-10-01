@@ -78,6 +78,13 @@ class CodeBridgeBackendTest {
         var keepAlive = false
         /** When true, the next session/prompt send fails once (simulates deliver failure). */
         var failPromptSendOnce = false
+        /**
+         * When set, a session/prompt send (after [failPromptSendOnce]) counts [promptHoldEntries]
+         * and blocks until the latch opens. Used to overlap two outbox flushers.
+         */
+        var holdPromptSend: CountDownLatch? = null
+        var promptHoldEntered: CountDownLatch? = null
+        val promptHoldEntries = java.util.concurrent.atomic.AtomicInteger(0)
         /** Prompts already delivered when the failing send happened (-1 = it hasn't happened). */
         @Volatile var promptsSentAtFailure = -1
         /** When true, the next non-prompt send fails once (approval answer / cancel). */
@@ -110,6 +117,11 @@ class CodeBridgeBackendTest {
                 // Stay CONNECTED — R4 queue-full / backpressure (not a drop).
                 lastError = "Send queue full"
                 return false
+            }
+            if (frame.contains("session/prompt") && holdPromptSend != null) {
+                promptHoldEntries.incrementAndGet()
+                promptHoldEntered?.countDown()
+                holdPromptSend!!.await(5, TimeUnit.SECONDS)
             }
             if (failCancelSendOnce && frame.contains("session/cancel")) {
                 failCancelSendOnce = false
@@ -1683,6 +1695,97 @@ class CodeBridgeBackendTest {
             withTimeout(3_000) { promptJob.join() }
             collectJob.cancel()
         } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun optimisticUserPromptDedupesTrimmedEcho() = runBlocking {
+        // The composer text is trimmed on the wire. The echo must still collapse onto the
+        // optimistic bubble, not leave a second one.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+            val promptJob = scope.launch { backend.prompt("s1", "  hello dedupe  ") }
+            withTimeout(3_000) {
+                while (collected.none {
+                    val ev = ((it.update as? CodeUpdate.Upsert)?.event as? CodeEvent.UserPrompt)
+                    ev?.text == "  hello dedupe  "
+                }) delay(5)
+            }
+            transport.deliver(
+                """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":42},
+                "update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"hello dedupe"}}}}"""
+            )
+            delay(50)
+            var events = emptyList<CodeEvent>()
+            for (su in collected.filter { it.sessionId == "s1" }) {
+                events = TranscriptReducer.apply(events, su.update)
+            }
+            val users = events.filterIsInstance<CodeEvent.UserPrompt>()
+            assertEquals(1, users.size)
+            assertEquals("hello dedupe", users.single().text)
+            transport.replyToPending({ it == "session/prompt" }, """{"stopReason":"end_turn"}""")
+            withTimeout(3_000) { promptJob.join() }
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun overlappingResumeFlushSendsPromptOnce() = runBlocking {
+        // onSocketReady flushes after each resumed session, and a failed send also starts
+        // the connected-queue retry. Both used to peek the same outbox head.
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
+        val answers = autoAnswer(transport, adapter)
+        val release = CountDownLatch(1)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary("s1"))
+            backend.attach(summary("s2"))
+            transport.drop()
+            withTimeout(3_000) { backend.connection.first { it == ConnectionState.DISCONNECTED } }
+            delay(20)
+            backend.prompt("s1", "flush-once")
+
+            transport.failPromptSendOnce = true
+            transport.holdPromptSend = release
+            transport.promptHoldEntered = CountDownLatch(1)
+            transport.restore()
+
+            assertTrue(
+                "the live flush must reach send",
+                transport.promptHoldEntered!!.await(5, TimeUnit.SECONDS),
+            )
+            // Retry backoff is at most 500 ms. A second flusher would enter the hold in that window.
+            delay(900)
+            assertEquals(
+                "queued prompt must be sent by one flusher",
+                1,
+                transport.promptHoldEntries.get(),
+            )
+        } finally {
+            release.countDown()
             answers.cancel()
             backend.close()
         }

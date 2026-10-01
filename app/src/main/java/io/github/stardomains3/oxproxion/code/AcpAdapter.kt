@@ -53,10 +53,14 @@ class AcpAdapter : HarnessAdapter {
     private val localKeyCounter = AtomicLong(0L)
 
     /**
-     * A seq hole being refilled: [seen] holds seqs delivered past the hole, so the replay that
-     * fills it does not append those chunks a second time.
+     * A seq hole being refilled. [floor] is the last seq already applied, so an inclusive
+     * replay (`seq >= afterSeq`) does not append that chunk again. [seen] holds seqs delivered
+     * past the hole (including the frame that opened it).
      */
-    private class OpenGap { val seen: MutableSet<Long> = ConcurrentHashMap.newKeySet() }
+    private class OpenGap(
+        val floor: Long,
+        val seen: MutableSet<Long> = ConcurrentHashMap.newKeySet(),
+    )
     private val openGaps = ConcurrentHashMap<String, OpenGap>()
 
     // ── outbound ──────────────────────────────────────────────────────────────────────────
@@ -194,16 +198,25 @@ class AcpAdapter : HarnessAdapter {
      * Seq bookkeeping for one notification, before it is decoded. Bridge seqs are consecutive per
      * session, so a jump means frames were dropped in flight; the first frame past the hole opens
      * a [OpenGap] until the backend's reload finishes.
+     *
+     * Text and image chunks append, so a seq that was already applied must not be decoded again
+     * (a bridge that replays `seq >= afterSeq`, or a duplicate frame on the socket). Tools and
+     * approvals upsert, but dropping here keeps one path for every notification.
      */
     private fun admit(method: String?, obj: JsonObject): Admit {
         if (method !in SEQ_METHODS) return Admit.Ok
         val params = obj["params"] as? JsonObject ?: return Admit.Ok
         val sid = params.str("sessionId") ?: return Admit.Ok
         val seq = bridgeSeq(params, obj) ?: return Admit.Ok
-        openGaps[sid]?.let { gap -> return if (gap.seen.add(seq)) Admit.Ok else Admit.Drop }
+        openGaps[sid]?.let { gap ->
+            // Anything at or below the last applied seq is already on screen.
+            if (seq <= gap.floor) return Admit.Drop
+            return if (gap.seen.add(seq)) Admit.Ok else Admit.Drop
+        }
         val prev = lastSeqBySession[sid] ?: return Admit.Ok
-        if (seq <= prev + 1) return Admit.Ok
-        openGaps[sid] = OpenGap().also { it.seen.add(seq) }
+        if (seq <= prev) return Admit.Drop
+        if (seq == prev + 1L) return Admit.Ok
+        openGaps[sid] = OpenGap(floor = prev).also { it.seen.add(seq) }
         return Admit.Hole(sid, prev)
     }
 

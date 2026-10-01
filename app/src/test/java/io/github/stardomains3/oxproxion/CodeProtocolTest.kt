@@ -713,6 +713,48 @@ class CodeProtocolTest {
         assertTrue(a.decode(chunk("E", 5)).single() is AdapterOutput.Update)
     }
 
+    @Test fun alreadySeenSeqIsNotDecodedAgain() {
+        // Text chunks append, so a duplicate of an applied seq must not grow the bubble.
+        val a = AcpAdapter()
+        fun chunk(text: String, seq: Long) =
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"$text"}}""", seq = seq)
+        var list = emptyList<CodeEvent>()
+        fun apply(frame: String) {
+            a.decode(frame).forEach { out ->
+                if (out is AdapterOutput.Update) list = TranscriptReducer.apply(list, out.update, now = 1L)
+            }
+        }
+        apply(chunk("A", 1))
+        apply(chunk("B", 2))
+        assertTrue(a.decode(chunk("A", 1)).single() is AdapterOutput.Ignored)
+        apply(chunk("A", 1))
+        apply(chunk("B", 2))
+        assertEquals("AB", (list.single() as CodeEvent.AgentText).text)
+    }
+
+    @Test fun gapReplayDropsTheInclusiveBoundarySeq() {
+        // Reload asks for seq > afterSeq. A bridge that also resends afterSeq must not append it.
+        val a = AcpAdapter()
+        fun chunk(text: String, seq: Long) =
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"$text"}}""", seq = seq)
+        var list = emptyList<CodeEvent>()
+        fun apply(frame: String) {
+            a.decode(frame).forEach { out ->
+                if (out is AdapterOutput.Update) list = TranscriptReducer.apply(list, out.update, now = 1L)
+            }
+        }
+        apply(chunk("A", 1))
+        val jump = a.decode(chunk("C", 3))
+        assertEquals(1L, (jump.first() as AdapterOutput.Gap).afterSeq)
+        jump.forEach { out ->
+            if (out is AdapterOutput.Update) list = TranscriptReducer.apply(list, out.update, now = 1L)
+        }
+        apply(chunk("A", 1)) // inclusive replay of the boundary
+        apply(chunk("B", 2))
+        apply(chunk("C", 3)) // the frame that opened the hole, already delivered
+        assertEquals("ACB", (list.single() as CodeEvent.AgentText).text)
+    }
+
     @Test fun consecutiveSeqsNeverReportAGap() {
         val a = AcpAdapter()
         val outs = (1L..6L).flatMap {

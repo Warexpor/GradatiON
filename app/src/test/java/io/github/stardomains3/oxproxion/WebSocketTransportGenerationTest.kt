@@ -16,11 +16,15 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 /**
  * Pure (no OkHttp network) coverage of R1: socket generation ignores stale callbacks so a
@@ -178,5 +182,42 @@ class WebSocketTransportGenerationTest {
 
         t.close()
         resumeReconnect.complete(Unit)
+    }
+
+    @Test
+    fun concurrentConnectWhileOpeningDoesNotOpenASecondSocket() {
+        val release = CountDownLatch(1)
+        val started = CountDownLatch(1)
+        val opened = AtomicInteger(0)
+        val t = WebSocketTransport(
+            url = "ws://127.0.0.1:9/bridge",
+            token = "tok",
+            fingerprint = "",
+            client = OkHttpClient.Builder().callTimeout(1, TimeUnit.MILLISECONDS).build(),
+            scope = scope,
+            sleeper = { _ -> },
+            random01 = { 0.0 },
+            nowMs = { 1_000L },
+            webSocketFactory = { _, _ ->
+                opened.incrementAndGet()
+                FakeSocket()
+            },
+            beforeOpenSocket = {
+                started.countDown()
+                check(release.await(3, TimeUnit.SECONDS))
+            },
+        )
+        val first = thread(name = "connect-a") { t.connect() }
+        assertTrue(started.await(3, TimeUnit.SECONDS))
+        val second = thread(name = "connect-b") { t.connect() }
+        // The second connect must wait out the in-flight open, not pass the state check.
+        Thread.sleep(150)
+        release.countDown()
+        first.join(3_000)
+        second.join(3_000)
+        assertEquals(1, opened.get())
+        assertEquals(ConnectionState.CONNECTING, t.state.value)
+        t.close()
+        assertFalse(t.send("{\"method\":\"session/prompt\"}"))
     }
 }
