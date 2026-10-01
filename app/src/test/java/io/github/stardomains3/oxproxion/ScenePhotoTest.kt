@@ -218,6 +218,26 @@ class ScenePhotoTest {
         assertFalse(File(dir, "keep.jpg.partial").exists())
     }
 
+    @Test fun aKilledReplaceIsRestoredFromTheSideFile() {
+        val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "atomic-recover")
+        dir.mkdirs()
+        val dest = File(dir, "wall.jpg")
+        val jpeg = tinyJpeg()
+        val partial = File(dir, "wall.jpg.partial")
+        partial.writeBytes(jpeg)
+        assertFalse(dest.exists())
+        assertTrue(ScenePhoto.recover(dest))
+        assertTrue(jpeg.contentEquals(dest.readBytes()))
+        assertFalse(partial.exists())
+
+        dest.writeBytes(jpeg.copyOf(4))
+        val bak = File(dir, "wall.jpg.bak")
+        bak.writeBytes(jpeg)
+        assertTrue(ScenePhoto.recover(dest))
+        assertTrue(jpeg.contentEquals(dest.readBytes()))
+        assertFalse(bak.exists())
+    }
+
     @Test fun aFailedRenameStillReplacesATornPicture() {
         val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "atomic-torn")
         dir.mkdirs()

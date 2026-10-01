@@ -8,6 +8,7 @@ import android.util.Base64
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.security.KeyStore
 import java.security.SecureRandom
@@ -764,33 +765,67 @@ class SharedPreferencesHelper(context: Context) {
      * and the next preference flush does not leave the chats without the notes that came with them.
      * Fork and swipe leftovers for a recycled id are cleared in that same edit.
      */
-    internal fun applyImportedChatMetadata(entries: List<ImportedChatMeta>) {
-        if (entries.isEmpty()) return
+    internal fun applyImportedChatMetadata(entries: List<ImportedChatMeta>): Boolean {
+        if (entries.isEmpty()) return true
         val pins = getPinnedSessionIds().toMutableSet()
-        mainPrefs.edit(commit = true) {
-            for (entry in entries) {
-                val id = entry.id
-                remove("$KEY_CHAT_FORK_INDEX_PREFIX$id")
-                remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$id")
-                remove("$KEY_CHAT_FORK_PREFIX$id")
-                remove("$KEY_CHAT_FORK_EDITING_PREFIX$id")
-                remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$id")
-                remove("$KEY_RP_SWIPE_PREFIX$id")
-                remove("rp_facts_$id")
-                if (!entry.facts.isNullOrBlank()) putString("rp_facts_$id", entry.facts)
-                if (entry.pinned) pins += id else pins -= id
-                // A backup from before these fields leaves them null. The removes above already
-                // dropped a recycled id's copy. An unreadable blob is written back as it was.
-                if (entry.forkIndex != null && entry.forkIndex >= 0 && !entry.forkMessages.isNullOrBlank()) {
-                    putInt("$KEY_CHAT_FORK_INDEX_PREFIX$id", entry.forkIndex)
-                    putInt("$KEY_CHAT_FORK_ANCHOR_PREFIX$id", entry.forkAnchor ?: -1)
-                    putString("$KEY_CHAT_FORK_PREFIX$id", entry.forkMessages)
-                }
-                if (!entry.swipeJson.isNullOrBlank()) {
-                    putString("$KEY_RP_SWIPE_PREFIX$id", entry.swipeJson)
-                }
+        val editor = mainPrefs.edit()
+        for (entry in entries) {
+            val id = entry.id
+            editor.remove("$KEY_CHAT_FORK_INDEX_PREFIX$id")
+            editor.remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$id")
+            editor.remove("$KEY_CHAT_FORK_PREFIX$id")
+            editor.remove("$KEY_CHAT_FORK_EDITING_PREFIX$id")
+            editor.remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$id")
+            editor.remove("$KEY_RP_SWIPE_PREFIX$id")
+            editor.remove("rp_facts_$id")
+            if (!entry.facts.isNullOrBlank()) editor.putString("rp_facts_$id", entry.facts)
+            if (entry.pinned) pins += id else pins -= id
+            // A backup from before these fields leaves them null. The removes above already
+            // dropped a recycled id's copy. An unreadable blob is written back as it was.
+            if (entry.forkIndex != null && entry.forkIndex >= 0 && !entry.forkMessages.isNullOrBlank()) {
+                editor.putInt("$KEY_CHAT_FORK_INDEX_PREFIX$id", entry.forkIndex)
+                editor.putInt("$KEY_CHAT_FORK_ANCHOR_PREFIX$id", entry.forkAnchor ?: -1)
+                editor.putString("$KEY_CHAT_FORK_PREFIX$id", entry.forkMessages)
             }
-            putStringSet(KEY_PINNED_SESSION_IDS, pins.map { it.toString() }.toSet())
+            if (!entry.swipeJson.isNullOrBlank()) {
+                editor.putString("$KEY_RP_SWIPE_PREFIX$id", entry.swipeJson)
+            }
+        }
+        editor.putStringSet(KEY_PINNED_SESSION_IDS, pins.map { it.toString() }.toSet())
+        return editor.commit()
+    }
+
+    /**
+     * One character's backup fields, into an editor the caller commits. Null leaves the
+     * value already stored. A voice replaces pitch, rate and the name together.
+     */
+    internal fun writeCharacterBackupFields(
+        editor: SharedPreferences.Editor,
+        characterId: Long,
+        memory: String?,
+        layout: String?,
+        voice: RpVoice?,
+        lorebookId: Long?,
+        clearLorebook: Boolean,
+        pendingLorebook: String?,
+        clearPendingLorebook: Boolean,
+    ) {
+        if (memory != null) {
+            if (memory.isBlank()) editor.remove(rpMemoryKey(characterId))
+            else editor.putString(rpMemoryKey(characterId), memory.trim())
+        }
+        if (layout != null) editor.putString("rp_layout_$characterId", layout)
+        if (voice != null) {
+            val k = characterId.toString()
+            if (voice.name == null) editor.remove("rp_voice_$k") else editor.putString("rp_voice_$k", voice.name)
+            editor.putFloat("rp_voice_pitch_$k", voice.pitch)
+            editor.putFloat("rp_voice_rate_$k", voice.rate)
+        }
+        if (clearLorebook) editor.remove("rp_lorebook_$characterId")
+        else if (lorebookId != null && lorebookId >= 0L) editor.putLong("rp_lorebook_$characterId", lorebookId)
+        if (clearPendingLorebook) editor.remove(pendingLorebookKey(characterId))
+        else if (!pendingLorebook.isNullOrBlank()) {
+            editor.putString(pendingLorebookKey(characterId), pendingLorebook.trim())
         }
     }
 
@@ -1654,7 +1689,8 @@ class SharedPreferencesHelper(context: Context) {
 
     fun getRpPendingInstruct(): String? = mainPrefs.getString(KEY_RP_PENDING_INSTRUCT, null)
     fun saveRpPendingInstruct(text: String?) {
-        mainPrefs.edit {
+        // commit: this is the rewrite the user has not sent yet. apply() can still be in memory when the process dies.
+        mainPrefs.edit(commit = true) {
             if (text.isNullOrBlank()) remove(KEY_RP_PENDING_INSTRUCT) else putString(KEY_RP_PENDING_INSTRUCT, text)
         }
     }
@@ -1692,6 +1728,7 @@ class SharedPreferencesHelper(context: Context) {
 }
 
 /** Pin and fact notes carried with one imported chat. [facts] is already trimmed. */
+@Serializable
 internal data class ImportedChatMeta(
     val id: Long,
     val facts: String?,

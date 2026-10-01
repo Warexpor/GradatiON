@@ -3,6 +3,7 @@ package io.github.stardomains3.oxproxion
 import android.content.Context
 import android.util.Log
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.channels.FileChannel
@@ -164,27 +165,141 @@ internal object ChatDbVault {
         return alt
     }
 
+    /**
+     * Test hook. The next [moveReplacing] copies instead of renaming, as a move across
+     * directories does when rename is refused. Cleared when that move starts the copy.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var copyInsteadForTest: Boolean = false
+
+    /**
+     * Test hook. After the copy is durable and before it takes the destination's name,
+     * return and leave the files as a killed process would. Cleared when it fires.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var stopAfterReadyForTest: Boolean = false
+
+    /**
+     * Test hook. After the previous destination has been moved aside, return before the
+     * finished copy takes its name. Cleared when it fires.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var stopAfterBakForTest: Boolean = false
+
     fun moveReplacing(from: File, to: File) {
         to.parentFile?.mkdirs()
-        if (from.renameTo(to)) return
+        val copyInstead = copyInsteadForTest
+        copyInsteadForTest = false
+        if (finishReadyPartial(from, to)) return
+        if (!copyInstead && from.renameTo(to)) {
+            discardMoveTemps(to)
+            return
+        }
         // rename across directories can fail. The copy has to reach disk before the source
-        // is removed, or a kill in between loses both. A copy that fails must not leave a
-        // partial file at the destination: the next launch treats that name as the real one
-        // and refuses to try the move again.
+        // is removed, or a kill in between loses both. Bytes go to a side file, not to [to]:
+        // a kill used to leave a half-written file under the real name, and the next launch
+        // treated that name as the database and refused to try the move again.
+        if (!from.exists()) throw IOException("Could not move ${from.path} to ${to.path}")
+        val partial = partialFile(to)
+        val ready = readyFile(to)
+        val bak = bakFile(to)
         val destExisted = to.exists()
         try {
-            from.copyTo(to, overwrite = true)
-            RandomAccessFile(to, "rw").use { it.fd.sync() }
+            partial.delete()
+            ready.delete()
+            from.copyTo(partial, overwrite = true)
+            RandomAccessFile(partial, "rw").use { it.fd.sync() }
+            syncDirectory(partial.parentFile)
+            markReady(ready)
+            if (stopAfterReadyForTest) {
+                stopAfterReadyForTest = false
+                return
+            }
+            if (destExisted) {
+                if (bak.exists() && !bak.delete()) {
+                    throw IOException("Could not move ${to.path} aside")
+                }
+                if (!to.renameTo(bak)) throw IOException("Could not move ${to.path} aside")
+                syncDirectory(to.parentFile)
+                if (stopAfterBakForTest) {
+                    stopAfterBakForTest = false
+                    return
+                }
+            }
+            if (!partial.renameTo(to)) {
+                if (!to.exists() && bak.exists()) bak.renameTo(to)
+                throw IOException("Could not replace ${to.path}")
+            }
             syncDirectory(to.parentFile)
+            ready.delete()
+            if (bak.exists() && !bak.delete()) Log.w(TAG, "Could not remove ${bak.path}")
             if (!from.delete() && from.exists()) {
                 if (!destExisted) to.delete()
                 throw IOException("Could not remove ${from.path} after copying it aside")
             }
         } catch (e: Exception) {
-            if (from.exists() && !destExisted) to.delete()
+            if (!ready.exists()) partial.delete()
+            if (!to.exists() && bak.exists() && !(ready.exists() && partial.exists())) {
+                bak.renameTo(to)
+            }
             if (e is IOException) throw e
             throw IOException("Could not move ${from.path} to ${to.path}", e)
         }
+    }
+
+    /**
+     * A previous move copied [from] and died before the side file took [to]'s name.
+     * The side file is only finished when the ready marker is present; a torn copy is removed.
+     * Returns true when [to] now holds that copy and [from] has been removed.
+     */
+    private fun finishReadyPartial(from: File, to: File): Boolean {
+        val partial = partialFile(to)
+        val ready = readyFile(to)
+        val bak = bakFile(to)
+        val readyCopy = ready.exists() && partial.isFile && partial.length() > 0L
+        if (readyCopy && !to.exists() && (!from.exists() || from.length() == partial.length())) {
+            if (partial.renameTo(to)) {
+                ready.delete()
+                if (bak.exists() && !bak.delete()) Log.w(TAG, "Could not remove ${bak.path}")
+                syncDirectory(to.parentFile)
+                if (from.exists() && !from.delete() && from.exists()) {
+                    throw IOException("Could not remove ${from.path} after copying it aside")
+                }
+                return true
+            }
+        }
+        if (!to.exists() && bak.exists() && !readyCopy) {
+            if (!bak.renameTo(to)) Log.e(TAG, "Could not restore ${bak.path}")
+        }
+        if (to.exists() && !readyCopy && bak.exists() && !bak.delete()) {
+            Log.w(TAG, "Could not remove ${bak.path}")
+        }
+        if (!ready.exists() || to.exists()) {
+            partial.delete()
+            ready.delete()
+        }
+        return false
+    }
+
+    private fun discardMoveTemps(to: File) {
+        partialFile(to).delete()
+        readyFile(to).delete()
+        val bak = bakFile(to)
+        if (bak.exists() && !bak.delete()) Log.w(TAG, "Could not remove ${bak.path}")
+    }
+
+    private fun partialFile(to: File) = File(to.parentFile, to.name + ".partial")
+
+    private fun readyFile(to: File) = File(to.parentFile, to.name + ".ready")
+
+    private fun bakFile(to: File) = File(to.parentFile, to.name + ".bak")
+
+    private fun markReady(ready: File) {
+        FileOutputStream(ready).use { out ->
+            out.write(1)
+            out.fd.sync()
+        }
+        syncDirectory(ready.parentFile)
     }
 
     private fun syncDirectory(dir: File?) {
