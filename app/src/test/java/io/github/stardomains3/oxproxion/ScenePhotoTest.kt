@@ -128,6 +128,25 @@ class ScenePhotoTest {
         assertFalse(ScenePhoto.isSceneFileName("notes.jpg"))
     }
 
+    @Test fun anEditKeepsThePictureTheSaveWouldDrop() {
+        val name = "22222222-2222-2222-2222-222222222222.jpg"
+        val other = "33333333-3333-3333-3333-333333333333.jpg"
+        val dropped = listOf(name, other)
+        val held = ScenePhoto.scenePhotosSafeToDelete(dropped, heldForEdit = setOf(name), pendingName = null)
+        assertEquals(listOf(other), held)
+        val staged = ScenePhoto.scenePhotosSafeToDelete(
+            dropped,
+            heldForEdit = emptySet(),
+            pendingName = name,
+        )
+        assertEquals(listOf(other), staged)
+        assertEquals(
+            listOf(other),
+            ScenePhoto.scenePhotosSafeToDelete(dropped, heldForEdit = setOf(name), pendingName = "not-a-file"),
+        )
+        assertTrue(ScenePhoto.scenePhotosSafeToDelete(emptyList(), emptySet(), null).isEmpty())
+    }
+
     @Test fun deleteSceneFilesRemovesOnlyThatName() {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val name = "22222222-2222-2222-2222-222222222222.jpg"

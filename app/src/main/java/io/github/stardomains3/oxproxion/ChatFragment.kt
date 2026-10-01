@@ -3638,6 +3638,8 @@ $cleanContent
     /**
      * Edit puts the caption back, and the photo with it. The thread is cut immediately so a
      * second send cannot land on the old turn; the picture is staged as soon as it is read.
+     * Roleplay has no Cancel mark, so the photo is kept for this chat until it is staged.
+     * The save that drops the turn must not delete that file in the meantime.
      */
     private fun beginEditMessage(position: Int, text: String) {
         val previousDraft = chatEditText.text?.toString().orEmpty()
@@ -3648,6 +3650,9 @@ $cleanContent
         )
         if (editPhoto != null) photoSendInFlight = true
         clearStagedAttachment(discardSceneFile = true)
+        val heldUri = editPhoto?.fileUri?.takeIf { viewModel.isRpMode() }
+        if (heldUri != null) viewModel.holdScenePhoto(heldUri)
+        val editEpoch = viewModel.openChatEpoch()
         if (viewModel.isRpMode()) {
             viewModel.truncateForRpEdit(position)
         } else {
@@ -3667,8 +3672,17 @@ $cleanContent
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val staged = withContext(Dispatchers.IO) { loadEditPhoto(appContext, editPhoto) }
-                if (!isAdded || photoGen != editPhotoGen || !viewModel.isComposerEditOpen()) return@launch
+                val keep = ChatEdit.keepEditPhoto(
+                    roleplay = viewModel.isRpMode(),
+                    askEditStillOpen = viewModel.isComposerEditOpen(),
+                    sameChat = viewModel.openChatEpoch() == editEpoch,
+                )
+                if (!isAdded || photoGen != editPhotoGen || !keep) {
+                    viewModel.discardHeldScenePhoto(heldUri)
+                    return@launch
+                }
                 if (staged == null) {
+                    viewModel.discardHeldScenePhoto(heldUri)
                     GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_image))
                     return@launch
                 }
@@ -3678,6 +3692,11 @@ $cleanContent
                     ScenePhoto.store(appContext, staged.bytes)?.toString()
                 }
                 viewModel.setPendingUserImageUri(stored)
+                val reused = stored != null &&
+                    ScenePhoto.sceneFileName(stored) != null &&
+                    ScenePhoto.sceneFileName(stored) == ScenePhoto.sceneFileName(heldUri)
+                if (reused) viewModel.releaseHeldScenePhoto(heldUri)
+                else viewModel.discardHeldScenePhoto(heldUri)
                 showStagedPhoto(staged.bytes, stored?.toUri() ?: staged.bytes)
                 if (viewModel.isRpMode()) applyRpComposerHint()
             } finally {

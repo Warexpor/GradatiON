@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, RP edit keeps the photo)
+
+On `cursor/rp-edit-photo-e6ba`, targeting `gradation/app-pass`.
+- Editing a roleplay message that has a photo puts the picture back in the composer with the caption. The chat-edit Cancel mark is Ask-only, and checking it here used to drop the photo after the turn was already cut. Leaving that chat before the picture is staged still drops it.
+- The save that cuts the turn out does not delete that JPEG while the edit still needs it. A new file replaces it, or leaving the edit deletes it when no message still names it.
+- Phone: in Roleplay, send a photo, edit that message (the chip should show the picture). Send it again and tap the picture. Edit it and leave the chat before the chip appears (the picture should not stay on the next chat).
+
 # Handoff (2026-10-01, chat edit cancel)
 
 On `cursor/chat-edit-cancel-b292`, targeting `gradation/app-pass`. Chat only:

@@ -661,6 +661,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         getApplication<Application>().getString(id, *args)
     //val generatedImages = mutableMapOf<Int, String>()
     private var pendingUserImageUri: String? = null  // String (toString())
+    /** Scene photos an edit has cut out of the transcript but still has to put back. */
+    private val scenePhotosHeld = mutableSetOf<String>()
     private var httpClient: HttpClient
     private var lanHttpClient: HttpClient
     private var llmService: LlmService
@@ -1254,9 +1256,46 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val dropped = previous.filter { it !in kept }
         if (dropped.isEmpty()) return
         val app = getApplication<Application>()
-        val unused = dropped.filter { !repository.scenePhotoStillUsed(it) }
+        val held = synchronized(scenePhotosHeld) { scenePhotosHeld.toSet() }
+        val unused = ScenePhoto.scenePhotosSafeToDelete(
+            dropped,
+            held,
+            ScenePhoto.sceneFileName(pendingUserImageUri),
+        ).filter { !repository.scenePhotoStillUsed(it) }
         ScenePhoto.deleteSceneFiles(app, unused)
     }
+
+    /**
+     * Keep [uri]'s file through the save that drops the message being edited. Roleplay cuts
+     * the turn before the picture is staged, and that save used to delete the JPEG.
+     */
+    fun holdScenePhoto(uri: String?) {
+        val name = ScenePhoto.sceneFileName(uri) ?: return
+        synchronized(scenePhotosHeld) { scenePhotosHeld.add(name) }
+    }
+
+    /** The staged photo is this same file. A later save may drop it once the composer lets go. */
+    fun releaseHeldScenePhoto(uri: String?) {
+        val name = ScenePhoto.sceneFileName(uri) ?: return
+        synchronized(scenePhotosHeld) { scenePhotosHeld.remove(name) }
+    }
+
+    /**
+     * The edit left before the photo was staged, or a new file replaced this one.
+     * A message that still names it, or the composer, keeps the file.
+     */
+    fun discardHeldScenePhoto(uri: String?) {
+        val name = ScenePhoto.sceneFileName(uri) ?: return
+        synchronized(scenePhotosHeld) { scenePhotosHeld.remove(name) }
+        if (name == ScenePhoto.sceneFileName(pendingUserImageUri)) return
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            if (!repository.scenePhotoStillUsed(name)) ScenePhoto.deleteSceneFiles(app, listOf(name))
+        }
+    }
+
+    /** Bumped when the open chat changes, so a photo read for one edit cannot land on the next. */
+    fun openChatEpoch(): Long = sessionEpoch
 
     /** True when some saved message still points at this scene photo. */
     suspend fun scenePhotoStillUsed(name: String): Boolean = repository.scenePhotoStillUsed(name)

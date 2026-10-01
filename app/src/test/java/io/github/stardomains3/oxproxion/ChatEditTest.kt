@@ -79,6 +79,17 @@ class ChatEditTest {
         )
     }
 
+    @Test fun a_roleplay_edit_keeps_its_photo_until_the_chat_changes() {
+        assertTrue(ChatEdit.keepEditPhoto(roleplay = true, askEditStillOpen = false, sameChat = true))
+        assertFalse(ChatEdit.keepEditPhoto(roleplay = true, askEditStillOpen = false, sameChat = false))
+        assertTrue(
+            ChatEdit.keepEditPhoto(roleplay = false, askEditStillOpen = true, sameChat = true)
+        )
+        assertFalse(
+            ChatEdit.keepEditPhoto(roleplay = false, askEditStillOpen = false, sameChat = true)
+        )
+    }
+
     @Test fun cancel_without_a_saved_line_drops_a_copy_of_the_bubble() {
         assertEquals(
             "",
