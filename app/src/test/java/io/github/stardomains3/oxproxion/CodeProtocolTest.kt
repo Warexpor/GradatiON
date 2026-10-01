@@ -1294,6 +1294,125 @@ class CodeProtocolTest {
         assertEquals(PlanStatus.IN_PROGRESS, (list.single() as CodeEvent.Plan).entries.single().status)
     }
 
+    @Test fun bashKindIsAShellAndKeepsTheTail() {
+        val body = "y".repeat(AcpAdapter.MAX_OUTPUT) + "-TAIL"
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"bash1","title":"Bash","kind":"Bash","status":"completed",
+               "content":[{"type":"content","content":{"type":"text","text":"$body"}}]}"""
+        )))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals(ToolKind.EXECUTE, tool.kind)
+        val output = checkNotNull(tool.output)
+        assertTrue(output.endsWith("-TAIL"))
+        assertTrue(output.startsWith("…"))
+    }
+
+    @Test fun readKindIgnoresCaseAndKeepsTheHead() {
+        val body = "START-" + "x".repeat(AcpAdapter.MAX_OUTPUT)
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"Read1","title":"Read","kind":"Read","status":"completed",
+               "content":{"type":"content","content":{"type":"text","text":"$body"}}}"""
+        )))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals(ToolKind.READ, tool.kind)
+        val output = checkNotNull(tool.output)
+        assertTrue(output.startsWith("START-"))
+        assertTrue(output.endsWith("…"))
+    }
+
+    @Test fun grepKindShowsTheQueryNotTheFolder() {
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"g1","title":"Grep","kind":"grep","status":"completed",
+               "locations":[{"path":"/repo"}],"rawInput":{"pattern":"snake_case","path":"src"}}"""
+        )))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals(ToolKind.SEARCH, tool.kind)
+        assertEquals("snake_case", tool.detail)
+    }
+
+    @Test fun writeKindIsAnEdit() {
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"w1","title":"Write","kind":"write","status":"completed",
+               "rawInput":{"file_path":"A.kt"}}"""
+        )))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals(ToolKind.EDIT, tool.kind)
+        assertEquals("A.kt", tool.detail)
+    }
+
+    @Test fun errorStatusEndsTheSpinner() {
+        val list = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"err1","title":"Bash","kind":"execute","status":"running"}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"err1","status":"error"}"""),
+        ))
+        assertEquals(ToolStatus.FAILED, (list.single() as CodeEvent.ToolCall).status)
+    }
+
+    @Test fun doneAndCancelledAreNotStillRunning() {
+        val done = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"done1","title":"Bash","kind":"execute","status":"in_progress"}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"done1","status":"done"}"""),
+        ))
+        assertEquals(ToolStatus.COMPLETED, (done.single() as CodeEvent.ToolCall).status)
+        val cancelled = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"stop1","title":"Bash","kind":"execute","status":"running"}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"stop1","status":"cancelled"}"""),
+        ))
+        assertEquals(ToolStatus.CANCELLED, (cancelled.single() as CodeEvent.ToolCall).status)
+    }
+
+    @Test fun unknownStatusLeavesTheSpinner() {
+        val list = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"unk1","title":"Bash","kind":"execute","status":"running"}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"unk1","status":"deferred"}"""),
+        ))
+        assertEquals(ToolStatus.RUNNING, (list.single() as CodeEvent.ToolCall).status)
+    }
+
+    @Test fun planStepRunningIsCurrentAndDoneIsComplete() {
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"plan","entries":[{"content":"Run tests","status":"running"},{"content":"Ship","status":"done"}]}"""
+        )))
+        val entries = (list.single() as CodeEvent.Plan).entries
+        assertEquals(PlanStatus.IN_PROGRESS, entries[0].status)
+        assertEquals(PlanStatus.COMPLETED, entries[1].status)
+    }
+
+    @Test fun stderrAndLineArrayAreShown() {
+        val err = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"se1","title":"Bash","kind":"execute","status":"failed","rawOutput":{"stderr":"not found"}}"""
+        )))
+        assertEquals("not found", (err.single() as CodeEvent.ToolCall).output)
+        val both = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"se2","title":"Bash","kind":"execute","status":"completed","rawOutput":{"stdout":"ok","stderr":"warn"}}"""
+        )))
+        assertEquals("ok\nwarn", (both.single() as CodeEvent.ToolCall).output)
+        val lines = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"se3","title":"Bash","kind":"execute","status":"completed","rawOutput":["one","two"]}"""
+        )))
+        assertEquals("one\ntwo", (lines.single() as CodeEvent.ToolCall).output)
+    }
+
+    @Test fun bareStringContentIsShown() {
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"str1","title":"Bash","kind":"shell","status":"completed","content":"hello from string"}"""
+        )))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals(ToolKind.EXECUTE, tool.kind)
+        assertEquals("hello from string", tool.output)
+    }
+
+    @Test fun singleDiffObjectStillRenders() {
+        val patch = "@@ -1 +1 @@\\n-old\\n+new\\n"
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"dobj","title":"Write","kind":"write","status":"completed","content":{"type":"diff","path":"a.kt","diff":"$patch"}}"""
+        )))
+        assertEquals(ToolKind.EDIT, list.filterIsInstance<CodeEvent.ToolCall>().single().kind)
+        val diff = list.filterIsInstance<CodeEvent.FileDiff>().single()
+        assertEquals("a.kt", diff.path)
+        assertEquals("new", diff.lines.first { it.type == DiffLine.Type.ADD }.text)
+    }
+
     @Test fun skippableAuthErrorIsOnlyAMissingMethod() {
         assertTrue(AcpHandshake.isSkippableAuthError("Method not found"))
         assertTrue(AcpHandshake.isSkippableAuthError("Unknown method: authenticate"))

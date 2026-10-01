@@ -41,7 +41,8 @@ import java.util.concurrent.atomic.AtomicLong
  * A `resource_link` or embedded `resource` in an agent or user chunk is shown as text.
  * Tool detail prefers the command for a shell call, and a file location includes its line.
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
- * A file read keeps those bytes. Tool status accepts `in-progress` and `running`.
+ * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
+ * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`).
  */
 class AcpAdapter : HarnessAdapter {
 
@@ -74,6 +75,7 @@ class AcpAdapter : HarnessAdapter {
      */
     private val toolKinds = ConcurrentHashMap<String, String>()
     private val toolDetailSet = ConcurrentHashMap.newKeySet<String>()
+    private val repeatedUnderscore = Regex("_+")
 
     // ── outbound ──────────────────────────────────────────────────────────────────────────
 
@@ -353,8 +355,31 @@ class AcpAdapter : HarnessAdapter {
         return ApprovalOption.Kind.ALLOW_ONCE
     }
 
-    private fun normalizeKind(kind: String?): String =
-        kind?.trim()?.lowercase()?.replace('-', '_')?.replace(' ', '_').orEmpty()
+    private fun normalizeKind(kind: String?): String {
+        val raw = kind?.trim()?.lowercase()?.replace('-', '_')?.replace(' ', '_').orEmpty()
+        return if (raw.contains("__")) raw.replace(repeatedUnderscore, "_") else raw
+    }
+
+    /**
+     * ACP's kinds, plus the tool names agents put in `kind` (`Bash`, `grep`, `write`, `Read`).
+     * The canonical token is what the icon, the detail line, and head-vs-tail clipping share.
+     * Null when the frame omitted kind.
+     */
+    private fun canonicalKind(kind: String?): String? {
+        val n = normalizeKind(kind)
+        if (n.isEmpty()) return null
+        return when (n) {
+            "read", "read_file", "readfile", "cat" -> "read"
+            "edit", "write", "write_file", "str_replace", "strreplace", "apply_patch", "patch" -> "edit"
+            "delete", "remove", "rm" -> "delete"
+            "move", "rename", "mv" -> "move"
+            "search", "grep", "glob", "find", "rg" -> "search"
+            "execute", "bash", "shell", "terminal", "command", "run", "run_command" -> "execute"
+            "think", "thought", "reasoning" -> "think"
+            "fetch", "web_fetch", "webfetch", "http" -> "fetch"
+            else -> n
+        }
+    }
 
     private fun decodeUpdate(params: JsonObject, seq: Long?): List<AdapterOutput> {
         val sid = params.str("sessionId") ?: return ignored("no sessionId")
@@ -605,8 +630,9 @@ class AcpAdapter : HarnessAdapter {
     /** Later updates often omit kind. The first frame's kind still decides which end of a long log to keep. */
     private fun rememberKind(sid: String, callId: String, kind: String?): String? {
         val key = toolKey(sid, callId)
-        if (!kind.isNullOrBlank()) toolKinds[key] = kind
-        return kind?.takeIf { it.isNotBlank() } ?: toolKinds[key]
+        val canon = canonicalKind(kind)
+        if (canon != null) toolKinds[key] = canon
+        return canon ?: toolKinds[key]
     }
 
     private fun outputOf(sid: String, callId: String, u: JsonObject): String? {
@@ -618,15 +644,37 @@ class AcpAdapter : HarnessAdapter {
         return ToolOutputText.clip(kind, shown, MAX_OUTPUT)
     }
 
-    /** Some agents put the log in `rawOutput` instead of a content block. */
+    /**
+     * Some agents put the log in `rawOutput` instead of a content block: a string,
+     * `{stdout, stderr}`, or a list of lines. A number is not a log.
+     */
     private fun rawOutputText(el: JsonElement?): String? = when (el) {
-        is JsonPrimitive -> {
-            // Numbers and booleans are not a log. A JSON string's content is the text.
-            val asNumber = el.longOrNull != null || el.doubleOrNull != null || el.booleanOrNull != null
-            if (asNumber) null else el.content.trim().ifEmpty { null }
+        is JsonPrimitive -> primitiveLog(el)
+        is JsonObject -> {
+            val out = firstRaw(el, "output", "stdout", "text", "result")
+            val err = firstRaw(el, "stderr")
+            when {
+                out != null && err != null && err != out -> "$out\n$err"
+                out != null -> out
+                else -> err
+            }
         }
-        is JsonObject -> firstRaw(el, "output", "stdout", "text", "result")
+        is JsonArray -> el.mapNotNull { item ->
+            when (item) {
+                is JsonPrimitive -> primitiveLog(item)
+                is JsonObject -> toolOutputPiece(item) ?: firstRaw(item, "text", "output", "stdout", "stderr")
+                else -> null
+            }
+        }.joinToString("\n").ifEmpty { null }
         else -> null
+    }
+
+    /** A JSON string's content is the text. Numbers and booleans are not a log. */
+    private fun primitiveLog(el: JsonPrimitive): String? {
+        if (el is JsonNull) return null
+        val asNumber = el.longOrNull != null || el.doubleOrNull != null || el.booleanOrNull != null
+        if (asNumber) return null
+        return el.content.trim().ifEmpty { null }
     }
 
     private fun detailOf(u: JsonObject): String? {
@@ -637,7 +685,7 @@ class AcpAdapter : HarnessAdapter {
         }
         val raw = rawInputOf(u)
         return ToolCallDetail.format(
-            kind = u.str("kind"),
+            kind = canonicalKind(u.str("kind")),
             locations = locations,
             command = commandOf(raw),
             query = firstRaw(raw, "pattern", "query", "url", "regex"),
@@ -700,12 +748,17 @@ class AcpAdapter : HarnessAdapter {
     }
 
     private fun textContent(content: JsonElement?): String? {
-        val arr = content as? JsonArray ?: return null
-        val text = arr.mapNotNull { e ->
-            val o = e as? JsonObject ?: return@mapNotNull null
-            toolOutputPiece(o)
-        }.joinToString("\n")
+        if (content is JsonPrimitive) return primitiveLog(content)
+        val items = contentItems(content) ?: return null
+        val text = items.mapNotNull { toolOutputPiece(it) }.joinToString("\n")
         return text.ifEmpty { null }
+    }
+
+    /** Tool `content` is an array, or one block some agents send as a bare object. */
+    private fun contentItems(content: JsonElement?): List<JsonObject>? = when (content) {
+        is JsonArray -> content.mapNotNull { it as? JsonObject }.ifEmpty { null }
+        is JsonObject -> listOf(content)
+        else -> null
     }
 
     /**
@@ -724,9 +777,8 @@ class AcpAdapter : HarnessAdapter {
     }
 
     private fun diffs(callId: String, content: JsonElement?, now: Long): List<CodeEvent.FileDiff> {
-        val arr = content as? JsonArray ?: return emptyList()
-        return arr.mapNotNull { e ->
-            val o = e as? JsonObject ?: return@mapNotNull null
+        val items = contentItems(content) ?: return emptyList()
+        return items.mapNotNull { o ->
             if (o.str("type") != "diff") return@mapNotNull null
             val path = o.str("path") ?: return@mapNotNull null
             val unified = o.str("diff")?.takeIf { it.isNotBlank() }
@@ -763,7 +815,7 @@ class AcpAdapter : HarnessAdapter {
     private fun toolKindIfPresent(s: String?): ToolKind? =
         if (s.isNullOrBlank()) null else toolKind(s)
 
-    private fun toolKind(s: String?) = when (s) {
+    private fun toolKind(s: String?) = when (canonicalKind(s)) {
         "read" -> ToolKind.READ
         "edit" -> ToolKind.EDIT
         "delete" -> ToolKind.DELETE
@@ -776,21 +828,26 @@ class AcpAdapter : HarnessAdapter {
     }
 
     /**
-     * ACP writes `in_progress`. Some agents send `in-progress`, `in progress`, or `running`.
-     * An unknown token stays null so a status-only update does not invent a state.
+     * ACP writes `in_progress` and `failed`. Agents also send `running`, `error`, `done`,
+     * and `cancelled`. An unknown token stays null so a status-only update does not invent a state.
+     * `cancelled` is its own quiet stop: the spinner ends, and it is not drawn as a failure.
      */
     private fun toolStatus(s: String?) = when (normalizeKind(s)) {
-        "pending" -> ToolStatus.PENDING
-        "in_progress", "running" -> ToolStatus.RUNNING
-        "completed" -> ToolStatus.COMPLETED
-        "failed" -> ToolStatus.FAILED
+        "pending", "queued" -> ToolStatus.PENDING
+        "in_progress", "running", "inprogress" -> ToolStatus.RUNNING
+        "completed", "complete", "success", "succeeded", "done", "finished" -> ToolStatus.COMPLETED
+        "failed", "failure", "error", "errored" -> ToolStatus.FAILED
+        "cancelled", "canceled" -> ToolStatus.CANCELLED
         else -> null
     }
 
-    /** Same spelling as [toolStatus]. Anything else stays pending so the row is still listed. */
+    /**
+     * Same spelling as [toolStatus] for the states a plan row can show.
+     * Anything else stays pending so the step is still listed.
+     */
     private fun planStatus(s: String?) = when (normalizeKind(s)) {
-        "completed" -> PlanStatus.COMPLETED
-        "in_progress" -> PlanStatus.IN_PROGRESS
+        "completed", "complete", "done", "success", "succeeded", "finished" -> PlanStatus.COMPLETED
+        "in_progress", "running", "inprogress" -> PlanStatus.IN_PROGRESS
         else -> PlanStatus.PENDING
     }
 

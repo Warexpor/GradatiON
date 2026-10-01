@@ -8,6 +8,8 @@ import io.github.stardomains3.oxproxion.code.CodeSessionState
 import io.github.stardomains3.oxproxion.code.CodeSessionSummary
 import io.github.stardomains3.oxproxion.code.CodeUpdate
 import io.github.stardomains3.oxproxion.code.SessionStatus
+import io.github.stardomains3.oxproxion.code.ToolKind
+import io.github.stardomains3.oxproxion.code.ToolStatus
 import io.github.stardomains3.oxproxion.code.HarnessKind
 import io.github.stardomains3.oxproxion.code.PermissionMode
 import io.github.stardomains3.oxproxion.code.SessionUpdate
@@ -54,6 +56,35 @@ class SessionUpdatePumpTest {
         assertFalse(state.running)
         assertEquals(2L, state.summary.updatedAt) // summary untouched
         assertFalse(CodeSessionFolder.needsPersist(CodeUpdate.AvailableCommands(cmds)))
+    }
+
+    @Test
+    fun listPreviewKeepsSnakeCaseAndFollowsTheLiveTool() {
+        var state = CodeSessionState(summary(), running = true)
+        state = CodeSessionFolder.apply(
+            state,
+            CodeUpdate.TextChunk("k", "use `snake_case` and **bold** and _note_"),
+            now = 10L,
+        )
+        assertEquals("use snake_case and bold and note", state.summary.preview)
+        state = CodeSessionFolder.apply(
+            state,
+            CodeUpdate.Upsert(
+                CodeEvent.ToolCall(
+                    "tool:1", 11L, "1", ToolKind.EXECUTE, "Bash", "npm test", ToolStatus.RUNNING,
+                ),
+            ),
+            now = 11L,
+        )
+        assertEquals("Bash · npm test", state.summary.preview)
+        state = CodeSessionFolder.apply(state, CodeUpdate.ToolPatch("1", ToolStatus.COMPLETED), now = 12L)
+        assertEquals("use snake_case and bold and note", state.summary.preview)
+        state = CodeSessionFolder.apply(
+            state,
+            CodeUpdate.SessionInfo(preview = "from the bridge"),
+            now = 13L,
+        )
+        assertEquals("from the bridge", state.summary.preview)
     }
 
     @Test
