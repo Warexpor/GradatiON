@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config
  * The offset math matches LinkMovementMethod, including the empty tail of a line.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35])
+@Config(application = ScreenshotApp::class, sdk = [35])
 class MessageTapTest {
 
     @Test fun plain_words_toggle_the_row() {
