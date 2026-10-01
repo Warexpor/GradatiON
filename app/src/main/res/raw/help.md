@@ -44,7 +44,9 @@ The picker lists your models with each maker's mark and a short line such as "An
 The Controls panel has a segmented reasoning picker: Off, Auto, Low, Med, High. Any cloud model can be asked; models that can't think ignore it. A local model needs its **Thinks** switch on in its edit sheet. **Thoughts** shows or hides the model's thinking above replies. It stays folded while the reply streams, and you tap to open it. For a token budget instead of an effort level, use **Settings → Advanced → Advanced reasoning**.
 
 ### Replies
-Tap the ⋮ under a reply for read aloud, copy, edit, regenerate and more. Editing one of your messages can fork the chat; use the `< n/m >` arrows to move between branches.
+Copy and regenerate sit under a reply. The ⋮ menu has read aloud and edit, and in Roleplay it also has rewrite. Editing one of your messages can fork the chat; use the `< n/m >` arrows to move between branches.
+
+Tap a message you sent to show edit, copy and delete. A link in that message opens on its own. Press and hold the message to copy all of it, including when it is folded.
 
 ### Images and audio
 Models with the image badge generate pictures, which save to Downloads. Transcription models turn an audio file into text.

@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, chat message tap and copy)
+
+On `cursor/chat-message-tap-copy-a4f5`, targeting `gradation/app-pass`.
+- A tap on a link in a message you sent opens the link. The action row stays as it was. A tap on the words still opens edit, copy and delete. Press and hold the words to copy the whole message, including when Show more has folded it, and the copy check shows on the action row. A hold on a link does not copy the message over the link.
+- Two sends of the same line keep their own action row and their own Show more. Opening one no longer opens the other.
+- Phone: send a message with a link and tap the link (it opens, and the edit row stays shut). Tap the words (the row opens). Send a long note, press and hold the folded bubble (the paste is the whole note). Send the same line twice and open the row on one of them (the other stays shut).
+
 # Handoff (2026-10-01, code tool logs and changed paths)
 
 On `cursor/code-tool-logs-paths-f82e`, targeting `gradation/app-pass`. Code mode only:

@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Tapping a link in a message you sent opens the link and leaves the action row as it was. Press and hold that message to copy all of it, including when Show more has folded it. Two copies of the same message open their own action rows.
 - Code: a shell or search log no longer shows terminal color codes, and a progress line that rewrites itself shows the last line. A file the agent opened still keeps those bytes. A tool reported as `in-progress` or `running` shows as running, and a plan step spelled that way does too. On Changes, a renamed file opens and copies the new path, and a path git quoted (a space, or a name outside ASCII) is the real path.
 - A character backup keeps that character's wallpaper. An older backup still imports, and it does not remove a wallpaper it does not mention. Clearing the wallpaper in the backup removes it on the next phone.
 - A photo in a chat is kept in the app. Opening the chat again restores the picture when the old link is gone, including a picture the character generated, and that picture is not sent back to the model. Continue, a rewrite, and a failed Continue leave the picture on the reply.

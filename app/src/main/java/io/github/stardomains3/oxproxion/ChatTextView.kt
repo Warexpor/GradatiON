@@ -84,6 +84,30 @@ class ChatTextView @JvmOverloads constructor(
     private var copiedCode: String? = null
     private var copiedUntil = 0L
 
+    /**
+     * True while the finger is on a link or a code header. The bubble's click listener
+     * reads this so that tap opens the link and leaves the action row alone. Cleared
+     * after the click, so a later accessibility activate is not treated as that link.
+     */
+    var gestureOnClickableSpan: Boolean = false
+        private set
+    private var gestureGen = 0
+
+    private fun noteClickableGesture(event: MotionEvent) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_CANCEL -> gestureOnClickableSpan = false
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP -> {
+                val gen = ++gestureGen
+                gestureOnClickableSpan = MessageTap.hitsLink(this, event.x, event.y)
+                if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    post {
+                        if (gestureGen == gen) gestureOnClickableSpan = false
+                    }
+                }
+            }
+        }
+    }
+
     /** The copy icon turns into a check for a moment; called by the icon and the header span. */
     fun showCopied(code: String) {
         copiedCode = code
@@ -119,6 +143,7 @@ class ChatTextView @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        noteClickableGesture(event)
         val x = event.x - totalPaddingLeft
         val y = event.y - totalPaddingTop + scrollY
         when (event.actionMasked) {

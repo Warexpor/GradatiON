@@ -26,6 +26,21 @@ class UserMessageFoldTest {
         assertEquals("one\ntwo\nthree…", UserMessageFold.collapse(text, maxChars = 500))
     }
 
+    @Test fun two_copies_of_the_same_message_do_not_share_a_row() {
+        assertEquals(
+            UserMessageFold.rowKey("same line", null, 0),
+            UserMessageFold.rowKey("same line", null, 0),
+        )
+        assertTrue(
+            UserMessageFold.rowKey("same line", null, 0) !=
+                UserMessageFold.rowKey("same line", null, 1)
+        )
+        assertTrue(
+            UserMessageFold.rowKey("same line", "file://a", 0) !=
+                UserMessageFold.rowKey("same line", null, 0)
+        )
+    }
+
     @Test fun two_copies_of_a_long_message_fold_on_their_own() {
         // The predicate is "same text as the row being folded", the way the bubble uses it.
         val copies = setOf(0, 2)
