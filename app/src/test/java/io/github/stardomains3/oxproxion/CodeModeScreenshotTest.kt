@@ -313,18 +313,35 @@ class CodeModeScreenshotTest {
         snap(root(a), "code_approvals_picker_dark")
     }
 
-    /** Changes list: commit and revert-all stay disabled until the status arrives, then both are offered. */
+    /**
+     * Changes list: both actions turn on once status arrives. The filter narrows the rows only,
+     * so a search that matches nothing still leaves revert available for the tracked files.
+     */
     @Test fun codeChangesRevertAllEnabled() = withCode { a, _ ->
         val id = startDemo("Add a follow-system option to the theme setting")
         push(a, CodeChangesFragment.newInstance(id))
         idle(2)
         val frag = a.supportFragmentManager.fragments.filterIsInstance<CodeChangesFragment>().single()
-        val toolbar = frag.requireView().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+        val root = frag.requireView()
+        val toolbar = root.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+        val list = root.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeChangesList)
+        val filter = root.findViewById<android.widget.EditText>(R.id.codeChangesFilter)
         assertEquals(a.getString(R.string.code_changes_ask_revert_all), toolbar.menu.findItem(R.id.action_ask_revert_all).title)
         assertTrue(toolbar.menu.findItem(R.id.action_ask_revert_all).isEnabled)
         assertTrue(toolbar.menu.findItem(R.id.action_ask_commit).isEnabled)
-        assertEquals(3, frag.requireView().findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeChangesList).adapter!!.itemCount)
-        snap(root(a), "code_changes_dark")
+        assertEquals(View.VISIBLE, filter.visibility)
+        val subtitle = toolbar.subtitle?.toString().orEmpty()
+        assertTrue(subtitle, subtitle.contains("2 tracked"))
+        assertTrue(subtitle, subtitle.contains("1 untracked"))
+        assertEquals(3, list.adapter!!.itemCount)
+        filter.setText("notes")
+        assertEquals(1, list.adapter!!.itemCount)
+        filter.setText("nope")
+        assertEquals(0, list.adapter!!.itemCount)
+        assertTrue(toolbar.menu.findItem(R.id.action_ask_revert_all).isEnabled)
+        filter.setText("")
+        assertEquals(3, list.adapter!!.itemCount)
+        snap(this.root(a), "code_changes_dark")
     }
 
     /** The composer sits above the popover's scrim: a second tap on the pill must fold the card. */

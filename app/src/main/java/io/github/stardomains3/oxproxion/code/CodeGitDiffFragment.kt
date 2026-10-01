@@ -26,6 +26,8 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
 
     private val sessionId by lazy { requireArguments().getString(ARG_SESSION)!! }
     private val path by lazy { requireArguments().getString(ARG_PATH)!! }
+    /** False for an untracked path: restore-to-HEAD does not apply, so Revert stays hidden. */
+    private val tracked by lazy { requireArguments().getBoolean(ARG_TRACKED, true) }
     private lateinit var hub: CodeHub
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -42,6 +44,7 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
         toolbar.subtitle = path.substringBeforeLast('/', "").ifBlank { path }
 
         commitBtn.setOnClickListener { ask(getString(R.string.code_changes_prompt_commit)) }
+        revertBtn.isVisible = tracked
         revertBtn.setOnClickListener {
             ask(getString(R.string.code_changes_prompt_revert, path))
         }
@@ -58,7 +61,7 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
                 return@launch
             }
             if (unified.isBlank()) {
-                hint.text = getString(R.string.code_changes_diff_empty)
+                hint.text = getString(if (tracked) R.string.code_changes_diff_empty else R.string.code_changes_diff_untracked)
                 hint.isVisible = true
                 actions.isVisible = true
                 return@launch
@@ -69,6 +72,12 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
                 val truncated = all.size > MAX_LINES
                 val shown = if (truncated) all.take(MAX_LINES) else all
                 ParsedDiff(shown, add, del, truncated)
+            }
+            if (parsed.lines.isEmpty()) {
+                hint.text = getString(if (tracked) R.string.code_changes_diff_empty else R.string.code_changes_diff_untracked)
+                hint.isVisible = true
+                actions.isVisible = true
+                return@launch
             }
             val dir = path.substringBeforeLast('/', "").ifBlank { "." }
             val counts = coloredDiffCounts(requireContext(), parsed.add, parsed.del)
@@ -103,12 +112,13 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
     companion object {
         private const val ARG_SESSION = "session"
         private const val ARG_PATH = "path"
+        private const val ARG_TRACKED = "tracked"
         /** Cap rendered lines so Main measure/layout stays bounded for huge working-tree patches. */
         private const val MAX_LINES = 2000
 
-        fun newInstance(sessionId: String, path: String) =
+        fun newInstance(sessionId: String, path: String, tracked: Boolean = true) =
             CodeGitDiffFragment().apply {
-                arguments = bundleOf(ARG_SESSION to sessionId, ARG_PATH to path)
+                arguments = bundleOf(ARG_SESSION to sessionId, ARG_PATH to path, ARG_TRACKED to tracked)
             }
     }
 }

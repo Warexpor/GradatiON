@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, code changes review)
+
+On `cursor/code-changes-review-7437`, targeting `gradation/app-pass`. Code mode only:
+- Changes filters by path. The filter does not change what Ask to revert all covers. That count is tracked files only (` M`, `M `, renames); `??` and ignored paths stay out, and the action is off when nothing is tracked. An untracked file's diff hides Restore-to-HEAD. Long-press a row to copy the path.
+- Unified diffs drop git preamble (rename, mode, index) and a binary patch body. `+++ heading` stays an added line. CRLF hunks still parse.
+- Phone: open Changes on a repo with a mix of edits and a new file. Filter to the new file (revert all still offered). Open it (no revert button). Open a tracked file (revert is there).
+
 # Handoff (2026-10-01, backup carries prefs)
 
 On `cursor/export-prefs-stability-1a11`, targeting `gradation/app-pass`.

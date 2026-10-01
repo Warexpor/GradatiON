@@ -1,12 +1,16 @@
 package io.github.stardomains3.oxproxion.code
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.TextView
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -20,7 +24,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Per-session working-tree changes from `bridge/gitStatus`. Tap a file for `bridge/diff`.
- * Commit / revert are agent prompts, not raw git.
+ * Commit / revert are agent prompts, not raw git. Revert covers tracked paths only.
  */
 class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
 
@@ -28,7 +32,10 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
     private lateinit var hub: CodeHub
     private lateinit var list: RecyclerView
     private lateinit var hint: TextView
+    private lateinit var filter: EditText
     private lateinit var toolbar: MaterialToolbar
+    /** Full status from the bridge. The list shows [rows], which is this set after the filter. */
+    private val allFiles = ArrayList<GitFileStatus>()
     private val rows = ArrayList<GitFileStatus>()
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -36,6 +43,7 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
         toolbar = view.findViewById(R.id.toolbar)
         list = view.findViewById(R.id.codeChangesList)
         hint = view.findViewById(R.id.codeChangesHint)
+        filter = view.findViewById(R.id.codeChangesFilter)
         toolbar.setNavigationOnClickListener { parentFragmentManager.popBackStack() }
         toolbar.inflateMenu(R.menu.menu_code_changes)
         toolbar.setOnMenuItemClickListener { item ->
@@ -51,6 +59,7 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
                 else -> false
             }
         }
+        filter.doAfterTextChanged { publishRows() }
         list.layoutManager = LinearLayoutManager(requireContext())
         list.adapter = Adapter()
         reload()
@@ -59,52 +68,91 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
     private fun reload() {
         hint.text = getString(R.string.code_changes_loading)
         hint.isVisible = true
-        setActionsEnabled(false)
+        filter.isVisible = false
+        setActionsEnabled(commit = false, revert = false)
         viewLifecycleOwner.lifecycleScope.launch {
             val result = hub.gitStatusResult(sessionId)
             val status = result.getOrNull()
             if (result.isFailure || status == null) {
+                allFiles.clear()
                 rows.clear()
                 list.adapter?.notifyDataSetChanged()
                 hint.text = getString(R.string.code_changes_failed)
                 hint.isVisible = true
+                filter.isVisible = false
                 toolbar.subtitle = null
-                setActionsEnabled(false)
+                setActionsEnabled(commit = false, revert = false)
                 return@launch
             }
             toolbar.subtitle = buildSubtitle(status).ifBlank { null }
-            rows.clear()
-            rows.addAll(status.files)
-            list.adapter?.notifyDataSetChanged()
-            setActionsEnabled(rows.isNotEmpty())
-            if (rows.isEmpty()) {
-                hint.text = getString(R.string.code_changes_empty)
-                hint.isVisible = true
-            } else {
-                hint.isVisible = false
-            }
+            allFiles.clear()
+            allFiles.addAll(status.files)
+            publishRows()
         }
     }
 
+    /** Branch, ahead/behind, then how many paths a revert can actually restore. */
     private fun buildSubtitle(status: GitStatusResult): String {
-        val parts = ArrayList<String>(3)
+        val parts = ArrayList<String>(5)
         if (status.branch.isNotBlank()) parts += status.branch
         if (status.ahead > 0) parts += getString(R.string.code_changes_ahead, status.ahead)
         if (status.behind > 0) parts += getString(R.string.code_changes_behind, status.behind)
+        val tracked = GitChanges.trackedCount(status.files)
+        val untracked = GitChanges.untrackedCount(status.files)
+        if (tracked > 0) parts += resources.getQuantityString(R.plurals.code_changes_tracked_count, tracked, tracked)
+        if (untracked > 0) parts += resources.getQuantityString(R.plurals.code_changes_untracked_count, untracked, untracked)
         return parts.joinToString("  ·  ")
+    }
+
+    /**
+     * The filter narrows the list only. Commit and revert still refer to the whole status:
+     * a search must not make "revert all" restore just the rows on screen.
+     */
+    private fun publishRows() {
+        val query = filter.text?.toString().orEmpty()
+        rows.clear()
+        rows.addAll(GitChanges.filter(allFiles, query))
+        list.adapter?.notifyDataSetChanged()
+        val tracked = GitChanges.trackedCount(allFiles)
+        setActionsEnabled(commit = allFiles.isNotEmpty(), revert = tracked > 0)
+        filter.isVisible = allFiles.isNotEmpty()
+        when {
+            allFiles.isEmpty() -> {
+                hint.text = getString(R.string.code_changes_empty)
+                hint.isVisible = true
+            }
+            rows.isEmpty() -> {
+                hint.text = getString(R.string.code_changes_filter_empty)
+                hint.isVisible = true
+            }
+            else -> hint.isVisible = false
+        }
     }
 
     private fun openDiff(file: GitFileStatus) {
         parentFragmentManager.beginTransaction()
             .withGrokStackAnimations()
-            .add(R.id.fragment_container, CodeGitDiffFragment.newInstance(sessionId, file.path))
+            .add(
+                R.id.fragment_container,
+                CodeGitDiffFragment.newInstance(
+                    sessionId,
+                    file.path,
+                    tracked = GitChanges.isTrackedChange(file.status),
+                ),
+            )
             .addToBackStack(null)
             .commit()
     }
 
-    private fun setActionsEnabled(enabled: Boolean) {
-        toolbar.menu.findItem(R.id.action_ask_commit)?.isEnabled = enabled
-        toolbar.menu.findItem(R.id.action_ask_revert_all)?.isEnabled = enabled
+    private fun copyPath(path: String) {
+        requireContext().getSystemService(ClipboardManager::class.java)
+            ?.setPrimaryClip(ClipData.newPlainText("path", path))
+        GlassNotice.show(requireContext(), getString(R.string.code_session_copied))
+    }
+
+    private fun setActionsEnabled(commit: Boolean, revert: Boolean) {
+        toolbar.menu.findItem(R.id.action_ask_commit)?.isEnabled = commit
+        toolbar.menu.findItem(R.id.action_ask_revert_all)?.isEnabled = revert
     }
 
     private fun askCommit() {
@@ -118,14 +166,15 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
 
     /** Asks the agent to restore every tracked path. Untracked files are left alone. */
     private fun askRevertAll() {
-        if (rows.isEmpty()) return
+        val tracked = GitChanges.trackedCount(allFiles)
+        if (tracked == 0) return
         GrokConfirmDialog.show(
             this,
             getString(R.string.code_changes_revert_all_title),
             getString(R.string.code_changes_revert_all_message),
             getString(R.string.code_changes_revert_all_confirm),
             onConfirm = {
-                val prompt = resources.getQuantityString(R.plurals.code_changes_prompt_revert_all, rows.size, rows.size)
+                val prompt = resources.getQuantityString(R.plurals.code_changes_prompt_revert_all, tracked, tracked)
                 if (hub.prompt(sessionId, prompt)) {
                     parentFragmentManager.popBackStack(CodeSessionFragment.BACK_STACK_TAG, 0)
                 } else {
@@ -153,6 +202,10 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
             holder.status.text = GitBridgeJson.statusLetter(f.status)
             holder.path.text = f.path
             holder.itemView.setOnClickListener { openDiff(f) }
+            holder.itemView.setOnLongClickListener {
+                copyPath(f.path)
+                true
+            }
         }
     }
 
