@@ -63,6 +63,7 @@ object RpAutoMemory {
     fun isMachinery(text: String): Boolean {
         val t = text.trim()
         return t == RpPromptEngine.PHOTO_TURN ||
+            t == RpPromptEngine.PHOTO_EARLIER ||
             t == RpPromptEngine.CONTINUE_USER_TURN ||
             t == RpPromptEngine.CONTINUE_DIRECTION ||
             isSceneNote(t) ||

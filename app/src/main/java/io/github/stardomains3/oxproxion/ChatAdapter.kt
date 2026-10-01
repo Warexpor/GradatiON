@@ -1492,28 +1492,57 @@ class ChatAdapter(
             }
 
             // 5. IMAGE LOADING
-            val generatedUriStr = message.imageUri
-            if (!generatedUriStr.isNullOrEmpty()) {
-                try {
-                    val generatedUri = generatedUriStr.toUri()
-                    val d = itemView.resources.displayMetrics.density
-                    loadFramedPhoto(
-                        generatedImageView, generatedUri, R.id.generatedImageView, generatedUriStr,
-                        (280 * d).toInt(), (300 * d).toInt(),
-                        onFramed = { _, _ -> wirePhotoOpen(generatedImageView, generatedUri) },
-                        onFailed = {
-                            clearPhotoTap(generatedImageView)
-                            generatedImageView.setImageDrawable(null)
-                            generatedImageView.visibility = View.GONE
-                        },
-                    )
-                } catch (e: Exception) {
-                    generatedImageView.visibility = View.GONE
-                }
-            } else {
+            // The file is what a tap opens. The JPEG in the message is what shows when that
+            // file is gone, the same way a photo you sent still shows.
+            val inlineUrl = MessageContent.imageUrl(message.content)
+            val source = ChatPhoto.bubbleSource(message.imageUri, inlineUrl)
+            val d = itemView.resources.displayMetrics.density
+            val maxW = (280 * d).toInt()
+            val maxH = (300 * d).toInt()
+            fun hideGenerated() {
                 generatedImageView.visibility = View.GONE
                 generatedImageView.setTag(R.id.generatedImageView, null)
+                generatedImageView.setImageDrawable(null)
                 clearPhotoTap(generatedImageView)
+            }
+            fun showEmbedded(dataUrl: String) {
+                clearPhotoTap(generatedImageView)
+                val tag = "inline:${dataUrl.hashCode()}"
+                generatedImageView.setTag(R.id.generatedImageView, tag)
+                generatedImageView.setImageDrawable(null)
+                generatedImageView.visibility = View.VISIBLE
+                val maxEdge = itemView.resources.displayMetrics.widthPixels
+                scope.launch {
+                    val bitmap = withContext(Dispatchers.Default) { ScenePhoto.bitmap(dataUrl, maxEdge) }
+                    if (bitmap != null && generatedImageView.getTag(R.id.generatedImageView) == tag) {
+                        val (w, h) = ChatPhoto.frame(bitmap.width, bitmap.height, maxW, maxH)
+                        generatedImageView.layoutParams.width = w
+                        generatedImageView.layoutParams.height = h
+                        generatedImageView.scaleType = ImageView.ScaleType.CENTER_CROP
+                        generatedImageView.setImageBitmap(bitmap)
+                    }
+                }
+            }
+            when (source) {
+                null -> hideGenerated()
+                is ChatPhoto.BubbleSource.Embedded -> showEmbedded(source.dataUrl)
+                is ChatPhoto.BubbleSource.File -> {
+                    try {
+                        val generatedUri = source.uri.toUri()
+                        loadFramedPhoto(
+                            generatedImageView, generatedUri, R.id.generatedImageView, source.uri,
+                            maxW, maxH,
+                            onFramed = { _, _ -> wirePhotoOpen(generatedImageView, generatedUri) },
+                            onFailed = {
+                                val embedded = inlineUrl?.takeIf { it.startsWith("data:image") }
+                                if (embedded != null) showEmbedded(embedded) else hideGenerated()
+                            },
+                        )
+                    } catch (e: Exception) {
+                        val embedded = inlineUrl?.takeIf { it.startsWith("data:image") }
+                        if (embedded != null) showEmbedded(embedded) else hideGenerated()
+                    }
+                }
             }
 
             // 6. BUTTON LISTENERS

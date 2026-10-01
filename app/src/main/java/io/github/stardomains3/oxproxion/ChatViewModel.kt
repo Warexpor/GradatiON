@@ -492,7 +492,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val merged = continuationBase?.let { mergeContinuation(it, message) } ?: message
         val index = resolveAssistantSlot(list, thinkingMessage)
         val newMessage = if (index != -1 && continuationBase != null) {
-            RpContinuation.keepPicture(list[index].imageUri, merged)
+            RpContinuation.keepPicture(list[index].imageUri, merged, list[index].content)
         } else {
             merged
         }
@@ -1053,7 +1053,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             assignOpenSession(sessionId)
             draftRpFacts = null
-            _chatMessages.value = messages.map {
+            val parsedMessages = messages.map {
                 val parsed = try {
                     json.parseToJsonElement(it.content)
                 } catch (e: Exception) {
@@ -1066,6 +1066,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     imageUri = kept.fileUri
                 )
             }
+            val healed = withContext(Dispatchers.IO) { healPhotoLinks(parsedMessages) }
+            _chatMessages.value = healed
 
             session?.let {
                 val loadedMode = it.chatMode()
@@ -1104,6 +1106,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             loadForkFromPrefs(sessionId)
             loadRpSwipeForSession(sessionId)
+            // A cache or Downloads link was copied into app files. Save that, or the next open
+            // repeats the copy and a backup still points at the dead link.
+            session?.title?.takeIf { it.isNotBlank() && healed !== parsedMessages }?.let {
+                saveCurrentChat(it)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1112,6 +1119,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } finally {
             _isChatLoading.value = false
         }
+    }
+
+    /**
+     * Point each picture at a file we still have. A JPEG already in the message rebuilds the
+     * file after the cache copy, or the Downloads copy, is gone.
+     */
+    private fun healPhotoLinks(messages: List<FlexibleMessage>): List<FlexibleMessage> {
+        val app = getApplication<Application>()
+        var changed = false
+        val out = messages.map { message ->
+            val embedded = ScenePhoto.bytesFromDataUrl(MessageContent.imageUrl(message.content).orEmpty())
+            val settled = ScenePhoto.settle(app, message.imageUri, embedded)
+            if (settled == message.imageUri) message
+            else {
+                changed = true
+                message.copy(imageUri = settled)
+            }
+        }
+        return if (changed) out else messages
     }
 
     fun onModelPreferenceSaved() {
@@ -1250,11 +1276,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
         if (lastAssistantIndex > lastUserIndex) {
             // Mid-stream regen left a partial — replace with the stashed full alt.
-            messages[lastAssistantIndex] = messages[lastAssistantIndex].copy(
-                content = JsonPrimitive(alt),
-                reasoning = null,
-                thinking = null
-            )
+            messages[lastAssistantIndex] = messages[lastAssistantIndex].let { current ->
+                current.copy(
+                    content = ScenePhoto.replaceTextKeepingPicture(current.content, alt),
+                    reasoning = null,
+                    thinking = null
+                )
+            }
         } else {
             messages.add(FlexibleMessage(role = "assistant", content = JsonPrimitive(alt)))
         }
@@ -1552,7 +1580,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         val messageToUpdate = currentList[position]
                 val updatedMessage = messageToUpdate.copy(
-            content = JsonPrimitive(newContent),
+            content = ScenePhoto.replaceTextKeepingPicture(messageToUpdate.content, newContent),
             reasoning = null,
             thinking = null
         )
@@ -2064,7 +2092,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val base = continuationBase ?: return
         updateMessages { list ->
             val index = resolveAssistantSlot(list, thinkingMessage)
-            if (index != -1) list[index] = list[index].copy(content = JsonPrimitive(base))
+            if (index != -1) {
+                val current = list[index]
+                list[index] = current.copy(
+                    content = ScenePhoto.replaceTextKeepingPicture(current.content, base)
+                )
+            }
         }
         val fallback = continuationErrorText(e, lanCertChange)
         if (e is ClientRequestException || e is ServerResponseException) {
@@ -2989,8 +3022,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             else -> "$originalMessage (Code: $code)"
         }
     }
-    private suspend fun downloadImages(imageUrls: List<String>): List<String> {  // NEW: Return Uris
-        val downloadedUris = mutableListOf<String>()
+    private suspend fun downloadImages(imageUrls: List<String>): List<ScenePhoto.GeneratedPicture> {
+        val saved = mutableListOf<ScenePhoto.GeneratedPicture>()
+        val app = getApplication<Application>()
         withContext(Dispatchers.IO) {
             imageUrls.forEachIndexed { index, imageUrl ->
                 try {
@@ -3001,14 +3035,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         val mime = imageUrl.substringAfter("data:", "").substringBefore(";").ifBlank { "image/png" }
                         Base64.getDecoder().decode(imageUrl.substringAfter(",")) to mime
                     }
-                    val extension = when (mimeType) {
-                        "image/jpeg", "image/jpg" -> "jpg"
-                        "image/webp" -> "webp"
-                        else -> "png"
+                    val jpeg = ScenePhoto.encode(imageBytes)
+                    // The chat keeps a copy under app files. Downloads is the copy the user can open
+                    // later; losing that file must not take the picture out of the story.
+                    val owned = jpeg?.let { ScenePhoto.store(app, it)?.toString() }
+                    val downloads = try {
+                        val extension = when (mimeType) {
+                            "image/jpeg", "image/jpg" -> "jpg"
+                            "image/webp" -> "webp"
+                            else -> "png"
+                        }
+                        val filename = "generated_image_${System.currentTimeMillis()}_$index.$extension"
+                        writeBytesToDownloads(filename, mimeType, imageBytes).toString()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
                     }
-                    val filename = "generated_image_${System.currentTimeMillis()}_$index.$extension"
-                    val uri = writeBytesToDownloads(filename, mimeType, imageBytes)
-                    downloadedUris.add(uri.toString())
+                    val uri = owned ?: downloads
+                    if (uri == null) {
+                        _toastUiEvent.postValue(Event(str(R.string.image_download_failed, "could not save")))
+                    } else {
+                        saved.add(ScenePhoto.GeneratedPicture(uri, jpeg?.let { ScenePhoto.dataUrl(it) }))
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -3016,7 +3065,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        return downloadedUris  // NEW: Return list
+        return saved
     }
 
     private suspend fun fetchGeneratedImage(url: String): Pair<ByteArray, String> {

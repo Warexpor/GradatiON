@@ -226,7 +226,7 @@ private object UnusedHost : ChatStreamHost {
     override fun parseOpenRouterError(responseText: String) = responseText
     override fun finalizeAssistantContent(text: String) = text
     override fun getModelDisplayName(apiIdentifier: String) = apiIdentifier
-    override suspend fun downloadImages(imageUrls: List<String>): List<String> = emptyList()
+    override suspend fun downloadImages(imageUrls: List<String>): List<ScenePhoto.GeneratedPicture> = emptyList()
     override fun saveBinaryFileToDownloads(filename: String, bytes: ByteArray, mimeType: String) = Unit
     override fun updateMessages(updateBlock: (MutableList<FlexibleMessage>) -> Unit) = Unit
     override fun putAssistantMessage(

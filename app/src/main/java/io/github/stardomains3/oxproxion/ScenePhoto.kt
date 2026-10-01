@@ -7,6 +7,13 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import androidx.core.content.FileProvider
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -63,6 +70,21 @@ object ScenePhoto {
         }
     }
 
+    /** A bitmap small enough to put in a bubble. The full picture is never decoded. */
+    fun bitmap(dataUrl: String, maxEdge: Int): Bitmap? {
+        val bytes = bytesFromDataUrl(dataUrl) ?: return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0 || maxEdge <= 0) return null
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= maxEdge && bounds.outHeight / (sample * 2) >= maxEdge) {
+            sample *= 2
+        }
+        return BitmapFactory.decodeByteArray(
+            bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }
+        )
+    }
+
     fun stagedFromDataUrl(url: String, maxBytes: Int = 12_000_000): Staged? {
         val bytes = bytesFromDataUrl(url) ?: return null
         if (bytes.isEmpty() || bytes.size > maxBytes) return null
@@ -96,13 +118,140 @@ object ScenePhoto {
 
     /**
      * A copy we own, so the bubble can still open the picture after the picker link dies.
-     * The message also carries the JPEG, which is what shows if this file is gone.
+     * It lives in app files: the cache is cleared out from under a long chat. The message
+     * also carries the JPEG, which is what shows if this file is gone.
      */
     fun store(context: Context, jpeg: ByteArray): Uri? = try {
-        val dir = File(context.cacheDir, "scene_photos").apply { mkdirs() }
+        val dir = File(context.filesDir, DIR).apply { mkdirs() }
         val file = File(dir, "${UUID.randomUUID()}.jpg")
         file.writeBytes(jpeg)
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    } catch (_: Exception) {
+        null
+    }
+
+    /** A picture the model sent, kept as a file we own and as the JPEG already in the message. */
+    data class GeneratedPicture(val uri: String, val dataUrl: String?)
+
+    fun dataUrl(jpeg: ByteArray): String =
+        "data:$MIME;base64," + android.util.Base64.encodeToString(jpeg, android.util.Base64.NO_WRAP)
+
+    /** The file behind one of our own links, or null when the link belongs to someone else. */
+    fun ownedFile(context: Context, uriString: String): File? {
+        val uri = Uri.parse(uriString)
+        if (uri.scheme != "content") return null
+        if (uri.authority != "${context.packageName}.fileprovider") return null
+        val segments = uri.pathSegments
+        if (segments.size < 2) return null
+        val root = when (segments[0]) {
+            CACHE_ROOT -> context.cacheDir
+            FILES_ROOT -> context.filesDir
+            else -> return null
+        }
+        if (segments.drop(1).any { it.isEmpty() || it == "." || it == ".." }) return null
+        val file = File(root, segments.drop(1).joinToString(File.separator))
+        val rootPath = root.canonicalFile.path + File.separator
+        val path = file.canonicalFile.path
+        if (path != root.canonicalFile.path && !path.startsWith(rootPath)) return null
+        return file.canonicalFile
+    }
+
+    /** True when [uriString] still opens. A missing cache file is not a picture we can put back. */
+    fun canRead(context: Context, uriString: String): Boolean {
+        val owned = ownedFile(context, uriString)
+        if (owned != null) return owned.isFile && owned.length() > 0L
+        return readLimited(context, uriString) != null
+    }
+
+    /**
+     * A link that still opens. A copy left in the cache, a JPEG already stored in the message,
+     * or a gallery link we can still read is written under app files. A link we cannot read
+     * stays as it is.
+     */
+    fun settle(context: Context, uriString: String?, embedded: ByteArray?): String? {
+        val current = uriString?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("data:", ignoreCase = true) }
+        val owned = current?.let { ownedFile(context, it) }
+        if (owned != null && owned.isFile && owned.length() > 0L && under(context.filesDir, owned)) {
+            return current
+        }
+        val fromFile = owned?.takeIf { it.isFile && it.length() > 0L }?.readBytes()
+        val payload = fromFile ?: embedded?.let { encode(it) }
+        if (payload != null) {
+            store(context, payload)?.toString()?.let { return it }
+        }
+        if (current != null && owned == null) {
+            val raw = readLimited(context, current) ?: return current
+            val jpeg = encode(raw) ?: return current
+            return store(context, jpeg)?.toString() ?: current
+        }
+        return current
+    }
+
+    /** [content] plus the generated JPEG, so a later open can draw it after the file is gone. */
+    fun embed(content: JsonElement, dataUrl: String): JsonElement {
+        val image = buildJsonObject {
+            put("type", "image_url")
+            put("image_url", buildJsonObject { put("url", dataUrl) })
+        }
+        val body = MessageContent.unwrap(content).body
+        if (MessageContent.imageUrl(body) == dataUrl) return content
+        return when (body) {
+            is JsonArray -> if (MessageContent.hasImage(body)) body else JsonArray(body + image)
+            is JsonPrimitive -> {
+                val text = body.contentOrNull.orEmpty()
+                buildJsonArray {
+                    if (text.isNotBlank()) {
+                        add(buildJsonObject {
+                            put("type", "text")
+                            put("text", text)
+                        })
+                    }
+                    add(image)
+                }
+            }
+            else -> content
+        }
+    }
+
+    /** The reply's words, with a generated picture left where it was. */
+    fun replaceTextKeepingPicture(content: JsonElement, text: String): JsonElement {
+        val url = MessageContent.imageUrl(content)?.takeIf { it.startsWith("data:image") }
+            ?: return JsonPrimitive(text)
+        return embed(JsonPrimitive(text), url)
+    }
+
+    fun withGeneratedPicture(message: FlexibleMessage, picture: GeneratedPicture?): FlexibleMessage {
+        if (picture == null) return message
+        val content = picture.dataUrl?.let { embed(message.content, it) } ?: message.content
+        return message.copy(content = content, imageUri = picture.uri)
+    }
+
+    private const val DIR = "scene_photos"
+    private const val CACHE_ROOT = "temp_images"
+    private const val FILES_ROOT = "owned"
+    private const val MAX_READ = 8_000_000
+
+    private fun under(root: File, file: File): Boolean {
+        val base = root.canonicalFile.path + File.separator
+        return file.canonicalFile.path.startsWith(base)
+    }
+
+    private fun readLimited(context: Context, uriString: String): ByteArray? = try {
+        val uri = Uri.parse(uriString)
+        if (uri.scheme != "content" && uri.scheme != "file") null
+        else context.contentResolver.openInputStream(uri)?.use { input ->
+            val out = ByteArrayOutputStream()
+            val buf = ByteArray(16 * 1024)
+            var total = 0
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                total += n
+                if (total > MAX_READ) return null
+                out.write(buf, 0, n)
+            }
+            out.toByteArray().takeIf { it.isNotEmpty() }
+        }
     } catch (_: Exception) {
         null
     }

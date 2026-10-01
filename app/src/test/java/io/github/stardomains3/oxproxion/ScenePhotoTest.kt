@@ -5,7 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.util.Base64
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -14,6 +16,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
@@ -45,5 +48,44 @@ class ScenePhotoTest {
         val edit = ScenePhoto.editPhoto(url, "content://scene/1")
         assertEquals(url, edit?.dataUrl)
         assertEquals("content://scene/1", edit?.fileUri)
+    }
+
+    @Test fun aPictureWeOwnStaysPutAndAMissingOneIsRebuilt() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val jpeg = tinyJpeg()
+        val dir = File(context.filesDir, "scene_photos").apply { mkdirs() }
+        val file = File(dir, "kept.jpg").apply { writeBytes(jpeg) }
+        val uri = "content://${context.packageName}.fileprovider/owned/scene_photos/kept.jpg"
+        assertEquals(file.canonicalFile, ScenePhoto.ownedFile(context, uri)?.canonicalFile)
+        assertEquals(uri, ScenePhoto.settle(context, uri, null))
+        assertNull(ScenePhoto.ownedFile(context, "content://${context.packageName}.fileprovider/owned/../kept.jpg"))
+
+        file.delete()
+        assertFalse(ScenePhoto.canRead(context, uri))
+        val rebuilt = ScenePhoto.settle(context, uri, jpeg)
+        assertNotNull(rebuilt)
+        assertTrue(rebuilt!!.contains("/owned/scene_photos/"))
+        val restored = ScenePhoto.ownedFile(context, rebuilt)
+        assertNotNull(restored)
+        assertTrue(restored!!.isFile)
+        assertTrue(restored.length() > 0)
+
+        val cache = File(File(context.cacheDir, "scene_photos").apply { mkdirs() }, "old.jpg")
+        cache.writeBytes(jpeg)
+        val cacheUri = "content://${context.packageName}.fileprovider/temp_images/scene_photos/old.jpg"
+        val moved = ScenePhoto.settle(context, cacheUri, null)
+        assertNotNull(moved)
+        assertTrue(moved!!.contains("/owned/"))
+        assertFalse(moved.contains("/temp_images/"))
+    }
+
+    private fun tinyJpeg(): ByteArray {
+        val bmp = Bitmap.createBitmap(8, 4, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(Color.DKGRAY)
+        val raw = ByteArrayOutputStream().also {
+            bmp.compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        bmp.recycle()
+        return raw
     }
 }

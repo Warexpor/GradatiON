@@ -1,5 +1,7 @@
 package io.github.stardomains3.oxproxion
 
+import kotlinx.serialization.json.JsonElement
+
 /**
  * Roleplay's Continue: the character carries on inside its last reply instead of starting a new
  * bubble. The model is asked (with a hidden user turn) to pick up exactly where the reply ends;
@@ -28,11 +30,23 @@ object RpContinuation {
     /**
      * Continue replaces the reply with the joined text. A picture already on that reply stays
      * unless the new piece brought one of its own. A data URL is not a file we can show.
+     * The JPEG stored in the message stays too, so the next save still has the picture.
      */
-    fun keepPicture(priorUri: String?, updated: FlexibleMessage): FlexibleMessage {
-        if (priorUri.isNullOrEmpty() || priorUri.startsWith("data:")) return updated
-        if (!updated.imageUri.isNullOrEmpty()) return updated
-        return updated.copy(imageUri = priorUri)
+    fun keepPicture(
+        priorUri: String?,
+        updated: FlexibleMessage,
+        priorContent: JsonElement? = null,
+    ): FlexibleMessage {
+        val withUri = when {
+            priorUri.isNullOrEmpty() || priorUri.startsWith("data:") -> updated
+            !updated.imageUri.isNullOrEmpty() -> updated
+            else -> updated.copy(imageUri = priorUri)
+        }
+        val priorImage = priorContent?.let { MessageContent.imageUrl(it) }
+            ?.takeIf { it.startsWith("data:image") }
+            ?: return withUri
+        if (MessageContent.hasImage(withUri.content)) return withUri
+        return withUri.copy(content = ScenePhoto.embed(withUri.content, priorImage))
     }
 
     fun join(base: String, addition: String): String {

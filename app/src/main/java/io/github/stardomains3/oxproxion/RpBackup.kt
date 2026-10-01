@@ -1,7 +1,11 @@
 package io.github.stardomains3.oxproxion
 
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.util.Base64
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.io.File
 
 @Serializable
 data class RpCharacterBackup(
@@ -39,7 +43,12 @@ data class RpCharacterExport(
      * Lorebook pinned to this character, by name. Null leaves the local pin. Empty clears it.
      * A name with no matching book is kept until that book is imported.
      */
-    val lorebookName: String? = null
+    val lorebookName: String? = null,
+    /**
+     * This character's wallpaper, as a JPEG. Null means a backup from before this field,
+     * which must not remove a picture already on the phone. Empty means no wallpaper.
+     */
+    val wallpaperBase64: String? = null
 )
 
 @Serializable
@@ -141,5 +150,56 @@ internal object RpCharacterPrefsBackup {
         } else {
             prefs.savePendingRpLorebookName(characterId, name.take(200))
         }
+    }
+}
+
+/**
+ * A character's wallpaper is a file beside the card, keyed by the Room id, so a backup of the
+ * card alone used to leave it behind on the next phone.
+ */
+internal object RpWallpaperBackup {
+    /** Larger than this and the backup leaves the phone's copy alone instead of dropping it. */
+    private const val MAX_BYTES = 2_000_000
+
+    /** Empty when there is no picture. Null when the file cannot be carried. */
+    fun encode(file: File): String? {
+        if (!file.isFile || file.length() == 0L) return ""
+        if (file.length() > MAX_BYTES) return null
+        return try {
+            Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun apply(context: Context, characterId: Long, encoded: String?) {
+        val slot = BackgroundPhoto.slotForCharacter(characterId)
+        when (val action = restore(encoded)) {
+            Restore.Leave -> Unit
+            Restore.Clear -> if (BackgroundPhoto.hasPhoto(context, slot)) BackgroundPhoto.delete(context, slot)
+            is Restore.Write -> BackgroundPhoto.writeBytes(context, slot, action.jpeg)
+        }
+    }
+
+    internal sealed class Restore {
+        data object Leave : Restore()
+        data object Clear : Restore()
+        data class Write(val jpeg: ByteArray) : Restore()
+    }
+
+    internal fun restore(encoded: String?): Restore {
+        if (encoded == null) return Restore.Leave
+        if (encoded.isBlank()) return Restore.Clear
+        if (encoded.length > MAX_BYTES * 2) return Restore.Leave
+        val bytes = try {
+            Base64.decode(encoded, Base64.DEFAULT)
+        } catch (_: IllegalArgumentException) {
+            return Restore.Leave
+        }
+        if (bytes.isEmpty() || bytes.size > MAX_BYTES) return Restore.Leave
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return Restore.Leave
+        return Restore.Write(bytes)
     }
 }

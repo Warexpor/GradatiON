@@ -2,4 +2,6 @@
 <paths >
     <external-files-path name="my_images" path="Pictures" />
     <cache-path name="temp_images" path="." />
+    <!-- Scene photos live under files, not the cache, so a cache clear does not drop the link. -->
+    <files-path name="owned" path="." />
 </paths>

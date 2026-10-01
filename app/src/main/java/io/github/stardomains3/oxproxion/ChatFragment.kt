@@ -3641,7 +3641,8 @@ $cleanContent
 
     private fun loadEditPhoto(context: Context, photo: ScenePhoto.EditPhoto): ScenePhoto.Staged? {
         photo.dataUrl?.let { ScenePhoto.stagedFromDataUrl(it) }?.let { staged ->
-            return ScenePhoto.Staged(staged.bytes, staged.mime, photo.fileUri)
+            val file = photo.fileUri?.takeIf { ScenePhoto.canRead(context, it) }
+            return ScenePhoto.Staged(staged.bytes, staged.mime, file)
         }
         val uri = photo.fileUri ?: return null
         val bytes = try {

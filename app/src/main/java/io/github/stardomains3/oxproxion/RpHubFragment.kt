@@ -65,6 +65,9 @@ class RpHubFragment : Fragment() {
                             voicePitch = voice.pitch,
                             voiceRate = voice.rate,
                             lorebookName = loreName,
+                            wallpaperBase64 = RpWallpaperBackup.encode(
+                                BackgroundPhoto.file(app, BackgroundPhoto.slotForCharacter(c.id))
+                            ),
                         )
                     }
                     val cache = File(app.cacheDir, "rp-chars-${System.nanoTime()}.json")
@@ -424,6 +427,7 @@ class RpHubFragment : Fragment() {
             imported.forEachIndexed { index, row ->
                 backup.characters.getOrNull(index)?.let { exported ->
                     RpCharacterPrefsBackup.apply(prefs, row.id, exported, lorebooks)
+                    RpWallpaperBackup.apply(requireContext(), row.id, exported.wallpaperBase64)
                 }
                 if (row.isNew && row.exportKey.isNotBlank()) {
                     val oldId = prefs.takeDeletedRpCharacterId(row.exportKey)

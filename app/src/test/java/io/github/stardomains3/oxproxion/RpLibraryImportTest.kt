@@ -1,6 +1,8 @@
 package io.github.stardomains3.oxproxion
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.Color
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
@@ -16,6 +18,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.ByteArrayOutputStream
 
 /**
  * Character and lore imports are one transaction: a failure on a later row leaves the library
@@ -164,6 +167,7 @@ class RpLibraryImportTest {
             RpCharacterBackup.serializer(),
             """{"characters":[{"name":"Mira","exportKey":"k"}]}""",
         )
+        assertNull(older.characters.single().wallpaperBase64)
         RpCharacterPrefsBackup.apply(prefs, kept, older.characters.single(), emptyList())
         assertEquals("stay", prefs.getRpMemory(kept))
         assertEquals(SharedPreferencesHelper.RP_LAYOUT_BOOK, prefs.getRpLayout(kept))
@@ -225,6 +229,56 @@ class RpLibraryImportTest {
         prefs.savePendingRpLorebookName(fresh, "later")
         prefs.clearRpCharacterPrefs(fresh)
         assertNull(prefs.getPendingRpLorebookName(fresh))
+    }
+
+    @Test
+    fun characterBackupCarriesTheWallpaperAndLeavesAnOlderOne() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val bmp = Bitmap.createBitmap(12, 8, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(Color.DKGRAY)
+        val jpeg = ByteArrayOutputStream().also {
+            bmp.compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        bmp.recycle()
+
+        val kept = 3L
+        val slot = BackgroundPhoto.slotForCharacter(kept)
+        assertEquals("", RpWallpaperBackup.encode(BackgroundPhoto.file(app, slot)))
+        assertTrue(BackgroundPhoto.writeBytes(app, slot, jpeg))
+        val encoded = RpWallpaperBackup.encode(BackgroundPhoto.file(app, slot))
+        assertFalse(encoded.isNullOrBlank())
+
+        val text = buildString {
+            RpBackupWriter.writeCharacters(
+                this,
+                listOf(RpCharacterExport(name = "Mira", exportKey = "k", wallpaperBase64 = encoded)),
+            )
+        }
+        val decoded = Json { ignoreUnknownKeys = true }
+            .decodeFromString(RpCharacterBackup.serializer(), text)
+            .characters.single()
+        assertEquals(encoded, decoded.wallpaperBase64)
+
+        val fresh = 9L
+        val freshSlot = BackgroundPhoto.slotForCharacter(fresh)
+        RpWallpaperBackup.apply(app, fresh, null)
+        assertFalse(BackgroundPhoto.hasPhoto(app, freshSlot))
+        RpWallpaperBackup.apply(app, fresh, "!!!!")
+        assertFalse(BackgroundPhoto.hasPhoto(app, freshSlot))
+        RpWallpaperBackup.apply(app, fresh, decoded.wallpaperBase64)
+        assertTrue(BackgroundPhoto.hasPhoto(app, freshSlot))
+        val restored = BackgroundPhoto.file(app, freshSlot).readBytes()
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(restored, 0, restored.size, bounds)
+        assertEquals(12, bounds.outWidth)
+        assertEquals(8, bounds.outHeight)
+
+        RpWallpaperBackup.apply(app, fresh, "")
+        assertFalse(BackgroundPhoto.hasPhoto(app, freshSlot))
+        RpWallpaperBackup.apply(app, kept, "not-a-picture")
+        assertTrue(BackgroundPhoto.hasPhoto(app, slot))
+        RpWallpaperBackup.apply(app, kept, null)
+        assertTrue(BackgroundPhoto.hasPhoto(app, slot))
     }
 
     @Test
