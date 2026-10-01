@@ -68,6 +68,11 @@ class ScenePhotoTest {
         val uri = "content://${context.packageName}.fileprovider/owned/scene_photos/kept.jpg"
         assertEquals(file.canonicalFile, ScenePhoto.ownedFile(context, uri)?.canonicalFile)
         assertEquals(uri, ScenePhoto.settle(context, uri, null))
+        assertTrue(ScenePhoto.storedFile(context, uri))
+        val cacheLink = "content://${context.packageName}.fileprovider/temp_images/scene_photos/kept.jpg"
+        assertFalse(ScenePhoto.storedFile(context, cacheLink))
+        file.writeBytes(jpeg.copyOf(4))
+        assertFalse(ScenePhoto.storedFile(context, uri))
         assertNull(ScenePhoto.ownedFile(context, "content://${context.packageName}.fileprovider/owned/../kept.jpg"))
 
         file.delete()

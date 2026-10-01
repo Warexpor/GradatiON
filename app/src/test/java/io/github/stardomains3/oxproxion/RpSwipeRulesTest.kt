@@ -3,6 +3,7 @@ package io.github.stardomains3.oxproxion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -107,6 +108,19 @@ class RpSwipeRulesTest {
         assertEquals("", RpSwipeRules.pictureUriOf("data:image/jpeg;base64,qq"))
         assertEquals("", RpSwipeRules.pictureUriOf("  "))
         assertEquals("content://scene/1", RpSwipeRules.pictureUriOf(" content://scene/1 "))
+    }
+
+    @Test
+    fun aRebuiltFileReplacesTheLinkEveryVersionWasShowing() {
+        val alts = listOf("She nods.", "She turns.")
+        val pictures = listOf("content://cache/1", "content://cache/1")
+        val adopted = RpSwipeRules.adoptVisibleFile(alts, pictures, 0, "She nods.", "content://files/a")
+        assertEquals(listOf("content://files/a", "content://files/a"), adopted)
+        assertSame(pictures, RpSwipeRules.adoptVisibleFile(alts, pictures, 0, "She nods.", ""))
+        assertSame(pictures, RpSwipeRules.adoptVisibleFile(alts, pictures, 0, "She turns.", "content://files/a"))
+        val blank = listOf("", "content://cache/2")
+        assertSame(blank, RpSwipeRules.adoptVisibleFile(alts, blank, 0, "She nods.", "content://files/a"))
+        assertSame(pictures, RpSwipeRules.remapPicture(pictures, "content://other", "content://files/a"))
     }
 
     @Test
