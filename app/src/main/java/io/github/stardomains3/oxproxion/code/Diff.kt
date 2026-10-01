@@ -78,6 +78,29 @@ object Diff {
         lines.count { it.type == DiffLine.Type.ADD } to lines.count { it.type == DiffLine.Type.DELETE }
 
     /**
+     * A unified patch that creates a file (`new file mode`, `--- /dev/null`, or `@@ -0,0`).
+     * A deletion (`deleted file mode`, `+++ /dev/null`, `+0,0`) is not a new file.
+     */
+    fun unifiedIsNewFile(text: String): Boolean {
+        var sawNew = false
+        var sawDelete = false
+        for (raw in text.lineSequence()) {
+            val line = raw.trimEnd('\r')
+            if (line.startsWith("deleted file mode") ||
+                line.startsWith("+++ /dev/null") ||
+                line.startsWith("+++ b/dev/null") ||
+                (line.startsWith("@@ -") && line.contains(" +0,0"))
+            ) sawDelete = true
+            if (line.startsWith("new file mode") ||
+                line.startsWith("--- /dev/null") ||
+                line.startsWith("--- a/dev/null") ||
+                line.startsWith("@@ -0,0 ")
+            ) sawNew = true
+        }
+        return sawNew && !sawDelete
+    }
+
+    /**
      * Git metadata that is not a hunk body. File headers are `--- a/path` / `+++ b/path`
      * (space or tab after the dashes), not a content line that itself starts with dashes.
      */

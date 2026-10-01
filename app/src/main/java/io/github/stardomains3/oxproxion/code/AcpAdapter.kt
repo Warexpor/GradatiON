@@ -6,7 +6,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -64,6 +66,12 @@ class AcpAdapter : HarnessAdapter {
         val seen: MutableSet<Long> = ConcurrentHashMap.newKeySet(),
     )
     private val openGaps = ConcurrentHashMap<String, OpenGap>()
+    /**
+     * Kind and whether a detail line was already shown, per session and tool id.
+     * A `tool_call_update` often omits `kind` and repeats only the working folder.
+     */
+    private val toolKinds = ConcurrentHashMap<String, String>()
+    private val toolDetailSet = ConcurrentHashMap.newKeySet<String>()
 
     // ── outbound ──────────────────────────────────────────────────────────────────────────
 
@@ -420,15 +428,18 @@ class AcpAdapter : HarnessAdapter {
         val callId = u.str("toolCallId") ?: return ignored("tool_call without id")
         val kind = toolKind(u.str("kind"))
         val result = ArrayList<AdapterOutput>()
+        val detail = detailOf(u)
+        rememberKind(sid, callId, u.str("kind"))
+        if (!detail.isNullOrBlank()) toolDetailSet.add(toolKey(sid, callId))
         result += AdapterOutput.Update(sid, CodeUpdate.Upsert(CodeEvent.ToolCall(
             key = "tool:$callId",
             at = now,
             callId = callId,
             kind = kind,
             title = u.str("title") ?: "Tool call",
-            detail = detailOf(u),
+            detail = detail,
             status = toolStatus(u.str("status")) ?: ToolStatus.PENDING,
-            output = textContent(u["content"], u.str("kind"))
+            output = outputOf(sid, callId, u)
         )), seq)
         diffs(callId, u["content"], now).forEach {
             result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it), seq)
@@ -444,8 +455,8 @@ class AcpAdapter : HarnessAdapter {
             status = toolStatus(u.str("status")),
             title = u.str("title"),
             // A location-only update must not wipe the command the tool_call already showed.
-            detail = detailForUpdate(u),
-            output = textContent(u["content"], u.str("kind"))
+            detail = detailForUpdate(sid, callId, u),
+            output = outputOf(sid, callId, u)
         ), seq)
         diffs(callId, u["content"], now).forEach {
             result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it), seq)
@@ -511,6 +522,9 @@ class AcpAdapter : HarnessAdapter {
         openText.remove(sessionId)
         openThought.remove(sessionId)
         openGaps.remove(sessionId)
+        val prefix = "$sessionId\u0000"
+        toolKinds.keys.removeAll { it.startsWith(prefix) }
+        toolDetailSet.removeAll { it.startsWith(prefix) }
     }
 
     /** The replay that refilled a seq hole has finished (or failed); stop dropping repeats. */
@@ -548,7 +562,7 @@ class AcpAdapter : HarnessAdapter {
      * Detail worth applying on `tool_call_update`. Null keeps the previous line.
      * A later frame that only repeats the working folder used to replace `npm test`.
      */
-    private fun detailForUpdate(u: JsonObject): String? {
+    private fun detailForUpdate(sid: String, callId: String, u: JsonObject): String? {
         val raw = u["rawInput"] as? JsonObject
         val specific = commandOf(raw) != null ||
             firstRaw(raw, "pattern", "query", "url") != null ||
@@ -557,8 +571,45 @@ class AcpAdapter : HarnessAdapter {
             val line = (e as? JsonObject)?.str("line")?.toIntOrNull()
             line != null && line > 0
         }
-        if (!specific && !hasLine) return null
-        return detailOf(u)
+        val key = toolKey(sid, callId)
+        val hadDetail = toolDetailSet.contains(key)
+        val hasPath = (u["locations"] as? JsonArray).orEmpty().any { e ->
+            val path = (e as? JsonObject)?.str("path")
+            !path.isNullOrBlank()
+        }
+        // A folder-only update must not replace `npm test`. The first path still fills an empty row.
+        if (!specific && !hasLine && (hadDetail || !hasPath)) return null
+        val detail = detailOf(u) ?: return null
+        if (detail.isNotBlank()) toolDetailSet.add(key)
+        return detail
+    }
+
+    private fun toolKey(sid: String, callId: String) = "$sid\u0000$callId"
+
+    /** Later updates often omit kind. The first frame's kind still decides which end of a long log to keep. */
+    private fun rememberKind(sid: String, callId: String, kind: String?): String? {
+        val key = toolKey(sid, callId)
+        if (!kind.isNullOrBlank()) toolKinds[key] = kind
+        return kind?.takeIf { it.isNotBlank() } ?: toolKinds[key]
+    }
+
+    private fun outputOf(sid: String, callId: String, u: JsonObject): String? {
+        val kind = rememberKind(sid, callId, u.str("kind"))
+        val fromContent = textContent(u["content"], kind)
+        if (fromContent != null) return fromContent
+        val raw = rawOutputText(u["rawOutput"]) ?: return null
+        return ToolOutputText.clip(kind, raw, MAX_OUTPUT)
+    }
+
+    /** Some agents put the log in `rawOutput` instead of a content block. */
+    private fun rawOutputText(el: JsonElement?): String? = when (el) {
+        is JsonPrimitive -> {
+            // Numbers and booleans are not a log. A JSON string's content is the text.
+            val asNumber = el.longOrNull != null || el.doubleOrNull != null || el.booleanOrNull != null
+            if (asNumber) null else el.content.trim().ifEmpty { null }
+        }
+        is JsonObject -> firstRaw(el, "output", "stdout", "text", "result")
+        else -> null
     }
 
     private fun detailOf(u: JsonObject): String? {
@@ -639,7 +690,8 @@ class AcpAdapter : HarnessAdapter {
                 if (lines.isEmpty()) return@mapNotNull null
                 val (add, del) = Diff.counts(lines)
                 return@mapNotNull CodeEvent.FileDiff(
-                    "diff:$callId:$path", now, callId, path, lines, add, del, isNewFile = false,
+                    "diff:$callId:$path", now, callId, path, lines, add, del,
+                    isNewFile = Diff.unifiedIsNewFile(unified),
                 )
             }
             // A non-string old/new text used to throw out of decode and drop the tool call with it.

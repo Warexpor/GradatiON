@@ -183,6 +183,7 @@
         <item quantity="other">%1$d untracked</item>
     </plurals>
     <string name="code_changes_failed">Can\'t load changes right now.</string>
+    <string name="code_changes_tap_retry">Tap to try again.</string>
     <string name="code_changes_diff_failed">Can\'t load this diff right now.</string>
     <string name="code_changes_diff_empty">No diff for this file.</string>
     <string name="code_changes_diff_untracked">Untracked. Revert leaves this file.</string>

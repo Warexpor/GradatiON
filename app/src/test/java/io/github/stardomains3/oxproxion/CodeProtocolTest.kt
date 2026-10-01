@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import io.github.stardomains3.oxproxion.code.AcpAdapter
+import io.github.stardomains3.oxproxion.code.AcpHandshake
 import io.github.stardomains3.oxproxion.code.AgentInlineImage
 import io.github.stardomains3.oxproxion.code.AvailableCommand
 import io.github.stardomains3.oxproxion.code.CodeComposer
@@ -1046,5 +1047,103 @@ class CodeProtocolTest {
         assertEquals("two", changed.first { it.type == DiffLine.Type.DELETE }.text)
         assertEquals("three", changed.first { it.type == DiffLine.Type.ADD }.text)
         assertTrue(changed.none { it.text.contains('\r') })
+    }
+
+    @Test fun readUpdateWithoutKindKeepsTheHead() {
+        val body = "START-" + "x".repeat(AcpAdapter.MAX_OUTPUT)
+        val list = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"r-head","title":"Read","kind":"read","status":"in_progress"}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"r-head","status":"completed","content":[{"type":"content","content":{"type":"text","text":"$body"}}]}"""),
+        ))
+        val output = (list.single() as CodeEvent.ToolCall).output!!
+        assertTrue(output.startsWith("START-"))
+        assertTrue(output.endsWith("…"))
+    }
+
+    @Test fun shellUpdateWithoutKindKeepsTheTail() {
+        val body = "y".repeat(AcpAdapter.MAX_OUTPUT) + "-TAIL"
+        val list = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"x-tail","title":"Bash","kind":"execute","status":"in_progress"}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"x-tail","status":"completed","content":[{"type":"content","content":{"type":"text","text":"$body"}}]}"""),
+        ))
+        val output = (list.single() as CodeEvent.ToolCall).output!!
+        assertTrue(output.endsWith("-TAIL"))
+        assertTrue(output.startsWith("…"))
+    }
+
+    @Test fun toolUpdateShowsPathWhenTheRowHadNoDetail() {
+        val list = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"path1","title":"Read","kind":"read","status":"pending"}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"path1","status":"in_progress","locations":[{"path":"src/A.kt"}]}"""),
+        ))
+        assertEquals("src/A.kt", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
+    @Test fun folderOnlyUpdateStillDoesNotReplaceACommand() {
+        val list = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cmd1","title":"Bash","kind":"execute","status":"pending","rawInput":{"command":"npm test"},"locations":[{"path":"/repo"}]}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"cmd1","status":"completed","locations":[{"path":"/repo"}]}"""),
+        ))
+        assertEquals("npm test", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
+    @Test fun rawOutputIsShownWhenContentIsMissing() {
+        val list = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"raw1","title":"Bash","kind":"execute","status":"completed","rawOutput":"ok from raw"}"""),
+        ))
+        assertEquals("ok from raw", (list.single() as CodeEvent.ToolCall).output)
+    }
+
+    @Test fun rawOutputObjectUsesStdout() {
+        val list = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"raw2","title":"Bash","kind":"execute","status":"completed","rawOutput":{"stdout":"hello out"}}"""),
+        ))
+        assertEquals("hello out", (list.single() as CodeEvent.ToolCall).output)
+    }
+
+    @Test fun contentBeatsRawOutput() {
+        val list = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"raw3","title":"Bash","kind":"execute","status":"completed","content":[{"type":"text","text":"from content"}],"rawOutput":"from raw"}"""),
+        ))
+        assertEquals("from content", (list.single() as CodeEvent.ToolCall).output)
+    }
+
+    @Test fun unifiedDiffOfANewFileIsMarkedNew() {
+        val patch = "new file mode 100644\\n--- /dev/null\\n+++ b/n.kt\\n@@ -0,0 +1 @@\\n+hello\\n"
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"new1","title":"Write","kind":"edit","status":"completed","content":[{"type":"diff","path":"n.kt","diff":"$patch"}]}"""
+        )))
+        val diff = list.filterIsInstance<CodeEvent.FileDiff>().single()
+        assertTrue(diff.isNewFile)
+        assertEquals("hello", diff.lines.first { it.type == DiffLine.Type.ADD }.text)
+    }
+
+    @Test fun unifiedDiffOfADeletionIsNotANewFile() {
+        val patch = "deleted file mode 100644\\n--- a/n.kt\\n+++ /dev/null\\n@@ -1 +0,0 @@\\n-hello\\n"
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"del1","title":"Delete","kind":"delete","status":"completed","content":[{"type":"diff","path":"n.kt","diff":"$patch"}]}"""
+        )))
+        val diff = list.filterIsInstance<CodeEvent.FileDiff>().single()
+        assertFalse(diff.isNewFile)
+        assertFalse(Diff.unifiedIsNewFile("@@ -1,3 +1,3 @@\n-a\n+b\n"))
+    }
+
+    @Test fun skippableAuthErrorIsOnlyAMissingMethod() {
+        assertTrue(AcpHandshake.isSkippableAuthError("Method not found"))
+        assertTrue(AcpHandshake.isSkippableAuthError("Unknown method: authenticate"))
+        assertTrue(AcpHandshake.isSkippableAuthError("authenticate is not implemented"))
+        assertTrue(AcpHandshake.isSkippableAuthError("error -32601"))
+        assertFalse(AcpHandshake.isSkippableAuthError("Sign in required"))
+        assertFalse(AcpHandshake.isSkippableAuthError(""))
+        assertFalse(AcpHandshake.isSkippableAuthError(null))
+    }
+
+    private fun foldFresh(frames: List<String>): List<CodeEvent> {
+        val fresh = AcpAdapter()
+        var list = emptyList<CodeEvent>()
+        frames.flatMap { fresh.decode(it) }.forEach { out ->
+            if (out is AdapterOutput.Update) list = TranscriptReducer.apply(list, out.update, now = 1L)
+        }
+        return list
     }
 }

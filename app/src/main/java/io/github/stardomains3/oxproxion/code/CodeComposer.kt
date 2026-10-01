@@ -137,6 +137,9 @@ class CodeComposer(
 
     val attachmentCount: Int get() = pendingAttachments.size
 
+    /** Copies staged pictures so a leaving screen can put them back. */
+    fun attachmentsSnapshot(): List<PromptAttachment> = pendingAttachments.toList()
+
     fun clear() {
         input.setText("")
         pendingAttachments.clear()

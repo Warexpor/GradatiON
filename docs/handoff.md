@@ -1,3 +1,12 @@
+# Handoff (2026-10-01, code reconnect, tools, session)
+
+On `cursor/code-reconnect-tools-session-0d3f`, targeting `gradation/app-pass`. Code mode only:
+- A `tool_call_update` that omits `kind` still clips a file read from the start and a shell log from the end. A path fills an empty card. A folder-only update still does not replace the command. `rawOutput` (a string, or `stdout`) is shown when there is no content block. A unified patch of a new file is marked new. A deletion is not. Status `R100` shows R.
+- A file or terminal request forwarded to the phone is answered again if the first send does not go out. The reply is dropped when the socket drops, so it cannot land on the next link. `authenticate` that answers "Unknown method" or "not implemented" still continues. "Sign in required" does not.
+- The session menu has Rename (the bridge cannot replace that name). Leaving the session keeps the unsent line and pictures until you send or clear them. Changes, and a file diff, say to tap when the load fails and that tap tries again.
+
+Phone: drop the link during a tool call and come back. On a long Read, confirm the start of the file is on the card after the tool finishes. Open Changes with the bridge down and tap the message. Type in a session, leave, come back (the line is there). Rename from the session menu.
+
 # Handoff (2026-10-01, chat search and bubbles)
 
 On `cursor/chat-search-and-bubbles-ab1f`, targeting `gradation/app-pass`.

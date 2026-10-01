@@ -69,7 +69,13 @@ object AcpHandshake {
     fun isSkippableAuthError(message: String?): Boolean {
         val m = message?.lowercase().orEmpty()
         if (m.isEmpty()) return false
-        return m.contains("method not found") || m.contains("-32601")
+        // JSON-RPC -32601, and the phrases agents use when the method was never implemented.
+        // A real refusal ("sign in required") must still fail the handshake.
+        return m.contains("method not found") ||
+            m.contains("-32601") ||
+            m.contains("unknown method") ||
+            m.contains("not implemented") ||
+            m.contains("unimplemented")
     }
 
     private data class AuthMethod(val id: String, val name: String, val type: String)

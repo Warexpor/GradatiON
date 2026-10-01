@@ -30,6 +30,8 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
     /** False for an untracked path: restore-to-HEAD does not apply, so Revert stays hidden. */
     private val tracked by lazy { requireArguments().getBoolean(ARG_TRACKED, true) }
     private lateinit var hub: CodeHub
+    /** Bumped on each load so a slow reply cannot paint over a newer tap. */
+    private var loadGen = 0
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         hub = CodeHub.get(requireContext())
@@ -58,15 +60,31 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
             )
         }
 
+        loadDiff(toolbar, diffView, hint, actions)
+    }
+
+    private fun loadDiff(
+        toolbar: MaterialToolbar,
+        diffView: DiffView,
+        hint: TextView,
+        actions: View,
+    ) {
+        val gen = ++loadGen
+        hint.setOnClickListener(null)
+        hint.isClickable = false
         hint.text = getString(R.string.code_changes_diff_loading)
         hint.isVisible = true
         actions.isVisible = false
+        diffView.lines = emptyList()
         viewLifecycleOwner.lifecycleScope.launch {
             val result = hub.diffResult(sessionId, path)
+            if (gen != loadGen || !isAdded) return@launch
             val unified = result.getOrNull()?.unified
             if (result.isFailure || unified == null) {
-                hint.text = getString(R.string.code_changes_diff_failed)
+                hint.text = getString(R.string.code_changes_diff_failed) + "\n" + getString(R.string.code_changes_tap_retry)
                 hint.isVisible = true
+                hint.isClickable = true
+                hint.setOnClickListener { loadDiff(toolbar, diffView, hint, actions) }
                 return@launch
             }
             if (unified.isBlank()) {
@@ -82,6 +100,7 @@ class CodeGitDiffFragment : Fragment(R.layout.fragment_code_git_diff) {
                 val shown = if (truncated) all.take(MAX_LINES) else all
                 ParsedDiff(shown, add, del, truncated)
             }
+            if (gen != loadGen || !isAdded) return@launch
             if (parsed.lines.isEmpty()) {
                 hint.text = getString(if (tracked) R.string.code_changes_diff_empty else R.string.code_changes_diff_untracked)
                 hint.isVisible = true
