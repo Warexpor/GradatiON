@@ -22,7 +22,9 @@ import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
 
 class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
@@ -68,9 +70,12 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { uri ->
                 viewLifecycleOwner.lifecycleScope.launch {
+                    val app = requireContext().applicationContext
                     try {
-                        val json = requireContext().contentResolver.openInputStream(uri)?.use {
-                            it.bufferedReader().readText()
+                        val json = withContext(Dispatchers.IO) {
+                            app.contentResolver.openInputStream(uri)?.use {
+                                ImportBounds.readUtf8(it)
+                            }
                         }
                         if (json != null) {
                             savedChatsViewModel.importChatsFromJson(json) { importResult ->
@@ -84,6 +89,13 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                         } else {
                             throw Exception("Failed to read file content.")
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: ImportBounds.TooLarge) {
+                        GlassNotice.show(
+                            requireContext(),
+                            getString(R.string.import_error_too_large, e.limitBytes / (1024 * 1024))
+                        )
                     } catch (_: Exception) {
                         GlassNotice.show(requireContext(), getString(R.string.notice_import_failed_format))
                     }

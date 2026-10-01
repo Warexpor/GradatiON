@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, backup and prefs hardening)
+
+On `cursor/backup-prefs-hardening-186c`, targeting `gradation/app-pass`.
+- Launch seeding no longer rewrites an unreadable `custom_models` or `custom_system_messages` blob, and the Maverick scrub waits too. A later save copies the blob to `key.unreadable` first (models, prompts, system messages, presets, personas, deleted-character remap, OpenRouter cache). Code host JSON is the same: token migration does not mark itself done, and a save archives the old text.
+- Imports stop at 5 MB (16 MB for roleplay backups). Chat import strips a UTF-8 BOM. Exports go through `BackupIo.publish` (sync the cache file, then copy, and a short copy is an error). Character and lore imports are one Room transaction (`RpImportGuard` fails a test at a row). A bad portrait is skipped. Import still refreshes an idle greeting only when the card's greeting text changed.
+- Phone: import a chat backup that is larger than a few megabytes, and a character backup, and confirm a failed export does not show the success notice. Rewrite a greeting, import the character without changing that greeting, and confirm the rewrite stays.
+
 # Handoff (2026-10-01, code approval reconnect)
 
 On `cursor/code-approval-reconnect-79a7` (PR into `gradation/app-pass`). Code mode only:

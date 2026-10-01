@@ -26,8 +26,12 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.button.MaterialButton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import java.io.File
+import kotlin.coroutines.cancellation.CancellationException
 import java.util.Collections
 import kotlin.collections.remove
 
@@ -43,14 +47,20 @@ class PromptLibraryFragment : Fragment() {
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { uri ->
                 viewLifecycleOwner.lifecycleScope.launch {
+                    val app = requireContext().applicationContext
                     try {
-                        val promptsList = sharedPreferencesHelper.getCustomPrompts()
-                        val json = Json.encodeToString(promptsList)
-                        requireContext().contentResolver.openOutputStream(uri)?.use { outputStream ->
-                            outputStream.write(json.toByteArray())
+                        withContext(Dispatchers.IO) {
+                            val promptsList = sharedPreferencesHelper.getCustomPrompts()
+                            val json = Json.encodeToString(promptsList)
+                            val cache = File(app.cacheDir, "prompts-${System.nanoTime()}.json")
+                            BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri) }) { stream ->
+                                stream.write(json.toByteArray(Charsets.UTF_8))
+                            }
                         }
                         // The picker closes onto this same screen, so silence would read as a no-op.
                         GlassNotice.show(requireContext(), getString(R.string.notice_prompts_exported))
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         GlassNotice.show(requireContext(), getString(R.string.notice_export_prompts_failed))
                     }
@@ -63,9 +73,12 @@ class PromptLibraryFragment : Fragment() {
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { uri ->
                 viewLifecycleOwner.lifecycleScope.launch {
+                    val app = requireContext().applicationContext
                     try {
-                        val jsonString = requireContext().contentResolver.openInputStream(uri)?.use {
-                            it.bufferedReader().readText()
+                        val jsonString = withContext(Dispatchers.IO) {
+                            app.contentResolver.openInputStream(uri)?.use {
+                                ImportBounds.readUtf8(it)
+                            }
                         }
                         if (jsonString != null) {
                             val importedPrompts = Json.decodeFromString<List<Prompt>>(jsonString)
@@ -83,6 +96,13 @@ class PromptLibraryFragment : Fragment() {
                         } else {
                             throw Exception("Failed to read file content.")
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: ImportBounds.TooLarge) {
+                        GlassNotice.show(
+                            requireContext(),
+                            getString(R.string.import_error_too_large, e.limitBytes / (1024 * 1024))
+                        )
                     } catch (e: Exception) {
                         GlassNotice.show(requireContext(), getString(R.string.notice_import_failed_format))
                     }

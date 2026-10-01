@@ -202,6 +202,27 @@ class ChatSaveOverwriteTest {
             """{"sessions":[],"futureField":1}"""
         )
         assertTrue(unknownKeysAreFine is ChatImportResult.Success)
+
+        val oversized = viewModel.importChatsFromJsonInternal("x".repeat(ImportBounds.MAX_TEXT_BYTES + 1))
+        assertTrue(oversized is ChatImportResult.Error)
+        assertEquals(
+            app.getString(R.string.import_error_too_large, ImportBounds.MAX_TEXT_BYTES / (1024 * 1024)),
+            (oversized as ChatImportResult.Error).message
+        )
         assertEquals(1, dao.getAllSessionsWithMessages().size)
+    }
+
+    @Test
+    fun importAcceptsAUtf8Bom() = runBlocking {
+        dao.insertSessionAndMessages(
+            ChatSession(title = "Trip", modelUsed = "m"),
+            listOf(message("user", "plan")),
+        )
+        val viewModel = SavedChatsViewModel(app)
+        val exported = "\uFEFF" + viewModel.getChatsAsJson()
+        dao.getAllSessionsWithMessages().forEach { dao.deleteSession(it.session.id) }
+
+        assertTrue(viewModel.importChatsFromJsonInternal(exported) is ChatImportResult.Success)
+        assertEquals(listOf("Trip"), dao.getAllSessionsWithMessages().map { it.session.title })
     }
 }

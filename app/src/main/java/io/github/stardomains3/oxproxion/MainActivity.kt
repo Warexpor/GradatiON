@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -103,26 +104,31 @@ class MainActivity : AppCompatActivity() {
         sharedPreferencesHelper.seedDefaultModelsIfNeeded()
         sharedPreferencesHelper.seedDefaultSystemMessagesIfNeeded()
         if (!sharedPreferencesHelper.hasMigratedMaverick()) {
-            // 1. Swap the active model if it was Maverick
-            val currentSavedModel = sharedPreferencesHelper.getPreferenceModelnew()
-            if (currentSavedModel == "meta-llama/llama-4-maverick") {
-                sharedPreferencesHelper.savePreferenceModelnewchat("openrouter/free")
+            if (sharedPreferencesHelper.customModelsUnreadable()) {
+                // An empty decode is not "no Maverick entries". Retry once the list can be read.
+                Log.w("MainActivity", "Skipping Maverick model cleanup until custom_models can be read")
+            } else {
+                // 1. Swap the active model if it was Maverick
+                val currentSavedModel = sharedPreferencesHelper.getPreferenceModelnew()
+                if (currentSavedModel == "meta-llama/llama-4-maverick") {
+                    sharedPreferencesHelper.savePreferenceModelnewchat("openrouter/free")
+                }
+
+                // 2. Scrub any old custom "openrouter/free" entries to prevent duplicates
+                val customModels = sharedPreferencesHelper.getCustomModels()
+                val initialSize = customModels.size
+
+                // Remove any custom model matching the identifier (ignoring case just in case)
+                customModels.removeAll { it.apiIdentifier.equals("openrouter/free", ignoreCase = true) }
+
+                // If we actually deleted something, save the clean list back to SharedPreferences
+                if (customModels.size < initialSize) {
+                    sharedPreferencesHelper.saveCustomModels(customModels)
+                }
+
+                // 3. Mark as complete so this never runs again
+                sharedPreferencesHelper.setMigratedMaverick()
             }
-
-            // 2. Scrub any old custom "openrouter/free" entries to prevent duplicates
-            val customModels = sharedPreferencesHelper.getCustomModels()
-            val initialSize = customModels.size
-
-            // Remove any custom model matching the identifier (ignoring case just in case)
-            customModels.removeAll { it.apiIdentifier.equals("openrouter/free", ignoreCase = true) }
-
-            // If we actually deleted something, save the clean list back to SharedPreferences
-            if (customModels.size < initialSize) {
-                sharedPreferencesHelper.saveCustomModels(customModels)
-            }
-
-            // 3. Mark as complete so this never runs again
-            sharedPreferencesHelper.setMigratedMaverick()
         }
 
         if (supportFragmentManager.findFragmentById(R.id.fragment_container) == null) {

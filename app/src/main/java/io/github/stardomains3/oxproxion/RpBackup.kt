@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 @Serializable
 data class RpCharacterBackup(
@@ -36,3 +37,26 @@ data class RpLorebookExport(
     val content: String = "",
     val isActive: Boolean = false
 )
+
+/** Writes one character or lorebook at a time so the backup is not also held as one string. */
+internal object RpBackupWriter {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun writeCharacters(out: Appendable, characters: List<RpCharacterExport>) {
+        out.append("{\"characters\":[")
+        characters.forEachIndexed { index, character ->
+            if (index > 0) out.append(',')
+            out.append(json.encodeToString(RpCharacterExport.serializer(), character))
+        }
+        out.append("]}")
+    }
+
+    fun writeLorebooks(out: Appendable, lorebooks: List<RpLorebookExport>) {
+        out.append("{\"lorebooks\":[")
+        lorebooks.forEachIndexed { index, book ->
+            if (index > 0) out.append(',')
+            out.append(json.encodeToString(RpLorebookExport.serializer(), book))
+        }
+        out.append("]}")
+    }
+}

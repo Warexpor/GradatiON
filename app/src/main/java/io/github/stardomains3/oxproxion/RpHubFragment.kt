@@ -16,8 +16,12 @@ import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import java.io.File
+import kotlin.coroutines.cancellation.CancellationException
 
 class RpHubFragment : Fragment() {
 
@@ -31,31 +35,36 @@ class RpHubFragment : Fragment() {
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
         val uri = result.data?.data ?: return@registerForActivityResult
         viewLifecycleOwner.lifecycleScope.launch {
+            val app = requireContext().applicationContext
             try {
-                val chars = chatViewModel.getRpRepository().getAllCharactersOnce()
-                val backup = RpCharacterBackup(chars.map { c ->
-                    RpCharacterExport(
-                        name = c.name,
-                        personality = c.personality,
-                        style = c.style,
-                        greeting = c.greeting,
-                        scenario = c.scenario,
-                        examplesJson = c.examplesJson,
-                        prompt = c.prompt,
-                        instruction = c.instruction,
-                        exportKey = c.exportKey,
-                        avatarBase64 = RpAvatarStorage.encodeAvatarBase64(requireContext(), c.id),
-                        photoUri = null
-                    )
-                })
-                requireContext().contentResolver.openOutputStream(uri)?.use { out ->
-                    out.write(json.encodeToString(RpCharacterBackup.serializer(), backup).toByteArray())
-                } ?: run {
-                    GlassNotice.show(requireContext(), getString(R.string.rp_export_failed))
-                    return@launch
+                withContext(Dispatchers.IO) {
+                    val chars = chatViewModel.getRpRepository().getAllCharactersOnce()
+                    val exports = chars.map { c ->
+                        RpCharacterExport(
+                            name = c.name,
+                            personality = c.personality,
+                            style = c.style,
+                            greeting = c.greeting,
+                            scenario = c.scenario,
+                            examplesJson = c.examplesJson,
+                            prompt = c.prompt,
+                            instruction = c.instruction,
+                            exportKey = c.exportKey,
+                            avatarBase64 = RpAvatarStorage.encodeAvatarBase64(app, c.id),
+                            photoUri = null
+                        )
+                    }
+                    val cache = File(app.cacheDir, "rp-chars-${System.nanoTime()}.json")
+                    BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri) }) { stream ->
+                        stream.writer(Charsets.UTF_8).buffered().use {
+                            RpBackupWriter.writeCharacters(it, exports)
+                        }
+                    }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
-                GlassNotice.show(requireContext(), getString(R.string.rp_export_failed))
+                if (isAdded) GlassNotice.show(requireContext(), getString(R.string.rp_export_failed))
             }
         }
     }
@@ -64,12 +73,16 @@ class RpHubFragment : Fragment() {
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
         val uri = result.data?.data ?: return@registerForActivityResult
         viewLifecycleOwner.lifecycleScope.launch {
+            val app = requireContext().applicationContext
             try {
-                val text = requireContext().contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
-                    ?: run {
-                        GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
-                        return@launch
+                val text = withContext(Dispatchers.IO) {
+                    app.contentResolver.openInputStream(uri)?.use {
+                        ImportBounds.readUtf8(it, ImportBounds.MAX_RP_BYTES)
                     }
+                } ?: run {
+                    GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
+                    return@launch
+                }
                 val backup = json.decodeFromString(RpCharacterBackup.serializer(), text)
                 if (backup.characters.isEmpty()) {
                     GlassNotice.show(requireContext(), getString(R.string.rp_import_empty))
@@ -95,8 +108,17 @@ class RpHubFragment : Fragment() {
                 } else {
                     applyCharacterBackup(backup)
                 }
+            } catch (e: ImportBounds.TooLarge) {
+                if (isAdded) {
+                    GlassNotice.show(
+                        requireContext(),
+                        getString(R.string.import_error_too_large, e.limitBytes / (1024 * 1024))
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
-                GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
+                if (isAdded) GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
             }
         }
     }
@@ -105,19 +127,24 @@ class RpHubFragment : Fragment() {
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
         val uri = result.data?.data ?: return@registerForActivityResult
         viewLifecycleOwner.lifecycleScope.launch {
+            val app = requireContext().applicationContext
             try {
-                val books = chatViewModel.getRpRepository().getAllLorebooksOnce()
-                val backup = RpLorebookBackup(books.map { b ->
-                    RpLorebookExport(name = b.name, content = b.content, isActive = b.isActive)
-                })
-                requireContext().contentResolver.openOutputStream(uri)?.use { out ->
-                    out.write(json.encodeToString(RpLorebookBackup.serializer(), backup).toByteArray())
-                } ?: run {
-                    GlassNotice.show(requireContext(), getString(R.string.rp_export_failed))
-                    return@launch
+                withContext(Dispatchers.IO) {
+                    val books = chatViewModel.getRpRepository().getAllLorebooksOnce()
+                    val exports = books.map { b ->
+                        RpLorebookExport(name = b.name, content = b.content, isActive = b.isActive)
+                    }
+                    val cache = File(app.cacheDir, "rp-lore-${System.nanoTime()}.json")
+                    BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri) }) { stream ->
+                        stream.writer(Charsets.UTF_8).buffered().use {
+                            RpBackupWriter.writeLorebooks(it, exports)
+                        }
+                    }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
-                GlassNotice.show(requireContext(), getString(R.string.rp_export_failed))
+                if (isAdded) GlassNotice.show(requireContext(), getString(R.string.rp_export_failed))
             }
         }
     }
@@ -126,12 +153,16 @@ class RpHubFragment : Fragment() {
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
         val uri = result.data?.data ?: return@registerForActivityResult
         viewLifecycleOwner.lifecycleScope.launch {
+            val app = requireContext().applicationContext
             try {
-                val text = requireContext().contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
-                    ?: run {
-                        GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
-                        return@launch
+                val text = withContext(Dispatchers.IO) {
+                    app.contentResolver.openInputStream(uri)?.use {
+                        ImportBounds.readUtf8(it, ImportBounds.MAX_RP_BYTES)
                     }
+                } ?: run {
+                    GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
+                    return@launch
+                }
                 val backup = json.decodeFromString(RpLorebookBackup.serializer(), text)
                 if (backup.lorebooks.isEmpty()) {
                     GlassNotice.show(requireContext(), getString(R.string.rp_import_empty))
@@ -154,8 +185,17 @@ class RpHubFragment : Fragment() {
                 } else {
                     applyLoreBackup(backup)
                 }
+            } catch (e: ImportBounds.TooLarge) {
+                if (isAdded) {
+                    GlassNotice.show(
+                        requireContext(),
+                        getString(R.string.import_error_too_large, e.limitBytes / (1024 * 1024))
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
-                GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
+                if (isAdded) GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
             }
         }
     }
@@ -362,56 +402,40 @@ class RpHubFragment : Fragment() {
             val activeBefore = prefs.getRpActiveCharacterId()?.let { repo.getCharacterById(it) }
             val delegate = RpChatDelegate(repo, prefs)
             val expandedBefore = activeBefore?.let { delegate.greetingMessage(it) }
-            var greetingChanged = false
-            var imported = 0
-            backup.characters.forEach { ex ->
-                val existing = ex.exportKey.takeIf { it.isNotBlank() }?.let { key ->
-                    repo.getCharacterByExportKey(key)
-                }
-                val base = existing ?: RpCharacter(
-                    name = ex.name,
-                    exportKey = ex.exportKey.ifBlank { java.util.UUID.randomUUID().toString() }
-                )
-                val savedId = repo.saveCharacter(
-                    base.copy(
-                        name = ex.name,
-                        personality = ex.personality,
-                        style = ex.style,
-                        greeting = ex.greeting,
-                        scenario = ex.scenario,
-                        examplesJson = ex.examplesJson,
-                        prompt = ex.prompt,
-                        instruction = ex.instruction,
-                        photoUri = existing?.photoUri,
-                        exportKey = base.exportKey
-                    )
-                )
-                if (activeBefore != null && ex.exportKey == activeBefore.exportKey && ex.greeting != activeBefore.greeting) {
-                    greetingChanged = true
-                }
-                if (existing == null && base.exportKey.isNotBlank()) {
-                    val oldId = SharedPreferencesHelper(requireContext()).takeDeletedRpCharacterId(base.exportKey)
-                    if (oldId != null && oldId != savedId) {
-                        chatViewModel.remappingCharacterSessions(oldId, savedId)
+            val greetingChanged = activeBefore != null && backup.characters.any { ex ->
+                ex.exportKey == activeBefore.exportKey && ex.greeting != activeBefore.greeting
+            }
+            val imported = repo.importCharacters(backup.characters)
+            imported.forEach { row ->
+                if (row.isNew && row.exportKey.isNotBlank()) {
+                    val oldId = prefs.takeDeletedRpCharacterId(row.exportKey)
+                    if (oldId != null && oldId != row.id) {
+                        chatViewModel.remappingCharacterSessions(oldId, row.id)
                     }
                 }
-                val photoUri = when {
-                    !ex.avatarBase64.isNullOrBlank() ->
-                        RpAvatarStorage.saveFromBase64(requireContext(), ex.avatarBase64, savedId)
-                    else -> null
+                val photoUri = row.avatarBase64?.takeIf { it.isNotBlank() }?.let { encoded ->
+                    try {
+                        RpAvatarStorage.saveFromBase64(requireContext(), encoded, row.id)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.w("RpHub", "Character portrait skipped", e)
+                        null
+                    }
                 }
                 if (photoUri != null) {
-                    repo.getCharacterById(savedId)?.let { c ->
+                    repo.getCharacterById(row.id)?.let { c ->
                         repo.saveCharacter(c.copy(photoUri = photoUri))
                     }
                 }
-                imported++
             }
             chatViewModel.refreshActiveRpCharacter()
             val refresh = expandedBefore?.let { RpGreetingSync.Refresh(it, greetingChanged) }
             chatViewModel.syncActiveCharacterGreetingIfIdle(refresh)
             if (!isAdded) return
-            GlassNotice.show(requireContext(), getString(R.string.rp_import_chars_ok, imported))
+            GlassNotice.show(requireContext(), getString(R.string.rp_import_chars_ok, imported.size))
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             if (isAdded) {
                 GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
@@ -423,23 +447,7 @@ class RpHubFragment : Fragment() {
         if (!isAdded) return
         try {
             val repo = chatViewModel.getRpRepository()
-            val hadBooksBefore = repo.getAllLorebooksOnce().isNotEmpty()
-            var imported = 0
-            backup.lorebooks.forEach { ex ->
-                val existing = repo.getAllLorebooksOnce()
-                    .firstOrNull { it.name.equals(ex.name, ignoreCase = true) }
-                val id = repo.saveLorebook(
-                    (existing ?: RpLorebook(name = ex.name)).copy(
-                        name = ex.name,
-                        content = ex.content
-                    )
-                )
-                if (ex.isActive) repo.setActiveLorebook(id)
-                imported++
-            }
-            if (!hadBooksBefore && repo.getActiveLorebook() == null) {
-                repo.getAllLorebooksOnce().firstOrNull()?.let { repo.setActiveLorebook(it.id) }
-            }
+            val imported = repo.importLorebooks(backup.lorebooks)
             if (!isAdded) return
             val prefs = SharedPreferencesHelper(requireContext())
             val loreHint = if (!prefs.isRpLoreEnabled() && repo.getActiveLorebook() != null) {
@@ -448,6 +456,8 @@ class RpHubFragment : Fragment() {
                 ""
             }
             GlassNotice.show(requireContext(), getString(R.string.rp_import_lore_ok, imported) + loreHint)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             if (isAdded) {
                 GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))

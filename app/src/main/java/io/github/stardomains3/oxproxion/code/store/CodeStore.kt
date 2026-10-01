@@ -122,20 +122,33 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
      */
     private fun migratePlaintextTokensIfNeeded() {
         if (prefs.getBoolean(KEY_TOKENS_MIGRATED, false)) return
-        val raw = readHostsRaw()
-        val withTokens = raw.filter { it.token.isNotBlank() }
-        if (withTokens.isEmpty()) {
-            prefs.edit { putBoolean(KEY_TOKENS_MIGRATED, true) }
-            return
-        }
-        for (host in withTokens) {
-            if (!secrets.putToken(host.id, host.token)) {
-                Log.w(TAG, "Token migration deferred for host ${host.id}")
+        when (val read = readHosts()) {
+            HostsRead.Unreadable -> {
+                // Same failure as a corrupt session list: marking this done would skip the real
+                // tokens the next time the JSON can be read, and a later save would replace it.
+                Log.w(TAG, "Host list is unreadable; token migration will retry")
                 return
             }
+            HostsRead.None -> {
+                prefs.edit { putBoolean(KEY_TOKENS_MIGRATED, true) }
+                return
+            }
+            is HostsRead.Ok -> {
+                val withTokens = read.hosts.filter { it.token.isNotBlank() }
+                if (withTokens.isEmpty()) {
+                    prefs.edit { putBoolean(KEY_TOKENS_MIGRATED, true) }
+                    return
+                }
+                for (host in withTokens) {
+                    if (!secrets.putToken(host.id, host.token)) {
+                        Log.w(TAG, "Token migration deferred for host ${host.id}")
+                        return
+                    }
+                }
+                writeHostsRaw(read.hosts.map { it.copy(token = "") })
+                prefs.edit { putBoolean(KEY_TOKENS_MIGRATED, true) }
+            }
         }
-        writeHostsRaw(raw.map { it.copy(token = "") })
-        prefs.edit { putBoolean(KEY_TOKENS_MIGRATED, true) }
     }
 
     /** Write token to vault when possible; leave plaintext on the host only if vault write fails. */
@@ -147,13 +160,29 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         return if (secrets.putToken(host.id, host.token)) host.copy(token = "") else host
     }
 
-    private fun readHostsRaw(): List<CodeHost> =
-        prefs.getString(KEY_HOSTS, null)?.let {
-            runCatching { json.decodeFromString(ListSerializer(CodeHost.serializer()), it) }.getOrNull()
-        } ?: emptyList()
+    private sealed class HostsRead {
+        data class Ok(val hosts: List<CodeHost>) : HostsRead()
+        data object None : HostsRead()
+        data object Unreadable : HostsRead()
+    }
+
+    private fun readHosts(): HostsRead {
+        val raw = prefs.getString(KEY_HOSTS, null) ?: return HostsRead.None
+        return runCatching { json.decodeFromString(ListSerializer(CodeHost.serializer()), raw) }
+            .fold(onSuccess = { HostsRead.Ok(it) }, onFailure = { HostsRead.Unreadable })
+    }
+
+    private fun readHostsRaw(): List<CodeHost> = when (val read = readHosts()) {
+        is HostsRead.Ok -> read.hosts
+        HostsRead.None, HostsRead.Unreadable -> emptyList()
+    }
 
     private fun writeHostsRaw(hosts: List<CodeHost>) {
+        val existing = prefs.getString(KEY_HOSTS, null)
+        val archive = "$KEY_HOSTS.unreadable"
+        val keep = existing != null && !prefs.contains(archive) && readHosts() is HostsRead.Unreadable
         prefs.edit {
+            if (keep && existing != null) putString(archive, existing)
             putString(KEY_HOSTS, json.encodeToString(ListSerializer(CodeHost.serializer()), hosts))
         }
     }

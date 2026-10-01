@@ -170,4 +170,20 @@ class CodeHostSecretsTest {
         assertTrue("plaintext retained when vault fails", plain.contains("keep-me"))
         assertEquals("keep-me", s.hosts.single().token)
     }
+
+    @Test
+    fun corruptHostListIsNotMarkedMigratedAndIsArchivedOnTheNextSave() {
+        val prefs = ctx.getSharedPreferences(CodeStore.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString("hosts", "{not-json").commit()
+        val s = store()
+
+        assertTrue(s.hosts.isEmpty())
+        assertEquals("{not-json", prefs.getString("hosts", null))
+        assertFalse(prefs.getBoolean("host_tokens_migrated", false))
+
+        s.hosts = listOf(CodeHost(id = "h", name = "Box", transport = TransportKind.DEMO))
+
+        assertEquals("{not-json", prefs.getString("hosts.unreadable", null))
+        assertEquals("h", s.hosts.single().id)
+    }
 }
