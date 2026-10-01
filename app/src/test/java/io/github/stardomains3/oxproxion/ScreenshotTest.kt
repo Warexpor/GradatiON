@@ -286,6 +286,37 @@ class ScreenshotTest {
         snap(root(a), "user_message_fold_dark")
     }
 
+    /**
+     * Edit cuts the turn out and says so on the composer. Cancel puts the turn back and
+     * restores the line that was already in the field.
+     */
+    @Test fun chatEditingDark() = withChat { a, _ ->
+        seedConversation(a); idle()
+        val field = a.findViewById<android.widget.EditText>(R.id.chatEditText)
+        field.setText("still thinking")
+        idle()
+        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        val row = rv.findViewHolderForAdapterPosition(2)!!.itemView
+        row.findViewById<View>(R.id.editButton).performClick()
+        idle()
+        val banner = a.findViewById<View>(R.id.composerEditBanner)
+        val cancel = a.findViewById<android.widget.TextView>(R.id.composerEditCancel)
+        val d = a.resources.displayMetrics.density
+        org.junit.Assert.assertEquals(View.VISIBLE, banner.visibility)
+        org.junit.Assert.assertEquals(a.getString(R.string.chat_editing), a.findViewById<android.widget.TextView>(R.id.composerEditLabel).text.toString())
+        org.junit.Assert.assertEquals(a.getString(R.string.action_cancel), cancel.text.toString())
+        org.junit.Assert.assertTrue(cancel.textSize / d >= 13f)
+        org.junit.Assert.assertTrue(cancel.layoutParams.height >= (44 * d).toInt() - 1)
+        org.junit.Assert.assertEquals("Nice. And why divide by √d?", field.text.toString())
+        org.junit.Assert.assertEquals(2, rv.adapter!!.itemCount)
+        snap(root(a), "chat_editing_dark")
+        cancel.performClick()
+        idle()
+        org.junit.Assert.assertEquals(View.GONE, banner.visibility)
+        org.junit.Assert.assertEquals("still thinking", field.text.toString())
+        org.junit.Assert.assertEquals(3, rv.adapter!!.itemCount)
+    }
+
     /** A sent photo keeps its shape inside the bubble, and the composer chip can send with no text. */
     @Test fun chatPhotoDark() = withChat { a, chat ->
         val d = a.resources.displayMetrics.density

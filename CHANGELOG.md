@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Editing a message you sent no longer drops the rest of that turn with no way back. The composer says Editing, and Cancel puts the message back, along with the line that was already in the field. The replacement still sends as before, and the older turn stays available from the reply's version switch. That unsent edit stays with the chat when it is saved for the first time after you have already left.
 - The other branch of a chat, and the other versions of a roleplay reply, stay with that chat when it is saved for the first time and you have already left. Switching away before that save finishes reopens that chat, not the one before it. A chat backup keeps both, including a fork this version cannot read yet. An older backup still imports, and it does not keep a fork that belonged to an id now reused.
 - A character portrait, a persona portrait, and a wallpaper are replaced only after the new JPEG is finished. A file that is not a finished picture leaves the one already there. Moving a chat database aside no longer leaves a half-written copy that the next launch treats as the real file.
 - A character's layout, read-aloud voice, and lorebook pin are written through before the app continues, as are which chat a mode will reopen and the notes cleared when a character is deleted.

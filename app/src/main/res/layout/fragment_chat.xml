@@ -767,6 +767,45 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
+                <!-- Edit cuts the turn out immediately. Cancel is the way back, until the replacement is sent. -->
+                <LinearLayout
+                    android:id="@+id/composerEditBanner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="2dp"
+                    android:visibility="gone"
+                    android:accessibilityLiveRegion="polite"
+                    tools:visibility="visible">
+
+                    <TextView
+                        android:id="@+id/composerEditLabel"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/app_sans"
+                        android:text="@string/chat_editing"
+                        android:textColor="@color/xai_mute"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/composerEditCancel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="44dp"
+                        android:minWidth="44dp"
+                        android:gravity="center"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:background="@drawable/bg_action_press"
+                        android:fontFamily="@font/app_sans"
+                        android:text="@string/action_cancel"
+                        android:textColor="@color/xai_ink"
+                        android:textSize="13sp"
+                        android:contentDescription="@string/cd_cancel_edit" />
+                </LinearLayout>
+
                 <!-- A staged photo (or audio): a thumbnail at the top of the composer that keeps
                      the picture's shape. The remove control is a 44dp target; the disc sits on the corner. -->
                 <FrameLayout
