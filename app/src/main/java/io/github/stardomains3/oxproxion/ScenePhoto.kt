@@ -177,6 +177,7 @@ object ScenePhoto {
      */
     internal fun writeAtomically(destination: File, bytes: ByteArray) {
         val dir = destination.parentFile ?: throw java.io.IOException("no directory")
+        dir.mkdirs()
         val tmp = File(dir, "${destination.name}.partial")
         try {
             FileOutputStream(tmp).use { out ->
@@ -184,7 +185,12 @@ object ScenePhoto {
                 out.fd.sync()
             }
             if (!tmp.renameTo(destination)) {
-                tmp.copyTo(destination, overwrite = true)
+                // rename across devices fails. The copy has to reach disk before the side file
+                // is removed, or a kill in between leaves no picture.
+                FileOutputStream(destination).use { out ->
+                    tmp.inputStream().use { it.copyTo(out) }
+                    out.fd.sync()
+                }
                 tmp.delete()
             }
         } catch (e: Exception) {

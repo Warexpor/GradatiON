@@ -383,5 +383,60 @@ class ChatSaveOverwriteTest {
         assertTrue(restored.session.timestamp > 0L)
         assertEquals("", prefs.getRpFacts(restored.session.id))
         assertFalse(prefs.isSessionPinned(restored.session.id))
+        assertNull(prefs.getChatForkMessagesJson(restored.session.id))
+        assertNull(prefs.getRpSwipeJson(restored.session.id))
+    }
+
+    @Test
+    fun exportKeepsTheOtherBranchAndTheOtherReply() = runBlocking {
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val id = dao.insertSessionAndMessages(
+            ChatSession(title = "Forked", modelUsed = "m"),
+            listOf(message("user", "hi"), message("assistant", "first")),
+        )
+        val fork = """[{"role":"assistant","content":"other"}]"""
+        prefs.saveChatFork(id, 1, 1, fork)
+        prefs.saveRpSwipeJson(id, """{"alts":["first","other"],"index":1}""")
+
+        val tornId = dao.insertSessionAndMessages(
+            ChatSession(title = "Torn", modelUsed = "m"),
+            listOf(message("user", "x")),
+        )
+        prefs.saveChatFork(tornId, 4, 2, "{torn")
+
+        val viewModel = SavedChatsViewModel(app)
+        val exported = viewModel.getChatsAsJson()
+        dao.getAllSessionsWithMessages().forEach { dao.deleteSession(it.session.id) }
+        prefs.clearSessionPrefs(id)
+        prefs.clearSessionPrefs(tornId)
+
+        assertTrue(viewModel.importChatsFromJsonInternal(exported) is ChatImportResult.Success)
+        val restored = dao.getAllSessionsWithMessages().sortedBy { it.session.title }
+        val forked = restored.single { it.session.title == "Forked" }.session.id
+        assertEquals(fork, prefs.getChatForkMessagesJson(forked))
+        assertEquals(1, prefs.getChatForkIndex(forked))
+        assertEquals(1, prefs.getChatForkAnchor(forked))
+        assertEquals("assistant", ForkLoad.messages(prefs.getChatForkMessagesJson(forked))!!.single().role)
+        assertEquals("""{"alts":["first","other"],"index":1}""", prefs.getRpSwipeJson(forked))
+        val torn = restored.single { it.session.title == "Torn" }.session.id
+        assertEquals("{torn", prefs.getChatForkMessagesJson(torn))
+        assertEquals(4, prefs.getChatForkIndex(torn))
+    }
+
+    @Test
+    fun anOlderBackupClearsAForkLeftOnAReusedId() = runBlocking {
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        prefs.saveChatFork(1L, 1, 0, """[{"role":"user","content":"stale"}]""")
+        prefs.saveRpSwipeJson(1L, """{"alts":["stale"],"index":0}""")
+        val viewModel = SavedChatsViewModel(app)
+        val older = """{"sessions":[{"title":"Old","modelUsed":"m","messages":[{"role":"user","content":"\"hi\""}]}]}"""
+        assertTrue(viewModel.importChatsFromJsonInternal(older) is ChatImportResult.Success)
+        val id = dao.getAllSessionsOnce().single().id
+        assertEquals(1L, id)
+        assertNull(prefs.getChatForkMessagesJson(id))
+        assertEquals(-1, prefs.getChatForkIndex(id))
+        assertNull(prefs.getRpSwipeJson(id))
     }
 }

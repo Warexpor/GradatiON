@@ -91,23 +91,16 @@ object BackgroundPhoto {
 
     /** Replace the slot with [jpeg] and bump the version so an open chat redraws it. */
     fun writeBytes(ctx: Context, slot: String?, jpeg: ByteArray): Boolean {
+        // A short file must not replace the picture already there. Deleting first, then
+        // renaming, used to leave the slot empty when the process died in between.
+        if (!ScenePhoto.completeJpeg(jpeg)) return false
         val out = file(ctx, slot)
-        val tmp = File(out.parentFile, out.name + ".tmp")
         return try {
             out.parentFile?.mkdirs()
-            tmp.writeBytes(jpeg)
-            if (out.exists() && !out.delete()) {
-                tmp.delete()
-                return false
-            }
-            if (!tmp.renameTo(out)) {
-                tmp.copyTo(out, overwrite = true)
-                tmp.delete()
-            }
+            ScenePhoto.writeAtomically(out, jpeg)
             prefs(ctx).edit { putLong(versionKey(slot), System.currentTimeMillis()) }
-            out.isFile
+            out.isFile && ScenePhoto.completeJpeg(out)
         } catch (_: Exception) {
-            tmp.delete()
             false
         }
     }

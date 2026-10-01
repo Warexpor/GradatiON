@@ -1,3 +1,11 @@
+# Handoff (2026-10-01, forks, swipes, and picture files)
+
+On `cursor/stability-side-data-a1aa`, targeting `gradation/app-pass`.
+- A chat that has not been saved yet can still hold another branch, or other versions of a roleplay reply. Those used to have nowhere to go until the row existed, so leaving the chat dropped them. They are written with the new row. Switching to the other mode before that save finishes reopens this chat. New chat still opens a blank one.
+- A chat backup keeps that other branch and those other versions. A fork this version cannot read is still carried. An older backup imports, and it does not leave a fork that belonged to an id the new row reused.
+- A portrait or a wallpaper is replaced only when the new JPEG is finished. A bad file leaves the picture already there. A database move that fails does not leave a half-written file under the destination name.
+- Phone: edit a reply in a brand-new chat and switch to the other mode before the reply has finished saving (the other branch should still be there when you come back). Export chats, delete one that has another branch, import, and confirm that branch is back. Replace a wallpaper, and set a character portrait, over ones that are already there.
+
 # Handoff (2026-10-01, RP swipe pictures and wallpapers)
 
 On `cursor/rp-photo-swipe-wallpaper-1214`, targeting `gradation/app-pass`.

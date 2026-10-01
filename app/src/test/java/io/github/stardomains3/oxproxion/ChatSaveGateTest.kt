@@ -1,6 +1,8 @@
 package io.github.stardomains3.oxproxion
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChatSaveGateTest {
@@ -118,4 +120,39 @@ class ChatSaveGateTest {
             ChatSaveGate.autoSaveKind(sessionId = null, hasAssistant = true, messagesEmpty = false)
         )
     }
+
+    @Test
+    fun modeSwitchParksTheChatThatJustReceivedAnId() {
+        assertTrue(park())
+        assertTrue(park(draftAtCapture = null, draftNow = null))
+    }
+
+    @Test
+    fun stayingOrStartingOverDoesNotParkThatId() {
+        assertFalse(park(liveMode = "ask", liveEpoch = 1, liveSessionId = null))
+        assertFalse(park(liveMode = "ask", draftNow = null))
+        assertFalse(park(draftNow = 8L))
+        assertFalse(park(liveMode = "ask", liveSessionId = 4L))
+        assertFalse(park(mintedId = 0L))
+    }
+
+    private fun park(
+        snapshotMode: String = "ask",
+        liveMode: String = "rp",
+        epochAtCapture: Long = 1,
+        liveEpoch: Long = 2,
+        liveSessionId: Long? = null,
+        mintedId: Long = 9L,
+        draftAtCapture: Long? = 3L,
+        draftNow: Long? = 3L,
+    ) = ChatSaveGate.parkMintedDraft(
+        snapshotMode = snapshotMode,
+        liveMode = liveMode,
+        epochAtCapture = epochAtCapture,
+        liveEpoch = liveEpoch,
+        liveSessionId = liveSessionId,
+        mintedId = mintedId,
+        draftAtCapture = draftAtCapture,
+        draftNow = draftNow,
+    )
 }

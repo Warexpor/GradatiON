@@ -168,13 +168,22 @@ internal object ChatDbVault {
         to.parentFile?.mkdirs()
         if (from.renameTo(to)) return
         // rename across directories can fail. The copy has to reach disk before the source
-        // is removed, or a kill in between loses both.
-        from.copyTo(to, overwrite = true)
-        RandomAccessFile(to, "rw").use { it.fd.sync() }
-        syncDirectory(to.parentFile)
-        if (!from.delete() && from.exists()) {
-            to.delete()
-            throw IOException("Could not remove ${from.path} after copying it aside")
+        // is removed, or a kill in between loses both. A copy that fails must not leave a
+        // partial file at the destination: the next launch treats that name as the real one
+        // and refuses to try the move again.
+        val destExisted = to.exists()
+        try {
+            from.copyTo(to, overwrite = true)
+            RandomAccessFile(to, "rw").use { it.fd.sync() }
+            syncDirectory(to.parentFile)
+            if (!from.delete() && from.exists()) {
+                if (!destExisted) to.delete()
+                throw IOException("Could not remove ${from.path} after copying it aside")
+            }
+        } catch (e: Exception) {
+            if (from.exists() && !destExisted) to.delete()
+            if (e is IOException) throw e
+            throw IOException("Could not move ${from.path} to ${to.path}", e)
         }
     }
 
