@@ -137,7 +137,8 @@ enum class PermissionMode(val id: String) {
                 "ask", "default" -> ASK
                 "auto-edit", "acceptedits" -> AUTO_EDIT
                 "plan" -> PLAN
-                "full-auto", "bypasspermissions", "dontask" -> FULL_AUTO
+                // Cursor Agent's `agent` mode is full tool access, the same pill as full auto.
+                "full-auto", "bypasspermissions", "dontask", "agent" -> FULL_AUTO
                 else -> entries.find { it.id == key }
             }
         }
@@ -206,7 +207,7 @@ enum class ToolStatus { PENDING, RUNNING, COMPLETED, FAILED, CANCELLED }
 enum class PlanStatus { PENDING, IN_PROGRESS, COMPLETED }
 enum class NoticeLevel { INFO, WARNING, ERROR }
 
-data class PlanEntry(val content: String, val status: PlanStatus)
+data class PlanEntry(val content: String, val status: PlanStatus, val id: String? = null)
 
 /**
  * One slash command from ACP `available_commands_update` ([name] without the leading `/`).

@@ -42,7 +42,11 @@ import java.util.concurrent.atomic.AtomicLong
  * Tool detail prefers the command for a shell call, and a file location includes its line.
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
- * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`).
+ * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`),
+ * and a tool `name` when `kind` is missing or `other`.
+ * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
+ * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
+ * are answered here so those requests do not sit forever.
  */
 class AcpAdapter : HarnessAdapter {
 
@@ -75,6 +79,7 @@ class AcpAdapter : HarnessAdapter {
      */
     private val toolKinds = ConcurrentHashMap<String, String>()
     private val toolDetailSet = ConcurrentHashMap.newKeySet<String>()
+    private val cursor = CursorMethods()
     private val repeatedUnderscore = Regex("_+")
 
     // ── outbound ──────────────────────────────────────────────────────────────────────────
@@ -149,7 +154,12 @@ class AcpAdapter : HarnessAdapter {
         put("modeId", mode.id)
     })
 
-    override fun answerApproval(requestId: String, optionId: String?): String = buildJsonObject {
+    override fun answerApproval(requestId: String, optionId: String?): String {
+        cursor.answer(requestId, optionId)?.let { return it }
+        return acpApproval(requestId, optionId)
+    }
+
+    private fun acpApproval(requestId: String, optionId: String?): String = buildJsonObject {
         put("jsonrpc", "2.0")
         put("id", requestId.toLongOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(requestId))
         put("result", buildJsonObject {
@@ -261,6 +271,14 @@ class AcpAdapter : HarnessAdapter {
             method == "bridge/sessionStatus" -> {
                 val params = obj["params"] as? JsonObject ?: return ignored("no params")
                 decodeSessionStatus(params, bridgeSeq(params, obj))
+            }
+            method == "cursor/update_todos" || method == "cursor/ask_question" || method == "cursor/create_plan" -> {
+                val cursorMethod = method ?: return ignored("no method")
+                val params = obj["params"] as? JsonObject ?: return ignored("no params")
+                val sid = sessionOf(params).orEmpty()
+                val seq = bridgeSeq(params, obj)
+                if (sid.isNotEmpty()) noteSeq(sid, seq)
+                cursor.handle(cursorMethod, sid, idEl, params, seq, System.currentTimeMillis())
             }
             method == null && idEl != null -> {
                 val id = rpcLongId(idEl) ?: return ignored("non-numeric id")
@@ -411,6 +429,7 @@ class AcpAdapter : HarnessAdapter {
                 return toolCall(sid, u, now, seq)
             }
             "tool_call_update" -> return toolCallUpdate(sid, u, now, seq)
+            "tool_call_content_chunk" -> return toolContentChunk(sid, u, now, seq)
             "plan" -> {
                 val entries = u["entries"]?.jsonArray?.mapNotNull { e ->
                     val o = e as? JsonObject ?: return@mapNotNull null
@@ -469,10 +488,11 @@ class AcpAdapter : HarnessAdapter {
 
     private fun toolCall(sid: String, u: JsonObject, now: Long, seq: Long?): List<AdapterOutput> {
         val callId = u.str("toolCallId") ?: return ignored("tool_call without id")
-        val kind = toolKind(u.str("kind"))
+        val canon = namedKind(u.str("kind"), u.str("name"))
+        val kind = toolKind(canon)
         val result = ArrayList<AdapterOutput>()
         val detail = detailOf(u)
-        rememberKind(sid, callId, u.str("kind"))
+        rememberKind(sid, callId, canon)
         if (!detail.isNullOrBlank()) toolDetailSet.add(toolKey(sid, callId))
         result += AdapterOutput.Update(sid, CodeUpdate.Upsert(CodeEvent.ToolCall(
             key = "tool:$callId",
@@ -501,7 +521,8 @@ class AcpAdapter : HarnessAdapter {
             detail = detailForUpdate(sid, callId, u),
             output = outputOf(sid, callId, u),
             // Omitted kind must stay null so a status-only update does not reset the icon.
-            kind = toolKindIfPresent(u.str("kind")),
+            // A name can still correct `kind: other` (Cursor's first MCP frame).
+            kind = toolKindIfPresent(u.str("kind"), u.str("name")),
         ), seq)
         diffs(callId, u["content"], now).forEach {
             result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it), seq)
@@ -509,10 +530,36 @@ class AcpAdapter : HarnessAdapter {
         return result
     }
 
+    /** One appended content item. A later `tool_call_update` with `content` still replaces. */
+    private fun toolContentChunk(sid: String, u: JsonObject, now: Long, seq: Long?): List<AdapterOutput> {
+        val callId = u.str("toolCallId") ?: return ignored("tool_call_content_chunk without id")
+        val result = ArrayList<AdapterOutput>()
+        val text = outputOf(sid, callId, u)
+        if (!text.isNullOrEmpty()) {
+            result += AdapterOutput.Update(sid, CodeUpdate.ToolPatch(
+                callId = callId,
+                status = toolStatus(u.str("status")),
+                title = u.str("title"),
+                detail = detailForUpdate(sid, callId, u),
+                output = text,
+                appendOutput = true,
+                kind = toolKindIfPresent(u.str("kind"), u.str("name")),
+            ), seq)
+        }
+        diffs(callId, u["content"], now).forEach {
+            result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it), seq)
+        }
+        if (result.isEmpty()) return ignored("tool_call_content_chunk without content")
+        return result
+    }
+
     private fun decodePermission(idEl: JsonElement, params: JsonObject, seq: Long?): List<AdapterOutput> {
         val sid = params.str("sessionId") ?: return ignored("permission without session")
         noteSeq(sid, seq)
+        val subject = params["subject"] as? JsonObject
         val call = params["toolCall"] as? JsonObject
+            ?: subject?.get("toolCall") as? JsonObject
+        val command = if (subject?.str("type")?.lowercase() == "command") subject.str("command") else null
         // R6: non-primitive JSON-RPC id must not ClassCastException out of decode.
         val requestId = (idEl as? JsonPrimitive)?.contentOrNull
             ?: return ignored("non-primitive permission id")
@@ -532,10 +579,14 @@ class AcpAdapter : HarnessAdapter {
             key = "approval:$requestId",
             at = now,
             requestId = requestId,
-            callId = call?.str("toolCallId"),
-            title = call?.str("title") ?: "The agent wants to continue",
-            detail = call?.let { detailOf(it) },
-            kind = toolKind(call?.str("kind")),
+            callId = call?.str("toolCallId") ?: subject?.str("toolCallId"),
+            title = params.str("title")?.trim()?.ifEmpty { null }
+                ?: call?.str("title")?.trim()?.ifEmpty { null }
+                ?: "The agent wants to continue",
+            detail = command?.trim()?.ifEmpty { null }
+                ?: params.str("description")?.trim()?.ifEmpty { null }
+                ?: call?.let { detailOf(it) },
+            kind = toolKind(namedKind(call?.str("kind"), call?.str("name"))),
             options = offered
         )), seq))
     }
@@ -566,6 +617,7 @@ class AcpAdapter : HarnessAdapter {
         val prefix = "$sessionId\u0000"
         toolKinds.keys.removeAll { it.startsWith(prefix) }
         toolDetailSet.removeAll { it.startsWith(prefix) }
+        cursor.clearSession(sessionId)
     }
 
     /** The replay that refilled a seq hole has finished (or failed); stop dropping repeats. */
@@ -590,6 +642,11 @@ class AcpAdapter : HarnessAdapter {
     /** Bridge (or top-level) `_meta.seq` on a notification / permission request. */
     private fun bridgeSeq(params: JsonObject, root: JsonObject): Long? =
         metaSeq(params) ?: metaSeq(root)
+
+    /** ACP `sessionId`, or the same field a bridge stuffed in `_meta`. */
+    private fun sessionOf(params: JsonObject): String? =
+        params.str("sessionId") ?: params.str("session_id")
+            ?: (params["_meta"] as? JsonObject)?.str("sessionId")
 
     private fun metaSeq(obj: JsonObject): Long? {
         val meta = obj["_meta"] as? JsonObject ?: return null
@@ -636,7 +693,7 @@ class AcpAdapter : HarnessAdapter {
     }
 
     private fun outputOf(sid: String, callId: String, u: JsonObject): String? {
-        val kind = rememberKind(sid, callId, u.str("kind"))
+        val kind = rememberKind(sid, callId, namedKind(u.str("kind"), u.str("name")))
         val raw = textContent(u["content"]) ?: rawOutputText(u["rawOutput"]) ?: return null
         // Color and `\r` progress belong on a log, not in a file the agent opened.
         val shown = if (ToolOutputText.stripsTerminal(kind)) TerminalText.readable(raw) else raw
@@ -685,7 +742,7 @@ class AcpAdapter : HarnessAdapter {
         }
         val raw = rawInputOf(u)
         return ToolCallDetail.format(
-            kind = canonicalKind(u.str("kind")),
+            kind = namedKind(u.str("kind"), u.str("name")),
             locations = locations,
             command = commandOf(raw),
             query = firstRaw(raw, "pattern", "query", "url", "regex"),
@@ -778,42 +835,165 @@ class AcpAdapter : HarnessAdapter {
 
     private fun diffs(callId: String, content: JsonElement?, now: Long): List<CodeEvent.FileDiff> {
         val items = contentItems(content) ?: return emptyList()
-        return items.mapNotNull { o ->
-            if (o.str("type") != "diff") return@mapNotNull null
-            val path = o.str("path") ?: return@mapNotNull null
-            val unified = o.str("diff")?.takeIf { it.isNotBlank() }
-                ?: o.str("patch")?.takeIf { it.isNotBlank() }
-            val newEl = o["newText"]
-            val hasNew = newEl is JsonPrimitive && newEl !is JsonNull
-            // Some agents send a unified patch instead of old/new file text.
-            if (!hasNew && unified != null) {
-                val lines = Diff.parseUnified(unified)
-                if (lines.isEmpty()) return@mapNotNull null
-                val (add, del) = Diff.counts(lines)
-                return@mapNotNull CodeEvent.FileDiff(
-                    "diff:$callId:$path", now, callId, path, lines, add, del,
-                    isNewFile = Diff.unifiedIsNewFile(unified),
-                )
+        return items.flatMap { diffBlocks(callId, it, now) }
+    }
+
+    /**
+     * One `type: diff` block. v1 is `path` plus old/new text or a unified string.
+     * v2 is `changes[]` plus an optional `patch.text` (git patch). A missing path
+     * is taken from the patch header so the edit is not dropped.
+     */
+    private fun diffBlocks(callId: String, o: JsonObject, now: Long): List<CodeEvent.FileDiff> {
+        if (o.str("type") != "diff") return emptyList()
+        val unified = unifiedOf(o)
+        val changes = diffChanges(o)
+        if (changes.isEmpty()) {
+            val path = o.str("path")?.trim()?.ifEmpty { null } ?: unified?.let(::pathFromGitPatch) ?: return emptyList()
+            return listOfNotNull(classicDiff(callId, path, o, unified, now))
+        }
+        val sections = if (unified.isNullOrBlank()) emptyList() else splitGitSections(unified)
+        return changes.map { ch ->
+            val section = pickSection(sections, unified, ch.path, changes.size)
+            val parsed = section?.let { Diff.parseUnified(it) }.orEmpty()
+            val lines = parsed.ifEmpty {
+                listOf(DiffLine(DiffLine.Type.HUNK, null, null, ch.operation.ifBlank { "modify" }))
             }
-            // A non-string old/new text used to throw out of decode and drop the tool call with it.
-            val old = when (val el = o["oldText"]) {
-                null, is JsonNull -> null
-                is JsonPrimitive -> el.contentOrNull
-                else -> return@mapNotNull null
-            }
-            val newText = when (val el = o["newText"]) {
-                is JsonPrimitive -> if (el is JsonNull) return@mapNotNull null else el.contentOrNull ?: return@mapNotNull null
-                else -> return@mapNotNull null
-            }
-            val lines = Diff.between(old, newText)
             val (add, del) = Diff.counts(lines)
-            CodeEvent.FileDiff("diff:$callId:$path", now, callId, path, lines, add, del, isNewFile = old == null)
+            val isNew = when (ch.operation) {
+                "add" -> true
+                "delete" -> false
+                else -> section != null && Diff.unifiedIsNewFile(section)
+            }
+            CodeEvent.FileDiff("diff:$callId:${ch.path}", now, callId, ch.path, lines, add, del, isNewFile = isNew)
         }
     }
 
-    /** Null when the frame omitted kind, so a status update does not reset the icon. */
-    private fun toolKindIfPresent(s: String?): ToolKind? =
-        if (s.isNullOrBlank()) null else toolKind(s)
+    private data class DiffChange(val path: String, val operation: String)
+
+    private fun diffChanges(o: JsonObject): List<DiffChange> {
+        val arr = o["changes"] as? JsonArray ?: return emptyList()
+        return arr.mapNotNull { el ->
+            val c = el as? JsonObject ?: return@mapNotNull null
+            val path = c.str("path")?.trim()?.ifEmpty { null } ?: return@mapNotNull null
+            DiffChange(path, c.str("operation")?.trim()?.lowercase().orEmpty())
+        }
+    }
+
+    /** Unified text from `diff`, a string `patch`, or v2 `patch.text`. */
+    private fun unifiedOf(o: JsonObject): String? {
+        o.str("diff")?.takeIf { it.isNotBlank() }?.let { return it }
+        return when (val p = o["patch"]) {
+            is JsonPrimitive -> if (p is JsonNull) null else p.contentOrNull?.takeIf { it.isNotBlank() }
+            is JsonObject -> p.str("text")?.takeIf { it.isNotBlank() }
+            else -> null
+        }
+    }
+
+    private fun classicDiff(
+        callId: String,
+        path: String,
+        o: JsonObject,
+        unified: String?,
+        now: Long,
+    ): CodeEvent.FileDiff? {
+        val newEl = o["newText"]
+        val hasNew = newEl is JsonPrimitive && newEl !is JsonNull
+        // Some agents send a unified patch instead of old/new file text.
+        if (!hasNew && unified != null) {
+            val lines = Diff.parseUnified(unified)
+            if (lines.isEmpty()) return null
+            val (add, del) = Diff.counts(lines)
+            return CodeEvent.FileDiff(
+                "diff:$callId:$path", now, callId, path, lines, add, del,
+                isNewFile = Diff.unifiedIsNewFile(unified),
+            )
+        }
+        // A non-string old/new text used to throw out of decode and drop the tool call with it.
+        val old = when (val el = o["oldText"]) {
+            null, is JsonNull -> null
+            is JsonPrimitive -> el.contentOrNull
+            else -> return null
+        }
+        val newText = when (val el = o["newText"]) {
+            is JsonPrimitive -> if (el is JsonNull) return null else el.contentOrNull ?: return null
+            else -> return null
+        }
+        val lines = Diff.between(old, newText)
+        val (add, del) = Diff.counts(lines)
+        return CodeEvent.FileDiff("diff:$callId:$path", now, callId, path, lines, add, del, isNewFile = old == null)
+    }
+
+    private fun splitGitSections(text: String): List<String> {
+        val parts = ArrayList<String>()
+        val cur = StringBuilder()
+        for (raw in text.lineSequence()) {
+            val line = raw.trimEnd('\r')
+            if (line.startsWith("diff --git ") && cur.isNotEmpty()) {
+                parts += cur.toString()
+                cur.clear()
+            }
+            if (cur.isNotEmpty()) cur.append('\n')
+            cur.append(line)
+        }
+        if (cur.isNotEmpty()) parts += cur.toString()
+        return parts
+    }
+
+    private fun pickSection(sections: List<String>, whole: String?, path: String, changeCount: Int): String? {
+        if (sections.isEmpty()) return whole
+        sections.firstOrNull { sectionMentions(it, path) }?.let { return it }
+        if (sections.size == 1 && changeCount == 1) return sections[0]
+        return null
+    }
+
+    private fun sectionMentions(section: String, path: String): Boolean {
+        if (path.isEmpty()) return false
+        return section.lineSequence().any { line ->
+            (line.startsWith("diff ") || line.startsWith("--- ") || line.startsWith("+++ ")) &&
+                (line.contains(path) || line.contains("b/$path") || line.contains("a/$path"))
+        }
+    }
+
+    /** `diff --git a/x b/y` or a `+++` header, so a patch with no `path` field still opens. */
+    private fun pathFromGitPatch(text: String): String? {
+        for (raw in text.lineSequence()) {
+            val line = raw.trimEnd('\r')
+            if (line.startsWith("diff --git ")) {
+                val b = line.removePrefix("diff --git ").split(' ').lastOrNull()?.let(::stripGitPath)
+                if (!b.isNullOrEmpty() && b != "/dev/null") return b
+            }
+            if (line.startsWith("+++ ") && !line.contains("/dev/null")) {
+                val rest = line.substring(4).substringBefore('\t').trim()
+                val path = stripGitPath(rest)
+                if (path.isNotEmpty()) return path
+            }
+        }
+        return null
+    }
+
+    private fun stripGitPath(token: String): String {
+        var t = token.trim().trim('"')
+        if (t.startsWith("b/") || t.startsWith("a/")) t = t.substring(2)
+        return t
+    }
+
+    /**
+     * Null when the frame named neither kind nor name, so a status-only update
+     * does not reset the icon. `kind: other` still yields to a recognized `name`.
+     */
+    private fun toolKindIfPresent(kind: String?, name: String?): ToolKind? {
+        if (kind.isNullOrBlank() && name.isNullOrBlank()) return null
+        return toolKind(namedKind(kind, name))
+    }
+
+    /** ACP kind, or the tool's programmatic name when kind is omitted or `other`. */
+    private fun namedKind(kind: String?, name: String?): String? {
+        val k = canonicalKind(kind)
+        if (k != null && k != "other") return k
+        val n = canonicalKind(name)
+        if (n != null && n != "other") return n
+        return k
+    }
 
     private fun toolKind(s: String?) = when (canonicalKind(s)) {
         "read" -> ToolKind.READ
@@ -876,6 +1056,7 @@ class AcpAdapter : HarnessAdapter {
         const val MAX_OUTPUT = 4000
         private val SEQ_METHODS = setOf(
             "session/update", "session/request_permission", "bridge/permissionResolved", "bridge/sessionStatus",
+            "cursor/update_todos", "cursor/ask_question", "cursor/create_plan",
         )
     }
 }

@@ -33,6 +33,11 @@ sealed class CodeUpdate {
         val detail: String? = null,
         val output: String? = null,
         val kind: ToolKind? = null,
+        /**
+         * True when [output] is the next piece (`tool_call_content_chunk`), not a replacement
+         * of the whole log. A later update with [appendOutput] false still replaces.
+         */
+        val appendOutput: Boolean = false,
     ) : CodeUpdate()
 
     /** An approval was answered, here or elsewhere. */
@@ -193,11 +198,20 @@ object TranscriptReducer {
                 } else {
                     val t = list[i] as CodeEvent.ToolCall
                     list.toMutableList().also {
+                        val output = when {
+                            update.output == null -> t.output
+                            update.appendOutput -> ToolOutputText.clip(
+                                ToolOutputText.kindToken(update.kind ?: t.kind),
+                                ToolOutputText.joinChunk(t.output, update.output),
+                                AcpAdapter.MAX_OUTPUT,
+                            )
+                            else -> update.output
+                        }
                         it[i] = t.copy(
                             status = update.status ?: t.status,
                             title = update.title ?: t.title,
                             detail = update.detail ?: t.detail,
-                            output = update.output ?: t.output,
+                            output = output,
                             kind = update.kind ?: t.kind,
                         )
                     }

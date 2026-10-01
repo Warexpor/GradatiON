@@ -256,6 +256,7 @@
     <string name="code_notice_resume_gave_up">Couldn\'t resume this session. Close and reopen it to try again.</string>
     <string name="code_notice_images_unsupported">This agent can\'t take pictures. The text was sent without them.</string>
     <string name="code_notice_images_only_unsupported">This agent can\'t take pictures.</string>
+    <string name="code_notice_question_skipped">This agent asked a question this screen can\'t answer. It was skipped.</string>
 
     <!-- Transport errors (resolved by CodeHub; the raw codes never reach the screen) -->
     <string name="code_error_invalid_address">Invalid address</string>
