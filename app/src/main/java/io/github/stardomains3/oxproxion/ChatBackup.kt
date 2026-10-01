@@ -30,7 +30,15 @@ data class ExportedChatSession(
     val forkIndex: Int? = null,
     val forkAnchor: Int? = null,
     val forkMessages: String? = null,
-    val swipe: String? = null
+    val swipe: String? = null,
+    /**
+     * The line that was not sent. Null means a backup from before this field, which must
+     * not clear a draft already on the phone.
+     */
+    val draft: String? = null,
+    /** True when Edit had cut a turn. Null means the backup does not say. */
+    val forkEditing: Boolean? = null,
+    val forkEditDraft: String? = null,
 )
 
 @Serializable
@@ -57,6 +65,9 @@ internal object ChatBackupWriter {
         forkAnchor: Int?,
         forkMessages: String?,
         swipeJson: String?,
+        draft: String? = null,
+        forkEditing: Boolean? = null,
+        forkEditDraft: String? = null,
         emitMessages: suspend (emit: suspend (ChatMessage) -> Unit) -> Unit,
     ) {
         out.append("{\"title\":")
@@ -99,6 +110,14 @@ internal object ChatBackupWriter {
         if (!swipeJson.isNullOrBlank()) {
             out.append(",\"swipe\":")
             out.append(json.encodeToString(swipeJson))
+        }
+        if (!draft.isNullOrBlank()) {
+            out.append(",\"draft\":")
+            out.append(json.encodeToString(draft))
+        }
+        if (forkEditing == true) {
+            out.append(",\"forkEditing\":true,\"forkEditDraft\":")
+            out.append(json.encodeToString(forkEditDraft.orEmpty()))
         }
         out.append('}')
     }

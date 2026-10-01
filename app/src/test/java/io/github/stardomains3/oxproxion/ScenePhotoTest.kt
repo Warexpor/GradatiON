@@ -241,6 +241,18 @@ class ScenePhotoTest {
         assertTrue(ScenePhoto.recover(dest))
         assertTrue(jpeg.contentEquals(dest.readBytes()))
         assertFalse(bak.exists())
+
+        val older = tinyJpeg()
+        dest.writeBytes(older)
+        dest.setLastModified(1_000)
+        val newer = ByteArray(older.size) { index ->
+            if (index == older.size / 2) 0x11 else older[index]
+        }
+        partial.writeBytes(newer)
+        partial.setLastModified(2_000)
+        assertTrue(ScenePhoto.recover(dest))
+        assertTrue(newer.contentEquals(dest.readBytes()))
+        assertFalse(partial.exists())
     }
 
     @Test fun aFailedRenameStillReplacesATornPicture() {

@@ -33,6 +33,13 @@ object AskComposerDraft {
         return field.isEmpty() || field == modeSnapshot
     }
 
+    /**
+     * A relaunch drops Ask's mode snapshot. That string is one line for every chat, and the
+     * per-thread draft is what comes back. Roleplay's unsent line lives only in its mode draft,
+     * so a relaunch keeps it.
+     */
+    fun dropOnRelaunch(mode: ChatMode): Boolean = mode == ChatMode.ASK
+
     fun bind(state: State, mode: ChatMode, sessionId: Long?): Pair<State, Effect> {
         if (state.bound) return state to Effect.None
         return State(bound = true, mode = mode, sessionId = sessionId) to Effect.Bind(sessionId)

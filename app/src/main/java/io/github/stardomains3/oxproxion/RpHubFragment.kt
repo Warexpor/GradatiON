@@ -422,40 +422,36 @@ class RpHubFragment : Fragment() {
                 ex.exportKey == activeBefore.exportKey &&
                     RpGreetingSync.greetingTextChanged(activeBefore.greeting, ex.greeting)
             }
-            val imported = repo.importCharacters(backup.characters)
-            val lorebooks = repo.getAllLorebooksOnce()
-            // Notes first, in one commit, before the pictures. A kill while a portrait is
-            // decoding used to leave the card without the Memory that arrived with it.
-            RpCharacterPrefsBackup.applyAll(
-                prefs,
-                imported.mapIndexedNotNull { index, row ->
-                    backup.characters.getOrNull(index)?.let { row.id to it }
-                },
-                lorebooks,
-            )
-            imported.forEachIndexed { index, row ->
-                backup.characters.getOrNull(index)?.let { exported ->
-                    RpWallpaperBackup.apply(requireContext(), row.id, exported.wallpaperBase64)
+            val app = requireContext().applicationContext
+            val carried = CharacterImportSideLog.read(CharacterImportSideLog.file(app)).orEmpty()
+            // The side file is written before the transaction commits. A kill after the rows
+            // land is finished on the next launch, including the portraits.
+            val imported = repo.importCharacters(backup.characters) { rows ->
+                val fresh = rows.mapIndexedNotNull { index, row ->
+                    backup.characters.getOrNull(index)?.let { exported ->
+                        ImportedCharacterNote(
+                            id = row.id,
+                            name = exported.name,
+                            exportKey = row.exportKey,
+                            exported = exported,
+                        )
+                    }
                 }
+                val freshIds = fresh.map { it.id }.toSet()
+                CharacterImportSideLog.write(
+                    CharacterImportSideLog.file(app),
+                    carried.filter { it.id !in freshIds } + fresh,
+                )
+            }
+            val db = AppDatabase.getDatabase(app)
+            if (!CharacterImportSideLog.resume(app, db)) {
+                android.util.Log.e("RpHub", "Imported character notes could not be saved; will retry next launch")
+            }
+            imported.forEach { row ->
                 if (row.isNew && row.exportKey.isNotBlank()) {
                     val oldId = prefs.takeDeletedRpCharacterId(row.exportKey)
                     if (oldId != null && oldId != row.id) {
                         chatViewModel.remappingCharacterSessions(oldId, row.id)
-                    }
-                }
-                val photoUri = row.avatarBase64?.takeIf { it.isNotBlank() }?.let { encoded ->
-                    try {
-                        RpAvatarStorage.saveFromBase64(requireContext(), encoded, row.id)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        android.util.Log.w("RpHub", "Character portrait skipped", e)
-                        null
-                    }
-                }
-                if (photoUri != null) {
-                    repo.getCharacterById(row.id)?.let { c ->
-                        repo.saveCharacter(c.copy(photoUri = photoUri))
                     }
                 }
             }

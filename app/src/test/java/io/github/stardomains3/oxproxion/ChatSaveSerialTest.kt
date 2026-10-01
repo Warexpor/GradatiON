@@ -89,6 +89,13 @@ class ChatSaveSerialTest {
     }
 
     @Test
+    fun anExistingRowStillSyncsTheNotesCapturedWithIt() {
+        assertTrue(ChatSaveGate.syncCapturedNotes(snapshotHas = true, storedHas = false))
+        assertTrue(ChatSaveGate.syncCapturedNotes(snapshotHas = false, storedHas = true))
+        assertFalse(ChatSaveGate.syncCapturedNotes(snapshotHas = false, storedHas = false))
+    }
+
+    @Test
     fun aWrittenRowKeepsItsSideDataWhenANewerSaveIsWaiting() {
         // The newer snapshot overwrites these if it runs. The row already written still
         // needs the fork and the facts when the process dies before that.

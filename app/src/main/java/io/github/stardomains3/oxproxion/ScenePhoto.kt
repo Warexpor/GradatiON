@@ -191,6 +191,8 @@ object ScenePhoto {
                 out.write(bytes)
                 out.fd.sync()
             }
+            val floor = destination.lastModified()
+            if (tmp.lastModified() <= floor) tmp.setLastModified(floor + 1)
             if (!install(tmp, destination) && !sameBytes(destination, bytes)) {
                 throw IOException("Could not replace ${destination.path}")
             }
@@ -201,21 +203,46 @@ object ScenePhoto {
     }
 
     /**
-     * Puts a finished side file back at [destination] when the real name is missing or torn.
-     * A complete picture already there is left alone, including its in-progress side file.
+     * Puts a finished side file back at [destination] when the real name is missing, torn,
+     * or older than that side file. A complete picture is left alone when the side file is
+     * not a finished newer one.
      */
     internal fun recover(destination: File): Boolean {
-        if (completeJpeg(destination)) return true
         val partial = File(destination.parentFile, "${destination.name}.partial")
         val bak = File(destination.parentFile, "${destination.name}.bak")
+        // A replace that died after the new bytes were durable, and before they took the name.
+        // The picture already there is older. Put the finished side file in its place.
+        if (completeJpeg(destination) && completeJpeg(partial) &&
+            partial.lastModified() > destination.lastModified()
+        ) {
+            return installFinished(partial, destination, bak)
+        }
+        if (completeJpeg(destination)) return true
         val source = when {
             completeJpeg(partial) -> partial
             completeJpeg(bak) -> bak
             else -> return false
         }
-        if (destination.exists() && !destination.delete()) return false
-        if (!source.renameTo(destination)) return completeJpeg(destination)
-        if (partial.exists()) partial.delete()
+        return installFinished(source, destination, bak)
+    }
+
+    /**
+     * [source] is a finished JPEG. A torn [destination] is removed first. A finished one was
+     * moved aside by the caller. A kill after that removal still has [source].
+     */
+    private fun installFinished(source: File, destination: File, bak: File): Boolean {
+        if (completeJpeg(destination)) {
+            if (bak.exists() && !bak.delete()) return true
+            if (!destination.renameTo(bak)) return true
+        } else if (destination.exists() && !destination.delete()) {
+            return false
+        }
+        if (!source.renameTo(destination)) {
+            if (!destination.exists() && bak.exists()) bak.renameTo(destination)
+            return completeJpeg(destination)
+        }
+        val partial = File(destination.parentFile, "${destination.name}.partial")
+        if (partial.exists() && partial != destination) partial.delete()
         if (bak.exists()) bak.delete()
         destination.parentFile?.let { syncDirectory(it) }
         return completeJpeg(destination)

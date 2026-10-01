@@ -253,10 +253,24 @@ interface ChatDao {
         return true
     }
 
-    /** Every imported chat in one transaction, so a failure part-way leaves the list untouched. */
+    @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId")
+    suspend fun messageCount(sessionId: Long): Int
+
+    /**
+     * Every imported chat in one transaction, so a failure part-way leaves the list untouched.
+     * [beforeCommit] runs after the rows are inserted and before the transaction commits, so a
+     * side file written there is durable before the rows are, and a kill in between rolls the
+     * rows back.
+     */
     @Transaction
-    suspend fun insertImportedSessions(batch: List<Pair<ChatSession, List<ChatMessage>>>): List<Long> =
-        batch.map { (session, messages) -> insertSessionAndMessages(session, messages) }
+    suspend fun insertImportedSessions(
+        batch: List<Pair<ChatSession, List<ChatMessage>>>,
+        beforeCommit: suspend (List<Long>) -> Unit = {},
+    ): List<Long> {
+        val ids = batch.map { (session, messages) -> insertSessionAndMessages(session, messages) }
+        beforeCommit(ids)
+        return ids
+    }
 }
 
 internal suspend fun ChatMessageHead.load(dao: ChatDao): ChatMessage =

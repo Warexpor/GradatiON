@@ -61,8 +61,11 @@ interface RpDao {
      * Matching is by export key, including a key inserted earlier in this same batch.
      */
     @Transaction
-    suspend fun importCharacters(incoming: List<RpCharacterExport>): List<ImportedCharacter> {
-        return incoming.mapIndexed { index, ex ->
+    suspend fun importCharacters(
+        incoming: List<RpCharacterExport>,
+        beforeCommit: suspend (List<ImportedCharacter>) -> Unit = {},
+    ): List<ImportedCharacter> {
+        val rows = incoming.mapIndexed { index, ex ->
             RpImportGuard.beforeRow(index)
             val existing = ex.exportKey.takeIf { it.isNotBlank() }?.let { getCharacterByExportKey(it) }
             val isNew = existing == null
@@ -88,6 +91,8 @@ interface RpDao {
             }
             ImportedCharacter(id, exportKey, isNew, ex.avatarBase64)
         }
+        beforeCommit(rows)
+        return rows
     }
 
     /**

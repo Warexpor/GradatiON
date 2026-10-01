@@ -107,6 +107,11 @@ class AskComposerDraftTest {
         assertFalse(AskComposerDraft.takeStoredDraft(field = "", userEdited = true, modeSnapshot = ""))
     }
 
+    @Test fun a_relaunch_keeps_the_roleplay_line_and_drops_the_ask_snapshot() {
+        assertTrue(AskComposerDraft.dropOnRelaunch(ChatMode.ASK))
+        assertFalse(AskComposerDraft.dropOnRelaunch(ChatMode.RP))
+    }
+
     @Test fun a_change_before_bind_is_ignored() {
         val (state, effect) = AskComposerDraft.change(AskComposerDraft.State(), ChatMode.ASK, 4L, promoted = true)
         assertFalse(state.bound)

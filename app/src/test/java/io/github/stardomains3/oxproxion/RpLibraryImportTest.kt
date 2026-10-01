@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -44,6 +45,8 @@ class RpLibraryImportTest {
     @After
     fun tearDown() {
         RpImportGuard.failAt = null
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        CharacterImportSideLog.clear(CharacterImportSideLog.file(app))
         db.close()
     }
 
@@ -64,6 +67,61 @@ class RpLibraryImportTest {
         }
 
         assertEquals(listOf("Keep"), repo.getAllCharactersOnce().map { it.name })
+    }
+
+    @Test
+    fun aRolledBackCharacterImportDoesNotKeepTheNotes() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        val exported = RpCharacterExport(
+            name = "Ada",
+            exportKey = "ada",
+            memory = "shy",
+            layout = SharedPreferencesHelper.RP_LAYOUT_BUBBLES,
+        )
+        try {
+            repo.importCharacters(listOf(exported)) { rows ->
+                val row = rows.single()
+                CharacterImportSideLog.write(
+                    log,
+                    listOf(ImportedCharacterNote(row.id, exported.name, row.exportKey, exported)),
+                )
+                throw IllegalStateException("killed before commit")
+            }
+        } catch (_: IllegalStateException) {
+        }
+        assertTrue(repo.getAllCharactersOnce().isEmpty())
+        assertNotNull(CharacterImportSideLog.read(log))
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("", prefs.getRpMemory(1L))
+        assertNull(CharacterImportSideLog.read(log))
+
+        val imported = repo.importCharacters(listOf(exported)) { rows ->
+            val row = rows.single()
+            CharacterImportSideLog.write(
+                log,
+                listOf(ImportedCharacterNote(row.id, exported.name, row.exportKey, exported)),
+            )
+        }
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("shy", prefs.getRpMemory(imported.single().id))
+        assertEquals(SharedPreferencesHelper.RP_LAYOUT_BUBBLES, prefs.getRpLayout(imported.single().id))
+        assertNull(CharacterImportSideLog.read(log))
+
+        val wrong = ImportedCharacterNote(
+            imported.single().id,
+            name = "Other",
+            exportKey = "other",
+            exported = exported.copy(name = "Other", memory = "nope"),
+        )
+        CharacterImportSideLog.write(log, listOf(wrong))
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("shy", prefs.getRpMemory(imported.single().id))
+        assertNull(CharacterImportSideLog.read(log))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
     }
 
     @Test

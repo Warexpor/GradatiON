@@ -75,4 +75,40 @@ class ChatImportSideLogTest {
         assertNull(prefs.getChatForkMessagesJson(9L))
         prefs.mainPrefs.edit().clear().commit()
     }
+
+    @Test
+    fun aNewerSideFileWinsAndAMissingChatIsDropped() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = ChatImportSideLog.file(app)
+        ChatImportSideLog.clear(log)
+        ChatImportSideLog.write(log, listOf(ImportedChatMeta(id = 2L, facts = "old", pinned = false)))
+        val partial = File(log.parentFile, log.name + ".partial")
+        partial.writeText(log.readText().replace("old", "new"))
+        partial.setLastModified(log.lastModified() + 5_000)
+
+        assertEquals("new", ChatImportSideLog.read(log)!!.single().facts)
+
+        val gone = ImportedChatMeta(
+            id = 8L,
+            facts = "nope",
+            pinned = true,
+            title = "Gone",
+            timestamp = 3L,
+            messageCount = 1,
+        )
+        assertFalse(ChatImportSideLog.matches(gone, null, 0))
+        val present = ChatSession(title = "Gone", modelUsed = "m", timestamp = 3L)
+        assertTrue(ChatImportSideLog.matches(gone, present, 1))
+        assertFalse(ChatImportSideLog.matches(gone, present.copy(title = "Other"), 1))
+        assertFalse(ChatImportSideLog.matches(gone, present, 2))
+        assertTrue(ChatImportSideLog.matches(gone.copy(title = null, timestamp = null, messageCount = null), present, 9))
+
+        ChatImportSideLog.write(log, listOf(gone))
+        assertTrue(ChatImportSideLog.resume(app) { false })
+        assertEquals("", prefs.getRpFacts(8L))
+        assertFalse(log.exists())
+        prefs.mainPrefs.edit().clear().commit()
+    }
 }
