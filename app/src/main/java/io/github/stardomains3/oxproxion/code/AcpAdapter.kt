@@ -11,7 +11,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.util.concurrent.ConcurrentHashMap
@@ -37,6 +36,8 @@ import java.util.concurrent.atomic.AtomicLong
  * Slash commands: `available_commands_update` → [CodeUpdate.AvailableCommands].
  * Prompt images: [prompt] accepts [PromptAttachment] → ACP `type: image` content blocks.
  * Agent images: `agent_message_chunk` with `type: image` (data+mimeType) → [CodeUpdate.ImageChunk].
+ * A `resource_link` or embedded `resource` in an agent or user chunk is shown as text.
+ * Tool detail prefers the command for a shell call, and a file location includes its line.
  */
 class AcpAdapter : HarnessAdapter {
 
@@ -298,43 +299,22 @@ class AcpAdapter : HarnessAdapter {
         val out: CodeUpdate? = when (u.str("sessionUpdate")) {
             "agent_message_chunk" -> {
                 openThought.remove(sid)
-                // Key from the first chunk's bridge seq so session/load replay upserts, not duplicates.
-                val key = openText.getOrPut(sid) { stableKey("text", seq) }
-                val content = u["content"] as? JsonObject
-                    ?: return ignored("agent_message_chunk without content")
-                when (content.str("type")) {
-                    "image" -> {
-                        val mime = content.str("mimeType")?.trim()?.lowercase().orEmpty()
-                        val data = content.str("data")?.trim().orEmpty()
-                        // MVP: data+mime only — no remote http/resource URIs.
-                        if (mime.isEmpty() || data.isEmpty()) {
-                            return ignored("agent_message_chunk image missing mimeType/data")
-                        }
-                        // Same allowlist as decode / prompt path (jpeg/png/webp) — do not waste slots.
-                        if (!CodePromptImages.isAllowedMime(mime)) {
-                            return ignored("agent_message_chunk unsupported mime $mime")
-                        }
-                        // Parse-time size gate: refuse unbounded base64 into the session model.
-                        if (data.length > CodePromptImages.MAX_INLINE_BASE64_CHARS) {
-                            return ignored("agent_message_chunk image data too large")
-                        }
-                        CodeUpdate.ImageChunk(key, mime, data)
-                    }
-                    // Missing type: treat as text when a text field is present (older fixtures).
-                    "text", null -> content.str("text")?.let { CodeUpdate.TextChunk(key, it) }
-                    else -> return ignored("agent_message_chunk type ${content.str("type")}")
-                }
+                return agentMessage(sid, u["content"], seq)
             }
             "agent_thought_chunk" -> {
+                val text = AcpMessageContent.textOf(u["content"])
+                    ?: return ignored("agent_thought_chunk without text")
                 val key = openThought.getOrPut(sid) { stableKey("thought", seq) }
-                (u["content"] as? JsonObject)?.str("text")?.let { CodeUpdate.TextChunk(key, it, thought = true) }
+                CodeUpdate.TextChunk(key, text, thought = true)
             }
             "user_message_chunk" -> {
                 // Replayed history (session/load) or a prompt sent from another device.
                 closeText(sid)
-                (u["content"] as? JsonObject)?.str("text")?.let {
-                    CodeUpdate.Upsert(CodeEvent.UserPrompt(stableKey("user", seq), now, it))
-                }
+                val body = AcpMessageContent.userBody(u["content"])
+                    ?: return ignored("user_message_chunk without text")
+                CodeUpdate.Upsert(CodeEvent.UserPrompt(
+                    stableKey("user", seq), now, body.text, attachmentCount = body.imageCount,
+                ))
             }
             "tool_call" -> {
                 closeText(sid)
@@ -374,6 +354,31 @@ class AcpAdapter : HarnessAdapter {
         }
         return if (out == null) ignored("update ${u.str("sessionUpdate")}")
         else listOf(AdapterOutput.Update(sid, out, seq))
+    }
+
+    /**
+     * One agent chunk: text, images, and links share the open message key. A chunk that is only
+     * an unusable image stays ignored (and does not open a key) so the reason still says why.
+     */
+    private fun agentMessage(sid: String, content: JsonElement?, seq: Long?): List<AdapterOutput> {
+        val parsed = AcpMessageContent.parse(content)
+        if (parsed is AcpMessageContent.Parse.Rejected) {
+            return ignored("agent_message_chunk ${parsed.reason}")
+        }
+        val pieces = (parsed as AcpMessageContent.Parse.Ok).pieces
+        // Key from the first chunk's bridge seq so session/load replay upserts, not duplicates.
+        val prior = openText[sid]
+        val key = prior ?: stableKey("text", seq)
+        openText[sid] = key
+        val updates = ArrayList<CodeUpdate>()
+        AcpMessageContent.joinText(pieces, continuing = prior != null)?.let {
+            updates += CodeUpdate.TextChunk(key, it)
+        }
+        for (p in pieces) {
+            if (p is AcpMessageContent.Piece.Image) updates += CodeUpdate.ImageChunk(key, p.mimeType, p.data)
+        }
+        if (updates.isEmpty()) return ignored("agent_message_chunk without content")
+        return updates.map { AdapterOutput.Update(sid, it, seq) }
     }
 
     private fun toolCall(sid: String, u: JsonObject, now: Long, seq: Long?): List<AdapterOutput> {
@@ -504,12 +509,41 @@ class AcpAdapter : HarnessAdapter {
     // ── helpers ───────────────────────────────────────────────────────────────────────────
 
     private fun detailOf(u: JsonObject): String? {
-        u["locations"]?.let { locs ->
-            (locs as? JsonArray)?.firstOrNull()?.let { (it as? JsonObject)?.str("path") }?.let { return it }
+        val locations = (u["locations"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            val path = o.str("path") ?: return@mapNotNull null
+            ToolCallDetail.Location(path, o.str("line")?.toIntOrNull())
         }
-        val raw = u["rawInput"] as? JsonObject ?: return null
-        return raw.str("command") ?: raw.str("cmd") ?: raw.str("file_path") ?: raw.str("path")
-            ?: raw.str("pattern") ?: raw.str("query") ?: raw.str("url")
+        val raw = u["rawInput"] as? JsonObject
+        return ToolCallDetail.format(
+            kind = u.str("kind"),
+            locations = locations,
+            command = commandOf(raw),
+            query = firstRaw(raw, "pattern", "query", "url"),
+            filePath = firstRaw(raw, "file_path", "path"),
+        )
+    }
+
+    /** `command` may be a string or an argv array. */
+    private fun commandOf(raw: JsonObject?): String? {
+        if (raw == null) return null
+        val el = raw["command"] ?: raw["cmd"] ?: return null
+        val text = when (el) {
+            is JsonArray -> el.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.takeIf { s -> s.isNotEmpty() } }
+                .joinToString(" ")
+            is JsonPrimitive -> if (el is JsonNull) "" else el.contentOrNull.orEmpty()
+            else -> ""
+        }.trim()
+        return text.ifEmpty { null }
+    }
+
+    private fun firstRaw(raw: JsonObject?, vararg keys: String): String? {
+        if (raw == null) return null
+        for (k in keys) {
+            val s = raw.str(k)?.trim()?.ifEmpty { null } ?: continue
+            return s
+        }
+        return null
     }
 
     private fun textContent(content: JsonElement?): String? {
@@ -528,18 +562,12 @@ class AcpAdapter : HarnessAdapter {
      * bridge inlines `output` — the phone does not call terminal methods.
      */
     private fun toolOutputPiece(o: JsonObject): String? = when (o.str("type")) {
-        "content" -> contentBlockText(o["content"] as? JsonObject)
+        "content" -> AcpMessageContent.textOf(o["content"])
         "text" -> o.str("text")?.takeIf { it.isNotEmpty() }
         "terminal" -> o.str("output")?.takeIf { it.isNotEmpty() }
             ?: o.str("text")?.takeIf { it.isNotEmpty() }
+        "resource", "resource_link" -> AcpMessageContent.textOf(o)
         else -> null
-    }
-
-    private fun contentBlockText(block: JsonObject?): String? {
-        if (block == null) return null
-        block.str("text")?.takeIf { it.isNotEmpty() }?.let { return it }
-        val resource = block["resource"] as? JsonObject ?: return null
-        return resource.str("text")?.takeIf { it.isNotEmpty() }
     }
 
     private fun diffs(callId: String, content: JsonElement?, now: Long): List<CodeEvent.FileDiff> {
@@ -548,8 +576,17 @@ class AcpAdapter : HarnessAdapter {
             val o = e as? JsonObject ?: return@mapNotNull null
             if (o.str("type") != "diff") return@mapNotNull null
             val path = o.str("path") ?: return@mapNotNull null
-            val old = o["oldText"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.contentOrNull
-            val lines = Diff.between(old, o.str("newText") ?: "")
+            // A non-string old/new text used to throw out of decode and drop the tool call with it.
+            val old = when (val el = o["oldText"]) {
+                null, is JsonNull -> null
+                is JsonPrimitive -> el.contentOrNull
+                else -> return@mapNotNull null
+            }
+            val newText = when (val el = o["newText"]) {
+                is JsonPrimitive -> if (el is JsonNull) return@mapNotNull null else el.contentOrNull ?: return@mapNotNull null
+                else -> return@mapNotNull null
+            }
+            val lines = Diff.between(old, newText)
             val (add, del) = Diff.counts(lines)
             CodeEvent.FileDiff("diff:$callId:$path", now, callId, path, lines, add, del, isNewFile = old == null)
         }

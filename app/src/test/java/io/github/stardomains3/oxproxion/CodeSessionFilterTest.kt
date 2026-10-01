@@ -14,17 +14,23 @@ class CodeSessionFilterTest {
         id: String,
         title: String,
         preview: String = "",
+        workspace: String = "~/code",
+        branch: String? = null,
+        harness: HarnessKind = HarnessKind.CLAUDE_CODE,
+        model: String? = null,
     ) = CodeSessionState(
         CodeSessionSummary(
             id = id,
             hostId = "host",
-            harness = HarnessKind.CLAUDE_CODE,
-            workspace = "~/code",
+            harness = harness,
+            workspace = workspace,
             title = title,
             createdAt = 1L,
             updatedAt = 2L,
             permissionMode = PermissionMode.ASK,
             preview = preview,
+            model = model,
+            branch = branch,
         )
     )
 
@@ -52,6 +58,17 @@ class CodeSessionFilterTest {
     @Test fun matchesIdSubstring() {
         val hit = CodeSessionFilter.filterSessions("xyz-2", list)
         assertEquals(listOf(list[1]), hit)
+    }
+
+    @Test fun matchesFolderBranchHarnessAndModel() {
+        val claude = session("a", "Theme", workspace = "/home/me/GradatiON", branch = "liquid-glass", model = "claude-sonnet")
+        val cursor = session("b", "Other", workspace = "/srv/api", branch = "main", harness = HarnessKind.CURSOR_CLI)
+        val both = listOf(claude, cursor)
+        assertEquals(listOf(claude), CodeSessionFilter.filterSessions("gradation", both))
+        assertEquals(listOf(claude), CodeSessionFilter.filterSessions("liquid", both))
+        assertEquals(listOf(claude), CodeSessionFilter.filterSessions("sonnet", both))
+        assertEquals(listOf(cursor), CodeSessionFilter.filterSessions("cursor", both))
+        assertEquals(listOf(claude), CodeSessionFilter.filterSessions("claude", both))
     }
 
     @Test fun noMatchIsEmpty() {

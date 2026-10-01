@@ -179,9 +179,17 @@
     <string name="code_changes_behind">↓%1$d</string>
     <string name="code_changes_ask_commit">Ask to commit</string>
     <string name="code_changes_ask_revert">Ask to revert this file</string>
+    <string name="code_changes_ask_revert_all">Ask to revert all</string>
+    <string name="code_changes_revert_all_title">Revert every tracked change?</string>
+    <string name="code_changes_revert_all_message">The agent will be asked to restore tracked files to the last commit. Untracked files stay. Nothing is pushed.</string>
+    <string name="code_changes_revert_all_confirm">Ask to revert</string>
     <string name="code_changes_busy">Agent is busy. Try again when it finishes.</string>
     <string name="code_changes_prompt_commit">Please review the current uncommitted changes and commit them with an appropriate commit message. Do not push.</string>
     <string name="code_changes_prompt_revert">Please revert the uncommitted changes to %1$s (restore that file to HEAD). Do not commit or push.</string>
+    <plurals name="code_changes_prompt_revert_all">
+        <item quantity="one">Please revert the uncommitted change to the tracked file in this workspace. Restore it to HEAD. Leave untracked files alone. Do not commit or push.</item>
+        <item quantity="other">Please revert all uncommitted changes to tracked files in this workspace (%1$d paths). Restore those tracked files to HEAD. Leave untracked files alone. Do not commit or push.</item>
+    </plurals>
 
     <string name="code_changes_loading">Loading changes…</string>
     <string name="code_changes_diff_loading">Loading diff…</string>

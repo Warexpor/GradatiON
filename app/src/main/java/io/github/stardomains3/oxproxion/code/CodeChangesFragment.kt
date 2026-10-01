@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import io.github.stardomains3.oxproxion.GlassNotice
+import io.github.stardomains3.oxproxion.GrokConfirmDialog
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.R
 import kotlinx.coroutines.launch
@@ -43,6 +44,10 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
                     askCommit()
                     true
                 }
+                R.id.action_ask_revert_all -> {
+                    askRevertAll()
+                    true
+                }
                 else -> false
             }
         }
@@ -54,7 +59,7 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
     private fun reload() {
         hint.text = getString(R.string.code_changes_loading)
         hint.isVisible = true
-        toolbar.menu.findItem(R.id.action_ask_commit)?.isEnabled = false
+        setActionsEnabled(false)
         viewLifecycleOwner.lifecycleScope.launch {
             val result = hub.gitStatusResult(sessionId)
             val status = result.getOrNull()
@@ -64,14 +69,14 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
                 hint.text = getString(R.string.code_changes_failed)
                 hint.isVisible = true
                 toolbar.subtitle = null
-                toolbar.menu.findItem(R.id.action_ask_commit)?.isEnabled = false
+                setActionsEnabled(false)
                 return@launch
             }
             toolbar.subtitle = buildSubtitle(status).ifBlank { null }
             rows.clear()
             rows.addAll(status.files)
             list.adapter?.notifyDataSetChanged()
-            toolbar.menu.findItem(R.id.action_ask_commit)?.isEnabled = rows.isNotEmpty()
+            setActionsEnabled(rows.isNotEmpty())
             if (rows.isEmpty()) {
                 hint.text = getString(R.string.code_changes_empty)
                 hint.isVisible = true
@@ -97,6 +102,11 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
             .commit()
     }
 
+    private fun setActionsEnabled(enabled: Boolean) {
+        toolbar.menu.findItem(R.id.action_ask_commit)?.isEnabled = enabled
+        toolbar.menu.findItem(R.id.action_ask_revert_all)?.isEnabled = enabled
+    }
+
     private fun askCommit() {
         val prompt = getString(R.string.code_changes_prompt_commit)
         if (!hub.prompt(sessionId, prompt)) {
@@ -104,6 +114,25 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
             return
         }
         parentFragmentManager.popBackStack(CodeSessionFragment.BACK_STACK_TAG, 0)
+    }
+
+    /** Asks the agent to restore every tracked path. Untracked files are left alone. */
+    private fun askRevertAll() {
+        if (rows.isEmpty()) return
+        GrokConfirmDialog.show(
+            this,
+            getString(R.string.code_changes_revert_all_title),
+            getString(R.string.code_changes_revert_all_message),
+            getString(R.string.code_changes_revert_all_confirm),
+            onConfirm = {
+                val prompt = resources.getQuantityString(R.plurals.code_changes_prompt_revert_all, rows.size, rows.size)
+                if (hub.prompt(sessionId, prompt)) {
+                    parentFragmentManager.popBackStack(CodeSessionFragment.BACK_STACK_TAG, 0)
+                } else {
+                    GlassNotice.show(requireContext(), getString(R.string.code_changes_busy))
+                }
+            },
+        )
     }
 
     private inner class Adapter : RecyclerView.Adapter<Adapter.VH>() {
