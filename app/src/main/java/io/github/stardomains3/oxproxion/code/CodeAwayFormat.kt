@@ -55,6 +55,21 @@ object CodeAwayFormat {
     fun isAwayNotifId(id: Int): Boolean =
         id >= NOTIF_ID_BASE && id <= NOTIF_ID_BASE + NOTIF_ID_MASK
 
+    /**
+     * Activity PendingIntent request code. One per posted notification.
+     * A hash of the session id collides, and FLAG_UPDATE_CURRENT then opens the wrong session.
+     */
+    fun contentRequestCode(notifId: Int): Int = notifId
+
+    /**
+     * Broadcast request code for Allow / Deny. Stays out of the [contentRequestCode] range
+     * for every away notification id, so one alert cannot replace another's extras.
+     */
+    fun actionRequestCode(notifId: Int, allow: Boolean): Int {
+        val tag = if (allow) ACTION_ALLOW_TAG else ACTION_DENY_TAG
+        return notifId xor tag
+    }
+
     fun approvalHeadline(title: String): String {
         val t = title.trim()
         return if (t.isEmpty()) "Approval needed" else "Approval needed · $t"
@@ -87,4 +102,8 @@ object CodeAwayFormat {
 
     const val NOTIF_ID_BASE = 0x5A00_0000
     const val NOTIF_ID_MASK = 0x00FF_FFFF
+
+    /** High bits clear of [NOTIF_ID_BASE] (0x5A…) so Allow, Deny, and the tap target never share a code. */
+    private const val ACTION_ALLOW_TAG = 0x0100_0000
+    private const val ACTION_DENY_TAG = 0x0200_0000
 }

@@ -114,4 +114,24 @@ class CodeHubMergeTest {
         val remote = summary(title = "From bridge")
         assertEquals("From bridge", mergeListSessionsSummary(remote, local).title)
     }
+
+    @Test
+    fun takesRemoteTitleWhenThePhoneHasNotRenamed() {
+        val local = summary(title = "First line of the prompt")
+        val remote = summary(title = "Fix the footer")
+        assertEquals(
+            "Fix the footer",
+            mergeListSessionsSummary(remote, local, keepLocalTitle = false).title,
+        )
+    }
+
+    @Test
+    fun unpinnedKeepsLocalTitleWhenRemoteIsBlank() {
+        val local = summary(title = "First line")
+        val remote = summary(title = "")
+        assertEquals(
+            "First line",
+            mergeListSessionsSummary(remote, local, keepLocalTitle = false).title,
+        )
+    }
 }

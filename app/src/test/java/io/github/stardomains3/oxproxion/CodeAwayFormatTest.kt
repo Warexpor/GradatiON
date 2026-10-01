@@ -122,6 +122,27 @@ class CodeAwayFormatTest {
     }
 
     @Test
+    fun requestCodesStayDistinctAcrossAlerts() {
+        val ids = listOf(
+            CodeAwayFormat.NOTIF_ID_BASE,
+            CodeAwayFormat.NOTIF_ID_BASE + 1,
+            CodeAwayFormat.NOTIF_ID_BASE + CodeAwayFormat.NOTIF_ID_MASK,
+        )
+        val codes = HashSet<Int>()
+        for (id in ids) {
+            assertTrue(codes.add(CodeAwayFormat.contentRequestCode(id)))
+            assertTrue(codes.add(CodeAwayFormat.actionRequestCode(id, allow = true)))
+            assertTrue(codes.add(CodeAwayFormat.actionRequestCode(id, allow = false)))
+        }
+        // Same 24-bit hash, different allocated ids: taps must not share a PendingIntent.
+        val a = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess-84400")
+        val b = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess-200064")
+        val idA = CodeAwayFormat.allocateNotificationId(a, emptySet())
+        val idB = CodeAwayFormat.allocateNotificationId(b, setOf(idA))
+        assertNotEquals(CodeAwayFormat.contentRequestCode(idA), CodeAwayFormat.contentRequestCode(idB))
+    }
+
+    @Test
     fun headlines() {
         assertEquals("Approval needed · Edit foo.kt", CodeAwayFormat.approvalHeadline("Edit foo.kt"))
         assertEquals("Approval needed", CodeAwayFormat.approvalHeadline("  "))

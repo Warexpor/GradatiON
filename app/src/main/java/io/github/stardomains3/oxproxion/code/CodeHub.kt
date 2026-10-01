@@ -77,6 +77,9 @@ class CodeHub internal constructor(context: Context) {
     /** Sessions the user has open on screen. They re-attach when their machine comes back. */
     private val viewing = HashSet<String>()
 
+    /** Session ids the user renamed. Bridge titles must not replace those. */
+    private val pinnedTitles = HashSet(store.pinnedSessionTitles())
+
     /** Local away notifications (§5.6); no sticky FGS. */
     val awayNotifier = CodeAwayNotifier(appContext, store) { hostId ->
         // Real CONNECTED only (demo included once its backend is up). No isDemo bypass —
@@ -300,7 +303,11 @@ class CodeHub internal constructor(context: Context) {
             val map = _sessions.value.toMutableMap()
             remote.forEach { s ->
                 val prev = map[s.id]
-                val merged = if (prev == null) s else mergeListSessionsSummary(s, prev.summary)
+                val merged = if (prev == null) s else mergeListSessionsSummary(
+                    s,
+                    prev.summary,
+                    keepLocalTitle = s.id in pinnedTitles,
+                )
                 map[s.id] = prev?.copy(summary = merged) ?: CodeSessionState(merged)
             }
             _sessions.value = map
@@ -594,6 +601,8 @@ class CodeHub internal constructor(context: Context) {
     }
 
     fun forget(sessionId: String) {
+        pinnedTitles.remove(sessionId)
+        store.unpinSessionTitle(sessionId)
         awayNotifier.cancelSession(sessionId) // A5
         // M2: stop an in-flight turn so keepalive / outbox do not outlive the row.
         // B2: detach so reconnect does not session/load a forgotten id.
@@ -616,10 +625,12 @@ class CodeHub internal constructor(context: Context) {
         persistSessions()
     }
 
-    /** Phone-local title edit; persists via the session index in Room. */
+    /** Phone-local title edit; persists via the session index in Room. The bridge cannot replace it. */
     fun rename(sessionId: String, title: String) {
         val t = title.trim()
-        if (t.isEmpty()) return
+        if (t.isEmpty() || _sessions.value[sessionId] == null) return
+        pinnedTitles += sessionId
+        store.pinSessionTitle(sessionId)
         update(sessionId) {
             it.copy(summary = it.summary.copy(title = t, updatedAt = System.currentTimeMillis()))
         }
@@ -647,6 +658,7 @@ class CodeHub internal constructor(context: Context) {
             liveSeqOf = { state, sid -> backends[state.summary.hostId]?.peekLastSeq(sid) },
             suppressRunningFromChunks = suppressRunningFromChunks,
             ignoreStaleCancelTurnDone = ignoreStaleCancelTurnDone,
+            pinnedTitles = pinnedTitles,
         )
         if (result.sessions != null) _sessions.value = result.sessions
         // Guards are only for the cancelled turn; a later prompt starts normally.
@@ -821,21 +833,27 @@ class CodeHub internal constructor(context: Context) {
  * Soft-merge a remote `bridge/listSessions` row with a previously known local summary.
  * Prefer non-null / non-blank remote fields; keep local [CodeSessionSummary.model],
  * [CodeSessionSummary.lastSeq], preview, and non-ASK permission when the bridge omits them
- * (listSessions often lacks model until it echoes start `_meta.model`). Phone-local title
- * (rename) wins when present so refreshSessions does not clobber it (G2).
+ * (listSessions often lacks model until it echoes start `_meta.model`).
+ * [keepLocalTitle] is set after a phone rename: the bridge's title must not replace it.
+ * Otherwise a non-blank remote title wins, so an agent rename shows up on the next refresh (G2).
  */
 internal fun mergeListSessionsSummary(
     remote: CodeSessionSummary,
     local: CodeSessionSummary,
+    keepLocalTitle: Boolean = true,
 ): CodeSessionSummary = remote.copy(
     lastSeq = remote.lastSeq ?: local.lastSeq,
     permissionMode = if (remote.permissionMode != PermissionMode.ASK ||
         local.permissionMode == PermissionMode.ASK
     ) remote.permissionMode else local.permissionMode,
     preview = remote.preview.ifBlank { local.preview },
-    // G2: phone-local rename must survive connect→refreshSessions (listSessions almost
-    // always sends a non-blank title). First sighting still uses remote as-is.
-    title = local.title.ifBlank { remote.title },
+    // G2: a pinned rename survives refresh. An unpinned row takes the bridge title when
+    // it sent one, so the agent's name replaces the first line of the prompt.
+    title = when {
+        keepLocalTitle -> local.title.ifBlank { remote.title }
+        remote.title.isBlank() -> local.title
+        else -> remote.title
+    },
     model = remote.model ?: local.model,
 )
 

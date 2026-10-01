@@ -136,6 +136,13 @@ class CodeAwayNotifier(
      * Only [consumeOpenToken] with the matching value authorizes a deep open.
      */
     fun issueOpenToken(sessionId: String): String {
+        // One nonce per session until it is consumed. Rotating on every post left the
+        // earlier notification (a second approval, say) holding a token that no longer matches.
+        openTokens[sessionId]?.let { return it }
+        tokenPrefs.getString(sessionId, null)?.let { saved ->
+            openTokens[sessionId] = saved
+            return saved
+        }
         val token = UUID.randomUUID().toString()
         openTokens[sessionId] = token
         tokenPrefs.edit().putString(sessionId, token).apply()
@@ -185,11 +192,13 @@ class CodeAwayNotifier(
         )
         if (!CodeAwayFormat.shouldPost(posted, key)) return
         ensureChannel()
-        val headline = CodeAwayFormat.approvalHeadline(
+        val headline = awayHeadline(
+            R.string.code_away_approval_title,
+            R.string.code_away_approval_title_named,
             approval.title.ifBlank { sessionTitle },
         )
         val id = idFor(key)
-        val builder = baseBuilder(sessionId, headline, sessionTitle.ifBlank { approval.title })
+        val builder = baseBuilder(sessionId, headline, sessionTitle.ifBlank { approval.title }, id)
         // Optional Allow / Deny when wire options are present (answer without opening UI).
         val allow = CodeAwayFormat.pickAllow(approval.options)
         val deny = CodeAwayFormat.pickDeny(approval.options)
@@ -216,9 +225,13 @@ class CodeAwayNotifier(
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId)
         if (!CodeAwayFormat.shouldPost(posted, key)) return
         ensureChannel()
-        val headline = CodeAwayFormat.turnDoneHeadline(sessionTitle)
+        val headline = awayHeadline(
+            R.string.code_away_turn_title,
+            R.string.code_away_turn_title_named,
+            sessionTitle,
+        )
         val id = idFor(key)
-        val builder = baseBuilder(sessionId, headline, sessionTitle)
+        val builder = baseBuilder(sessionId, headline, sessionTitle, id)
         nm?.notify(id, builder.build())
         markPosted(key, id)
     }
@@ -256,10 +269,16 @@ class CodeAwayNotifier(
         manager.createNotificationChannel(channel)
     }
 
+    private fun awayHeadline(bare: Int, named: Int, title: String): String {
+        val t = title.trim()
+        return if (t.isEmpty()) appContext.getString(bare) else appContext.getString(named, t)
+    }
+
     private fun baseBuilder(
         sessionId: String,
         title: String,
         contentText: String,
+        notifId: Int,
     ): NotificationCompat.Builder {
         val token = issueOpenToken(sessionId)
         val open = Intent(appContext, MainActivity::class.java).apply {
@@ -270,7 +289,7 @@ class CodeAwayNotifier(
         }
         val contentPi = PendingIntent.getActivity(
             appContext,
-            CodeAwayFormat.notificationId("open:$sessionId"),
+            CodeAwayFormat.contentRequestCode(notifId),
             open,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -301,7 +320,7 @@ class CodeAwayNotifier(
             putExtra(EXTRA_OPTION_KIND, option.kind.name)
             putExtra(EXTRA_OPTION_LABEL, option.label)
         }
-        val req = requestCodeSalt xor notifId
+        val req = CodeAwayFormat.actionRequestCode(notifId, allow = requestCodeSalt == REQUEST_ALLOW)
         return PendingIntent.getBroadcast(
             appContext,
             req,

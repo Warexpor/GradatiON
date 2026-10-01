@@ -485,6 +485,27 @@ class CodeProtocolTest {
         assertEquals(9L, acp.lastSeq("s1"))
     }
 
+    @Test fun sessionInfoUpdateSetsTitle() {
+        val out = acp.decode(update("""{"sessionUpdate":"session_info_update","title":"Fix the footer"}""", seq = 4))
+        val info = (out.single() as AdapterOutput.Update).update as CodeUpdate.SessionInfo
+        assertEquals("Fix the footer", info.title)
+        assertEquals(4L, acp.lastSeq("s1"))
+        val blank = acp.decode(update("""{"sessionUpdate":"session_info_update","title":"  "}"""))
+        assertTrue(blank.single() is AdapterOutput.Ignored)
+    }
+
+    @Test fun toolOutputIncludesEmbeddedResourceAndTerminalSnapshot() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"r1","title":"Read a.kt","kind":"read","status":"completed",
+               "content":[
+                 {"type":"content","content":{"type":"resource","resource":{"uri":"file:///a.kt","text":"fun main() {}"}}},
+                 {"type":"terminal","terminalId":"t","output":"exit 0"}
+               ]}"""
+        )))
+        val tool = list.filterIsInstance<CodeEvent.ToolCall>().single()
+        assertEquals("fun main() {}\nexit 0", tool.output)
+    }
+
 
     @Test fun availableCommandsUpdateParsesNameDescriptionAndHint() {
         val out = acp.decode(update("""{"sessionUpdate":"available_commands_update","availableCommands":[

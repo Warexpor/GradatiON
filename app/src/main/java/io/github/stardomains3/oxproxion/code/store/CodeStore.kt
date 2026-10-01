@@ -73,6 +73,26 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         get() = prefs.getBoolean(KEY_NOTIFY_AWAY, false)
         set(v) = prefs.edit { putBoolean(KEY_NOTIFY_AWAY, v) }
 
+    /**
+     * Session ids whose title the user edited on the phone.
+     * A bridge title (list refresh or `session_info_update`) must not replace those.
+     */
+    fun pinnedSessionTitles(): Set<String> =
+        prefs.getStringSet(KEY_PINNED_TITLES, emptySet())?.toSet().orEmpty()
+
+    fun pinSessionTitle(sessionId: String) {
+        if (sessionId.isBlank()) return
+        val cur = pinnedSessionTitles()
+        if (sessionId in cur) return
+        prefs.edit { putStringSet(KEY_PINNED_TITLES, cur + sessionId) }
+    }
+
+    fun unpinSessionTitle(sessionId: String) {
+        val cur = pinnedSessionTitles()
+        if (sessionId !in cur) return
+        prefs.edit { putStringSet(KEY_PINNED_TITLES, cur - sessionId) }
+    }
+
     var hosts: List<CodeHost>
         get() {
             migratePlaintextTokensIfNeeded()
@@ -197,6 +217,7 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         private const val KEY_ACTIVE_HOST = "active_host"
         private const val KEY_PERMISSION = "permission_mode"
         private const val KEY_NOTIFY_AWAY = "notify_when_away"
+        private const val KEY_PINNED_TITLES = "pinned_session_titles"
         private const val KEY_HOSTS = "hosts"
         const val KEY_SESSIONS = "sessions"
         private const val KEY_SESSIONS_MIGRATED = "sessions_migrated_to_room"

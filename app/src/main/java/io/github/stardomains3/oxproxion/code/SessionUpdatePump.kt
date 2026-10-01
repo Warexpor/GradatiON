@@ -79,6 +79,8 @@ internal object CodeSessionFolder {
         suppressRunningFromChunks: Boolean = false,
         /** True when hub.prompt accepted after a local cancel — ignore that cancel's TurnDone. */
         ignoreStaleCancelTurnDone: Boolean = false,
+        /** User renamed this session; bridge titles must not replace it. */
+        keepLocalTitle: Boolean = false,
     ): CodeSessionState {
         // Slash-command list is session UI state, not transcript; keep fold side-effect free.
         if (update is CodeUpdate.AvailableCommands) {
@@ -110,7 +112,7 @@ internal object CodeSessionFolder {
         val summary = when (update) {
             is CodeUpdate.SessionInfo -> state.summary.copy(
                 updatedAt = now,
-                title = update.title ?: state.summary.title,
+                title = incomingTitle(state.summary.title, update.title, keepLocalTitle),
                 preview = update.preview ?: fromText ?: state.summary.preview,
                 branch = update.branch ?: state.summary.branch,
                 permissionMode = update.permissionMode ?: state.summary.permissionMode,
@@ -118,7 +120,7 @@ internal object CodeSessionFolder {
             )
             is CodeUpdate.Title -> state.summary.copy(
                 updatedAt = now,
-                title = update.title,
+                title = incomingTitle(state.summary.title, update.title, keepLocalTitle),
                 lastSeq = liveSeq ?: state.summary.lastSeq
             )
             else -> state.summary.copy(
@@ -132,6 +134,12 @@ internal object CodeSessionFolder {
 
     fun needsPersist(update: CodeUpdate): Boolean =
         update is CodeUpdate.TurnDone || update is CodeUpdate.SessionInfo
+
+    /** Blank wire titles are ignored. A pinned local title stays. */
+    private fun incomingTitle(current: String, incoming: String?, keepLocal: Boolean): String {
+        val next = incoming?.trim()?.takeIf { it.isNotEmpty() } ?: return current
+        return if (keepLocal) current else next
+    }
 
     /** Transcripts live in memory only, so a long session must not grow without bound. */
     const val MAX_EVENTS = 1500
@@ -180,6 +188,7 @@ internal fun foldSessionUpdates(
     liveSeqOf: (CodeSessionState, String) -> Long? = { _, _ -> null },
     suppressRunningFromChunks: Set<String> = emptySet(),
     ignoreStaleCancelTurnDone: Set<String> = emptySet(),
+    pinnedTitles: Set<String> = emptySet(),
 ): SessionFoldResult {
     if (batch.isEmpty()) return SessionFoldResult(null, false)
     val touched = HashMap<String, CodeSessionState>()
@@ -193,6 +202,7 @@ internal fun foldSessionUpdates(
             liveSeqOf(cur, u.sessionId),
             suppressRunningFromChunks = u.sessionId in suppressRunningFromChunks,
             ignoreStaleCancelTurnDone = u.sessionId in ignoreStaleCancelTurnDone,
+            keepLocalTitle = u.sessionId in pinnedTitles,
         )
         if (CodeSessionFolder.needsPersist(u.update)) needsPersist = true
     }
