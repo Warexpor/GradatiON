@@ -24,6 +24,13 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         // A backup from a newer version may carry fields this one doesn't know.
         private val importJson = Json { ignoreUnknownKeys = true }
         private const val MAX_IMPORT_MESSAGES = 5000
+
+        /**
+         * Test hook. When false, the import leaves the side log in place and does not commit
+         * the notes, as a kill after the rows landed would. True in production.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal var commitImportedNotesForTest: Boolean = true
     }
     // Lazy, so building the ViewModel never opens the encrypted database on the main thread; the
     // chat screen's ViewModel has already started that on IO by the time a history screen exists.
@@ -75,6 +82,7 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
                 val exportKey = session.characterId?.let { rpRepository.getCharacterById(it)?.exportKey }
                 val forkJson = prefs.getChatForkMessagesJson(session.id)
                 val forkIndex = prefs.getChatForkIndex(session.id)
+                val editing = prefs.isChatForkEditing(session.id)
                 ChatBackupWriter.writeSession(
                     out,
                     session,
@@ -85,6 +93,9 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
                     forkAnchor = prefs.getChatForkAnchor(session.id),
                     forkMessages = forkJson?.takeIf { it.isNotBlank() && forkIndex >= 0 },
                     swipeJson = prefs.getRpSwipeJson(session.id)?.takeIf { it.isNotBlank() },
+                    draft = ComposerDrafts.text(prefs.getAskComposerDrafts(), session.id).takeIf { it.isNotBlank() },
+                    forkEditing = editing.takeIf { it },
+                    forkEditDraft = if (editing) prefs.getChatForkEditDraft(session.id).orEmpty() else null,
                 ) { emit ->
                     repository.forEachMessage(session.id, emit)
                 }
@@ -172,32 +183,49 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 session to messages
             }
-            // A kill during the previous import may still owe that batch its notes.
-            // Leave its log in place when the commit does not land, instead of replacing it.
-            val prefs = SharedPreferencesHelper(app)
-            val resumed = ChatImportSideLog.resume(app)
-            // One transaction: a failure part-way leaves the chat list as it was.
-            val newIds = repository.insertImportedSessions(batch)
-            // A new row can take an id a deleted chat used to have; drop that chat's leftovers.
-            // The side file is written before the preference commit. A kill after the rows
-            // land and before that commit is finished on the next launch.
-            val metas = newIds.mapIndexed { index, id ->
-                val exported = backup.sessions[index]
-                ImportedChatMeta(
-                    id = id,
-                    facts = exported.facts?.take(RpPromptEngine.MEMORY_MAX_CHARS)?.takeIf { it.isNotBlank() },
-                    pinned = exported.pinned,
-                    forkIndex = exported.forkIndex,
-                    forkAnchor = exported.forkAnchor,
-                    forkMessages = exported.forkMessages?.takeIf { it.isNotBlank() },
-                    swipeJson = exported.swipe?.takeIf { it.isNotBlank() },
+            // One transaction. The side file is written before it commits, and it keeps a
+            // previous log whose notes have not landed yet. A kill after the commit is finished
+            // on the next launch. A log for a row that is not there is dropped.
+            val carried = ChatImportSideLog.read(ChatImportSideLog.file(app)).orEmpty()
+            repository.insertImportedSessions(batch) { ids ->
+                val fresh = ids.mapIndexed { index, id ->
+                    val exported = backup.sessions[index]
+                    val session = batch[index].first
+                    ImportedChatMeta(
+                        id = id,
+                        facts = exported.facts?.take(RpPromptEngine.MEMORY_MAX_CHARS)?.takeIf { it.isNotBlank() },
+                        pinned = exported.pinned,
+                        forkIndex = exported.forkIndex,
+                        forkAnchor = exported.forkAnchor,
+                        forkMessages = exported.forkMessages?.takeIf { it.isNotBlank() },
+                        swipeJson = exported.swipe?.takeIf { it.isNotBlank() },
+                        title = session.title,
+                        timestamp = session.timestamp,
+                        messageCount = batch[index].second.size,
+                        draft = exported.draft?.take(ComposerDrafts.MAX_CHARS)?.takeIf { it.isNotBlank() },
+                        forkEditing = exported.forkEditing,
+                        forkEditDraft = exported.forkEditDraft,
+                    )
+                }
+                val freshIds = fresh.map { it.id }.toSet()
+                ChatImportSideLog.write(
+                    ChatImportSideLog.file(app),
+                    carried.filter { it.id !in freshIds } + fresh,
                 )
             }
-            if (resumed) ChatImportSideLog.write(ChatImportSideLog.file(app), metas)
-            if (prefs.applyImportedChatMetadata(metas)) {
-                if (resumed) ChatImportSideLog.clear(ChatImportSideLog.file(app))
-            } else {
-                Log.e("SavedChats", "Imported chat notes could not be saved; will retry next launch")
+            if (commitImportedNotesForTest) {
+                val pending = ChatImportSideLog.read(ChatImportSideLog.file(app)).orEmpty()
+                val ok = pending.filter { entry ->
+                    ChatImportSideLog.matches(
+                        entry,
+                        repository.getSessionById(entry.id),
+                        repository.messageCount(entry.id),
+                    )
+                }.map { it.id }.toSet()
+                val applied = ChatImportSideLog.resume(app) { it.id in ok }
+                if (!applied) {
+                    Log.e("SavedChats", "Imported chat notes could not be saved; will retry next launch")
+                }
             }
             ChatImportResult.Success
         } catch (e: CancellationException) {

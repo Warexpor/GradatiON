@@ -108,4 +108,13 @@ object ChatSaveGate {
      * its notes when the process died first.
      */
     fun recordSideData(rowWritten: Boolean): Boolean = rowWritten
+
+    /**
+     * Write the captured fork, swipe versions, or edit mark after the row lands.
+     * A snapshot that has them always writes. A snapshot that does not still writes when
+     * something is already stored, so the notes stay the ones that belong to this transcript.
+     * A newer save puts its own back if it finishes. Neither means there is nothing to touch.
+     */
+    fun syncCapturedNotes(snapshotHas: Boolean, storedHas: Boolean): Boolean =
+        snapshotHas || storedHas
 }

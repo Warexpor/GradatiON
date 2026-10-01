@@ -330,11 +330,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         RpRepository(AppDatabase.getDatabase(getApplication()).rpDao())
     }
     private val rpDelegate: RpChatDelegate by lazy { RpChatDelegate(rpRepo, sharedPreferencesHelper) }
-    private val dbWarmup: Job? = if (AppDatabase.isOpen()) null else viewModelScope.launch(Dispatchers.IO) {
-        try {
+    private val dbWarmup: Job = viewModelScope.launch(Dispatchers.IO) {
+        val db = try {
             AppDatabase.getDatabase(getApplication())
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("ChatViewModel", "Chat database unavailable", e)
+            return@launch
+        }
+        try {
+            // A kill after an import committed its rows and before the notes did.
+            val app = getApplication<Application>()
+            val pending = ChatImportSideLog.read(ChatImportSideLog.file(app)).orEmpty()
+            val ok = pending.filter { entry ->
+                ChatImportSideLog.matches(
+                    entry,
+                    db.chatDao().getSessionById(entry.id),
+                    db.chatDao().messageCount(entry.id),
+                )
+            }.map { it.id }.toSet()
+            ChatImportSideLog.resume(app) { it.id in ok }
+            CharacterImportSideLog.resume(app, db)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Imported notes could not be restored", e)
         }
     }
     private val rpSwipeStore: RpSwipeStore
@@ -732,15 +753,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // A relaunch starts blank. These ids only remember a thread while this process is alive.
         sharedPreferencesHelper.saveRpDraftSessionId(ChatMode.ASK, null)
         sharedPreferencesHelper.saveRpDraftSessionId(ChatMode.RP, null)
-        sharedPreferencesHelper.saveComposerDraft(ChatMode.ASK, "")
-        sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, "")
+        // Ask's mode snapshot is not a thread's draft. Roleplay's unsent line lives only there,
+        // and onPause already wrote it through, so a relaunch must not wipe it.
+        ChatMode.entries.forEach { mode ->
+            if (AskComposerDraft.dropOnRelaunch(mode)) {
+                sharedPreferencesHelper.saveComposerDraft(mode, "")
+            }
+        }
         _chatMode.value = sharedPreferencesHelper.getChatMode()
         viewModelScope.launch(Dispatchers.IO) {
             DemoCharacter.seedOnce(rpRepo, sharedPreferencesHelper, getApplication())
         }
         // Tell the user once if the chat database had to be replaced (see AppDatabase.build).
         viewModelScope.launch {
-            dbWarmup?.join()
+            dbWarmup.join()
             if (sharedPreferencesHelper.consumeChatDbRecovered()) {
                 _toastUiEvent.postValue(Event(str(R.string.notice_chat_db_recovered)))
             }
@@ -748,7 +774,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val launchEpoch = sessionEpoch
         sessionTransitionJob = viewModelScope.launch {
             try {
-                dbWarmup?.join()
+                dbWarmup.join()
                 refreshActiveRpCharacter()
                 restoreDraftOrNewChat(_chatMode.value ?: ChatMode.ASK)
             } finally {
@@ -1040,18 +1066,33 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 sharedPreferencesHelper.saveRpFacts(sessionId, facts)
                 if (sessionEpoch == snap.epoch) draftRpFacts = null
             }
-            // The row did not exist when this snapshot was taken, so the fork and the other
-            // reply versions had nowhere to be written. Leaving the chat must not drop them,
-            // and the mode the user left should reopen this chat rather than the one before it.
-            if (snap.sessionId == null) {
+            // The row just written is this snapshot, even when a newer one is waiting.
+            // Its fork and the other reply versions have to land before we return, or a kill
+            // keeps the transcript and a newer branch that does not belong to it.
+            val storedFork = sharedPreferencesHelper.getChatForkIndex(sessionId) >= 0 ||
+                !sharedPreferencesHelper.getChatForkMessagesJson(sessionId).isNullOrEmpty()
+            if (ChatSaveGate.syncCapturedNotes(snap.fork != null, storedFork)) {
                 persistCapturedFork(sessionId, snap.fork)
+            }
+            val storedSwipe = !sharedPreferencesHelper.getRpSwipeJson(sessionId).isNullOrEmpty()
+            if (ChatSaveGate.syncCapturedNotes(snap.swipe != null, storedSwipe)) {
                 persistCapturedSwipe(sessionId, snap.swipe)
-                parkMintedDraft(sessionId, snap)
-                // Edit was cut before this chat had a row. The flag has to land with the fork,
-                // or coming back shows the other branch with no Cancel.
-                if (snap.editDraft != null) {
-                    sharedPreferencesHelper.setChatForkEditing(sessionId, true, snap.editDraft)
-                }
+            }
+            // The row did not exist when this snapshot was taken. The mode the user left
+            // should reopen this chat rather than the one before it.
+            if (snap.sessionId == null) parkMintedDraft(sessionId, snap)
+            // Edit was cut with this transcript. The flag has to land with it, or coming
+            // back shows the other branch with no Cancel. A transcript that is not an edit
+            // clears a mark a newer edit already wrote; that edit writes it again if it finishes.
+            if (snap.editDraft != null) {
+                sharedPreferencesHelper.setChatForkEditing(sessionId, true, snap.editDraft)
+            } else if (
+                ChatSaveGate.syncCapturedNotes(
+                    snapshotHas = false,
+                    storedHas = sharedPreferencesHelper.isChatForkEditing(sessionId),
+                )
+            ) {
+                sharedPreferencesHelper.setChatForkEditing(sessionId, false, null)
             }
         }
         if (!chatSaveSerial.isCurrent(ticket)) return

@@ -1,3 +1,12 @@
+# Handoff (2026-10-01, import notes, save notes, Roleplay draft)
+
+On `cursor/stability-import-notes-c3a3`, targeting `gradation/app-pass`.
+- A chat import writes its pins, fact notes, branches and the unsent line before the database commit. The next launch applies that file only when the chat is the one it names. A character import does the same for Memory, layout, voice, the lore pin, and the pictures.
+- A save of a chat that already has a row writes the fork, the other reply versions, and the edit mark captured with the transcript it stored. A newer save overwrites them if it finishes.
+- A picture replace that dies after the new file is finished puts that file in place even when the old picture is still there.
+- A relaunch keeps the unsent Roleplay line. Ask still starts without the last mode-switch snapshot.
+- Phone: install over a build that already has chats (they should still open). Export a chat that is pinned, has fact notes, an unsent line, and Editing open; delete it; import it (the pin, the notes, the line, and Cancel are back). Type a line in Roleplay, leave the app, kill it, and come back (the line is there). Replace a wallpaper that is already set.
+
 # Handoff (2026-10-01, code seq hole resume)
 
 On `cursor/code-seq-gap-resume-d98a`, targeting `gradation/app-pass`. Code mode only:

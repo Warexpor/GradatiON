@@ -52,8 +52,10 @@ class RpRepository(private val rpDao: RpDao) {
 
     suspend fun getAllLorebooksOnce(): List<RpLorebook> = rpDao.getAllLorebooksOnce()
 
-    suspend fun importCharacters(incoming: List<RpCharacterExport>): List<ImportedCharacter> =
-        rpDao.importCharacters(incoming)
+    suspend fun importCharacters(
+        incoming: List<RpCharacterExport>,
+        beforeCommit: suspend (List<ImportedCharacter>) -> Unit = {},
+    ): List<ImportedCharacter> = rpDao.importCharacters(incoming, beforeCommit)
 
     /** [activateFirstIfNone] matches the old import: a library that was empty gets one active book. */
     suspend fun importLorebooks(incoming: List<RpLorebookExport>): Int {

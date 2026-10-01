@@ -768,6 +768,8 @@ class SharedPreferencesHelper(context: Context) {
     internal fun applyImportedChatMetadata(entries: List<ImportedChatMeta>): Boolean {
         if (entries.isEmpty()) return true
         val pins = getPinnedSessionIds().toMutableSet()
+        var drafts = getAskComposerDrafts()
+        var draftsTouched = false
         val editor = mainPrefs.edit()
         for (entry in entries) {
             val id = entry.id
@@ -787,11 +789,33 @@ class SharedPreferencesHelper(context: Context) {
                 editor.putInt("$KEY_CHAT_FORK_ANCHOR_PREFIX$id", entry.forkAnchor ?: -1)
                 editor.putString("$KEY_CHAT_FORK_PREFIX$id", entry.forkMessages)
             }
+            if (entry.forkEditing == true) {
+                editor.putBoolean("$KEY_CHAT_FORK_EDITING_PREFIX$id", true)
+                editor.putString(
+                    "$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$id",
+                    entry.forkEditDraft.orEmpty().take(ComposerDrafts.MAX_CHARS),
+                )
+            }
             if (!entry.swipeJson.isNullOrBlank()) {
                 editor.putString("$KEY_RP_SWIPE_PREFIX$id", entry.swipeJson)
             }
+            // A reused id must not keep the previous chat's unsent line. A backup that
+            // carries one puts it back in the same commit.
+            drafts = ComposerDrafts.drop(drafts, id)
+            if (!entry.draft.isNullOrBlank()) {
+                drafts = ComposerDrafts.remember(drafts, id, entry.draft)
+            }
+            draftsTouched = true
         }
         editor.putStringSet(KEY_PINNED_SESSION_IDS, pins.map { it.toString() }.toSet())
+        if (draftsTouched) {
+            val archive = "$KEY_ASK_COMPOSER_DRAFTS.unreadable"
+            val raw = mainPrefs.getString(KEY_ASK_COMPOSER_DRAFTS, null)
+            val torn = raw?.takeIf { !mainPrefs.contains(archive) && !ComposerDrafts.readable(it) }
+            torn?.let { editor.putString(archive, it) }
+            if (drafts.isEmpty()) editor.remove(KEY_ASK_COMPOSER_DRAFTS)
+            else editor.putString(KEY_ASK_COMPOSER_DRAFTS, ComposerDrafts.encode(drafts))
+        }
         return editor.commit()
     }
 
@@ -1727,7 +1751,11 @@ class SharedPreferencesHelper(context: Context) {
         appContext.getString(resId, *args)
 }
 
-/** Pin and fact notes carried with one imported chat. [facts] is already trimmed. */
+/**
+ * Pin, fact notes, the other branch, and the unsent line for one imported chat.
+ * [facts] is already trimmed. [title], [timestamp] and [messageCount] name the row this
+ * entry was written for. Null means a log from before those fields.
+ */
 @Serializable
 internal data class ImportedChatMeta(
     val id: Long,
@@ -1737,5 +1765,13 @@ internal data class ImportedChatMeta(
     val forkAnchor: Int? = null,
     val forkMessages: String? = null,
     val swipeJson: String? = null,
+    val title: String? = null,
+    val timestamp: Long? = null,
+    val messageCount: Int? = null,
+    /** Unsent composer line. Null means the backup does not carry one. */
+    val draft: String? = null,
+    /** True when Edit had cut a turn and Cancel still has to put [forkEditDraft] back. */
+    val forkEditing: Boolean? = null,
+    val forkEditDraft: String? = null,
 )
 

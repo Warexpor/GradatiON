@@ -10,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -42,6 +43,8 @@ class ChatSaveOverwriteTest {
 
     @After
     fun tearDown() {
+        SavedChatsViewModel.commitImportedNotesForTest = true
+        ChatImportSideLog.clear(ChatImportSideLog.file(app))
         AppDatabase.setInstanceForTesting(null)
         db.close()
     }
@@ -422,6 +425,99 @@ class ChatSaveOverwriteTest {
         val torn = restored.single { it.session.title == "Torn" }.session.id
         assertEquals("{torn", prefs.getChatForkMessagesJson(torn))
         assertEquals(4, prefs.getChatForkIndex(torn))
+    }
+
+    @Test
+    fun exportKeepsTheUnsentLineAndTheOpenEdit() = runBlocking {
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val id = dao.insertSessionAndMessages(
+            ChatSession(title = "Drafted", modelUsed = "m"),
+            listOf(message("user", "hi"), message("assistant", "there")),
+        )
+        prefs.saveAskComposerDrafts(ComposerDrafts.remember(emptyMap(), id, "still writing"))
+        prefs.saveChatFork(id, 1, 1, """[{"role":"assistant","content":"other"}]""")
+        prefs.setChatForkEditing(id, true, "was in the field")
+
+        val viewModel = SavedChatsViewModel(app)
+        val exported = viewModel.getChatsAsJson()
+        dao.getAllSessionsWithMessages().forEach { dao.deleteSession(it.session.id) }
+        prefs.clearSessionPrefs(id)
+        prefs.saveAskComposerDrafts(ComposerDrafts.drop(prefs.getAskComposerDrafts(), id))
+
+        assertTrue(viewModel.importChatsFromJsonInternal(exported) is ChatImportResult.Success)
+        val restored = dao.getAllSessionsOnce().single().id
+        assertEquals("still writing", ComposerDrafts.text(prefs.getAskComposerDrafts(), restored))
+        assertTrue(prefs.isChatForkEditing(restored))
+        assertEquals("was in the field", prefs.getChatForkEditDraft(restored))
+        assertEquals("""[{"role":"assistant","content":"other"}]""", prefs.getChatForkMessagesJson(restored))
+    }
+
+    @Test
+    fun aRolledBackImportDoesNotKeepTheSideLogNotes() = runBlocking {
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = ChatImportSideLog.file(app)
+        ChatImportSideLog.clear(log)
+        val session = ChatSession(title = "Kept", modelUsed = "m", timestamp = 50L)
+        val messages = listOf(message("user", "hi"))
+        try {
+            dao.insertImportedSessions(listOf(session to messages)) { ids ->
+                ChatImportSideLog.write(
+                    log,
+                    listOf(
+                        ImportedChatMeta(
+                            id = ids.single(),
+                            facts = "should not stick",
+                            pinned = true,
+                            title = session.title,
+                            timestamp = session.timestamp,
+                            messageCount = messages.size,
+                        )
+                    ),
+                )
+                throw IllegalStateException("killed before commit")
+            }
+        } catch (_: IllegalStateException) {
+        }
+        assertTrue(dao.getAllSessionsOnce().isEmpty())
+        assertNotNull(ChatImportSideLog.read(log))
+        assertTrue(
+            ChatImportSideLog.resume(app) { entry ->
+                ChatImportSideLog.matches(entry, null, 0)
+            }
+        )
+        assertNull(ChatImportSideLog.read(log))
+        assertEquals("", prefs.getRpFacts(1L))
+        assertFalse(prefs.isSessionPinned(1L))
+    }
+
+    @Test
+    fun notesLandFromTheSideLogWhenThePreferenceCommitDidNot() = runBlocking {
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val viewModel = SavedChatsViewModel(app)
+        val backup = """{"sessions":[{"title":"N","modelUsed":"m","timestamp":9,"pinned":true,"facts":"note","messages":[{"role":"user","content":"\"hi\""}]}]}"""
+        SavedChatsViewModel.commitImportedNotesForTest = false
+        try {
+            assertTrue(viewModel.importChatsFromJsonInternal(backup) is ChatImportResult.Success)
+            val id = dao.getAllSessionsOnce().single().id
+            assertEquals("", prefs.getRpFacts(id))
+            assertNotNull(ChatImportSideLog.read(ChatImportSideLog.file(app)))
+            val session = dao.getSessionById(id)
+            val count = dao.messageCount(id)
+            assertTrue(
+                ChatImportSideLog.resume(app) { entry ->
+                    ChatImportSideLog.matches(entry, session, count)
+                }
+            )
+            assertEquals("note", prefs.getRpFacts(id))
+            assertTrue(prefs.isSessionPinned(id))
+            assertNull(ChatImportSideLog.read(ChatImportSideLog.file(app)))
+        } finally {
+            SavedChatsViewModel.commitImportedNotesForTest = true
+            ChatImportSideLog.clear(ChatImportSideLog.file(app))
+        }
     }
 
     @Test

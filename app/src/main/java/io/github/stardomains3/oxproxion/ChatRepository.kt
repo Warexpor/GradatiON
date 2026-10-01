@@ -34,9 +34,13 @@ class ChatRepository(private val chatDao: ChatDao) {
     suspend fun overwriteIfExists(session: ChatSession, messages: List<ChatMessage>): Boolean =
         chatDao.overwriteIfExists(session, messages)
 
-    /** All or nothing; returns the new session ids in order. */
-    suspend fun insertImportedSessions(batch: List<Pair<ChatSession, List<ChatMessage>>>): List<Long> =
-        chatDao.insertImportedSessions(batch)
+    /** All or nothing; returns the new session ids in order. [beforeCommit] runs inside the transaction. */
+    suspend fun insertImportedSessions(
+        batch: List<Pair<ChatSession, List<ChatMessage>>>,
+        beforeCommit: suspend (List<Long>) -> Unit = {},
+    ): List<Long> = chatDao.insertImportedSessions(batch, beforeCommit)
+
+    suspend fun messageCount(sessionId: Long): Int = chatDao.messageCount(sessionId)
 
     suspend fun updateSessionTitle(sessionId: Long, newTitle: String) {
         chatDao.updateSessionTitle(sessionId, newTitle)
