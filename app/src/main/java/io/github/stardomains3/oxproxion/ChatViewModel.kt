@@ -1152,6 +1152,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         discardableRpAssistantInFlight = false
         rpPrepJob?.cancel()
         rpPrepJob = null
+        rpRewriteJob?.cancel()
+        rpRewriteJob = null
         networkJob?.cancel()
         // Drop any partial still queued for the main thread so it can't land after Stop.
         activeStreamPump?.cancel()
@@ -1235,6 +1237,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         /** Roleplay's Continue: [userContent] is a hidden prompt, and the reply grows the last bubble. */
         continueInPlace: Boolean = false
     ): Boolean {
+        rpRewriteJob?.cancel()
         val restore = sessionTransitionJob
         if (restore != null && restore.isActive) {
             _isAwaitingResponse.value = true
@@ -1290,7 +1293,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val history = _chatMessages.value.orEmpty()
         val lastReply = history.lastOrNull()?.takeIf { it.role == "assistant" && !isAssistantPlaceholder(it) }
         val inPlace = continueInPlace && lastReply != null
-        if (!continueInPlace || inPlace) messagesForApiRequest.add(userMessage)
+        // The transcript keeps a bare photo (no empty caption line). The request adds a line
+        // when there are no words, so a provider that rejects an image-only turn still answers.
+        if (!continueInPlace || inPlace) {
+            messagesForApiRequest.add(userMessage.copy(content = withScenePhotoNote(userMessage.content)))
+        }
         trimMessagesForApiMemory(messagesForApiRequest)
 
         val uiMessages = history.toMutableList()
@@ -1598,8 +1605,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         messagesForApiRequest.addAll(currentMessages.take(userMessageIndex))
         // Use messageWithImage instead of userMessage
         messagesForApiRequest.add(messageWithImage)
-        messagesForApiRequest.addAll(extraTurns)
         trimMessagesForApiMemory(messagesForApiRequest)
+        // A rewrite's old reply and its note have to survive a tight memory window. Trim pins
+        // the newest turn, which would be the note, and would drop the reply the note refers to.
+        messagesForApiRequest.addAll(extraTurns)
 
         val uiMessages = _chatMessages.value?.toMutableList() ?: mutableListOf()
         uiMessages.add(THINKING_MESSAGE)
@@ -2417,9 +2426,37 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return if (stripQuotes) content?.trim()?.removeSurrounding("\"")?.removeSurrounding("'") else content
     }
 
+    /** A photo with no caption still needs words on the wire. The bubble stays the picture alone. */
+    private fun withScenePhotoNote(content: JsonElement): JsonElement {
+        val array = content as? JsonArray ?: return content
+        var hasText = false
+        var hasImage = false
+        for (item in array) {
+            val type = (item as? JsonObject)?.get("type")?.jsonPrimitive?.contentOrNull ?: continue
+            if (type == "text") hasText = true
+            if (type == "image_url") hasImage = true
+        }
+        if (!hasImage || hasText) return content
+        return buildJsonArray {
+            add(buildJsonObject {
+                put("type", JsonPrimitive("text"))
+                put("text", JsonPrimitive(RpPromptEngine.PHOTO_TURN))
+            })
+            array.forEach { add(it) }
+        }
+    }
+
     /** One non-streamed reply to [turns] (role to text) from the LAN server or [model] on OpenRouter; null on any failure. */
     private suspend fun completeTurns(
         turns: List<Pair<String, String>>,
+        model: String?,
+        timeoutMs: Long,
+        maxTokens: Int,
+    ): String? = completeContent(turns.map { it.first to JsonPrimitive(it.second) }, model, timeoutMs, maxTokens)
+
+    /** Same as [completeTurns], but a turn may be an image array so a rewrite still sees the photo. */
+    private suspend fun completeContent(
+        turns: List<Pair<String, JsonElement>>,
         model: String?,
         timeoutMs: Long,
         maxTokens: Int,
@@ -2430,29 +2467,36 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val requestUrl: String
         val requestKey: String
         val modelToUse: String
-        if (isLanModel) {
+        val client = if (isLanModel) {
             val lanEndpoint = sharedPreferencesHelper.getLanEndpoint()
             if (lanEndpoint.isNullOrBlank()) return null
             requestUrl = "$lanEndpoint/v1/chat/completions"
             requestKey = sharedPreferencesHelper.getLanApiKeyForRequest()
             modelToUse = _activeChatModel.value ?: return null
+            lanHttpClient
+        } else if (DemoModel.isDemo(model) || DemoModel.isDemo(_activeChatModel.value)) {
+            // The demo answers on its own client and has no key.
+            requestKey = "demo"
+            requestUrl = "https://openrouter.ai/api/v1/chat/completions"
+            modelToUse = DemoModel.ID
+            demoHttpClient
         } else {
             requestKey = sharedPreferencesHelper.getApiKeyFromPrefs("openrouter_api_key")
             if (requestKey.isBlank() || model.isNullOrBlank()) return null
             requestUrl = "https://openrouter.ai/api/v1/chat/completions"
             modelToUse = model
+            httpClient
         }
         return try {
             withTimeout(timeoutMs.milliseconds) {
                 withContext(Dispatchers.IO) {
-                    val client = if (isLanModel) lanHttpClient else httpClient
                     val requestBody = buildJsonObject {
                             put("model", JsonPrimitive(modelToUse))
                             putJsonArray("messages") {
-                                turns.forEach { (role, text) ->
+                                turns.forEach { (role, content) ->
                                     add(buildJsonObject {
                                         put("role", JsonPrimitive(role))
-                                        put("content", JsonPrimitive(text))
+                                        put("content", content)
                                     })
                                 }
                             }
@@ -2483,6 +2527,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             ?.get("content")?.jsonPrimitive?.content
                 }
             }
+        } catch (e: CancellationException) {
+            // A timeout is a failed rewrite. Stopping, or leaving the chat, is not.
+            if (e is TimeoutCancellationException) null else throw e
         } catch (_: Throwable) {
             null
         }
@@ -4006,6 +4053,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * @return false if soft-failed (toast already shown); true if prep started.
      */
     fun regenerateLastRpReply(instruction: String? = null, rewrite: String? = null): Boolean {
+        rpRewriteJob?.cancel()
         if (_isAwaitingResponse.value == true) {
             _toastUiEvent.postValue(
                 Event(getApplication<Application>().getString(R.string.rp_wait_for_reply))
@@ -4118,7 +4166,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (original.isBlank() || isNonSwipeableRpAssistantText(original)) return false
         val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
         val lastUserIndex = messages.indexOfLast { it.role == "user" }
-        if (position == lastAssistantIndex && lastAssistantIndex > lastUserIndex) {
+        if (RpRewrite.streamsAsNewSwipe(position, lastAssistantIndex, lastUserIndex)) {
             return regenerateLastRpReply(rewrite = note)
         }
         if (!canSendRpMessage()) {
@@ -4128,33 +4176,44 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _toastUiEvent.postValue(Event(str(R.string.rp_rewrite_started)))
         val epoch = sessionEpoch
         rpRewriteJob = viewModelScope.launch {
-            val systemPrompt = rpDelegate.buildSystemPrompt(
-                character = rpDelegate.getActiveCharacter(),
-                extraInstruction = null,
-                loreScan = rpLoreScan(),
-                definitionCap = rpDefinitionCap(),
-                facts = currentRpFacts()
-            )
-            val request = mutableListOf(FlexibleMessage(role = "system", content = JsonPrimitive(systemPrompt)))
-            messages.take(position + 1).filterTo(request) { it.role != "system" && !isAssistantPlaceholder(it) }
-            trimMessagesForApiMemory(request)
-            request.add(FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.rewriteDirective(note))))
-            val turns = request.map { it.role to getMessageText(it.content) }
-            val rewritten = completeTurns(
-                turns = turns,
-                model = _activeChatModel.value,
-                timeoutMs = 120_000,
-                maxTokens = sharedPreferencesHelper.getMaxTokens().toIntOrNull() ?: 12_000,
-            )?.let { rpDelegate.cleanReply(it) }?.takeIf { it.isNotBlank() }
-            // The chat moved on (switched, or this reply was edited or removed): don't write into it.
-            val now = _chatMessages.value
-            if (epoch != sessionEpoch || now?.getOrNull(position)?.let { getMessageText(it.content) } != original) return@launch
-            if (rewritten == null) {
-                _toastUiEvent.postValue(Event(str(R.string.rp_rewrite_failed)))
-                return@launch
+            try {
+                val systemPrompt = rpDelegate.buildSystemPrompt(
+                    character = rpDelegate.getActiveCharacter(),
+                    extraInstruction = null,
+                    loreScan = rpLoreScan(),
+                    definitionCap = rpDefinitionCap(),
+                    facts = currentRpFacts()
+                )
+                val prefix = messages.take(position + 1).filter { it.role != "system" && !isAssistantPlaceholder(it) }
+                val request = mutableListOf(FlexibleMessage(role = "system", content = JsonPrimitive(systemPrompt)))
+                request.addAll(prefix)
+                trimMessagesForApiMemory(request)
+                // The reply, and the turn before it, stay even when the greeting ate the budget.
+                val pinned = RpApiMemory.pinTail(request, prefix.takeLast(2)) { a, b ->
+                    a.role == b.role && a.content == b.content
+                }
+                request.clear()
+                request.addAll(pinned)
+                request.add(FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.rewriteDirective(note))))
+                if (epoch != sessionEpoch) return@launch
+                val rewritten = completeContent(
+                    turns = request.map { it.toApiMessage().let { m -> m.role to m.content } },
+                    model = _activeChatModel.value,
+                    timeoutMs = 120_000,
+                    maxTokens = sharedPreferencesHelper.getMaxTokens().toIntOrNull() ?: 12_000,
+                )?.let { rpDelegate.cleanReply(it) }?.takeIf { it.isNotBlank() }
+                // The chat moved on (switched, or this reply was edited or removed): don't write into it.
+                val now = _chatMessages.value
+                if (epoch != sessionEpoch || now?.getOrNull(position)?.let { getMessageText(it.content) } != original) return@launch
+                if (rewritten == null) {
+                    _toastUiEvent.postValue(Event(str(R.string.rp_rewrite_failed)))
+                    return@launch
+                }
+                updateMessageAt(position, rewritten)
+                _rpRewriteDone.value = Event(RpRewriteDone(position, original, rewritten))
+            } catch (e: CancellationException) {
+                throw e
             }
-            updateMessageAt(position, rewritten)
-            _rpRewriteDone.value = Event(RpRewriteDone(position, original, rewritten))
         }
         return true
     }

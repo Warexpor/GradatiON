@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Roleplay rewrite quotes the reply you are changing and offers Shorter, Longer and More dialogue. The demo model accepts a scene photo and answers it. A photo with no caption still tells the character the picture is in the scene.
 - RP character panel pages: every tile (History, Memory, Lore, Edit, Voice, Persona, Wallpaper, Layout, Style) opens its own full-screen page with a drawn hero, cards and a Save pinned above the keyboard. The sheet stays open under the page and refreshes when you come back. History lists that character's chats by day (current one marked "Open now") with a New chat button. Layout shows three drawings with a ring on the chosen one; Wallpaper previews the picture in a phone shape; Voice lists Default at once and adds the engine's voices when speech is ready; Style is Writing, Story and Mode cards.
 - Persona can be switched off once one exists: a "Use persona in chats" switch on the Persona screen. Off keeps it saved but characters stop seeing your name and description; saving a persona turns it back on. The persona screen now has a tappable portrait, a name and About field, and your saved personas as rows (up to 12).
 - Choosing an avatar photo (characters and personas) opens a small menu under the portrait: Gallery (your gallery app) or the system Photo picker. A frame step then lets you drag and pinch to choose what part of the photo shows, and saves a 512px square.
@@ -26,6 +27,8 @@
 
 ### Fixed
 - Code: a bridge event that arrives twice (or a resume that includes the last seq already on screen) no longer appends that chunk again. A prompt queued while reconnecting is sent once even if the resume flush and the retry overlap. A prompt with surrounding spaces matches the bridge's echo, so it stays one bubble. A second connect while the socket is still opening no longer leaves a spare WebSocket, and a send after the socket was retired reports failure so the prompt can be queued again.
+- Roleplay Rewrite on the greeting no longer asks you to send a message first. Rewriting the latest reply still shows the model that reply when chat memory is short, and rewriting an earlier reply still shows it the photo. The demo model can rewrite too.
+- A photo on its own can be sent: the button no longer stays on Continue, or stays disabled, while a picture is staged, and a second tap cannot send it twice. Camera photos are turned upright before they go to the model. A saved photo still shows after the gallery link expires.
 - A photo staged in the composer with no caption left Send disabled, so the picture could not be sent. Send now wakes as soon as a photo or audio clip is attached, and New chat drops the staged attachment instead of carrying it into the next thread.
 - Opening the keyboard on a short thread no longer yanks the messages up by the full keyboard height. A message already resting on the composer still rides with it; one the keyboard would cover moves by only the covered amount.
 - Composer photos keep their shape (a portrait stays tall, including the camera's rotation flag) instead of being cropped to a square, and the remove control is a 44dp target. Sent and generated pictures use the same rounded cap, with a caption lined up to the text inset.
