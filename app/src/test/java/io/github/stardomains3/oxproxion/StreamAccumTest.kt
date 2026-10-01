@@ -2,11 +2,17 @@ package io.github.stardomains3.oxproxion
 
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StreamAccumTest {
+
+    @After fun resetCap() {
+        StreamAccum.maxCharsForTest = null
+    }
 
     @Test fun firstTokenPublishesImmediately() {
         val a = StreamAccum()
@@ -55,5 +61,23 @@ class StreamAccumTest {
         a.partial(0L)
         assertEquals("one two", a.content())
         assertEquals("", a.reasoning())
+    }
+
+    @Test fun textPastTheCapIsCutAndMarked() {
+        StreamAccum.maxCharsForTest = 5
+        val accum = StreamAccum()
+        accum.appendContent("hello!!")
+        assertTrue(accum.capped)
+        assertEquals("hello", accum.content())
+        accum.appendContent("more")
+        assertEquals("hello", accum.content())
+    }
+
+    @Test fun reasoningHasTheSameCap() {
+        StreamAccum.maxCharsForTest = 4
+        val accum = StreamAccum()
+        accum.appendReasoning("abcdef")
+        assertTrue(accum.capped)
+        assertEquals("abcd", accum.reasoning())
     }
 }

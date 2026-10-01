@@ -1,3 +1,11 @@
+# Handoff (2026-10-01, stream and voice bounds)
+
+On `cursor/stream-voice-stability-d087`, targeting `gradation/app-pass`.
+- A message part that is not a string no longer crashes chat open, History, Roleplay's last line, or PDF and HTML export (`MessageContent`).
+- One stream event past 4 MB fails the turn. A reply past 1.5 million characters stops and keeps the text. Tool arguments stop at 2 MB. Generated audio past 12 MB is not saved.
+- Dictation stops after five minutes and keeps the words. A clip past 8 MB is not loaded. A recognizer result that arrives after the session ended does not paste twice.
+- Phone: dictate for a short clip and confirm the words land once. Open a chat that has a photo plus a caption. A very long reply should stop with the max-tokens notice rather than grow forever.
+
 # Handoff (2026-10-01, RP lore keys and the scene)
 
 On `cursor/rp-lore-keys-and-scene-1966`, targeting `gradation/app-pass`.

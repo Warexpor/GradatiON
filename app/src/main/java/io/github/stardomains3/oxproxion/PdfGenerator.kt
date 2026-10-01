@@ -45,11 +45,7 @@ import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.syntax.Prism4jThemeDarkula
 import io.noties.markwon.syntax.SyntaxHighlightPlugin
 import io.noties.prism4j.Prism4j
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -391,27 +387,13 @@ class PdfGenerator(private val context: Context) {
 
         messagesToRender.forEachIndexed { index, message ->
             val isUser = message.role == "user"
-            var textContent = ""
-
-            // Extract text from content (same as original)
-            if (message.content is JsonArray) {
-                textContent = message.content.firstNotNullOfOrNull { item ->
-                    (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.content == "text" }?.get("text")?.jsonPrimitive?.content
-                } ?: ""
-            } else if (message.content is JsonPrimitive) {
-                textContent = message.content.content
-            }
-            textContent = processMarkdownLinks(textContent)
+            val textContent = processMarkdownLinks(MessageContent.text(message.content))
 
             // Extract uploaded image (base64 from content)
             var uploadedImageBitmap: Bitmap? = null
-            if (message.content is JsonArray) {
-                val imageUrl = message.content.firstNotNullOfOrNull { item ->
-                    (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.content == "image_url" }?.get("image_url")?.jsonObject?.get("url")?.jsonPrimitive?.content
-                }
-                if (imageUrl != null) {
-                    uploadedImageBitmap = decodeImage(imageUrl)  // Reuse existing decodeImage
-                }
+            val imageUrl = MessageContent.imageUrl(message.content)
+            if (imageUrl != null) {
+                uploadedImageBitmap = decodeImage(imageUrl)
             }
 
             // Prioritize: Use generated image if available, else uploaded
@@ -448,17 +430,7 @@ class PdfGenerator(private val context: Context) {
 
             messagesToRender.forEachIndexed { index, message ->
                 val isUser = message.role == "user"
-                var textContent = ""
-
-                // Extract text (same as above)
-                if (message.content is JsonArray) {
-                    textContent = message.content.firstNotNullOfOrNull { item ->
-                        (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.content == "text" }?.get("text")?.jsonPrimitive?.content
-                    } ?: ""
-                } else if (message.content is JsonPrimitive) {
-                    textContent = message.content.content
-                }
-                textContent = processMarkdownLinks(textContent)
+                val textContent = processMarkdownLinks(MessageContent.text(message.content))
 
                 // Reuse the stored bitmap
                 val finalImageBitmap = imageBitmaps[index]
@@ -550,24 +522,13 @@ class PdfGenerator(private val context: Context) {
 
         messagesToRender.forEachIndexed { index, message ->
             val isUser = message.role == "user"
-            var textContent = ""
+            val textContent = processMarkdownLinks(MessageContent.text(message.content))
             var imageBitmap: Bitmap? = null
-            if (message.content is JsonArray) {
-                val contentArray = message.content
-                textContent = contentArray.firstNotNullOfOrNull { item ->
-                    (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.content == "text" }?.get("text")?.jsonPrimitive?.content
-                } ?: ""
-                val imageUrl = contentArray.firstNotNullOfOrNull { item ->
-                    (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.content == "image_url" }?.get("image_url")?.jsonObject?.get("url")?.jsonPrimitive?.content
-                }
-                if (imageUrl != null) {
-                    imageBitmap = decodeImage(imageUrl)
-                    imageBitmap?.let { imageBitmaps[index] = it }  // Store the decoded bitmap for reuse
-                }
-            } else if (message.content is JsonPrimitive) {
-                textContent = message.content.content
+            val imageUrl = MessageContent.imageUrl(message.content)
+            if (imageUrl != null) {
+                imageBitmap = decodeImage(imageUrl)
+                imageBitmap?.let { imageBitmaps[index] = it }
             }
-            textContent = processMarkdownLinks(textContent)
             totalHeight += calculateTotalMessageHeight(textContent, imageBitmap, pageWidth, if (isUser) userIconDrawable != null else aiIconDrawable != null)
             if (index < messagesToRender.size - 1) {
                 totalHeight += bubbleSpacing // Add spacing between messages
@@ -590,25 +551,8 @@ class PdfGenerator(private val context: Context) {
 
             messagesToRender.forEachIndexed { index, message ->
                 val isUser = message.role == "user"
-                var textContent = ""
-                var imageBitmap: Bitmap? = null
-
-                // Extract text and image
-                if (message.content is JsonArray) {
-                    val contentArray = message.content
-                    textContent = contentArray.firstNotNullOfOrNull { item ->
-                        (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.content == "text" }?.get("text")?.jsonPrimitive?.content
-                    } ?: ""
-                    val imageUrl = contentArray.firstNotNullOfOrNull { item ->
-                        (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.content == "image_url" }?.get("image_url")?.jsonObject?.get("url")?.jsonPrimitive?.content
-                    }
-                    if (imageUrl != null) {
-                        imageBitmap = imageBitmaps[index]  // Reuse the stored bitmap instead of re-decoding
-                    }
-                } else if (message.content is JsonPrimitive) {
-                    textContent = message.content.content
-                }
-                textContent = processMarkdownLinks(textContent)
+                val textContent = processMarkdownLinks(MessageContent.text(message.content))
+                val imageBitmap = if (MessageContent.imageUrl(message.content) != null) imageBitmaps[index] else null
 
                 // Draw the icon and bubble
                 val messageHeight = calculateTotalMessageHeight(textContent, imageBitmap, canvas.width.toFloat(), if (isUser) userIconDrawable != null else aiIconDrawable != null)

@@ -38,13 +38,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 
 class ChatAdapter(
@@ -485,24 +479,10 @@ class ChatAdapter(
         currentFontScale = scalePercent.coerceIn(50, 200) // clamp 50%-200%
         notifyDataSetChanged()
     }
-    private fun getMessageText(content: JsonElement): String {
-        if (content is JsonPrimitive) return content.content
-        if (content is JsonArray) {
-            return content.firstNotNullOfOrNull { item ->
-                (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.contentOrNull == "text" }?.get("text")?.jsonPrimitive?.content
-            } ?: ""
-        }
-        return ""
-    }
+    private fun getMessageText(content: JsonElement): String = MessageContent.text(content)
 
-    private fun getImageBase64(content: JsonElement): String? {
-        if (content is JsonArray) {
-            return content.firstNotNullOfOrNull { item ->
-                (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.contentOrNull == "image_url" }?.get("image_url")?.jsonObject?.get("url")?.jsonPrimitive?.content?.substringAfter(",")
-            }
-        }
-        return null
-    }
+    private fun getImageBase64(content: JsonElement): String? =
+        MessageContent.imageUrl(content)?.substringAfter(",")
 
     /** What a message shows: its text, or for a turn that only called tools a line naming them. */
     private fun visibleText(message: FlexibleMessage): String {

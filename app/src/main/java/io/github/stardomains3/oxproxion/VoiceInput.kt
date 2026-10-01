@@ -151,6 +151,7 @@ class VoiceInput(
 
     /** Stop listening and keep what was said (cloud and local transcribe first). */
     fun finish() {
+        disarmDurationCap()
         if (state != State.LISTENING) return
         if (recognizer != null) {
             stopping = true
@@ -167,6 +168,7 @@ class VoiceInput(
      * the user sends or leaves mid-dictation, so their words are never thrown away.
      */
     fun finishNow() {
+        disarmDurationCap()
         if (recognizer != null) {
             finishDevice()
         } else if (recorder != null) {
@@ -176,6 +178,7 @@ class VoiceInput(
 
     /** Give up on this dictation: stop listening or drop a transcription in flight, keep nothing. */
     fun cancel() {
+        disarmDurationCap()
         main.removeCallbacks(busyRetry)
         if (recognizer != null) {
             discardDevice()
@@ -204,6 +207,7 @@ class VoiceInput(
         heard()
         r.setRecognitionListener(deviceListener)
         state = State.LISTENING
+        armDurationCap()
         // Some recognizer services throw (service gone, permission revoked) instead of calling onError.
         runCatching { r.startListening(recognizerIntent()) }.onFailure {
             discardDevice()
@@ -289,16 +293,23 @@ class VoiceInput(
         state = State.IDLE
     }
 
+    /** A result delivered after the recognizer was destroyed must not paste the phrase a second time. */
+    private fun deviceLive(): Boolean = recognizer != null
+
     private val deviceListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) = Unit
-        override fun onBeginningOfSpeech() = heard()
+        override fun onBeginningOfSpeech() {
+            if (deviceLive()) heard()
+        }
         override fun onRmsChanged(rmsdB: Float) {
+            if (!deviceLive()) return
             // Recognizers report roughly -2 dB (silence) to 10 dB (loud speech).
             listener.onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
         }
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEndOfSpeech() = Unit
         override fun onPartialResults(partialResults: Bundle?) {
+            if (!deviceLive()) return
             val text = partialResults?.bestResult() ?: return
             if (text.isBlank()) return
             heard()
@@ -306,6 +317,7 @@ class VoiceInput(
             listener.onPartial(text)
         }
         override fun onResults(results: Bundle?) {
+            if (!deviceLive()) return
             results?.bestResult()?.takeIf { it.isNotBlank() }?.let {
                 heard()
                 lastPartial = it
@@ -314,6 +326,7 @@ class VoiceInput(
             if (stopping) finishDevice() else restartDevice()
         }
         override fun onError(error: Int) {
+            if (!deviceLive()) return
             when {
                 stopping -> finishDevice()
                 // A pause ended the session: keep listening until the user taps.
@@ -366,10 +379,27 @@ class VoiceInput(
         recordFile = file
         recordEngine = engine
         state = State.LISTENING
+        armDurationCap()
         main.post(amplitudeTick)
     }
 
+    private val durationCap = Runnable {
+        if (state != State.LISTENING) return@Runnable
+        listener.onError(context.getString(R.string.voice_recording_cap))
+        finish()
+    }
+
+    private fun armDurationCap() {
+        main.removeCallbacks(durationCap)
+        main.postDelayed(durationCap, VoiceClip.MAX_DURATION_MS)
+    }
+
+    private fun disarmDurationCap() {
+        main.removeCallbacks(durationCap)
+    }
+
     private fun stopRecording(transcribeIt: Boolean) {
+        disarmDurationCap()
         main.removeCallbacks(amplitudeTick)
         val rec = recorder ?: return
         recorder = null
@@ -384,9 +414,31 @@ class VoiceInput(
             state = State.IDLE
             return
         }
+        if (!VoiceClip.readable(file.length())) {
+            file.delete()
+            listener.onError(context.getString(R.string.voice_error_too_long))
+            state = State.IDLE
+            return
+        }
         state = State.TRANSCRIBING
         transcribeJob = scope.launch {
-            val bytes = withContext(Dispatchers.IO) { file.readBytes().also { file.delete() } }
+            val bytes = try {
+                withContext(Dispatchers.IO) {
+                    try {
+                        file.readBytes()
+                    } finally {
+                        file.delete()
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                if (!isActive) return@launch
+                transcribeJob = null
+                state = State.IDLE
+                listener.onError(context.getString(R.string.voice_error_too_long))
+                return@launch
+            }
             val result = transcribe(bytes, "ogg", file.name)
             // Cancelled while the request was in flight: cancel() already reset the state.
             if (!isActive) return@launch
@@ -398,6 +450,16 @@ class VoiceInput(
     }
 
     companion object {
+        /**
+         * A recording the phone can turn into text. Longer than this is not loaded into memory:
+         * the upload is the raw bytes, then a base64 copy, and an unbounded clip used to exhaust the heap.
+         */
+        internal object VoiceClip {
+            const val MAX_BYTES = 8L * 1024 * 1024
+            const val MAX_DURATION_MS = 5 * 60 * 1000L
+            fun readable(lengthBytes: Long): Boolean = lengthBytes in 1..MAX_BYTES
+        }
+
         private const val LEVEL_TICK_MS = 66L
         private const val STOP_GRACE_MS = 1_500L
         /** Empty device sessions tolerated in a row; each lasts a few seconds of silence. */

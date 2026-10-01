@@ -19,12 +19,16 @@ class SseJsonReaderTest {
     private fun read(
         text: String,
         shouldStop: (() -> Boolean)? = null,
+        maxLineBytes: Long = SseJsonReader.MAX_LINE_BYTES,
+        maxEventChars: Int = SseJsonReader.MAX_EVENT_CHARS,
     ): Pair<SseJsonReader.End, List<String>> = runBlocking {
         val payloads = mutableListOf<String>()
         val end = SseJsonReader.forEachJsonPayload(
             ByteReadChannel(text.toByteArray()),
             { payloads.add(it) },
             shouldStop,
+            maxLineBytes,
+            maxEventChars,
         )
         end to payloads
     }
@@ -120,6 +124,30 @@ class SseJsonReaderTest {
         job.cancel()
         job.join()
         assertTrue("reader swallowed the cancellation", rethrown)
+    }
+
+    @Test
+    fun aLinePastTheCapFailsInsteadOfGrowing() {
+        try {
+            read("data: " + "x".repeat(80) + "\n\n", maxLineBytes = 40)
+            fail("expected the oversized line to fail")
+        } catch (e: IOException) {
+            assertTrue(e.message, e.message!!.contains("too large"))
+        }
+    }
+
+    @Test
+    fun severalDataLinesPastTheEventCapFail() {
+        val body = buildString {
+            repeat(4) { append("data: ").append("y".repeat(20)).append('\n') }
+            append('\n')
+        }
+        try {
+            read(body, maxEventChars = 30)
+            fail("expected the oversized event to fail")
+        } catch (e: IOException) {
+            assertTrue(e.message, e.message!!.contains("too large"))
+        }
     }
 
     @Test

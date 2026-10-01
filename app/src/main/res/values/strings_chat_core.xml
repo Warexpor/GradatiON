@@ -37,6 +37,7 @@
     <string name="save_epub_failed">EPUB save failed: %1$s</string>
     <string name="save_audio_ok">Music saved: %1$s</string>
     <string name="save_audio_failed">Audio save failed: %1$s</string>
+    <string name="save_audio_too_large">The audio was too large to save</string>
     <string name="image_download_ok">Image downloaded: %1$s</string>
     <string name="image_download_failed">Failed to download image: %1$s</string>
 
