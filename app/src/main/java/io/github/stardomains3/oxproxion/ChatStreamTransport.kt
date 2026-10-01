@@ -67,7 +67,7 @@ internal interface ChatStreamHost {
     fun parseOpenRouterError(responseText: String): String
     fun finalizeAssistantContent(text: String): String
     fun getModelDisplayName(apiIdentifier: String): String
-    suspend fun downloadImages(imageUrls: List<String>): List<String>
+    suspend fun downloadImages(imageUrls: List<String>): List<ScenePhoto.GeneratedPicture>
     fun saveBinaryFileToDownloads(filename: String, bytes: ByteArray, mimeType: String)
     fun updateMessages(updateBlock: (MutableList<FlexibleMessage>) -> Unit)
     fun putAssistantMessage(list: MutableList<FlexibleMessage>, thinkingMessage: FlexibleMessage?, newMessage: FlexibleMessage)
@@ -484,7 +484,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
     private fun handleSuccessResponse(
         chatResponse: ChatResponse,
         thinkingMessage: FlexibleMessage?,
-        downloadedUris: List<String> = emptyList()
+        downloadedUris: List<ScenePhoto.GeneratedPicture> = emptyList()
     ) {
         val message = chatResponse.choices.firstOrNull()?.message
         if (message == null) {
@@ -519,7 +519,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
             reasoning = reasoningForDisplay + separator
         )
         if (downloadedUris.isNotEmpty()) {
-            finalAiMessage = finalAiMessage.copy(imageUri = downloadedUris.first())
+            finalAiMessage = ScenePhoto.withGeneratedPicture(finalAiMessage, downloadedUris.first())
         }
         updateMessages { list ->
             if (thinkingMessage == null) list.add(finalAiMessage)
@@ -721,11 +721,13 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                 val hadToolCalls = toolCallBuffer.isNotEmpty()
                 var streamFinalContent: String? = null
                 if (hadToolCalls && !toolCallsHandledForTurn) {
-                    val assistantMessage = FlexibleMessage(
-                        role = "assistant",
-                        content = JsonPrimitive(accumulatedResponse + citationsMarkdown),
-                        toolCalls = toolCallBuffer,
-                        imageUri = downloadedUris.firstOrNull()
+                    val assistantMessage = ScenePhoto.withGeneratedPicture(
+                        FlexibleMessage(
+                            role = "assistant",
+                            content = JsonPrimitive(accumulatedResponse + citationsMarkdown),
+                            toolCalls = toolCallBuffer,
+                        ),
+                        downloadedUris.firstOrNull(),
                     )
                     withContext(Dispatchers.Main) {
                         updateMessages { list ->
@@ -743,11 +745,13 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                             putAssistantMessage(
                                 list,
                                 thinkingMessage,
-                                FlexibleMessage(
-                                    role = "assistant",
-                                    content = JsonPrimitive(finalContent),
-                                    reasoning = accumulatedReasoning.ifBlank { null },
-                                    imageUri = downloadedUris.firstOrNull()
+                                ScenePhoto.withGeneratedPicture(
+                                    FlexibleMessage(
+                                        role = "assistant",
+                                        content = JsonPrimitive(finalContent),
+                                        reasoning = accumulatedReasoning.ifBlank { null },
+                                    ),
+                                    downloadedUris.firstOrNull(),
                                 )
                             )
                         }

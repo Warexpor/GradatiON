@@ -84,6 +84,29 @@ object BackgroundPhoto {
         prefs(ctx).edit { putLong(versionKey(slot), System.currentTimeMillis()) }
     }
 
+    /** Replace the slot with [jpeg] and bump the version so an open chat redraws it. */
+    fun writeBytes(ctx: Context, slot: String, jpeg: ByteArray): Boolean {
+        val out = file(ctx, slot)
+        val tmp = File(out.parentFile, out.name + ".tmp")
+        return try {
+            out.parentFile?.mkdirs()
+            tmp.writeBytes(jpeg)
+            if (out.exists() && !out.delete()) {
+                tmp.delete()
+                return false
+            }
+            if (!tmp.renameTo(out)) {
+                tmp.copyTo(out, overwrite = true)
+                tmp.delete()
+            }
+            prefs(ctx).edit { putLong(versionKey(slot), System.currentTimeMillis()) }
+            out.isFile
+        } catch (_: Exception) {
+            tmp.delete()
+            false
+        }
+    }
+
     /** Copy [uri] into app storage (downscaled JPEG), off the main thread; [done] on main. */
     fun import(ctx: Context, uri: Uri, slot: String? = null, done: (Boolean) -> Unit) {
         val app = ctx.applicationContext

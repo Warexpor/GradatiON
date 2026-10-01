@@ -113,6 +113,24 @@ internal object MessageContent {
     }
 
     /**
+     * Image parts out, words left as they were. A generated picture is kept for the bubble
+     * and the backup; the next request does not send it back.
+     */
+    fun stripImages(content: JsonElement): JsonElement {
+        val array = content as? JsonArray ?: return content
+        if (array.none { partType(it) == "image_url" }) return content
+        val kept = array.filterNot { part ->
+            partType(part) == "image_url" || (partType(part) == "text" && partText(part).isNullOrBlank())
+        }
+        if (kept.isEmpty()) return JsonPrimitive("")
+        if (kept.size == 1) {
+            val text = partText(kept[0])
+            if (text != null) return JsonPrimitive(text)
+        }
+        return JsonArray(kept)
+    }
+
+    /**
      * An image with no words. Some providers reject that turn, and the picture still has to
      * be read as something in the scene. The stored bubble stays the picture alone; this is
      * the copy that goes on the wire, including a later rewrite of the same turn.

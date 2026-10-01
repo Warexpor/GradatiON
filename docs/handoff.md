@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, RP wallpaper backup and photo files)
+
+On `cursor/rp-photos-wallpaper-files-01f9`, targeting `gradation/app-pass`.
+- A character backup carries that character's wallpaper. Empty means there isn't one. A backup from before this field leaves the picture already on the phone. A file that is too large to carry is left as it is.
+- Scene photos are stored in app files, not the cache. Opening a chat copies a cache file, a Downloads picture, or the JPEG stored in the message into that folder when the old link is dead. A picture the character generated is kept the same way, and it is still saved to Downloads. The next request does not send that picture back. Continue, a rewrite, and a failed Continue leave it on the reply. A note that an older photo was shown is not written into Facts.
+- Phone: set a wallpaper, export characters, import on a fresh library (the picture is behind that chat). Export again after removing the wallpaper (the next import has none). Send a photo, then a generated picture if you can, leave the chat, come back. Continue a reply that has a picture.
+
 # Handoff (2026-10-01, fresh database does not inherit notes)
 
 On `cursor/fresh-db-pref-quarantine-67e8`, targeting `gradation/app-pass`.

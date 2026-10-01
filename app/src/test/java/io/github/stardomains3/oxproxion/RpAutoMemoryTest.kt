@@ -93,6 +93,7 @@ class RpAutoMemoryTest {
             "user" to RpAutoMemory.turnBody("", showedPhoto = true),
             "user" to RpPromptEngine.rewriteDirective("shorter"),
             "user" to RpPromptEngine.PHOTO_TURN,
+            "user" to RpPromptEngine.PHOTO_EARLIER,
             "assistant" to "She waits."
         )
         val t = RpAutoMemory.transcript(turns, "Mira", "Sam")
@@ -107,6 +108,7 @@ class RpAutoMemoryTest {
         assertTrue(captioned.contains(RpAutoMemory.PHOTO_BEAT))
         assertFalse(t.contains("Rewrite your last reply"))
         assertFalse(t.contains("says nothing"))
+        assertFalse(t.contains("no longer attached"))
     }
 
     @Test fun transcriptDropsContinueAndABareSceneNote() {

@@ -133,6 +133,29 @@ class MessageContentTest {
         assertEquals("", MessageContent.text(stored.content))
         val assistant = FlexibleMessage(role = "assistant", content = photo).toApiMessage()
         assertEquals("", MessageContent.text(assistant.content))
+        assertFalse(MessageContent.hasImage(assistant.content))
+        assertFalse(assistant.content.toString().contains("base64"))
+    }
+
+    @Test
+    fun aGeneratedPictureStaysInTheChatAndLeavesTheRequest() {
+        val story = JsonPrimitive("She holds it up.")
+        val jpeg = "data:image/jpeg;base64,AQI="
+        val message = ScenePhoto.withGeneratedPicture(
+            FlexibleMessage(role = "assistant", content = story),
+            ScenePhoto.GeneratedPicture("content://owned/1", jpeg),
+        )
+        assertEquals("She holds it up.", MessageContent.text(message.content))
+        assertEquals(jpeg, MessageContent.imageUrl(message.content))
+        assertEquals("content://owned/1", message.imageUri)
+        val wire = message.toApiMessage()
+        assertEquals("She holds it up.", MessageContent.text(wire.content))
+        assertFalse(MessageContent.hasImage(wire.content))
+        assertEquals(null, wire.imageUri)
+        assertFalse(wire.content.toString().contains("base64"))
+        val edited = ScenePhoto.replaceTextKeepingPicture(message.content, "She puts it down.")
+        assertEquals("She puts it down.", MessageContent.text(edited))
+        assertEquals(jpeg, MessageContent.imageUrl(edited))
     }
 
     @Test

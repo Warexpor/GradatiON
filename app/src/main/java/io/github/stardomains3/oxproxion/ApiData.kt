@@ -85,7 +85,8 @@ fun FlexibleMessage.toApiMessage(): FlexibleMessage {
     val wire = if (role == "user") {
         MessageContent.withScenePhotoNote(body, RpPromptEngine.PHOTO_TURN)
     } else {
-        body
+        // A picture the model already drew stays in the chat. Sending it again is not the story.
+        MessageContent.stripImages(body)
     }
     if (wire === content && !toolsUsed && reasoning == null && thinking == null && imageUri == null) return this
     return copy(content = wire, toolsUsed = false, reasoning = null, thinking = null, imageUri = null)

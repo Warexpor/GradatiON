@@ -1,7 +1,11 @@
 package io.github.stardomains3.oxproxion
 
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class RpContinuationTest {
@@ -64,6 +68,28 @@ class RpContinuationTest {
         val fresh = piece.copy(imageUri = "content://scene/2")
         assertEquals("content://scene/2", RpContinuation.keepPicture("content://scene/1", fresh).imageUri)
         assertEquals(null, RpContinuation.keepPicture("data:image/jpeg;base64,qq", piece).imageUri)
+    }
+
+    @Test fun continueKeepsTheJpegStoredOnTheReply() {
+        val jpeg = "data:image/jpeg;base64,qq"
+        val prior = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "text")
+                put("text", "She holds it up.")
+            })
+            add(buildJsonObject {
+                put("type", "image_url")
+                put("image_url", buildJsonObject { put("url", jpeg) })
+            })
+        }
+        val piece = FlexibleMessage(role = "assistant", content = JsonPrimitive("She turns."))
+        val kept = RpContinuation.keepPicture("content://scene/1", piece, prior)
+        assertEquals("content://scene/1", kept.imageUri)
+        assertEquals("She turns.", MessageContent.text(kept.content))
+        assertEquals(jpeg, MessageContent.imageUrl(kept.content))
+        val wire = kept.toApiMessage()
+        assertFalse(MessageContent.hasImage(wire.content))
+        assertFalse(wire.content.toString().contains("qq"))
     }
 
     @Test fun theContinueDirectionAsksForAnExactSeam() {
