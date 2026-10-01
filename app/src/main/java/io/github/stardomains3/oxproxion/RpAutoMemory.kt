@@ -92,7 +92,9 @@ object RpAutoMemory {
             .filter { it.second.isNotBlank() && !isMachinery(it.second) }
             .map { (role, text) ->
                 val who = if (role == "assistant") charName else userName
-                "$who: ${text.trim()}"
+                // A line written with {{char}} or {{user}} is still about those people.
+                val body = RpPromptEngine.expandMacros(text.trim(), charName, userName)
+                "$who: $body"
             }
         val out = ArrayDeque<String>()
         var size = 0

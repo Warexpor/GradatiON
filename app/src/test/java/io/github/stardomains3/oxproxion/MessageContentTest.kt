@@ -77,4 +77,61 @@ class MessageContentTest {
         assertEquals("", MessageContent.text(buildJsonObject { put("text", "no") }))
         assertFalse(MessageContent.hasImage(JsonPrimitive("no")))
     }
+
+    @Test
+    fun aPhotoWithNoCaptionGainsASceneLineOnTheWireOnly() {
+        val photo = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "image_url")
+                put("image_url", buildJsonObject { put("url", "data:image/jpeg;base64,qq") })
+            })
+        }
+        val noted = MessageContent.withScenePhotoNote(photo, RpPromptEngine.PHOTO_TURN)
+        assertEquals(RpPromptEngine.PHOTO_TURN, MessageContent.text(noted))
+        assertEquals("data:image/jpeg;base64,qq", MessageContent.imageUrl(noted))
+        val again = MessageContent.withScenePhotoNote(noted, RpPromptEngine.PHOTO_TURN)
+        assertTrue(again === noted)
+        val blankCaption = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "text")
+                put("text", "  ")
+            })
+            add(buildJsonObject {
+                put("type", "image_url")
+                put("image_url", buildJsonObject { put("url", "data:image/jpeg;base64,qq") })
+            })
+        }
+        assertEquals(
+            RpPromptEngine.PHOTO_TURN,
+            MessageContent.text(MessageContent.withScenePhotoNote(blankCaption, RpPromptEngine.PHOTO_TURN))
+        )
+        val captioned = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "text")
+                put("text", "the docks")
+            })
+            add(buildJsonObject {
+                put("type", "image_url")
+                put("image_url", buildJsonObject { put("url", "data:image/jpeg;base64,qq") })
+            })
+        }
+        assertTrue(MessageContent.withScenePhotoNote(captioned, RpPromptEngine.PHOTO_TURN) === captioned)
+    }
+
+    @Test
+    fun anImageOnlyUserTurnCarriesTheSceneLineAndDropsTheFileUri() {
+        val photo = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "image_url")
+                put("image_url", buildJsonObject { put("url", "data:image/jpeg;base64,qq") })
+            })
+        }
+        val wire = FlexibleMessage(role = "user", content = photo, imageUri = "content://scene/1").toApiMessage()
+        assertEquals(RpPromptEngine.PHOTO_TURN, MessageContent.text(wire.content))
+        assertEquals(null, wire.imageUri)
+        val stored = FlexibleMessage(role = "user", content = photo, imageUri = "content://scene/1")
+        assertEquals("", MessageContent.text(stored.content))
+        val assistant = FlexibleMessage(role = "assistant", content = photo).toApiMessage()
+        assertEquals("", MessageContent.text(assistant.content))
+    }
 }

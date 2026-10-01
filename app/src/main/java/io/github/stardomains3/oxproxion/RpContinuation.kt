@@ -25,6 +25,16 @@ object RpContinuation {
      * paragraph after a finished sentence or closed action, a plain space after unfinished
      * text. A sentence in an unspaced script gets no space, and 。！？ count as sentence ends.
      */
+    /**
+     * Continue replaces the reply with the joined text. A picture already on that reply stays
+     * unless the new piece brought one of its own. A data URL is not a file we can show.
+     */
+    fun keepPicture(priorUri: String?, updated: FlexibleMessage): FlexibleMessage {
+        if (priorUri.isNullOrEmpty() || priorUri.startsWith("data:")) return updated
+        if (!updated.imageUri.isNullOrEmpty()) return updated
+        return updated.copy(imageUri = priorUri)
+    }
+
     fun join(base: String, addition: String): String {
         if (addition.isEmpty()) return base
         if (base.isEmpty()) return addition

@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion
 
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -53,6 +54,16 @@ class RpContinuationTest {
 
     @Test fun japanesePunctuationHugsTheWordBeforeIt() {
         assertEquals("彼女は待つ。", RpContinuation.join("彼女は待つ", "。"))
+    }
+
+    @Test fun continueKeepsThePictureAlreadyOnTheReply() {
+        val piece = FlexibleMessage(role = "assistant", content = JsonPrimitive("She turns."))
+        val kept = RpContinuation.keepPicture("content://scene/1", piece)
+        assertEquals("content://scene/1", kept.imageUri)
+        assertEquals("She turns.", (kept.content as JsonPrimitive).content)
+        val fresh = piece.copy(imageUri = "content://scene/2")
+        assertEquals("content://scene/2", RpContinuation.keepPicture("content://scene/1", fresh).imageUri)
+        assertEquals(null, RpContinuation.keepPicture("data:image/jpeg;base64,qq", piece).imageUri)
     }
 
     @Test fun theContinueDirectionAsksForAnExactSeam() {

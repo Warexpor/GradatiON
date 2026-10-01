@@ -866,6 +866,33 @@ class ChatAdapter(
             )
         }
 
+        /** The picture stored on the message, when the file link is missing or will not open. */
+        private fun showInlinePhoto(base64: String, tag: String, maxW: Int, maxH: Int, density: Float) {
+            imageView.setOnClickListener(null)
+            imageView.setImageDrawable(null)
+            imageView.setTag(R.id.userImageView, tag)
+            imageView.visibility = View.VISIBLE
+            val maxEdge = itemView.resources.displayMetrics.widthPixels
+            scope.launch {
+                val bitmap = withContext(Dispatchers.Default) { decodeSampled(base64, maxEdge) }
+                if (bitmap != null && imageView.getTag(R.id.userImageView) == tag) {
+                    val (w, h) = ChatPhoto.frame(bitmap.width, bitmap.height, maxW, maxH)
+                    imageView.layoutParams.width = w
+                    imageView.layoutParams.height = h
+                    imageView.scaleType = ImageView.ScaleType.CENTER_CROP
+                    imageView.setImageBitmap(bitmap)
+                    messageTextView.maxWidth = captionWidthForPhoto(w, maxW, density)
+                }
+            }
+        }
+
+        private fun hideUserPhoto() {
+            imageView.visibility = View.GONE
+            imageView.setTag(R.id.userImageView, null)
+            imageView.setOnClickListener(null)
+            messageTextView.maxWidth = Int.MAX_VALUE
+        }
+
         fun bind(message: FlexibleMessage) {
             messageTextView.textSize = 16f * currentFontScale / 100f
             messageTextView.typeface = currentTypeface
@@ -916,46 +943,32 @@ class ChatAdapter(
                 setCachedUserMarkdown(messageTextView, rawUserContent)
             }
 
-            val imageUriStr = message.imageUri
-            if (!imageUriStr.isNullOrEmpty()) {
-                val d = itemView.resources.displayMetrics.density
-                val maxW = (240 * d).toInt()
-                val maxH = (300 * d).toInt()
+            // A data URL is not a file. The picture then comes from the message itself,
+            // which is also how a photo shows after its file is gone.
+            val fileUri = message.imageUri?.takeUnless { it.startsWith("data:") }.orEmpty()
+            val inline = getImageBase64(message.content)
+            val d = itemView.resources.displayMetrics.density
+            val maxW = (240 * d).toInt()
+            val maxH = (300 * d).toInt()
+            if (fileUri.isNotEmpty() || inline != null) {
                 // Until the picture's own width is known, don't let the caption blow the bubble out past the cap.
                 messageTextView.maxWidth = maxW
-                try {
-                    val userImageUri = imageUriStr.toUri()
-                    loadFramedPhoto(imageView, userImageUri, R.id.userImageView, imageUriStr, maxW, maxH) { w, _ ->
-                        messageTextView.maxWidth = captionWidthForPhoto(w, maxW, d)
-                    }
-                    wirePhotoOpen(imageView, userImageUri)
-                } catch (e: Exception) {
-                    val base64 = getImageBase64(message.content)
-                    if (base64 != null) {
-                        // A stored photo can be 12 MB: decode it scaled to the screen, off the main thread.
-                        imageView.setImageDrawable(null)
-                        imageView.setTag(R.id.userImageView, imageUriStr)
-                        imageView.visibility = View.VISIBLE
-                        val maxEdge = itemView.resources.displayMetrics.widthPixels
-                        scope.launch {
-                            val bitmap = withContext(Dispatchers.Default) { decodeSampled(base64, maxEdge) }
-                            if (bitmap != null && imageView.getTag(R.id.userImageView) == imageUriStr) {
-                                val (w, h) = ChatPhoto.frame(bitmap.width, bitmap.height, maxW, maxH)
-                                imageView.layoutParams.width = w
-                                imageView.layoutParams.height = h
-                                imageView.scaleType = ImageView.ScaleType.CENTER_CROP
-                                imageView.setImageBitmap(bitmap)
-                                messageTextView.maxWidth = captionWidthForPhoto(w, maxW, d)
-                            }
+                if (fileUri.isNotEmpty()) {
+                    try {
+                        val userImageUri = fileUri.toUri()
+                        loadFramedPhoto(imageView, userImageUri, R.id.userImageView, fileUri, maxW, maxH) { w, _ ->
+                            messageTextView.maxWidth = captionWidthForPhoto(w, maxW, d)
                         }
-                    } else {
-                        imageView.visibility = View.GONE
+                        wirePhotoOpen(imageView, userImageUri)
+                    } catch (e: Exception) {
+                        if (inline != null) showInlinePhoto(inline, fileUri, maxW, maxH, d)
+                        else hideUserPhoto()
                     }
+                } else {
+                    showInlinePhoto(inline, "inline:${inline.hashCode()}", maxW, maxH, d)
                 }
             } else {
-                imageView.visibility = View.GONE
-                imageView.setTag(R.id.userImageView, null)
-                messageTextView.maxWidth = Int.MAX_VALUE
+                hideUserPhoto()
             }
             // A photo sent on its own is just the picture, in a slim frame. With a caption, the
             // picture keeps a 4dp rim and the words stay on the same inset as a text bubble.
@@ -981,7 +994,8 @@ class ChatAdapter(
                 true
             }
             editButton.setOnClickListener {
-                if (rawUserContent.isNotBlank()) {
+                // A photo with no caption is still a scene beat. Edit puts the picture back.
+                if (rawUserContent.isNotBlank() || fileUri.isNotEmpty() || inline != null) {
                     Haptics.tap(editButton)
                     onEditMessage(bindingAdapterPosition, rawUserContent)
                 }

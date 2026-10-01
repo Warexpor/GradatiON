@@ -98,6 +98,21 @@ class RpPromptEngineTest {
     }
 
     @Test
+    fun expandMacros_keepsADollarOrSlashInTheName() {
+        val out = RpPromptEngine.expandMacros("{{char}} owes {{user}}.", "Sam\$1", "Mo\\e")
+        org.junit.Assert.assertEquals("Sam\$1 owes Mo\\e.", out)
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = RpCharacter(id = 1, name = "Sam\$1"),
+            persona = "", lore = "", instruction = "",
+            thirdPerson = false, showThoughts = false, isLlm = false,
+            memory = "{{char}} knows {{user}}.",
+            userName = "Mo\\e"
+        )
+        assertTrue(prompt.contains("Sam\$1"))
+        assertTrue(prompt.contains("Mo\\e"))
+    }
+
+    @Test
     fun buildSystemPrompt_memoryMacrosAndCraft() {
         val char = RpCharacter(id = 1, name = "Mira", scenario = "{{user}} walks into {{char}}'s garage.",
             examplesJson = """[{"user":"hi","char":"*nods*"},{"user":"bye","char":"later"}]""")

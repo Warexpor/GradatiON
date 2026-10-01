@@ -2091,19 +2091,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             { text, position -> speakText(text, position) },
             { text, position -> synthesizeToWavFile(text, position) },
             ttsAvailable,
-            onEditMessage = { position, text ->
-                clearStagedAttachment()
-                if (viewModel.isRpMode()) {
-                    viewModel.truncateForRpEdit(position)
-                } else {
-                    viewModel.stashAndTruncateFrom(position, anchorAssistantIndex = -1)
-                }
-                chatEditText.setText(text)
-                chatEditText.setSelection(text.length)
-                hideMenu()
-                chatEditText.showKeyboard()
-                viewModel.autoSaveChat()
-            },
+            onEditMessage = { position, text -> beginEditMessage(position, text) },
             onRedoMessage = { position, _ ->
                 if (viewModel.isRpMode()) {
                     viewModel.regenerateLastRpReply()
@@ -2422,6 +2410,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
                     return@setOnClickListener
                 }
+                // A photo is still being put back into the composer. Sending now would drop it.
+                if (photoSendInFlight) return@setOnClickListener
                 hideKeyboard()
                 var prompt = chatEditText.text.toString().trim()
                 // Empty RP composer: the send button is "Continue", so the character takes the next beat.
@@ -3514,6 +3504,64 @@ $cleanContent
             previewImageView.layoutParams = lp
             previewImageView.load(preview)
         }
+    }
+
+    /**
+     * Edit puts the caption back, and the photo with it. The thread is cut immediately so a
+     * second send cannot land on the old turn; the picture is staged as soon as it is read.
+     */
+    private fun beginEditMessage(position: Int, text: String) {
+        val message = viewModel.chatMessages.value?.getOrNull(position)
+        val editPhoto = ScenePhoto.editPhoto(
+            message?.content?.let { MessageContent.imageUrl(it) },
+            message?.imageUri
+        )
+        if (editPhoto != null) photoSendInFlight = true
+        clearStagedAttachment()
+        if (viewModel.isRpMode()) {
+            viewModel.truncateForRpEdit(position)
+        } else {
+            viewModel.stashAndTruncateFrom(position, anchorAssistantIndex = -1)
+        }
+        chatEditText.setText(text)
+        chatEditText.setSelection(text.length)
+        hideMenu()
+        chatEditText.showKeyboard()
+        viewModel.autoSaveChat()
+        updateSendButtonChrome()
+        if (editPhoto == null) return
+        val appContext = requireContext().applicationContext
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val staged = withContext(Dispatchers.IO) { loadEditPhoto(appContext, editPhoto) }
+                if (!isAdded || staged == null) return@launch
+                selectedImageBytes = staged.bytes
+                selectedImageMime = staged.mime
+                val stored = staged.fileUri ?: withContext(Dispatchers.IO) {
+                    ScenePhoto.store(appContext, staged.bytes)?.toString()
+                }
+                viewModel.setPendingUserImageUri(stored)
+                showStagedPhoto(staged.bytes, stored?.toUri() ?: staged.bytes)
+                if (viewModel.isRpMode()) applyRpComposerHint()
+            } finally {
+                photoSendInFlight = false
+                if (isAdded) updateSendButtonChrome()
+            }
+        }
+    }
+
+    private fun loadEditPhoto(context: Context, photo: ScenePhoto.EditPhoto): ScenePhoto.Staged? {
+        photo.dataUrl?.let { ScenePhoto.stagedFromDataUrl(it) }?.let { staged ->
+            return ScenePhoto.Staged(staged.bytes, staged.mime, photo.fileUri)
+        }
+        val uri = photo.fileUri ?: return null
+        val bytes = try {
+            context.contentResolver.openInputStream(uri.toUri())?.use { it.readBytes() }
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        if (bytes.isEmpty() || bytes.size > 12_000_000) return null
+        return ScenePhoto.Staged(bytes, ScenePhoto.MIME, photo.fileUri)
     }
 
     /** Drops a photo or audio clip staged in the composer, and lets Send follow. */
@@ -5483,7 +5531,8 @@ $cleanContent
             pendingFiles.isNotEmpty() ||
             selectedImageBytes != null ||
             currentTempImageFile != null ||
-            selectedAudioBytes != null
+            selectedAudioBytes != null ||
+            photoSendInFlight
         // RP with nothing typed: the button turns into Continue (fast-forward the story).
         val canContinue = !hasContent && viewModel.canContinueRpStory()
         if (canContinue) {
