@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.text.Spanned
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
@@ -28,6 +29,8 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.dispose
 import coil.imageLoader
 import coil.request.ImageRequest
+import coil.size.Scale
+import coil.target.Target
 import io.noties.markwon.Markwon
 import io.noties.markwon.utils.NoCopySpannableFactory
 import kotlinx.coroutines.CoroutineScope
@@ -757,6 +760,70 @@ class ChatAdapter(
     private fun View.marginStartCompat() = (layoutParams as? ViewGroup.MarginLayoutParams)?.marginStart ?: 0
     private fun View.marginEndCompat() = (layoutParams as? ViewGroup.MarginLayoutParams)?.marginEnd ?: 0
 
+    /**
+     * Loads [data] into a rounded frame that keeps the picture's shape inside [maxW]×[maxH].
+     * The size is applied when the bitmap arrives, so a portrait doesn't flash as a square.
+     */
+    private fun loadFramedPhoto(view: ImageView, data: Any, tagKey: Int, tag: String, maxW: Int, maxH: Int) {
+        view.scaleType = ImageView.ScaleType.CENTER_CROP
+        if (view.getTag(tagKey) == tag && view.drawable != null && view.layoutParams.width > 0) {
+            view.visibility = View.VISIBLE
+            return
+        }
+        view.setTag(tagKey, tag)
+        view.setImageDrawable(null)
+        view.visibility = View.VISIBLE
+        val request = ImageRequest.Builder(view.context)
+            .data(data)
+            .size(maxW, maxH)
+            .scale(Scale.FIT)
+            .target(object : Target {
+                override fun onSuccess(result: Drawable) {
+                    if (view.getTag(tagKey) != tag) return
+                    val (w, h) = ChatPhoto.frame(result.intrinsicWidth, result.intrinsicHeight, maxW, maxH)
+                    val lp = view.layoutParams
+                    if (lp.width != w || lp.height != h) {
+                        lp.width = w
+                        lp.height = h
+                        view.layoutParams = lp
+                    }
+                    view.setImageDrawable(result)
+                }
+            })
+            .build()
+        view.context.imageLoader.enqueue(request)
+    }
+
+    private fun wirePhotoOpen(view: View, uri: android.net.Uri) {
+        view.setOnClickListener {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "image/*")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                view.context.startActivity(intent)
+            } catch (e: Exception) {
+                GlassNotice.show(view.context, view.context.getString(R.string.toast_could_not_open_image))
+            }
+        }
+        ViewCompat.replaceAccessibilityAction(
+            view,
+            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_CLICK,
+            view.context.getString(R.string.a11y_view_photo),
+            null
+        )
+    }
+
+    private fun applyDpBox(view: View, box: ChatPhoto.DpBox) {
+        val d = view.resources.displayMetrics.density
+        view.setPadding(
+            (box.start * d).toInt(),
+            (box.top * d).toInt(),
+            (box.end * d).toInt(),
+            (box.bottom * d).toInt()
+        )
+    }
+
     // --- VIEW HOLDERS ---
 
     inner class UserViewHolder(itemView: View, private val markwon: Markwon) : RecyclerView.ViewHolder(itemView) {
@@ -866,32 +933,15 @@ class ChatAdapter(
                 setCachedUserMarkdown(messageTextView, rawUserContent)
             }
 
-            // ... (Image and Button logic) ...
             val imageUriStr = message.imageUri
             if (!imageUriStr.isNullOrEmpty()) {
+                val d = itemView.resources.displayMetrics.density
+                val maxW = (240 * d).toInt()
+                val maxH = (300 * d).toInt()
                 try {
                     val userImageUri = imageUriStr.toUri()
-                    // Rebinding the same row while scrolling already has this bitmap.
-                    if (imageView.getTag(R.id.userImageView) != imageUriStr || imageView.drawable == null) {
-                        imageView.setTag(R.id.userImageView, imageUriStr)
-                        val request = ImageRequest.Builder(itemView.context)
-                            .data(userImageUri)
-                            .target(imageView)
-                            .build()
-                        itemView.context.imageLoader.enqueue(request)
-                    }
-                    imageView.visibility = View.VISIBLE
-                    imageView.setOnClickListener {
-                        try {
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(userImageUri, "image/*")
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            itemView.context.startActivity(intent)
-                        } catch (e: Exception) {
-                            GlassNotice.show(itemView.context, itemView.context.getString(R.string.toast_could_not_open_image))
-                        }
-                    }
+                    loadFramedPhoto(imageView, userImageUri, R.id.userImageView, imageUriStr, maxW, maxH)
+                    wirePhotoOpen(imageView, userImageUri)
                 } catch (e: Exception) {
                     val base64 = getImageBase64(message.content)
                     if (base64 != null) {
@@ -903,6 +953,10 @@ class ChatAdapter(
                         scope.launch {
                             val bitmap = withContext(Dispatchers.Default) { decodeSampled(base64, maxEdge) }
                             if (bitmap != null && imageView.getTag(R.id.userImageView) == imageUriStr) {
+                                val (w, h) = ChatPhoto.frame(bitmap.width, bitmap.height, maxW, maxH)
+                                imageView.layoutParams.width = w
+                                imageView.layoutParams.height = h
+                                imageView.scaleType = ImageView.ScaleType.CENTER_CROP
                                 imageView.setImageBitmap(bitmap)
                             }
                         }
@@ -912,13 +966,15 @@ class ChatAdapter(
                 }
             } else {
                 imageView.visibility = View.GONE
+                imageView.setTag(R.id.userImageView, null)
             }
-            // A photo sent on its own is just the picture, in a slim frame; no empty line under it.
-            val photoOnly = imageView.visibility == View.VISIBLE && rawUserContent.isBlank()
+            // A photo sent on its own is just the picture, in a slim frame. With a caption, the
+            // picture keeps a 4dp rim and the words stay on the same inset as a text bubble.
+            val hasPhoto = imageView.visibility == View.VISIBLE
+            val photoOnly = hasPhoto && rawUserContent.isBlank()
             messageTextView.visibility = if (photoOnly) View.GONE else View.VISIBLE
-            val d = itemView.resources.displayMetrics.density
-            if (photoOnly) messageContainer.setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
-            else messageContainer.setPadding((16 * d).toInt(), (12 * d).toInt(), (16 * d).toInt(), (12 * d).toInt())
+            applyDpBox(messageContainer, ChatPhoto.containerInsets(hasPhoto, photoOnly))
+            applyDpBox(messageTextView, ChatPhoto.captionInsets(hasPhoto, photoOnly))
 
             copyButtonuser.setOnClickListener {
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -1397,29 +1453,18 @@ class ChatAdapter(
             if (!generatedUriStr.isNullOrEmpty()) {
                 try {
                     val generatedUri = generatedUriStr.toUri()
-                    val request = ImageRequest.Builder(itemView.context)
-                        .data(generatedUri)
-                        .target(generatedImageView)
-                        .build()
-                    itemView.context.imageLoader.enqueue(request)
-                    generatedImageView.visibility = View.VISIBLE
-
-                    generatedImageView.setOnClickListener {
-                        try {
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(generatedUri, "image/*")
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            itemView.context.startActivity(intent)
-                        } catch (e: Exception) {
-                            GlassNotice.show(itemView.context, itemView.context.getString(R.string.toast_could_not_open_image))
-                        }
-                    }
+                    val d = itemView.resources.displayMetrics.density
+                    loadFramedPhoto(
+                        generatedImageView, generatedUri, R.id.generatedImageView, generatedUriStr,
+                        (280 * d).toInt(), (300 * d).toInt()
+                    )
+                    wirePhotoOpen(generatedImageView, generatedUri)
                 } catch (e: Exception) {
                     generatedImageView.visibility = View.GONE
                 }
             } else {
                 generatedImageView.visibility = View.GONE
+                generatedImageView.setTag(R.id.generatedImageView, null)
             }
 
             // 6. BUTTON LISTENERS

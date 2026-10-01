@@ -1,3 +1,7 @@
+# Handoff (2026-10-01, chat photo and keyboard)
+
+A staged photo (or audio clip) with an empty composer now enables Send. New chat, remove, and a model that can't see photos all drop the staged attachment, so it can't ride into the next thread. Composer thumbnails keep the picture's aspect (EXIF quarter-turns included) inside a 156dp cap; the remove disc is a real 44dp hit target. Sent and generated photos use that same rounded frame, and a caption stays on the 16dp text inset. Keyboard follow no longer scrolls a short thread by the full keyboard travel: only a message the composer would cover moves, and a message pinned to the composer rides back down when it closes (`KeyboardFollow`, `ChatPhoto`). Phone: send a photo with no caption, open the keyboard on a short chat and on a long one, and check a portrait from the camera isn't sideways in the chip.
+
 # Handoff (2026-10-01)
 
 ## Polish wave 2 (2026-10-01)

@@ -25,6 +25,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A photo staged in the composer with no caption left Send disabled, so the picture could not be sent. Send now wakes as soon as a photo or audio clip is attached, and New chat drops the staged attachment instead of carrying it into the next thread.
+- Opening the keyboard on a short thread no longer yanks the messages up by the full keyboard height. A message already resting on the composer still rides with it; one the keyboard would cover moves by only the covered amount.
+- Composer photos keep their shape (a portrait stays tall, including the camera's rotation flag) instead of being cropped to a square, and the remove control is a 44dp target. Sent and generated pictures use the same rounded cap, with a caption lined up to the text inset.
 - The character panel sheet dropped by its own height after coming back from a page.
 - The Persona tile no longer washes the portrait out, and the panel header's avatar is no longer squashed.
 - The pause between the last words of a reply and its tools appearing: the swap to the final render used to wait out the 340 ms word fade; it now happens at once. The finished reply's markdown and text layout are also prepared off the main thread, and a late update of the same reply no longer throws that work away.

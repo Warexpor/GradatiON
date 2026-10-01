@@ -269,6 +269,52 @@ class ScreenshotTest {
         seedConversation(a); idle(); snap(root(a), "chat_conversation_dark")
     }
 
+    /** A sent photo keeps its shape inside the bubble, and the composer chip can send with no text. */
+    @Test fun chatPhotoDark() = withChat { a, chat ->
+        val d = a.resources.displayMetrics.density
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        val f = ChatViewModel::class.java.getDeclaredField("_chatMessages").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val live = f.get(vm) as MutableLiveData<List<FlexibleMessage>>
+        live.value = listOf(
+            FlexibleMessage("user", JsonPrimitive("The north window, this morning."), imageUri = "file:///no/such/photo.jpg")
+        )
+        idle()
+        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        val row = rv.findViewHolderForAdapterPosition(0)!!.itemView
+        val image = row.findViewById<android.widget.ImageView>(R.id.userImageView)
+        val text = row.findViewById<android.widget.TextView>(R.id.messageTextView)
+        val container = row.findViewById<View>(R.id.messageContainer)
+        org.junit.Assert.assertEquals(View.VISIBLE, image.visibility)
+        org.junit.Assert.assertEquals((4 * d).toInt(), container.paddingTop)
+        org.junit.Assert.assertEquals((12 * d).toInt(), text.paddingStart)
+        val portrait = android.graphics.Bitmap.createBitmap(90, 160, android.graphics.Bitmap.Config.ARGB_8888)
+        portrait.eraseColor(android.graphics.Color.rgb(70, 70, 70))
+        val (iw, ih) = ChatPhoto.frame(portrait.width, portrait.height, (240 * d).toInt(), (300 * d).toInt())
+        image.layoutParams.width = iw
+        image.layoutParams.height = ih
+        image.setImageBitmap(portrait)
+
+        val wide = android.graphics.Bitmap.createBitmap(320, 180, android.graphics.Bitmap.Config.ARGB_8888)
+        wide.eraseColor(android.graphics.Color.rgb(90, 90, 90))
+        val max = (156 * d).toInt()
+        val (pw, ph) = ChatPhoto.frame(wide.width, wide.height, max, max, (64 * d).toInt())
+        val preview = a.findViewById<android.widget.ImageView>(R.id.previewImageView)
+        preview.layoutParams.width = pw
+        preview.layoutParams.height = ph
+        preview.setImageBitmap(wide)
+        a.findViewById<View>(R.id.attachmentPreviewContainer).visibility = View.VISIBLE
+        ChatFragment::class.java.getDeclaredField("selectedImageBytes").apply { isAccessible = true }
+            .set(chat, byteArrayOf(1, 2, 3))
+        ChatFragment::class.java.getDeclaredMethod("updateSendButtonChrome").apply { isAccessible = true }
+            .invoke(chat)
+        org.junit.Assert.assertTrue(a.findViewById<View>(R.id.sendChatButton).isEnabled)
+        val remove = a.findViewById<View>(R.id.removeAttachmentButton)
+        org.junit.Assert.assertTrue(remove.layoutParams.width >= (44 * d).toInt() - 1)
+        idle()
+        snap(root(a), "chat_photo_dark")
+    }
+
     /** Android 12: code cards must not call API 34-only text layout methods. */
     @Test @Config(sdk = [31])
     fun chatConversationApi31() = withChat { a, _ ->
