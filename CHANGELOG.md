@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Code: the Changes screen filters the file list by path. The line under the title says how many of those files are already tracked and how many are new.
 - Each Chat thread keeps the message you were typing. Open another chat, or start a new one, and that text is there when you come back. A photo or file staged on the composer stays with the thread you attached it to, instead of being sent into the next one. A chat that is saved for the first time keeps the line you have already started.
 - Roleplay lore also matches the character's personality, greeting and description. Rewriting a reply still matches lore from that reply, and from the turn just before it, after the chat has moved on.
 - Code: the Changes screen can ask the agent to revert every tracked file, after a confirmation. Untracked files are left alone. Search on the session list also matches the folder path, branch, model, and harness.
@@ -34,6 +35,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code: Ask to revert all counts only files git already tracks, and stays off when every change is untracked. Opening an untracked file no longer offers to restore it to the last commit. A diff no longer shows rename headers, file-mode lines, or a binary notice as changed lines, and a line of code that starts with dashes or pluses is kept. A Windows line ending no longer drops the hunk.
 - A chat backup keeps the date, whether the chat was pinned, and that chat's fact notes. A character backup keeps Memory, the chat layout, the read-aloud voice, and which lorebook is pinned to them. If that lorebook is not on the phone yet, the pin is applied when the lorebook is imported. An older backup still imports, and it does not wipe notes it does not contain.
 - Chat export writes one message at a time, so one long chat is not copied into a second string. Loading every chat with its messages no longer reads each message in one piece, so a long attachment cannot crash that path.
 - The chat database passphrase is written through before the app continues, so a kill at that moment does not lose the only key. A Code setting or a saved host token stored as the wrong type no longer crashes Code mode, and copying the last reply from a notification no longer crashes when that preference has the wrong type.

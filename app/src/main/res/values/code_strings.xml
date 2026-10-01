@@ -172,9 +172,20 @@
     <string name="code_session_changes">Changes</string>
     <string name="code_changes_title">Changes</string>
     <string name="code_changes_empty">No uncommitted changes.</string>
+    <string name="code_changes_filter_hint">Filter files</string>
+    <string name="code_changes_filter_empty">No files match.</string>
+    <plurals name="code_changes_tracked_count">
+        <item quantity="one">%1$d tracked</item>
+        <item quantity="other">%1$d tracked</item>
+    </plurals>
+    <plurals name="code_changes_untracked_count">
+        <item quantity="one">%1$d untracked</item>
+        <item quantity="other">%1$d untracked</item>
+    </plurals>
     <string name="code_changes_failed">Can\'t load changes right now.</string>
     <string name="code_changes_diff_failed">Can\'t load this diff right now.</string>
     <string name="code_changes_diff_empty">No diff for this file.</string>
+    <string name="code_changes_diff_untracked">Untracked. Revert leaves this file.</string>
     <string name="code_changes_ahead">↑%1$d</string>
     <string name="code_changes_behind">↓%1$d</string>
     <string name="code_changes_ask_commit">Ask to commit</string>

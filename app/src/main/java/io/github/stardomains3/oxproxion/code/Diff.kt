@@ -11,27 +11,47 @@ data class DiffLine(val type: Type, val oldNo: Int?, val newNo: Int?, val text: 
  */
 object Diff {
 
-    /** Parses unified diff text (with or without ---/+++ headers) into lines. */
+    /**
+     * Parses unified diff text into lines. Git preamble (rename, mode, index) is dropped so it
+     * is not drawn as file content. A `---` / `+++` header needs the space git puts before the
+     * path: a real line that starts with `++` or `--` stays a change. Carriage returns are
+     * stripped so a Windows patch still matches hunk headers.
+     */
     fun parseUnified(text: String): List<DiffLine> {
         val out = ArrayList<DiffLine>()
         var oldNo = 0
         var newNo = 0
+        var inHunk = false
+        var skippingBinary = false
         val hunk = Regex("""^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$""")
         for (raw in text.lineSequence()) {
+            val line = raw.trimEnd('\r')
+            if (line.startsWith("diff ")) {
+                inHunk = false
+                skippingBinary = false
+                continue
+            }
+            if (skippingBinary) continue
             when {
-                raw.startsWith("---") || raw.startsWith("+++") || raw.startsWith("diff ") ||
-                    raw.startsWith("index ") || raw.startsWith("\\ No newline") -> Unit
-                raw.startsWith("@@") -> {
-                    val m = hunk.find(raw) ?: continue
+                line.startsWith("@@") -> {
+                    val m = hunk.find(line) ?: continue
                     oldNo = m.groupValues[1].toInt()
                     newNo = m.groupValues[2].toInt()
+                    inHunk = true
                     out += DiffLine(DiffLine.Type.HUNK, null, null, m.groupValues[3].trim())
                 }
-                raw.startsWith("+") -> out += DiffLine(DiffLine.Type.ADD, null, newNo++, raw.substring(1))
-                raw.startsWith("-") -> out += DiffLine(DiffLine.Type.DELETE, oldNo++, null, raw.substring(1))
-                raw.startsWith(" ") -> out += DiffLine(DiffLine.Type.CONTEXT, oldNo++, newNo++, raw.substring(1))
-                raw.isEmpty() && out.isNotEmpty() -> Unit
-                else -> out += DiffLine(DiffLine.Type.CONTEXT, oldNo++, newNo++, raw)
+                isPreamble(line) -> Unit
+                line.startsWith("Binary files ") || line.startsWith("GIT binary patch") -> {
+                    inHunk = false
+                    skippingBinary = line.startsWith("GIT binary patch")
+                    out += DiffLine(DiffLine.Type.HUNK, null, null, line)
+                }
+                line.startsWith("+") -> out += DiffLine(DiffLine.Type.ADD, null, newNo++, line.substring(1))
+                line.startsWith("-") -> out += DiffLine(DiffLine.Type.DELETE, oldNo++, null, line.substring(1))
+                line.startsWith(" ") -> out += DiffLine(DiffLine.Type.CONTEXT, oldNo++, newNo++, line.substring(1))
+                line.isEmpty() && out.isNotEmpty() -> Unit
+                inHunk -> out += DiffLine(DiffLine.Type.CONTEXT, oldNo++, newNo++, line)
+                else -> Unit
             }
         }
         return out
@@ -52,6 +72,22 @@ object Diff {
 
     fun counts(lines: List<DiffLine>): Pair<Int, Int> =
         lines.count { it.type == DiffLine.Type.ADD } to lines.count { it.type == DiffLine.Type.DELETE }
+
+    /**
+     * Git metadata that is not a hunk body. File headers are `--- a/path` / `+++ b/path`
+     * (space or tab after the dashes), not a content line that itself starts with dashes.
+     */
+    private fun isPreamble(line: String): Boolean {
+        if (line.startsWith("--- ") || line.startsWith("---\t") ||
+            line.startsWith("+++ ") || line.startsWith("+++\t") ||
+            line.startsWith("index ") || line.startsWith("\\ No newline")
+        ) return true
+        return line.startsWith("similarity ") || line.startsWith("dissimilarity ") ||
+            line.startsWith("rename from") || line.startsWith("rename to") ||
+            line.startsWith("copy from") || line.startsWith("copy to") ||
+            line.startsWith("old mode") || line.startsWith("new mode") ||
+            line.startsWith("deleted file mode") || line.startsWith("new file mode")
+    }
 
     // ── internals ─────────────────────────────────────────────────────────────────────────
 

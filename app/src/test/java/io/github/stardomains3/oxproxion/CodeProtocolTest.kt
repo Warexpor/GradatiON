@@ -438,6 +438,68 @@ class CodeProtocolTest {
         assertEquals(2, lines[3].newNo)
     }
 
+    @Test fun parseUnifiedDropsGitPreambleAndKeepsDashedLines() {
+        val rename = Diff.parseUnified(
+            """
+            diff --git a/old.kt b/new.kt
+            similarity index 90%
+            rename from old.kt
+            rename to new.kt
+            index aaa..bbb 100644
+            --- a/old.kt
+            +++ b/new.kt
+            @@ -1 +1 @@
+            -val x = 1
+            +val x = 2
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf(DiffLine.Type.HUNK, DiffLine.Type.DELETE, DiffLine.Type.ADD),
+            rename.map { it.type }
+        )
+        assertEquals("val x = 1", rename[1].text)
+        assertEquals(1, rename[1].oldNo)
+        assertEquals(1, rename[2].newNo)
+
+        val dashes = Diff.parseUnified(
+            """
+            @@ -1,2 +1,2 @@
+            ---- comment
+            ++++ heading
+            """.trimIndent()
+        )
+        assertEquals("--- comment", dashes[1].text)
+        assertEquals("+++ heading", dashes[2].text)
+
+        val crlf = Diff.parseUnified("@@ -1 +1 @@\r\n-a\r\n+b\r\n")
+        assertEquals(listOf(DiffLine.Type.HUNK, DiffLine.Type.DELETE, DiffLine.Type.ADD), crlf.map { it.type })
+        assertEquals("a", crlf[1].text)
+        assertEquals("b", crlf[2].text)
+
+        val binary = Diff.parseUnified(
+            """
+            diff --git a/x.png b/x.png
+            Binary files a/x.png and b/x.png differ
+            """.trimIndent()
+        )
+        assertEquals(1, binary.size)
+        assertEquals(DiffLine.Type.HUNK, binary.single().type)
+        assertEquals("Binary files a/x.png and b/x.png differ", binary.single().text)
+
+        val patch = Diff.parseUnified("GIT binary patch\nliteral 12\nzcmV+\n")
+        assertEquals(listOf("GIT binary patch"), patch.map { it.text })
+
+        val pureRename = Diff.parseUnified(
+            """
+            diff --git a/old b/new
+            similarity index 100%
+            rename from old
+            rename to new
+            """.trimIndent()
+        )
+        assertTrue(pureRename.isEmpty())
+    }
+
     @Test fun textAndUserKeysDeriveFromBridgeSeq() {
         val frames = listOf(
             update("""{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"Hi"}}""", seq = 10),
