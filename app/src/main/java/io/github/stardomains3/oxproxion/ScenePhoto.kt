@@ -314,6 +314,17 @@ object ScenePhoto {
     }
 
     /**
+     * A finished JPEG in app files. A cache copy, a gallery link, and a file that was only
+     * half written are not: those still have to be copied before a swipe drops the bytes
+     * stored in the message.
+     */
+    fun storedFile(context: Context, uriString: String): Boolean {
+        val owned = ownedFile(context, uriString) ?: return false
+        recover(owned)
+        return completeJpeg(owned) && under(context.filesDir, owned)
+    }
+
+    /**
      * A link that still opens. A copy left in the cache, a JPEG already stored in the message,
      * or a gallery link we can still read is written under app files. A link we cannot read
      * stays as it is.

@@ -129,6 +129,35 @@ object RpSwipeRules {
         return Triple(next, pictureUris + "", next.lastIndex)
     }
 
+    /**
+     * The reply on screen was just given a durable file at [healedUri]. Remember that file
+     * on the selected version, and on any other version that still names the link this one
+     * had: those versions were already showing that same file.
+     * A blank slot stays blank. A reply that is not this version is left alone, so a picture
+     * from a different turn is not pasted onto it.
+     */
+    fun adoptVisibleFile(
+        alts: List<String>,
+        pictureUris: List<String>,
+        index: Int,
+        visibleText: String,
+        healedUri: String,
+    ): List<String> {
+        if (!picturesTracked(pictureUris, alts.size)) return pictureUris
+        if (healedUri.isEmpty()) return pictureUris
+        val at = index.coerceIn(0, alts.lastIndex)
+        if (alts[at] != visibleText) return pictureUris
+        val previous = pictureUris[at]
+        if (previous.isEmpty() || previous == healedUri) return pictureUris
+        return remapPicture(pictureUris, previous, healedUri)
+    }
+
+    /** Every version that still names [from] now names [to]. The same list when nothing changes. */
+    fun remapPicture(pictureUris: List<String>, from: String, to: String): List<String> {
+        if (from.isEmpty() || to.isEmpty() || from == to || from !in pictureUris) return pictureUris
+        return pictureUris.map { if (it == from) to else it }
+    }
+
     /** Put [picture] on the selected version. A blank does not wipe a file a partial reply lacks. */
     fun notePicture(
         alts: List<String>,

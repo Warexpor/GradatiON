@@ -4816,12 +4816,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         rpRegenRestoreFallback = null
         // Don't duplicate the already-selected seed on first regen; keep that index so
         // Stop/error restore brings back the variant the user was viewing, picture included.
+        // Settle first: the stream is about to replace this bubble, and that drops the JPEG.
+        // The link is resolved before stash reads the list, because settling rewrites that list.
+        val picture = durableSwipeUri(current)
         val (alts, pictures, index) = RpSwipeRules.stashAlt(
             rpSwipeState.alts,
             rpSwipeState.pictureUris,
             rpSwipeState.index,
             currentText,
-            RpSwipeRules.pictureUriOf(current.imageUri),
+            picture,
         )
         rpSwipeState = RpSwipeState(alts = alts, index = index, pictureUris = pictures)
         persistRpSwipeState()
@@ -4873,9 +4876,61 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         rpSwipeStore.save(id, rpSwipeState)
     }
 
+    /**
+     * The file a swipe version should keep. A picture already in app files is used as it is.
+     * A cache link, a gallery link, or a half-written file is copied first, including from the
+     * JPEG still in the message, and every version that named the old link follows the copy.
+     * Returns the link to remember. Blank when this reply has no picture.
+     */
+    private fun durableSwipeUri(message: FlexibleMessage): String {
+        val previous = RpSwipeRules.pictureUriOf(message.imageUri)
+        if (previous.isEmpty()) return ""
+        val app = getApplication<Application>()
+        if (ScenePhoto.storedFile(app, previous)) return previous
+        val embedded = ScenePhoto.bytesFromDataUrl(MessageContent.imageUrl(message.content).orEmpty())
+        val settled = RpSwipeRules.pictureUriOf(ScenePhoto.settle(app, previous, embedded))
+        if (settled.isEmpty() || settled == previous) return previous
+        val pictures = RpSwipeRules.remapPicture(rpSwipeState.pictureUris, previous, settled)
+        if (pictures !== rpSwipeState.pictureUris) {
+            rpSwipeState = rpSwipeState.copy(pictureUris = pictures)
+        }
+        return settled
+    }
+
+    /**
+     * Point swipe versions at files that will still be here on the next open. The reply on
+     * screen was already copied; versions that are not showing still name the old link, and
+     * swiping back used to restore that link and throw away the JPEG just rebuilt.
+     */
+    private fun healSwipePictureLinks(state: RpSwipeState, visible: FlexibleMessage?): RpSwipeState {
+        if (!RpSwipeRules.picturesTracked(state.pictureUris, state.alts.size)) return state
+        val text = visible?.let { getMessageText(it.content) }.orEmpty()
+        val healed = RpSwipeRules.pictureUriOf(visible?.imageUri)
+        var pictures = RpSwipeRules.adoptVisibleFile(
+            state.alts,
+            state.pictureUris,
+            state.index,
+            text,
+            healed,
+        )
+        val app = getApplication<Application>()
+        for (uri in pictures.filter { it.isNotEmpty() }.distinct()) {
+            if (ScenePhoto.storedFile(app, uri)) continue
+            val settled = RpSwipeRules.pictureUriOf(ScenePhoto.settle(app, uri, null))
+            if (settled.isNotEmpty() && settled != uri) {
+                pictures = RpSwipeRules.remapPicture(pictures, uri, settled)
+            }
+        }
+        return if (pictures == state.pictureUris) state else state.copy(pictureUris = pictures)
+    }
+
     private fun applyRpSwipeIndex(index: Int, persistChat: Boolean = true) {
         if (!canInteractWithRpSwipe()) return
         val alt = rpSwipeState.alts.getOrNull(index) ?: return
+        _chatMessages.value?.let { messages ->
+            val leaving = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+            if (leaving >= 0) durableSwipeUri(messages[leaving])
+        }
         val picture = RpSwipeRules.pictureForAlt(rpSwipeState.pictureUris, rpSwipeState.alts.size, index)
         rpSwipeState = rpSwipeState.copy(index = index)
         persistRpSwipeState()
@@ -4928,7 +4983,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun loadRpSwipeForSession(sessionId: Long) {
+    private suspend fun loadRpSwipeForSession(sessionId: Long) {
         pendingRpSwipeAppend = false
         rpSwipeState = rpSwipeStore.load(sessionId) ?: RpSwipeState()
         val messages = _chatMessages.value.orEmpty()
@@ -4941,6 +4996,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (!swipeable) forgetRpSwipeVersions()
             updateRpSwipeNav()
             return
+        }
+        val visible = messages.lastOrNull { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val healed = withContext(Dispatchers.IO) { healSwipePictureLinks(rpSwipeState, visible) }
+        if (healed.pictureUris != rpSwipeState.pictureUris) {
+            rpSwipeState = healed
+            persistRpSwipeState()
         }
         updateRpSwipeNav()
         applyRpSwipeIndex(rpSwipeState.index, persistChat = false)

@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, RP swipe picture files)
+
+On `cursor/rp-swipe-photo-files-a9a6`, targeting `gradation/app-pass`.
+- Opening a roleplay chat copies a picture into app files, then remembers that file on the swipe version that was showing it, including any other version that still named the old link. A version that is not on screen is copied too, while its old link still opens. A version with no picture stays without one.
+- Swiping to another version, or starting a new one, copies a cache, gallery, or half-written file first (from the JPEG in the message when the file is torn). The bubble used to drop those bytes and keep the dead link.
+- Phone: in Roleplay, get a reply that includes a picture, leave the chat, and come back (the picture is there, and it still opens). Swipe to another version and back. Start another version, then Stop (the first picture comes back).
+
 # Handoff (2026-10-01, save notes, file moves, import resume)
 
 On `cursor/stability-save-move-9560`, targeting `gradation/app-pass`.
