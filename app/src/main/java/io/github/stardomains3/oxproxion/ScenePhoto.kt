@@ -334,6 +334,20 @@ object ScenePhoto {
 
     fun isSceneFileName(name: String): Boolean = SCENE_FILE.matches(name)
 
+    /**
+     * A save may drop a picture the new transcript does not name. An edit that already cut
+     * that message, and a photo staged in the composer, still need the file.
+     */
+    internal fun scenePhotosSafeToDelete(
+        dropped: Collection<String>,
+        heldForEdit: Set<String>,
+        pendingName: String?,
+    ): List<String> {
+        if (dropped.isEmpty()) return emptyList()
+        val pending = pendingName?.takeIf { isSceneFileName(it) }
+        return dropped.filter { it !in heldForEdit && it != pending }
+    }
+
     /** Deletes scene photos we own. A name that is not one of ours is ignored. */
     fun deleteSceneFiles(context: Context, names: Collection<String>) {
         if (names.isEmpty()) return

@@ -36,4 +36,13 @@ object ChatEdit {
         if (remembered != null) return remembered
         return if (field == restoredUserText) "" else field
     }
+
+    /**
+     * A photo read for Edit should land in the composer only while that edit is still the one
+     * on screen. Ask drops it once Cancel, a send, or another chat has closed the edit mark.
+     * Roleplay never sets that mark (there is no Cancel), so the photo follows the cut for as
+     * long as this is still the same chat. Checking the mark there used to throw the picture away.
+     */
+    fun keepEditPhoto(roleplay: Boolean, askEditStillOpen: Boolean, sameChat: Boolean): Boolean =
+        if (roleplay) sameChat else askEditStillOpen
 }
