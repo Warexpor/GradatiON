@@ -50,11 +50,13 @@ object RpAutoMemory {
     fun runKey(launchSessionId: Long?, currentSessionId: Long?, sameChat: Boolean): Long? =
         if (sameChat) currentSessionId ?: launchSessionId ?: UNSAVED_KEY else launchSessionId
 
-    /** Caption when there is one. A picture with no words is still a beat. */
+    /** Caption when there is one, and a beat so a captioned picture is still a picture. */
     fun turnBody(text: String, showedPhoto: Boolean): String {
         val body = text.trim()
-        if (body.isNotBlank()) return body
-        return if (showedPhoto) PHOTO_BEAT else ""
+        if (!showedPhoto) return body
+        if (body.isBlank() || body == PHOTO_BEAT) return PHOTO_BEAT
+        if (body.endsWith(PHOTO_BEAT)) return body
+        return "$body\n$PHOTO_BEAT"
     }
 
     /** Hidden rewrite, continue, scene-note and photo-boilerplate turns are not story, so they never become facts. */

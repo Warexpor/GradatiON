@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,5 +28,13 @@ class RpChatSummariesTest {
         )
         assertEquals(1, rows.size)
         assertTrue(rows[0].preview.startsWith("Mira keeps the locket."))
+    }
+
+    @Test
+    fun loreTileFollowsTheBookThatWouldBeUsed() {
+        assertFalse(RpChatSummaries.loreTileOn(loreEnabled = false, pinnedBookExists = true, activeBookExists = true))
+        assertFalse(RpChatSummaries.loreTileOn(loreEnabled = true, pinnedBookExists = false, activeBookExists = false))
+        assertTrue(RpChatSummaries.loreTileOn(loreEnabled = true, pinnedBookExists = false, activeBookExists = true))
+        assertTrue(RpChatSummaries.loreTileOn(loreEnabled = true, pinnedBookExists = true, activeBookExists = false))
     }
 }

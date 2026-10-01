@@ -205,6 +205,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var rpPanel: RpCharacterPanel.Host? = null
     /** Back-stack depth when a panel page was opened; the sheet refreshes when the stack is back to it. */
     private var rpPanelDepth = 0
+    /** Last look at whether a pin and the active lorebook exist. The tile waits on this. */
+    private var rpLorePinned = false
+    private var rpLoreActive = false
     private val rpPanelBackStackListener = androidx.fragment.app.FragmentManager.OnBackStackChangedListener {
         if (rpPanel?.isShowing == true && parentFragmentManager.backStackEntryCount <= rpPanelDepth) refreshRpPanel()
     }
@@ -6395,13 +6398,16 @@ $cleanContent
         }
         val memoryId = if (llm) null else character?.id
         val title = if (llm) getString(R.string.rp_llm_speaker) else character!!.name
-        val subtitle = if (llm) "" else character!!.personality.ifBlank { character.scenario }
-            .lineSequence().firstOrNull().orEmpty()
-        val memory = sharedPreferencesHelper.getRpMemory(memoryId)
-        val hasMemory = memory.isNotBlank()
         val personaOn = sharedPreferencesHelper.isRpPersonaEnabled()
         val personaName = sharedPreferencesHelper.activeRpPersonaName()
+        val subtitle = if (llm) "" else RpChatSummaries.tagline(
+            character!!,
+            personaName.ifBlank { getString(R.string.rp_you) }
+        )
+        val memory = sharedPreferencesHelper.getRpMemory(memoryId)
+        val hasMemory = memory.isNotBlank()
         val cast = character?.takeIf { !llm }
+        val pinnedId = cast?.let { sharedPreferencesHelper.getRpLorebookId(it.id) }
         val tiles = buildList {
             // Three rows of three: the story (its chats, what is remembered, the world), the people
             // (the character, how they sound, who you are), and how it looks.
@@ -6411,8 +6417,15 @@ $cleanContent
             add(RpCharacterPanel.Tile(R.string.rp_panel_memory, RpTileArt.Kind.MEMORY, on = hasMemory || viewModel.currentRpFacts().isNotBlank()) {
                 pushRp(RpMemoryFragment.newInstance(memoryId, title))
             })
-            val pinnedId = cast?.let { sharedPreferencesHelper.getRpLorebookId(it.id) }
-            add(RpCharacterPanel.Tile(R.string.rp_panel_lore, RpTileArt.Kind.LORE, on = pinnedId != null) {
+            add(RpCharacterPanel.Tile(
+                R.string.rp_panel_lore,
+                RpTileArt.Kind.LORE,
+                on = RpChatSummaries.loreTileOn(
+                    sharedPreferencesHelper.isRpLoreEnabled(),
+                    rpLorePinned,
+                    rpLoreActive
+                )
+            ) {
                 openRpLore(cast)
             })
             if (cast != null) {
@@ -6460,6 +6473,33 @@ $cleanContent
         val host = rpPanel ?: RpCharacterPanel.Host(requireView() as FrameLayout).also { rpPanel = it }
         hideKeyboard()
         host.show(content) { if (rpPanel === host) rpPanel = null }
+        refreshLoreTile(pinnedId)
+    }
+
+    /** The Lore tile follows the book that would actually be used, including the active one. */
+    private fun refreshLoreTile(pinnedId: Long?) {
+        val owner = viewLifecycleOwner
+        owner.lifecycleScope.launch {
+            val repo = viewModel.getRpRepository()
+            val pinned = withContext(Dispatchers.IO) {
+                pinnedId?.let { repo.getLorebookById(it) } != null
+            }
+            val active = withContext(Dispatchers.IO) { repo.getActiveLorebook() != null }
+            if (!isAdded || view == null) return@launch
+            val was = RpChatSummaries.loreTileOn(
+                sharedPreferencesHelper.isRpLoreEnabled(),
+                rpLorePinned,
+                rpLoreActive
+            )
+            rpLorePinned = pinned
+            rpLoreActive = active
+            val now = RpChatSummaries.loreTileOn(
+                sharedPreferencesHelper.isRpLoreEnabled(),
+                pinned,
+                active
+            )
+            if (was != now && rpPanel?.isShowing == true) showRpCharacterPanel()
+        }
     }
 
     /** Rebuild the open sheet in place (a page it opened may have changed a tile), with no slide. */

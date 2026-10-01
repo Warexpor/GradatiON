@@ -17,8 +17,40 @@ import kotlinx.serialization.json.put
  * Opening the chat, History, and export all read this on the main thread, so a throw closed the app.
  */
 internal object MessageContent {
+    /** Saved beside the body so a generated picture's file survives a reopen. Not a wire field. */
+    private const val KEPT_TYPE = "kept_turn"
+
+    data class Kept(val body: JsonElement, val fileUri: String?)
+
+    /**
+     * A file URI stashed for the database. The live transcript and the provider request use
+     * [unwrap] so the extra object never leaves the row.
+     */
+    fun unwrap(content: JsonElement): Kept {
+        val obj = content as? JsonObject ?: return Kept(content, null)
+        if (obj.string("type") != KEPT_TYPE) return Kept(content, null)
+        val body = obj["body"] ?: JsonPrimitive("")
+        val file = obj.string("kept")?.takeIf { it.isNotBlank() && !it.startsWith("data:", ignoreCase = true) }
+        return Kept(body, file)
+    }
+
+    /** The row to store. Image bytes already in [content] stay. A file URI is kept with them. */
+    fun forStorage(content: JsonElement, imageUri: String?): JsonElement {
+        val kept = unwrap(content)
+        val file = imageUri?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("data:", ignoreCase = true) }
+            ?: return kept.body
+        if (kept.fileUri == file && content is JsonObject && content.string("type") == KEPT_TYPE) return content
+        return buildJsonObject {
+            put("type", KEPT_TYPE)
+            put("body", kept.body)
+            put("kept", file)
+        }
+    }
+
     /** The first text part, or the string itself. Missing and non-string parts are skipped. */
-    fun text(content: JsonElement): String = when (content) {
+    fun text(content: JsonElement): String = textBody(unwrap(content).body)
+
+    private fun textBody(content: JsonElement): String = when (content) {
         is JsonPrimitive -> content.contentOrNull.orEmpty()
         is JsonArray -> content.firstNotNullOfOrNull { partText(it) }.orEmpty()
         else -> ""
@@ -28,7 +60,7 @@ internal object MessageContent {
     fun allText(content: JsonArray): List<String> = content.mapNotNull { partText(it) }
 
     fun imageUrls(content: JsonElement): List<String> {
-        val array = content as? JsonArray ?: return emptyList()
+        val array = unwrap(content).body as? JsonArray ?: return emptyList()
         return array.mapNotNull { part ->
             val obj = part as? JsonObject ?: return@mapNotNull null
             if (partType(obj) != "image_url") return@mapNotNull null
@@ -40,8 +72,44 @@ internal object MessageContent {
 
     /** True when any part says it is an image, even if the url itself is missing or not a string. */
     fun hasImage(content: JsonElement): Boolean {
-        val array = content as? JsonArray ?: return false
+        val array = unwrap(content).body as? JsonArray ?: return false
         return array.any { partType(it) == "image_url" }
+    }
+
+    /**
+     * Older scene photos stay as words. The last [keep] user turns that still have a picture
+     * keep the bytes; anything earlier drops them so a long chat does not resend every photo.
+     */
+    fun keepRecentPhotos(messages: List<FlexibleMessage>, keep: Int = 2): List<FlexibleMessage> {
+        if (keep < 0 || messages.isEmpty()) return messages
+        var left = keep
+        val drop = HashSet<Int>()
+        for (i in messages.indices.reversed()) {
+            val message = messages[i]
+            if (message.role != "user" || !hasImage(message.content)) continue
+            if (left > 0) left-- else drop.add(i)
+        }
+        if (drop.isEmpty()) return messages
+        return messages.mapIndexed { index, message ->
+            if (index !in drop) message
+            else message.copy(content = withoutImages(message.content, RpPromptEngine.PHOTO_EARLIER))
+        }
+    }
+
+    /** Image parts out. A caption stays, and [note] says a picture used to be here. */
+    fun withoutImages(content: JsonElement, note: String): JsonElement {
+        val body = unwrap(content).body
+        val array = body as? JsonArray ?: return body
+        if (array.none { partType(it) == "image_url" }) return body
+        val kept = array.filterNot { part ->
+            partType(part) == "image_url" || (partType(part) == "text" && partText(part).isNullOrBlank())
+        }
+        val notePart = buildJsonObject {
+            put("type", JsonPrimitive("text"))
+            put("text", JsonPrimitive(note))
+        }
+        if (kept.none { partType(it) == "text" && !partText(it).isNullOrBlank() }) return JsonPrimitive(note)
+        return JsonArray(kept + notePart)
     }
 
     /**
@@ -61,12 +129,16 @@ internal object MessageContent {
             }
         }
         if (!hasImage || hasText) return content
+        // A blank text part is not a caption. Leaving it lets a provider treat the turn as empty.
+        val kept = array.filterNot { part ->
+            partType(part) == "text" && partText(part).isNullOrBlank()
+        }
         return JsonArray(buildList {
             add(buildJsonObject {
                 put("type", JsonPrimitive("text"))
                 put("text", JsonPrimitive(note))
             })
-            addAll(array)
+            addAll(kept)
         })
     }
 

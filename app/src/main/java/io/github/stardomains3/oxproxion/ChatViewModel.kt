@@ -517,7 +517,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _toastUiEvent.postValue(Event(text.removePrefix("**Error:**").trim().trimStart('-').trim().ifBlank { text }))
             return piece.copy(content = JsonPrimitive(base))
         }
+        if (text.isBlank()) return piece.copy(content = JsonPrimitive(base))
+        // The story actually moved. A failed Continue never reaches here, so its swipe alts stay.
+        clearRpSwipeAlts()
         return piece.copy(content = JsonPrimitive(RpContinuation.join(base, text)))
+    }
+
+    private fun clearRpSwipeAlts() {
+        if (rpSwipeState.alts.isEmpty()) return
+        rpSwipeState = RpSwipeState()
+        currentSessionId?.let { rpSwipeStore.clear(it) }
+        _rpSwipeNav.value = null
     }
 
     private fun removeAssistantPlaceholder(thinkingMessage: FlexibleMessage?) {
@@ -799,7 +809,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val isLlmAtSave = sessionIsLlm()
         val modelAtSave = _activeChatModel.value ?: ""
         val messagesSnapshot = (_chatMessages.value ?: emptyList()).map { it.copy() }
-        val stripImages = hasImagesInChat() || hasGeneratedImagesInChat()
 
         viewModelScope.launch {
             try {
@@ -825,14 +834,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             // Serializing the whole transcript is the heavy part, and autosave fires the moment a
             // reply lands, so it runs off the main thread instead of stalling the last frames.
-            val messagesToSave = if (stripImages) {
-                withContext(Dispatchers.Default) {
-                    messagesSnapshot.map { message ->
-                        message.copy(content = removeImagesFromJsonElement(message.content))
-                    }
+            // The JPEG stays in the row: a reopened chat has no file URI until this puts it back.
+            val messagesToSave = withContext(Dispatchers.Default) {
+                messagesSnapshot.map { message ->
+                    message.copy(content = MessageContent.forStorage(message.content, message.imageUri))
                 }
-            } else {
-                messagesSnapshot
             }
 
             val existingId = if (!saveAsNew && rowExists && openSessionId != null) openSessionId else null
@@ -890,26 +896,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 Log.e("ChatViewModel", "Could not save the open chat", e)
                 _toastUiEvent.postValue(Event(str(R.string.notice_chat_save_failed)))
             }
-        }
-    }
-
-    private fun removeImagesFromJsonElement(element: JsonElement): JsonElement {
-        return when (element) {
-            is JsonArray -> {
-                // Filter out objects where "type" == "image_url"
-                val filteredItems = element.filterNot { item ->
-                    MessageContent.partType(item) == "image_url"
-                }.map { removeImagesFromJsonElement(it) }  // Recurse for any nested structures
-                JsonArray(filteredItems)
-            }
-            is JsonObject -> {
-                // If it's an object, recurse on its values (in case images are nested elsewhere)
-                val cleanedMap = element.mapValues { (_, value) ->
-                    removeImagesFromJsonElement(value)
-                }
-                JsonObject(cleanedMap)
-            }
-            else -> element  // Primitives stay as-is
         }
     }
 
@@ -1068,13 +1054,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             assignOpenSession(sessionId)
             draftRpFacts = null
             _chatMessages.value = messages.map {
+                val parsed = try {
+                    json.parseToJsonElement(it.content)
+                } catch (e: Exception) {
+                    JsonPrimitive(it.content)
+                }
+                val kept = MessageContent.unwrap(parsed)
                 FlexibleMessage(
                     role = it.role,
-                    content = try {
-                        json.parseToJsonElement(it.content)
-                    } catch (e: Exception) {
-                        JsonPrimitive(it.content)
-                    }
+                    content = kept.body,
+                    imageUri = kept.fileUri
                 )
             }
 
@@ -1330,9 +1319,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // Only wipe alts once the send is known to proceed (after early returns above).
         if (clearRpSwipeOnStart && isRpMode()) {
             pendingRpSwipeAppend = false
-            rpSwipeState = RpSwipeState()
-            currentSessionId?.let { rpSwipeStore.clear(it) }
-            _rpSwipeNav.value = null
+            clearRpSwipeAlts()
         }
 
         val thinkingMessage = THINKING_MESSAGE
@@ -2005,6 +1992,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _toastUiEvent.postValue(Event(shortMsg))
             return
         }
+        // Continue grows the last reply. An HTTP error used to write the Error bubble later,
+        // after this turn had already forgotten the original text, so the story was replaced.
+        if (continuationBase != null) {
+            failContinuation(e, thinkingMessage, lanCertChange)
+            return
+        }
         val errorMsg = if (lanCertChange != null) {
             ERROR_BUBBLE_PREFIX + (lanCertChange.message ?: str(R.string.error_lan_cert_changed))
         } else when (e) {
@@ -2059,6 +2052,46 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Leave the reply Continue was extending, and say why in a notice. The HTTP body is read
+     * afterwards: that used to land as a second write once [continuationBase] was already cleared.
+     */
+    private fun failContinuation(
+        e: Throwable,
+        thinkingMessage: FlexibleMessage?,
+        lanCertChange: LanCertChangedException?,
+    ) {
+        val base = continuationBase ?: return
+        updateMessages { list ->
+            val index = resolveAssistantSlot(list, thinkingMessage)
+            if (index != -1) list[index] = list[index].copy(content = JsonPrimitive(base))
+        }
+        val fallback = continuationErrorText(e, lanCertChange)
+        if (e is ClientRequestException || e is ServerResponseException) {
+            viewModelScope.launch {
+                val parsed = try {
+                    parseOpenRouterError(e.response.bodyAsText()).takeIf { it.isNotBlank() }
+                } catch (_: Exception) {
+                    null
+                }
+                _toastUiEvent.postValue(Event(parsed ?: fallback))
+            }
+        } else {
+            _toastUiEvent.postValue(Event(fallback))
+        }
+    }
+
+    private fun continuationErrorText(e: Throwable, lanCertChange: LanCertChangedException?): String {
+        if (lanCertChange != null) return lanCertChange.message ?: str(R.string.error_lan_cert_changed)
+        return when (e) {
+            is ClientRequestException -> str(R.string.error_client_request, e.response.status)
+            is ServerResponseException -> str(R.string.error_server_request, e.response.status)
+            is TimeoutCancellationException, is SocketTimeoutException ->
+                str(R.string.error_request_timeout, sharedPreferencesHelper.getTimeoutMinutes())
+            is IOException -> str(R.string.error_network)
+            else -> e.localizedMessage?.takeIf { it.isNotBlank() } ?: str(R.string.error_unknown)
+        }
+    }
 
     private fun updateMessages(updateBlock: (MutableList<FlexibleMessage>) -> Unit) {
         val current = _chatMessages.value?.toMutableList() ?: mutableListOf()
@@ -3681,7 +3714,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (!RpAutoMemory.shouldUpdate(turns.size, budget, previousRun)) return
 
         val charName = if (llm) getApplication<Application>().getString(R.string.rp_llm_speaker) else character!!.name
-        val userName = sharedPreferencesHelper.activeRpPersonaName().ifBlank { "User" }
+        // Same fallback as the prompt and the lore scan, so a {{user}} key still matches these notes.
+        val userName = RpPromptEngine.chatNames(null, sharedPreferencesHelper.activeRpPersonaName()).second
         val userMemory = sharedPreferencesHelper.getRpMemory(characterId)
         val facts = currentRpFacts()
         val prompt = RpAutoMemory.prompt(
@@ -3964,15 +3998,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val memory = sharedPreferencesHelper.getRpMemory(if (llm) null else char!!.id)
             if (memory.isNotBlank()) notes += expand(memory)
         }
-        if (sharedPreferencesHelper.isRpAutoMemory()) {
-            val facts = currentRpFacts()
-            if (facts.isNotBlank()) notes += expand(facts)
-        }
+        val facts = currentRpFacts()
+        if (facts.isNotBlank()) notes += expand(facts)
         _chatMessages.value.orEmpty().forEach { msg ->
             if ((msg.role == "user" || msg.role == "assistant") && !isAssistantPlaceholder(msg)) {
                 val text = getMessageText(msg.content)
+                // A caption-less photo has no words. It is still a beat, so a key can match it.
+                val shown = if (text.isNotBlank()) text
+                    else if (isImageMessage(msg)) RpAutoMemory.PHOTO_BEAT
+                    else ""
                 // A caption or a line written as {{char}} / {{user}} still matches those people.
-                if (text.isNotBlank()) recent += expand(text)
+                if (shown.isNotBlank()) recent += expand(shown)
             }
         }
         extra.forEach { if (it.isNotBlank()) recent += expand(it) }
@@ -4069,7 +4105,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (!sendUserMessage(
                         content,
                         systemPrompt,
-                        clearRpSwipeOnStart = true,
+                        // Continue keeps swipe alts until the new text actually arrives.
+                        clearRpSwipeOnStart = !continueBeat,
                         continueInPlace = continueBeat
                     )
                 ) {
@@ -4270,7 +4307,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 request.add(FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.rewriteDirective(note))))
                 if (epoch != sessionEpoch) return@launch
                 val rewritten = completeContent(
-                    turns = request.map { it.toApiMessage().let { m -> m.role to m.content } },
+                    turns = request.toApiMessages().map { it.role to it.content },
                     model = _activeChatModel.value,
                     timeoutMs = 120_000,
                     maxTokens = sharedPreferencesHelper.getMaxTokens().toIntOrNull() ?: 12_000,
