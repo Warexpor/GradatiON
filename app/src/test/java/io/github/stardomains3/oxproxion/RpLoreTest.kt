@@ -218,6 +218,53 @@ class RpLoreTest {
     }
 
     @Test
+    fun keysWrittenWithCardPlaceholdersMatchThePeople() {
+        val book = """
+            [keys: {{char}}, {{user}}'s locket]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "Mira keeps it.", charName = "Mira", userName = "Alex").contains("dawn"))
+        assertTrue(RpLore.select(book, "Alex's locket is shut.", charName = "Mira", userName = "Alex").contains("dawn"))
+        assertFalse(RpLore.select(book, "Nobody mentioned them.", charName = "Mira", userName = "Alex").contains("dawn"))
+        assertFalse(RpLore.select(book, "Mirage waits.", charName = "Mira", userName = "Alex").contains("dawn"))
+    }
+
+    @Test
+    fun aPlaceholderInOneEntryPullsTheNext() {
+        val book = """
+            [keys: map]
+            The map belongs to {{char}}.
+
+            [keys: {{char}}]
+            The locket is under the pier.
+        """.trimIndent()
+        val out = RpLore.select(book, "She unfolds the map.", charName = "Mira", userName = "Alex")
+        assertTrue(out.contains("belongs to {{char}}"))
+        assertTrue(out.contains("under the pier"))
+    }
+
+    @Test
+    fun aBlankNameDoesNotEraseThePlaceholderKey() {
+        val book = """
+            [keys: {{user}}]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertFalse(RpLore.select(book, "Alex waits.", charName = "Mira", userName = "").contains("dawn"))
+        assertTrue(RpLore.select(book, "{{user}} waits.", charName = "Mira", userName = "").contains("dawn"))
+    }
+
+    @Test
+    fun aTrailingPeriodAndAFullwidthHeaderStillMatch() {
+        val dotted = """
+            [keys: locket.]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(dotted, "She holds the locket.").contains("dawn"))
+        val wide = "［keys：locket］\nThe locket opens at dawn."
+        assertTrue(RpLore.select(wide, "the locket").contains("dawn"))
+    }
+
+    @Test
     fun sceneScanKeepsTheReplyBeingRewritten() {
         val scan = RpLore.sceneScan(
             pinned = listOf("Mira"),

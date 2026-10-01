@@ -5,9 +5,10 @@ package io.github.stardomains3.oxproxion
  *
  * Text before the first `[keys: …]` line is always included, so an old book that is one
  * block of prose still goes in whole. A block under `[keys: docks, grey haven]` is included
- * only when the scan mentions one of those keys. Entries keep pulling each other until
- * nothing new matches, so a chain of three still arrives together. A long always-on block
- * is cut so a block that actually matched still fits.
+ * only when the scan mentions one of those keys. A key written as {{char}} or {{user}} is
+ * the person in this chat. Entries keep pulling each other until nothing new matches, so a
+ * chain of three still arrives together. A long always-on block is cut so a block that
+ * actually matched still fits.
  */
 object RpLore {
     private const val SCAN_CHARS = 4_000
@@ -20,7 +21,8 @@ object RpLore {
     private const val NOTES_CHARS = 800
     /** The reply a rewrite is changing, so its keys still match after the chat has moved on. */
     private const val FOCUS_CHARS = 1_500
-    private val header = Regex("""(?m)^[ \t]*\[keys:[ \t]*(.*?)[ \t]*][ \t]*$""")
+    /** ASCII or fullwidth brackets and colon, so a header typed either way still splits. */
+    private val header = Regex("""(?m)^[ \t]*[\[［][ \t]*keys[ \t]*[:：][ \t]*(.*?)[ \t]*[\]］][ \t]*$""")
     private val keySplit = Regex("[,;、，|]")
     private val wrappingQuotes = setOf('"', '\'', '“', '”', '「', '」', '«', '»')
 
@@ -145,12 +147,16 @@ object RpLore {
     private fun joinedLen(parts: List<String>): Int =
         parts.sumOf { it.length } + (parts.size - 1).coerceAtLeast(0)
 
+    /** A period or comma stuck on the end of a key is not part of the word. */
+    private val keyTrail = setOf('.', ',', ';', ':', '!', '?', '。', '，', '、', '…')
+
     /** Quotes around a key are not part of the word, so `"locket"` still matches locket. */
     private fun cleanKey(raw: String): String {
-        val k = raw.trim()
+        var k = raw.trim()
         if (k.length >= 2 && k.first() in wrappingQuotes && k.last() in wrappingQuotes) {
-            return k.substring(1, k.length - 1).trim()
+            k = k.substring(1, k.length - 1).trim()
         }
+        while (k.length > 1 && k.last() in keyTrail) k = k.dropLast(1).trimEnd()
         return k
     }
 
@@ -169,8 +175,31 @@ object RpLore {
     private fun join(parts: List<String>) =
         parts.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
 
-    fun select(content: String, scan: String, maxChars: Int = 12_000): String {
-        val entries = parse(content)
+    /** A blank name leaves its placeholder, so a key is not wiped when that person has no name yet. */
+    private fun expandNames(text: String, charName: String, userName: String): String =
+        RpPromptEngine.expandKnownMacros(text, charName, userName)
+
+    private fun expandKeys(entry: Entry, charName: String, userName: String): Entry {
+        if (entry.keys.isEmpty() || (charName.isBlank() && userName.isBlank())) return entry
+        val keys = entry.keys.map { key ->
+            expandNames(key, charName, userName).trim().ifEmpty { key }
+        }
+        return if (keys == entry.keys) entry else entry.copy(keys = keys)
+    }
+
+    /**
+     * [charName] and [userName] expand {{char}} and {{user}} inside keys, and inside an
+     * entry that just came in, so the next key in the chain still matches. The text that
+     * is returned keeps the placeholders; the prompt fills those in.
+     */
+    fun select(
+        content: String,
+        scan: String,
+        maxChars: Int = 12_000,
+        charName: String = "",
+        userName: String = "",
+    ): String {
+        val entries = parse(content).map { expandKeys(it, charName, userName) }
         if (entries.isEmpty()) return ""
         val picked = LinkedHashSet<Int>()
         fun take(haystack: String) {
@@ -185,7 +214,7 @@ object RpLore {
         var guard = entries.size
         while (guard-- > 0) {
             val before = picked.size
-            val broughtIn = picked.joinToString("\n") { entries[it].text }
+            val broughtIn = picked.joinToString("\n") { expandNames(entries[it].text, charName, userName) }
             if (broughtIn.isBlank()) break
             take(broughtIn)
             if (picked.size == before) break

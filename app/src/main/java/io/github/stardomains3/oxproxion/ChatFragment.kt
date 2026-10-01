@@ -5924,14 +5924,15 @@ $cleanContent
             val llm = getString(R.string.rp_llm_speaker)
             val none = getString(R.string.rp_home_no_preview)
             val start = getString(R.string.rp_home_start)
-            val heads = RpChatSummaries.build(sessions, characters, emptyMap(), llm, none, start)
+            val you = sharedPreferencesHelper.activeRpPersonaName().ifBlank { getString(R.string.rp_you) }
+            val heads = RpChatSummaries.build(sessions, characters, emptyMap(), llm, none, start, you)
             val previews = heads.mapNotNull { row ->
                 val id = row.sessionId ?: return@mapNotNull null
                 val last = dao.getLastMessage(id)
                 val text = last?.let { RpChatSummaries.previewOf(it.content) }.orEmpty()
                 id to if (last?.role == "user" && text.isNotBlank()) getString(R.string.rp_home_you, text) else text
             }.toMap()
-            home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none, start))
+            home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none, start, you))
             updateRpHome()
         }
     }

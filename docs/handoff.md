@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, RP lore keys and the scene)
+
+On `cursor/rp-lore-keys-and-scene-1966`, targeting `gradation/app-pass`.
+- A lore key written as `{{char}}` or `{{user}}` matches that person, and an entry can pull the next one when the link is a name. A trailing period on a key, and a fullwidth `[keys:]` header, still match. Speech style is in the scan with the scenario and the personality (`RpPromptEngine.loreCardFields`).
+- Continue starts a new paragraph after 。！？ and after 「」, and does not put a space into Japanese, Chinese or Korean. `_(Reminder :)_` and a fullwidth colon still parse. A reply wrapped in a plain code fence is unwrapped, and a scene note echoed at the start of a reply is dropped when the story goes on. Character lists expand `{{char}}` and `{{user}}` in the tagline.
+- Phone: a lorebook keyed on `{{char}}`, Continue on a Japanese line that ends in 。, and a card whose personality is `{{char}} waits for {{user}}` on the characters list.
+
 # Handoff (2026-10-01, code changes review)
 
 On `cursor/code-changes-review-7437`, targeting `gradation/app-pass`. Code mode only:

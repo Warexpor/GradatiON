@@ -62,6 +62,13 @@ class RpReminderParserTest {
     }
 
     @Test
+    fun aSpaceOrFullwidthColonStillMarksAReminder() {
+        assertEquals("stay tense", RpReminderParser.parse("_(Reminder : stay tense)_").reminder)
+        assertEquals("stay tense", RpReminderParser.parse("_( Reminder：stay tense )_").reminder)
+        assertEquals("Hello  there", RpReminderParser.parse("Hello _(Reminder : stay tense)_ there").userText)
+    }
+
+    @Test
     fun aNoteMayContainParentheses() {
         val parsed = RpReminderParser.parse("Hello _(Reminder: stay (tense))_ there")
         assertEquals("stay (tense)", parsed.reminder)
