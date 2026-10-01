@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import io.github.stardomains3.oxproxion.code.AcpAdapter
+import io.github.stardomains3.oxproxion.code.InboundSession
 import io.github.stardomains3.oxproxion.code.AcpHandshake
 import io.github.stardomains3.oxproxion.code.AgentInlineImage
 import io.github.stardomains3.oxproxion.code.AvailableCommand
@@ -1411,6 +1412,145 @@ class CodeProtocolTest {
         val diff = list.filterIsInstance<CodeEvent.FileDiff>().single()
         assertEquals("a.kt", diff.path)
         assertEquals("new", diff.lines.first { it.type == DiffLine.Type.ADD }.text)
+    }
+
+    @Test fun contentChunkAppendsUntilAFullUpdateReplaces() {
+        val fresh = AcpAdapter()
+        fun step(u: String, list: List<CodeEvent>): List<CodeEvent> {
+            var next = list
+            fresh.decode(update(u)).forEach { out ->
+                if (out is AdapterOutput.Update) next = TranscriptReducer.apply(next, out.update, now = 1L)
+            }
+            return next
+        }
+        var list = step(
+            """{"sessionUpdate":"tool_call","toolCallId":"c1","title":"Run","kind":"execute","status":"in_progress","content":[{"type":"content","content":{"type":"text","text":"one"}}]}""",
+            emptyList(),
+        )
+        list = step(
+            """{"sessionUpdate":"tool_call_content_chunk","toolCallId":"c1","content":{"type":"content","content":{"type":"text","text":"two"}}}""",
+            list,
+        )
+        assertEquals("one\ntwo", (list.single() as CodeEvent.ToolCall).output)
+        list = step(
+            """{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed","content":[{"type":"text","text":"final"}]}""",
+            list,
+        )
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals("final", tool.output)
+        assertEquals(ToolStatus.COMPLETED, tool.status)
+    }
+
+    @Test fun contentChunkWithoutAFirstCallStillShows() {
+        val list = foldFresh(listOf(
+            update("""{"sessionUpdate":"tool_call_content_chunk","toolCallId":"c2","content":{"type":"text","text":"partial"}}"""),
+            update("""{"sessionUpdate":"tool_call_content_chunk","toolCallId":"c2","content":{"type":"text","text":" more"}}"""),
+        ))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals("partial\n more", tool.output)
+    }
+
+    @Test fun v2DiffChangesAndPatchTextRender() {
+        val patch = "diff --git /repo/src/a.kt /repo/src/a.kt\\n--- /repo/src/a.kt\\n+++ /repo/src/a.kt\\n@@ -1 +1 @@\\n-old\\n+new\\n"
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"d2","title":"Edit","kind":"edit","status":"completed","content":{"type":"diff","changes":[{"operation":"modify","path":"/repo/src/a.kt"}],"patch":{"format":"git_patch","text":"$patch"}}}"""
+        )))
+        val diff = list.filterIsInstance<CodeEvent.FileDiff>().single()
+        assertEquals("/repo/src/a.kt", diff.path)
+        assertEquals("new", diff.lines.first { it.type == DiffLine.Type.ADD }.text)
+        assertEquals(false, diff.isNewFile)
+    }
+
+    @Test fun v2AddedFileIsMarkedNewEvenWithoutAPatchBody() {
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call_update","toolCallId":"d3","content":{"type":"diff","changes":[{"operation":"add","path":"/repo/New.kt"}]}}"""
+        )))
+        val diff = list.filterIsInstance<CodeEvent.FileDiff>().single()
+        assertEquals("/repo/New.kt", diff.path)
+        assertEquals(true, diff.isNewFile)
+    }
+
+    @Test fun permissionSubjectCommandUsesTheTitleAndCommand() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":5,"method":"session/request_permission","params":{"sessionId":"s1","title":"Run tests?","description":"The suite","subject":{"type":"command","command":"cargo test","cwd":"/proj","toolCallId":"c1"},"options":[{"optionId":"allow-once","name":"Allow once","kind":"allow_once"},{"optionId":"reject-once","name":"Reject","kind":"reject_once"}]}}""")
+        val approval = ((out.single() as AdapterOutput.Update).update as CodeUpdate.Upsert).event as CodeEvent.Approval
+        assertEquals("Run tests?", approval.title)
+        assertEquals("cargo test", approval.detail)
+        assertEquals("c1", approval.callId)
+        assertEquals(ApprovalOption.Kind.REJECT_ONCE, approval.options[1].kind)
+    }
+
+    @Test fun cursorAgentModeIsFullAuto() {
+        val out = acp.decode(update("""{"sessionUpdate":"current_mode_update","currentModeId":"agent"}"""))
+        val info = (out.single() as AdapterOutput.Update).update as CodeUpdate.SessionInfo
+        assertEquals(PermissionMode.FULL_AUTO, info.permissionMode)
+    }
+
+    @Test fun toolNameCorrectsAnOtherKind() {
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"n1","title":"MCP: tool","kind":"other","name":"read_file","status":"pending","rawInput":{"target_file":"App.kt"}}"""
+        )))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals(ToolKind.READ, tool.kind)
+        assertEquals("App.kt", tool.detail)
+    }
+
+    @Test fun cursorAskQuestionAnswersWithTheChosenOption() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":9,"method":"cursor/ask_question","params":{"sessionId":"s1","title":"Need input","toolCallId":"call_123","questions":[{"id":"q1","prompt":"Which mode?","allowMultiple":false,"options":[{"id":"agent","label":"Agent"},{"id":"plan","label":"Plan"}]}]}}""")
+        val approval = ((out.single() as AdapterOutput.Update).update as CodeUpdate.Upsert).event as CodeEvent.Approval
+        assertEquals("Need input", approval.title)
+        assertEquals(listOf("agent", "plan"), approval.options.map { it.id })
+        val reply = Json.parseToJsonElement(acp.answerApproval("9", "plan")).jsonObject
+        val outcome = reply["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("answered", outcome["outcome"]!!.jsonPrimitive.content)
+        val answer = outcome["answers"]!!.jsonArray.single().jsonObject
+        assertEquals("q1", answer["questionId"]!!.jsonPrimitive.content)
+        assertEquals("plan", answer["selectedOptionIds"]!!.jsonArray.single().jsonPrimitive.content)
+        val cancel = Json.parseToJsonElement(acp.answerApproval("9", null)).jsonObject
+        assertEquals("cancelled", cancel["result"]!!.jsonObject["outcome"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun cursorAskWithSeveralQuestionsIsSkipped() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":"ask-2","method":"cursor/ask_question","params":{"sessionId":"s1","questions":[{"id":"q1","prompt":"A","options":[{"id":"a","label":"A"}]},{"id":"q2","prompt":"B","options":[{"id":"b","label":"B"}]}]}}""")
+        assertTrue(out.any { it is AdapterOutput.Update && (it.update as? CodeUpdate.Upsert)?.event is CodeEvent.Notice })
+        val reply = out.filterIsInstance<AdapterOutput.Reply>().single().frame
+        val outcome = Json.parseToJsonElement(reply).jsonObject["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("skipped", outcome["outcome"]!!.jsonPrimitive.content)
+        assertEquals("ask-2", Json.parseToJsonElement(reply).jsonObject["id"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun cursorCreatePlanIsATodoCardAndAnApproval() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":11,"method":"cursor/create_plan","params":{"sessionId":"s1","name":"Refactor tabs","overview":"Tighten layout.","plan":"1. Inspect.","toolCallId":"call_124","todos":[{"id":"todo-1","content":"Inspect","status":"completed"},{"id":"todo-2","content":"Update","status":"in_progress"}]}}""")
+        val updates = out.filterIsInstance<AdapterOutput.Update>().map { it.update }
+        val plan = updates.mapNotNull { (it as? CodeUpdate.Upsert)?.event as? CodeEvent.Plan }.single()
+        assertEquals(PlanStatus.COMPLETED, plan.entries[0].status)
+        assertEquals(PlanStatus.IN_PROGRESS, plan.entries[1].status)
+        val approval = updates.mapNotNull { (it as? CodeUpdate.Upsert)?.event as? CodeEvent.Approval }.single()
+        assertEquals("Refactor tabs", approval.title)
+        assertEquals("Tighten layout.", approval.detail)
+        val accept = Json.parseToJsonElement(acp.answerApproval("11", "accept")).jsonObject
+        assertEquals("accepted", accept["result"]!!.jsonObject["outcome"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
+        val reject = Json.parseToJsonElement(acp.answerApproval("11", "reject")).jsonObject
+        assertEquals("rejected", reject["result"]!!.jsonObject["outcome"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun cursorTodosMergeById() {
+        val first = """{"jsonrpc":"2.0","method":"cursor/update_todos","params":{"sessionId":"s1","merge":false,"toolCallId":"t","todos":[{"id":"1","content":"Set up","status":"completed"},{"id":"2","content":"Auth","status":"pending"}]}}"""
+        val second = """{"jsonrpc":"2.0","method":"cursor/update_todos","params":{"sessionId":"s1","merge":true,"toolCallId":"t","todos":[{"id":"2","content":"Auth","status":"in_progress"},{"id":"3","content":"Tests","status":"pending"}]}}"""
+        var list = emptyList<CodeEvent>()
+        listOf(first, second).flatMap { acp.decode(it) }.forEach { out ->
+            if (out is AdapterOutput.Update) list = TranscriptReducer.apply(list, out.update, now = 1L)
+        }
+        val plan = list.filterIsInstance<CodeEvent.Plan>().last()
+        assertEquals(listOf("1", "2", "3"), plan.entries.map { it.id })
+        assertEquals(PlanStatus.IN_PROGRESS, plan.entries[1].status)
+        assertEquals("Tests", plan.entries[2].content)
+    }
+
+    @Test fun blankSessionIdUsesTheOnlyAttachedSession() {
+        assertEquals("s1", InboundSession.resolve("", setOf("s1")))
+        assertEquals("s9", InboundSession.resolve("s9", setOf("s1", "s9")))
+        assertEquals(null, InboundSession.resolve("", setOf("s1", "s2")))
+        assertEquals(null, InboundSession.resolve("", emptySet()))
     }
 
     @Test fun skippableAuthErrorIsOnlyAMissingMethod() {

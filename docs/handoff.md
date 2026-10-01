@@ -1,3 +1,12 @@
+# Handoff (2026-10-01, code ACP chunks, diffs, Cursor questions)
+
+On `cursor/code-acp-cursor-tools-2966`, targeting `gradation/app-pass`. Code mode only:
+- A tool log that arrives as `tool_call_content_chunk` is appended. A later update that sends the whole log still replaces it. A diff with `changes` and `patch.text` opens, and an added file is marked new even when there is no patch body. An approval whose title or command is on the request, not only on `toolCall`, shows that text.
+- Cursor Agent: mode `agent` is full auto on the pill. One single-choice question uses the approval card, and the answer goes back as `answered`. Several questions, or a multi-select, are skipped so the agent is not stuck. `create_plan` shows the to-dos and Accept / Reject. `update_todos` merges by id. A request that does not name a session still lands on the one open session; if more than one is open, the question is cancelled so it does not wait.
+- The away notification does not pick Allow when the card is a list of choices.
+
+Phone: on Cursor Agent, let it ask one question (tap an option; the turn continues). Let it propose a plan and reject it. Run a command whose log arrives in pieces (the card grows, then shows the final log). Open a diff the agent reports as a new file.
+
 # Handoff (2026-10-01, recovery notes and picture replace)
 
 On `cursor/recovery-quarantine-retry-fc6a`, targeting `gradation/app-pass`.

@@ -80,10 +80,15 @@ object CodeAwayFormat {
         return if (t.isEmpty()) "Turn finished" else "Turn finished · $t"
     }
 
-    /** Prefer once-allow; fall back to always-allow for notification action. */
-    fun pickAllow(options: List<ApprovalOption>): ApprovalOption? =
-        options.firstOrNull { it.kind == ApprovalOption.Kind.ALLOW_ONCE }
-            ?: options.firstOrNull { it.kind == ApprovalOption.Kind.ALLOW_ALWAYS }
+    /**
+     * Prefer once-allow; fall back to always-allow for the notification action.
+     * Several once-allows are a choice (a question), not one Allow the shade can tap.
+     */
+    fun pickAllow(options: List<ApprovalOption>): ApprovalOption? {
+        val once = options.filter { it.kind == ApprovalOption.Kind.ALLOW_ONCE }
+        if (once.size > 1) return null
+        return once.firstOrNull() ?: options.firstOrNull { it.kind == ApprovalOption.Kind.ALLOW_ALWAYS }
+    }
 
     /** Prefer once-reject; fall back to always-reject. */
     fun pickDeny(options: List<ApprovalOption>): ApprovalOption? =

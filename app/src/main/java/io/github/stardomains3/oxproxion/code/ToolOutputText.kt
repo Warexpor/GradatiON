@@ -27,6 +27,30 @@ object ToolOutputText {
         else -> false
     }
 
+    /** Canonical token [clip] and [keepsHead] already use, from the card's [ToolKind]. */
+    fun kindToken(kind: ToolKind): String = when (kind) {
+        ToolKind.READ -> "read"
+        ToolKind.EDIT -> "edit"
+        ToolKind.DELETE -> "delete"
+        ToolKind.MOVE -> "move"
+        ToolKind.SEARCH -> "search"
+        ToolKind.EXECUTE -> "execute"
+        ToolKind.THINK -> "think"
+        ToolKind.FETCH -> "fetch"
+        ToolKind.OTHER -> "other"
+    }
+
+    /**
+     * One more content chunk on a tool log. A chunk that already starts a line is not
+     * given a second break; the first chunk is the whole log.
+     */
+    fun joinChunk(existing: String?, chunk: String): String {
+        if (existing.isNullOrEmpty()) return chunk
+        if (chunk.isEmpty()) return existing
+        if (existing.endsWith('\n') || chunk.startsWith('\n')) return existing + chunk
+        return "$existing\n$chunk"
+    }
+
     /**
      * Shell and search logs are a terminal. File tools are not: a read can contain
      * an escape on purpose. An update that has not named a kind yet is treated as a log.

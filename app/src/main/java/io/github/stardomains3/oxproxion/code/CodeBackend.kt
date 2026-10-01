@@ -350,8 +350,17 @@ class BridgeBackend(
                         for (out in decoded) when (out) {
                             is AdapterOutput.Gap -> reloadAfterGap(out.sessionId, out.afterSeq)
                             is AdapterOutput.Update -> {
-                                noteInboundResolved(out)
-                                val remapped = remapUserPromptEcho(out)
+                                val sid = InboundSession.resolve(out.sessionId, attached.keys)
+                                if (sid == null) {
+                                    // A Cursor question with no session to show still has to be
+                                    // answered, or the agent waits. Cancel is the honest outcome.
+                                    val approval = (out.update as? CodeUpdate.Upsert)?.event as? CodeEvent.Approval
+                                    if (approval != null) offerReply(adapter.answerApproval(approval.requestId, null))
+                                    continue
+                                }
+                                val placed = if (sid == out.sessionId) out else out.copy(sessionId = sid)
+                                noteInboundResolved(placed)
+                                val remapped = remapUserPromptEcho(placed)
                                 if (remapped.sessionId in suppressAgent &&
                                     isSuppressedAgentActivity(remapped.update)
                                 ) {
@@ -1567,4 +1576,14 @@ class BridgeBackend(
         /** Client replies waiting on a full send queue. Older ones drop so a stuck agent cannot grow this without bound. */
         const val MAX_PENDING_REPLIES = 32
     }
+}
+
+/**
+ * Where an inbound update belongs. A blank id is the one open session, when there is
+ * only one: Cursor's extension methods often omit `sessionId`. Several open sessions
+ * and a blank id have nowhere safe to draw, so the caller answers and drops the card.
+ */
+internal object InboundSession {
+    fun resolve(sessionId: String, attachedIds: Collection<String>): String? =
+        sessionId.ifBlank { attachedIds.singleOrNull() }
 }

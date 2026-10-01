@@ -157,6 +157,9 @@ class CodeAwayFormatTest {
         assertEquals(once, CodeAwayFormat.pickAllow(listOf(always, once)))
         assertEquals(always, CodeAwayFormat.pickAllow(listOf(always)))
         assertNull(CodeAwayFormat.pickAllow(emptyList()))
+        val agent = ApprovalOption("agent", "Agent", ApprovalOption.Kind.ALLOW_ONCE)
+        val plan = ApprovalOption("plan", "Plan", ApprovalOption.Kind.ALLOW_ONCE)
+        assertNull(CodeAwayFormat.pickAllow(listOf(agent, plan)))
     }
 
     @Test
