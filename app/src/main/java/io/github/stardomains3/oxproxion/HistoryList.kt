@@ -123,7 +123,8 @@ object HistoryList {
         if (raw.isEmpty()) return ""
         val parsed = runCatching { json.parseToJsonElement(raw) }.getOrNull()
         val text = when {
-            parsed != null -> RpChatSummaries.previewOf(raw)
+            // Not previewOf: that strips every underscore, so snake_case no longer matches.
+            parsed != null -> fold(MessageContent.text(parsed))
             raw.startsWith("\"") -> fold(jsonStringPrefix(raw))
             else -> fold(textFieldPrefix(raw))
         }.takeUnless { it.startsWith("data:") || it.contains("base64,") }.orEmpty()
@@ -384,7 +385,7 @@ object HistoryList {
     private val DATA_URL = Regex("data:[^\"\\s]*;base64,[A-Za-z0-9+/=]+")
     private val MD_STARS = Regex("\\*+")
     private val MD_MARKS = Regex("[#>`~]")
-    private val MD_EDGE_UNDERSCORE = Regex("(?<![\\p{L}\\p{N}])_|_(?![\\p{L}\\p{N}])")
+    private val MD_EDGE_UNDERSCORE = Regex("(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])")
     private val WHITESPACE = Regex("\\s+")
 
     private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
