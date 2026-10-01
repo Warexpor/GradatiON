@@ -614,6 +614,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     updateMessages { list -> putAssistantMessage(list, thinkingMessage, partial) }
                 }
                 activeStreamPump = pump
+                try {
                 pump.drive {
                     streamEnd = forEachSseJsonPayload(channel, shouldStop = { streamAborted || overCap }) { jsonString ->
                         if (streamAborted || overCap) return@forEachSseJsonPayload
@@ -655,6 +656,9 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                         delta.images?.forEach { accumulatedImages.add(it.image_url.url) }
                     }
                     fold.publish(pump, force = true)
+                }
+                } finally {
+                    activeStreamPump = StreamTurn.retainPump(activeStreamPump, pump)
                 }
 
                 if (streamAborted) return@execute

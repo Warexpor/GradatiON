@@ -614,6 +614,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun startNetworkJob(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
         networkJob?.cancel()
         activeStreamPump?.cancel()
+        // A pump that already finished must not still look like a live turn.
+        activeStreamPump = null
         if (clientsStale) {
             clientsStale = false
             refreshHttpClient()

@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, history search labels and a finished stream)
+
+On `cursor/chat-history-search-stream-3acd`, targeting `gradation/app-pass`. Chat only:
+- History search used to treat the "You:" label as a hit. Searching "you" hid an unsent draft that actually contained the word and showed the last message instead. The highlight no longer lands on that label, or on "Draft:", when the line itself does not contain the word. A draft with a line break is found by the same words the row shows ("see you" finds a draft written as two lines).
+- A reply that had already finished left its stream pump in place. Edit and Delete treated that as a turn still arriving and ran Stop's cleanup, which cancelled a model-list fetch. The pump is cleared when the reply ends and when the next turn starts.
+- Phone: type an unsent line that contains "you", open History, search you (the row should say Draft, not the last message). Search a word from a draft you typed on two lines. Send a reply, then edit a message while the model list is loading (the list should still arrive).
+
 # Handoff (2026-10-01, RP swipe picture files)
 
 On `cursor/rp-swipe-photo-files-a9a6`, targeting `gradation/app-pass`.

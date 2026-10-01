@@ -155,11 +155,20 @@ class HistoryListTest {
         assertTrue(
             HistoryList.searchLine("user", "\"use snake_case here\"", "snake_case", you, "Photo").contains("snake_case"),
         )
+        assertEquals("", HistoryList.searchLine("user", "\"hello\"", "you", you, "Photo"))
+        assertEquals(
+            "You: you there",
+            HistoryList.searchLine("user", "\"you there\"", "you", you, "Photo"),
+        )
     }
 
     @Test fun emphasis_skips_the_you_prefix_when_the_message_also_matches() {
         assertEquals(5, HistoryList.emphasisAt("You: lantern is lit", "lantern"))
-        assertEquals(0, HistoryList.emphasisAt("You: hello", "you"))
+        assertEquals(5, HistoryList.emphasisAt("You: you there", "you"))
+        // The label is not the line. A title that is not one of those prefixes still matches.
+        assertEquals(-1, HistoryList.emphasisAt("You: hello", "you"))
+        assertEquals(-1, HistoryList.emphasisAt("Draft: still writing", "draft"))
+        assertEquals(0, HistoryList.emphasisAt("Note: hello", "note"))
         assertEquals(-1, HistoryList.emphasisAt("hello", " "))
         assertEquals(-1, HistoryList.emphasisAt("", "a"))
     }
@@ -193,6 +202,13 @@ class HistoryListTest {
         )
         assertEquals("Draft: still writing", HistoryList.rowPreview("You: sent", "still writing", "title", label))
         assertEquals("You: sent", HistoryList.rowPreview("You: sent", "  \n", "", label))
+        // "You:" is the label. The draft is what actually contains the word.
+        assertEquals("Draft: see you later", HistoryList.rowPreview("You: sent", "see you later", "you", label))
+        assertEquals("You: you there", HistoryList.rowPreview("You: you there", "other words", "you", label))
+        assertEquals(
+            "Draft: see you later",
+            HistoryList.rowPreview("You: sent", "see\nyou later", "see  you", label),
+        )
         val long = "word ".repeat(30) + "lantern" + " tail".repeat(20)
         val clipped = HistoryList.rowPreview("sent", long, "lantern", label)
         assertTrue(clipped.startsWith("Draft: …"))
@@ -203,6 +219,8 @@ class HistoryListTest {
     @Test fun search_includes_a_chat_whose_only_match_is_the_draft() {
         val drafts = mapOf("new" to "no row", "4" to "the lantern", "9" to "nothing")
         assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "LANTERN"))
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(mapOf("4" to "see\nyou later"), "see you"))
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(mapOf("4" to "see you later"), "see  you"))
         assertTrue(HistoryList.draftMatchIds(drafts, "  ").isEmpty())
         val all = listOf(session(4, now, "notes"), session(9, now, "other"))
         val matched = listOf(session(9, now, "other"))

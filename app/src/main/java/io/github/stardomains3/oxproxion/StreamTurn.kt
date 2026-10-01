@@ -13,4 +13,14 @@ object StreamTurn {
 
     fun applyCancelCleanup(active: Any?, cancelled: Any?): Boolean =
         cancelled != null && active === cancelled
+
+    /**
+     * The pump a finished turn should leave behind. Stop, Edit, and Delete treat a
+     * non-null pump as a reply that is still arriving. The finished pump used to stay
+     * referenced, so the next cut ran that cleanup: it cancelled a model-list fetch
+     * and cleared a note the next turn still needed. A newer pump, already started,
+     * is left alone.
+     */
+    fun <T : Any> retainPump(active: T?, finished: T?): T? =
+        if (finished != null && active === finished) null else active
 }
