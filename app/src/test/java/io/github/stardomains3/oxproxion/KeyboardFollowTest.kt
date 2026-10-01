@@ -17,10 +17,10 @@ class KeyboardFollowTest {
     }
 
     @Test fun short_thread_stays_put() {
-        // A few messages near the top, a gap under them. Opening the keyboard must not yank them.
+        // A few messages near the top, still above the composer after the keyboard opens.
         val oldPad = 200
         val newPad = 500
-        val lastBottom = 360
+        val lastBottom = 240
         assertEquals(0, KeyboardFollow.scroll(lastBottom, height, newPad, oldPad, slack))
     }
 

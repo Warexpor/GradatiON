@@ -24,7 +24,9 @@ object KeyboardFollow {
         val oldLine = listHeight - oldBottomPad
         val overflow = lastBottom - newLine
         if (overflow > 0) return overflow
-        val wasPinned = lastBottom >= oldLine - pinnedSlack
+        // Resting on the old composer line, not merely somewhere above it. A short thread
+        // has a gap; closing the keyboard must leave that gap instead of pulling the row down.
+        val wasPinned = kotlin.math.abs(lastBottom - oldLine) <= pinnedSlack
         return if (wasPinned) overflow else 0
     }
 }

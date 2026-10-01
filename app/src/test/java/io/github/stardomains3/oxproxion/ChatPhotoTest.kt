@@ -10,7 +10,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35])
+@Config(application = ScreenshotApp::class, sdk = [35])
 class ChatPhotoTest {
 
     @Test fun landscape_fits_the_long_edge() {

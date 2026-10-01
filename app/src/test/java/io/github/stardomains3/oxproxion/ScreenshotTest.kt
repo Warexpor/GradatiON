@@ -288,12 +288,17 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(View.VISIBLE, image.visibility)
         org.junit.Assert.assertEquals((4 * d).toInt(), container.paddingTop)
         org.junit.Assert.assertEquals((12 * d).toInt(), text.paddingStart)
-        val portrait = android.graphics.Bitmap.createBitmap(90, 160, android.graphics.Bitmap.Config.ARGB_8888)
-        portrait.eraseColor(android.graphics.Color.rgb(70, 70, 70))
+        val portrait = android.graphics.Bitmap.createBitmap(600, 1000, android.graphics.Bitmap.Config.ARGB_8888)
+        portrait.eraseColor(android.graphics.Color.rgb(58, 58, 58))
+        android.graphics.Canvas(portrait).drawRect(
+            80f, 140f, 520f, 860f,
+            android.graphics.Paint().apply { color = android.graphics.Color.rgb(96, 96, 96) }
+        )
         val (iw, ih) = ChatPhoto.frame(portrait.width, portrait.height, (240 * d).toInt(), (300 * d).toInt())
         image.layoutParams.width = iw
         image.layoutParams.height = ih
         image.setImageBitmap(portrait)
+        text.maxWidth = maxOf(iw, (160 * d).toInt())
 
         val wide = android.graphics.Bitmap.createBitmap(320, 180, android.graphics.Bitmap.Config.ARGB_8888)
         wide.eraseColor(android.graphics.Color.rgb(90, 90, 90))

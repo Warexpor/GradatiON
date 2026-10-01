@@ -764,7 +764,15 @@ class ChatAdapter(
      * Loads [data] into a rounded frame that keeps the picture's shape inside [maxW]×[maxH].
      * The size is applied when the bitmap arrives, so a portrait doesn't flash as a square.
      */
-    private fun loadFramedPhoto(view: ImageView, data: Any, tagKey: Int, tag: String, maxW: Int, maxH: Int) {
+    private fun loadFramedPhoto(
+        view: ImageView,
+        data: Any,
+        tagKey: Int,
+        tag: String,
+        maxW: Int,
+        maxH: Int,
+        onFramed: (Int, Int) -> Unit = { _, _ -> },
+    ) {
         view.scaleType = ImageView.ScaleType.CENTER_CROP
         if (view.getTag(tagKey) == tag && view.drawable != null && view.layoutParams.width > 0) {
             view.visibility = View.VISIBLE
@@ -788,6 +796,7 @@ class ChatAdapter(
                         view.layoutParams = lp
                     }
                     view.setImageDrawable(result)
+                    onFramed(w, h)
                 }
             })
             .build()
@@ -812,6 +821,12 @@ class ChatAdapter(
             view.context.getString(R.string.a11y_view_photo),
             null
         )
+    }
+
+    /** The caption wraps to the picture, but a very thin photo still gets a readable line. */
+    private fun captionWidthForPhoto(photoW: Int, maxW: Int, density: Float): Int {
+        val floor = (160 * density).toInt()
+        return maxOf(photoW, floor).coerceAtMost(maxW)
     }
 
     private fun applyDpBox(view: View, box: ChatPhoto.DpBox) {
@@ -938,9 +953,13 @@ class ChatAdapter(
                 val d = itemView.resources.displayMetrics.density
                 val maxW = (240 * d).toInt()
                 val maxH = (300 * d).toInt()
+                // Until the picture's own width is known, don't let the caption blow the bubble out past the cap.
+                messageTextView.maxWidth = maxW
                 try {
                     val userImageUri = imageUriStr.toUri()
-                    loadFramedPhoto(imageView, userImageUri, R.id.userImageView, imageUriStr, maxW, maxH)
+                    loadFramedPhoto(imageView, userImageUri, R.id.userImageView, imageUriStr, maxW, maxH) { w, _ ->
+                        messageTextView.maxWidth = captionWidthForPhoto(w, maxW, d)
+                    }
                     wirePhotoOpen(imageView, userImageUri)
                 } catch (e: Exception) {
                     val base64 = getImageBase64(message.content)
@@ -958,6 +977,7 @@ class ChatAdapter(
                                 imageView.layoutParams.height = h
                                 imageView.scaleType = ImageView.ScaleType.CENTER_CROP
                                 imageView.setImageBitmap(bitmap)
+                                messageTextView.maxWidth = captionWidthForPhoto(w, maxW, d)
                             }
                         }
                     } else {
@@ -967,6 +987,7 @@ class ChatAdapter(
             } else {
                 imageView.visibility = View.GONE
                 imageView.setTag(R.id.userImageView, null)
+                messageTextView.maxWidth = Int.MAX_VALUE
             }
             // A photo sent on its own is just the picture, in a slim frame. With a caption, the
             // picture keeps a 4dp rim and the words stay on the same inset as a text bubble.
