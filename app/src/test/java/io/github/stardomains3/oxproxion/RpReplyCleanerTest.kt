@@ -48,6 +48,18 @@ class RpReplyCleanerTest {
     }
 
     @Test
+    fun stripsARewritePreamble() {
+        assertEquals("*She waits.*", RpReplyCleaner.clean("Here's the rewritten reply:\n*She waits.*"))
+        assertEquals("*She waits.*", RpReplyCleaner.clean("(OOC: Rewrite your last reply above.)\n*She waits.*"))
+    }
+
+    @Test
+    fun keepsALineThatOnlySoundsLikeARewriteLabel() {
+        val story = "Here's the new version of me, she said.\n*She waits.*"
+        assertEquals(story, RpReplyCleaner.clean(story))
+    }
+
+    @Test
     fun keepsEmoji() {
         val cleaned = RpReplyCleaner.clean("Hi 😊 friend")
         assertTrue(cleaned.contains("😊"))

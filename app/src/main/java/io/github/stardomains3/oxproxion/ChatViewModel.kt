@@ -1238,6 +1238,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         continueInPlace: Boolean = false
     ): Boolean {
         rpRewriteJob?.cancel()
+        rpRewriteJob = null
         val restore = sessionTransitionJob
         if (restore != null && restore.isActive) {
             _isAwaitingResponse.value = true
@@ -3657,13 +3658,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val characterId = if (llm) null else character?.id
         val turns = _chatMessages.value.orEmpty()
             .filter { (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it) }
-            .map { it.role to getMessageText(it.content) }
+            .map { it.role to RpAutoMemory.turnBody(getMessageText(it.content), isImageMessage(it)) }
             .toMutableList()
         // The finished reply may not be in the list yet.
         if (turns.lastOrNull()?.let { it.first == "assistant" && it.second.trim() == latestReply.trim() } != true) {
             turns += "assistant" to latestReply
         }
-        val sessionKey = currentSessionId ?: -1L
+        val sessionKey = currentSessionId ?: RpAutoMemory.UNSAVED_KEY
         val budget = sharedPreferencesHelper.getChatMemoryCount()
         val previousRun = rpMemoryRunAt[sessionKey] ?: 0
         if (!RpAutoMemory.shouldUpdate(turns.size, budget, previousRun)) return
@@ -3694,20 +3695,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 isReasoningModel = isReasoningModel(modelId),
                 client = if (demo) demoHttpClient else if (isLan) lanHttpClient else null
             )
-            val note = RpAutoMemory.clean(reply)
+            val note = RpAutoMemory.clean(reply, userMemory)
             // The user may have switched chats meanwhile; the note belongs to the one it was built for.
             withContext(Dispatchers.Main) {
+                val sameChat = sessionEpoch == launchEpoch &&
+                    (launchSessionId == null || currentSessionId == launchSessionId)
                 if (note != null) {
                     // A chat that was unsaved at launch may have been saved since, which is still the same chat.
-                    val sameChat = sessionEpoch == launchEpoch &&
-                        (launchSessionId == null || currentSessionId == launchSessionId)
                     if (sameChat) {
                         saveCurrentRpFacts(note)
                     } else if (launchSessionId != null && repository.getSessionById(launchSessionId) != null) {
                         sharedPreferencesHelper.saveRpFacts(launchSessionId, note)
                     }
                 }
-                rpMemoryRunAt[sessionKey] = RpAutoMemory.watermarkAfter(previousRun, turns.size, note != null)
+                // An unsaved chat that gained an id keeps its mark there, not on the next new chat.
+                if (launchSessionId == null) rpMemoryRunAt.remove(RpAutoMemory.UNSAVED_KEY)
+                val key = RpAutoMemory.runKey(launchSessionId, currentSessionId, sameChat)
+                if (key != null) {
+                    rpMemoryRunAt[key] = RpAutoMemory.watermarkAfter(previousRun, turns.size, note != null)
+                }
             }
         }
     }
@@ -3751,12 +3757,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * If the open RP thread is still greeting-only (or empty) for the active character, refresh
      * that bubble after an edit / rematch so name/greeting changes show without restarting the chat.
+     * [refresh] is the card line from before the change. A rewritten opening is left alone unless
+     * the greeting text on the card itself changed. [stillCurrent] drops a stale refresh when a
+     * later persona change has already superseded it.
      */
-    suspend fun syncActiveCharacterGreetingIfIdle() {
+    suspend fun syncActiveCharacterGreetingIfIdle(
+        refresh: RpGreetingSync.Refresh? = null,
+        stillCurrent: () -> Boolean = { true }
+    ) {
         if (!isRpMode() || sharedPreferencesHelper.isRpLlmMode()) return
+        if (!stillCurrent()) return
         val epoch = sessionEpoch
         val character = rpDelegate.getActiveCharacter() ?: return
-        if (epoch != sessionEpoch) return
+        if (epoch != sessionEpoch || !stillCurrent()) return
         val messages = _chatMessages.value.orEmpty()
         if (messages.any { it.role == "user" }) return
         val onlyGreeting = messages.size == 1 &&
@@ -3764,7 +3777,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             !isAssistantPlaceholder(messages[0])
         if (!onlyGreeting && messages.isNotEmpty()) return
         val greeting = rpDelegate.greetingMessage(character)
-        if (epoch != sessionEpoch) return
+        val current = if (onlyGreeting) getMessageText(messages[0].content) else ""
+        if (!RpGreetingSync.shouldReplace(
+                current = current,
+                expandedBefore = refresh?.expandedBefore,
+                expandedNow = greeting,
+                templateChanged = refresh?.templateChanged == true
+            )
+        ) return
+        if (epoch != sessionEpoch || !stillCurrent()) return
         _chatMessages.value = listOf(
             FlexibleMessage(role = "assistant", content = JsonPrimitive(greeting))
         )
@@ -4054,6 +4075,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun regenerateLastRpReply(instruction: String? = null, rewrite: String? = null): Boolean {
         rpRewriteJob?.cancel()
+        rpRewriteJob = null
         if (_isAwaitingResponse.value == true) {
             _toastUiEvent.postValue(
                 Event(getApplication<Application>().getString(R.string.rp_wait_for_reply))
@@ -4174,6 +4196,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return false
         }
         _toastUiEvent.postValue(Event(str(R.string.rp_rewrite_started)))
+        // Hold the turn the way a reply does, so Send becomes Stop and a tap cancels this
+        // instead of dropping it. The latest-reply path already does that via regenerate.
+        _isAwaitingResponse.value = true
         val epoch = sessionEpoch
         rpRewriteJob = viewModelScope.launch {
             try {
@@ -4213,6 +4238,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _rpRewriteDone.value = Event(RpRewriteDone(position, original, rewritten))
             } catch (e: CancellationException) {
                 throw e
+            } finally {
+                val job = coroutineContext[Job]
+                // A Stop or a newer send already cleared this job; don't clear that send's turn.
+                if (rpRewriteJob === job) {
+                    rpRewriteJob = null
+                    _isAwaitingResponse.value = false
+                }
             }
         }
         return true

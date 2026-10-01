@@ -36,11 +36,20 @@ object RpLore {
         return out
     }
 
-    /** Newest part of the scene, so a long chat does not keep ancient mentions alive. */
+    /**
+     * Newest part of the scene, so a long chat does not keep ancient mentions alive.
+     * The cut moves forward to a word break: a key sliced in half would miss, and the
+     * leftover letters could match a shorter key.
+     */
     fun scanOf(parts: List<String>, maxChars: Int = SCAN_CHARS): String {
         val text = parts.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
         if (text.length <= maxChars) return text
-        return text.takeLast(maxChars)
+        val start = text.length - maxChars
+        if (text[start - 1].isWhitespace()) return text.substring(start).trimStart()
+        var i = start
+        while (i < text.length && !text[i].isWhitespace()) i++
+        if (i >= text.length) return text.substring(start)
+        return text.substring(i).trimStart()
     }
 
     fun select(content: String, scan: String, maxChars: Int = 12_000): String {

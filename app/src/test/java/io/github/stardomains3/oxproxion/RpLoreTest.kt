@@ -101,5 +101,15 @@ class RpLoreTest {
         val scan = RpLore.scanOf(listOf(old, "only the locket remains"))
         assertTrue(scan.endsWith("only the locket remains"))
         assertTrue(scan.length <= 4_000)
+        assertTrue(RpLore.keyHits("locket", scan))
+    }
+
+    @Test
+    fun scanDoesNotStartMidWord() {
+        val head = "x".repeat(30) + "locket"
+        val scan = RpLore.scanOf(listOf(head, "docks at dawn"), maxChars = "cket\ndocks at dawn".length)
+        assertFalse(scan.contains("cket"))
+        assertFalse(RpLore.keyHits("locket", scan))
+        assertTrue(RpLore.keyHits("docks", scan))
     }
 }

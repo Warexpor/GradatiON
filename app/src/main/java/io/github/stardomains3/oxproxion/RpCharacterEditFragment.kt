@@ -199,6 +199,14 @@ class RpCharacterEditFragment : Fragment() {
                         }
                         return@launch
                     }
+                    val newGreeting = greetingInput.text?.toString().orEmpty()
+                    // The bubble may be a rewrite. Only a change to the greeting text replaces that.
+                    val greetingRefresh = existing?.let {
+                        RpGreetingSync.Refresh(
+                            expandedBefore = rpDelegate.greetingMessage(it),
+                            templateChanged = it.greeting != newGreeting
+                        )
+                    }
                     val examplesRaw = examplesInput.text?.toString().orEmpty()
                     val parsedExamples = rpDelegate.parseExamplesFromEdit(examplesRaw)
                     if (examplesRaw.isNotBlank() && parsedExamples.isEmpty()) {
@@ -217,7 +225,7 @@ class RpCharacterEditFragment : Fragment() {
                     val savedId = repo.saveCharacter(
                         (existing ?: RpCharacter(name = name)).copy(
                             name = name,
-                            greeting = greetingInput.text?.toString().orEmpty(),
+                            greeting = newGreeting,
                             personality = personalityInput.text?.toString().orEmpty(),
                             style = styleInput.text?.toString().orEmpty(),
                             scenario = scenarioInput.text?.toString().orEmpty(),
@@ -251,7 +259,7 @@ class RpCharacterEditFragment : Fragment() {
                         SharedPreferencesHelper(requireContext()).getRpActiveCharacterId() == savedId
                     ) {
                         chatViewModel.refreshActiveRpCharacter()
-                        chatViewModel.syncActiveCharacterGreetingIfIdle()
+                        chatViewModel.syncActiveCharacterGreetingIfIdle(greetingRefresh)
                     }
                     parentFragmentManager.popBackStack()
                 } catch (_: Exception) {

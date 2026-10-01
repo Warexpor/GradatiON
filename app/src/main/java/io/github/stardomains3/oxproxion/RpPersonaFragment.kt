@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
@@ -28,7 +29,9 @@ import kotlinx.coroutines.withContext
  */
 class RpPersonaFragment : Fragment() {
 
+    private val chatViewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
     private lateinit var prefs: SharedPreferencesHelper
+    private var greetingGen = 0
     private lateinit var nameInput: TextInputEditText
     private lateinit var aboutInput: TextInputEditText
     private lateinit var list: LinearLayout
@@ -74,7 +77,11 @@ class RpPersonaFragment : Fragment() {
         val hasPersona = baseline.name.isNotBlank() || baseline.description.isNotBlank() || prefs.getRpPersonaPresets().isNotEmpty()
         enabledCard.visibility = if (hasPersona) View.VISIBLE else View.GONE
         enabledSwitch.isChecked = prefs.isRpPersonaEnabled()
-        enabledSwitch.setOnCheckedChangeListener { _, on -> prefs.setRpPersonaEnabled(on) }
+        enabledSwitch.setOnCheckedChangeListener { _, on ->
+            val before = idleGreeting()
+            prefs.setRpPersonaEnabled(on)
+            refreshIdleGreeting(before)
+        }
         nameInput.doAfterTextChanged { showPortrait() }
         aboutInput.doAfterTextChanged { markInUse() }
         showPortrait()
@@ -117,6 +124,7 @@ class RpPersonaFragment : Fragment() {
         )
 
         view.findViewById<MaterialButton>(R.id.saveRpPersonaButton).setOnClickListener {
+            val before = idleGreeting()
             val persona = current()
             prefs.saveRpPersona(persona.description)
             prefs.saveRpPersonaName(persona.name)
@@ -128,11 +136,33 @@ class RpPersonaFragment : Fragment() {
             prune()
             // The page closes on Save, so a plain "Saved" adds nothing; losing a persona to the cap does.
             if (droppedOldest) GlassNotice.show(requireContext(), getString(R.string.rp_persona_preset_cap))
+            refreshIdleGreeting(before)
             parentFragmentManager.popBackStack()
         }
     }
 
     private fun current() = RpPersonaPreset(name, about, photo)
+
+    /** The open greeting expanded with the persona as it is right now, before a change is saved. */
+    private fun idleGreeting(): String? {
+        if (!chatViewModel.isRpMode() || prefs.isRpLlmMode()) return null
+        val character = chatViewModel.activeRpCharacter.value ?: return null
+        return RpChatDelegate(chatViewModel.getRpRepository(), prefs).greetingMessage(character)
+    }
+
+    /**
+     * An idle thread whose bubble is still the card's line picks up the new name. A rewritten
+     * opening stays. A later change cancels the effect of an earlier one.
+     */
+    private fun refreshIdleGreeting(before: String?) {
+        val captured = before ?: return
+        val gen = ++greetingGen
+        viewLifecycleOwner.lifecycleScope.launch {
+            chatViewModel.syncActiveCharacterGreetingIfIdle(
+                RpGreetingSync.Refresh(captured, templateChanged = false)
+            ) { gen == greetingGen }
+        }
+    }
 
     /** The photo when there is one, else the name's initial, else a silhouette; the list's check follows. */
     private fun showPortrait() {

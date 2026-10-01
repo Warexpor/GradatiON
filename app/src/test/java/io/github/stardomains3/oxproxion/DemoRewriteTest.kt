@@ -25,6 +25,22 @@ class DemoRewriteTest {
     }
 
     @Test
+    fun aNoteWithTwoLinesIsKeptWhole() {
+        val directive = RpPromptEngine.rewriteDirective("Make it longer.\nKeep the rain.")
+        assertEquals("Make it longer.\nKeep the rain.", DemoModel.rewriteNote(directive))
+    }
+
+    @Test
+    fun theLaterAskWins() {
+        val previous = "*She waits.*\n\n\"You're late.\"\n\n*Rain on the glass.*"
+        val longer = DemoModel.demoRewrite(previous, "Don't make it shorter, make it longer")
+        assertTrue(longer.contains("Rain on the glass."))
+        assertTrue(longer.contains("doesn't look away"))
+        val spoken = DemoModel.demoRewrite(previous, "More of your dialogue, and less narration.")
+        assertTrue(spoken.contains("closer to what you wanted"))
+    }
+
+    @Test
     fun previousAssistantIsTheReplyAboveTheNote() {
         val body = buildJsonObject {
             put("messages", buildJsonArray {

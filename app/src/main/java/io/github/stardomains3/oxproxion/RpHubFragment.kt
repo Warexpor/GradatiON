@@ -359,6 +359,10 @@ class RpHubFragment : Fragment() {
         if (!isAdded) return
         try {
             val repo = chatViewModel.getRpRepository()
+            val activeBefore = prefs.getRpActiveCharacterId()?.let { repo.getCharacterById(it) }
+            val delegate = RpChatDelegate(repo, prefs)
+            val expandedBefore = activeBefore?.let { delegate.greetingMessage(it) }
+            var greetingChanged = false
             var imported = 0
             backup.characters.forEach { ex ->
                 val existing = ex.exportKey.takeIf { it.isNotBlank() }?.let { key ->
@@ -382,6 +386,9 @@ class RpHubFragment : Fragment() {
                         exportKey = base.exportKey
                     )
                 )
+                if (activeBefore != null && ex.exportKey == activeBefore.exportKey && ex.greeting != activeBefore.greeting) {
+                    greetingChanged = true
+                }
                 if (existing == null && base.exportKey.isNotBlank()) {
                     val oldId = SharedPreferencesHelper(requireContext()).takeDeletedRpCharacterId(base.exportKey)
                     if (oldId != null && oldId != savedId) {
@@ -401,7 +408,8 @@ class RpHubFragment : Fragment() {
                 imported++
             }
             chatViewModel.refreshActiveRpCharacter()
-            chatViewModel.syncActiveCharacterGreetingIfIdle()
+            val refresh = expandedBefore?.let { RpGreetingSync.Refresh(it, greetingChanged) }
+            chatViewModel.syncActiveCharacterGreetingIfIdle(refresh)
             if (!isAdded) return
             GlassNotice.show(requireContext(), getString(R.string.rp_import_chars_ok, imported))
         } catch (_: Exception) {
