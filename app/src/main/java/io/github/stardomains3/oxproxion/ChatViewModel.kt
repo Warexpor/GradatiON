@@ -3892,7 +3892,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /** Continue: the character carries on inside its last reply, with no new words from the user (and no bubble for the prompt). */
     fun continueRpStory(): Boolean = sendRpUserMessage("", continueBeat = true)
 
-    fun sendRpUserMessage(rawText: String, messageInstruct: String? = null, continueBeat: Boolean = false): Boolean {
+    /** [imageUrl]: a photo for the scene as a data URL, sent with the words (or alone). */
+    fun sendRpUserMessage(
+        rawText: String,
+        messageInstruct: String? = null,
+        continueBeat: Boolean = false,
+        imageUrl: String? = null
+    ): Boolean {
         val parsed = rpDelegate.parseSendText(rawText).let {
             if (!continueBeat) it
             else it.copy(reminder = listOfNotNull(RpPromptEngine.CONTINUE_DIRECTION, it.reminder).joinToString("\n"))
@@ -3903,6 +3909,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             continueBeat && parsed.userText.isBlank() -> app.getString(R.string.rp_continue_prompt)
             parsed.userText.isNotBlank() -> parsed.userText
             !parsed.reminder.isNullOrBlank() -> app.getString(R.string.rp_reminder_continue)
+            imageUrl != null -> ""
             else -> {
                 _toastUiEvent.postValue(Event(app.getString(R.string.rp_message_empty)))
                 return false
@@ -3942,8 +3949,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _composerRestoreEvent.postValue(Event(draftToRestore))
                     return@launch
                 }
+                val content = if (imageUrl == null) JsonPrimitive(userText) else buildJsonArray {
+                    if (userText.isNotBlank()) add(buildJsonObject {
+                        put("type", JsonPrimitive("text"))
+                        put("text", JsonPrimitive(userText))
+                    })
+                    add(buildJsonObject {
+                        put("type", JsonPrimitive("image_url"))
+                        put("image_url", buildJsonObject { put("url", JsonPrimitive(imageUrl)) })
+                    })
+                }
                 if (!sendUserMessage(
-                        JsonPrimitive(userText),
+                        content,
                         systemPrompt,
                         clearRpSwipeOnStart = true,
                         continueInPlace = continueBeat

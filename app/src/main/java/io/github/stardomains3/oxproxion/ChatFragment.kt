@@ -403,7 +403,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             currentCameraUri = null  // Always reset after callback
             val resolver = requireContext().contentResolver
             if (result.resultCode == Activity.RESULT_OK && imageUri != null) {
-                if (discardAttachmentIfRp()) return@registerForActivityResult
                 // A 12 MB photo read and delete on the main thread stalls the sheet closing.
                 viewLifecycleOwner.lifecycleScope.launch {
                     val rawBytes = withContext(Dispatchers.IO) {
@@ -2136,10 +2135,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     viewModel.continueRpStory()
                     return@setOnClickListener
                 }
-                // RP forbids attachments; reject before file prepend so drafts stay clean.
-                if (viewModel.isRpMode() &&
-                    (selectedImageBytes != null || selectedAudioBytes != null || pendingFiles.isNotEmpty())
-                ) {
+                // RP takes photos only; reject files and audio before file prepend so drafts stay clean.
+                if (viewModel.isRpMode() && (selectedAudioBytes != null || pendingFiles.isNotEmpty())) {
                     GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
                     return@setOnClickListener
                 }
@@ -2181,11 +2178,24 @@ $cleanContent
                             GlassNotice.show(requireContext(), getString(R.string.rp_wait_for_reply))
                             return@setOnClickListener
                         }
-                        if (!viewModel.sendRpUserMessage(substitutedPrompt)) {
+                        val photo = selectedImageBytes
+                        if (photo == null) {
+                            if (!viewModel.sendRpUserMessage(substitutedPrompt)) return@setOnClickListener
+                            chatEditText.setText("")
+                            chatEditText.text.clear()
                             return@setOnClickListener
                         }
-                        chatEditText.setText("")
-                        chatEditText.text.clear()
+                        val photoMime = selectedImageMime
+                        // A 12 MB photo is a 16 MB string: encode it off the main thread.
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            val base64 = withContext(Dispatchers.Default) { Base64.encodeToString(photo, Base64.NO_WRAP) }
+                            if (!viewModel.sendRpUserMessage(substitutedPrompt, imageUrl = "data:$photoMime;base64,$base64")) return@launch
+                            chatEditText.setText("")
+                            chatEditText.text.clear()
+                            selectedImageBytes = null
+                            selectedImageMime = null
+                            attachmentPreviewContainer.visibility = View.GONE
+                        }
                         return@setOnClickListener
                     }
 
@@ -3499,7 +3509,10 @@ $cleanContent
         newPopover(menuButton) { open -> if (!open) setAttachPlusOpen(false) }?.show(null, rows, footer)
     }
 
-    /** Roleplay "+": scene tools instead of attachments (files are off in RP by design). */
+    /**
+     * Roleplay "+": a photo for the scene (from the library or the camera) and a scene reminder;
+     * the model's controls and the Roleplay hub sit under the line. Files and audio stay in Chat.
+     */
     private fun showRpPlusPopover() {
         if (pickerPopover?.isShowing == true) {
             pickerPopover?.dismiss()
@@ -3512,21 +3525,25 @@ $cleanContent
                 menuButton.post { showCharacterPopover() }
             }
         }
+        rows += PickerPopover.Row(getString(R.string.grok_attach_gallery), getString(R.string.rp_plus_photo_sub), R.drawable.ic_gallery) {
+            menuButton.post { launchGalleryPicker() }
+        }
+        rows += PickerPopover.Row(getString(R.string.grok_attach_camera), getString(R.string.attach_camera_sub), R.drawable.ic_camera) {
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            } else {
+                launchCamera()
+            }
+        }
         rows += PickerPopover.Row(getString(R.string.rp_plus_reminder), getString(R.string.rp_plus_reminder_sub), R.drawable.ic_nav_prompts) {
             insertRpReminderTemplate()
         }
-        val streaming = streamButton.isSelected
-        rows += PickerPopover.Row(
-            getString(R.string.rp_plus_stream),
-            getString(if (streaming) R.string.rp_plus_stream_on else R.string.rp_plus_stream_off),
-            R.drawable.ic_stream,
-            selected = streaming
-        ) { streamButton.performClick() }
-        // The composer's old settings button is the character menu here, so its options live under +.
-        rows += PickerPopover.Row(getString(R.string.rp_plus_controls), getString(R.string.rp_plus_controls_sub), R.drawable.ic_sliders) {
-            menuButton.post { showMenu() }
-        }
+        // The composer's old settings button is the character menu here, so the model's controls
+        // (streaming among them) live under +.
         val footer = listOf(
+            PickerPopover.Row(getString(R.string.rp_plus_controls), getString(R.string.rp_plus_controls_sub), R.drawable.ic_sliders) {
+                menuButton.post { showMenu() }
+            },
             PickerPopover.Row(getString(R.string.drawer_nav_roleplay), getString(R.string.rp_plus_home_sub), R.drawable.ic_nav_characters) { openRpHub() }
         )
         setAttachPlusOpen(true)
@@ -3559,7 +3576,6 @@ $cleanContent
     }
 
     private fun processPickedImageUri(uri: Uri) {
-        if (discardAttachmentIfRp()) return
         val model = viewModel.activeChatModel.value
         if (model != null && !viewModel.isVisionModel(model)) {
             GlassNotice.show(requireContext(), getString(R.string.toast_image_need_vision))
@@ -3599,7 +3615,6 @@ $cleanContent
                 GlassNotice.show(requireContext(), getString(R.string.toast_image_too_large))
                 return@launch
             }
-            if (discardAttachmentIfRp()) return@launch
             selectedImageBytes = bytes
             selectedImageMime = mime
             previewImageView.load(uri)  // Coil decodes and downsamples off the main thread
@@ -6171,14 +6186,11 @@ $cleanContent
         }
         reflectToolButtons()
         if (rp) {
-            val hadAttachments = selectedImageBytes != null ||
-                selectedAudioBytes != null ||
-                pendingFiles.isNotEmpty()
-            selectedImageBytes = null
-            selectedImageMime = null
+            // A staged photo goes along to the scene; files and audio stay in Chat.
+            val hadAttachments = selectedAudioBytes != null || pendingFiles.isNotEmpty()
+            if (selectedAudioBytes != null) attachmentPreviewContainer.visibility = View.GONE
             selectedAudioBytes = null
             selectedAudioFormat = null
-            attachmentPreviewContainer.visibility = View.GONE
             pendingFiles.clear()
             updateAttachmentButton()
             if (hadAttachments) {
