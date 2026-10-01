@@ -1,3 +1,12 @@
+# Handoff (2026-10-01, code tool logs and changed paths)
+
+On `cursor/code-tool-logs-paths-f82e`, targeting `gradation/app-pass`. Code mode only:
+- A shell or search log drops terminal color, a window title, and a progress line that rewrites itself with a carriage return (including a clear-to-end). The card and the full output show the words. A file read keeps an escape that was in the file.
+- A tool status of `in-progress`, `in progress`, or `running` is running, so the spinner is not stuck on waiting. A plan step spelled `in-progress` is the current step.
+- Changes: a rename (`old -> new`, quotes included) opens and copies the new path, and the row names the old one. A path git quoted, including octal UTF-8, is unquoted before the diff request.
+
+Phone: run a command that prints color (the card should be the words). Open Changes on a rename and on a path with a space (the diff should be that file).
+
 # Handoff (2026-10-01, RP wallpaper backup and photo files)
 
 On `cursor/rp-photos-wallpaper-files-01f9`, targeting `gradation/app-pass`.

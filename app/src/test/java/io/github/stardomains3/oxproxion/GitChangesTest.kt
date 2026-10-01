@@ -36,4 +36,32 @@ class GitChangesTest {
         assertEquals(listOf("src/Ws.ts"), GitChanges.filter(files, "ws").map { it.path })
         assertTrue(GitChanges.filter(files, "nope").isEmpty())
     }
+
+    @Test fun changePathUnquotesAndTakesTheNewNameOfARename() {
+        val plain = GitChanges.changePath(GitFileStatus("src/A.kt", " M"))
+        assertEquals("src/A.kt", plain.diffPath)
+        assertEquals(null, plain.renamedFrom)
+
+        val spaced = GitChanges.changePath(GitFileStatus("\"src/My File.kt\"", " M"))
+        assertEquals("src/My File.kt", spaced.diffPath)
+
+        val renamed = GitChanges.changePath(GitFileStatus("\"old name.kt\" -> \"new name.kt\"", "R "))
+        assertEquals("new name.kt", renamed.diffPath)
+        assertEquals("old name.kt", renamed.renamedFrom)
+
+        // The arrow is inside the quotes, so this is one path, not a rename.
+        val literal = GitChanges.changePath(GitFileStatus("\"a -> b.txt\"", "??"))
+        assertEquals("a -> b.txt", literal.diffPath)
+        assertEquals(null, literal.renamedFrom)
+
+        val utf8 = GitChanges.changePath(GitFileStatus("\"\\344\\270\\255.kt\"", " M"))
+        assertEquals("中.kt", utf8.diffPath)
+    }
+
+    @Test fun filterMatchesTheOldNameOfARename() {
+        val files = listOf(GitFileStatus("\"old name.kt\" -> \"new name.kt\"", "R "))
+        assertEquals(1, GitChanges.filter(files, "old name").size)
+        assertEquals(1, GitChanges.filter(files, "new name").size)
+        assertTrue(GitChanges.filter(files, "missing").isEmpty())
+    }
 }

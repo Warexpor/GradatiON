@@ -144,7 +144,7 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
                 R.id.fragment_container,
                 CodeGitDiffFragment.newInstance(
                     sessionId,
-                    file.path,
+                    GitChanges.changePath(file).diffPath,
                     tracked = GitChanges.isTrackedChange(file.status),
                 ),
             )
@@ -207,11 +207,14 @@ class CodeChangesFragment : Fragment(R.layout.fragment_code_changes) {
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val f = rows[position]
+            val shown = GitChanges.changePath(f)
             holder.status.text = GitBridgeJson.statusLetter(f.status)
-            holder.path.text = f.path
+            val from = shown.renamedFrom
+            holder.path.text = if (from.isNullOrEmpty()) shown.diffPath
+            else holder.itemView.context.getString(R.string.code_changes_renamed, shown.diffPath, from)
             holder.itemView.setOnClickListener { openDiff(f) }
             holder.itemView.setOnLongClickListener {
-                copyPath(f.path)
+                copyPath(shown.diffPath)
                 true
             }
         }

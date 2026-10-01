@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -1246,6 +1247,51 @@ class CodeProtocolTest {
         val diff = list.filterIsInstance<CodeEvent.FileDiff>().single()
         assertFalse(diff.isNewFile)
         assertFalse(Diff.unifiedIsNewFile("@@ -1,3 +1,3 @@\n-a\n+b\n"))
+    }
+
+    @Test fun shellOutputDropsColorAndKeepsTheLastProgressLine() {
+        val raw = "\u001b[32m10%\u001b[0m\r\u001b[2K\u001b[32m100%\u001b[0m\nFAIL WidgetTest"
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"sh","title":"Bash","kind":"execute","status":"completed",
+               "content":[{"type":"terminal","output":${JsonPrimitive(raw)}}]}"""
+        )))
+        assertEquals("100%\nFAIL WidgetTest", (list.single() as CodeEvent.ToolCall).output)
+    }
+
+    @Test fun searchOutputDropsRipgrepColor() {
+        val raw = "\u001b[1;32msrc/A.kt\u001b[0m:3:fun main"
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"rg","title":"Search","kind":"search","status":"completed",
+               "rawOutput":${JsonPrimitive(raw)}}"""
+        )))
+        assertEquals("src/A.kt:3:fun main", (list.single() as CodeEvent.ToolCall).output)
+    }
+
+    @Test fun readOutputKeepsColorBytesInTheFile() {
+        val raw = "const RED = \"\u001b[31m\""
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"rd","title":"Read","kind":"read","status":"completed",
+               "content":[{"type":"content","content":{"type":"text","text":${JsonPrimitive(raw)}}}]}"""
+        )))
+        assertEquals(raw, (list.single() as CodeEvent.ToolCall).output)
+    }
+
+    @Test fun toolStatusAcceptsHyphenAndRunning() {
+        val hyphen = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"a","title":"Bash","kind":"execute","status":"in-progress"}"""
+        )))
+        assertEquals(ToolStatus.RUNNING, (hyphen.single() as CodeEvent.ToolCall).status)
+        val running = foldFresh(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"b","title":"Bash","kind":"execute","status":"running"}"""
+        )))
+        assertEquals(ToolStatus.RUNNING, (running.single() as CodeEvent.ToolCall).status)
+    }
+
+    @Test fun planStatusAcceptsAHyphen() {
+        val list = foldFresh(listOf(update(
+            """{"sessionUpdate":"plan","entries":[{"content":"Run tests","status":"in-progress"}]}"""
+        )))
+        assertEquals(PlanStatus.IN_PROGRESS, (list.single() as CodeEvent.Plan).entries.single().status)
     }
 
     @Test fun skippableAuthErrorIsOnlyAMissingMethod() {
