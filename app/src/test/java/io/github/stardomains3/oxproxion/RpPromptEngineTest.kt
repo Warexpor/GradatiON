@@ -178,4 +178,15 @@ class RpPromptEngineTest {
         assertTrue(d.contains("What to change: make it shorter\n"))
         assertTrue(d.contains("Write only the new version"))
     }
+
+    @Test
+    fun craftTellsTheCharacterAPhotoIsInTheScene() {
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = RpCharacter(id = 1, name = "Mira"),
+            persona = "", lore = "", instruction = "",
+            thirdPerson = false, showThoughts = false, isLlm = false
+        )
+        assertTrue(prompt.contains("photo is in the scene"))
+        assertTrue(RpPromptEngine.PHOTO_TURN.contains("says nothing"))
+    }
 }

@@ -37,6 +37,22 @@ object RpApiMemory {
     }
 
     /**
+     * Put [tail] at the end, even when the window had dropped it. A rewrite has to see the reply
+     * it is changing and the turn just before that reply (often the photo), which a greeting pin
+     * on a tiny budget would otherwise crowd out.
+     */
+    fun <T> pinTail(messages: List<T>, tail: List<T>, same: (T, T) -> Boolean): List<T> {
+        if (tail.isEmpty()) return messages
+        val rest = messages.toMutableList()
+        for (msg in tail) {
+            val idx = rest.indexOfLast { same(it, msg) }
+            if (idx >= 0) rest.removeAt(idx)
+        }
+        rest.addAll(tail)
+        return rest
+    }
+
+    /**
      * Null while the chat still fits in [historyBudget]: history is dropped before the card.
      * "All messages" never cuts the card.
      */
