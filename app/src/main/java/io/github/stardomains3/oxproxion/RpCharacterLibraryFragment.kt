@@ -82,7 +82,8 @@ class RpCharacterLibraryFragment : Fragment() {
         }
         adapter = RpCharacterAdapter(
             onActivate = { character -> activateCharacter(character) },
-            onMenu = { anchor, character -> showCardMenu(anchor, character, openEditor, confirmDelete) }
+            onMenu = { anchor, character -> showCardMenu(anchor, character, openEditor, confirmDelete) },
+            userName = { prefs.activeRpPersonaName().ifBlank { getString(R.string.rp_you) } }
         )
         val recycler = view.findViewById<RecyclerView>(R.id.rpCharacterRecyclerView)
         recycler.layoutManager = GridLayoutManager(requireContext(), 2)
@@ -170,6 +171,7 @@ class RpCharacterLibraryFragment : Fragment() {
     private class RpCharacterAdapter(
         private val onActivate: (RpCharacter) -> Unit,
         private val onMenu: (View, RpCharacter) -> Unit,
+        private val userName: () -> String,
         private var activeCharacterId: Long? = null
     ) : RecyclerView.Adapter<RpCharacterAdapter.Holder>() {
         private var items: List<RpCharacter> = emptyList()
@@ -194,7 +196,7 @@ class RpCharacterLibraryFragment : Fragment() {
         override fun getItemCount(): Int = items.size
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
-            holder.bind(items[position], activeCharacterId, onActivate, onMenu)
+            holder.bind(items[position], activeCharacterId, onActivate, onMenu, userName())
         }
 
         class Holder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -210,14 +212,15 @@ class RpCharacterLibraryFragment : Fragment() {
                 character: RpCharacter,
                 activeId: Long?,
                 onActivate: (RpCharacter) -> Unit,
-                onMenu: (View, RpCharacter) -> Unit
+                onMenu: (View, RpCharacter) -> Unit,
+                you: String
             ) {
                 val ctx = itemView.context
                 val isActive = activeId != null && activeId == character.id
                 name.text = character.name
                 activeBadge.visibility = if (isActive) View.VISIBLE else View.GONE
                 card.setBackgroundResource(if (isActive) R.drawable.rp_bg_card_active else R.drawable.rp_bg_card)
-                subtitle.text = tagline(character).ifBlank { ctx.getString(R.string.rp_ui_no_description) }
+                subtitle.text = tagline(character, you).ifBlank { ctx.getString(R.string.rp_ui_no_description) }
                 RpAvatars.bind(avatar, monogram, character)
                 card.contentDescription = ctx.getString(R.string.rp_ui_character_card_a11y, character.name)
                 more.contentDescription = ctx.getString(R.string.rp_ui_more_options, character.name)
@@ -231,9 +234,10 @@ class RpCharacterLibraryFragment : Fragment() {
                 more.setOnClickListener { onMenu(it, character) }
             }
 
-            private fun tagline(c: RpCharacter): String {
+            private fun tagline(c: RpCharacter, you: String): String {
                 val source = listOf(c.personality, c.scenario, c.greeting).firstOrNull { it.isNotBlank() }.orEmpty()
-                return source.replace(Regex("[*_#>`]"), "").replace(Regex("\\s+"), " ").trim().take(140)
+                val named = RpPromptEngine.expandMacros(source, c.name.ifBlank { "GradatiON" }, you)
+                return named.replace(Regex("[*_#>`]"), "").replace(Regex("\\s+"), " ").trim().take(140)
             }
         }
     }

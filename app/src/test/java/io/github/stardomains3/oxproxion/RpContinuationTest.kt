@@ -41,6 +41,20 @@ class RpContinuationTest {
         assertEquals("(quietly)", RpContinuation.join("(", "quietly)"))
     }
 
+    @Test fun aFinishedJapaneseSentenceStartsANewParagraph() {
+        assertEquals("彼女は微笑む。\n\nそして振り向く。", RpContinuation.join("彼女は微笑む。", "そして振り向く。"))
+        assertEquals("「来て。」\n\n彼は待つ。", RpContinuation.join("「来て。」", "彼は待つ。"))
+    }
+
+    @Test fun unfinishedJapaneseAndKoreanDoNotGainASpace() {
+        assertEquals("彼女は待つそして", RpContinuation.join("彼女は待つ", "そして"))
+        assertEquals("안녕잘 가", RpContinuation.join("안녕", "잘 가"))
+    }
+
+    @Test fun japanesePunctuationHugsTheWordBeforeIt() {
+        assertEquals("彼女は待つ。", RpContinuation.join("彼女は待つ", "。"))
+    }
+
     @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)

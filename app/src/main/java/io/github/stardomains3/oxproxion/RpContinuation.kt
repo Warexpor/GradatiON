@@ -11,18 +11,19 @@ object RpContinuation {
      * Characters that hug the text before them: no space goes in front of these. Straight quotes
      * are left out on purpose: a reply that opens with `"` is starting new dialogue.
      */
-    private const val CLOSERS = ",.;:!?)]}%\u2026\u2019\u201D"
+    private const val CLOSERS = ",.;:!?)]}%\u2026\u2019\u201D。！？」』"
 
     /** Characters that hug the text after them: a reply that stops on one has more to say right after it. */
-    private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C"
+    private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C「『"
 
-    /** Sentence enders, and the markup/quotes that may trail one (`*She smiles.*`, `"Come in."`). */
-    private const val ENDERS = ".!?…"
-    private const val TRAILERS = "*_~\"')]’”"
+    /** Sentence enders, and the markup/quotes that may trail one (`*She smiles.*`, `"Come in."`, 「来て。」). */
+    private const val ENDERS = ".!?…。！？"
+    private const val TRAILERS = "*_~\"')]’”」』"
 
     /**
      * [base] followed by [addition], with a separator only where the model left none: a new
-     * paragraph after a finished sentence or closed action, a plain space after unfinished text.
+     * paragraph after a finished sentence or closed action, a plain space after unfinished
+     * text. A sentence in an unspaced script gets no space, and 。！？ count as sentence ends.
      */
     fun join(base: String, addition: String): String {
         if (addition.isEmpty()) return base
@@ -32,6 +33,21 @@ object RpContinuation {
         if (last.isWhitespace() || first.isWhitespace()) return base + addition
         if (first in CLOSERS || last in OPENERS) return base + addition
         val end = base.trimEnd { it in TRAILERS }.lastOrNull()
-        return if (end != null && end in ENDERS) "$base\n\n$addition" else "$base $addition"
+        if (end != null && end in ENDERS) return "$base\n\n$addition"
+        // Japanese, Chinese, Korean and the other unspaced scripts do not take a space between words.
+        if (unspaced(last) || unspaced(first)) return base + addition
+        return "$base $addition"
+    }
+
+    private fun unspaced(ch: Char): Boolean {
+        val script = Character.UnicodeScript.of(ch.code)
+        return script == Character.UnicodeScript.HAN ||
+            script == Character.UnicodeScript.HIRAGANA ||
+            script == Character.UnicodeScript.KATAKANA ||
+            script == Character.UnicodeScript.HANGUL ||
+            script == Character.UnicodeScript.THAI ||
+            script == Character.UnicodeScript.LAO ||
+            script == Character.UnicodeScript.KHMER ||
+            script == Character.UnicodeScript.MYANMAR
     }
 }

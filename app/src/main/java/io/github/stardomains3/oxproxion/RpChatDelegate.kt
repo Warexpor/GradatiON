@@ -59,7 +59,11 @@ class RpChatDelegate(
         } else {
             rpRepository.getActiveLorebook()
         }
-        return RpLore.select(book?.content.orEmpty(), scan)
+        val (charName, userName) = RpPromptEngine.chatNames(
+            if (isLlm) null else character?.name,
+            prefs.activeRpPersonaName()
+        )
+        return RpLore.select(book?.content.orEmpty(), scan, charName = charName, userName = userName)
     }
 
     fun cleanReply(text: String): String = RpReplyCleaner.clean(text)

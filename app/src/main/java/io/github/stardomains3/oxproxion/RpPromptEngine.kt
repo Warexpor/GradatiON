@@ -60,6 +60,20 @@ object RpPromptEngine {
         return body.trim().ifBlank { null }
     }
 
+    /**
+     * A reply that opens by echoing the scene note, with the story after it. The note on its
+     * own is left in place, so a reply that is only the echo is not wiped to nothing.
+     */
+    fun withoutLeadingSceneNote(text: String): String {
+        val trimmed = text.trim()
+        if (!trimmed.startsWith(SCENE_NOTE_OPEN)) return text
+        val from = SCENE_NOTE_OPEN.length
+        val end = trimmed.indexOf(SCENE_NOTE_CLOSE, from)
+        if (end < 0) return text
+        val rest = trimmed.substring(end + SCENE_NOTE_CLOSE.length).trim()
+        return rest.ifEmpty { trimmed }
+    }
+
     /** Scene-craft rules shared by every character reply. */
     private const val CRAFT =
         "- Never speak, act or decide for the user. End your turn where the user can respond.\n" +
@@ -91,6 +105,45 @@ object RpPromptEngine {
             .replace(Regex("""\{\{\s*char\s*\}\}|<BOT>""", RegexOption.IGNORE_CASE), charName)
             .replace(Regex("""\{\{\s*user\s*\}\}|<USER>""", RegexOption.IGNORE_CASE), userName)
     }
+
+    /**
+     * Like [expandMacros], but a blank name leaves its placeholder in place. Lore keys use this
+     * so a missing persona does not turn `{{user}}` into an empty key.
+     */
+    fun expandKnownMacros(text: String, charName: String, userName: String): String {
+        if (text.isEmpty() || (charName.isBlank() && userName.isBlank())) return text
+        var out = text
+        if (userName.isNotBlank()) {
+            out = Regex("""\{\{\s*random_user_(\d+)\s*\}\}""", RegexOption.IGNORE_CASE).replace(out) { match ->
+                standInName(match.groupValues[1].toIntOrNull() ?: 1, userName)
+            }
+        }
+        if (charName.isNotBlank()) {
+            out = out.replace(Regex("""\{\{\s*char\s*\}\}|<BOT>""", RegexOption.IGNORE_CASE)) { charName }
+        }
+        if (userName.isNotBlank()) {
+            out = out.replace(Regex("""\{\{\s*user\s*\}\}|<USER>""", RegexOption.IGNORE_CASE)) { userName }
+        }
+        return out
+    }
+
+    /** The names the prompt and the lore scan both use when the card or the persona has none. */
+    fun chatNames(charName: String?, userName: String?): Pair<String, String> =
+        (charName?.takeIf { it.isNotBlank() } ?: "GradatiON") to
+            (userName?.takeIf { it.isNotBlank() } ?: "the user")
+
+    /**
+     * Card text a lore scan keeps, short fields first. Speech style sits with the setting so a
+     * key that only appears in how they talk still matches after the chat is long.
+     */
+    fun loreCardFields(character: RpCharacter): List<String> = listOf(
+        character.scenario,
+        character.personality,
+        character.style,
+        character.greeting,
+        character.prompt,
+        character.instruction,
+    ).map { it.trim() }.filter { it.isNotEmpty() }
 
     /** Example dialogs: {{user}} is a stand-in, not the person in this chat. */
     fun expandExampleMacros(text: String, charName: String, realUserName: String): String =

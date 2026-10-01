@@ -36,7 +36,8 @@ object RpChatSummaries {
         previews: Map<Long, String>,
         llmName: String,
         noPreview: String,
-        startPrompt: String = noPreview
+        startPrompt: String = noPreview,
+        userName: String = ""
     ): List<RpChatSummary> {
         val byId = characters.associateBy { it.id }
         val groups = sessions
@@ -70,7 +71,7 @@ object RpChatSummaries {
                     sessionId = null,
                     character = c,
                     name = c.name,
-                    preview = tagline(c).ifBlank { startPrompt },
+                    preview = tagline(c, userName).ifBlank { startPrompt },
                     timestamp = 0L,
                     chats = 0,
                     isLlm = false
@@ -79,13 +80,18 @@ object RpChatSummaries {
         return talked + fresh
     }
 
-    /** The first line of what the card says about itself, for a character you have not talked to. */
-    fun tagline(c: RpCharacter): String =
-        listOf(c.personality, c.scenario, c.greeting)
+    /**
+     * The first line of what the card says about itself, for a character you have not talked to.
+     * {{char}} and {{user}} are the names, so the list does not show the placeholders.
+     */
+    fun tagline(c: RpCharacter, userName: String = ""): String {
+        val raw = listOf(c.personality, c.scenario, c.greeting)
             .firstNotNullOfOrNull { text -> text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() } }
             .orEmpty()
-            .replace(Regex("[*_#>`~]"), "")
-            .take(140)
+        val who = c.name.ifBlank { "GradatiON" }
+        val named = RpPromptEngine.expandMacros(raw, who, userName.ifBlank { "you" })
+        return named.replace(Regex("[*_#>`~]"), "").take(140)
+    }
 
     /** A stored message as one line of plain text: markdown marks and line breaks folded away. */
     fun previewOf(storedContent: String): String {

@@ -60,6 +60,25 @@ class RpReplyCleanerTest {
     }
 
     @Test
+    fun unwrapsAProseFenceAroundTheReply() {
+        assertEquals("*She waits.*", RpReplyCleaner.clean("```\n*She waits.*\n```"))
+        assertEquals("*She waits.*", RpReplyCleaner.clean("```markdown\n*She waits.*\n```"))
+    }
+
+    @Test
+    fun keepsAFencedProgram() {
+        val code = "```python\nprint(1)\n```"
+        assertEquals(code, RpReplyCleaner.clean(code))
+    }
+
+    @Test
+    fun dropsASceneNoteEchoedAtTheStart() {
+        val note = RpPromptEngine.sceneNote("stay tense")
+        assertEquals("*She waits.*", RpReplyCleaner.clean("$note\n*She waits.*"))
+        assertEquals(note, RpReplyCleaner.clean(note))
+    }
+
+    @Test
     fun keepsEmoji() {
         val cleaned = RpReplyCleaner.clean("Hi 😊 friend")
         assertTrue(cleaned.contains("😊"))

@@ -3971,8 +3971,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * What lore keys are matched against. The character's name, scenario, greeting, personality
-     * and description stay from the front, so a long chat does not forget the setting. Memory
+     * What lore keys are matched against. The character's name, scenario, personality, speech
+     * style, greeting and description stay from the front, so a long chat does not forget the
+     * setting or the way they talk. Memory
      * and this chat's facts share the rest of that pin, so a long Memory note cannot hide a fact.
      * [focus] is a beat that must still match after it leaves the recent window (the reply a
      * rewrite is changing). The open chat and [extra] (the line about to be sent, a scene
@@ -3984,19 +3985,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val recent = ArrayList<String>()
         val llm = sharedPreferencesHelper.isRpLlmMode()
         val char = if (llm) null else _activeRpCharacter.value
-        val userName = sharedPreferencesHelper.activeRpPersonaName().ifBlank { "the user" }
-        val charName = char?.name?.takeIf { it.isNotBlank() } ?: "GradatiON"
+        val (charName, userName) = RpPromptEngine.chatNames(char?.name, sharedPreferencesHelper.activeRpPersonaName())
         fun expand(text: String) = RpPromptEngine.expandMacros(text, charName, userName)
         if (char != null) {
             if (char.name.isNotBlank()) pinned += char.name
             val persona = sharedPreferencesHelper.activeRpPersonaName()
             if (persona.isNotBlank()) pinned += persona
-            // Scenario and personality before the long fields, so a clip keeps the setting and cuts the tail.
-            if (char.scenario.isNotBlank()) pinned += expand(char.scenario)
-            if (char.personality.isNotBlank()) pinned += expand(char.personality)
-            if (char.greeting.isNotBlank()) pinned += expand(char.greeting)
-            if (char.prompt.isNotBlank()) pinned += expand(char.prompt)
-            if (char.instruction.isNotBlank()) pinned += expand(char.instruction)
+            // Short fields first, so a clip keeps the setting and the way they talk, and cuts the tail.
+            RpPromptEngine.loreCardFields(char).forEach { pinned += expand(it) }
         } else {
             val persona = sharedPreferencesHelper.activeRpPersonaName()
             if (persona.isNotBlank()) pinned += persona

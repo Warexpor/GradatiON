@@ -16,9 +16,19 @@ object RpReplyCleaner {
     private val rewritePreamble = Regex(
         """(?i)^[ \t]*(?:\(OOC:[^\n]*Rewrite your last reply[^\n]*\)|here(?:'s| is) the (?:rewritten|new) (?:reply|version)[ \t]*:?|rewritten version[ \t]*:?)[ \t]*(?:\n+|$)"""
     )
+    /**
+     * A whole reply wrapped in a plain fence (or text/markdown). A fenced program stays, because
+     * that fence has a language. Local models often wrap the story this way.
+     */
+    private val proseFence = Regex(
+        """^```(?:text|markdown|md)?[ \t]*\r?\n(.*)\r?\n```\s*$""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    )
 
     fun clean(text: String): String {
-        var out = thinkRegex.replace(text, "")
+        var out = unwrapProseFence(text.trim())
+        out = RpPromptEngine.withoutLeadingSceneNote(out)
+        out = thinkRegex.replace(out, "")
         out = openThinkRegex.replace(out, "")
         // Some providers drop the opening tag and send only the closing one.
         if (out.contains("</think>")) out = out.substringAfterLast("</think>")
@@ -27,5 +37,10 @@ object RpReplyCleaner {
         // A stripped line leaves its blank neighbours behind.
         out = blankRuns.replace(out, "\n\n")
         return out.trim()
+    }
+
+    private fun unwrapProseFence(text: String): String {
+        val inner = proseFence.matchEntire(text)?.groupValues?.get(1)?.trim().orEmpty()
+        return inner.ifEmpty { text }
     }
 }

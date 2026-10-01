@@ -55,6 +55,43 @@ class RpPromptEngineTest {
     }
 
     @Test
+    fun loreCardFieldsKeepSpeechStyleWithTheSetting() {
+        val fields = RpPromptEngine.loreCardFields(
+            RpCharacter(
+                name = "Mira",
+                scenario = "docks",
+                personality = "bold",
+                style = "calls it Greyhaven",
+                greeting = "hi",
+                prompt = "long",
+                instruction = "never lie"
+            )
+        )
+        org.junit.Assert.assertEquals(
+            listOf("docks", "bold", "calls it Greyhaven", "hi", "long", "never lie"),
+            fields
+        )
+    }
+
+    @Test
+    fun chatNamesUseTheSameFallbacksAsThePrompt() {
+        org.junit.Assert.assertEquals("Mira" to "Alex", RpPromptEngine.chatNames("Mira", "Alex"))
+        org.junit.Assert.assertEquals("GradatiON" to "the user", RpPromptEngine.chatNames("  ", ""))
+    }
+
+    @Test
+    fun expandKnownMacrosLeavesABlankNameAlone() {
+        org.junit.Assert.assertEquals(
+            "Mira owes {{user}}.",
+            RpPromptEngine.expandKnownMacros("{{char}} owes {{user}}.", "Mira", "")
+        )
+        org.junit.Assert.assertEquals(
+            "{{char}} owes Alex.",
+            RpPromptEngine.expandKnownMacros("<BOT> owes <USER>.", "", "Alex")
+        )
+    }
+
+    @Test
     fun expandMacros_replacesCardPlaceholders() {
         val out = RpPromptEngine.expandMacros("{{char}} waves at {{ user }}. <BOT> knows <USER>.", "Mira", "Alex")
         org.junit.Assert.assertEquals("Mira waves at Alex. Mira knows Alex.", out)
