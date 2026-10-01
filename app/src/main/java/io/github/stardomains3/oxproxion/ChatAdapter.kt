@@ -913,6 +913,12 @@ class ChatAdapter(
             } else {
                 imageView.visibility = View.GONE
             }
+            // A photo sent on its own is just the picture, in a slim frame; no empty line under it.
+            val photoOnly = imageView.visibility == View.VISIBLE && rawUserContent.isBlank()
+            messageTextView.visibility = if (photoOnly) View.GONE else View.VISIBLE
+            val d = itemView.resources.displayMetrics.density
+            if (photoOnly) messageContainer.setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
+            else messageContainer.setPadding((16 * d).toInt(), (12 * d).toInt(), (16 * d).toInt(), (12 * d).toInt())
 
             copyButtonuser.setOnClickListener {
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

@@ -424,6 +424,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     }
                     selectedImageBytes = rawBytes  // Raw for send (EXIF intact)
                     selectedImageMime = "image/jpeg"
+                    previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
                     previewImageView.load(imageUri)  // Coil decodes off the main thread and honours EXIF
                     attachmentPreviewContainer.visibility = View.VISIBLE
 
@@ -1604,7 +1605,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 bottom + (14 * d).toInt()
             )
             if (atBottom && grew > 0) chatRecyclerView.post { chatRecyclerView.scrollBy(0, grew) }
-            listOfNotNull(attachmentPreviewContainer, extBG, fontSizeControlsContainer, root.findViewById(R.id.jumpToBottomButton)).forEach { v ->
+            listOfNotNull(extBG, fontSizeControlsContainer, root.findViewById(R.id.jumpToBottomButton)).forEach { v ->
                 val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
                 val base = chromeBaseMargins.getOrPut(v) { lp.bottomMargin }
                 if (lp.bottomMargin != base + bottom) {
@@ -3020,6 +3021,7 @@ $cleanContent
 
                 // Show audio attachment indicator
                 previewImageView.dispose()
+                previewImageView.scaleType = ImageView.ScaleType.CENTER_INSIDE
                 previewImageView.setImageResource(android.R.drawable.ic_media_play) // or use a custom ic_audio
                 attachmentPreviewContainer.visibility = View.VISIBLE
             } catch (e: Exception) {
@@ -3617,6 +3619,7 @@ $cleanContent
             }
             selectedImageBytes = bytes
             selectedImageMime = mime
+            previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
             previewImageView.load(uri)  // Coil decodes and downsamples off the main thread
             attachmentPreviewContainer.visibility = View.VISIBLE
             try {
@@ -4924,6 +4927,7 @@ $cleanContent
         // Set for ViewModel (enables bubble preview)
         viewModel.setPendingUserImageUri(pngUri.toString())
 
+        previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
         previewImageView.load(tempPngFile)
         attachmentPreviewContainer.visibility = View.VISIBLE
     }
