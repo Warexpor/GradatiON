@@ -18,7 +18,10 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.RandomAccessFile
+import java.nio.channels.FileChannel
+import java.nio.file.StandardOpenOption
 import java.util.UUID
 
 /**
@@ -174,9 +177,11 @@ object ScenePhoto {
     /**
      * Writes [bytes] to a side file, syncs it, then renames it over [destination].
      * A crash leaves the side file, not a truncated picture at the real name.
+     * The destination is never opened for writing: that truncates a finished picture
+     * before the new bytes are durable.
      */
     internal fun writeAtomically(destination: File, bytes: ByteArray) {
-        val dir = destination.parentFile ?: throw java.io.IOException("no directory")
+        val dir = destination.parentFile ?: throw IOException("no directory")
         dir.mkdirs()
         val tmp = File(dir, "${destination.name}.partial")
         try {
@@ -184,18 +189,50 @@ object ScenePhoto {
                 out.write(bytes)
                 out.fd.sync()
             }
-            if (!tmp.renameTo(destination)) {
-                // rename across devices fails. The copy has to reach disk before the side file
-                // is removed, or a kill in between leaves no picture.
-                FileOutputStream(destination).use { out ->
-                    tmp.inputStream().use { it.copyTo(out) }
-                    out.fd.sync()
-                }
-                tmp.delete()
+            if (!install(tmp, destination)) {
+                throw IOException("Could not replace ${destination.path}")
             }
-        } catch (e: Exception) {
-            tmp.delete()
-            throw e
+            syncDirectory(dir)
+        } finally {
+            if (tmp.exists()) tmp.delete()
+        }
+    }
+
+    /**
+     * Tests: the next [rename] returns false once, as a device that refuses to replace does.
+     * The finished picture at the destination must still be there afterwards.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun failNextRenameForTest() {
+        failRenameOnce.set(true)
+    }
+
+    private val failRenameOnce = ThreadLocal.withInitial { false }
+
+    private fun rename(from: File, to: File): Boolean {
+        if (failRenameOnce.get() == true) {
+            failRenameOnce.set(false)
+            return false
+        }
+        return from.renameTo(to)
+    }
+
+    /**
+     * [tmp] is a finished file in the same directory as [destination]. A rename that fails
+     * onto a finished picture leaves that picture. A torn file is not one, so it can be removed
+     * and the side file renamed into its place.
+     */
+    private fun install(tmp: File, destination: File): Boolean {
+        if (rename(tmp, destination)) return true
+        if (completeJpeg(destination)) return false
+        if (destination.exists() && !destination.delete()) return false
+        return rename(tmp, destination)
+    }
+
+    private fun syncDirectory(dir: File) {
+        try {
+            FileChannel.open(dir.toPath(), StandardOpenOption.READ).use { it.force(true) }
+        } catch (_: Exception) {
         }
     }
 

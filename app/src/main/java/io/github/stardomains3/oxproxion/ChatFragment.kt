@@ -4508,7 +4508,13 @@ $cleanContent
         }
     }
     override fun onPause() {
-        parkAskDraft(if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId())
+        // Ask parks per thread. Roleplay's unsent line is the mode draft, and it used to be
+        // written only when leaving the mode, so a kill while staying in Roleplay dropped it.
+        if (viewModel.isRpMode() && ::chatEditText.isInitialized) {
+            sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, chatEditText.text?.toString().orEmpty())
+        } else {
+            parkAskDraft(if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId())
+        }
         super.onPause()
     }
 

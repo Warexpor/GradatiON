@@ -44,6 +44,7 @@ class DbPrefQuarantineTest {
         assertFalse(DbPrefQuarantine.isRowScoped("custom_models"))
         assertFalse(DbPrefQuarantine.isRowScoped("bg_photo_version"))
         assertFalse(DbPrefQuarantine.isRowScoped("aside.3.rp_facts_4"))
+        assertFalse(DbPrefQuarantine.isRowScoped("chat_db_quarantine_due"))
     }
 
     @Test

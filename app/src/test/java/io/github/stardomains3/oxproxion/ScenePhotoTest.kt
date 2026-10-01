@@ -194,6 +194,38 @@ class ScenePhotoTest {
         assertFalse(File(dir, "done.jpg.partial").exists())
     }
 
+    @Test fun aFailedRenameLeavesTheFinishedPicture() {
+        val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "atomic-keep")
+        dir.mkdirs()
+        val dest = File(dir, "keep.jpg")
+        val original = tinyJpeg()
+        dest.writeBytes(original)
+        val replacement = ByteArray(original.size) { index ->
+            if (index == original.size / 2) 0x11 else original[index]
+        }
+        ScenePhoto.failNextRenameForTest()
+        try {
+            ScenePhoto.writeAtomically(dest, replacement)
+            throw AssertionError("replace should fail when the finished file cannot be renamed over")
+        } catch (_: java.io.IOException) {
+        }
+        assertTrue(original.contentEquals(dest.readBytes()))
+        assertTrue(ScenePhoto.completeJpeg(dest))
+        assertFalse(File(dir, "keep.jpg.partial").exists())
+    }
+
+    @Test fun aFailedRenameStillReplacesATornPicture() {
+        val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "atomic-torn")
+        dir.mkdirs()
+        val dest = File(dir, "torn.jpg")
+        val jpeg = tinyJpeg()
+        dest.writeBytes(jpeg.copyOf(4))
+        ScenePhoto.failNextRenameForTest()
+        ScenePhoto.writeAtomically(dest, jpeg)
+        assertTrue(jpeg.contentEquals(dest.readBytes()))
+        assertFalse(File(dir, "torn.jpg.partial").exists())
+    }
+
     private fun tinyJpeg(): ByteArray {
         val bmp = Bitmap.createBitmap(8, 4, Bitmap.Config.ARGB_8888)
         bmp.eraseColor(Color.DKGRAY)

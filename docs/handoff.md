@@ -1,3 +1,11 @@
+# Handoff (2026-10-01, recovery notes and picture replace)
+
+On `cursor/recovery-quarantine-retry-fc6a`, targeting `gradation/app-pass`.
+- A fresh chat database sets the old notes aside even when the previous file could not be moved (no aside copy) or was already gone. A kill before that rename, or a rename that does not commit, is tried again on the next launch. A database that already has rows is left alone, including its notes.
+- Replacing a portrait, a wallpaper, or a scene photo no longer opens the existing file for writing. A rename that fails leaves the finished picture. A file that was only half written is still replaced.
+- Roleplay's unsent line is written through when you leave the app, not only when you switch modes.
+- Phone: install over a build that already has chats (they should still open). Type a line in Roleplay, leave the app, kill it, and come back (the line is there). Replace a wallpaper that is already set.
+
 # Handoff (2026-10-01, chat stream cut)
 
 On `cursor/chat-stream-cut-a1c1`, targeting `gradation/app-pass`. Chat only:

@@ -193,10 +193,42 @@ class ChatDatabaseRecoveryTest {
         val prefs = SharedPreferencesHelper(ApplicationProvider.getApplicationContext<Application>())
         assertNull(prefs.recoveryPendingStamp())
         prefs.markRecoveryPending(99L)
+        prefs.markChatDbQuarantineDue()
         assertEquals(99L, prefs.recoveryPendingStamp())
+        assertTrue(prefs.isChatDbQuarantineDue())
         prefs.markChatDbRecovered()
         assertNull(prefs.recoveryPendingStamp())
+        assertFalse(prefs.isChatDbQuarantineDue())
         assertTrue(prefs.consumeChatDbRecovered())
+    }
+
+    @Test
+    fun anEmptyFreshDatabaseIsQuarantinedEvenWhenNothingWasMovedAside() {
+        // The old file could not be moved, so there is no aside copy. The new file is a
+        // recovered name, or the quarantine flag was set before Room created it.
+        assertTrue(AppDatabase.shouldQuarantineInterruptedRecovery(
+            databaseEmpty = true, asideExists = false, openedRecoveredFile = true, quarantineArmed = false
+        ))
+        assertTrue(AppDatabase.shouldQuarantineInterruptedRecovery(
+            databaseEmpty = true, asideExists = false, openedRecoveredFile = false, quarantineArmed = true
+        ))
+        assertTrue(AppDatabase.shouldQuarantineInterruptedRecovery(
+            databaseEmpty = true, asideExists = true, openedRecoveredFile = false, quarantineArmed = false
+        ))
+        // The original database opened and already has rows. Its notes stay.
+        assertFalse(AppDatabase.shouldQuarantineInterruptedRecovery(
+            databaseEmpty = false, asideExists = true, openedRecoveredFile = true, quarantineArmed = true
+        ))
+        // Nothing was replaced. An empty original is not a fresh file.
+        assertFalse(AppDatabase.shouldQuarantineInterruptedRecovery(
+            databaseEmpty = true, asideExists = false, openedRecoveredFile = false, quarantineArmed = false
+        ))
+        val prefs = SharedPreferencesHelper(ApplicationProvider.getApplicationContext<Application>())
+        prefs.markRecoveryPending(4L)
+        prefs.markChatDbQuarantineDue()
+        prefs.clearRecoveryPending()
+        assertNull(prefs.recoveryPendingStamp())
+        assertFalse(prefs.isChatDbQuarantineDue())
     }
 
     @Test
