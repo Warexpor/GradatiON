@@ -151,12 +151,13 @@ object HistoryList {
      * The line under a title. An unsent draft replaces the last message, unless [query]
      * already hits that message: the search result stays, and a title-only hit still
      * shows the draft so the unsent line is not hidden.
+     * The "You:" prefix is not the message. A search for that word used to hide the draft.
      */
     fun rowPreview(messageLine: String, draft: String, query: String, draftLabel: (String) -> String): String {
-        val folded = draft.replace(Regex("\\s+"), " ").trim()
+        val folded = foldSpace(draft)
         if (folded.isEmpty()) return messageLine
-        val needle = query.trim()
-        if (needle.isNotEmpty() && messageLine.contains(needle, ignoreCase = true)) return messageLine
+        val needle = foldSpace(query)
+        if (needle.isNotEmpty() && matchesBeyondLabel(messageLine, needle)) return messageLine
         val body = if (needle.isEmpty() || !folded.contains(needle, ignoreCase = true)) {
             if (folded.length <= DRAFT_LINE) folded else folded.take(DRAFT_LINE).trimEnd() + "…"
         } else {
@@ -165,13 +166,17 @@ object HistoryList {
         return draftLabel(body)
     }
 
-    /** Saved chats whose unsent text contains [query]. The unsaved slot has no row. */
+    /**
+     * Saved chats whose unsent text contains [query]. The unsaved slot has no row.
+     * A line break is a space, the same way the row draws the draft, so a search
+     * for the words on that row still finds the chat.
+     */
     fun draftMatchIds(drafts: Map<String, String>, query: String): Set<Long> {
-        val needle = query.trim()
+        val needle = foldSpace(query)
         if (needle.isEmpty()) return emptySet()
         return drafts.mapNotNullTo(HashSet()) { (key, text) ->
             val id = key.toLongOrNull() ?: return@mapNotNullTo null
-            if (id > 0L && text.contains(needle, ignoreCase = true)) id else null
+            if (id > 0L && foldSpace(text).contains(needle, ignoreCase = true)) id else null
         }
     }
 
@@ -218,7 +223,8 @@ object HistoryList {
         val parsed = preview(role, window, youLabel, photoLabel)
         // A slice of a photo's data URL is one long token. It is not a line of the chat.
         // A line with no spaces still is: a link, or Chinese, Japanese or Korean.
-        if (isChatLine(parsed) && parsed.contains(needle, ignoreCase = true)) {
+        // "You:" is added here. It is not a match for the word in that label.
+        if (isChatLine(parsed) && matchesBeyondLabel(parsed, needle)) {
             return clipMatch(parsed, needle)
         }
         val readable = lineFor(readableSource(window), needle)
@@ -228,16 +234,18 @@ object HistoryList {
     }
 
     /**
-     * Where to mark [query] in a row. Skips a short "You: " lead when the words after it
-     * also match, so the highlight lands on the message rather than the prefix.
+     * Where to mark [query] in a row. Skips a short "You: " or "Draft: " lead when the
+     * words after it also match, so the highlight lands on the message rather than the
+     * prefix. A hit that is only that prefix is not a match: the label is not the line.
      */
     fun emphasisAt(text: String, query: String): Int {
         val needle = query.trim()
         if (needle.isEmpty() || text.isEmpty()) return -1
-        val colon = text.indexOf(": ")
-        if (colon in 0..8) {
-            val later = text.indexOf(needle, startIndex = colon + 2, ignoreCase = true)
+        val labelEnd = historyLabelEnd(text)
+        if (labelEnd >= 0) {
+            val later = text.indexOf(needle, startIndex = labelEnd, ignoreCase = true)
             if (later >= 0) return later
+            return -1
         }
         return text.indexOf(needle, ignoreCase = true)
     }
@@ -300,6 +308,29 @@ object HistoryList {
             i++
         }
         return out.toString()
+    }
+
+    /** Spaces and line breaks are the same word break the row already draws. */
+    private fun foldSpace(text: String): String = WHITESPACE.replace(text, " ").trim()
+
+    /**
+     * True when [needle] is in the message, not only in the "You:" or "Draft:" label
+     * this list adds. Any other "Word:" is the message itself.
+     */
+    /** Index just after a "You: " or "Draft: " this list added, or -1 when the line has no such label. */
+    private fun historyLabelEnd(text: String): Int {
+        val colon = text.indexOf(": ")
+        if (colon !in 0..8) return -1
+        val label = text.substring(0, colon)
+        if (!label.equals("You", ignoreCase = true) && !label.equals("Draft", ignoreCase = true)) return -1
+        return colon + 2
+    }
+
+    private fun matchesBeyondLabel(text: String, needle: String): Boolean {
+        if (needle.isEmpty()) return false
+        val labelEnd = historyLabelEnd(text)
+        val body = if (labelEnd >= 0) text.substring(labelEnd) else text
+        return body.contains(needle, ignoreCase = true)
     }
 
     private fun clipMatch(text: String, needle: String): String {
