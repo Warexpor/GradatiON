@@ -353,20 +353,25 @@ object ScenePhoto {
      * The `UUID.jpg` in a stored message or a content URI. Anything else is left alone so a
      * caption that mentions the folder cannot delete a file.
      */
-    fun fileNameIn(slice: String): String? {
+    fun fileNameIn(slice: String): String? = fileNamesIn(slice).firstOrNull()
+
+    /** Every scene photo named in [slice], in order, once each. */
+    fun fileNamesIn(slice: String): List<String> {
+        if (slice.isEmpty()) return emptyList()
+        val found = ArrayList<String>(2)
         var from = 0
         while (from < slice.length) {
             val i = slice.indexOf(FILE_MARKER, from)
-            if (i < 0) return null
+            if (i < 0) break
             val start = i + FILE_MARKER.length
             val end = start + FILE_NAME_LENGTH
             if (end <= slice.length) {
                 val name = slice.substring(start, end)
-                if (isSceneFileName(name)) return name
+                if (isSceneFileName(name) && name !in found) found.add(name)
             }
             from = start
         }
-        return null
+        return found
     }
 
     fun isSceneFileName(name: String): Boolean = SCENE_FILE.matches(name)

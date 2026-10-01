@@ -58,4 +58,91 @@ object RpSwipeRules {
         val next = alts + currentText
         return next to next.lastIndex
     }
+
+    /** A file link worth remembering. A data URL is not one, and a blank is no picture. */
+    fun pictureUriOf(imageUri: String?): String {
+        val uri = imageUri?.trim().orEmpty()
+        if (uri.isEmpty() || uri.startsWith("data:", ignoreCase = true)) return ""
+        return uri
+    }
+
+    /** True once every version has a picture slot, including a blank one. */
+    fun picturesTracked(pictureUris: List<String>, altCount: Int): Boolean =
+        altCount > 0 && pictureUris.size == altCount
+
+    /**
+     * The file for [index], or null when this save does not remember pictures and the one
+     * already on the reply should stay. A blank string is a version with no picture.
+     */
+    fun pictureForAlt(pictureUris: List<String>, altCount: Int, index: Int): String? {
+        if (!picturesTracked(pictureUris, altCount)) return null
+        return pictureUris.getOrElse(index) { "" }
+    }
+
+    /**
+     * Remember [currentPicture] on the version being stashed. An older save that never
+     * stored pictures, and whose reply has no file, is left alone so swiping still keeps
+     * the JPEG already on that reply. Once a file is known, every existing version shares
+     * it: that is what those versions were already showing.
+     */
+    fun stashAlt(
+        alts: List<String>,
+        pictureUris: List<String>,
+        selectedIndex: Int,
+        currentText: String,
+        currentPicture: String,
+    ): Triple<List<String>, List<String>, Int> {
+        if (!picturesTracked(pictureUris, alts.size) && currentPicture.isEmpty()) {
+            val (nextAlts, nextIndex) = stashCurrentAlt(alts, selectedIndex, currentText)
+            return Triple(nextAlts, pictureUris, nextIndex)
+        }
+        val base = if (picturesTracked(pictureUris, alts.size)) {
+            pictureUris.toMutableList()
+        } else {
+            MutableList(alts.size) { currentPicture }
+        }
+        if (alts.getOrNull(selectedIndex) == currentText) {
+            if (selectedIndex in base.indices) base[selectedIndex] = currentPicture
+            return Triple(alts, base, selectedIndex)
+        }
+        if (alts.lastOrNull() == currentText) {
+            base[base.lastIndex] = currentPicture
+            return Triple(alts, base, alts.lastIndex)
+        }
+        return Triple(alts + currentText, base + currentPicture, alts.size)
+    }
+
+    /**
+     * The new version starts with no picture. The file is filled in when the reply lands.
+     * An older save that is not tracking pictures stays that way.
+     */
+    fun appendAlt(
+        alts: List<String>,
+        pictureUris: List<String>,
+        text: String,
+    ): Triple<List<String>, List<String>, Int> {
+        if (alts.isNotEmpty() && !picturesTracked(pictureUris, alts.size)) {
+            val next = alts + text
+            return Triple(next, pictureUris, next.lastIndex)
+        }
+        val next = alts + text
+        return Triple(next, pictureUris + "", next.lastIndex)
+    }
+
+    /** Put [picture] on the selected version. A blank does not wipe a file a partial reply lacks. */
+    fun notePicture(
+        alts: List<String>,
+        pictureUris: List<String>,
+        index: Int,
+        picture: String,
+    ): List<String> {
+        if (alts.isEmpty() || picture.isEmpty()) return pictureUris
+        val at = index.coerceIn(0, alts.lastIndex)
+        if (picturesTracked(pictureUris, alts.size)) {
+            if (pictureUris[at] == picture) return pictureUris
+            return pictureUris.toMutableList().also { it[at] = picture }
+        }
+        if (alts.size != 1) return pictureUris
+        return listOf(picture)
+    }
 }
