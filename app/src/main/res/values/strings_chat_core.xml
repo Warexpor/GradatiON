@@ -18,6 +18,7 @@
     <string name="error_lan_cert_changed">The local server\'s certificate changed. Turn Trust self-signed certificates off and on to accept the new one.</string>
     <string name="notice_chat_db_recovered">Your chat history couldn\'t be opened, so it was set aside and a fresh one started.</string>
     <string name="notice_chat_open_failed">This chat couldn\'t be opened</string>
+    <string name="notice_chat_still_opening">Wait for the chat to open</string>
     <string name="notice_chat_save_failed">This chat couldn\'t be saved</string>
     <string name="notice_history_load_failed">History couldn\'t be loaded</string>
     <string name="error_tool_followup_limit">Tool follow-up recursion limit reached.</string>

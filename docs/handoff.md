@@ -1,3 +1,9 @@
+# Handoff (2026-10-01, chat send while a chat is opening)
+
+On `cursor/chat-send-while-opening-0ddc`, targeting `gradation/app-pass`. Chat only:
+- Send while another chat is still opening (History, or a mode change that has not landed) keeps the line in the composer and says to wait. It used to report success immediately, so the field cleared and an open edit closed, and the line was then added to whichever chat finished loading. Stop could not cancel that turn, because it had not started.
+- Phone: type a line, open another chat, and tap Send before the new chat appears (the line stays, and it is not in the chat that opens). Edit a message, switch chats, and tap Send in that moment (Editing stays on the chat you left, and Cancel still puts that turn back).
+
 # Handoff (2026-10-01, Cursor request ids)
 
 On `cursor/code-cursor-request-ids-387f`, targeting `gradation/app-pass`. Code mode only:
