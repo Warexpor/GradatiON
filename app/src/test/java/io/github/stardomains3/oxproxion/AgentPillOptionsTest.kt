@@ -14,6 +14,22 @@ class AgentPillOptionsTest {
         assertTrue(opts.any { it.second == HarnessKind.CLAUDE_CODE })
         assertTrue(opts.none { it.second == HarnessKind.CUSTOM })
         assertEquals(HarnessKind.entries.size - 1, opts.size) // all except CUSTOM
+        assertEquals("Cursor Agent", opts.first { it.second == HarnessKind.CURSOR_CLI }.first)
+    }
+
+    @Test fun cursorAgentLabelReplacesStaleBridgeName() {
+        val live = listOf(
+            HarnessInfo("cursor-cli", "Cursor CLI", true),
+            HarnessInfo("cursor-agent", "cursor-agent", false)
+        )
+        val opts = AgentPillOptions.resolve(live, HarnessKind.CURSOR_CLI)
+        assertEquals(
+            listOf(
+                "Cursor Agent" to HarnessKind.CURSOR_CLI,
+                "Cursor Agent" to HarnessKind.CURSOR_CLI
+            ),
+            opts
+        )
     }
 
     @Test fun liveListPreferredWhenPresent() {

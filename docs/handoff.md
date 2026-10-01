@@ -388,7 +388,7 @@ The full suite (426 tests) passed at b9789d9. Dev APK `GradatiON-dev-b9789d9.apk
 ## UI clip pass (2026-09-27, fresh screenshots, not the old checklist)
 Clipped labels, verified with the screenshot tests that cover each screen:
 - RP settings Facts switch wrapped so "Your Memory note is left alone." is fully visible.
-- Add-machine dialog wraps agent pills (Grok Build, Cursor CLI, Pi were off the card) and shows the
+- Add-machine dialog wraps agent pills (Grok Build, Cursor Agent, Pi were off the card) and shows the
   full bridge example `wss://studio.tailnet.ts.net:7878/v1` under the address field.
 - Code settings Demo machine row shows "nothing leaves the phone."
 - Lorebook editor shows "Always-on lore, then [keys: word, phrase] blocks" under the field. It was a

@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 /*
  * Code mode core model. Harness-agnostic: every harness (Claude Code, Codex, OpenCode, Grok Build,
- * Cursor CLI, Pi, anything speaking ACP) is mapped onto these few concepts by a [HarnessAdapter],
+ * Cursor Agent, Pi, anything speaking ACP) is mapped onto these few concepts by a [HarnessAdapter],
  * and the UI only ever renders these. See docs/code-mode-plan.md for the full design.
  *
  *   CodeHost     a machine the user controls, reached through a bridge (or directly)
@@ -22,12 +22,22 @@ enum class HarnessKind(val id: String, val displayName: String, val shortName: S
     CODEX("codex", "Codex CLI", "Codex"),
     OPENCODE("opencode", "OpenCode", "OpenCode"),
     GROK_BUILD("grok-build", "Grok Build", "Grok"),
-    CURSOR_CLI("cursor-cli", "Cursor CLI", "Cursor"),
+    /** Wire id stays `cursor-cli`. The product name is Cursor Agent (`cursor-agent` / `agent acp`). */
+    CURSOR_CLI("cursor-cli", "Cursor Agent", "Cursor"),
     PI("pi", "Pi", "Pi"),
     CUSTOM("custom", "Custom agent", "Agent");
 
     companion object {
-        fun fromId(id: String?): HarnessKind = entries.find { it.id == id } ?: CUSTOM
+        /**
+         * Ids a bridge may report for [CURSOR_CLI] besides the canonical wire id `cursor-cli`.
+         * Outbound frames still send [CURSOR_CLI.id].
+         */
+        private val CURSOR_ALIASES = setOf("cursor-agent", "cursor")
+
+        fun fromId(id: String?): HarnessKind {
+            entries.find { it.id == id }?.let { return it }
+            return if (id in CURSOR_ALIASES) CURSOR_CLI else CUSTOM
+        }
     }
 }
 
@@ -42,6 +52,14 @@ data class HarnessInfo(
     val models: List<String> = emptyList()
 ) {
     val kind: HarnessKind get() = HarnessKind.fromId(id)
+
+    /**
+     * Label in pickers and machine detail. Cursor Agent always uses [HarnessKind.displayName]
+     * so a bridge that still sends the old "Cursor CLI" string does not keep that name.
+     * Other harnesses keep the name the bridge sent.
+     */
+    val label: String
+        get() = if (kind == HarnessKind.CURSOR_CLI) kind.displayName else name
 }
 
 /** One entry from `bridge/browse` (folder picker). */

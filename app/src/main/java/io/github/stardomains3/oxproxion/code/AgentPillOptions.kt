@@ -10,7 +10,7 @@ object AgentPillOptions {
         if (live.isEmpty()) {
             return HarnessKind.entries.filter { it != HarnessKind.CUSTOM }.map { it.displayName to it }
         }
-        val opts = live.map { it.name to it.kind }.toMutableList()
+        val opts = live.map { it.label to it.kind }.toMutableList()
         if (opts.none { it.second == selected }) {
             opts.add(0, selected.displayName to selected)
         }

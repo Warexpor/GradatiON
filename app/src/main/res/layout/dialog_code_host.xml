@@ -140,7 +140,7 @@
             android:text="@string/code_host_agent_label"
             android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
-        <!-- Wrap: a scrollbar-less row was clipping Grok Build, Cursor CLI and Pi off the card. -->
+        <!-- Wrap: a scrollbar-less row was clipping Grok Build, Cursor Agent and Pi off the card. -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/codeHostAgents"
             android:layout_width="match_parent"
