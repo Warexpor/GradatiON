@@ -109,6 +109,9 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_CHAT_FORK_PREFIX = "chat_fork_"
         private const val KEY_CHAT_FORK_INDEX_PREFIX = "chat_fork_idx_"
         private const val KEY_CHAT_FORK_ANCHOR_PREFIX = "chat_fork_anchor_"
+        /** Composer edit is waiting to be sent. Separate from the fork so a regenerate does not look like one. */
+        private const val KEY_CHAT_FORK_EDITING_PREFIX = "chat_fork_editing_"
+        private const val KEY_CHAT_FORK_EDIT_DRAFT_PREFIX = "chat_fork_edit_draft_"
         private const val KEY_VOLUME_SCROLL = "volume_scroll_enabled"
         private const val KEY_ENABLED_TOOLS = "enabled_tools"
         private const val KEY_TOOLS_ENABLED = "tools_enabled_preference"
@@ -680,7 +683,37 @@ class SharedPreferencesHelper(context: Context) {
             remove("$KEY_CHAT_FORK_INDEX_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId")
         }
+    }
+
+    /**
+     * The composer cut a turn and is waiting to send the replacement. [draft] is the line
+     * that was already in the field. A kill before Cancel still has to put that line back.
+     */
+    fun setChatForkEditing(sessionId: Long, editing: Boolean, draft: String?) {
+        mainPrefs.edit(commit = true) {
+            if (!editing) {
+                remove("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId")
+                remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId")
+            } else {
+                putBoolean("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId", true)
+                putString(
+                    "$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId",
+                    draft.orEmpty().take(ComposerDrafts.MAX_CHARS),
+                )
+            }
+        }
+    }
+
+    fun isChatForkEditing(sessionId: Long): Boolean =
+        mainPrefs.getBoolean("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId", false)
+
+    /** The pre-edit composer line, or null when this chat is not waiting on an edit. */
+    fun getChatForkEditDraft(sessionId: Long): String? {
+        if (!isChatForkEditing(sessionId)) return null
+        return mainPrefs.getString("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId", "") ?: ""
     }
 
     /**
@@ -694,6 +727,8 @@ class SharedPreferencesHelper(context: Context) {
             remove("$KEY_CHAT_FORK_INDEX_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId")
             remove("$KEY_RP_SWIPE_PREFIX$sessionId")
             remove("rp_facts_$sessionId")
             if (sessionId in pins) {
@@ -719,6 +754,8 @@ class SharedPreferencesHelper(context: Context) {
                 remove("$KEY_CHAT_FORK_INDEX_PREFIX$id")
                 remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$id")
                 remove("$KEY_CHAT_FORK_PREFIX$id")
+                remove("$KEY_CHAT_FORK_EDITING_PREFIX$id")
+                remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$id")
                 remove("$KEY_RP_SWIPE_PREFIX$id")
                 remove("rp_facts_$id")
                 if (!entry.facts.isNullOrBlank()) putString("rp_facts_$id", entry.facts)

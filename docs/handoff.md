@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, chat edit cancel)
+
+On `cursor/chat-edit-cancel-b292`, targeting `gradation/app-pass`. Chat only:
+- Edit on a message you sent cuts that turn out immediately and used to leave it only as a fork with no control until a new reply existed. The composer now says Editing, with Cancel. Cancel puts the turn back and restores the line that was already in the field (including a blank). Sending the replacement hides that row; the older turn stays on the version switch. A regenerate is not this state. Roleplay edit is unchanged.
+- The pre-edit line is kept with the fork, including when a chat that has not been saved yet is saved after you have already left, so coming back still offers Cancel. A field that was changed after a kill, when that line was not kept, stays as a draft instead of being wiped.
+- Phone: type a line, edit an earlier message (the turn leaves, Editing shows, your line is gone). Cancel (the turn and your line are back). Edit again and send (Editing leaves, and the reply can switch back to the old turn).
+
 # Handoff (2026-10-01, forks, swipes, and picture files)
 
 On `cursor/stability-side-data-a1aa`, targeting `gradation/app-pass`.

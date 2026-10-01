@@ -235,6 +235,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private lateinit var copyChatButton: MaterialButton
     private lateinit var buttonsRow2: LinearLayout
     private lateinit var chatInputContainer: LinearLayout
+    private lateinit var composerEditBanner: View
+    /** Bumped when an edit is cancelled so a photo still loading does not land in the field. */
+    private var editPhotoGen = 0
     private lateinit var rpComposerExtras: LinearLayout
     private lateinit var rpReminderButton: MaterialButton
     private lateinit var rpStreamButton: MaterialButton
@@ -509,6 +512,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         printButton =   view.findViewById(R.id.printButton)
         buttonsRow2 = view.findViewById(R.id.buttonsRow2)
         chatInputContainer = view.findViewById(R.id.chatInputContainer)
+        composerEditBanner = view.findViewById(R.id.composerEditBanner)
+        view.findViewById<View>(R.id.composerEditCancel).setOnClickListener { cancelComposerEdit() }
         rpComposerExtras = view.findViewById(R.id.rpComposerExtras)
         rpReminderButton = view.findViewById(R.id.rpReminderButton)
         rpStreamButton = view.findViewById(R.id.rpStreamButton)
@@ -524,6 +529,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (::chatAdapter.isInitialized) {
                 chatAdapter.notifyDataSetChanged()
             }
+            refreshEditBanner()
         }
         expandedButtonContainer = view.findViewById(R.id.expandedButtonContainer)
         leftButtonContainer = view.findViewById(R.id.leftButtonContainer)
@@ -907,6 +913,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             presetsButton.isVisible = !isPresetsOnChatScreen && !isTopBarEnabled
         }
         viewModel.chatMessages.observe(viewLifecycleOwner) { messages ->
+            refreshEditBanner()
             chatAdapter.continuingFrom = viewModel.continuationText
             chatAdapter.setMessages(messages)
             restoreListSpot()
@@ -2621,6 +2628,7 @@ $cleanContent
                             }
                             if (!isAdded) return@launch
                             if (accepted) {
+                                viewModel.finishComposerEdit()
                                 forgetAskDraft(draftSession)
                                 clearStagedAttachment()
                             } else {
@@ -2628,6 +2636,7 @@ $cleanContent
                             }
                         }
                     } else if (viewModel.sendUserMessage(JsonPrimitive(substitutedPrompt), substitutedSystemPrompt)) {
+                        viewModel.finishComposerEdit()
                         clearComposerAfterSend()
                     }
                 }
@@ -3591,11 +3600,47 @@ $cleanContent
         }
     }
 
+    /** Edit is waiting on a replacement. Hidden once that send lands, or after Cancel. */
+    private fun refreshEditBanner() {
+        if (!::composerEditBanner.isInitialized) return
+        val show = viewModel.isComposerEditOpen()
+        if (composerEditBanner.isVisible == show) return
+        composerEditBanner.isVisible = show
+    }
+
+    /**
+     * Put the cut turn back and restore the line that was in the field before Edit.
+     * A photo load that is still running is dropped; the picture stays on the message.
+     */
+    private fun cancelComposerEdit() {
+        if (!viewModel.isComposerEditOpen()) return
+        editPhotoGen++
+        val canceled = viewModel.cancelComposerEdit() ?: return
+        Haptics.tap(composerEditBanner)
+        val next = ChatEdit.composerAfterCancel(
+            canceled.rememberedDraft,
+            chatEditText.text?.toString().orEmpty(),
+            canceled.restoredUserText,
+        )
+        clearStagedAttachment(discardSceneFile = true)
+        photoSendInFlight = false
+        suppressDraftDirty = true
+        chatEditText.setText(next)
+        if (next.isNotEmpty()) chatEditText.setSelection(next.length)
+        suppressDraftDirty = false
+        askComposerDirty = true
+        parkAskDraft(viewModel.getCurrentSessionId())
+        updateSendButtonChrome()
+        if (viewModel.isRpMode()) applyRpComposerHint()
+        refreshEditBanner()
+    }
+
     /**
      * Edit puts the caption back, and the photo with it. The thread is cut immediately so a
      * second send cannot land on the old turn; the picture is staged as soon as it is read.
      */
     private fun beginEditMessage(position: Int, text: String) {
+        val previousDraft = chatEditText.text?.toString().orEmpty()
         val message = viewModel.chatMessages.value?.getOrNull(position)
         val editPhoto = ScenePhoto.editPhoto(
             message?.content?.let { MessageContent.imageUrl(it) },
@@ -3607,6 +3652,7 @@ $cleanContent
             viewModel.truncateForRpEdit(position)
         } else {
             viewModel.stashAndTruncateFrom(position, anchorAssistantIndex = -1)
+            viewModel.openComposerEdit(previousDraft)
         }
         chatEditText.setText(text)
         chatEditText.setSelection(text.length)
@@ -3614,12 +3660,14 @@ $cleanContent
         chatEditText.showKeyboard()
         viewModel.autoSaveChat()
         updateSendButtonChrome()
+        refreshEditBanner()
         if (editPhoto == null) return
         val appContext = requireContext().applicationContext
+        val photoGen = ++editPhotoGen
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val staged = withContext(Dispatchers.IO) { loadEditPhoto(appContext, editPhoto) }
-                if (!isAdded) return@launch
+                if (!isAdded || photoGen != editPhotoGen || !viewModel.isComposerEditOpen()) return@launch
                 if (staged == null) {
                     GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_image))
                     return@launch

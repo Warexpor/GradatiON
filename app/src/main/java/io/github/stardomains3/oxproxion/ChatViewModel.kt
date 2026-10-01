@@ -440,6 +440,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var forkAnchorAssistantIndex: Int = -1
     private var stashedForkTail: List<FlexibleMessage> = emptyList()
     private var forkDisplayVariant: Int = 1
+    /**
+     * Set while Edit has cut a turn and the replacement has not been sent. A regenerate
+     * uses the fork too, and must not show Cancel. Keyed like [ComposerDrafts].
+     */
+    private var composerEditKey: String? = null
+    /** The composer line from before Edit, so Cancel can put it back. */
+    private val composerEditDrafts = HashMap<String, String>()
 
     data class ForkNavState(
         val variantIndex: Int,
@@ -738,6 +745,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * [promoted] is an unsaved chat receiving the id the database just minted.
      */
     private fun assignOpenSession(id: Long?, promoted: Boolean = false) {
+        // An edit started before the first save. The unsaved slot and the new id are the same chat.
+        if (promoted && id != null && composerEditKey == ComposerDrafts.NEW) {
+            val draft = composerEditDrafts.remove(ComposerDrafts.NEW)
+            composerEditKey = ComposerDrafts.key(id)
+            if (draft != null) composerEditDrafts[composerEditKey!!] = draft
+            sharedPreferencesHelper.setChatForkEditing(id, true, draft.orEmpty())
+        }
         currentSessionId = id
         if (_sessionReady.value != true) return
         val publish = {
@@ -838,6 +852,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val draftAtCapture: Long?,
         val fork: CapturedFork?,
         val swipe: RpSwipeState?,
+        /**
+         * The line already in the field when Edit cut the turn. Null when this save is not
+         * that edit. Empty is a blank field, which Cancel still has to put back.
+         */
+        val editDraft: String?,
     )
 
     private fun captureSnapshot(): ChatPersistSnapshot {
@@ -859,6 +878,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 messages = stashedForkTail.map { it.copy() },
             ),
             swipe = rpSwipeState.takeIf { it.alts.isNotEmpty() },
+            editDraft = composerEditDrafts[ComposerDrafts.key(id)]
+                .takeIf { composerEditKey == ComposerDrafts.key(id) },
         )
     }
 
@@ -965,6 +986,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             persistCapturedFork(sessionId, snap.fork)
             persistCapturedSwipe(sessionId, snap.swipe)
             parkMintedDraft(sessionId, snap)
+            // Edit was cut before this chat had a row. The flag has to land with the fork,
+            // or coming back shows the other branch with no Cancel.
+            if (snap.editDraft != null) {
+                sharedPreferencesHelper.setChatForkEditing(sessionId, true, snap.editDraft)
+            }
         }
         if (
             ChatSaveGate.decide(
@@ -2293,6 +2319,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * One fork per chat: restoring swaps the active tail with the stash.
      */
     fun stashAndTruncateFrom(startIndex: Int, anchorAssistantIndex: Int = startIndex) {
+        // A new cut replaces an edit that had not been sent. Edit marks itself again just after.
+        clearComposerEditMark()
         val current = _chatMessages.value?.toMutableList() ?: return
         if (startIndex < 0 || startIndex >= current.size) return
         val discarded = current.subList(startIndex, current.size)
@@ -2308,6 +2336,74 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         current.subList(startIndex, current.size).clear()
         _chatMessages.value = current
+    }
+
+    /** True while Edit has cut a turn and the replacement has not been sent. */
+    fun isComposerEditOpen(): Boolean = ChatEdit.awaitingSend(
+        marked = composerEditKey != null,
+        sameChat = composerEditKey == ComposerDrafts.key(currentSessionId),
+        roleplay = isRpMode(),
+        hasFork = _hasChatFork.value == true,
+        variant = forkDisplayVariant,
+        forkIndex = forkIndex,
+        messageCount = _chatMessages.value?.size ?: 0,
+    )
+
+    /**
+     * Call after the turn has been cut. [draft] is whatever was already in the field.
+     * A second call for the same open edit does not replace that line with the message text.
+     */
+    fun openComposerEdit(draft: String) {
+        if (isRpMode()) return
+        if (_hasChatFork.value != true || forkDisplayVariant != 2 || forkIndex < 0) return
+        if ((_chatMessages.value?.size ?: 0) > forkIndex) return
+        val key = ComposerDrafts.key(currentSessionId)
+        if (composerEditKey != key || key !in composerEditDrafts) composerEditDrafts[key] = draft
+        composerEditKey = key
+        currentSessionId?.let { id ->
+            sharedPreferencesHelper.setChatForkEditing(id, true, composerEditDrafts[key].orEmpty())
+        }
+    }
+
+    /** The replacement was sent, or a different cut replaced this one. The fork itself can stay. */
+    fun finishComposerEdit() = clearComposerEditMark()
+
+    private fun clearComposerEditMark() {
+        val id = currentSessionId
+        if (composerEditKey == null && (id == null || !sharedPreferencesHelper.isChatForkEditing(id))) {
+            composerEditDrafts.remove(ComposerDrafts.NEW)
+            return
+        }
+        composerEditKey = null
+        if (id != null) {
+            composerEditDrafts.remove(ComposerDrafts.key(id))
+            sharedPreferencesHelper.setChatForkEditing(id, false, null)
+        }
+        composerEditDrafts.remove(ComposerDrafts.NEW)
+    }
+
+    data class EditCancel(val rememberedDraft: String?, val restoredUserText: String)
+
+    /**
+     * Put the cut turn back and return the line the field should show. Null when there
+     * is nothing to cancel (the edit was already sent, or this is not the chat it belongs to).
+     */
+    fun cancelComposerEdit(): EditCancel? {
+        if (!isComposerEditOpen()) return null
+        val id = currentSessionId
+        val key = ComposerDrafts.key(id)
+        val remembered = when {
+            key in composerEditDrafts -> composerEditDrafts.remove(key)
+            id != null -> sharedPreferencesHelper.getChatForkEditDraft(id)
+            else -> null
+        }
+        val index = forkIndex
+        composerEditKey = null
+        composerEditDrafts.remove(ComposerDrafts.NEW)
+        id?.let { sharedPreferencesHelper.setChatForkEditing(it, false, null) }
+        restoreChatFork()
+        val restored = _chatMessages.value?.getOrNull(index)?.let { getMessageText(it.content) }.orEmpty()
+        return EditCancel(remembered, restored)
     }
 
     fun truncateHistory(startIndex: Int, anchorAssistantIndex: Int = startIndex) {
@@ -2388,6 +2484,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         forkAnchorAssistantIndex = -1
         stashedForkTail = emptyList()
         forkDisplayVariant = 1
+        composerEditKey = null
         _hasChatFork.value = false
     }
     fun restoreChatFork() {
@@ -2480,6 +2577,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             forkAnchorAssistantIndex = msgs.indices.firstOrNull { i ->
                 i >= idx && msgs[i].role == "assistant" && !isAssistantPlaceholder(msgs[i])
             } ?: idx
+        }
+        val editing = sharedPreferencesHelper.isChatForkEditing(sessionId)
+        val size = _chatMessages.value?.size ?: 0
+        if (editing && forkDisplayVariant == 2 && size <= forkIndex) {
+            val key = ComposerDrafts.key(sessionId)
+            composerEditKey = key
+            if (key !in composerEditDrafts) {
+                sharedPreferencesHelper.getChatForkEditDraft(sessionId)?.let { composerEditDrafts[key] = it }
+            }
+        } else if (editing) {
+            sharedPreferencesHelper.setChatForkEditing(sessionId, false, null)
         }
         _hasChatFork.postValue(true)
     }
