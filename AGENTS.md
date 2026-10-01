@@ -85,3 +85,8 @@ need a version bump plus a migration, never a destructive fallback.
 - Add new prefs to `SharedPreferencesHelper`, or to `CodeStore` for Code mode, with a one-line doc comment.
 - Every UI change needs a screenshot test, or an update to an existing one.
 - Commit messages give a short summary line and a body that explains the why.
+- Keyboard (`ChatFragment.setupEdgeToEdge`): the IME is laid out frame by frame from its own animation
+  (`applyKb`: dock padding, list padding and, at the newest message, its scroll, all in one layout pass).
+  Don't go back to translating the chrome and handing off to layout at the end, and don't post any part of
+  it: every hand-off left a frame a step behind, which the user saw as a flash at the end of each slide.
+  Things that track the composer (`composerFade`, the empty-state mark) follow it in a pre-draw.
