@@ -196,6 +196,9 @@
     <string name="code_changes_revert_all_confirm">Ask to revert</string>
     <string name="code_changes_busy">Agent is busy. Try again when it finishes.</string>
     <string name="code_changes_prompt_commit">Please review the current uncommitted changes and commit them with an appropriate commit message. Do not push.</string>
+    <string name="code_changes_prompt_commit_file">Please review the uncommitted changes to %1$s and commit that file with an appropriate commit message. Leave other files alone. Do not push.</string>
+    <string name="code_changes_revert_file_title">Revert this file?</string>
+    <string name="code_changes_revert_file_message">The agent will be asked to restore %1$s to the last commit. Nothing is pushed.</string>
     <string name="code_changes_prompt_revert">Please revert the uncommitted changes to %1$s (restore that file to HEAD). Do not commit or push.</string>
     <plurals name="code_changes_prompt_revert_all">
         <item quantity="one">Please revert the uncommitted change to the tracked file in this workspace. Restore it to HEAD. Leave untracked files alone. Do not commit or push.</item>
@@ -210,6 +213,7 @@
     <string name="code_tool_full_output">Full output</string>
     <string name="code_tool_output_find_hint">Find in output</string>
     <string name="code_tool_output_truncated_hint">Showing the last 4,000 characters stored on the phone. The bridge has no full-log fetch yet.</string>
+    <string name="code_tool_output_truncated_head">Showing the first 4,000 characters stored on the phone. The bridge has no full-log fetch yet.</string>
 
     <!-- Diff viewer -->
     <string name="code_diff_counts">+%1$d  −%2$d</string>
@@ -248,11 +252,15 @@
     <string name="code_notice_stop_pending">Stop did not reach the host. Retrying…</string>
     <string name="code_notice_send_gave_up">Couldn\'t send your message. Check the connection and try again.</string>
     <string name="code_notice_resume_gave_up">Couldn\'t resume this session. Close and reopen it to try again.</string>
+    <string name="code_notice_images_unsupported">This agent can\'t take pictures. The text was sent without them.</string>
+    <string name="code_notice_images_only_unsupported">This agent can\'t take pictures.</string>
 
     <!-- Transport errors (resolved by CodeHub; the raw codes never reach the screen) -->
     <string name="code_error_invalid_address">Invalid address</string>
     <string name="code_error_token_rejected">The bridge rejected the pairing token</string>
     <string name="code_error_handshake">Handshake failed</string>
+    <string name="code_error_protocol">This bridge speaks a newer protocol than this app.</string>
+    <string name="code_error_auth_terminal">Sign in on the computer, then reconnect. This app can\'t open a login terminal.</string>
 
     <!-- Session loading states -->
     <string name="code_session_loading">Loading the session…</string>

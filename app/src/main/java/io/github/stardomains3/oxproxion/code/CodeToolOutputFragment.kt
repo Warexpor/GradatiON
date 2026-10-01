@@ -83,7 +83,17 @@ class CodeToolOutputFragment : Fragment(R.layout.fragment_code_tool_output) {
         toolbar.title = e.title
         toolbar.subtitle = e.detail?.takeIf { it.isNotBlank() }
         stored = e.output.orEmpty()
-        truncated.isVisible = ToolOutputText.isPhoneTailTruncated(stored)
+        when (ToolOutputText.keptEnd(stored)) {
+            ToolOutputText.KeptEnd.NONE -> truncated.isVisible = false
+            ToolOutputText.KeptEnd.HEAD -> {
+                truncated.isVisible = true
+                truncated.text = getString(R.string.code_tool_output_truncated_head)
+            }
+            ToolOutputText.KeptEnd.TAIL -> {
+                truncated.isVisible = true
+                truncated.text = getString(R.string.code_tool_output_truncated_hint)
+            }
+        }
         renderBody()
     }
 

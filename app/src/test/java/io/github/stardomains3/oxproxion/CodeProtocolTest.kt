@@ -940,4 +940,111 @@ class CodeProtocolTest {
         assertTrue(out.single() is AdapterOutput.Ignored)
         assertEquals(2L, acp.lastSeq("s1"))
     }
+
+    @Test fun stringRpcIdStillMatches() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":"12","result":{"stopReason":"end_turn"}}""")
+        val result = out.single() as AdapterOutput.Result
+        assertEquals(12L, result.id)
+        assertEquals("end_turn", result.result!!.jsonObject["stopReason"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun nonNumericStringIdIsIgnored() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":"nope","result":{}}""")
+        assertTrue(out.single() is AdapterOutput.Ignored)
+    }
+
+    @Test fun requestShapedSessionUpdateIsAcked() {
+        val frame = """{"jsonrpc":"2.0","id":3,"method":"session/update","params":{"sessionId":"s1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Hi"}}}}"""
+        val outs = acp.decode(frame)
+        val text = outs.filterIsInstance<AdapterOutput.Update>().single().update as CodeUpdate.TextChunk
+        assertEquals("Hi", text.chunk)
+        val reply = outs.filterIsInstance<AdapterOutput.Reply>().single().frame
+        assertTrue(reply.contains("\"id\":3"))
+        assertTrue(reply.contains("\"result\""))
+        assertFalse(reply.contains("error"))
+    }
+
+    @Test fun forwardedFileReadIsAnErrorResponse() {
+        val outs = acp.decode("""{"jsonrpc":"2.0","id":4,"method":"fs/read_text_file","params":{"path":"a.kt"}}""")
+        val reply = outs.single() as AdapterOutput.Reply
+        assertTrue(reply.frame.contains("-32601"))
+        assertTrue(reply.frame.contains("Method not found"))
+        assertTrue(reply.frame.contains("\"id\":4"))
+    }
+
+    @Test fun permissionRequestIsNotAutoReplied() {
+        val outs = acp.decode("""{"jsonrpc":"2.0","id":7,"method":"session/request_permission","params":{"sessionId":"s1","options":[]}}""")
+        assertTrue(outs.none { it is AdapterOutput.Reply })
+        assertTrue(outs.single() is AdapterOutput.Update)
+    }
+
+    @Test fun toolUpdateKeepsCommandWhenOnlyTheFolderArrives() {
+        val list = fold(listOf(
+            update(
+                """{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Bash","kind":"execute","status":"pending",
+                   "locations":[{"path":"/home/me/repo"}],"rawInput":{"command":"npm test"}}"""
+            ),
+            update(
+                """{"sessionUpdate":"tool_call_update","toolCallId":"t1","status":"in_progress",
+                   "locations":[{"path":"/home/me/repo"}]}"""
+            ),
+        ))
+        val tool = list.single() as CodeEvent.ToolCall
+        assertEquals("npm test", tool.detail)
+        assertEquals(ToolStatus.RUNNING, tool.status)
+    }
+
+    @Test fun toolUpdateReplacesCommandWhenANewOneArrives() {
+        val list = fold(listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Bash","kind":"execute","status":"pending","rawInput":{"command":"npm test"}}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"t1","status":"in_progress","rawInput":{"command":"npm test --watch"}}"""),
+        ))
+        assertEquals("npm test --watch", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
+    @Test fun readOutputKeepsTheHead() {
+        val body = "START-" + "x".repeat(AcpAdapter.MAX_OUTPUT)
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"r1","title":"Read","kind":"read","status":"completed",
+               "content":[{"type":"content","content":{"type":"text","text":"$body"}}]}"""
+        )))
+        val output = (list.single() as CodeEvent.ToolCall).output!!
+        assertTrue(output.startsWith("START-"))
+        assertTrue(output.endsWith("…"))
+        assertTrue(output.length < body.length)
+    }
+
+    @Test fun shellOutputKeepsTheTail() {
+        val body = "y".repeat(AcpAdapter.MAX_OUTPUT) + "-TAIL"
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Bash","kind":"execute","status":"completed",
+               "content":[{"type":"content","content":{"type":"text","text":"$body"}}]}"""
+        )))
+        val output = (list.single() as CodeEvent.ToolCall).output!!
+        assertTrue(output.endsWith("-TAIL"))
+        assertTrue(output.startsWith("…"))
+    }
+
+    @Test fun unifiedDiffContentBecomesFileDiff() {
+        val patch = "@@ -1 +1 @@\\n-old\\n+new\\n"
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"e1","title":"Edit","kind":"edit","status":"completed",
+               "content":[{"type":"diff","path":"a.kt","diff":"$patch"}]}"""
+        )))
+        val diff = list.filterIsInstance<CodeEvent.FileDiff>().single()
+        assertEquals("a.kt", diff.path)
+        assertEquals(1, diff.added)
+        assertEquals(1, diff.removed)
+        assertEquals("old", diff.lines.first { it.type == DiffLine.Type.DELETE }.text)
+        assertEquals("new", diff.lines.first { it.type == DiffLine.Type.ADD }.text)
+    }
+
+    @Test fun crlfFileContentsAreNotAFullRewrite() {
+        val same = Diff.between("hello\r\n", "hello\n")
+        assertTrue(same.isEmpty())
+        val changed = Diff.between("one\r\ntwo\r\n", "one\r\nthree\r\n")
+        assertEquals("two", changed.first { it.type == DiffLine.Type.DELETE }.text)
+        assertEquals("three", changed.first { it.type == DiffLine.Type.ADD }.text)
+        assertTrue(changed.none { it.text.contains('\r') })
+    }
 }

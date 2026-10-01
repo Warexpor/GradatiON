@@ -68,6 +68,12 @@ sealed class AdapterOutput {
     data class Gap(val sessionId: String, val afterSeq: Long) : AdapterOutput()
     /** Something the phone can't use (yet). Logged, never shown. */
     data class Ignored(val reason: String) : AdapterOutput()
+    /**
+     * A JSON-RPC response the phone owes the peer (empty ack for a request-shaped
+     * `session/update`, or method-not-found for a client call this app does not serve).
+     * Sent as-is. Permission requests are not these: Allow/Deny is the response.
+     */
+    data class Reply(val frame: String) : AdapterOutput()
 }
 
 /**
@@ -88,6 +94,8 @@ interface HarnessAdapter {
     val protocol: String
 
     fun initialize(id: Long): String
+    /** ACP `authenticate` for an agent-type method advertised by `initialize`. */
+    fun authenticate(id: Long, methodId: String): String
     fun newSession(id: Long, request: NewSessionRequest): String
     /** [afterSeq]: bridge replays only notifications with seq greater than this (null = full history). */
     fun loadSession(id: Long, sessionId: String, workspace: String, afterSeq: Long? = null): String

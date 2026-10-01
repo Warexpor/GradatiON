@@ -535,7 +535,12 @@ class CodeTranscriptAdapter(
         val full = v.findViewById<TextView>(R.id.codeToolFull)
         full.isVisible = open
         if (open) {
-            v.findViewById<TextView>(R.id.codeToolOutput).text = ToolOutputText.cardPreview(raw, OUTPUT_LINES)
+            val head = when (e.kind) {
+                ToolKind.READ, ToolKind.EDIT, ToolKind.DELETE, ToolKind.MOVE -> true
+                else -> false
+            }
+            v.findViewById<TextView>(R.id.codeToolOutput).text =
+                ToolOutputText.cardPreview(raw, OUTPUT_LINES, head = head)
             val hidden = (raw.lines().size - OUTPUT_LINES).coerceAtLeast(0)
             full.text = if (hidden > 0) {
                 v.context.getString(R.string.code_session_more_lines, hidden)

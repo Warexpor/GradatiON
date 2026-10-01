@@ -54,6 +54,10 @@ object CodeErrors {
     const val INVALID_ADDRESS = "code:invalid_address"
     const val TOKEN_REJECTED = "code:token_rejected"
     const val HANDSHAKE_FAILED = "code:handshake_failed"
+    /** Peer answered `initialize` with a protocol version this app does not speak. */
+    const val PROTOCOL_VERSION = "code:protocol_version"
+    /** The only advertised login needs a terminal, which the phone does not have. */
+    const val AUTH_TERMINAL = "code:auth_terminal"
 }
 
 /**
