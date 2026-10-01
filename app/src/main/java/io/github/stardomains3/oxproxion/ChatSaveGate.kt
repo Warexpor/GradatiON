@@ -3,6 +3,9 @@ package io.github.stardomains3.oxproxion
 /**
  * Pure decisions for chat persistence races (sessionEpoch / delete-while-save).
  * Kept free of Android so unit tests can lock the contract.
+ *
+ * [decide] is whether the save may attach to the chat on screen. A snapshot taken
+ * before a switch still has to be written; that choice is [persist].
  */
 object ChatSaveGate {
 
@@ -13,6 +16,23 @@ object ChatSaveGate {
         ProceedAllocateNew,
         /** Drop the scheduled save (stale epoch, deleted row, or session switched). */
         Abort
+    }
+
+    /**
+     * Whether the captured transcript is written. Epoch and the live session are ignored:
+     * leaving the chat must not throw the snapshot away. A newer snapshot of the same chat
+     * ([ticketCurrent] false) is the one that writes. A deleted row is not recreated.
+     */
+    fun persist(
+        ticketCurrent: Boolean,
+        saveAsNew: Boolean,
+        existingId: Long?,
+        rowExists: Boolean
+    ): Outcome {
+        if (!ticketCurrent) return Outcome.Abort
+        if (saveAsNew || existingId == null) return Outcome.ProceedAllocateNew
+        if (!rowExists) return Outcome.Abort
+        return Outcome.ProceedExisting
     }
 
     fun decide(

@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, chat saves and photo files)
+
+On `cursor/stability-save-order-2f15`, targeting `gradation/app-pass`.
+- A save keeps the transcript it captured. Opening another chat, or New chat, waits until that write finishes, and does not point the new screen at the old row. Two saves of one chat run one at a time; the later snapshot is the one that lands. A first save still inserts, and the next save of that same unsaved chat overwrites the id it just received. A deleted chat is not brought back.
+- Forks and roleplay swipe versions are `commit()`ed. A scene photo is synced to a side file, then renamed. A file that is not a finished JPEG is rebuilt from the bytes in the message.
+- Phone: send a reply and immediately open another chat (the first chat still has the reply). Edit that reply and leave again. Send a photo, leave, come back.
+
 # Handoff (2026-10-01, RP photo file, portraits, cleanup)
 
 On `cursor/rp-photo-file-portrait-cdde`, targeting `gradation/app-pass`.
