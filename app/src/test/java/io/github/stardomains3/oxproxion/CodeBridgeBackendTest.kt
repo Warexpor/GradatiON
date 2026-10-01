@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion
 
+import io.github.stardomains3.oxproxion.code.ApprovalOption
 import io.github.stardomains3.oxproxion.code.AcpAdapter
 import io.github.stardomains3.oxproxion.code.BridgeBackend
 import io.github.stardomains3.oxproxion.code.BrowseEntry
@@ -89,6 +90,9 @@ class CodeBridgeBackendTest {
         @Volatile var promptsSentAtFailure = -1
         /** When true, the next non-prompt send fails once (approval answer / cancel). */
         var failNextNonPromptSend = false
+
+        /** When true, every non-prompt send fails until cleared (approval retry budget). */
+        var failNonPromptSends = false
         /** When true, the next session/cancel send fails once (R3 queue-full / drop). */
         var failCancelSendOnce = false
         /**
@@ -130,6 +134,10 @@ class CodeBridgeBackendTest {
             }
             if (failNextNonPromptSend && !frame.contains("session/prompt")) {
                 failNextNonPromptSend = false
+                lastError = "Not connected"
+                return false
+            }
+            if (failNonPromptSends && !frame.contains("session/prompt")) {
                 lastError = "Not connected"
                 return false
             }
@@ -705,7 +713,8 @@ class CodeBridgeBackendTest {
 
     @Test
     fun answerDoesNotEmitWhenSendFails() = runBlocking {
-        // H2: failed transport.send must not emit ApprovalAnswered.
+        // H2: a send the socket refuses must not emit ApprovalAnswered. Repeated refusal
+        // while still connected drops the queued choice and fails the caller.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
         val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
@@ -718,7 +727,7 @@ class CodeBridgeBackendTest {
             }
             val collected = CopyOnWriteArrayList<SessionUpdate>()
             val collectJob = scope.launch { backend.updates.collect { collected += it } }
-            transport.failNextNonPromptSend = true
+            transport.failNonPromptSends = true
             val threw = runCatching {
                 backend.answer("s1", "42", io.github.stardomains3.oxproxion.code.ApprovalOption(
                     "allow", "Allow", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ONCE
@@ -726,9 +735,9 @@ class CodeBridgeBackendTest {
             }.exceptionOrNull()
             assertTrue("expected send failure", threw is IllegalStateException)
             delay(50)
-            assertFalse(
-                collected.any { it.update is CodeUpdate.ApprovalAnswered }
-            )
+            assertFalse(collected.any { it.update is CodeUpdate.ApprovalAnswered })
+            assertFalse(transport.sent.any { it.contains("\"id\":42") || it.contains("\"id\":\"42\"") })
+            assertFalse("give-up must release keepAlive", transport.keepAlive)
             collectJob.cancel()
         } finally {
             answers.cancel()
@@ -738,7 +747,7 @@ class CodeBridgeBackendTest {
 
     @Test
     fun answerRetryAfterSendFailureSucceeds() = runBlocking {
-        // H2 follow-up: after a failed send, a later answer can still go out.
+        // A single refused send stays queued and leaves on the next try, once.
         val transport = FakeTransport()
         val adapter = AcpAdapter()
         val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
@@ -753,15 +762,12 @@ class CodeBridgeBackendTest {
                 "allow", "Allow", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ONCE
             )
             transport.failNextNonPromptSend = true
-            assertTrue(runCatching { backend.answer("s1", "77", opt) }.isFailure)
-            val before = transport.sent.count { it.contains("\"id\":77") || it.contains("\"id\":\"77\"") }
-            assertEquals(0, before)
             val collected = CopyOnWriteArrayList<SessionUpdate>()
             val collectJob = scope.launch { backend.updates.collect { collected += it } }
             backend.answer("s1", "77", opt)
-            delay(50)
-            assertTrue(transport.sent.any { it.contains("\"id\":77") || it.contains("\"id\":\"77\"") })
-            assertTrue(collected.any { it.update is CodeUpdate.ApprovalAnswered })
+            val frames = transport.sent.filter { it.contains("\"id\":77") || it.contains("\"id\":\"77\"") }
+            assertEquals("retried approval must be sent once", 1, frames.size)
+            assertEquals(1, collected.count { it.update is CodeUpdate.ApprovalAnswered })
             collectJob.cancel()
         } finally {
             answers.cancel()
@@ -793,6 +799,148 @@ class CodeBridgeBackendTest {
                 transport.sent.any { it.contains("\"id\":42") || it.contains("\"id\":\"42\"") },
             )
             assertTrue(collected.any { it.update is CodeUpdate.ApprovalAnswered })
+            collectJob.cancel()
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun answerSurvivesDisconnectAndSendsOnceOnReconnect() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(5_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            transport.failNonPromptSends = true
+            val opt = ApprovalOption("allow", "Allow", ApprovalOption.Kind.ALLOW_ONCE)
+            val job = scope.async { runCatching { backend.answer("s1", "9", opt) } }
+            delay(40)
+            assertTrue("queued approval keeps the link up", transport.keepAlive)
+            transport.drop()
+            delay(40)
+            val before = transport.sent.count { it.contains("\"id\":9") || it.contains("\"id\":\"9\"") }
+            assertEquals(0, before)
+            transport.failNonPromptSends = false
+            transport.restore()
+            val result = withTimeout(5_000) { job.await() }
+            assertTrue(result.isSuccess)
+            assertEquals(
+                1,
+                transport.sent.count { it.contains("\"id\":9") || it.contains("\"id\":\"9\"") },
+            )
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun answerReplacesQueuedChoiceInsteadOfSendingTwice() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(5_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            transport.failNonPromptSends = true
+            val allow = ApprovalOption("allow-once", "Allow", ApprovalOption.Kind.ALLOW_ONCE)
+            val deny = ApprovalOption("deny-once", "Deny", ApprovalOption.Kind.REJECT_ONCE)
+            val first = scope.async { runCatching { backend.answer("s1", "9", allow) } }
+            delay(30)
+            val second = scope.async { runCatching { backend.answer("s1", "9", deny) } }
+            delay(20)
+            transport.failNonPromptSends = false
+            assertTrue(withTimeout(5_000) { first.await() }.isSuccess)
+            assertTrue(withTimeout(5_000) { second.await() }.isSuccess)
+            val frames = transport.sent.filter { it.contains("\"id\":9") || it.contains("\"id\":\"9\"") }
+            assertEquals(1, frames.size)
+            assertTrue(frames.single().contains("deny-once"))
+            assertFalse(frames.single().contains("allow-once"))
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun detachDropsQueuedAnswer() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(5_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            transport.failNonPromptSends = true
+            val opt = ApprovalOption("allow", "Allow", ApprovalOption.Kind.ALLOW_ONCE)
+            val job = scope.async { runCatching { backend.answer("s1", "9", opt) } }
+            delay(40)
+            backend.detach("s1")
+            val result = withTimeout(5_000) { job.await() }
+            assertTrue(result.isSuccess)
+            transport.failNonPromptSends = false
+            transport.drop()
+            delay(30)
+            transport.restore()
+            delay(200)
+            assertFalse(
+                transport.sent.any { it.contains("\"id\":9") || it.contains("\"id\":\"9\"") },
+            )
+            assertFalse(transport.keepAlive)
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test
+    fun promptResultCarriesUsageOntoTurnDone() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
+        val answers = autoAnswer(transport, adapter)
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+            val collected = CopyOnWriteArrayList<SessionUpdate>()
+            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+            val promptJob = scope.launch { backend.prompt("s1", "count tokens") }
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("session/prompt") }) delay(5)
+            }
+            transport.replyToPending(
+                { it == "session/prompt" },
+                """{"stopReason":"max_tokens","usage":{"inputTokens":1200,"outputTokens":340,"costUsd":0.02}}""",
+            )
+            withTimeout(3_000) { promptJob.join() }
+            val done = collected.map { it.update }.filterIsInstance<CodeUpdate.TurnDone>().single()
+            assertEquals("max_tokens", done.stopReason)
+            assertEquals(1200L, done.usage?.inputTokens)
+            assertEquals(340L, done.usage?.outputTokens)
+            assertEquals(0.02, done.usage!!.costUsd!!, 1e-9)
+            var events = emptyList<CodeEvent>()
+            events = TranscriptReducer.apply(events, done, now = 5L)
+            val end = events.filterIsInstance<CodeEvent.TurnEnd>().single()
+            assertEquals(1200L, end.usage?.inputTokens)
+            assertEquals("max_tokens", end.stopReason)
             collectJob.cancel()
         } finally {
             answers.cancel()

@@ -160,8 +160,15 @@ class BridgeBackend(
     private val suppressAgent = ConcurrentHashMap.newKeySet<String>()
     /** Serialize prompt + flush deliver per session so turns never overlap. */
     private val promptMutexes = ConcurrentHashMap<String, Mutex>()
-    /** In-flight permission answers (M3 / AWAY-02); key = sessionId + requestId. */
-    private val answering = ConcurrentHashMap.newKeySet<String>()
+    /**
+     * Allow/Deny that has not left the device yet. Latest option wins. The deferred completes
+     * when the frame is accepted, the turn ends, or repeated sends while connected give up.
+     * A caller timeout leaves the entry queued so a later reconnect can still deliver it.
+     */
+    private val answerOutbox = LinkedHashMap<String, PendingAnswer>()
+    private val answerLock = Any()
+    private val answerFlushMutex = Mutex()
+    private var answerFlushJob: Job? = null
     /**
      * R3: sessions whose session/cancel failed to queue (socket dropping / OkHttp full).
      * Value = whether a successful resend should finalize suppress/TurnDone.
@@ -193,6 +200,13 @@ class BridgeBackend(
         val sessionId: String,
         val text: String,
         val attachments: List<PromptAttachment> = emptyList(),
+    )
+
+    private class PendingAnswer(
+        val sessionId: String,
+        val requestId: String,
+        @Volatile var option: ApprovalOption?,
+        val done: CompletableDeferred<Unit> = CompletableDeferred(),
     )
 
     /** Outcome of [deliverPrompt]: aborts must not outbox-requeue. */
@@ -297,7 +311,7 @@ class BridgeBackend(
     /** Same rule as the transport: a backgrounded app keeps the link only while a turn needs it. */
     private fun reconnectAllowed(): Boolean =
         !appBackgrounded || runningSessions.isNotEmpty() || cancelPending.isNotEmpty() ||
-            synchronized(outboxLock) { outbox.isNotEmpty() }
+            synchronized(outboxLock) { outbox.isNotEmpty() } || answersQueued()
 
     override fun connect() {
         // A deliberate connect (screen open, tap on the banner) starts the handshake budget over.
@@ -322,6 +336,7 @@ class BridgeBackend(
                         for (out in decoded) when (out) {
                             is AdapterOutput.Gap -> reloadAfterGap(out.sessionId, out.afterSeq)
                             is AdapterOutput.Update -> {
+                                noteInboundResolved(out)
                                 val remapped = remapUserPromptEcho(out)
                                 if (remapped.sessionId in suppressAgent &&
                                     isSuppressedAgentActivity(remapped.update)
@@ -465,6 +480,8 @@ class BridgeBackend(
         outboxFlushFailCount = 0
         sessionLoadFailCount = 0
         flushCancelPending()
+        // Approvals unblock the agent; send them before queued prompts and history replays.
+        flushAnswers()
         flushOutbox()
         // History replays run behind ready (each can take a while); running sessions go first.
         for (session in toResume.sortedByDescending { it.id in runningSessions }) {
@@ -643,16 +660,18 @@ class BridgeBackend(
                 )
             )
         )
-        _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("error")))
+        finishTurn(sessionId, "error")
         refreshKeepAlive()
     }
 
     private fun refreshKeepAlive() {
         val pendingOutbox = synchronized(outboxLock) { outbox.isNotEmpty() }
         transport.setKeepAliveForSession(
-            runningSessions.isNotEmpty() || pendingOutbox || cancelPending.isNotEmpty()
+            runningSessions.isNotEmpty() || pendingOutbox || cancelPending.isNotEmpty() || answersQueued()
         )
     }
+
+    private fun answersQueued(): Boolean = synchronized(answerLock) { answerOutbox.isNotEmpty() }
 
     private fun failPending(msg: String) {
         val snap = pending.values.toList()
@@ -773,7 +792,7 @@ class BridgeBackend(
             } catch (e: Exception) {
                 // The session exists but its first prompt never left: end the turn visibly.
                 _updates.emit(SessionUpdate(sid, errorNotice(e.message)))
-                _updates.emit(SessionUpdate(sid, CodeUpdate.TurnDone("error")))
+                finishTurn(sid, "error")
                 runningSessions.remove(sid)
                 refreshKeepAlive()
             }
@@ -991,7 +1010,7 @@ class BridgeBackend(
             }
             val stop = (result?.get("stopReason") as? JsonPrimitive)?.contentOrNull ?: "end_turn"
             (adapter as? AcpAdapter)?.endTurn(sessionId)
-            _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone(stop)))
+            finishTurn(sessionId, stop, TurnEndFormat.parseUsage(result))
             runningSessions.remove(sessionId)
             refreshKeepAlive()
             return DeliverResult.Done
@@ -1024,7 +1043,7 @@ class BridgeBackend(
                 return DeliverResult.Retry
             }
             _updates.emit(SessionUpdate(sessionId, errorNotice(e.message)))
-            _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("error")))
+            finishTurn(sessionId, "error")
             runningSessions.remove(sessionId)
             refreshKeepAlive()
             return DeliverResult.Done
@@ -1035,32 +1054,167 @@ class BridgeBackend(
     }
 
     override suspend fun answer(sessionId: String, requestId: String, option: ApprovalOption?) {
-        // M3 / AWAY-02: ignore a second Allow/Deny for the same session+request while in flight.
+        // M3 / AWAY-02: one queued choice per session+request. A second tap updates it
+        // (Allow then Deny) and waits on the same result, so the frame goes out once.
         val key = answeringKey(sessionId, requestId)
-        if (!answering.add(key)) return
-        try {
-            // AWAY-01: cold-start / disconnected hosts must connect + await ACP ready
-            // before the permission reply; otherwise transport.send returns false.
-            ensureReady()
-            // H2: do not mark answered / cancel away shade when the frame never left the device.
-            if (!transport.send(adapter.answerApproval(requestId, option?.id))) {
-                throw IllegalStateException(transport.lastError ?: "Not connected")
+        val waiter = synchronized(answerLock) {
+            val prev = answerOutbox[key]
+            if (prev != null) {
+                prev.option = option
+                prev.done
+            } else {
+                val item = PendingAnswer(sessionId, requestId, option)
+                answerOutbox[key] = item
+                item.done
             }
-            _updates.emit(
-                SessionUpdate(
-                    sessionId,
-                    CodeUpdate.ApprovalAnswered(requestId, option?.kind ?: ApprovalOption.Kind.REJECT_ONCE)
-                )
-            )
-        } finally {
-            answering.remove(key)
         }
+        pokeAnswerDelivery()
+        try {
+            // The card stays locked while this waits. Past the budget, unlock and say so,
+            // but keep the choice queued: a later reconnect still sends it once.
+            withTimeout(ANSWER_WAIT_MS) { waiter.await() }
+        } catch (e: TimeoutCancellationException) {
+            val stillQueued = synchronized(answerLock) { answerOutbox[key]?.done === waiter }
+            if (stillQueued) throw IllegalStateException(lastError ?: "Not connected")
+            if (waiter.isCompleted) waiter.await() else throw e
+        } catch (e: CancellationException) {
+            // Away-notification wait (or a leaving screen) must not drop the choice.
+            throw e
+        }
+    }
+
+    /** Start a reconnect if needed, and make sure a flush is running. */
+    private fun pokeAnswerDelivery() {
+        refreshKeepAlive()
+        val st = connection.value
+        if (st != ConnectionState.CONNECTING && st != ConnectionState.CONNECTED) connect()
+        scheduleAnswerFlush()
+    }
+
+    /**
+     * Send queued permission replies. One flusher at a time, so resume and the retry loop
+     * cannot deliver the same Allow twice. Returns once a send fails or the queue is empty.
+     */
+    private suspend fun flushAnswers() {
+        answerFlushMutex.withLock {
+            while (ready.value && connection.value == ConnectionState.CONNECTED) {
+                val key = synchronized(answerLock) { answerOutbox.keys.firstOrNull() } ?: return
+                val item = synchronized(answerLock) { answerOutbox[key] } ?: continue
+                val optionId = item.option?.id
+                val kind = item.option?.kind ?: ApprovalOption.Kind.REJECT_ONCE
+                val ok = runCatching {
+                    transport.send(adapter.answerApproval(item.requestId, optionId))
+                }.getOrDefault(false)
+                if (!ok) return
+                val owned = synchronized(answerLock) {
+                    val cur = answerOutbox[key]
+                    if (cur === item && cur.option?.id == optionId) {
+                        answerOutbox.remove(key)
+                        true
+                    } else false
+                }
+                if (!owned) continue
+                _updates.emit(
+                    SessionUpdate(item.sessionId, CodeUpdate.ApprovalAnswered(item.requestId, kind))
+                )
+                if (!item.done.isCompleted) item.done.complete(Unit)
+                refreshKeepAlive()
+            }
+        }
+    }
+
+    private fun scheduleAnswerFlush() {
+        if (answerFlushJob?.isActive == true) return
+        if (!answersQueued()) return
+        answerFlushJob = scope.launch {
+            val self = coroutineContext[Job]
+            var connectedFails = 0
+            try {
+                while (lifecycle != null && answersQueued()) {
+                    if (ready.value && connection.value == ConnectionState.CONNECTED) {
+                        val before = synchronized(answerLock) { answerOutbox.size }
+                        flushAnswers()
+                        val after = synchronized(answerLock) { answerOutbox.size }
+                        if (after == 0) break
+                        if (after < before) {
+                            connectedFails = 0
+                            continue
+                        }
+                        // Still connected, but the socket will not take the frame.
+                        connectedFails++
+                        if (connectedFails > MAX_ANSWER_RETRIES) {
+                            failQueuedAnswers(lastError ?: "Not connected")
+                            break
+                        }
+                        delay(20L shl connectedFails.coerceAtMost(5))
+                    } else {
+                        connectedFails = 0
+                        val err = lastError
+                        if (connection.value == ConnectionState.FAILED &&
+                            (err == CodeErrors.INVALID_ADDRESS || err == CodeErrors.TOKEN_REJECTED)
+                        ) {
+                            failQueuedAnswers(err)
+                            break
+                        }
+                        delay(150)
+                    }
+                }
+            } finally {
+                if (answerFlushJob === self) answerFlushJob = null
+                refreshKeepAlive()
+            }
+        }
+    }
+
+    /** The choice never reached the host. Waiters surface that so the card unlocks. */
+    private fun failQueuedAnswers(msg: String) {
+        val dropped = synchronized(answerLock) {
+            val all = answerOutbox.values.toList()
+            answerOutbox.clear()
+            all
+        }
+        val err = IllegalStateException(msg)
+        dropped.forEach { if (!it.done.isCompleted) it.done.completeExceptionally(err) }
+        refreshKeepAlive()
+    }
+
+    /**
+     * Stop waiting, and do not send. Used when the turn ended, the session was dropped,
+     * or the bridge already recorded the choice. Not a send failure: no error notice.
+     */
+    private fun abandonAnswers(sessionId: String, requestId: String? = null) {
+        val dropped = synchronized(answerLock) {
+            val keys = answerOutbox.keys.filter { key ->
+                if (requestId != null) key == answeringKey(sessionId, requestId)
+                else key.startsWith("$sessionId\u0000")
+            }
+            keys.mapNotNull { answerOutbox.remove(it) }
+        }
+        dropped.forEach { if (!it.done.isCompleted) it.done.complete(Unit) }
+        refreshKeepAlive()
+    }
+
+    /** A bridge replay already settled this request, or the turn ended, so do not answer it later. */
+    private fun noteInboundResolved(out: AdapterOutput.Update) {
+        when (val u = out.update) {
+            is CodeUpdate.ApprovalAnswered -> abandonAnswers(out.sessionId, u.requestId)
+            is CodeUpdate.TurnDone -> abandonAnswers(out.sessionId)
+            else -> Unit
+        }
+    }
+
+    /** The turn is over, so a queued Allow/Deny for it must not go out afterwards. */
+    private suspend fun finishTurn(sessionId: String, stop: String, usage: TurnUsage? = null) {
+        abandonAnswers(sessionId)
+        _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone(stop, usage = usage)))
     }
 
     /** AWAY-02: composite in-flight key so two sessions may share a numeric request id. */
     private fun answeringKey(sessionId: String, requestId: String) = "$sessionId\u0000$requestId"
 
     override suspend fun cancel(sessionId: String) {
+        // The turn is over; a queued Allow must not land after Stop.
+        abandonAnswers(sessionId)
         // C1 / D1: after forget→detach, never re-seed suppressAgent / deliverGeneration
         // (would swallow a later session/load). Abort leftovers without suppress stamps.
         if (!attached.containsKey(sessionId)) {
@@ -1143,7 +1297,7 @@ class BridgeBackend(
     private suspend fun finalizeAcceptedCancel(sessionId: String) {
         suppressAgent.add(sessionId)
         // The "Stopped" row comes from the TurnEnd this produces; a Notice too would say it twice.
-        _updates.emit(SessionUpdate(sessionId, CodeUpdate.TurnDone("cancelled")))
+        finishTurn(sessionId, "cancelled")
     }
 
     /** Resend any cancel-pending intents; finalize each that queues successfully. */
@@ -1180,6 +1334,7 @@ class BridgeBackend(
     }
 
     override fun detach(sessionId: String) {
+        abandonAnswers(sessionId)
         attached.remove(sessionId)
         runningSessions.remove(sessionId)
         suppressAgent.remove(sessionId)
@@ -1213,6 +1368,9 @@ class BridgeBackend(
         sessionLoadFailCount = 0
         cancelFlushJob?.cancel()
         cancelFlushJob = null
+        answerFlushJob?.cancel()
+        answerFlushJob = null
+        failQueuedAnswers("Closed")
         lifecycle?.cancel()
         lifecycle = null
         reader?.cancel()
@@ -1233,7 +1391,6 @@ class BridgeBackend(
         gapReloads.clear()
         handshakeRetryDeferred = false
         synchronized(pendingUserLock) { pendingUserPrompts.clear() }
-        answering.clear()
         promptMutexes.clear()
         synchronized(outboxLock) { outbox.clear() }
         failPending("Closed")
@@ -1247,5 +1404,9 @@ class BridgeBackend(
         const val MAX_LOAD_RETRIES = 16
         const val MAX_OUTBOX_RETRIES = 16
         const val MAX_GAP_RELOADS = 3
+        /** Sends refused while the socket still says connected, before a queued approval is dropped. */
+        const val MAX_ANSWER_RETRIES = 4
+        /** How long [answer] waits before unlocking the card. The choice stays queued after this. */
+        const val ANSWER_WAIT_MS = 8_000L
     }
 }

@@ -1,3 +1,12 @@
+# Handoff (2026-10-01, code approval reconnect)
+
+On `cursor/code-approval-reconnect-79a7` (PR into `gradation/app-pass`). Code mode only:
+- Allow/Deny stays queued across a dropped socket and is sent once on reconnect. A second tap replaces the queued choice. Give-up is only when the socket stays up and still refuses the frame. Stop, detach, and turn end drop it.
+- ACP `current_mode_update` moves the approval pill (`acceptEdits`, `bypassPermissions`, and this app's own mode ids). Unknown ids are ignored.
+- Turn end line: token limit, too many steps, refusal, plus usage from `session/prompt` (`usage` or `_meta.usage`).
+
+Phone: tap Allow, toggle airplane mode, come back (one answer, card shows allowed). Change mode on the computer and see the pill move. A turn that hits the token limit should say so.
+
 # Handoff (2026-10-01, RP greeting and memory)
 
 On `cursor/rp-greeting-memory-scene-fa48` (PR into `gradation/app-pass`). A rewritten greeting is no longer replaced when the character is saved, the persona changes, or a backup is imported, unless the greeting text on the card changed. A bubble that is still the card's line still follows a rename or a new persona name (`RpGreetingSync`). An in-place rewrite holds the turn so Stop cancels it. Lore scans start on a word. Fact notes drop scratchpads and lines copied from Memory, and a caption-less photo is a beat in that summary. The demo rewrite follows the last ask in a multi-line note. Phone: rewrite the greeting, save the character without touching the greeting (the rewrite stays), then edit the greeting text (the chat follows); Stop during a greeting rewrite.

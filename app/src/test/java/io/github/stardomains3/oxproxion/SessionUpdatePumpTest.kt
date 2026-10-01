@@ -179,6 +179,23 @@ class SessionUpdatePumpTest {
     }
 
     @Test
+    fun currentModeUpdateChangesThePillWithoutClearingTitle() {
+        var state = CodeSessionState(
+            summary().copy(permissionMode = PermissionMode.ASK, title = "Keep me"),
+            running = true,
+        )
+        state = CodeSessionFolder.apply(
+            state,
+            CodeUpdate.SessionInfo(permissionMode = PermissionMode.PLAN),
+            now = 20L,
+        )
+        assertEquals(PermissionMode.PLAN, state.summary.permissionMode)
+        assertEquals("Keep me", state.summary.title)
+        assertTrue(state.running)
+        assertTrue(CodeSessionFolder.needsPersist(CodeUpdate.SessionInfo(permissionMode = PermissionMode.PLAN)))
+    }
+
+    @Test
     fun naturalTurnDoneClearsRunningEvenWithoutSuppress() {
         val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))
         val result = foldSessionUpdates(

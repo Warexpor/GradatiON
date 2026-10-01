@@ -762,4 +762,30 @@ class CodeProtocolTest {
         }
         assertTrue(outs.none { it is AdapterOutput.Gap })
     }
+
+    @Test fun currentModeUpdateSyncsKnownModes() {
+        val out = acp.decode(update(
+            """{"sessionUpdate":"current_mode_update","currentModeId":"acceptEdits"}""",
+            seq = 4,
+        ))
+        val info = (out.single() as AdapterOutput.Update).update as CodeUpdate.SessionInfo
+        assertEquals(PermissionMode.AUTO_EDIT, info.permissionMode)
+        assertEquals(4L, acp.lastSeq("s1"))
+
+        val full = acp.decode(update(
+            """{"sessionUpdate":"current_mode_update","modeId":"bypassPermissions"}""",
+            seq = 5,
+        ))
+        val info2 = (full.single() as AdapterOutput.Update).update as CodeUpdate.SessionInfo
+        assertEquals(PermissionMode.FULL_AUTO, info2.permissionMode)
+    }
+
+    @Test fun currentModeUpdateIgnoresUnknownMode() {
+        val out = acp.decode(update(
+            """{"sessionUpdate":"current_mode_update","currentModeId":"yolo"}""",
+            seq = 2,
+        ))
+        assertTrue(out.single() is AdapterOutput.Ignored)
+        assertEquals(2L, acp.lastSeq("s1"))
+    }
 }

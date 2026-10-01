@@ -113,6 +113,7 @@ internal object CodeSessionFolder {
                 title = update.title ?: state.summary.title,
                 preview = update.preview ?: fromText ?: state.summary.preview,
                 branch = update.branch ?: state.summary.branch,
+                permissionMode = update.permissionMode ?: state.summary.permissionMode,
                 lastSeq = liveSeq ?: state.summary.lastSeq
             )
             is CodeUpdate.Title -> state.summary.copy(

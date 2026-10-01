@@ -295,8 +295,7 @@ class CodeTranscriptAdapter(
                     text = if (e.textRes != 0) context.getString(e.textRes, *e.args.toTypedArray()) else e.text
                     setTextColor(context.getColor(if (e.level == NoticeLevel.ERROR) R.color.xai_ink else R.color.xai_mute))
                 }
-                is CodeEvent.TurnEnd -> v.findViewById<TextView>(R.id.codeTurnText).text =
-                    e.summary ?: if (e.stopReason == "cancelled") v.context.getString(R.string.code_session_stopped) else ""
+                is CodeEvent.TurnEnd -> v.findViewById<TextView>(R.id.codeTurnText).text = turnEndLine(v.context, e)
             }
         }
     }
@@ -701,6 +700,25 @@ class CodeTranscriptAdapter(
             }
             box.addView(row)
         }
+    }
+
+    /** Stop reason in the app language, then any token/cost counts the bridge reported. */
+    private fun turnEndLine(ctx: Context, e: CodeEvent.TurnEnd): String {
+        val reason = when (TurnEndFormat.reason(e.stopReason)) {
+            TurnEndFormat.Reason.STOPPED -> ctx.getString(R.string.code_session_stopped)
+            TurnEndFormat.Reason.MAX_TOKENS -> ctx.getString(R.string.code_turn_max_tokens)
+            TurnEndFormat.Reason.MAX_REQUESTS -> ctx.getString(R.string.code_turn_max_requests)
+            TurnEndFormat.Reason.REFUSAL -> ctx.getString(R.string.code_turn_refusal)
+            TurnEndFormat.Reason.ERROR -> ctx.getString(R.string.code_turn_error)
+            null -> null
+        }
+        val pieces = TurnEndFormat.usagePieces(e.usage)
+        val usage = buildList {
+            pieces?.input?.let { add(ctx.getString(R.string.code_turn_usage_in, it)) }
+            pieces?.output?.let { add(ctx.getString(R.string.code_turn_usage_out, it)) }
+            pieces?.cost?.let { add(it) }
+        }
+        return TurnEndFormat.line(e.summary, reason, usage)
     }
 
     private class TextHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
