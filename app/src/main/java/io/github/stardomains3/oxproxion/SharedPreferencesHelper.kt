@@ -59,13 +59,13 @@ class SharedPreferencesHelper(context: Context) {
      */
     private inline fun <reified T> putStoredJson(key: String, value: T) {
         val encoded = json.encodeToString(value)
-        val existing = mainPrefs.getString(key, null)
         val archive = unreadableArchiveKey(key)
-        val keep = existing != null &&
+        val torn = mainPrefs.getString(key, null)?.takeIf { raw ->
             !mainPrefs.contains(archive) &&
-            runCatching { json.decodeFromString<T>(existing) }.isFailure
+                runCatching { json.decodeFromString<T>(raw) }.isFailure
+        }
         mainPrefs.edit {
-            if (keep && existing != null) putString(archive, existing)
+            torn?.let { putString(archive, it) }
             putString(key, encoded)
         }
     }

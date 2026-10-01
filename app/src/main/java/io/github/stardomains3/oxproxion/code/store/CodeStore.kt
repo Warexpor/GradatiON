@@ -178,11 +178,12 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
     }
 
     private fun writeHostsRaw(hosts: List<CodeHost>) {
-        val existing = prefs.getString(KEY_HOSTS, null)
         val archive = "$KEY_HOSTS.unreadable"
-        val keep = existing != null && !prefs.contains(archive) && readHosts() is HostsRead.Unreadable
+        val torn = prefs.getString(KEY_HOSTS, null)?.takeIf {
+            !prefs.contains(archive) && readHosts() is HostsRead.Unreadable
+        }
         prefs.edit {
-            if (keep && existing != null) putString(archive, existing)
+            torn?.let { putString(archive, it) }
             putString(KEY_HOSTS, json.encodeToString(ListSerializer(CodeHost.serializer()), hosts))
         }
     }

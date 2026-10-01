@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -47,11 +48,13 @@ class BackupIoTest {
         var opened = false
 
         assertThrows(IllegalStateException::class.java) {
-            BackupIo.publish(cache, {
-                opened = true
-                tmp.newFile("dest.json").outputStream()
-            }) {
-                throw IllegalStateException("encode failed")
+            runBlocking {
+                BackupIo.publish(cache, {
+                    opened = true
+                    tmp.newFile("dest.json").outputStream()
+                }) {
+                    throw IllegalStateException("encode failed")
+                }
             }
         }
 
@@ -64,8 +67,10 @@ class BackupIoTest {
         val cache = tmp.newFile("cache.json")
         val dest = tmp.newFile("dest.json")
 
-        BackupIo.publish(cache, { dest.outputStream() }) { stream ->
-            stream.writer(Charsets.UTF_8).use { it.write("{\"characters\":[]}") }
+        runBlocking {
+            BackupIo.publish(cache, { dest.outputStream() }) { stream ->
+                stream.writer(Charsets.UTF_8).use { it.write("{\"characters\":[]}") }
+            }
         }
 
         assertEquals("{\"characters\":[]}", dest.readText())
