@@ -81,6 +81,13 @@ class RpAutoMemoryTest {
         assertEquals(last, out.lines().last())
     }
 
+    @Test fun transcriptExpandsNamesInTheScene() {
+        val turns = listOf("user" to "{{user}} shows {{char}} the locket.")
+        val t = RpAutoMemory.transcript(turns, "Mira", "Sam\$1")
+        assertTrue(t.contains("Sam\$1: Sam\$1 shows Mira the locket."))
+        assertFalse(t.contains("{{"))
+    }
+
     @Test fun transcriptDropsRewriteNotesAndKeepsAPhotoBeat() {
         val turns = listOf(
             "user" to RpAutoMemory.turnBody("", showedPhoto = true),

@@ -5,7 +5,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
 
 /**
  * Text and image parts of a chat message.
@@ -40,6 +42,32 @@ internal object MessageContent {
     fun hasImage(content: JsonElement): Boolean {
         val array = content as? JsonArray ?: return false
         return array.any { partType(it) == "image_url" }
+    }
+
+    /**
+     * An image with no words. Some providers reject that turn, and the picture still has to
+     * be read as something in the scene. The stored bubble stays the picture alone; this is
+     * the copy that goes on the wire, including a later rewrite of the same turn.
+     * A blank text part does not count as a caption.
+     */
+    fun withScenePhotoNote(content: JsonElement, note: String): JsonElement {
+        val array = content as? JsonArray ?: return content
+        var hasText = false
+        var hasImage = false
+        for (item in array) {
+            when (partType(item)) {
+                "text" -> if (!partText(item).isNullOrBlank()) hasText = true
+                "image_url" -> hasImage = true
+            }
+        }
+        if (!hasImage || hasText) return content
+        return JsonArray(buildList {
+            add(buildJsonObject {
+                put("type", JsonPrimitive("text"))
+                put("text", JsonPrimitive(note))
+            })
+            addAll(array)
+        })
     }
 
     fun partType(part: JsonElement): String? = (part as? JsonObject)?.let { partType(it) }

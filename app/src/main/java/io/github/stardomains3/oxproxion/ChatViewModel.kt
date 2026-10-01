@@ -313,9 +313,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun hasImagesInChat(): Boolean = _chatMessages.value?.any { isImageMessage(it) } ?: false
 
     private fun isImageMessage(message: FlexibleMessage): Boolean =
-        (message.content as? JsonArray)?.any { item ->
-            (item as? JsonObject)?.get("type")?.jsonPrimitive?.contentOrNull == "image_url"
-        } ?: false
+        MessageContent.hasImage(message.content) ||
+            message.imageUri?.let { it.isNotEmpty() && !it.startsWith("data:") } == true
 
     fun getMessageText(content: JsonElement): String = MessageContent.text(content)
 
@@ -490,8 +489,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun putAssistantMessage(list: MutableList<FlexibleMessage>, thinkingMessage: FlexibleMessage?, message: FlexibleMessage) {
-        val newMessage = continuationBase?.let { mergeContinuation(it, message) } ?: message
+        val merged = continuationBase?.let { mergeContinuation(it, message) } ?: message
         val index = resolveAssistantSlot(list, thinkingMessage)
+        val newMessage = if (index != -1 && continuationBase != null) {
+            RpContinuation.keepPicture(list[index].imageUri, merged)
+        } else {
+            merged
+        }
         if (index != -1) {
             list[index] = newMessage
             streamingAssistantIndex = index
@@ -1339,10 +1343,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val history = _chatMessages.value.orEmpty()
         val lastReply = history.lastOrNull()?.takeIf { it.role == "assistant" && !isAssistantPlaceholder(it) }
         val inPlace = continueInPlace && lastReply != null
-        // The transcript keeps a bare photo (no empty caption line). The request adds a line
-        // when there are no words, so a provider that rejects an image-only turn still answers.
+        // The transcript keeps a bare photo. toApiMessage adds the scene line on the wire,
+        // including when this picture comes back on a later turn or a rewrite.
         if (!continueInPlace || inPlace) {
-            messagesForApiRequest.add(userMessage.copy(content = withScenePhotoNote(userMessage.content)))
+            messagesForApiRequest.add(userMessage)
         }
         trimMessagesForApiMemory(messagesForApiRequest)
 
@@ -1611,18 +1615,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         val currentMessages = _chatMessages.value ?: emptyList()
         val userMessage = currentMessages[userMessageIndex]
-
-        // Restore pendingUserImageUri from the message content if not already set
-        if (pendingUserImageUri == null) {
-            pendingUserImageUri = MessageContent.imageUrl(userMessage.content)
-        }
-
-        // CRITICAL: Attach the image URI to the user message for the API call
-        val messageWithImage = if (pendingUserImageUri != null) {
-            userMessage.copy(imageUri = pendingUserImageUri)
-        } else {
-            userMessage
-        }
+        // The picture is already in the message. pendingUserImageUri is only the photo staged
+        // in the composer; copying this turn's data URL into it made the next send inherit it.
 
         if (isRpMode()) {
             truncateWithoutFork(userMessageIndex + 1)
@@ -1642,8 +1636,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         messagesForApiRequest.addAll(currentMessages.take(userMessageIndex))
-        // Use messageWithImage instead of userMessage
-        messagesForApiRequest.add(messageWithImage)
+        messagesForApiRequest.add(userMessage)
         trimMessagesForApiMemory(messagesForApiRequest)
         // A rewrite's old reply and its note have to survive a tight memory window. Trim pins
         // the newest turn, which would be the note, and would drop the reply the note refers to.
@@ -2452,27 +2445,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (input.isBlank()) return null
         val content = completeTurns(listOf("system" to systemPrompt, "user" to input), cloudModel, timeoutMs, maxTokens)
         return if (stripQuotes) content?.trim()?.removeSurrounding("\"")?.removeSurrounding("'") else content
-    }
-
-    /** A photo with no caption still needs words on the wire. The bubble stays the picture alone. */
-    private fun withScenePhotoNote(content: JsonElement): JsonElement {
-        val array = content as? JsonArray ?: return content
-        var hasText = false
-        var hasImage = false
-        for (item in array) {
-            when (MessageContent.partType(item)) {
-                "text" -> hasText = true
-                "image_url" -> hasImage = true
-            }
-        }
-        if (!hasImage || hasText) return content
-        return buildJsonArray {
-            add(buildJsonObject {
-                put("type", JsonPrimitive("text"))
-                put("text", JsonPrimitive(RpPromptEngine.PHOTO_TURN))
-            })
-            array.forEach { add(it) }
-        }
     }
 
     /** One non-streamed reply to [turns] (role to text) from the LAN server or [model] on OpenRouter; null on any failure. */
@@ -3982,7 +3954,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _chatMessages.value.orEmpty().forEach { msg ->
             if ((msg.role == "user" || msg.role == "assistant") && !isAssistantPlaceholder(msg)) {
                 val text = getMessageText(msg.content)
-                if (text.isNotBlank()) recent += text
+                // A caption or a line written as {{char}} / {{user}} still matches those people.
+                if (text.isNotBlank()) recent += expand(text)
             }
         }
         extra.forEach { if (it.isNotBlank()) recent += expand(it) }

@@ -77,9 +77,17 @@ data class FlexibleMessage(
  * [FlexibleMessage] also carries what the UI needs (a generated image's Uri, the reasoning
  * text, the tools badge), and none of that belongs in a provider request.
  */
-fun FlexibleMessage.toApiMessage(): FlexibleMessage =
-    if (!toolsUsed && reasoning == null && thinking == null && imageUri == null) this
-    else copy(toolsUsed = false, reasoning = null, thinking = null, imageUri = null)
+fun FlexibleMessage.toApiMessage(): FlexibleMessage {
+    // A caption-less photo is stored as the picture alone. Every request, including a
+    // rewrite or the next turn, still needs words or some providers reject the image.
+    val wire = if (role == "user") {
+        MessageContent.withScenePhotoNote(content, RpPromptEngine.PHOTO_TURN)
+    } else {
+        content
+    }
+    if (wire === content && !toolsUsed && reasoning == null && thinking == null && imageUri == null) return this
+    return copy(content = wire, toolsUsed = false, reasoning = null, thinking = null, imageUri = null)
+}
 
 fun List<FlexibleMessage>.toApiMessages(): List<FlexibleMessage> = map { it.toApiMessage() }
 

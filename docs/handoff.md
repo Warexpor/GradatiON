@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, RP photos, rewrite, and names)
+
+On `cursor/rp-photos-rewrite-greeting-737a`, targeting `gradation/app-pass`.
+- A photo with no caption is still only the picture in the chat. Every request, including the next turn, Continue, and a rewrite, adds the scene line so a provider that rejects an image with no words still answers. Rewriting that turn no longer copies the data URL onto the next message. Continue keeps a picture already on the reply. Edit puts the photo back in the composer, and a bubble still shows the picture when the file is gone.
+- `{{char}}` and `{{user}}` keep a name that contains `$` or `\`. Lore and the fact-note transcript expand those placeholders in the scene, so a caption written that way still matches.
+- Phone: send a photo with no caption, then another line (the character should still see the picture). Rewrite the reply after that photo, then send text (the text should not carry the photo). Continue a reply that has a generated picture. Edit a photo message and send it again. A character named with a `$`, greeting `Hello {{user}}`, rewrite the greeting, save without changing the greeting (the rewrite stays).
+
 # Handoff (2026-10-01, history shows unsent lines)
 
 On `cursor/chat-drafts-history-9b5f`, targeting `gradation/app-pass`.
