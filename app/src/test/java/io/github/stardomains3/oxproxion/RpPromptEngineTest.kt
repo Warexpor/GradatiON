@@ -86,7 +86,7 @@ class RpPromptEngineTest {
             RpPromptEngine.expandKnownMacros("{{char}} owes {{user}}.", "Mira", "")
         )
         org.junit.Assert.assertEquals(
-            "{{char}} owes Alex.",
+            "<BOT> owes Alex.",
             RpPromptEngine.expandKnownMacros("<BOT> owes <USER>.", "", "Alex")
         )
     }
