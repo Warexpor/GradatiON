@@ -40,6 +40,8 @@ import java.util.concurrent.atomic.AtomicLong
  * Agent images: `agent_message_chunk` with `type: image` (data+mimeType) → [CodeUpdate.ImageChunk].
  * A `resource_link` or embedded `resource` in an agent or user chunk is shown as text.
  * Tool detail prefers the command for a shell call, and a file location includes its line.
+ * Shell and search output is terminal text: color and a rewritten progress line are dropped.
+ * A file read keeps those bytes. Tool status accepts `in-progress` and `running`.
  */
 class AcpAdapter : HarnessAdapter {
 
@@ -387,11 +389,7 @@ class AcpAdapter : HarnessAdapter {
             "plan" -> {
                 val entries = u["entries"]?.jsonArray?.mapNotNull { e ->
                     val o = e as? JsonObject ?: return@mapNotNull null
-                    PlanEntry(o.str("content") ?: "", when (o.str("status")) {
-                        "completed" -> PlanStatus.COMPLETED
-                        "in_progress" -> PlanStatus.IN_PROGRESS
-                        else -> PlanStatus.PENDING
-                    })
+                    PlanEntry(o.str("content") ?: "", planStatus(o.str("status")))
                 }.orEmpty()
                 // One live plan card per session: same key, so it updates in place.
                 CodeUpdate.Upsert(CodeEvent.Plan("plan:$sid", now, entries))
@@ -613,10 +611,11 @@ class AcpAdapter : HarnessAdapter {
 
     private fun outputOf(sid: String, callId: String, u: JsonObject): String? {
         val kind = rememberKind(sid, callId, u.str("kind"))
-        val fromContent = textContent(u["content"], kind)
-        if (fromContent != null) return fromContent
-        val raw = rawOutputText(u["rawOutput"]) ?: return null
-        return ToolOutputText.clip(kind, raw, MAX_OUTPUT)
+        val raw = textContent(u["content"]) ?: rawOutputText(u["rawOutput"]) ?: return null
+        // Color and `\r` progress belong on a log, not in a file the agent opened.
+        val shown = if (ToolOutputText.stripsTerminal(kind)) TerminalText.readable(raw) else raw
+        if (shown.isEmpty()) return null
+        return ToolOutputText.clip(kind, shown, MAX_OUTPUT)
     }
 
     /** Some agents put the log in `rawOutput` instead of a content block. */
@@ -700,13 +699,13 @@ class AcpAdapter : HarnessAdapter {
         return null
     }
 
-    private fun textContent(content: JsonElement?, kind: String?): String? {
+    private fun textContent(content: JsonElement?): String? {
         val arr = content as? JsonArray ?: return null
         val text = arr.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             toolOutputPiece(o)
         }.joinToString("\n")
-        return text.ifEmpty { null }?.let { ToolOutputText.clip(kind, it, MAX_OUTPUT) }
+        return text.ifEmpty { null }
     }
 
     /**
@@ -776,12 +775,23 @@ class AcpAdapter : HarnessAdapter {
         else -> ToolKind.OTHER
     }
 
-    private fun toolStatus(s: String?) = when (s) {
+    /**
+     * ACP writes `in_progress`. Some agents send `in-progress`, `in progress`, or `running`.
+     * An unknown token stays null so a status-only update does not invent a state.
+     */
+    private fun toolStatus(s: String?) = when (normalizeKind(s)) {
         "pending" -> ToolStatus.PENDING
-        "in_progress" -> ToolStatus.RUNNING
+        "in_progress", "running" -> ToolStatus.RUNNING
         "completed" -> ToolStatus.COMPLETED
         "failed" -> ToolStatus.FAILED
         else -> null
+    }
+
+    /** Same spelling as [toolStatus]. Anything else stays pending so the row is still listed. */
+    private fun planStatus(s: String?) = when (normalizeKind(s)) {
+        "completed" -> PlanStatus.COMPLETED
+        "in_progress" -> PlanStatus.IN_PROGRESS
+        else -> PlanStatus.PENDING
     }
 
     private fun JsonObject.str(k: String): String? = (this[k] as? JsonPrimitive)?.contentOrNull

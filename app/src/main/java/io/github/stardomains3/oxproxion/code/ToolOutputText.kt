@@ -28,6 +28,12 @@ object ToolOutputText {
     }
 
     /**
+     * Shell and search logs are a terminal. File tools are not: a read can contain
+     * an escape on purpose. An update that has not named a kind yet is treated as a log.
+     */
+    fun stripsTerminal(kind: String?): Boolean = !keepsHead(kind)
+
+    /**
      * @param head true for a file tool: the card shows the first lines, matching [clip].
      */
     fun cardPreview(output: String, maxLines: Int = CARD_LINES, head: Boolean = false): String {

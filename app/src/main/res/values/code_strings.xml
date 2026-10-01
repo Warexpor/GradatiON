@@ -206,6 +206,7 @@
         <item quantity="other">Please revert all uncommitted changes to tracked files in this workspace (%1$d paths). Restore those tracked files to HEAD. Leave untracked files alone. Do not commit or push.</item>
     </plurals>
 
+    <string name="code_changes_renamed">%1$s (from %2$s)</string>
     <string name="code_changes_loading">Loading changes…</string>
     <string name="code_changes_diff_loading">Loading diff…</string>
     <string name="code_changes_diff_truncated">Showing first %1$d lines</string>
