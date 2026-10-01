@@ -55,6 +55,16 @@ class RpApiMemoryTest {
     }
 
     @Test
+    fun pinTailPutsTheReplyAndThePhotoBack() {
+        val greeting = Msg("assistant", 1)
+        val photo = Msg("user", 2)
+        val reply = Msg("assistant", 3)
+        val kept = listOf(greeting, reply) // a budget of 2 pinned the greeting and dropped the photo
+        val pinned = RpApiMemory.pinTail(kept, listOf(photo, reply)) { a, b -> a == b }
+        assertEquals(listOf(1, 2, 3), pinned.map { it.id })
+    }
+
+    @Test
     fun definitionStaysWholeUntilHistoryIsCut() {
         assertEquals(null, RpApiMemory.definitionCap(messageCount = 4, historyBudget = 10))
         assertEquals(RpApiMemory.DEFINITION_HEAD, RpApiMemory.definitionCap(messageCount = 12, historyBudget = 10))

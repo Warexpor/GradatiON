@@ -165,6 +165,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     private var selectedImageBytes: ByteArray? = null
     private var selectedImageMime: String? = null
+    /** True while a scene photo is being encoded into the send, so a second tap cannot send it twice. */
+    private var photoSendInFlight = false
     private lateinit var audioPicker: ActivityResultLauncher<Array<String>>
     private var selectedAudioBytes: ByteArray? = null
     private var selectedAudioFormat: String? = null
@@ -422,16 +424,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         withContext(Dispatchers.IO) { runCatching { resolver.delete(imageUri, null, null) } }
                         return@launch
                     }
-                    selectedImageBytes = rawBytes  // Raw for send (EXIF intact)
-                    selectedImageMime = "image/jpeg"
-                    previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
-                    previewImageView.load(imageUri)  // Coil decodes off the main thread and honours EXIF
-                    attachmentPreviewContainer.visibility = View.VISIBLE
-
-                    // Set pending as string for FlexibleMessage (MediaStore Uri already persistent)
-                    viewModel.setPendingUserImageUri(imageUri.toString())
-
-                    // Notify for gallery refresh
+                    // The gallery copy stays. What we send is upright and small; EXIF rotation
+                    // would otherwise reach the model sideways.
+                    stagePickedPhoto(rawBytes)
                     resolver.notifyChange(imageUri, null)
                 }
             } else {
@@ -772,6 +767,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     selectedImageBytes = null
                     selectedImageMime = null
                     attachmentPreviewContainer.visibility = View.GONE
+                    viewModel.setPendingUserImageUri(null)
+                    updateSendButtonChrome()
+                    if (viewModel.isRpMode()) applyRpComposerHint()
                     GlassNotice.show(requireContext(), getString(R.string.toast_image_removed_no_vision))
                 }
                 // Clear staged audio if model doesn't support transcription
@@ -1289,8 +1287,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private fun applyRpComposerHint() {
         val llm = sharedPreferencesHelper.isRpLlmMode()
         val activeChar = viewModel.activeRpCharacter.value
+        val photo = selectedImageBytes != null
         chatEditText.hint = when {
+            llm && photo -> getString(R.string.rp_composer_hint_photo)
             llm -> getString(R.string.rp_composer_hint_llm)
+            activeChar != null && photo -> getString(R.string.rp_composer_hint_photo)
             activeChar != null -> getString(R.string.rp_composer_hint, activeChar.name)
             else -> getString(R.string.rp_composer_hint_empty)
         }
@@ -1929,6 +1930,23 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 // Rewrite: the title says it; the field only needs its placeholder.
                 val wrapper = layoutInflater.inflate(R.layout.dialog_instruct, null)
                 val input = wrapper.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.instructInput)
+                val quote = wrapper.findViewById<android.widget.TextView>(R.id.instructQuote)
+                val reply = viewModel.chatMessages.value?.getOrNull(position)?.let { viewModel.getMessageText(it.content) }.orEmpty()
+                val snippet = RpRewrite.snippet(reply)
+                if (snippet.isEmpty()) quote.visibility = View.GONE else quote.text = snippet
+                fun fill(note: String) {
+                    input.setText(note)
+                    input.setSelection(note.length)
+                }
+                wrapper.findViewById<View>(R.id.rewriteShorter).setOnClickListener {
+                    fill(getString(R.string.rp_rewrite_shorter_note))
+                }
+                wrapper.findViewById<View>(R.id.rewriteLonger).setOnClickListener {
+                    fill(getString(R.string.rp_rewrite_longer_note))
+                }
+                wrapper.findViewById<View>(R.id.rewriteDialogue).setOnClickListener {
+                    fill(getString(R.string.rp_rewrite_dialogue_note))
+                }
                 val dialog = GlassAlertDialogBuilder(
                     requireContext(),
                     R.style.CustomMaterialAlertDialogTheme
@@ -2129,6 +2147,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             clearPreview()
             currentTempImageFile?.delete()
             currentTempImageFile = null
+            updateSendButtonChrome()
+            if (viewModel.isRpMode()) applyRpComposerHint()
         }
         webSearchButton.setOnClickListener {
             //  hideMenu()
@@ -2219,7 +2239,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 var prompt = chatEditText.text.toString().trim()
                 // Empty RP composer: the send button is "Continue", so the character takes the next beat.
                 if (prompt.isEmpty() && pendingFiles.isEmpty() && selectedImageBytes == null &&
-                    selectedAudioBytes == null && viewModel.canContinueRpStory()
+                    selectedAudioBytes == null && !photoSendInFlight && viewModel.canContinueRpStory()
                 ) {
                     viewModel.continueRpStory()
                     return@setOnClickListener
@@ -2257,6 +2277,10 @@ $cleanContent
                 val substitutedSystemPrompt = substituteVariables(systemMessage.prompt)//#subpromptcode
                 //if (prompt.isNotBlank() || selectedImageBytes != null) { //#subpromptcode replaced
                 if (substitutedPrompt.isNotBlank() || selectedImageBytes != null) { //#subpromptcode
+                    if (selectedImageBytes != null && !viewModel.isVisionModel(viewModel.activeChatModel.value)) {
+                        GlassNotice.show(requireContext(), getString(R.string.toast_image_need_vision))
+                        return@setOnClickListener
+                    }
                     // RP: validate before clearing the composer so character-gate failures keep the draft.
                     if (viewModel.isRpMode()) {
                         if (!viewModel.canSendRpMessage()) {
@@ -2274,16 +2298,27 @@ $cleanContent
                             chatEditText.text.clear()
                             return@setOnClickListener
                         }
+                        if (photoSendInFlight) return@setOnClickListener
+                        photoSendInFlight = true
                         val photoMime = selectedImageMime
-                        // A 12 MB photo is a 16 MB string: encode it off the main thread.
+                        val draft = substitutedPrompt
+                        // The photo stays staged until the send is accepted, so a second tap
+                        // (or Continue) can't fire a second turn while the bytes are encoded.
                         viewLifecycleOwner.lifecycleScope.launch {
-                            val base64 = withContext(Dispatchers.Default) { Base64.encodeToString(photo, Base64.NO_WRAP) }
-                            if (!viewModel.sendRpUserMessage(substitutedPrompt, imageUrl = "data:$photoMime;base64,$base64")) return@launch
-                            chatEditText.setText("")
-                            chatEditText.text.clear()
-                            selectedImageBytes = null
-                            selectedImageMime = null
-                            attachmentPreviewContainer.visibility = View.GONE
+                            try {
+                                val base64 = withContext(Dispatchers.Default) { Base64.encodeToString(photo, Base64.NO_WRAP) }
+                                if (!isAdded) return@launch
+                                if (selectedImageBytes !== photo) return@launch
+                                if (!viewModel.sendRpUserMessage(draft, imageUrl = "data:$photoMime;base64,$base64")) return@launch
+                                chatEditText.setText("")
+                                selectedImageBytes = null
+                                selectedImageMime = null
+                                attachmentPreviewContainer.visibility = View.GONE
+                                updateSendButtonChrome()
+                                applyRpComposerHint()
+                            } finally {
+                                photoSendInFlight = false
+                            }
                         }
                         return@setOnClickListener
                     }
@@ -3666,13 +3701,10 @@ $cleanContent
     }
 
     private fun processPickedImageUri(uri: Uri) {
-        val model = viewModel.activeChatModel.value
-        if (model != null && !viewModel.isVisionModel(model)) {
-            GlassNotice.show(requireContext(), getString(R.string.toast_image_need_vision))
-        }
         val resolver = requireContext().applicationContext.contentResolver
         val mime = resolver.getType(uri)
-        if (mime !in setOf("image/jpeg", "image/png", "image/webp")) {
+        // HEIC and anything else BitmapFactory can read is turned into a JPEG below.
+        if (mime != null && !mime.startsWith("image/")) {
             GlassNotice.show(requireContext(), getString(R.string.toast_unsupported_image_format))
             return
         }
@@ -3705,18 +3737,35 @@ $cleanContent
                 GlassNotice.show(requireContext(), getString(R.string.toast_image_too_large))
                 return@launch
             }
-            selectedImageBytes = bytes
-            selectedImageMime = mime
-            previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
-            previewImageView.load(uri)  // Coil decodes and downsamples off the main thread
-            attachmentPreviewContainer.visibility = View.VISIBLE
-            try {
-                val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                resolver.takePersistableUriPermission(uri, takeFlags)
-                viewModel.setPendingUserImageUri(uri.toString())
-            } catch (_: SecurityException) {
-                viewModel.setPendingUserImageUri(uri.toString())
+            stagePickedPhoto(bytes)
+        }
+    }
+
+    /**
+     * Turn a picked or captured photo into the JPEG we actually send, and show it in the composer.
+     * The bubble keeps a copy we own: the picker's link does not survive leaving the screen.
+     */
+    private fun stagePickedPhoto(raw: ByteArray) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val jpeg = withContext(Dispatchers.Default) { ScenePhoto.encode(raw) }
+            if (!isAdded) return@launch
+            if (jpeg == null) {
+                GlassNotice.show(requireContext(), getString(R.string.toast_unsupported_image_format))
+                return@launch
             }
+            val model = viewModel.activeChatModel.value
+            if (model != null && !viewModel.isVisionModel(model)) {
+                GlassNotice.show(requireContext(), getString(R.string.toast_image_need_vision))
+            }
+            val stored = withContext(Dispatchers.IO) { ScenePhoto.store(requireContext(), jpeg) }
+            selectedImageBytes = jpeg
+            selectedImageMime = ScenePhoto.MIME
+            previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
+            previewImageView.load(jpeg)
+            attachmentPreviewContainer.visibility = View.VISIBLE
+            viewModel.setPendingUserImageUri(stored?.toString())
+            updateSendButtonChrome()
+            if (viewModel.isRpMode()) applyRpComposerHint()
         }
     }
 
@@ -5177,6 +5226,7 @@ $cleanContent
         }
         val hasContent = !chatEditText.text.isNullOrBlank() ||
             pendingFiles.isNotEmpty() ||
+            selectedImageBytes != null ||
             currentTempImageFile != null ||
             selectedAudioBytes != null
         // RP with nothing typed: the button turns into Continue (fast-forward the story).

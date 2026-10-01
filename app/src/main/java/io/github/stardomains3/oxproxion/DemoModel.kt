@@ -36,7 +36,7 @@ object DemoModel {
 
     fun isDemo(modelId: String?) = modelId == ID
 
-    fun model() = LlmModel(NAME, ID, isVisionCapable = false, isReasoningCapable = true)
+    fun model() = LlmModel(NAME, ID, isVisionCapable = true, isReasoningCapable = true)
 
     /** A short local title for saved demo chats (no model call). */
     fun titleFor(firstUserMessage: String): String =
@@ -58,8 +58,13 @@ object DemoModel {
                 // `stream: false` is a default and isn't serialized, so only an explicit true streams.
                 Json.parseToJsonElement(body).jsonObject["stream"]?.jsonPrimitive?.contentOrNull == "true"
             }.getOrDefault(true)
-            if (!streaming) return oneShot(request, userText)
-            val script = reply(userText, roleplay())
+            val inRoleplay = roleplay()
+            if (!streaming) return oneShot(request, userText, body)
+            val script = if (inRoleplay && isRewriteRequest(userText)) {
+                Script(null, demoRewrite(previousAssistant(body), rewriteNote(userText)))
+            } else {
+                reply(userText, inRoleplay, sawPhoto = "image_url" in body)
+            }
             val pipe = Pipe(64 * 1024)
             Thread({ play(script, pipe) }, "demo-stream").apply { isDaemon = true }.start()
             return Response.Builder()
@@ -76,8 +81,12 @@ object DemoModel {
     class Script(val thinking: String?, val text: String)
 
     /** Background chores (RP Facts upkeep) ask without streaming; answer with one JSON reply. */
-    private fun oneShot(request: okhttp3.Request, userText: String): Response {
-        val text = if ("fact notes" in userText) DEMO_MEMORY else "OK"
+    private fun oneShot(request: okhttp3.Request, userText: String, body: String): Response {
+        val text = when {
+            "fact notes" in userText -> DEMO_MEMORY
+            isRewriteRequest(userText) -> demoRewrite(previousAssistant(body), rewriteNote(userText))
+            else -> "OK"
+        }
         Thread.sleep((300 * pace).toLong())
         val json = buildJsonObject {
             put("id", "demo")
@@ -160,7 +169,49 @@ object DemoModel {
         }
     }
 
-    fun reply(userText: String, roleplay: Boolean): Script {
+    /** The closing turn of a Rewrite, matched on the directive rather than the whole prompt. */
+    fun isRewriteRequest(userText: String) = "Rewrite your last reply" in userText
+
+    fun rewriteNote(userText: String): String =
+        userText.substringAfter("What to change:", "").substringBefore("\n").trim()
+
+    /** The assistant text the rewrite is about: the last assistant turn before the note. */
+    fun previousAssistant(body: String): String = runCatching {
+        val messages = Json.parseToJsonElement(body).jsonObject["messages"]?.jsonArray ?: return ""
+        val lastUser = messages.indexOfLast { it.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "user" }
+        if (lastUser <= 0) return ""
+        val prev = messages.subList(0, lastUser).lastOrNull {
+            it.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "assistant"
+        } ?: return ""
+        textOf(prev.jsonObject["content"])
+    }.getOrDefault("")
+
+    /**
+     * The demo has no model behind it, so a rewrite is a visible edit of the reply it was shown:
+     * shorter keeps the opening, longer and "more dialogue" add a line, anything else adds a beat.
+     */
+    fun demoRewrite(previous: String, note: String): String {
+        val base = previous.trim()
+        if (base.isEmpty()) return "*She tries the line again, more simply.*"
+        val n = note.lowercase()
+        return when {
+            "short" in n -> base.lineSequence().filter { it.isNotBlank() }.take(2).joinToString("\n\n")
+            "long" in n || "detail" in n || "room" in n ->
+                base + "\n\n*The light in the room shifts, and she doesn't look away.*"
+            "dialogue" in n || "say" in n || "talk" in n ->
+                base + "\n\n\"Is that closer to what you wanted?\""
+            else -> base + "\n\n*She lets that land, then goes on as you asked.*"
+        }
+    }
+
+    private fun textOf(content: kotlinx.serialization.json.JsonElement?): String = when (content) {
+        is JsonPrimitive -> content.contentOrNull.orEmpty()
+        is JsonArray -> content.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }.joinToString("\n")
+        else -> ""
+    }
+
+    fun reply(userText: String, roleplay: Boolean, sawPhoto: Boolean = false): Script {
+        if (sawPhoto) return if (roleplay) PHOTO_RP else PHOTO_ASK
         val t = userText.lowercase()
         if (roleplay) return ROLEPLAY[turn.getAndIncrement() % ROLEPLAY.size]
         return when {
@@ -253,6 +304,27 @@ object DemoModel {
             | Needs | A key | A character | A paired machine |
 
             Swipe left or right to move between them.
+        """.trimIndent()
+    )
+
+    private val PHOTO_ASK = Script(
+        thinking = "The user attached a photo. The demo cannot see pixels, so say so and don't invent what the picture shows.",
+        text = """
+            I can see that you attached a photo. This demo model doesn't look at the picture itself, so I won't guess what's in it.
+
+            A vision model (one marked Vision in the model list) can react to the actual photo.
+        """.trimIndent()
+    )
+
+    /** Shown a picture in a scene: don't invent the contents. Ask what they want noticed. */
+    private val PHOTO_RP = Script(
+        thinking = null,
+        text = """
+            *She takes what you hold out and studies it, quiet, the way she studies the rain.*
+
+            "You brought this into the room."
+
+            *A glance back.* "Tell me what you want me to see in it. I won't pretend I already know."
         """.trimIndent()
     )
 

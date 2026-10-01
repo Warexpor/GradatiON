@@ -868,57 +868,71 @@ class ChatAdapter(
 
             // ... (Image and Button logic) ...
             val imageUriStr = message.imageUri
-            if (!imageUriStr.isNullOrEmpty()) {
-                try {
-                    val userImageUri = imageUriStr.toUri()
-                    // Rebinding the same row while scrolling already has this bitmap.
-                    if (imageView.getTag(R.id.userImageView) != imageUriStr || imageView.drawable == null) {
-                        imageView.setTag(R.id.userImageView, imageUriStr)
-                        val request = ImageRequest.Builder(itemView.context)
-                            .data(userImageUri)
-                            .target(imageView)
-                            .build()
-                        itemView.context.imageLoader.enqueue(request)
-                    }
-                    imageView.visibility = View.VISIBLE
-                    imageView.setOnClickListener {
-                        try {
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(userImageUri, "image/*")
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            itemView.context.startActivity(intent)
-                        } catch (e: Exception) {
-                            GlassNotice.show(itemView.context, itemView.context.getString(R.string.toast_could_not_open_image))
-                        }
-                    }
-                } catch (e: Exception) {
-                    val base64 = getImageBase64(message.content)
-                    if (base64 != null) {
-                        // A stored photo can be 12 MB: decode it scaled to the screen, off the main thread.
-                        imageView.setImageDrawable(null)
-                        imageView.setTag(R.id.userImageView, imageUriStr)
-                        imageView.visibility = View.VISIBLE
-                        val maxEdge = itemView.resources.displayMetrics.widthPixels
-                        scope.launch {
-                            val bitmap = withContext(Dispatchers.Default) { decodeSampled(base64, maxEdge) }
-                            if (bitmap != null && imageView.getTag(R.id.userImageView) == imageUriStr) {
-                                imageView.setImageBitmap(bitmap)
-                            }
-                        }
-                    } else {
-                        imageView.visibility = View.GONE
+            val embedded = getImageBase64(message.content)
+            val density = itemView.resources.displayMetrics.density
+            fun applyPhotoFrame(showing: Boolean) {
+                val photoOnly = showing && rawUserContent.isBlank()
+                messageTextView.visibility = if (photoOnly) View.GONE else View.VISIBLE
+                val pad = if (photoOnly) (4 * density).toInt() else (16 * density).toInt()
+                val vert = if (photoOnly) (4 * density).toInt() else (12 * density).toInt()
+                messageContainer.setPadding(pad, vert, pad, vert)
+            }
+            fun showEmbedded(token: String) {
+                if (embedded == null) {
+                    imageView.visibility = View.GONE
+                    applyPhotoFrame(false)
+                    return
+                }
+                // A stored photo can be a couple of megabytes: decode it scaled to the screen, off the main thread.
+                imageView.setImageDrawable(null)
+                imageView.setTag(R.id.userImageView, token)
+                imageView.visibility = View.VISIBLE
+                applyPhotoFrame(true)
+                val maxEdge = itemView.resources.displayMetrics.widthPixels
+                val b64 = embedded
+                scope.launch {
+                    val bitmap = withContext(Dispatchers.Default) { decodeSampled(b64, maxEdge) }
+                    if (bitmap != null && imageView.getTag(R.id.userImageView) == token) {
+                        imageView.setImageBitmap(bitmap)
                     }
                 }
+            }
+            fun openPhoto(uri: android.net.Uri) {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "image/*")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    itemView.context.startActivity(intent)
+                } catch (e: Exception) {
+                    GlassNotice.show(itemView.context, itemView.context.getString(R.string.toast_could_not_open_image))
+                }
+            }
+            if (!imageUriStr.isNullOrEmpty()) {
+                val userImageUri = imageUriStr.toUri()
+                imageView.setOnClickListener { openPhoto(userImageUri) }
+                // Rebinding the same row while scrolling already has this bitmap.
+                if (imageView.getTag(R.id.userImageView) != imageUriStr || imageView.drawable == null) {
+                    imageView.setTag(R.id.userImageView, imageUriStr)
+                    val request = ImageRequest.Builder(itemView.context)
+                        .data(userImageUri)
+                        .listener(onError = { _, _ ->
+                            // The picker link dies after a restart. The JPEG in the message does not.
+                            if (imageView.getTag(R.id.userImageView) == imageUriStr) showEmbedded("embedded:$imageUriStr")
+                        })
+                        .target(imageView)
+                        .build()
+                    itemView.context.imageLoader.enqueue(request)
+                }
+                imageView.visibility = View.VISIBLE
+                applyPhotoFrame(true)
+            } else if (embedded != null) {
+                imageView.setOnClickListener(null)
+                showEmbedded("embedded")
             } else {
                 imageView.visibility = View.GONE
+                applyPhotoFrame(false)
             }
-            // A photo sent on its own is just the picture, in a slim frame; no empty line under it.
-            val photoOnly = imageView.visibility == View.VISIBLE && rawUserContent.isBlank()
-            messageTextView.visibility = if (photoOnly) View.GONE else View.VISIBLE
-            val d = itemView.resources.displayMetrics.density
-            if (photoOnly) messageContainer.setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt())
-            else messageContainer.setPadding((16 * d).toInt(), (12 * d).toInt(), (16 * d).toInt(), (12 * d).toInt())
 
             copyButtonuser.setOnClickListener {
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

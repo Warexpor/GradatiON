@@ -30,13 +30,21 @@ object RpPromptEngine {
             "Stay in character and never speak, act or decide for the user. Write only the new " +
             "version of that reply, with no notes, labels or commentary.)"
 
+    /**
+     * Text part added when a turn is a photo and nothing else. Some providers reject an image
+     * with no text, and the picture still has to be read as something in the scene.
+     */
+    const val PHOTO_TURN =
+        "(The user shows a photo and says nothing. It is in the scene. React only to what the picture actually shows.)"
+
     /** Scene-craft rules shared by every character reply. */
     private const val CRAFT =
         "- Never speak, act or decide for the user. End your turn where the user can respond.\n" +
             "- Move the scene forward every reply: a new detail, choice, complication or question.\n" +
             "- Don't repeat phrases, openings or gestures from your earlier replies.\n" +
             "- Keep the facts in Memory and the world lore consistent.\n" +
-            "- Match the length of your reply to the moment: short and quick for banter, fuller for big scenes.\n"
+            "- Match the length of your reply to the moment: short and quick for banter, fuller for big scenes.\n" +
+            "- When a user message includes a photo, that photo is in the scene. React only to what it actually shows.\n"
 
     /**
      * SillyTavern-style placeholders used by imported cards: {{char}}, {{user}} and the older

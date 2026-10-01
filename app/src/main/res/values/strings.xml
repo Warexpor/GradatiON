@@ -161,6 +161,13 @@
     <string name="rp_rewrite_failed">Couldn\'t rewrite that reply. Try again</string>
     <string name="rp_rewrite_done">Rewritten</string>
     <string name="rp_rewrite_undo">Undo</string>
+    <string name="rp_rewrite_shorter">Shorter</string>
+    <string name="rp_rewrite_longer">Longer</string>
+    <string name="rp_rewrite_dialogue">More dialogue</string>
+    <string name="rp_rewrite_shorter_note">Make it shorter. Keep the same events and voice.</string>
+    <string name="rp_rewrite_longer_note">Make it longer, with more of the room and the moment.</string>
+    <string name="rp_rewrite_dialogue_note">More of your dialogue, and less narration.</string>
+    <string name="rp_composer_hint_photo">What is this in the scene?</string>
     <string name="rp_save_failed">Save failed — try again</string>
     <string name="rp_select_character">Pick a character or enable LLM mode in RP settings</string>
     <string name="rp_export_characters">Export characters (JSON)</string>

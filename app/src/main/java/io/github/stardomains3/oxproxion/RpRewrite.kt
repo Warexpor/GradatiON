@@ -1,0 +1,22 @@
+package io.github.stardomains3.oxproxion
+
+/** Which replies stream back as a new swipe, and the one line the rewrite dialog quotes. */
+object RpRewrite {
+    /**
+     * The reply after the latest user turn comes back as another swipe (the old one stays a swipe
+     * back). The greeting, and any earlier reply, is rewritten in place: there is no swipe for it,
+     * and a greeting-only thread has no user turn to regenerate from.
+     */
+    fun streamsAsNewSwipe(position: Int, lastAssistantIndex: Int, lastUserIndex: Int): Boolean =
+        lastUserIndex >= 0 && position == lastAssistantIndex && position > lastUserIndex
+
+    /** First line of the reply, markdown marks stripped, so the dialog shows which bubble the note is for. */
+    fun snippet(reply: String, limit: Int = 90): String {
+        val line = reply.lineSequence()
+            .map { it.trim().trim('*', '_', '"', '\'') }
+            .firstOrNull { it.isNotBlank() }
+            .orEmpty()
+        if (line.length <= limit) return line
+        return line.take((limit - 1).coerceAtLeast(1)).trimEnd() + "…"
+    }
+}
