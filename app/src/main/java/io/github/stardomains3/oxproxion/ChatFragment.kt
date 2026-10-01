@@ -1605,7 +1605,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 bottom + (14 * d).toInt()
             )
             if (atBottom && grew > 0) chatRecyclerView.post { chatRecyclerView.scrollBy(0, grew) }
-            listOfNotNull(extBG, fontSizeControlsContainer, root.findViewById(R.id.jumpToBottomButton)).forEach { v ->
+            listOfNotNull<View>(extBG, fontSizeControlsContainer, root.findViewById(R.id.jumpToBottomButton)).forEach { v ->
                 val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return@forEach
                 val base = chromeBaseMargins.getOrPut(v) { lp.bottomMargin }
                 if (lp.bottomMargin != base + bottom) {

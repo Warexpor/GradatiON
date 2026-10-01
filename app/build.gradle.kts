@@ -1,3 +1,5 @@
+import java.time.Duration
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -142,6 +144,13 @@ android {
             // `--tests` runs exactly those, screenshots included. `-Pfast` is kept as a no-op.
             val named = gradle.startParameter.taskNames.any { it == "--tests" || it.startsWith("--tests=") }
             if (!project.hasProperty("full") && !named) test.filter.excludeTestsMatching("*ScreenshotTest")
+            // Robolectric keeps every booted Android around: one JVM for the whole run ran out of heap
+            // and then hung for minutes. Two JVMs in parallel, each recycled every 40 test classes.
+            test.maxParallelForks = 2
+            test.setForkEvery(40)
+            test.maxHeapSize = "2g"
+            // A hung test fails the run instead of stalling it (the full suite takes ~4 min).
+            test.timeout.set(Duration.ofMinutes(8))
 
         }
     }

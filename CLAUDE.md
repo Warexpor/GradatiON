@@ -31,6 +31,14 @@ the state of work in progress in `docs/handoff.md`.
 - `./gradlew testDebugUnitTest` runs the logic tests only (~20 s). `-Pfull` adds the screenshot classes (~4 min): run it for UI changes and always before a release. `--tests` names run as asked, screenshots included.
 - Screenshots come from Robolectric (`ScreenshotTest`, `CodeModeScreenshotTest`) and land in
   `app/build/screenshots`. There's no emulator, so anything involving motion needs a check on a real phone.
+- Test budget (user call, keep it lean): logic run under 30 s, `-Pfull` under 5 min wall. Gradle runs
+  2 test JVMs at 2 GB each (`app/build.gradle.kts`); the old 512 MB default ran out of heap and hung for 10+ min.
+  - A new screenshot is one shot per screen, dark only unless the change is theme-specific. Extend an
+    existing screen's test before adding a class or a boot.
+  - Behaviour checks belong in logic tests, not screenshots. No single test over 10 s, except a class's first boot.
+  - Over budget: merge or drop the weakest shots in the same change, never just raise the limits.
+- Trust only Gradle's own exit code (`${PIPESTATUS[0]}`, not a pipe's or a background wrapper's). Before
+  sending an APK, check its timestamp is newer than the change: a failed test run leaves the old one in place.
 - Kill stray test JVMs with `pgrep -f "Gradle Test Executo[r]"`. Using `pkill -f` with the plain pattern kills
   your own shell.
 - Vector paths must not use SVG compact arc flags, because `PathParser` throws on them at runtime.
