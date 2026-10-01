@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Each Chat thread keeps the message you were typing. Open another chat, or start a new one, and that text is there when you come back. A photo or file staged on the composer stays with the thread you attached it to, instead of being sent into the next one. A chat that is saved for the first time keeps the line you have already started.
 - Roleplay lore also matches the character's personality, greeting and description. Rewriting a reply still matches lore from that reply, and from the turn just before it, after the chat has moved on.
 - Code: the Changes screen can ask the agent to revert every tracked file, after a confirmation. Untracked files are left alone. Search on the session list also matches the folder path, branch, model, and harness.
 - History search shows the line that matched, including a hit in an earlier message, and marks those words. The chat you have open reads "Open now", and a pinned chat keeps a pin on its row.
@@ -33,6 +34,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- History opens on the chat you have open, and submitting a search closes the keyboard so the results are not left under it. A new search starts at the top of the list.
+- A long message you sent that is many short lines folds after three lines. It used to cut on length only, so a stack of short lines stayed open well past that.
 - A long always-on lore block no longer pushes out the entry that matched the scene, and a short always-on block still stays beside a long match. A long Memory note no longer keeps this chat's facts from matching keys. Fact notes no longer save a line that only repeats the Memory note once {{char}} and {{user}} are names, or once a dash or a final period is ignored. A scene reminder works in any capitalization. Lore keys separated with a bar, or wrapped in quotes, still match.
 - Code: a shell tool call shows the command when the agent sent one, including a command passed as a list of arguments, instead of only the working folder. A file location includes its line. A link or an embedded file in an agent message is shown instead of being dropped, and a picture-only prompt from another device still appears. A diff whose old or new text is not a string no longer drops the whole tool call.
 - A chat message longer than Android's cursor window (a large attached file) no longer crashes when the chat is opened, when History or Roleplay asks for the last line, or when chats are exported. The text is read in slices. Opening a chat that the database cannot return shows a notice instead of closing the app.

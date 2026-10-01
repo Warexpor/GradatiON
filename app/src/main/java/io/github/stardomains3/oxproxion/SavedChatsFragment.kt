@@ -43,7 +43,11 @@ class SavedChatsFragment : Fragment() {
     private val viewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
     private val savedChatsViewModel: SavedChatsViewModel by viewModels { AppViewModelFactory(requireActivity().application) }
     private lateinit var savedChatsAdapter: SavedChatsAdapter
+    private lateinit var savedChatsList: RecyclerView
     private lateinit var searchView: SearchView
+    /** Scroll to the open chat the next time the drawer is shown and the list has rows. */
+    private var scrollToOpen = true
+    private var scrolledQuery: String? = null
     private lateinit var historyEmptyView: TextView
     private lateinit var historyEmptyContainer: View
     private lateinit var prefs: SharedPreferencesHelper
@@ -64,6 +68,7 @@ class SavedChatsFragment : Fragment() {
         prefs = SharedPreferencesHelper(requireContext())
 
         val recyclerView = view.findViewById<RecyclerView>(R.id.savedChatsRecyclerView)
+        savedChatsList = recyclerView
         historyEmptyView = view.findViewById(R.id.historyEmptyView)
         historyEmptyContainer = view.findViewById(R.id.historyEmptyContainer)
         searchView = view.findViewById(R.id.historySearchView)
@@ -121,7 +126,11 @@ class SavedChatsFragment : Fragment() {
             ?.setColorFilter(ContextCompat.getColor(requireContext(), R.color.xai_mute))
         var searchJob: Job? = null
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean = true
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                // Returning true used to leave the keyboard up over the results.
+                searchView.clearFocus()
+                return true
+            }
             override fun onQueryTextChange(newText: String?): Boolean {
                 searchJob?.cancel()
                 searchJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -231,7 +240,19 @@ class SavedChatsFragment : Fragment() {
                 openId = viewModel.getCurrentSessionId(),
                 query = query,
             )
-            savedChatsAdapter.submitList(items)
+            val queryNow = query
+            savedChatsAdapter.submitList(items) {
+                if (view == null) return@submitList
+                if (queryNow.isNotEmpty()) {
+                    if (scrolledQuery != queryNow) {
+                        savedChatsList.scrollToPosition(0)
+                        scrolledQuery = queryNow
+                    }
+                } else {
+                    scrolledQuery = null
+                    scrollOpenRow()
+                }
+            }
 
             val empty = filtered.isEmpty()
             historyEmptyContainer.isVisible = empty
@@ -242,6 +263,24 @@ class SavedChatsFragment : Fragment() {
                 else -> R.string.grok_history_empty_title
             })
         }
+    }
+
+    /** The drawer just opened. Bring the chat that is on screen into view. */
+    fun onDrawerOpened() {
+        scrollToOpen = true
+        scrollOpenRow()
+    }
+
+    private fun scrollOpenRow() {
+        if (!scrollToOpen || !::savedChatsList.isInitialized || !::savedChatsAdapter.isInitialized) return
+        val items = savedChatsAdapter.currentList
+        if (items.isEmpty()) return
+        val index = HistoryList.openAnchor(items)
+        if (index >= 0) {
+            (savedChatsList.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(index, 0)
+                ?: savedChatsList.scrollToPosition(index)
+        }
+        scrollToOpen = false
     }
 
     /** Code and Roleplay rows follow Settings > Modes; the host calls this each time it opens. */

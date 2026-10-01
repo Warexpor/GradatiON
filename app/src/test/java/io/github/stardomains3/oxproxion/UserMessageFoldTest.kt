@@ -25,4 +25,10 @@ class UserMessageFoldTest {
         val text = "one\ntwo\nthree\nfour"
         assertEquals("one\ntwo\nthree…", UserMessageFold.collapse(text, maxChars = 500))
     }
+
+    @Test fun many_short_lines_still_stop_at_three() {
+        val text = (1..80).joinToString("\n") { "hi" }
+        assertTrue(text.length > 150)
+        assertEquals("hi\nhi\nhi…", UserMessageFold.collapse(text, maxChars = 150))
+    }
 }

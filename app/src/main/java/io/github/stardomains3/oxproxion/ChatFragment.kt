@@ -707,6 +707,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
             override fun afterTextChanged(s: android.text.Editable?) {
+                // Ignore the mode draft and the view-state restore; those run before this is set.
+                if (!suppressDraftDirty && composerStateRestored) askComposerDirty = true
                 updateComposerAccessoryVisibility()
                 updateSendButtonChrome()
             }
@@ -1267,7 +1269,105 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         if (viewModel.activeModelIsLan()) {
             checkLocalNetworkPermission()
         }
+        viewModel.sessionReady.observe(viewLifecycleOwner) { ready ->
+            if (ready == true) bindAskComposerIfRestored()
+        }
+        viewModel.openSessionId.observe(viewLifecycleOwner) { id ->
+            if (!composerStateRestored || !askComposer.bound) return@observe
+            val promoted = viewModel.consumeOpenSessionPromoted()
+            val mode = viewModel.chatMode.value ?: ChatMode.ASK
+            val (next, effect) = AskComposerDraft.change(askComposer, mode, id, promoted)
+            askComposer = next
+            when (effect) {
+                is AskComposerDraft.Effect.Promote -> promoteAskDraft(effect.sessionId)
+                is AskComposerDraft.Effect.Switch -> switchAskDraft(effect.from, effect.to)
+                else -> Unit
+            }
+        }
         // end onviewcreated
+    }
+
+    private var askComposer = AskComposerDraft.State()
+    private var askComposerDirty = false
+    private var suppressDraftDirty = false
+    private var composerStateRestored = false
+
+    override fun onViewStateRestored(savedInstanceState: Bundle?) {
+        super.onViewStateRestored(savedInstanceState)
+        composerStateRestored = true
+        bindAskComposerIfRestored()
+    }
+
+    /**
+     * The first id is the thread we restored, not a switch. An empty field takes that
+     * thread's unsent text; a field the view already restored is left as it is.
+     */
+    private fun bindAskComposerIfRestored() {
+        if (!composerStateRestored || viewModel.sessionReady.value != true || askComposer.bound) return
+        if (!::chatEditText.isInitialized) return
+        val mode = viewModel.chatMode.value ?: ChatMode.ASK
+        val id = viewModel.getCurrentSessionId()
+        val promoted = viewModel.consumeOpenSessionPromoted()
+        val (next, _) = AskComposerDraft.bind(askComposer, mode, id)
+        askComposer = next
+        if (mode != ChatMode.ASK) return
+        if (promoted) {
+            promoteAskDraft(id)
+        } else if (chatEditText.text.isNullOrEmpty()) {
+            applyAskDraft(id)
+        }
+    }
+
+    private fun parkAskDraft(sessionId: Long?) {
+        if (askComposer.mode != ChatMode.ASK || viewModel.isRpMode()) return
+        if (!::chatEditText.isInitialized) return
+        val text = chatEditText.text?.toString().orEmpty()
+        // An empty field we never edited is not a request to forget a stored draft.
+        if (!askComposerDirty && text.isEmpty()) return
+        sharedPreferencesHelper.saveAskComposerDrafts(
+            ComposerDrafts.remember(sharedPreferencesHelper.getAskComposerDrafts(), sessionId, text)
+        )
+        askComposerDirty = false
+    }
+
+    private fun applyAskDraft(sessionId: Long?) {
+        val text = ComposerDrafts.text(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
+        if (chatEditText.text?.toString() == text) {
+            askComposerDirty = false
+            return
+        }
+        suppressDraftDirty = true
+        chatEditText.setText(text)
+        if (text.isNotEmpty()) chatEditText.setSelection(text.length)
+        suppressDraftDirty = false
+        askComposerDirty = false
+    }
+
+    private fun promoteAskDraft(sessionId: Long?) {
+        val text = chatEditText.text?.toString().orEmpty()
+        sharedPreferencesHelper.saveAskComposerDrafts(
+            ComposerDrafts.rekey(sharedPreferencesHelper.getAskComposerDrafts(), from = null, to = sessionId, text = text)
+        )
+    }
+
+    /** Leave the previous thread's text (and staged photo) behind, and show this thread's. */
+    private fun switchAskDraft(from: Long?, to: Long?) {
+        parkAskDraft(from)
+        applyAskDraft(to)
+        clearStagedAttachment()
+        pendingFiles.clear()
+        if (::attachmentButton.isInitialized) updateAttachmentButton()
+    }
+
+    /** After a Chat send, the line that went out is not still waiting in that thread. */
+    private fun forgetAskDraft() {
+        if (viewModel.isRpMode()) return
+        if (askComposer.bound && askComposer.mode != ChatMode.ASK) return
+        val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+        askComposerDirty = true
+        sharedPreferencesHelper.saveAskComposerDrafts(
+            ComposerDrafts.remember(sharedPreferencesHelper.getAskComposerDrafts(), id, "")
+        )
     }
 
     private fun updateSystemMessageButtonState() {
@@ -2175,13 +2275,31 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     }
     private fun performNewChat() {
         if (viewModel.chatMessages.value.isNullOrEmpty()) return
+        val previous = viewModel.getCurrentSessionId()
         viewModel.startFreshChatForCurrentMode()
-        chatEditText.setText("")
-        chatEditText.text.clear()
+        finishNewChatComposer(previous)
         clearStagedAttachment()
         pendingFiles.clear()
         updateAttachmentButton()
         chatAdapter.clearCache()
+    }
+
+    /**
+     * New chat parks the thread you left and shows that new thread's unsent text.
+     * An unsaved thread that stays unsaved (no id change) drops what was typed for it.
+     * Roleplay still starts from an empty field.
+     */
+    private fun finishNewChatComposer(previousId: Long?) {
+        if (viewModel.isRpMode()) {
+            chatEditText.setText("")
+            chatEditText.text.clear()
+            return
+        }
+        if (viewModel.getCurrentSessionId() == previousId) {
+            askComposerDirty = true
+            chatEditText.setText("")
+            parkAskDraft(previousId)
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -2356,6 +2474,7 @@ $cleanContent
 
                     chatEditText.setText("")
                     chatEditText.text.clear()
+                    forgetAskDraft()
 
                     val stagedImage = selectedImageBytes
                     val stagedImageMime = selectedImageMime
@@ -2615,9 +2734,9 @@ $cleanContent
             backButton.visibility = View.GONE
             backcopyButton.visibility = View.GONE
             updateHomeButtonVisibility()
+            val previous = viewModel.getCurrentSessionId()
             viewModel.startFreshChatForCurrentMode()
-            chatEditText.setText("")
-            chatEditText.text.clear()
+            finishNewChatComposer(previous)
             clearStagedAttachment()
             pendingFiles.clear()
             updateAttachmentButton()
@@ -2631,9 +2750,9 @@ $cleanContent
             backButton.visibility = View.GONE
             backcopyButton.visibility = View.GONE
             updateHomeButtonVisibility()
+            val previous = viewModel.getCurrentSessionId()
             viewModel.startFreshChatForCurrentMode()
-            chatEditText.setText("")
-            chatEditText.text.clear()
+            finishNewChatComposer(previous)
             clearStagedAttachment()
             pendingFiles.clear()
             updateAttachmentButton()
@@ -4135,6 +4254,11 @@ $cleanContent
           //  topConvoButton.isSelected = sharedPreferencesHelper.getConversationModeEnabled()
         }
     }
+    override fun onPause() {
+        parkAskDraft(if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId())
+        super.onPause()
+    }
+
     override fun onStop() {
         super.onStop()
         backButton.visibility = View.GONE
@@ -4269,6 +4393,7 @@ $cleanContent
         }
         codeMode.deactivate()
         if (target != current) {
+            parkAskDraft(viewModel.getCurrentSessionId())
             sharedPreferencesHelper.saveComposerDraft(current, chatEditText.text?.toString().orEmpty())
             modeSwitchedAt = android.os.SystemClock.uptimeMillis()
             captureListSpot()?.let { modeSpots[current] = it }
@@ -4846,7 +4971,10 @@ $cleanContent
                 .replace(R.id.historyDrawerContainer, SavedChatsFragment.newEmbedded())
                 .commitNow()
         }
-        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.refreshModeRows()
+        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.let {
+            it.refreshModeRows()
+            it.onDrawerOpened()
+        }
         val lp = panel.layoutParams as FrameLayout.LayoutParams
         lp.width = ViewGroup.LayoutParams.MATCH_PARENT
         lp.gravity = Gravity.START
@@ -4922,7 +5050,10 @@ $cleanContent
                 .replace(R.id.historyDrawerContainer, SavedChatsFragment.newEmbedded())
                 .commitNow()
         }
-        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.refreshModeRows()
+        (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.let {
+            it.refreshModeRows()
+            it.onDrawerOpened()
+        }
 
         val drawerMs = resources.getInteger(R.integer.motion_drawer).toLong()
         val anim = Motion.areAnimationsEnabled(requireContext())

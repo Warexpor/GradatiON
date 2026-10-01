@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, chat composer drafts)
+
+On `cursor/chat-composer-drafts-2822`, targeting `gradation/app-pass`.
+- Chat (Ask) keeps unsent composer text per thread (`ComposerDrafts`, `AskComposerDraft`). Leaving for another chat or a new one parks the text and restores that thread's. A first save moves the unsaved slot onto the new id without clearing what you just started typing. Send forgets that thread's draft. A staged photo or file is dropped on the switch so it cannot go out with the next chat. Roleplay still uses the mode draft and is not swapped by this.
+- History scrolls to the open chat (section header included) when the drawer opens. Search submit clears focus so the keyboard closes. A long user message of many short lines folds at three lines.
+- Phone: type in one chat, open another, come back (the text is there). Send it and come back (it is gone). Stage a photo, open another chat (the photo is not still attached). Open History (the open chat is in view) and submit a search (the keyboard closes).
+
 # Handoff (2026-10-01, RP lore budget, rewrite focus, fact copies)
 
 On `cursor/rp-lore-rewrite-memory-b423`, targeting `gradation/app-pass`.
