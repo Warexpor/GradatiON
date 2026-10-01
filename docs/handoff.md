@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, chat reply text)
+
+On `cursor/chat-reply-text-276b`, targeting `gradation/app-pass`.
+- Copy and read-aloud use the words of the reply. A code card's language name and the padding that gives the header its height are left out (`ChatMarkdown.readable`). Long-press copy still includes the markdown, and the thoughts when there are any, without a blank line at the start.
+- A long message you sent keeps the window when the only space is near the start (a short word, then a link). A trailing newline is not an extra line, so a three-line note is not folded.
+- Phone: copy a reply that has a code block (the language name should not be in the paste). Read that reply aloud. Send a three-line note that ends with enter (no Show more). Send "See" plus a long link (the folded line still shows the start of the link).
+
 # Handoff (2026-10-01, code diffs, tool cards, deny)
 
 On `cursor/code-diff-hunks-tools-ed98`, targeting `gradation/app-pass`. Code mode only:

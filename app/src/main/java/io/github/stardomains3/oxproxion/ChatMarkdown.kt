@@ -68,6 +68,32 @@ object ChatMarkdown {
 
     fun plugin(context: Context): AbstractMarkwonPlugin = Plugin(context.applicationContext)
 
+    /**
+     * The words of a rendered reply. A code card paints its language name and a little
+     * padding in the text itself (transparent, so the row has a height), and those
+     * characters are not part of the reply. Copy and read-aloud used to speak them.
+     */
+    fun readable(text: CharSequence): String {
+        val spanned = text as? Spanned ?: return text.toString()
+        val markers = spanned.getSpans(0, spanned.length, CodeBlockMarker::class.java)
+        if (markers.isEmpty()) return spanned.toString()
+        val ordered = markers
+            .map { it to spanned.getSpanStart(it) }
+            .filter { (_, start) -> start >= 0 }
+            .sortedBy { it.second }
+        val out = StringBuilder()
+        var at = 0
+        for ((marker, start) in ordered) {
+            val end = spanned.getSpanEnd(marker)
+            if (end <= start || start < at) continue
+            out.append(spanned, at, start)
+            out.append(marker.code)
+            at = end
+        }
+        if (at < spanned.length) out.append(spanned, at, spanned.length)
+        return out.toString()
+    }
+
     /** The copy icon turns into a check for feedback; no toast on top of it. */
     fun copyCode(widget: View, code: String) {
         val clipboard = widget.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
