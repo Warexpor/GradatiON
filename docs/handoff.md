@@ -1,3 +1,13 @@
+# Handoff (2026-10-01, code session and reconnect polish)
+
+On `cursor/code-session-bridge-ux-164d` (PR into `gradation/app-pass`). Code mode only:
+- A failed socket open during automatic reconnect schedules the next try (it used to stop). Coming back to the app opens immediately instead of finishing a backoff that started while away.
+- ACP `session_info_update` sets the session title. A phone rename is pinned and is not replaced by the bridge; an unpinned row takes the list title on refresh.
+- Tool cards show embedded resource text and an inlined terminal `output`.
+- Away notifications: each alert has its own tap target, and the open token is reused until it is consumed so an earlier alert still opens.
+
+Phone: drop the link, leave the app, come back (should reconnect without a long wait). Rename a session and confirm a bridge title does not replace it. Tap an away notification for the session that is not the latest one posted.
+
 # Handoff (2026-10-01, backup and prefs hardening)
 
 On `cursor/backup-prefs-hardening-186c`, targeting `gradation/app-pass`.

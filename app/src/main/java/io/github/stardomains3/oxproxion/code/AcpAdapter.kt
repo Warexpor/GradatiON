@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * Not yet: the terminal and fs client methods (the bridge answers those on the machine itself).
  * `current_mode_update` syncs the approval pill ([CodeUpdate.SessionInfo.permissionMode]).
+ * `session_info_update` carries the agent's session title ([CodeUpdate.SessionInfo.title]).
  * Slash commands: `available_commands_update` → [CodeUpdate.AvailableCommands].
  * Prompt images: [prompt] accepts [PromptAttachment] → ACP `type: image` content blocks.
  * Agent images: `agent_message_chunk` with `type: image` (data+mimeType) → [CodeUpdate.ImageChunk].
@@ -363,6 +364,12 @@ class AcpAdapter : HarnessAdapter {
                     ?: return ignored("current_mode_update unknown mode")
                 CodeUpdate.SessionInfo(permissionMode = mode)
             }
+            "session_info_update" -> {
+                // ACP: the agent named the session. A blank title must not wipe the one we have.
+                val title = u.str("title")?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: return ignored("session_info_update without title")
+                CodeUpdate.SessionInfo(title = title)
+            }
             else -> null
         }
         return if (out == null) ignored("update ${u.str("sessionUpdate")}")
@@ -509,9 +516,30 @@ class AcpAdapter : HarnessAdapter {
         val arr = content as? JsonArray ?: return null
         val text = arr.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
-            if (o.str("type") == "content") o["content"]?.jsonObject?.str("text") else null
+            toolOutputPiece(o)
         }.joinToString("\n")
         return text.ifEmpty { null }?.let { if (it.length > MAX_OUTPUT) "…" + it.takeLast(MAX_OUTPUT) else it }
+    }
+
+    /**
+     * Text the transcript can show from one tool-content block.
+     * `type: content` is an ACP content block; file reads often use an embedded resource
+     * (`resource.text`) instead of a text block. A `terminal` block is shown only when the
+     * bridge inlines `output` — the phone does not call terminal methods.
+     */
+    private fun toolOutputPiece(o: JsonObject): String? = when (o.str("type")) {
+        "content" -> contentBlockText(o["content"] as? JsonObject)
+        "text" -> o.str("text")?.takeIf { it.isNotEmpty() }
+        "terminal" -> o.str("output")?.takeIf { it.isNotEmpty() }
+            ?: o.str("text")?.takeIf { it.isNotEmpty() }
+        else -> null
+    }
+
+    private fun contentBlockText(block: JsonObject?): String? {
+        if (block == null) return null
+        block.str("text")?.takeIf { it.isNotEmpty() }?.let { return it }
+        val resource = block["resource"] as? JsonObject ?: return null
+        return resource.str("text")?.takeIf { it.isNotEmpty() }
     }
 
     private fun diffs(callId: String, content: JsonElement?, now: Long): List<CodeEvent.FileDiff> {

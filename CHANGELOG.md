@@ -29,6 +29,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code: coming back to the app reconnects at once instead of waiting out a backoff that started while it was away, and a reconnect whose socket open fails keeps trying. ACP `session_info_update` sets the session title. A name you edited stays; one you did not picks up the agent's title on the next session list. Tool output includes text sent as an embedded file resource, and a terminal snapshot when the bridge includes one. Away-notification taps no longer share one target across sessions, and an earlier alert for the same session still opens after a later one is posted.
 - A taller composer (another line, or a staged photo) no longer yanks a short thread up by the full growth. A message the composer would cover moves by only the covered amount, and one resting on the composer rides back down when the composer shrinks.
 - History dates no longer treat early January and late December as the same week. Today and yesterday show the time, the rest of the week shows the weekday, and older chats show the date.
 - A roleplay greeting you rewrote stays when you save the character, switch persona, or import, unless the greeting text on the card itself changed. A bubble that is still the card's line still follows a rename or a new persona name.

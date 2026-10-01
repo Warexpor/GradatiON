@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
@@ -219,5 +220,79 @@ class WebSocketTransportGenerationTest {
         assertEquals(ConnectionState.CONNECTING, t.state.value)
         t.close()
         assertFalse(t.send("{\"method\":\"session/prompt\"}"))
+    }
+
+    @Test
+    fun failedOpenDuringReconnectSchedulesAnotherAttempt() {
+        val opens = AtomicInteger(0)
+        val sleeps = Channel<Unit>(Channel.RENDEZVOUS)
+        val t = WebSocketTransport(
+            url = "ws://127.0.0.1:9/bridge",
+            token = "tok",
+            fingerprint = "",
+            client = OkHttpClient.Builder().callTimeout(1, TimeUnit.MILLISECONDS).build(),
+            scope = scope,
+            sleeper = { sleeps.receive() },
+            random01 = { 0.0 },
+            nowMs = { 1_000L },
+            webSocketFactory = { _, _ ->
+                if (opens.incrementAndGet() < 3) throw IllegalStateException("down")
+                FakeSocket()
+            },
+        )
+        t.connect()
+        assertEquals(ConnectionState.FAILED, t.state.value)
+        assertEquals(1, opens.get())
+        assertTrue(sleeps.trySend(Unit).isSuccess)
+        assertEquals(2, opens.get())
+        assertEquals(ConnectionState.FAILED, t.state.value)
+        assertTrue(sleeps.trySend(Unit).isSuccess)
+        assertEquals(3, opens.get())
+        assertEquals(ConnectionState.CONNECTING, t.state.value)
+        t.close()
+    }
+
+    @Test
+    fun returningToTheForegroundSkipsTheBackoffSleep() {
+        val factory = SocketFactory()
+        val gate = CompletableDeferred<Unit>()
+        val t = WebSocketTransport(
+            url = "ws://127.0.0.1:9/bridge",
+            token = "tok",
+            fingerprint = "",
+            client = OkHttpClient.Builder().callTimeout(1, TimeUnit.MILLISECONDS).build(),
+            scope = scope,
+            sleeper = { gate.await() },
+            random01 = { 1.0 },
+            nowMs = { 1_000L },
+            webSocketFactory = factory.factory,
+        )
+        t.connect()
+        val first = factory.opened[0]
+        first.listener.onFailure(first.socket, RuntimeException("drop"), null)
+        assertEquals(ConnectionState.FAILED, t.state.value)
+        assertEquals(1, factory.opened.size)
+        t.setAppBackgrounded(false)
+        assertEquals(2, factory.opened.size)
+        assertEquals(ConnectionState.CONNECTING, t.state.value)
+        t.close()
+        gate.cancel()
+    }
+
+    @Test
+    fun foregroundAfterADropWhileAwayOpensImmediately() {
+        val factory = SocketFactory()
+        val t = transport(factory)
+        t.connect()
+        val first = factory.opened[0]
+        first.listener.onOpen(first.socket, okResponse(first.socket.request()))
+        t.setAppBackgrounded(true)
+        first.listener.onFailure(first.socket, RuntimeException("drop"), null)
+        assertEquals(1, factory.opened.size)
+        assertEquals(ConnectionState.FAILED, t.state.value)
+        t.setAppBackgrounded(false)
+        assertEquals(2, factory.opened.size)
+        assertEquals(ConnectionState.CONNECTING, t.state.value)
+        t.close()
     }
 }

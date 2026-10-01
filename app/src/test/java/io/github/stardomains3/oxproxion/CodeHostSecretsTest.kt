@@ -186,4 +186,16 @@ class CodeHostSecretsTest {
         assertEquals("{not-json", prefs.getString("hosts.unreadable", null))
         assertEquals("h", s.hosts.single().id)
     }
+
+    @Test
+    fun pinnedSessionTitleSurvivesANewStore() {
+        val s = store()
+        assertTrue(s.pinnedSessionTitles().isEmpty())
+        s.pinSessionTitle("s1")
+        s.pinSessionTitle("s1")
+        s.pinSessionTitle("s2")
+        assertEquals(setOf("s1", "s2"), s.pinnedSessionTitles())
+        s.unpinSessionTitle("s1")
+        assertEquals(setOf("s2"), store().pinnedSessionTitles())
+    }
 }

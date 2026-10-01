@@ -196,6 +196,29 @@ class SessionUpdatePumpTest {
     }
 
     @Test
+    fun sessionInfoTitleAppliesUnlessTheUserRenamed() {
+        var state = CodeSessionState(summary().copy(title = "First line"))
+        state = CodeSessionFolder.apply(state, CodeUpdate.SessionInfo(title = "Agent name"), now = 3L)
+        assertEquals("Agent name", state.summary.title)
+        state = CodeSessionFolder.apply(
+            state,
+            CodeUpdate.SessionInfo(title = "Other"),
+            now = 4L,
+            keepLocalTitle = true,
+        )
+        assertEquals("Agent name", state.summary.title)
+        state = CodeSessionFolder.apply(state, CodeUpdate.SessionInfo(title = "   "), now = 5L)
+        assertEquals("Agent name", state.summary.title)
+        val folded = foldSessionUpdates(
+            mapOf("s1" to state),
+            listOf(SessionUpdate("s1", CodeUpdate.SessionInfo(title = "From the wire"))),
+            now = 6L,
+            pinnedTitles = setOf("s1"),
+        )
+        assertEquals("Agent name", folded.sessions!!["s1"]!!.summary.title)
+    }
+
+    @Test
     fun naturalTurnDoneClearsRunningEvenWithoutSuppress() {
         val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))
         val result = foldSessionUpdates(

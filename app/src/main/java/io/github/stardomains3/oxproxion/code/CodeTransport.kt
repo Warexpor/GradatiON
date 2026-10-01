@@ -144,8 +144,18 @@ class WebSocketTransport(
     @Volatile private var reconnectJob: Job? = null
 
     override fun setAppBackgrounded(backgrounded: Boolean) {
-        appBackgrounded = backgrounded
-        if (!backgrounded) scheduleReconnectIfNeeded()
+        synchronized(lock) {
+            appBackgrounded = backgrounded
+            if (backgrounded) return
+            if (!reconnectAllowed()) return
+            val state = _state.value
+            if (state == ConnectionState.CONNECTED || state == ConnectionState.CONNECTING) return
+            // The user is looking again. A backoff that started while away (or a retry that
+            // woke, saw the app was backgrounded, and gave up) should not add another wait.
+            reconnectJob?.cancel()
+            reconnectJob = null
+            openSocket()
+        }
     }
 
     override fun setKeepAliveForSession(keepAlive: Boolean) {
@@ -288,13 +298,20 @@ class WebSocketTransport(
             attempt = n + 1
             val wait = ReconnectBackoff.delayMs(n, random01())
             reconnectJob = scope.launch {
+                val self = coroutineContext[Job] ?: return@launch
                 sleeper(wait)
-                if (reconnectAllowed() &&
-                    _state.value != ConnectionState.CONNECTED &&
-                    _state.value != ConnectionState.CONNECTING
-                ) {
-                    openSocket()
+                val proceed = synchronized(lock) {
+                    // Drop our claim before openSocket. A throw inside it calls back here, and
+                    // this job is still running — leaving the claim set used to skip the next try.
+                    if (reconnectJob !== self) false
+                    else {
+                        reconnectJob = null
+                        reconnectAllowed() &&
+                            _state.value != ConnectionState.CONNECTED &&
+                            _state.value != ConnectionState.CONNECTING
+                    }
                 }
+                if (proceed) openSocket()
             }
         }
     }

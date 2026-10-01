@@ -14,6 +14,10 @@
     <string name="code_away_channel_desc">Approvals and finished turns while GradatiON is in the background</string>
     <string name="code_away_action_allow">Allow</string>
     <string name="code_away_action_deny">Deny</string>
+    <string name="code_away_approval_title">Approval needed</string>
+    <string name="code_away_approval_title_named">Approval needed · %1$s</string>
+    <string name="code_away_turn_title">Turn finished</string>
+    <string name="code_away_turn_title_named">Turn finished · %1$s</string>
     <string name="code_settings_machines">Machines</string>
     <string name="code_settings_add_machine">Add a machine</string>
     <string name="code_settings_try_demo">Try the demo machine</string>
