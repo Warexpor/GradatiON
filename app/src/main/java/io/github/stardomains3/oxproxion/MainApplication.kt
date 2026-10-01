@@ -29,5 +29,7 @@ class MainApplication : Application() {
         })
         // Kill leftover sticky "Running" FGS notifs from older builds
         ForegroundService.clearLegacyRunningNotification(this)
+        // A kill after a chat import wrote its rows and before the notes were committed.
+        ChatImportSideLog.resume(this)
     }
 }

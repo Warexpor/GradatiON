@@ -183,18 +183,50 @@ object ScenePhoto {
     internal fun writeAtomically(destination: File, bytes: ByteArray) {
         val dir = destination.parentFile ?: throw IOException("no directory")
         dir.mkdirs()
+        // A kill after the bytes were durable used to leave them beside a missing picture.
+        recover(destination)
         val tmp = File(dir, "${destination.name}.partial")
         try {
             FileOutputStream(tmp).use { out ->
                 out.write(bytes)
                 out.fd.sync()
             }
-            if (!install(tmp, destination)) {
+            if (!install(tmp, destination) && !sameBytes(destination, bytes)) {
                 throw IOException("Could not replace ${destination.path}")
             }
             syncDirectory(dir)
         } finally {
             if (tmp.exists()) tmp.delete()
+        }
+    }
+
+    /**
+     * Puts a finished side file back at [destination] when the real name is missing or torn.
+     * A complete picture already there is left alone, including its in-progress side file.
+     */
+    internal fun recover(destination: File): Boolean {
+        if (completeJpeg(destination)) return true
+        val partial = File(destination.parentFile, "${destination.name}.partial")
+        val bak = File(destination.parentFile, "${destination.name}.bak")
+        val source = when {
+            completeJpeg(partial) -> partial
+            completeJpeg(bak) -> bak
+            else -> return false
+        }
+        if (destination.exists() && !destination.delete()) return false
+        if (!source.renameTo(destination)) return completeJpeg(destination)
+        if (partial.exists()) partial.delete()
+        if (bak.exists()) bak.delete()
+        destination.parentFile?.let { syncDirectory(it) }
+        return completeJpeg(destination)
+    }
+
+    private fun sameBytes(file: File, bytes: ByteArray): Boolean {
+        if (!completeJpeg(file) || file.length() != bytes.size.toLong()) return false
+        return try {
+            file.readBytes().contentEquals(bytes)
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -225,8 +257,17 @@ object ScenePhoto {
     private fun install(tmp: File, destination: File): Boolean {
         if (rename(tmp, destination)) return true
         if (completeJpeg(destination)) return false
-        if (destination.exists() && !destination.delete()) return false
-        return rename(tmp, destination)
+        // A torn file is not the picture. Move it aside instead of deleting it, so a kill
+        // before the side file takes the name can still be put back.
+        val bak = File(destination.parentFile, "${destination.name}.bak")
+        if (bak.exists() && !bak.delete()) return false
+        if (destination.exists() && !rename(destination, bak)) return false
+        if (!rename(tmp, destination)) {
+            if (!destination.exists()) rename(bak, destination)
+            return false
+        }
+        bak.delete()
+        return true
     }
 
     private fun syncDirectory(dir: File) {
@@ -265,7 +306,10 @@ object ScenePhoto {
     /** True when [uriString] still opens. A missing cache file is not a picture we can put back. */
     fun canRead(context: Context, uriString: String): Boolean {
         val owned = ownedFile(context, uriString)
-        if (owned != null) return completeJpeg(owned)
+        if (owned != null) {
+            recover(owned)
+            return completeJpeg(owned)
+        }
         return readLimited(context, uriString) != null
     }
 
@@ -276,7 +320,7 @@ object ScenePhoto {
      */
     fun settle(context: Context, uriString: String?, embedded: ByteArray?): String? {
         val current = uriString?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("data:", ignoreCase = true) }
-        val owned = current?.let { ownedFile(context, it) }
+        val owned = current?.let { ownedFile(context, it) }?.also { recover(it) }
         if (owned != null && completeJpeg(owned) && under(context.filesDir, owned)) {
             return current
         }
@@ -397,6 +441,9 @@ object ScenePhoto {
         for (name in names) {
             if (!isSceneFileName(name)) continue
             File(dir, name).delete()
+            // A side file left by a killed replace would bring the picture back on the next open.
+            File(dir, "$name.bak").delete()
+            File(dir, "$name.partial").delete()
         }
     }
 

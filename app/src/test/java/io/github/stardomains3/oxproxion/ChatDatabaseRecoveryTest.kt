@@ -348,6 +348,74 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun aCopyDoesNotLeaveAPartialFileAtTheRealName() {
+        val root = tmp.newFolder("copy-move")
+        val from = File(root, "from").apply { writeText("history") }
+        val to = File(root, "to")
+        ChatDbVault.copyInsteadForTest = true
+        try {
+            ChatDbVault.moveReplacing(from, to)
+        } finally {
+            ChatDbVault.copyInsteadForTest = false
+        }
+        assertEquals("history", to.readText())
+        assertFalse(from.exists())
+        assertFalse(File(root, "to.partial").exists())
+        assertFalse(File(root, "to.ready").exists())
+        assertFalse(File(root, "to.bak").exists())
+    }
+
+    @Test
+    fun aKillAfterTheCopyIsFinishedOnTheNextMove() {
+        val root = tmp.newFolder("copy-kill")
+        val from = File(root, "from").apply { writeText("history") }
+        val to = File(root, "to")
+        ChatDbVault.copyInsteadForTest = true
+        ChatDbVault.stopAfterReadyForTest = true
+        try {
+            ChatDbVault.moveReplacing(from, to)
+            assertEquals("history", from.readText())
+            assertFalse(to.exists())
+            assertEquals("history", File(root, "to.partial").readText())
+            assertTrue(File(root, "to.ready").exists())
+
+            ChatDbVault.moveReplacing(from, to)
+        } finally {
+            ChatDbVault.copyInsteadForTest = false
+            ChatDbVault.stopAfterReadyForTest = false
+        }
+        assertEquals("history", to.readText())
+        assertFalse(from.exists())
+        assertFalse(File(root, "to.partial").exists())
+        assertFalse(File(root, "to.ready").exists())
+    }
+
+    @Test
+    fun aKillAfterTheOldFileIsMovedAsideRestoresTheNewCopy() {
+        val root = tmp.newFolder("copy-bak")
+        val from = File(root, "from").apply { writeText("new-db") }
+        val to = File(root, "to").apply { writeText("old-db") }
+        ChatDbVault.copyInsteadForTest = true
+        ChatDbVault.stopAfterBakForTest = true
+        try {
+            ChatDbVault.moveReplacing(from, to)
+            assertFalse(to.exists())
+            assertEquals("old-db", File(root, "to.bak").readText())
+            assertEquals("new-db", File(root, "to.partial").readText())
+            assertEquals("new-db", from.readText())
+
+            ChatDbVault.moveReplacing(from, to)
+        } finally {
+            ChatDbVault.copyInsteadForTest = false
+            ChatDbVault.stopAfterBakForTest = false
+        }
+        assertEquals("new-db", to.readText())
+        assertFalse(from.exists())
+        assertFalse(File(root, "to.bak").exists())
+        assertFalse(File(root, "to.partial").exists())
+    }
+
+    @Test
     fun aFailedMoveLeavesTheSourceAndNoPartialDestination() {
         val root = tmp.newFolder("failed-move")
         val from = File(root, "from").apply { writeText("history") }
@@ -356,6 +424,7 @@ class ChatDatabaseRecoveryTest {
         assertThrows(Exception::class.java) { ChatDbVault.moveReplacing(from, to) }
         assertEquals("history", from.readText())
         assertFalse(to.exists())
+        assertFalse(File(to.parentFile, to.name + ".partial").exists())
         assertEquals("x", blocked.readText())
     }
 

@@ -1,3 +1,11 @@
+# Handoff (2026-10-01, save notes, file moves, import resume)
+
+On `cursor/stability-save-move-9560`, targeting `gradation/app-pass`.
+- A save that already wrote its transcript also writes that snapshot's facts, other branch and other reply versions, even when a newer save of the same chat is waiting. The newer one overwrites them if it finishes. A kill before it runs used to keep the transcript and drop the notes.
+- Moving a database file copies to a side file, syncs it, then renames. A kill no longer leaves a half-written file under the real name. The next move finishes a copy that had already reached disk, and puts the previous file back when the new one had not. Replacing a picture does the same: a finished side file is put back when the real name is missing or torn.
+- A chat import writes the pins, fact notes, branches and swipe versions to a file before the preference commit. The next launch applies that file. A character backup writes Memory, layout, voice and the lore pin in one commit, before the portraits.
+- Phone: install over a build that already has chats (they should still open). Export chats, delete one that is pinned and has fact notes, import it (the pin and the notes are back). Replace a wallpaper that is already set.
+
 # Handoff (2026-10-01, RP swipe pictures)
 
 On `cursor/rp-swipe-version-photos-5930`, targeting `gradation/app-pass`.

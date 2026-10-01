@@ -1030,25 +1030,30 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val sessionId = ChatSessionSaver.save(repository, existingId, session, chatMessages)
             ?: return
         if (existingId == null) chatSaveSerial.noteMinted(ticket, sessionId)
-        if (!chatSaveSerial.isCurrent(ticket)) return
-        releaseDroppedScenePhotos(previousPhotos, messagesToSave, snap.swipe)
-        snap.draftFacts?.let { facts ->
-            sharedPreferencesHelper.saveRpFacts(sessionId, facts)
-            if (sessionEpoch == snap.epoch) draftRpFacts = null
-        }
-        // The row did not exist when this snapshot was taken, so the fork and the other
-        // reply versions had nowhere to be written. Leaving the chat must not drop them,
-        // and the mode the user left should reopen this chat rather than the one before it.
-        if (snap.sessionId == null) {
-            persistCapturedFork(sessionId, snap.fork)
-            persistCapturedSwipe(sessionId, snap.swipe)
-            parkMintedDraft(sessionId, snap)
-            // Edit was cut before this chat had a row. The flag has to land with the fork,
-            // or coming back shows the other branch with no Cancel.
-            if (snap.editDraft != null) {
-                sharedPreferencesHelper.setChatForkEditing(sessionId, true, snap.editDraft)
+        // A newer snapshot may already be waiting, and it holds the mutex next. The row
+        // just written is still this snapshot. Its notes have to land before we return,
+        // or a kill in between keeps the transcript and drops the fork.
+        if (ChatSaveGate.recordSideData(rowWritten = true)) {
+            snap.draftFacts?.let { facts ->
+                sharedPreferencesHelper.saveRpFacts(sessionId, facts)
+                if (sessionEpoch == snap.epoch) draftRpFacts = null
+            }
+            // The row did not exist when this snapshot was taken, so the fork and the other
+            // reply versions had nowhere to be written. Leaving the chat must not drop them,
+            // and the mode the user left should reopen this chat rather than the one before it.
+            if (snap.sessionId == null) {
+                persistCapturedFork(sessionId, snap.fork)
+                persistCapturedSwipe(sessionId, snap.swipe)
+                parkMintedDraft(sessionId, snap)
+                // Edit was cut before this chat had a row. The flag has to land with the fork,
+                // or coming back shows the other branch with no Cancel.
+                if (snap.editDraft != null) {
+                    sharedPreferencesHelper.setChatForkEditing(sessionId, true, snap.editDraft)
+                }
             }
         }
+        if (!chatSaveSerial.isCurrent(ticket)) return
+        releaseDroppedScenePhotos(previousPhotos, messagesToSave, snap.swipe)
         if (
             ChatSaveGate.decide(
                 epochAtSchedule = snap.epoch,

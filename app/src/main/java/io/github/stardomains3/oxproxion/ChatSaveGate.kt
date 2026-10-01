@@ -100,4 +100,12 @@ object ChatSaveGate {
         if (snapshotMode == liveMode) return false
         return draftNow == draftAtCapture
     }
+
+    /**
+     * The transcript just landed in the database. The facts, the other branch and the other
+     * reply versions captured with it belong on that row even when a newer snapshot is already
+     * queued. That newer save overwrites them if it finishes. Skipping them left the row without
+     * its notes when the process died first.
+     */
+    fun recordSideData(rowWritten: Boolean): Boolean = rowWritten
 }

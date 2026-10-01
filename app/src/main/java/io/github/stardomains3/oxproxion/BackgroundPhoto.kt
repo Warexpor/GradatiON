@@ -82,10 +82,17 @@ object BackgroundPhoto {
     fun file(ctx: Context, slot: String? = null) =
         File(File(ctx.filesDir, "backgrounds"), if (slot == null) "photo.jpg" else "$slot.jpg")
 
-    fun hasPhoto(ctx: Context, slot: String? = null) = file(ctx, slot).isFile
+    fun hasPhoto(ctx: Context, slot: String? = null): Boolean {
+        val f = file(ctx, slot)
+        ScenePhoto.recover(f)
+        return f.isFile
+    }
 
     fun delete(ctx: Context, slot: String) {
-        file(ctx, slot).delete()
+        val f = file(ctx, slot)
+        f.delete()
+        File(f.parentFile, "${f.name}.bak").delete()
+        File(f.parentFile, "${f.name}.partial").delete()
         prefs(ctx).edit { putLong(versionKey(slot), System.currentTimeMillis()) }
     }
 
@@ -216,6 +223,7 @@ object BackgroundPhoto {
 
     private fun process(ctx: Context, w: Int, h: Int, opts: Options, slot: String?): Bitmap? {
         val f = file(ctx, slot)
+        ScenePhoto.recover(f)
         if (!f.isFile || w <= 0 || h <= 0) return null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(f.path, bounds)

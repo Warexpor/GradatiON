@@ -424,9 +424,17 @@ class RpHubFragment : Fragment() {
             }
             val imported = repo.importCharacters(backup.characters)
             val lorebooks = repo.getAllLorebooksOnce()
+            // Notes first, in one commit, before the pictures. A kill while a portrait is
+            // decoding used to leave the card without the Memory that arrived with it.
+            RpCharacterPrefsBackup.applyAll(
+                prefs,
+                imported.mapIndexedNotNull { index, row ->
+                    backup.characters.getOrNull(index)?.let { row.id to it }
+                },
+                lorebooks,
+            )
             imported.forEachIndexed { index, row ->
                 backup.characters.getOrNull(index)?.let { exported ->
-                    RpCharacterPrefsBackup.apply(prefs, row.id, exported, lorebooks)
                     RpWallpaperBackup.apply(requireContext(), row.id, exported.wallpaperBase64)
                 }
                 if (row.isNew && row.exportKey.isNotBlank()) {

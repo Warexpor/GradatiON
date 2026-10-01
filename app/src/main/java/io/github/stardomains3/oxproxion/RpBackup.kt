@@ -1,8 +1,10 @@
 package io.github.stardomains3.oxproxion
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.BitmapFactory
 import android.util.Base64
+import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -91,6 +93,7 @@ internal object RpBackupWriter {
  * Room id, so a backup of the card alone used to drop them on the next phone.
  */
 internal object RpCharacterPrefsBackup {
+    private const val TAG = "RpCharacterBackup"
     private val layouts = setOf(
         SharedPreferencesHelper.RP_LAYOUT_CLASSIC,
         SharedPreferencesHelper.RP_LAYOUT_BUBBLES,
@@ -103,31 +106,80 @@ internal object RpCharacterPrefsBackup {
         exported: RpCharacterExport,
         lorebooks: List<RpLorebook>,
     ) {
-        exported.memory?.let {
-            prefs.saveRpMemory(characterId, it.take(RpPromptEngine.MEMORY_MAX_CHARS))
+        applyAll(prefs, listOf(characterId to exported), lorebooks)
+    }
+
+    /**
+     * Every character in one commit. A kill between Memory and the voice used to keep one
+     * and drop the other. Wallpaper and the portrait are files and follow this write.
+     */
+    fun applyAll(
+        prefs: SharedPreferencesHelper,
+        rows: List<Pair<Long, RpCharacterExport>>,
+        lorebooks: List<RpLorebook>,
+    ): Boolean {
+        if (rows.isEmpty()) return true
+        val editor = prefs.mainPrefs.edit()
+        for ((characterId, exported) in rows) {
+            write(editor, prefs, characterId, exported, lorebooks)
         }
-        exported.layout?.takeIf { it in layouts }?.let { prefs.saveRpLayout(characterId, it) }
+        val saved = editor.commit()
+        if (!saved) Log.e(TAG, "Character backup notes could not be saved")
+        return saved
+    }
+
+    private fun write(
+        editor: SharedPreferences.Editor,
+        prefs: SharedPreferencesHelper,
+        characterId: Long,
+        exported: RpCharacterExport,
+        lorebooks: List<RpLorebook>,
+    ) {
+        val memory = exported.memory?.take(RpPromptEngine.MEMORY_MAX_CHARS)
+        val layout = exported.layout?.takeIf { it in layouts }
         // Pitch or rate present means this backup carries a voice. A missing name is the default
         // voice, not "leave whatever is already set".
-        if (exported.voicePitch != null || exported.voiceRate != null) {
+        val voice = if (exported.voicePitch != null || exported.voiceRate != null) {
             val current = prefs.getRpVoice(characterId)
-            prefs.saveRpVoice(
-                characterId,
-                SharedPreferencesHelper.RpVoice(
-                    name = exported.voiceName?.takeIf { it.isNotBlank() },
-                    pitch = exported.voicePitch?.takeIf { it.isFinite() && it in 0.25f..4f } ?: current.pitch,
-                    rate = exported.voiceRate?.takeIf { it.isFinite() && it in 0.25f..4f } ?: current.rate,
-                )
+            SharedPreferencesHelper.RpVoice(
+                name = exported.voiceName?.takeIf { it.isNotBlank() },
+                pitch = exported.voicePitch?.takeIf { it.isFinite() && it in 0.25f..4f } ?: current.pitch,
+                rate = exported.voiceRate?.takeIf { it.isFinite() && it in 0.25f..4f } ?: current.rate,
             )
+        } else {
+            null
         }
+        var lorebookId: Long? = null
+        var clearLorebook = false
+        var pending: String? = null
+        var clearPending = false
         when {
             exported.lorebookName == null -> Unit
             exported.lorebookName.isBlank() -> {
-                prefs.saveRpLorebookId(characterId, null)
-                prefs.savePendingRpLorebookName(characterId, null)
+                clearLorebook = true
+                clearPending = true
             }
-            else -> bindLorebook(prefs, characterId, exported.lorebookName, lorebooks)
+            else -> {
+                val match = lorebooks.firstOrNull { it.name.equals(exported.lorebookName, ignoreCase = true) }
+                if (match != null) {
+                    lorebookId = match.id
+                    clearPending = true
+                } else {
+                    pending = exported.lorebookName.take(200)
+                }
+            }
         }
+        prefs.writeCharacterBackupFields(
+            editor,
+            characterId,
+            memory = memory,
+            layout = layout,
+            voice = voice,
+            lorebookId = lorebookId,
+            clearLorebook = clearLorebook,
+            pendingLorebook = pending,
+            clearPendingLorebook = clearPending,
+        )
     }
 
     /** After a lorebook import, attach pins that were waiting for a book that was not here yet. */

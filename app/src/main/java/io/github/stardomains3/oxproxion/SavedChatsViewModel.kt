@@ -172,25 +172,33 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 session to messages
             }
+            // A kill during the previous import may still owe that batch its notes.
+            // Leave its log in place when the commit does not land, instead of replacing it.
+            val prefs = SharedPreferencesHelper(app)
+            val resumed = ChatImportSideLog.resume(app)
             // One transaction: a failure part-way leaves the chat list as it was.
             val newIds = repository.insertImportedSessions(batch)
             // A new row can take an id a deleted chat used to have; drop that chat's leftovers.
-            // Facts and pins are one commit, not a series of apply() calls.
-            val prefs = SharedPreferencesHelper(app)
-            prefs.applyImportedChatMetadata(
-                newIds.mapIndexed { index, id ->
-                    val exported = backup.sessions[index]
-                    ImportedChatMeta(
-                        id = id,
-                        facts = exported.facts?.take(RpPromptEngine.MEMORY_MAX_CHARS)?.takeIf { it.isNotBlank() },
-                        pinned = exported.pinned,
-                        forkIndex = exported.forkIndex,
-                        forkAnchor = exported.forkAnchor,
-                        forkMessages = exported.forkMessages?.takeIf { it.isNotBlank() },
-                        swipeJson = exported.swipe?.takeIf { it.isNotBlank() },
-                    )
-                }
-            )
+            // The side file is written before the preference commit. A kill after the rows
+            // land and before that commit is finished on the next launch.
+            val metas = newIds.mapIndexed { index, id ->
+                val exported = backup.sessions[index]
+                ImportedChatMeta(
+                    id = id,
+                    facts = exported.facts?.take(RpPromptEngine.MEMORY_MAX_CHARS)?.takeIf { it.isNotBlank() },
+                    pinned = exported.pinned,
+                    forkIndex = exported.forkIndex,
+                    forkAnchor = exported.forkAnchor,
+                    forkMessages = exported.forkMessages?.takeIf { it.isNotBlank() },
+                    swipeJson = exported.swipe?.takeIf { it.isNotBlank() },
+                )
+            }
+            if (resumed) ChatImportSideLog.write(ChatImportSideLog.file(app), metas)
+            if (prefs.applyImportedChatMetadata(metas)) {
+                if (resumed) ChatImportSideLog.clear(ChatImportSideLog.file(app))
+            } else {
+                Log.e("SavedChats", "Imported chat notes could not be saved; will retry next launch")
+            }
             ChatImportResult.Success
         } catch (e: CancellationException) {
             throw e

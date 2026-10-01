@@ -89,6 +89,14 @@ class ChatSaveSerialTest {
     }
 
     @Test
+    fun aWrittenRowKeepsItsSideDataWhenANewerSaveIsWaiting() {
+        // The newer snapshot overwrites these if it runs. The row already written still
+        // needs the fork and the facts when the process dies before that.
+        assertTrue(ChatSaveGate.recordSideData(rowWritten = true))
+        assertFalse(ChatSaveGate.recordSideData(rowWritten = false))
+    }
+
+    @Test
     fun leavingStillWritesTheSnapshot() {
         // decide() refuses to attach the row to the chat now on screen. persist() still writes it.
         assertEquals(
