@@ -1545,7 +1545,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     // NEW: Specialized resend for existing user prompt (keeps original UI bubble intact)
-    fun resendExistingPrompt(userMessageIndex: Int, systemMessage: String? = null) {
+    fun resendExistingPrompt(
+        userMessageIndex: Int,
+        systemMessage: String? = null,
+        /** Turns sent after the user message but never shown: a Rewrite's old reply and its note. */
+        extraTurns: List<FlexibleMessage> = emptyList()
+    ) {
         if (userMessageIndex < 0 || userMessageIndex >= (_chatMessages.value?.size ?: 0)) {
 
             return
@@ -1593,6 +1598,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         messagesForApiRequest.addAll(currentMessages.take(userMessageIndex))
         // Use messageWithImage instead of userMessage
         messagesForApiRequest.add(messageWithImage)
+        messagesForApiRequest.addAll(extraTurns)
         trimMessagesForApiMemory(messagesForApiRequest)
 
         val uiMessages = _chatMessages.value?.toMutableList() ?: mutableListOf()
@@ -2407,6 +2413,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         stripQuotes: Boolean,
     ): String? {
         if (input.isBlank()) return null
+        val content = completeTurns(listOf("system" to systemPrompt, "user" to input), cloudModel, timeoutMs, maxTokens)
+        return if (stripQuotes) content?.trim()?.removeSurrounding("\"")?.removeSurrounding("'") else content
+    }
+
+    /** One non-streamed reply to [turns] (role to text) from the LAN server or [model] on OpenRouter; null on any failure. */
+    private suspend fun completeTurns(
+        turns: List<Pair<String, String>>,
+        model: String?,
+        timeoutMs: Long,
+        maxTokens: Int,
+    ): String? {
         val isLanModel = activeModelIsLan()
         val lanProvider = sharedPreferencesHelper.getLanProvider()
         val isReasoningModel = isReasoningModel(_activeChatModel.value)
@@ -2420,10 +2437,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             requestKey = sharedPreferencesHelper.getLanApiKeyForRequest()
             modelToUse = _activeChatModel.value ?: return null
         } else {
-            if (activeChatApiKey.isBlank() || cloudModel.isNullOrBlank()) return null
-            requestUrl = "https://openrouter.ai/api/v1/chat/completions"
             requestKey = sharedPreferencesHelper.getApiKeyFromPrefs("openrouter_api_key")
-            modelToUse = cloudModel
+            if (requestKey.isBlank() || model.isNullOrBlank()) return null
+            requestUrl = "https://openrouter.ai/api/v1/chat/completions"
+            modelToUse = model
         }
         return try {
             withTimeout(timeoutMs.milliseconds) {
@@ -2432,14 +2449,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val requestBody = buildJsonObject {
                             put("model", JsonPrimitive(modelToUse))
                             putJsonArray("messages") {
-                                add(buildJsonObject {
-                                    put("role", JsonPrimitive("system"))
-                                    put("content", JsonPrimitive(systemPrompt))
-                                })
-                                add(buildJsonObject {
-                                    put("role", JsonPrimitive("user"))
-                                    put("content", JsonPrimitive(input))
-                                })
+                                turns.forEach { (role, text) ->
+                                    add(buildJsonObject {
+                                        put("role", JsonPrimitive(role))
+                                        put("content", JsonPrimitive(text))
+                                    })
+                                }
                             }
                             put("stream", JsonPrimitive(false))
                             put("max_tokens", JsonPrimitive(maxTokens))
@@ -2462,11 +2477,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             val errorBody = try { response.bodyAsText() } catch (_: Exception) { "No details" }
                             throw Exception("API Error: ${response.status} - $errorBody")
                         }
-                        val content = response.body<JsonObject>()["choices"]?.jsonArray
+                        response.body<JsonObject>()["choices"]?.jsonArray
                             ?.firstOrNull()?.jsonObject
                             ?.get("message")?.jsonObject
                             ?.get("content")?.jsonPrimitive?.content
-                        if (stripQuotes) content?.trim()?.removeSurrounding("\"")?.removeSurrounding("'") else content
                 }
             }
         } catch (_: Throwable) {
@@ -3974,7 +3988,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * Existing assistant text is stashed into swipe alts; the new reply is appended when it completes.
      * @return false if soft-failed (toast already shown); true if prep started.
      */
-    fun regenerateLastRpReply(instruction: String? = null): Boolean {
+    fun regenerateLastRpReply(instruction: String? = null, rewrite: String? = null): Boolean {
         if (_isAwaitingResponse.value == true) {
             _toastUiEvent.postValue(
                 Event(getApplication<Application>().getString(R.string.rp_wait_for_reply))
@@ -3996,8 +4010,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
             return false
         }
+        // A Rewrite shows the model the reply it is changing, so it needs one to change.
+        val rewriteTurns = if (rewrite.isNullOrBlank()) emptyList() else {
+            val old = messages.getOrNull(lastAssistantIndex)
+                ?.takeIf { lastAssistantIndex > lastUserIndex }
+                ?.let { getMessageText(it.content) }
+                ?.takeIf { it.isNotBlank() && !isNonSwipeableRpAssistantText(it) }
+                ?: return false
+            listOf(
+                FlexibleMessage(role = "assistant", content = JsonPrimitive(old)),
+                FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.rewriteDirective(rewrite)))
+            )
+        }
         _toastUiEvent.postValue(
-            Event(getApplication<Application>().getString(R.string.rp_regen_started))
+            Event(str(if (rewriteTurns.isEmpty()) R.string.rp_regen_started else R.string.rp_rewrite_started))
         )
         // Block Ask↔RP before truncate + async prompt build.
         _isAwaitingResponse.value = true
@@ -4033,7 +4059,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 pendingRpSwipeAppend = true
-                resendExistingPrompt(lastUserIndex, systemPrompt)
+                resendExistingPrompt(lastUserIndex, systemPrompt, rewriteTurns)
             } catch (e: CancellationException) {
                 _isAwaitingResponse.value = false
                 throw e
@@ -4052,7 +4078,81 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
-    fun instructLastRpReply(instruction: String): Boolean = regenerateLastRpReply(instruction)
+    private var rpRewriteJob: Job? = null
+
+    /**
+     * Rewrite: the reply at [position] comes back changed the way [instruction] asks, written with
+     * the chat up to it, the reply itself and the note in view. The last reply streams in as a new
+     * swipe (the old one stays a swipe back); an earlier one, or the greeting, is replaced in place
+     * with an Undo, and everything after it is left as it was.
+     * @return false if soft-failed (toast already shown).
+     */
+    fun rewriteRpReply(position: Int, instruction: String): Boolean {
+        val note = instruction.trim()
+        if (note.isEmpty() || !isRpMode()) return false
+        if (_isAwaitingResponse.value == true || rpRewriteJob?.isActive == true) {
+            _toastUiEvent.postValue(Event(str(R.string.rp_wait_for_reply)))
+            return false
+        }
+        val messages = _chatMessages.value ?: return false
+        val target = messages.getOrNull(position)?.takeIf { it.role == "assistant" && !isAssistantPlaceholder(it) }
+            ?: return false
+        val original = getMessageText(target.content)
+        if (original.isBlank() || isNonSwipeableRpAssistantText(original)) return false
+        val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val lastUserIndex = messages.indexOfLast { it.role == "user" }
+        if (position == lastAssistantIndex && lastAssistantIndex > lastUserIndex) {
+            return regenerateLastRpReply(rewrite = note)
+        }
+        if (!canSendRpMessage()) {
+            _toastUiEvent.postValue(Event(str(R.string.rp_select_character)))
+            return false
+        }
+        _toastUiEvent.postValue(Event(str(R.string.rp_rewrite_started)))
+        val epoch = sessionEpoch
+        rpRewriteJob = viewModelScope.launch {
+            val systemPrompt = rpDelegate.buildSystemPrompt(
+                character = rpDelegate.getActiveCharacter(),
+                extraInstruction = null,
+                loreScan = rpLoreScan(),
+                definitionCap = rpDefinitionCap(),
+                facts = currentRpFacts()
+            )
+            val request = mutableListOf(FlexibleMessage(role = "system", content = JsonPrimitive(systemPrompt)))
+            messages.take(position + 1).filterTo(request) { it.role != "system" && !isAssistantPlaceholder(it) }
+            trimMessagesForApiMemory(request)
+            request.add(FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.rewriteDirective(note))))
+            val turns = request.map { it.role to getMessageText(it.content) }
+            val rewritten = completeTurns(
+                turns = turns,
+                model = _activeChatModel.value,
+                timeoutMs = 120_000,
+                maxTokens = sharedPreferencesHelper.getMaxTokens().toIntOrNull() ?: 12_000,
+            )?.let { rpDelegate.cleanReply(it) }?.takeIf { it.isNotBlank() }
+            // The chat moved on (switched, or this reply was edited or removed): don't write into it.
+            val now = _chatMessages.value
+            if (epoch != sessionEpoch || now?.getOrNull(position)?.let { getMessageText(it.content) } != original) return@launch
+            if (rewritten == null) {
+                _toastUiEvent.postValue(Event(str(R.string.rp_rewrite_failed)))
+                return@launch
+            }
+            updateMessageAt(position, rewritten)
+            _rpRewriteDone.value = Event(RpRewriteDone(position, original, rewritten))
+        }
+        return true
+    }
+
+    /** A finished in-place Rewrite, for the notice's Undo. */
+    data class RpRewriteDone(val position: Int, val original: String, val rewritten: String)
+    private val _rpRewriteDone = MutableLiveData<Event<RpRewriteDone>>()
+    val rpRewriteDone: LiveData<Event<RpRewriteDone>> = _rpRewriteDone
+
+    /** Undo puts the old reply back, but only while the rewritten one is still what's there. */
+    fun undoRpRewrite(done: RpRewriteDone) {
+        val current = _chatMessages.value?.getOrNull(done.position) ?: return
+        if (getMessageText(current.content) != done.rewritten) return
+        updateMessageAt(done.position, done.original)
+    }
 
     /** Drop messages from [startIndex] onward without stashing an Ask-mode fork. */
     private fun truncateWithoutFork(startIndex: Int) {

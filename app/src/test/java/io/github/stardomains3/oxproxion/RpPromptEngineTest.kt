@@ -170,4 +170,12 @@ class RpPromptEngineTest {
         assertFalse(prompt.contains("x".repeat(80)))
         assertTrue(prompt.contains("## Response Format"))
     }
+
+    @Test
+    fun rewriteDirective_carriesTheNoteOutOfCharacter() {
+        val d = RpPromptEngine.rewriteDirective("  make it shorter  ")
+        assertTrue(d.startsWith("(OOC:"))
+        assertTrue(d.contains("What to change: make it shorter\n"))
+        assertTrue(d.contains("Write only the new version"))
+    }
 }

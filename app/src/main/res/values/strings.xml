@@ -154,9 +154,13 @@
     <string name="rp_insert_reminder_a11y">Insert a Reminder scene note</string>
     <string name="rp_message_empty">Type a message first</string>
     <string name="rp_reminder_continue">…</string>
-    <string name="rp_instruct">Instruct</string>
+    <string name="rp_instruct">Rewrite</string>
     <string name="rp_regenerate">Regenerate response</string>
     <string name="rp_regen_started">Generating another reply…</string>
+    <string name="rp_rewrite_started">Rewriting…</string>
+    <string name="rp_rewrite_failed">Couldn\'t rewrite that reply. Try again</string>
+    <string name="rp_rewrite_done">Rewritten</string>
+    <string name="rp_rewrite_undo">Undo</string>
     <string name="rp_save_failed">Save failed — try again</string>
     <string name="rp_select_character">Pick a character or enable LLM mode in RP settings</string>
     <string name="rp_export_characters">Export characters (JSON)</string>
@@ -207,7 +211,7 @@
     <string name="rp_hub_section_library">Library</string>
     <string name="rp_persona_delete_preset">Delete persona</string>
     <string name="rp_persona_preset_cap">Saved. Your oldest persona was dropped (max 12).</string>
-    <string name="rp_instruct_hint">How should the next reply change?</string>
+    <string name="rp_instruct_hint">What should change? Shorter, darker, she says no…</string>
     <string name="rp_session_llm">GradatiON LLM</string>
     <string name="rp_session_default">RP chat</string>
     <string name="rp_orphan_character">Character missing — pick one from the library</string>
@@ -440,7 +444,7 @@
     <string name="rp_continue_prompt">Continue your last message from exactly where it stopped. Write only what comes next.</string>
     <string name="msg_menu_read">Read aloud</string>
     <string name="msg_menu_stop_reading">Stop reading</string>
-    <string name="msg_menu_instruct">Instruct</string>
+    <string name="msg_menu_instruct">Rewrite</string>
     <string name="msg_menu_edit">Edit</string>
     <string name="control_thoughts_a11y">Show the model\'s thinking above replies</string>
     <string name="controls_model">Model</string>

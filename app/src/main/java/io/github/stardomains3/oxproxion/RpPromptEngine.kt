@@ -20,6 +20,16 @@ object RpPromptEngine {
             "repeat, rephrase or summarize anything already written, don't restate its last words, " +
             "don't greet, and never speak, act or decide for the user."
 
+    /**
+     * The closing turn of a Rewrite: the model has just seen its own reply and gets it back with
+     * the user's note. Out of character, so it isn't read as the user's next move in the scene.
+     */
+    fun rewriteDirective(instruction: String): String =
+        "(OOC: Rewrite your last reply above. What to change: ${instruction.trim()}\n" +
+            "Keep everything the change doesn't touch: the events, facts, names and your voice. " +
+            "Stay in character and never speak, act or decide for the user. Write only the new " +
+            "version of that reply, with no notes, labels or commentary.)"
+
     /** Scene-craft rules shared by every character reply. */
     private const val CRAFT =
         "- Never speak, act or decide for the user. End your turn where the user can respond.\n" +

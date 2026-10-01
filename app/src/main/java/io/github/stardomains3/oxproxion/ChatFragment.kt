@@ -818,6 +818,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.rpChromeRefreshEvent.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { updateRpChrome() }
         }
+        viewModel.rpRewriteDone.observe(viewLifecycleOwner) { event ->
+            event.getContentIfNotHandled()?.let { done ->
+                GlassNotice.show(requireContext(), getString(R.string.rp_rewrite_done), getString(R.string.rp_rewrite_undo)) {
+                    viewModel.undoRpRewrite(done)
+                }
+            }
+        }
         viewModel.rpSwipeNav.observe(viewLifecycleOwner) { nav ->
             applyRpSwipeChrome(nav)
         }
@@ -1830,8 +1837,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 hideMenu()
                 scrollChatToLatestEnd()
             },
-            onInstructMessage = { _ ->
-                // Title says "Instruct"; the field only needs its placeholder.
+            onInstructMessage = { position ->
+                // Rewrite: the title says it; the field only needs its placeholder.
                 val wrapper = layoutInflater.inflate(R.layout.dialog_instruct, null)
                 val input = wrapper.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.instructInput)
                 val dialog = GlassAlertDialogBuilder(
@@ -1851,10 +1858,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                             dialog.dismiss()
                             return@setOnClickListener
                         }
-                        // Keep dialog open on soft-fail so the typed instruct isn't lost.
-                        if (!viewModel.instructLastRpReply(text)) return@setOnClickListener
+                        // Keep dialog open on soft-fail so the typed note isn't lost.
+                        if (!viewModel.rewriteRpReply(position, text)) return@setOnClickListener
                         dialog.dismiss()
-                        scrollChatToLatestEnd()
+                        // The last reply streams in at the end; an earlier one changes where it is.
+                        if (position >= chatAdapter.itemCount - 1) scrollChatToLatestEnd()
                     }
                 }
                 dialog.show()

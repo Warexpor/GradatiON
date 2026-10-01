@@ -957,15 +957,15 @@ class ChatAdapter(
         private val regenerateButton: ImageButton = itemView.findViewById(R.id.regenerateButton)
         private val moreActionsButton: ImageButton = itemView.findViewById(R.id.moreActionsButton)
 
-        /** ⋮ after Regenerate: Read aloud, Instruct (Roleplay's last reply) and Edit. */
-        private fun bindMoreActions(speakingHere: Boolean, canInstruct: Boolean) {
+        /** ⋮ after Regenerate: Read aloud, Rewrite (any Roleplay reply) and Edit. */
+        private fun bindMoreActions(speakingHere: Boolean, canRewrite: Boolean) {
             val ctx = itemView.context
             val rows = buildList {
                 if (ttsAvailable) add(MessageMenu.Item(
                     ctx.getString(if (speakingHere) R.string.msg_menu_stop_reading else R.string.msg_menu_read),
                     if (speakingHere) R.drawable.ic_msg_stop else R.drawable.ic_msg_speak,
                 ) { ttsButton.performClick() })
-                if (canInstruct) add(MessageMenu.Item(ctx.getString(R.string.msg_menu_instruct), R.drawable.ic_msg_instruct) {
+                if (canRewrite) add(MessageMenu.Item(ctx.getString(R.string.msg_menu_instruct), R.drawable.ic_msg_instruct) {
                     instructButton.performClick()
                 })
                 add(MessageMenu.Item(ctx.getString(R.string.msg_menu_edit), R.drawable.ic_msg_edit) {
@@ -1444,14 +1444,8 @@ class ChatAdapter(
                 if (lastUserIndex < 0 && role == "user") lastUserIndex = i
                 if (lastAssistantIndex >= 0 && lastUserIndex >= 0) break
             }
-            val hasUserTurn = lastUserIndex >= 0
-            // Instruct/regen only when there is an assistant reply after the last user turn
+            // Regen only when there is an assistant reply after the last user turn
             // (not the opening greeting after a cancelled request). Error bubbles still allow retry.
-            val showRpActions = isRpMode &&
-                hasUserTurn &&
-                position == lastAssistantIndex &&
-                lastAssistantIndex > lastUserIndex &&
-                !isThinking
             instructButton.visibility = View.GONE
             regenerateButton.visibility = if (
                 position > 0 &&
@@ -1488,7 +1482,8 @@ class ChatAdapter(
             ttsButton.setImageResource(iconRes)
             bindMoreActions(
                 speakingHere = isSpeaking && position == currentPosition,
-                canInstruct = showRpActions,
+                // Any finished reply, the greeting included; an error bubble has nothing to rewrite.
+                canRewrite = isRpMode && !isThinking && !isError && text.isNotBlank(),
             )
 
             ttsButton.setOnClickListener {
