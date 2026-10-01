@@ -5,4 +5,10 @@
     <exclude domain="database" path="chat_database" />
     <exclude domain="database" path="chat_database-shm" />
     <exclude domain="database" path="chat_database-wal" />
+    <exclude domain="database" path="chat_database-journal" />
+    <!-- Leftovers from before these copies moved to noBackupFilesDir. A backup can run before the next open. -->
+    <exclude domain="database" path="chat_database.pre_sqlcipher" />
+    <exclude domain="database" path="chat_database.encrypting" />
+    <exclude domain="database" path="chat_database.encrypt_ok" />
+    <exclude domain="sharedpref" path="code_mode_secrets.xml" />
 </full-backup-content>

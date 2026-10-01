@@ -14,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlin.math.roundToInt
 
 /** The history row and the user bubble, inflated the way the adapters see them. */
 @RunWith(RobolectricTestRunner::class)

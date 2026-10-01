@@ -222,8 +222,170 @@ class ChatDatabaseRecoveryTest {
         val prefs = SharedPreferencesHelper(app)
         prefs.mainPrefs.edit().putString("chat_db_file", "../chat_database").commit()
         assertEquals(AppDatabase.DB_NAME, prefs.chatDbFileName())
+        prefs.mainPrefs.edit().putString("chat_db_file", "chat_database.pre_sqlcipher").commit()
+        assertEquals(AppDatabase.DB_NAME, prefs.chatDbFileName())
+        prefs.mainPrefs.edit().putString("chat_db_file", "/tmp/chat_database.recovered-5").commit()
+        assertEquals(AppDatabase.DB_NAME, prefs.chatDbFileName())
         prefs.saveChatDbFileName("chat_database.recovered-5")
         assertEquals("chat_database.recovered-5", prefs.chatDbFileName())
+        prefs.mainPrefs.edit().remove("chat_db_file").commit()
+    }
+
+    @Test
+    fun setAsideWritesIntoTheVaultNotBesideTheDatabase() {
+        val db = tmp.newFile("chat_database").apply { writeText("main") }
+        File(db.path + "-wal").writeText("wal")
+        val vault = tmp.newFolder("vault")
+
+        val moved = AppDatabase.setAside(db, 4L, vault)!!
+
+        assertEquals(vault.canonicalFile, moved.parentFile!!.canonicalFile)
+        assertEquals("chat_database.unreadable-4", moved.name)
+        assertEquals("main", moved.readText())
+        assertEquals("wal", File(moved.path + "-wal").readText())
+        assertFalse(db.exists())
+        assertFalse(File(tmp.root, "chat_database.unreadable-4").exists())
+    }
+
+    @Test
+    fun thePlaintextCopyIsReadFromTheVault() {
+        val db = File(tmp.root, "chat_database")
+        val vault = tmp.newFolder("plain-vault")
+        File(vault, "chat_database.pre_sqlcipher").writeBytes(sqliteHeader("vaulted"))
+        File(tmp.root, "chat_database.pre_sqlcipher").writeBytes(sqliteHeader("sibling"))
+
+        assertTrue(AppDatabase.shouldRestorePlaintextBackup(db, vault))
+        assertTrue(AppDatabase.restorePlaintextBackup(db, vault))
+
+        assertEquals("vaulted", String(db.readBytes().copyOfRange(16, db.length().toInt()), Charsets.US_ASCII))
+        assertFalse(File(vault, "chat_database.pre_sqlcipher").exists())
+        assertTrue(File(tmp.root, "chat_database.pre_sqlcipher").exists())
+    }
+
+    @Test
+    fun aRecoveredNameStillInTheDatabasesDirectoryIsNotReused() {
+        val vault = tmp.newFolder("name-vault")
+        val databases = tmp.newFolder("name-databases")
+        File(databases, "chat_database.recovered-5-wal").writeText("wal")
+
+        assertEquals("chat_database.recovered-6", AppDatabase.recoveredFileName(vault, 5L, databases))
+    }
+
+    @Test
+    fun plaintextCopiesLeaveTheDatabasesDirectory() {
+        val databases = tmp.newFolder("legacy-databases")
+        val vault = tmp.newFolder("legacy-vault")
+        File(databases, "chat_database").writeText("live")
+        File(databases, "chat_database-wal").writeText("livewal")
+        File(databases, "chat_database.pre_sqlcipher").writeBytes(sqliteHeader("plain"))
+        File(databases, "chat_database.encrypting").writeText("temp")
+        File(databases, "chat_database.encrypt_ok").writeText("ok")
+        File(databases, "chat_database.unreadable-3").writeText("old")
+        File(databases, "chat_database.unreadable-3-wal").writeText("wal")
+
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, null))
+
+        assertEquals("live", File(databases, "chat_database").readText())
+        assertEquals("livewal", File(databases, "chat_database-wal").readText())
+        assertFalse(File(databases, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(databases, "chat_database.encrypting").exists())
+        assertFalse(File(databases, "chat_database.encrypt_ok").exists())
+        assertFalse(File(databases, "chat_database.unreadable-3").exists())
+        assertFalse(File(databases, "chat_database.unreadable-3-wal").exists())
+        assertTrue(ChatDbVault.plaintextBackup(vault).readBytes().copyOfRange(16, 21).contentEquals("plain".toByteArray()))
+        assertEquals("temp", ChatDbVault.encrypting(vault).readText())
+        assertEquals("ok", ChatDbVault.encryptMarker(vault).readText())
+        assertEquals("old", File(vault, "chat_database.unreadable-3").readText())
+        assertEquals("wal", File(vault, "chat_database.unreadable-3-wal").readText())
+    }
+
+    @Test
+    fun aPlaintextCopyAlreadyInTheVaultIsNotOverwritten() {
+        val databases = tmp.newFolder("both-databases")
+        val vault = tmp.newFolder("both-vault")
+        File(databases, "chat_database.pre_sqlcipher").writeText("legacy")
+        ChatDbVault.plaintextBackup(vault).writeText("already")
+
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, null))
+
+        assertEquals("already", ChatDbVault.plaintextBackup(vault).readText())
+        assertFalse(File(databases, "chat_database.pre_sqlcipher").exists())
+        val kept = vault.listFiles()?.filter { it.name.startsWith("chat_database.pre_sqlcipher.kept-") }.orEmpty()
+        assertEquals(1, kept.size)
+        assertEquals("legacy", kept.single().readText())
+    }
+
+    @Test
+    fun aRecoveredFileAlreadyInTheVaultIsLeftBesideTheLiveDatabase() {
+        val databases = tmp.newFolder("split-databases")
+        val vault = tmp.newFolder("split-vault")
+        File(databases, "chat_database.recovered-2").writeText("legacy")
+        File(databases, "chat_database.recovered-2-wal").writeText("wal")
+        File(vault, "chat_database.recovered-2").writeText("vaultcopy")
+
+        assertFalse(ChatDbVault.relocateLegacy(databases, vault, "chat_database.recovered-2"))
+
+        assertEquals("legacy", File(databases, "chat_database.recovered-2").readText())
+        assertEquals("wal", File(databases, "chat_database.recovered-2-wal").readText())
+        assertEquals("vaultcopy", File(vault, "chat_database.recovered-2").readText())
+        assertFalse(File(vault, "chat_database.recovered-2-wal").exists())
+    }
+
+    @Test
+    fun aRecoveredNameOpensUnderNoBackupOnceTheDatabasesCopyIsGone() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val databases = app.getDatabasePath(AppDatabase.DB_NAME).parentFile!!
+        databases.mkdirs()
+        val vault = ChatDbVault.directory(app)
+        val stored = "chat_database.recovered-11"
+        val legacy = File(databases, stored)
+        val legacyWal = File(databases, "$stored-wal")
+        legacy.writeText("live")
+        legacyWal.writeText("wal")
+        val resolved = File(vault, stored)
+        try {
+            assertEquals(stored, ChatDbVault.roomDatabaseName(app, stored))
+            assertTrue(ChatDbVault.relocateLegacy(databases, vault, stored))
+            val roomName = ChatDbVault.roomDatabaseName(app, stored)
+            assertEquals(resolved.canonicalPath, File(roomName).canonicalPath)
+            assertEquals("live", resolved.readText())
+            assertEquals("wal", File(resolved.path + "-wal").readText())
+            assertFalse(legacy.exists())
+            assertFalse(legacyWal.exists())
+            val opened = app.getDatabasePath(roomName)
+            assertEquals(resolved.canonicalPath, opened.canonicalPath)
+            assertEquals(AppDatabase.DB_NAME, ChatDbVault.roomDatabaseName(app, "chat_database.pre_sqlcipher"))
+        } finally {
+            legacy.delete()
+            legacyWal.delete()
+            resolved.delete()
+            File(resolved.path + "-wal").delete()
+        }
+    }
+
+    @Test
+    fun backupRulesExcludePlaintextCopiesAndHostTokens() {
+        val rules = xmlText("backup_rules.xml")
+        val extraction = xmlText("data_extraction_rules.xml")
+        val names = listOf(
+            "chat_database-journal",
+            "chat_database.pre_sqlcipher",
+            "chat_database.encrypting",
+            "chat_database.encrypt_ok",
+            "code_mode_secrets.xml"
+        )
+        for (name in names) {
+            assertTrue(name, rules.contains("path=\"$name\""))
+            // cloud-backup and device-transfer each name the file once
+            assertEquals(name, 2, Regex.fromLiteral("path=\"$name\"").findAll(extraction).count())
+        }
+    }
+
+    private fun xmlText(name: String): String {
+        val file = listOf(File("src/main/res/xml/$name"), File("app/src/main/res/xml/$name"))
+            .firstOrNull { it.isFile }
+            ?: error("$name not found from ${File(".").absolutePath}")
+        return file.readText()
     }
 
     @Test
