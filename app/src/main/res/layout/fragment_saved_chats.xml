@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- History: wordmark title, grouped list, bottom search | settings | new chat -->
+<!-- History: wordmark title, grouped list, bottom search | settings | new chat.
+     The drawer container is padded for the status bar and the keyboard. This root
+     must not pad again, or the header and the search field sit too low. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/xai_canvas"
-    android:fitsSystemWindows="true"
     android:orientation="vertical"
     tools:context="SavedChatsFragment">
 

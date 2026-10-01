@@ -194,29 +194,42 @@ class SavedChatsFragment : Fragment() {
             } else {
                 savedChatsViewModel.searchSessions(query, mode)
             }
-            val prefixes = savedChatsViewModel.lastMessagePrefixes(filtered.map { it.id })
+            val ids = filtered.map { it.id }
+            val prefixes = savedChatsViewModel.lastMessagePrefixes(ids)
             val photo = getString(R.string.history_preview_photo)
             val you = getString(R.string.history_preview_you)
+            val youLabel = { text: String -> you.replace("%1\$s", text) }
             val previews = prefixes.associate { message ->
                 message.sessionId to HistoryList.preview(
                     role = message.role,
                     storedPrefix = message.content,
-                    youLabel = { text -> you.replace("%1\$s", text) },
+                    youLabel = youLabel,
                     photoLabel = photo,
                 )
+            }.toMutableMap()
+            // A hit in an earlier message replaces the last line, which may not contain the words.
+            if (query.isNotEmpty()) {
+                for (hit in savedChatsViewModel.searchWindows(ids, query)) {
+                    val line = HistoryList.searchLine(hit.role, hit.content, query, youLabel, photo)
+                    if (line.isNotEmpty()) previews[hit.sessionId] = line
+                }
             }
-            val items = HistoryList.build(
-                sessions = filtered,
-                pinnedIds = prefs.getPinnedSessionIds(),
-                previews = previews,
-                now = System.currentTimeMillis(),
-                labels = HistoryList.Labels(
-                    pinned = getString(R.string.grok_history_pinned_title),
-                    today = getString(R.string.history_section_today),
-                    yesterday = getString(R.string.history_section_yesterday),
-                    week = getString(R.string.history_section_week),
-                    earlier = getString(R.string.history_section_earlier),
+            val items = HistoryList.present(
+                HistoryList.build(
+                    sessions = filtered,
+                    pinnedIds = prefs.getPinnedSessionIds(),
+                    previews = previews,
+                    now = System.currentTimeMillis(),
+                    labels = HistoryList.Labels(
+                        pinned = getString(R.string.grok_history_pinned_title),
+                        today = getString(R.string.history_section_today),
+                        yesterday = getString(R.string.history_section_yesterday),
+                        week = getString(R.string.history_section_week),
+                        earlier = getString(R.string.history_section_earlier),
+                    ),
                 ),
+                openId = viewModel.getCurrentSessionId(),
+                query = query,
             )
             savedChatsAdapter.submitList(items)
 

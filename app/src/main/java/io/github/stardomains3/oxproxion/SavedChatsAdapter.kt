@@ -1,10 +1,16 @@
 package io.github.stardomains3.oxproxion
 
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.StyleSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -43,7 +49,7 @@ class SavedChatsAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = getItem(position)) {
             is HistoryListItem.Header -> (holder as HeaderViewHolder).bind(item.title)
-            is HistoryListItem.Session -> (holder as ChatSessionViewHolder).bind(item.session, item.preview)
+            is HistoryListItem.Session -> (holder as ChatSessionViewHolder).bind(item)
         }
     }
 
@@ -62,7 +68,11 @@ class SavedChatsAdapter(
         private val titleTextView: TextView = itemView.findViewById(R.id.savedChatTitle)
         private val previewTextView: TextView = itemView.findViewById(R.id.savedChatPreview)
         private val timestampTextView: TextView = itemView.findViewById(R.id.savedChatTimestamp)
+        private val pinView: ImageView = itemView.findViewById(R.id.savedChatPin)
         private val overflowButton: ImageButton = itemView.findViewById(R.id.iconEditt)
+        private val ink = ContextCompat.getColor(itemView.context, R.color.xai_ink)
+        private val mute = ContextCompat.getColor(itemView.context, R.color.xai_mute)
+        private val timeFace = timestampTextView.typeface ?: Typeface.DEFAULT
         private var currentSession: ChatSession? = null
 
         init {
@@ -87,16 +97,36 @@ class SavedChatsAdapter(
             }
         }
 
-        fun bind(session: ChatSession, preview: String) {
+        fun bind(item: HistoryListItem.Session) {
+            val session = item.session
             currentSession = session
-            titleTextView.text = TitleMarkdown.render(session.title)
-            timestampTextView.text = formatHistoryTimestamp(session.timestamp)
-            if (preview.isBlank()) {
+            titleTextView.text = emphasize(TitleMarkdown.render(session.title), item.query)
+            pinView.visibility = if (item.pinned) View.VISIBLE else View.GONE
+            if (item.open) {
+                timestampTextView.setText(R.string.rp_history_current)
+                timestampTextView.setTextColor(ink)
+                timestampTextView.typeface = Typeface.create(timeFace, 600, false)
+            } else {
+                timestampTextView.text = formatHistoryTimestamp(session.timestamp)
+                timestampTextView.setTextColor(mute)
+                timestampTextView.typeface = Typeface.create(timeFace, 400, false)
+            }
+            if (item.preview.isBlank()) {
                 previewTextView.visibility = View.GONE
                 previewTextView.text = ""
             } else {
                 previewTextView.visibility = View.VISIBLE
-                previewTextView.text = preview
+                previewTextView.text = emphasize(item.preview, item.query)
+            }
+        }
+
+        private fun emphasize(text: CharSequence, query: String): CharSequence {
+            val at = HistoryList.emphasisAt(text.toString(), query)
+            if (at < 0) return text
+            val end = at + query.trim().length
+            if (end > text.length) return text
+            return SpannableString(text).apply {
+                setSpan(StyleSpan(Typeface.BOLD), at, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
         }
 

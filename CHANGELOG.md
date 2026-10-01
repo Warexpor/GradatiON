@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- History search shows the line that matched, including a hit in an earlier message, and marks those words. The chat you have open reads "Open now", and a pinned chat keeps a pin on its row.
 - History groups chats by day (Today, Yesterday, This week, Earlier), with pinned chats still first, and shows the last line under the title. A photo with no caption reads as "Photo".
 - Code: the approval pill follows the harness when it changes mode, including the mode ids Claude Code and Codex use. A finished turn says when it stopped at the token limit, after too many steps, or because the agent refused, and shows token and cost counts when the bridge sends them.
 - Roleplay rewrite quotes the reply you are changing and offers Shorter, Longer and More dialogue. The demo model accepts a scene photo and answers it. A photo with no caption still tells the character the picture is in the scene.
@@ -29,6 +30,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- History search stays above the keyboard. The drawer takes the same insets as the chat, so the field is not covered.
+- A long message's Show more control sits under the bubble. It used to live in the action row, which stays hidden until you tap the bubble, and the cutoff said "continued" in English.
 - Code: coming back to the app reconnects at once instead of waiting out a backoff that started while it was away, and a reconnect whose socket open fails keeps trying. ACP `session_info_update` sets the session title. A name you edited stays; one you did not picks up the agent's title on the next session list. Tool output includes text sent as an embedded file resource, and a terminal snapshot when the bridge includes one. Away-notification taps no longer share one target across sessions, and an earlier alert for the same session still opens after a later one is posted.
 - A taller composer (another line, or a staged photo) no longer yanks a short thread up by the full growth. A message the composer would cover moves by only the covered amount, and one resting on the composer rides back down when the composer shrinks.
 - History dates no longer treat early January and late December as the same week. Today and yesterday show the time, the rest of the week shows the weekday, and older chats show the date.

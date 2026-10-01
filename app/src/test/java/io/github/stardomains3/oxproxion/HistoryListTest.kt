@@ -120,4 +120,48 @@ class HistoryListTest {
         assertEquals("", HistoryList.preview("user", "", you, "Photo"))
         assertEquals("You: 100% sure", HistoryList.preview("user", "\"100% sure\"", you, "Photo"))
     }
+
+    @Test fun search_line_uses_a_clean_parse_and_a_mid_string_slice() {
+        val you = { text: String -> "You: $text" }
+        assertEquals(
+            "You: the secret word is lantern",
+            HistoryList.searchLine("user", "\"the secret word is lantern\"", "lantern", you, "Photo"),
+        )
+        val slice = "before ".repeat(8) + "lantern" + " after".repeat(12)
+        val line = HistoryList.searchLine("user", slice, "lantern", you, "Photo")
+        assertTrue(line.startsWith("You: …"))
+        assertTrue(line.contains("lantern"))
+        assertTrue(line.endsWith("…"))
+        assertEquals("", HistoryList.searchLine("user", "\"hello\"", "   ", you, "Photo"))
+        assertEquals(
+            "",
+            HistoryList.searchLine("user", "A".repeat(80), "AAAA", you, "Photo"),
+        )
+    }
+
+    @Test fun emphasis_skips_the_you_prefix_when_the_message_also_matches() {
+        assertEquals(5, HistoryList.emphasisAt("You: lantern is lit", "lantern"))
+        assertEquals(0, HistoryList.emphasisAt("You: hello", "you"))
+        assertEquals(-1, HistoryList.emphasisAt("hello", " "))
+        assertEquals(-1, HistoryList.emphasisAt("", "a"))
+    }
+
+    @Test fun present_marks_the_open_chat_and_carries_the_query() {
+        val items = HistoryList.build(
+            sessions = listOf(session(4, now, "notes"), session(9, now, "other")),
+            pinnedIds = setOf(4),
+            previews = mapOf(4L to "last line"),
+            now = now,
+            labels = labels,
+            zone = zone,
+        )
+        val shown = HistoryList.present(items, openId = 9, query = "  lantern ")
+        val pinned = shown[1] as HistoryListItem.Session
+        val other = shown[3] as HistoryListItem.Session
+        assertTrue(pinned.pinned)
+        assertEquals(false, pinned.open)
+        assertEquals(true, other.open)
+        assertEquals("lantern", other.query)
+        assertEquals("lantern", pinned.query)
+    }
 }

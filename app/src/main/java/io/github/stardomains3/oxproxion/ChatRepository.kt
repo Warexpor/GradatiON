@@ -49,15 +49,36 @@ class ChatRepository(private val chatDao: ChatDao) {
 
     suspend fun getAllSessionsOnce(): List<ChatSession> = chatDao.getAllSessionsOnce()
     suspend fun searchSessions(query: String, mode: ChatMode = ChatMode.ASK): List<ChatSession> {
-        // Escape LIKE's wildcards so a search for "50%" or "a_b" matches the text, not everything.
-        val escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        val sessionIds = chatDao.searchSessionIds("%$escaped%", mode.storageValue)
+        val sessionIds = chatDao.searchSessionIds(likeContains(query), mode.storageValue)
         return sessionIds.mapNotNull { chatDao.getSessionById(it) }
+    }
+
+    /**
+     * A window around the newest matching message in each session. Empty [query] and an
+     * empty id list stay out of the DAO.
+     */
+    suspend fun searchWindows(sessionIds: List<Long>, query: String): List<MessageWindow> {
+        val needle = query.trim()
+        if (sessionIds.isEmpty() || needle.isEmpty()) return emptyList()
+        val pattern = likeContains(needle)
+        return sessionIds.distinct().chunked(200).flatMap {
+            chatDao.searchMessageWindows(it, pattern, needle, SEARCH_WINDOW)
+        }
     }
 
     /** Empty input stays out of the DAO: SQLite rejects `IN ()`. Chunked under the variable cap. */
     suspend fun lastMessagePrefixes(sessionIds: List<Long>): List<ChatMessage> {
         if (sessionIds.isEmpty()) return emptyList()
         return sessionIds.distinct().chunked(200).flatMap { chatDao.lastMessagePrefixes(it) }
+    }
+
+    /** LIKE pattern that matches [query] as text. `%`, `_` and `\` are escaped with `\`. */
+    private fun likeContains(query: String): String {
+        val escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return "%$escaped%"
+    }
+
+    private companion object {
+        const val SEARCH_WINDOW = 240
     }
 }

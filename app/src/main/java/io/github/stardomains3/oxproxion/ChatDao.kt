@@ -10,6 +10,13 @@ import androidx.room.Relation
 import androidx.room.Transaction
 import androidx.room.Update
 
+/** A short slice of one message around a search hit. [content] is not the whole row. */
+data class MessageWindow(
+    val sessionId: Long,
+    val role: String,
+    val content: String,
+)
+
 data class SessionWithMessages(
     @Embedded val session: ChatSession,
     @Relation(
@@ -74,6 +81,35 @@ interface ChatDao {
         """
     )
     suspend fun lastMessagePrefixes(sessionIds: List<Long>): List<ChatMessage>
+
+    /**
+     * The newest message in each session that matches [pattern], cut to a window around
+     * [needle]. History only needs the line that matched, not a multi-megabyte photo.
+     */
+    @Query(
+        """
+        SELECT m.sessionId AS sessionId, m.role AS role,
+            substr(
+                m.content,
+                MAX(1, instr(lower(m.content), lower(:needle)) - 48),
+                :span
+            ) AS content
+        FROM chat_messages m
+        INNER JOIN (
+            SELECT sessionId, MAX(id) AS mid
+            FROM chat_messages
+            WHERE sessionId IN (:sessionIds)
+              AND content LIKE :pattern ESCAPE '\'
+            GROUP BY sessionId
+        ) hit ON m.id = hit.mid
+        """
+    )
+    suspend fun searchMessageWindows(
+        sessionIds: List<Long>,
+        pattern: String,
+        needle: String,
+        span: Int,
+    ): List<MessageWindow>
 
     @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId")
     suspend fun countMessages(sessionId: Long): Int

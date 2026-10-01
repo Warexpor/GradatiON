@@ -140,6 +140,37 @@ class ChatSaveOverwriteTest {
 
         assertEquals(listOf("a"), repository.searchSessions("100%").map { it.title })
         assertEquals(listOf("c"), repository.searchSessions("snake_case").map { it.title })
+        val hit = repository.searchWindows(
+            repository.searchSessions("100%").map { it.id },
+            "100%",
+        ).single()
+        assertTrue(hit.content.contains("100%"))
+        assertTrue(repository.searchWindows(emptyList(), "100%").isEmpty())
+        assertTrue(repository.searchWindows(listOf(hit.sessionId), "   ").isEmpty())
+    }
+
+    @Test
+    fun searchWindowIsTheMatchingMessageNotTheLatestLine() = runBlocking {
+        val repository = ChatRepository(dao)
+        val id = dao.insertSessionAndMessages(
+            ChatSession(title = "notes", modelUsed = "m"),
+            listOf(
+                message("user", "the secret word is lantern"),
+                message("assistant", "goodbye"),
+            ),
+        )
+        dao.insertSessionAndMessages(
+            ChatSession(title = "zebra title only", modelUsed = "m"),
+            listOf(message("assistant", "nothing to see")),
+        )
+        val hit = repository.searchWindows(listOf(id), "Lantern").single()
+        assertEquals("user", hit.role)
+        assertTrue(hit.content.contains("lantern"))
+        assertFalse(hit.content.contains("goodbye"))
+        val line = HistoryList.searchLine(hit.role, hit.content, "lantern", { "You: $it" }, "Photo")
+        assertTrue(line.contains("lantern"))
+        assertFalse(line.contains("goodbye"))
+        assertTrue(repository.searchWindows(repository.searchSessions("zebra").map { it.id }, "zebra").isEmpty())
     }
 
     @Test

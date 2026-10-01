@@ -1,3 +1,12 @@
+# Handoff (2026-10-01, chat history and message list)
+
+On `cursor/chat-history-message-polish-4044`, targeting `gradation/app-pass`.
+- History search rides the keyboard: the drawer is a sibling of the chat root, which consumes insets, so the drawer is padded from that same listener (`HistoryChrome`). The fragment root no longer pads itself.
+- A search hit in an earlier message replaces the last-line preview with a window around the match. The open chat says "Open now", and a pinned row shows a pin. Matching words are bold.
+- A long message you sent folds on a word (or after three lines) with a 44dp Show more under the bubble, not inside the hidden action row.
+
+Phone: open History, focus search (the field clears the keyboard), search a word from an earlier message, and expand a long message you sent.
+
 # Handoff (2026-10-01, code session and reconnect polish)
 
 On `cursor/code-session-bridge-ux-164d` (PR into `gradation/app-pass`). Code mode only:
