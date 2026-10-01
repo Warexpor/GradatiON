@@ -193,8 +193,10 @@ class SavedChatsFragment : Fragment() {
 
     /** The search in flight; a newer query, or a list change, replaces it so a slow result can't land late. */
     private var filterJob: Job? = null
+    private var filterGeneration = 0
 
     private fun filterSessions(query: String) {
+        val generation = ++filterGeneration
         filterJob?.cancel()
         filterJob = viewLifecycleOwner.lifecycleScope.launch {
             val mode = viewModel.chatMode.value ?: ChatMode.ASK
@@ -257,6 +259,7 @@ class SavedChatsFragment : Fragment() {
                 openId = viewModel.getCurrentSessionId(),
                 query = query,
             )
+            if (generation != filterGeneration) return@launch
             val queryNow = query
             savedChatsAdapter.submitList(items) {
                 if (view == null) return@submitList
@@ -285,7 +288,12 @@ class SavedChatsFragment : Fragment() {
     /** The drawer just opened. Bring the chat that is on screen into view. */
     fun onDrawerOpened() {
         scrollToOpen = true
-        if (::searchView.isInitialized) filterSessions(searchView.query?.toString().orEmpty())
+        // A first open is still waiting on the database. Filtering now would cancel that
+        // load and publish an empty list over it. Once rows exist, rebuild so a draft
+        // parked as the drawer opened is on the row.
+        if (allSessions.isNotEmpty() && ::searchView.isInitialized) {
+            filterSessions(searchView.query?.toString().orEmpty())
+        }
         scrollOpenRow()
     }
 

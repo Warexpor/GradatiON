@@ -5001,6 +5001,7 @@ $cleanContent
         val scrim = historyDrawerScrim ?: return
         if (panel.visibility == View.VISIBLE) return
         cancelDrawerAnimation()
+        parkOpenDraft()
         if (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) == null) {
             childFragmentManager.beginTransaction()
                 .replace(R.id.historyDrawerContainer, SavedChatsFragment.newEmbedded())
@@ -5070,9 +5071,12 @@ $cleanContent
         }
     }
 
-    /** Park the open line first, so the drawer can show it, then rebuild the list. */
-    private fun prepareHistoryList() {
+    /** Park the open line first, so the drawer's first load already includes it. */
+    private fun parkOpenDraft() {
         parkAskDraft(if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId())
+    }
+
+    private fun prepareHistoryList() {
         (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.let {
             it.refreshModeRows()
             it.onDrawerOpened()
@@ -5085,6 +5089,7 @@ $cleanContent
         val scrim = historyDrawerScrim ?: return
         if (panel.visibility == View.VISIBLE) return
         cancelDrawerAnimation()
+        parkOpenDraft()
 
         if (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) == null) {
             childFragmentManager.beginTransaction()

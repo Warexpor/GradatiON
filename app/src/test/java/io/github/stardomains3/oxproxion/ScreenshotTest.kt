@@ -434,32 +434,46 @@ class ScreenshotTest {
         snap(root(a), "attach_menu_dark")
     }
 
-    @Test fun historyDraftDark() = withChat { a, _ ->
-        seedHistory()
-        val target = runBlocking {
-            db.chatDao().getAllSessionsOnce().first { it.title.contains("attention") }
+    @Test fun historyDraftDark() {
+        try {
+            withChat { a, _ ->
+                seedHistory()
+                val target = runBlocking {
+                    db.chatDao().getAllSessionsOnce().first { it.title.contains("attention") }
+                }
+                SharedPreferencesHelper(a).saveAskComposerDrafts(
+                    ComposerDrafts.remember(emptyMap(), target.id, "still writing the question")
+                )
+                a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
+                val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.savedChatsRecyclerView)
+                var row: View? = null
+                for (i in 0 until (list.adapter?.itemCount ?: 0)) {
+                    val item = list.findViewHolderForAdapterPosition(i)?.itemView ?: continue
+                    val title = item.findViewById<android.widget.TextView>(R.id.savedChatTitle)?.text?.toString().orEmpty()
+                    if (title.contains("attention")) {
+                        row = item
+                        break
+                    }
+                }
+                val preview = row?.findViewById<android.widget.TextView>(R.id.savedChatPreview)
+                org.junit.Assert.assertEquals(
+                    a.getString(R.string.history_preview_draft, "still writing the question"),
+                    preview?.text?.toString(),
+                )
+                snap(root(a), "history_draft_dark")
+                row!!.performLongClick(); idle()
+                val discard = ShadowDialog.getLatestDialog()?.findViewById<View>(R.id.menu_discard_draft)
+                org.junit.Assert.assertEquals(View.VISIBLE, discard?.visibility)
+                snapDialog(a, "history_draft_options_dark")
+            }
+        } finally {
+            // The next test seeds a fresh database. A session id or draft left here would
+            // attach to those new rows and scroll History off the top.
+            val ctx = ApplicationProvider.getApplicationContext<Application>()
+            SharedPreferencesHelper(ctx).saveAskComposerDrafts(emptyMap())
+            SharedPreferencesHelper(ctx).saveComposerDraft(ChatMode.ASK, "")
+            SharedPreferencesHelper(ctx).saveRpDraftSessionId(ChatMode.ASK, null)
         }
-        SharedPreferencesHelper(a).saveAskComposerDrafts(
-            ComposerDrafts.remember(emptyMap(), target.id, "still writing the question")
-        )
-        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
-        val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.savedChatsRecyclerView)
-        var row: View? = null
-        for (i in 0 until (list.adapter?.itemCount ?: 0)) {
-            val item = list.findViewHolderForAdapterPosition(i)?.itemView ?: continue
-            val title = item.findViewById<android.widget.TextView>(R.id.savedChatTitle)?.text?.toString().orEmpty()
-            if (title.contains("attention")) { row = item; break }
-        }
-        val preview = row?.findViewById<android.widget.TextView>(R.id.savedChatPreview)
-        org.junit.Assert.assertEquals(
-            a.getString(R.string.history_preview_draft, "still writing the question"),
-            preview?.text?.toString(),
-        )
-        snap(root(a), "history_draft_dark")
-        row!!.performLongClick(); idle()
-        val discard = ShadowDialog.getLatestDialog()?.findViewById<View>(R.id.menu_discard_draft)
-        org.junit.Assert.assertEquals(View.VISIBLE, discard?.visibility)
-        snapDialog(a, "history_draft_options_dark")
     }
 
     @Test fun historyDark() = withChat { a, _ ->
