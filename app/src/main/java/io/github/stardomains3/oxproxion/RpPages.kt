@@ -3,6 +3,7 @@ package io.github.stardomains3.oxproxion
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
+import android.media.ExifInterface
 import android.graphics.Outline
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -521,8 +522,14 @@ class RpWallpaperFragment : RpPageFragment() {
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
             var sample = 1
             val longest = max(bounds.outWidth, bounds.outHeight)
-            while (longest / sample > maxEdge) sample *= 2
-            return BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+            while (sample < 32 && longest / sample > maxEdge) sample *= 2
+            val decoded = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+                ?: return null
+            // The chat turns a leftover sideways flag. The preview has to match it.
+            val orientation = runCatching {
+                ExifInterface(path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+            return BackgroundPhoto.upright(decoded, orientation)
         }
     }
 }

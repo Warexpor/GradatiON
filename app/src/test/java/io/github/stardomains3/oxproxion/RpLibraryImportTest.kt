@@ -279,6 +279,22 @@ class RpLibraryImportTest {
         assertTrue(BackgroundPhoto.hasPhoto(app, slot))
         RpWallpaperBackup.apply(app, kept, null)
         assertTrue(BackgroundPhoto.hasPhoto(app, slot))
+
+        val wide = Bitmap.createBitmap(1800, 40, Bitmap.Config.ARGB_8888)
+        wide.eraseColor(Color.GRAY)
+        val wideJpeg = ByteArrayOutputStream().also {
+            wide.compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        wide.recycle()
+        val wideEncoded = android.util.Base64.encodeToString(wideJpeg, android.util.Base64.NO_WRAP)
+        val capped = 11L
+        RpWallpaperBackup.apply(app, capped, wideEncoded)
+        val cappedFile = BackgroundPhoto.file(app, BackgroundPhoto.slotForCharacter(capped))
+        val cappedBounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(cappedFile.path, cappedBounds)
+        assertTrue(cappedBounds.outWidth in 1..1600)
+        assertTrue(cappedBounds.outHeight in 1..1600)
+        assertEquals(1600, maxOf(cappedBounds.outWidth, cappedBounds.outHeight))
     }
 
     @Test

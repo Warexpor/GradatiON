@@ -89,6 +89,25 @@ class ScenePhotoTest {
         assertFalse(moved.contains("/temp_images/"))
     }
 
+    @Test fun aDetailedPictureIsShrunkUntilItFits() {
+        val bmp = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888)
+        val rnd = java.util.Random(1)
+        val pixels = IntArray(bmp.width * bmp.height) { rnd.nextInt() }
+        bmp.setPixels(pixels, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+        val raw = ByteArrayOutputStream().also {
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }.toByteArray()
+        bmp.recycle()
+        val jpeg = ScenePhoto.encode(raw, maxEdge = 320, maxBytes = 6_000)
+        assertNotNull(jpeg)
+        assertTrue("size ${jpeg!!.size}", jpeg.size <= 6_000)
+        assertTrue(ScenePhoto.completeJpeg(jpeg))
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, bounds)
+        assertTrue(bounds.outWidth in 1..320)
+        assertTrue(bounds.outHeight in 1..320)
+    }
+
     @Test fun aRoleplaySendKeepsTheFileItCaptured() {
         val captured = "content://app.fileprovider/owned/scene_photos/11111111-1111-1111-1111-111111111111.jpg"
         assertEquals(captured, ScenePhoto.uriForTurn(useCaptured = true, captured = captured, live = null))

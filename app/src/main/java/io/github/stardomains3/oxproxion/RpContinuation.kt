@@ -49,6 +49,18 @@ object RpContinuation {
         return withUri.copy(content = ScenePhoto.embed(withUri.content, priorImage))
     }
 
+    /**
+     * Another version of the same reply. The words change; a picture already on it stays,
+     * including the JPEG stored in the message. Swipe used to replace the whole body with
+     * text, so the next save forgot that JPEG and a missing file took the picture with it.
+     */
+    fun withWords(message: FlexibleMessage, text: String): FlexibleMessage =
+        message.copy(
+            content = ScenePhoto.replaceTextKeepingPicture(message.content, text),
+            reasoning = null,
+            thinking = null,
+        )
+
     fun join(base: String, addition: String): String {
         if (addition.isEmpty()) return base
         if (base.isEmpty()) return addition

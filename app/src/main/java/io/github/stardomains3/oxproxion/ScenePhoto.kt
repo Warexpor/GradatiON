@@ -30,6 +30,8 @@ object ScenePhoto {
     const val MAX_EDGE = 1536
     const val MIME = "image/jpeg"
     private const val MAX_ENCODED = 1_500_000
+    /** Stop shrinking once the long edge is this small. A picture still over the cap is refused. */
+    private const val MIN_EDGE = 64
     private const val QUALITY = 82
 
     /**
@@ -94,25 +96,34 @@ object ScenePhoto {
     }
 
     /** JPEG bytes, or null when [raw] is not a picture this device can decode. */
-    fun encode(raw: ByteArray): ByteArray? {
-        if (raw.isEmpty()) return null
+    fun encode(raw: ByteArray): ByteArray? = encode(raw, MAX_EDGE, MAX_ENCODED)
+
+    /**
+     * [maxEdge] is the long side before the byte cap. A detailed picture that is still over
+     * [maxBytes] after a second, rougher compress is scaled down until it fits. Refusing it
+     * used to tell the user the photo was a format we cannot read.
+     */
+    internal fun encode(raw: ByteArray, maxEdge: Int, maxBytes: Int): ByteArray? {
+        if (raw.isEmpty() || maxEdge <= 0 || maxBytes <= 0) return null
         return try {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
             val maxSide = maxOf(bounds.outWidth, bounds.outHeight)
             var sample = 1
-            while (maxSide / sample > MAX_EDGE) sample *= 2
+            while (sample < 32 && maxSide / sample > maxEdge) sample *= 2
             val decoded = BitmapFactory.decodeByteArray(
                 raw, 0, raw.size, BitmapFactory.Options().apply { inSampleSize = sample }
             ) ?: return null
             val oriented = applyExif(decoded, raw)
             if (oriented !== decoded) decoded.recycle()
-            val scaled = scale(oriented, MAX_EDGE)
+            val scaled = scale(oriented, maxEdge)
             if (scaled !== oriented) oriented.recycle()
-            val jpeg = compress(scaled)
-            scaled.recycle()
-            jpeg
+            try {
+                compress(scaled, maxBytes)
+            } finally {
+                if (!scaled.isRecycled) scaled.recycle()
+            }
         } catch (_: Throwable) {
             null
         }
@@ -365,17 +376,40 @@ object ScenePhoto {
         null
     }
 
-    private fun compress(bmp: Bitmap): ByteArray? {
-        val out = ByteArrayOutputStream()
-        if (!bmp.compress(Bitmap.CompressFormat.JPEG, QUALITY, out)) return null
-        var bytes = out.toByteArray()
-        if (bytes.size > MAX_ENCODED) {
-            val again = ByteArrayOutputStream()
-            if (!bmp.compress(Bitmap.CompressFormat.JPEG, 60, again)) return null
-            bytes = again.toByteArray()
-            if (bytes.size > MAX_ENCODED) return null
+    /**
+     * JPEG at the usual quality, then a rougher one, then a smaller bitmap, until it fits
+     * [maxBytes]. [bmp] itself is left for the caller to recycle.
+     */
+    private fun compress(bmp: Bitmap, maxBytes: Int): ByteArray? {
+        var current = bmp
+        var quality = QUALITY
+        var scaled = false
+        try {
+            repeat(12) {
+                val out = ByteArrayOutputStream()
+                if (!current.compress(Bitmap.CompressFormat.JPEG, quality, out)) return null
+                val bytes = out.toByteArray()
+                if (bytes.size <= maxBytes) return bytes
+                if (quality != 60) {
+                    quality = 60
+                    return@repeat
+                }
+                val edge = maxOf(current.width, current.height)
+                if (edge <= MIN_EDGE) return null
+                val nw = (current.width * 3 / 4).coerceAtLeast(1)
+                val nh = (current.height * 3 / 4).coerceAtLeast(1)
+                if (nw == current.width && nh == current.height) return null
+                val smaller = Bitmap.createScaledBitmap(current, nw, nh, true)
+                if (scaled && smaller !== current) current.recycle()
+                if (smaller === current) return null
+                current = smaller
+                scaled = true
+                quality = QUALITY
+            }
+            return null
+        } finally {
+            if (scaled && current !== bmp && !current.isRecycled) current.recycle()
         }
-        return bytes
     }
 
     private fun scale(src: Bitmap, maxEdge: Int): Bitmap {

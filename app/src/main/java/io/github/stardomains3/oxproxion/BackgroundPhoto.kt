@@ -16,6 +16,8 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.edit
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.math.max
@@ -47,6 +49,9 @@ object BackgroundPhoto {
 
     /** Long edge kept on disk; plenty for a blurred, dimmed backdrop. */
     private const val MAX_EDGE = 1600
+
+    /** A picker file bigger than this is refused instead of decoded whole. */
+    private const val MAX_SOURCE = 32 * 1024 * 1024
 
     private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "bg-photo").apply { isDaemon = true } }
     private val main = Handler(Looper.getMainLooper())
@@ -85,7 +90,7 @@ object BackgroundPhoto {
     }
 
     /** Replace the slot with [jpeg] and bump the version so an open chat redraws it. */
-    fun writeBytes(ctx: Context, slot: String, jpeg: ByteArray): Boolean {
+    fun writeBytes(ctx: Context, slot: String?, jpeg: ByteArray): Boolean {
         val out = file(ctx, slot)
         val tmp = File(out.parentFile, out.name + ".tmp")
         return try {
@@ -107,41 +112,83 @@ object BackgroundPhoto {
         }
     }
 
-    /** Copy [uri] into app storage (downscaled JPEG), off the main thread; [done] on main. */
+    /**
+     * Copy [uri] into app storage (downscaled, upright JPEG), off the main thread; [done] on main.
+     * The picker is read once. A second open used to fail on a link that only allows one read,
+     * and replacing a picture could miss the file that was already there.
+     */
     fun import(ctx: Context, uri: Uri, slot: String? = null, done: (Boolean) -> Unit) {
         val app = ctx.applicationContext
         io.execute {
             val ok = runCatching {
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                app.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-                var sample = 1
-                while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_EDGE) sample *= 2
-                val decoded = app.contentResolver.openInputStream(uri)?.use {
-                    BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
-                } ?: return@runCatching false
-                // Phone photos are stored sideways with an EXIF flag, and re-compressing drops the
-                // flag: turn the pixels upright now or the background ends up rotated for good.
-                val exif = runCatching {
-                    app.contentResolver.openInputStream(uri)?.use {
-                        ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-                    }
-                }.getOrNull() ?: ExifInterface.ORIENTATION_NORMAL
-                val src = upright(decoded, exif)
-                val scale = MAX_EDGE / max(src.width, src.height).toFloat()
-                val bmp = if (scale < 1f) {
-                    Bitmap.createScaledBitmap(src, (src.width * scale).roundToInt(), (src.height * scale).roundToInt(), true)
-                } else src
-                val out = file(app, slot)
-                out.parentFile?.mkdirs()
-                val tmp = File(out.parentFile, out.name + ".tmp")
-                tmp.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-                tmp.renameTo(out)
+                val raw = readBounded(app, uri) ?: return@runCatching false
+                val jpeg = prepare(raw) ?: return@runCatching false
+                writeBytes(app, slot, jpeg)
             }.getOrDefault(false)
-            main.post {
-                if (ok) prefs(app).edit { putLong(versionKey(slot), System.currentTimeMillis()) }
-                done(ok)
-            }
+            main.post { done(ok) }
         }
+    }
+
+    /**
+     * An upright JPEG whose long edge is at most [MAX_EDGE], or null when [raw] is not a picture.
+     * Phone photos are stored sideways with an EXIF flag, and re-compressing drops the flag.
+     */
+    internal fun prepare(raw: ByteArray): ByteArray? {
+        if (raw.isEmpty() || raw.size > MAX_SOURCE) return null
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            while (sample < 64 && max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_EDGE) {
+                sample *= 2
+            }
+            val decoded = BitmapFactory.decodeByteArray(
+                raw, 0, raw.size, BitmapFactory.Options().apply { inSampleSize = sample }
+            ) ?: return null
+            val exif = runCatching {
+                ExifInterface(ByteArrayInputStream(raw)).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
+                )
+            }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+            val src = upright(decoded, exif)
+            val scale = MAX_EDGE / max(src.width, src.height).toFloat()
+            val bmp = if (scale < 1f) {
+                Bitmap.createScaledBitmap(
+                    src,
+                    (src.width * scale).roundToInt().coerceAtLeast(1),
+                    (src.height * scale).roundToInt().coerceAtLeast(1),
+                    true,
+                )
+            } else {
+                src
+            }
+            if (bmp !== src) src.recycle()
+            val out = ByteArrayOutputStream()
+            val ok = bmp.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            bmp.recycle()
+            if (!ok) null else out.toByteArray().takeIf { it.isNotEmpty() }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun readBounded(ctx: Context, uri: Uri): ByteArray? = try {
+        ctx.contentResolver.openInputStream(uri)?.use { input ->
+            val out = ByteArrayOutputStream()
+            val buf = ByteArray(16 * 1024)
+            var total = 0
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                total += n
+                if (total > MAX_SOURCE) return null
+                out.write(buf, 0, n)
+            }
+            out.toByteArray().takeIf { it.isNotEmpty() }
+        }
+    } catch (_: Exception) {
+        null
     }
 
     /** [src] turned so it reads upright for an EXIF [orientation] (the same bitmap when it already does). */
@@ -177,29 +224,54 @@ object BackgroundPhoto {
     private fun process(ctx: Context, w: Int, h: Int, opts: Options, slot: String?): Bitmap? {
         val f = file(ctx, slot)
         if (!f.isFile || w <= 0 || h <= 0) return null
-        val src = BitmapFactory.decodeFile(f.path) ?: return null
-        // Center crop to the view's aspect.
-        val target = w / h.toFloat()
-        val srcAspect = src.width / src.height.toFloat()
-        val crop = if (srcAspect > target) {
-            val cw = (src.height * target).roundToInt()
-            Rect((src.width - cw) / 2, 0, (src.width + cw) / 2, src.height)
-        } else {
-            val ch = (src.width / target).roundToInt()
-            Rect(0, (src.height - ch) / 2, src.width, (src.height + ch) / 2)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(f.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        val need = max(w, h)
+        while (sample < 32 && max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= need) sample *= 2
+        var src = BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return null
+        // A file that still carries a sideways flag (a backup written before it was turned)
+        // has to be upright here. upright recycles the bitmap it replaces.
+        val orientation = runCatching {
+            ExifInterface(f.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+        src = upright(src, orientation)
+        val drawn = try {
+            // Center crop to the view's aspect. The rect stays inside the bitmap: a rounding
+            // step past the edge used to fail the draw and drop the picture.
+            val target = w / h.toFloat()
+            val srcAspect = src.width / src.height.toFloat()
+            val crop = if (srcAspect > target) {
+                val cw = (src.height * target).roundToInt().coerceIn(1, src.width)
+                val left = ((src.width - cw) / 2).coerceAtLeast(0)
+                Rect(left, 0, left + cw, src.height)
+            } else {
+                val ch = (src.width / target).roundToInt().coerceIn(1, src.height)
+                val top = ((src.height - ch) / 2).coerceAtLeast(0)
+                Rect(0, top, src.width, top + ch)
+            }
+            val paint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+                if (!opts.color) colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
+            }
+            val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            Canvas(out).drawBitmap(src, crop, Rect(0, 0, w, h), paint)
+            if (!opts.blur) {
+                out
+            } else {
+                // Blur at a third of the size (it is drawn scaled up anyway): three box passes ≈ a
+                // gaussian of ~1.5% of the width, a frost the photo still reads through. The old
+                // quarter-size, width/28 pass (~3.5%) smeared it into a wash.
+                val small = Bitmap.createScaledBitmap(out, max(1, w / 3), max(1, h / 3), true)
+                if (small !== out) out.recycle()
+                boxBlur(small, radius = max(1, small.width / 72), passes = 3)
+                small
+            }
+        } finally {
+            if (!src.isRecycled) src.recycle()
         }
-        val paint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
-            if (!opts.color) colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
-        }
-        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        Canvas(out).drawBitmap(src, crop, Rect(0, 0, w, h), paint)
-        if (!opts.blur) return out
-        // Blur at a third of the size (it is drawn scaled up anyway): three box passes ≈ a
-        // gaussian of ~1.5% of the width, a frost the photo still reads through. The old
-        // quarter-size, width/28 pass (~3.5%) smeared it into a wash.
-        val small = Bitmap.createScaledBitmap(out, max(1, w / 3), max(1, h / 3), true)
-        boxBlur(small, radius = max(1, small.width / 72), passes = 3)
-        return small
+        return drawn
     }
 
     /** In-place separable box blur on ARGB pixels; [passes] of it approximate a gaussian. */

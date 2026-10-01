@@ -1344,13 +1344,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
         if (lastAssistantIndex > lastUserIndex) {
             // Mid-stream regen left a partial — replace with the stashed full alt.
-            messages[lastAssistantIndex] = messages[lastAssistantIndex].let { current ->
-                current.copy(
-                    content = ScenePhoto.replaceTextKeepingPicture(current.content, alt),
-                    reasoning = null,
-                    thinking = null
-                )
-            }
+            messages[lastAssistantIndex] = RpContinuation.withWords(messages[lastAssistantIndex], alt)
         } else {
             messages.add(FlexibleMessage(role = "assistant", content = JsonPrimitive(alt)))
         }
@@ -1664,11 +1658,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val messageToUpdate = currentList[position]
-                val updatedMessage = messageToUpdate.copy(
-            content = ScenePhoto.replaceTextKeepingPicture(messageToUpdate.content, newContent),
-            reasoning = null,
-            thinking = null
-        )
+        val updatedMessage = RpContinuation.withWords(messageToUpdate, newContent)
         val newList = currentList.toMutableList()
         newList[position] = updatedMessage
         _chatMessages.value = newList
@@ -4582,11 +4572,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (thinkingAfterUser) return
         when {
             lastAssistantIndex > lastUserIndex -> {
-                messages[lastAssistantIndex] = messages[lastAssistantIndex].copy(
-                    content = JsonPrimitive(alt),
-                    reasoning = null,
-                    thinking = null
-                )
+                messages[lastAssistantIndex] = RpContinuation.withWords(messages[lastAssistantIndex], alt)
             }
             else -> {
                 // Missing reply after user — append rather than overwrite greeting.

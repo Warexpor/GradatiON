@@ -177,7 +177,12 @@ internal object RpWallpaperBackup {
         when (val action = restore(encoded)) {
             Restore.Leave -> Unit
             Restore.Clear -> if (BackgroundPhoto.hasPhoto(context, slot)) BackgroundPhoto.delete(context, slot)
-            is Restore.Write -> BackgroundPhoto.writeBytes(context, slot, action.jpeg)
+            is Restore.Write -> {
+                // A backup can carry a camera JPEG. Store the same upright, capped picture a
+                // pick would, so the chat does not decode the full file on every open.
+                val jpeg = BackgroundPhoto.prepare(action.jpeg) ?: action.jpeg
+                BackgroundPhoto.writeBytes(context, slot, jpeg)
+            }
         }
     }
 
