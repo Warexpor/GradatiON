@@ -140,6 +140,11 @@ class BridgeBackend(
     private val runningSessions = ConcurrentHashMap.newKeySet<String>()
     private val outbox = ArrayDeque<OutboxPrompt>()
     private val outboxLock = Any()
+    /**
+     * One flusher at a time. [onSocketReady] and the connected-queue retry both call
+     * [flushOutbox]; without this they can peek the same head and deliver it twice.
+     */
+    private val outboxFlushMutex = Mutex()
     private val ready = MutableStateFlow(false)
     private var reader: Job? = null
     private var lifecycle: Job? = null
@@ -224,17 +229,20 @@ class BridgeBackend(
     private fun rememberPendingUser(sessionId: String, key: String, text: String, attachmentCount: Int) {
         synchronized(pendingUserLock) {
             pendingUserPrompts.getOrPut(sessionId) { ArrayDeque() }
-                .addLast(PendingUserPrompt(key, text, attachmentCount))
+                .addLast(PendingUserPrompt(key, text.trim(), attachmentCount))
         }
     }
 
     private fun takePendingUser(sessionId: String, text: String): PendingUserPrompt? {
+        // The wire prompt is trimmed (AcpAdapter.prompt). Match that, so a leading or
+        // trailing space on the composer does not leave a second bubble when the echo arrives.
+        val wanted = text.trim()
         synchronized(pendingUserLock) {
             val q = pendingUserPrompts[sessionId] ?: return null
             val it = q.iterator()
             while (it.hasNext()) {
                 val p = it.next()
-                if (p.text == text) {
+                if (p.text == wanted) {
                     it.remove()
                     if (q.isEmpty()) pendingUserPrompts.remove(sessionId)
                     return p
@@ -841,6 +849,12 @@ class BridgeBackend(
     }
 
     private suspend fun flushOutbox() {
+        // Suspending lock: the connected-queue retry can wait here while a resume flush
+        // is inside deliverPrompt, then see the head already removed.
+        outboxFlushMutex.withLock { flushOutboxOnce() }
+    }
+
+    private suspend fun flushOutboxOnce() {
         while (true) {
             val next = synchronized(outboxLock) {
                 if (outbox.isEmpty()) null

@@ -90,6 +90,10 @@ object ReconnectBackoff {
  *
  * Each [openSocket] bumps a socket generation; OkHttp callbacks from a retired generation are
  * ignored so a late onOpen/onClosed/onFailure cannot poison a replacement connection (R1).
+ *
+ * [lock] covers the socket field, generation, and [send]. A send that loses the race with
+ * [close] or [handleDrop] returns false instead of enqueueing on a socket that is no longer
+ * the live one (that true used to drop the prompt: the backend treated it as accepted).
  */
 class WebSocketTransport(
     private val url: String,
@@ -103,6 +107,11 @@ class WebSocketTransport(
     /** Injectable for unit tests; production uses [OkHttpClient.newWebSocket]. */
     private val webSocketFactory: (Request, WebSocketListener) -> WebSocket =
         { request, listener -> client.newWebSocket(request, listener) },
+    /**
+     * Test hook, invoked inside [lock] after the "already connecting" check and before the
+     * generation bump. Production leaves it empty.
+     */
+    private val beforeOpenSocket: () -> Unit = {},
 ) : CodeTransport {
 
     private val _state = MutableStateFlow(ConnectionState.DISCONNECTED)
@@ -121,6 +130,9 @@ class WebSocketTransport(
     /** Bumped on every new socket and on [close]; stale OkHttp callbacks must no-op. */
     @Volatile
     private var socketGeneration = 0
+
+    /** Socket, generation, reconnect job, and [send] share this so they cannot tear. */
+    private val lock = Any()
 
     @Volatile private var userWantsConnection = false
     @Volatile private var intentionalClose = false
@@ -148,63 +160,91 @@ class WebSocketTransport(
             !(appBackgrounded && !keepAliveForSession)
 
     override fun connect() {
-        intentionalClose = false
-        authRejected = false
-        userWantsConnection = true
-        reconnectJob?.cancel()
-        reconnectJob = null
-        openSocket()
+        synchronized(lock) {
+            intentionalClose = false
+            authRejected = false
+            userWantsConnection = true
+            reconnectJob?.cancel()
+            reconnectJob = null
+            openSocket()
+        }
     }
 
     private fun isCurrent(webSocket: WebSocket, generation: Int): Boolean =
         generation == socketGeneration && socket === webSocket
 
     private fun openSocket() {
-        if (_state.value == ConnectionState.CONNECTING || _state.value == ConnectionState.CONNECTED) return
-        val request = runCatching {
-            Request.Builder().url(url).apply {
-                if (token.isNotBlank()) header("Authorization", "Bearer $token")
-                header("X-Gradation-Client", "android/1")
-            }.build()
-        }.getOrElse {
-            lastError = CodeErrors.INVALID_ADDRESS
-            _state.value = ConnectionState.FAILED
-            return
+        synchronized(lock) {
+            if (_state.value == ConnectionState.CONNECTING || _state.value == ConnectionState.CONNECTED) return
+            val request = runCatching {
+                Request.Builder().url(url).apply {
+                    if (token.isNotBlank()) header("Authorization", "Bearer $token")
+                    header("X-Gradation-Client", "android/1")
+                }.build()
+            }.getOrElse {
+                lastError = CodeErrors.INVALID_ADDRESS
+                _state.value = ConnectionState.FAILED
+                return
+            }
+            beforeOpenSocket()
+            _state.value = ConnectionState.CONNECTING
+            val generation = ++socketGeneration
+            val created = try {
+                webSocketFactory(request, listenerFor(generation))
+            } catch (t: Throwable) {
+                // newWebSocket failed after we advertised CONNECTING: don't stick there.
+                lastError = t.message?.takeIf { it.isNotBlank() } ?: t.javaClass.simpleName
+                socket = null
+                _state.value = ConnectionState.FAILED
+                scheduleReconnectIfNeeded()
+                return
+            }
+            // close() may have re-entered from the factory and retired this generation.
+            if (generation != socketGeneration || intentionalClose) {
+                created.cancel()
+                return
+            }
+            socket = created
         }
-        _state.value = ConnectionState.CONNECTING
-        val generation = ++socketGeneration
-        socket = webSocketFactory(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
+    }
+
+    private fun listenerFor(generation: Int) = object : WebSocketListener() {
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            synchronized(lock) {
                 if (!isCurrent(webSocket, generation)) return
                 lastError = null
                 connectedAtMs = nowMs()
                 _state.value = ConnectionState.CONNECTED
             }
+        }
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
+        override fun onMessage(webSocket: WebSocket, text: String) {
+            synchronized(lock) {
                 if (!isCurrent(webSocket, generation)) return
-                _incoming.tryEmit(text)
             }
+            _incoming.tryEmit(text)
+        }
 
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            synchronized(lock) {
                 if (!isCurrent(webSocket, generation)) return
-                webSocket.close(1000, null)
             }
+            webSocket.close(1000, null)
+        }
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                handleDrop(webSocket, generation, authReject = false)
-            }
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            handleDrop(webSocket, generation, authReject = false)
+        }
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                handleDrop(webSocket, generation, authReject = response?.code == 401 || response?.code == 403) {
-                    lastError = when (response?.code) {
-                        401, 403 -> CodeErrors.TOKEN_REJECTED
-                        null -> t.message ?: t.javaClass.simpleName
-                        else -> "HTTP ${response.code}"
-                    }
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            handleDrop(webSocket, generation, authReject = response?.code == 401 || response?.code == 403) {
+                lastError = when (response?.code) {
+                    401, 403 -> CodeErrors.TOKEN_REJECTED
+                    null -> t.message ?: t.javaClass.simpleName
+                    else -> "HTTP ${response.code}"
                 }
             }
-        })
+        }
     }
 
     /**
@@ -217,57 +257,70 @@ class WebSocketTransport(
         authReject: Boolean,
         onCurrent: (() -> Unit)? = null,
     ) {
-        if (!isCurrent(webSocket, generation)) return
-        onCurrent?.invoke()
-        socket = null
-        val heldFor = connectedAtMs?.let { nowMs() - it } ?: 0L
-        connectedAtMs = null
-        if (authReject) {
-            authRejected = true
-            userWantsConnection = false
-            _state.value = ConnectionState.FAILED
-            return
+        synchronized(lock) {
+            if (!isCurrent(webSocket, generation)) return
+            onCurrent?.invoke()
+            socket = null
+            val heldFor = connectedAtMs?.let { nowMs() - it } ?: 0L
+            connectedAtMs = null
+            if (authReject) {
+                authRejected = true
+                userWantsConnection = false
+                _state.value = ConnectionState.FAILED
+                return
+            }
+            if (heldFor >= ReconnectBackoff.RESET_AFTER_CONNECTED_MS) attempt = 0
+            if (intentionalClose || !userWantsConnection) {
+                _state.value = ConnectionState.DISCONNECTED
+                return
+            }
+            _state.value = if (lastError != null) ConnectionState.FAILED else ConnectionState.DISCONNECTED
+            scheduleReconnectIfNeeded()
         }
-        if (heldFor >= ReconnectBackoff.RESET_AFTER_CONNECTED_MS) attempt = 0
-        if (intentionalClose || !userWantsConnection) {
-            _state.value = ConnectionState.DISCONNECTED
-            return
-        }
-        _state.value = if (lastError != null) ConnectionState.FAILED else ConnectionState.DISCONNECTED
-        scheduleReconnectIfNeeded()
     }
 
     private fun scheduleReconnectIfNeeded() {
-        if (!reconnectAllowed()) return
-        if (_state.value == ConnectionState.CONNECTED || _state.value == ConnectionState.CONNECTING) return
-        if (reconnectJob?.isActive == true) return
-        val n = attempt
-        attempt = n + 1
-        val wait = ReconnectBackoff.delayMs(n, random01())
-        reconnectJob = scope.launch {
-            sleeper(wait)
-            if (reconnectAllowed() &&
-                _state.value != ConnectionState.CONNECTED &&
-                _state.value != ConnectionState.CONNECTING
-            ) {
-                openSocket()
+        synchronized(lock) {
+            if (!reconnectAllowed()) return
+            if (_state.value == ConnectionState.CONNECTED || _state.value == ConnectionState.CONNECTING) return
+            if (reconnectJob?.isActive == true) return
+            val n = attempt
+            attempt = n + 1
+            val wait = ReconnectBackoff.delayMs(n, random01())
+            reconnectJob = scope.launch {
+                sleeper(wait)
+                if (reconnectAllowed() &&
+                    _state.value != ConnectionState.CONNECTED &&
+                    _state.value != ConnectionState.CONNECTING
+                ) {
+                    openSocket()
+                }
             }
         }
     }
 
-    override fun send(frame: String): Boolean = socket?.send(frame) ?: false
+    override fun send(frame: String): Boolean = synchronized(lock) {
+        // Queued only on the socket that is still current. A retired socket's send()
+        // can return true and the frame never reaches the new connection.
+        socket?.send(frame) ?: false
+    }
 
     override fun close() {
-        intentionalClose = true
-        userWantsConnection = false
-        reconnectJob?.cancel()
-        reconnectJob = null
-        // Retire the live generation before closing so late OkHttp callbacks no-op.
-        socketGeneration++
-        socket?.close(1000, "bye")
-        socket = null
-        connectedAtMs = null
-        _state.value = ConnectionState.DISCONNECTED
+        val retiring: WebSocket?
+        synchronized(lock) {
+            intentionalClose = true
+            userWantsConnection = false
+            reconnectJob?.cancel()
+            reconnectJob = null
+            // Retire the live generation before closing so late OkHttp callbacks no-op.
+            socketGeneration++
+            retiring = socket
+            socket = null
+            connectedAtMs = null
+            _state.value = ConnectionState.DISCONNECTED
+        }
+        // Outside the lock: OkHttp may invoke onClosed on this thread, and that takes [lock].
+        retiring?.close(1000, "bye")
     }
 
     companion object {

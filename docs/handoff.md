@@ -4,6 +4,15 @@ A staged photo (or audio clip) with an empty composer now enables Send. New chat
 
 # Handoff (2026-10-01)
 
+## Code reconnect reliability (2026-10-01)
+On `cursor/code-reconnect-reliability-05bf` (PR into `gradation/app-pass`). Four fixes, unit-tested (`CodeProtocolTest`, `CodeBridgeBackendTest`, `WebSocketTransportGenerationTest`):
+- Already-applied bridge seqs are dropped, including the boundary seq of a gap refill, so a replay cannot append a text chunk twice.
+- Outbox flush is single-flight, so resume and the connected-queue retry cannot deliver one queued prompt twice.
+- Optimistic user bubbles match the bridge echo on trimmed text.
+- WebSocket open/send/close share one lock: a second connect during open does not leak a socket, and send after retire returns false.
+
+Phone still has the polish-wave checklist below. Not on a device: drop Wi-Fi mid prompt, and a prompt with leading spaces, to see one bubble and one turn.
+
 ## Stability pass (2026-10-01, database recovery)
 On `cursor/db-recovery-hardening-700c`, targeting `gradation/app-pass`.
 - Recovery used to delete the only wrapped SQLCipher passphrase after moving `chat_database` aside, so the backup could not be opened. The wrapped blob is now copied under `chat_db_passphrase_unreadable_<stamp>` before the active one is replaced. A pending-recovery stamp covers a process death between the move and the fresh database. A taken stamp uses the next free one, and a failed move puts the files back.

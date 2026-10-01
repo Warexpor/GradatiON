@@ -26,6 +26,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code: a bridge event that arrives twice (or a resume that includes the last seq already on screen) no longer appends that chunk again. A prompt queued while reconnecting is sent once even if the resume flush and the retry overlap. A prompt with surrounding spaces matches the bridge's echo, so it stays one bubble. A second connect while the socket is still opening no longer leaves a spare WebSocket, and a send after the socket was retired reports failure so the prompt can be queued again.
 - Roleplay Rewrite on the greeting no longer asks you to send a message first. Rewriting the latest reply still shows the model that reply when chat memory is short, and rewriting an earlier reply still shows it the photo. The demo model can rewrite too.
 - A photo on its own can be sent: the button no longer stays on Continue, or stays disabled, while a picture is staged, and a second tap cannot send it twice. Camera photos are turned upright before they go to the model. A saved photo still shows after the gallery link expires.
 - A photo staged in the composer with no caption left Send disabled, so the picture could not be sent. Send now wakes as soon as a photo or audio clip is attached, and New chat drops the staged attachment instead of carrying it into the next thread.
