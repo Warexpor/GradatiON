@@ -17,6 +17,7 @@
 - Chat: streaming, fades, the copy check and the glass switch all honour the system "animations off" setting; message copies confirm with the check animation and a haptic; the haptics preference applies to every tap (new `Haptics.tap`).
 
 ### Changed
+- The demo model's rewrite follows the last ask in the note, so "don't shorten it, make it longer" comes out longer, and a note of more than one line is read in full.
 - Roleplay characters list: the top-left button is a gear that opens Settings (inside a chat it stays the back chevron).
 - Character panel: square tiles with flat drawn art that fills each card; no edge line; the header's Switch button and the New chat tile are gone (New chat lives on the History page).
 - About 50 older icons were redrawn as 24dp round strokes to match the rest, and `ic_licenses` was added. 30 unused drawables, plus about 100 unused layouts, menus, colors, styles and strings, were removed.
@@ -26,6 +27,10 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A roleplay greeting you rewrote stays when you save the character, switch persona, or import, unless the greeting text on the card itself changed. A bubble that is still the card's line still follows a rename or a new persona name.
+- Rewriting the greeting, or any earlier reply, holds the turn: Send becomes Stop, and that tap cancels the rewrite instead of dropping it with no notice.
+- Lore matching starts on a word when a long scene is cut down to the recent part, so a key sliced by that cut is not missed or half-matched.
+- Fact notes drop a reasoning model's unfinished scratchpad, and lines copied from the Memory note you wrote. A photo sent with no caption still counts as a beat in that summary.
 - Code: a bridge event that arrives twice (or a resume that includes the last seq already on screen) no longer appends that chunk again. A prompt queued while reconnecting is sent once even if the resume flush and the retry overlap. A prompt with surrounding spaces matches the bridge's echo, so it stays one bubble. A second connect while the socket is still opening no longer leaves a spare WebSocket, and a send after the socket was retired reports failure so the prompt can be queued again.
 - Roleplay Rewrite on the greeting no longer asks you to send a message first. Rewriting the latest reply still shows the model that reply when chat memory is short, and rewriting an earlier reply still shows it the photo. The demo model can rewrite too.
 - A photo on its own can be sent: the button no longer stays on Continue, or stays disabled, while a picture is staged, and a second tap cannot send it twice. Camera photos are turned upright before they go to the model. A saved photo still shows after the gallery link expires.

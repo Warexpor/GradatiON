@@ -172,8 +172,34 @@ object DemoModel {
     /** The closing turn of a Rewrite, matched on the directive rather than the whole prompt. */
     fun isRewriteRequest(userText: String) = "Rewrite your last reply" in userText
 
-    fun rewriteNote(userText: String): String =
-        userText.substringAfter("What to change:", "").substringBefore("\n").trim()
+    fun rewriteNote(userText: String): String {
+        val body = userText.substringAfter("What to change:", "")
+        // The directive continues on the next paragraph. A note may be more than one line.
+        val end = body.indexOf("\nKeep everything")
+        val note = if (end >= 0) body.substring(0, end) else body.substringBefore("\n")
+        return note.trim()
+    }
+
+    /** Which edit the note is asking for. When it asks for two, the later one wins. */
+    fun rewriteKind(note: String): RewriteKind {
+        val n = note.lowercase()
+        val hits = listOf(
+            "shorter" to RewriteKind.SHORTER,
+            "longer" to RewriteKind.LONGER,
+            "dialogue" to RewriteKind.DIALOGUE,
+            "dialog" to RewriteKind.DIALOGUE
+        ).mapNotNull { (word, kind) -> n.lastIndexOf(word).takeIf { it >= 0 }?.let { it to kind } }
+        if (hits.isNotEmpty()) return hits.maxByOrNull { it.first }!!.second
+        return when {
+            "detail" in n || Regex("""\broom\b""").containsMatchIn(n) || Regex("""\blong\b""").containsMatchIn(n) ->
+                RewriteKind.LONGER
+            Regex("""\bshort\b""").containsMatchIn(n) || "brief" in n -> RewriteKind.SHORTER
+            Regex("""\b(?:talk|say)\b""").containsMatchIn(n) -> RewriteKind.DIALOGUE
+            else -> RewriteKind.OTHER
+        }
+    }
+
+    enum class RewriteKind { SHORTER, LONGER, DIALOGUE, OTHER }
 
     /** The assistant text the rewrite is about: the last assistant turn before the note. */
     fun previousAssistant(body: String): String = runCatching {
@@ -193,14 +219,11 @@ object DemoModel {
     fun demoRewrite(previous: String, note: String): String {
         val base = previous.trim()
         if (base.isEmpty()) return "*She tries the line again, more simply.*"
-        val n = note.lowercase()
-        return when {
-            "short" in n -> base.lineSequence().filter { it.isNotBlank() }.take(2).joinToString("\n\n")
-            "long" in n || "detail" in n || "room" in n ->
-                base + "\n\n*The light in the room shifts, and she doesn't look away.*"
-            "dialogue" in n || "say" in n || "talk" in n ->
-                base + "\n\n\"Is that closer to what you wanted?\""
-            else -> base + "\n\n*She lets that land, then goes on as you asked.*"
+        return when (rewriteKind(note)) {
+            RewriteKind.SHORTER -> base.lineSequence().filter { it.isNotBlank() }.take(2).joinToString("\n\n")
+            RewriteKind.LONGER -> base + "\n\n*The light in the room shifts, and she doesn't look away.*"
+            RewriteKind.DIALOGUE -> base + "\n\n\"Is that closer to what you wanted?\""
+            RewriteKind.OTHER -> base + "\n\n*She lets that land, then goes on as you asked.*"
         }
     }
 

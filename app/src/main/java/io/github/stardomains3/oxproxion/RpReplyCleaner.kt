@@ -12,12 +12,17 @@ object RpReplyCleaner {
         RegexOption.MULTILINE
     )
     private val blankRuns = Regex("""\n{3,}""")
+    /** A label some models put above a Rewrite. Only the opening line, and only that shape. */
+    private val rewritePreamble = Regex(
+        """(?i)^[ \t]*(?:\(OOC:[^\n]*Rewrite your last reply[^\n]*\)|here(?:'s| is) the (?:rewritten|new) (?:reply|version)[ \t]*:?|rewritten version[ \t]*:?)[ \t]*(?:\n+|$)"""
+    )
 
     fun clean(text: String): String {
         var out = thinkRegex.replace(text, "")
         out = openThinkRegex.replace(out, "")
         // Some providers drop the opening tag and send only the closing one.
         if (out.contains("</think>")) out = out.substringAfterLast("</think>")
+        out = rewritePreamble.replace(out, "")
         out = leakRegex.replace(out, "")
         // A stripped line leaves its blank neighbours behind.
         out = blankRuns.replace(out, "\n\n")

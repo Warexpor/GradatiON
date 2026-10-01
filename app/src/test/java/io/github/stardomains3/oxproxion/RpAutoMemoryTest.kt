@@ -81,6 +81,37 @@ class RpAutoMemoryTest {
         assertEquals(last, out.lines().last())
     }
 
+    @Test fun transcriptDropsRewriteNotesAndKeepsAPhotoBeat() {
+        val turns = listOf(
+            "user" to RpAutoMemory.turnBody("", showedPhoto = true),
+            "user" to RpPromptEngine.rewriteDirective("shorter"),
+            "user" to RpPromptEngine.PHOTO_TURN,
+            "assistant" to "She waits."
+        )
+        val t = RpAutoMemory.transcript(turns, "Mira", "Sam")
+        assertTrue(t.contains("Sam: ${RpAutoMemory.PHOTO_BEAT}"))
+        assertTrue(t.contains("Mira: She waits."))
+        assertFalse(t.contains("Rewrite your last reply"))
+        assertFalse(t.contains("says nothing"))
+    }
+
+    @Test fun cleanDropsAnUnclosedThinkAndCopiedMemory() {
+        assertEquals("- They leave at dawn", RpAutoMemory.clean("- They leave at dawn\n<think>still scratching"))
+        assertNull(RpAutoMemory.clean("<think>the facts never got written"))
+        assertEquals(
+            "- They leave at dawn",
+            RpAutoMemory.clean("- Sam owes nothing\n- They leave at dawn", userMemory = "Sam owes nothing")
+        )
+        assertNull(RpAutoMemory.clean("- Sam owes nothing", userMemory = "- Sam owes nothing"))
+    }
+
+    @Test fun runKeyFollowsTheChatThatGainedAnId() {
+        assertEquals(42L, RpAutoMemory.runKey(launchSessionId = null, currentSessionId = 42L, sameChat = true))
+        assertEquals(RpAutoMemory.UNSAVED_KEY, RpAutoMemory.runKey(null, null, sameChat = true))
+        assertNull(RpAutoMemory.runKey(launchSessionId = null, currentSessionId = 9L, sameChat = false))
+        assertEquals(3L, RpAutoMemory.runKey(launchSessionId = 3L, currentSessionId = 9L, sameChat = false))
+    }
+
     @Test fun cleanCapKeepsAnOverlongSingleLine() {
         val out = RpAutoMemory.clean("- " + "y".repeat(3000))!!
         assertEquals(RpAutoMemory.MEMORY_CHARS, out.length)
