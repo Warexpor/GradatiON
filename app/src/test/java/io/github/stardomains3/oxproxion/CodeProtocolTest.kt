@@ -980,12 +980,57 @@ class CodeProtocolTest {
         assertEquals("s1", gap.sessionId)
         assertEquals(1L, gap.afterSeq)
         assertTrue(jump[1] is AdapterOutput.Update)
+        // The far frame is on screen, but resume still asks for seq > 1 until the hole is filled.
+        assertEquals(1L, a.lastSeq("s1"))
         // The reload replays everything after seq 1: the missing frames apply, the delivered one is dropped.
         assertTrue(a.decode(chunk("B", 2)).single() is AdapterOutput.Update)
         assertTrue(a.decode(chunk("C", 3)).single() is AdapterOutput.Update)
+        assertEquals(4L, a.lastSeq("s1"))
         assertTrue(a.decode(chunk("D", 4)).single() is AdapterOutput.Ignored)
         a.endGap("s1")
+        assertEquals(4L, a.lastSeq("s1"))
         assertTrue(a.decode(chunk("E", 5)).single() is AdapterOutput.Update)
+    }
+
+    @Test fun failedGapFillDoesNotSkipTheHoleOrAppendTheFarFrameTwice() {
+        val a = AcpAdapter()
+        fun chunk(text: String, seq: Long) =
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"$text"}}""", seq = seq)
+        var list = emptyList<CodeEvent>()
+        fun apply(frame: String) {
+            a.decode(frame).forEach { out ->
+                if (out is AdapterOutput.Update) list = TranscriptReducer.apply(list, out.update, now = 1L)
+            }
+        }
+        apply(chunk("A", 1))
+        val jump = a.decode(chunk("D", 4))
+        jump.forEach { out ->
+            if (out is AdapterOutput.Update) list = TranscriptReducer.apply(list, out.update, now = 1L)
+        }
+        a.endGap("s1", filled = false)
+        assertEquals(1L, a.lastSeq("s1"))
+        assertTrue(a.decode(chunk("D", 4)).single() is AdapterOutput.Ignored)
+        apply(chunk("D", 4))
+        assertEquals("AD", (list.single() as CodeEvent.AgentText).text)
+        apply(chunk("B", 2))
+        apply(chunk("C", 3))
+        assertEquals("ADBC", (list.single() as CodeEvent.AgentText).text)
+        assertEquals(4L, a.lastSeq("s1"))
+    }
+
+    @Test fun finishedGapLoadAcceptsASkippedSequence() {
+        // Some bridges do not number every seq. A load that completes still moves the cursor
+        // to the frame already on screen, so the next one is not another hole.
+        val a = AcpAdapter()
+        fun chunk(text: String, seq: Long) =
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"$text"}}""", seq = seq)
+        assertTrue(a.decode(chunk("A", 1)).single() is AdapterOutput.Update)
+        assertTrue(a.decode(chunk("J", 10)).first() is AdapterOutput.Gap)
+        assertEquals(1L, a.lastSeq("s1"))
+        a.endGap("s1", filled = true)
+        assertEquals(10L, a.lastSeq("s1"))
+        assertTrue(a.decode(chunk("K", 11)).single() is AdapterOutput.Update)
+        assertEquals(11L, a.lastSeq("s1"))
     }
 
     @Test fun alreadySeenSeqIsNotDecodedAgain() {
@@ -1028,6 +1073,7 @@ class CodeProtocolTest {
         apply(chunk("B", 2))
         apply(chunk("C", 3)) // the frame that opened the hole, already delivered
         assertEquals("ACB", (list.single() as CodeEvent.AgentText).text)
+        assertEquals(3L, a.lastSeq("s1"))
     }
 
     @Test fun consecutiveSeqsNeverReportAGap() {
