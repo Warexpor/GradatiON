@@ -14,6 +14,7 @@ import android.view.View
 import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
+import io.github.stardomains3.oxproxion.code.CodeChangesFragment
 import io.github.stardomains3.oxproxion.code.CodeDiffFragment
 import io.github.stardomains3.oxproxion.code.CodeEvent
 import io.github.stardomains3.oxproxion.code.CodeHub
@@ -310,6 +311,20 @@ class CodeModeScreenshotTest {
             assertTrue("approval row $i needs its icon", icon.isShown && icon.drawable != null)
         }
         snap(root(a), "code_approvals_picker_dark")
+    }
+
+    /** Changes list: commit and revert-all stay disabled until the status arrives, then both are offered. */
+    @Test fun codeChangesRevertAllEnabled() = withCode { a, _ ->
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeChangesFragment.newInstance(id))
+        idle(2)
+        val frag = a.supportFragmentManager.fragments.filterIsInstance<CodeChangesFragment>().single()
+        val toolbar = frag.requireView().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+        assertEquals(a.getString(R.string.code_changes_ask_revert_all), toolbar.menu.findItem(R.id.action_ask_revert_all).title)
+        assertTrue(toolbar.menu.findItem(R.id.action_ask_revert_all).isEnabled)
+        assertTrue(toolbar.menu.findItem(R.id.action_ask_commit).isEnabled)
+        assertEquals(3, frag.requireView().findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeChangesList).adapter!!.itemCount)
+        snap(root(a), "code_changes_dark")
     }
 
     /** The composer sits above the popover's scrim: a second tap on the pill must fold the card. */

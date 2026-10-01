@@ -1,3 +1,12 @@
+# Handoff (2026-10-01, code tool detail and changes)
+
+On `cursor/code-tool-detail-search-7caa`, targeting `gradation/app-pass`. Code mode only:
+- A shell tool call keeps its command (a string or an argument list) when the only location is the working folder. A file location includes its line, and extra paths past three are counted.
+- An agent message that is a link or an embedded file is shown. A picture-only prompt from another device still makes a bubble. A diff whose old or new text is not a string no longer drops the tool call.
+- Session search also matches the folder path, branch, model, and harness. Changes can ask the agent to revert every tracked file after a confirmation; untracked files stay.
+
+Phone: open a real session, confirm a Bash card shows the command and a Read card shows `file:line`. Search the session list by folder. On Changes, Ask to revert all and cancel, then confirm on a scratch repo.
+
 # Handoff (2026-10-01, RP scene, lore, memory)
 
 On `cursor/rp-scene-lore-memory-7ec9`, targeting `gradation/app-pass`.

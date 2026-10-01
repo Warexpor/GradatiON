@@ -5,4 +5,8 @@
         android:id="@+id/action_ask_commit"
         android:title="@string/code_changes_ask_commit"
         app:showAsAction="never" />
+    <item
+        android:id="@+id/action_ask_revert_all"
+        android:title="@string/code_changes_ask_revert_all"
+        app:showAsAction="never" />
 </menu>

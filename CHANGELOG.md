@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Code: the Changes screen can ask the agent to revert every tracked file, after a confirmation. Untracked files are left alone. Search on the session list also matches the folder path, branch, model, and harness.
 - History search shows the line that matched, including a hit in an earlier message, and marks those words. The chat you have open reads "Open now", and a pinned chat keeps a pin on its row.
 - Roleplay lore stays with the story as the chat grows. The character's name and scenario, your name, the Memory note and this chat's facts keep matching keys after the recent scene is all that fits. A lore entry can pull the next one, and that one the next. A scene reminder is kept even when you write two, it may contain parentheses, and the model is told it is a note rather than your next line. The demo model follows that note.
 - History groups chats by day (Today, Yesterday, This week, Earlier), with pinned chats still first, and shows the last line under the title. A photo with no caption reads as "Photo".
@@ -31,6 +32,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code: a shell tool call shows the command when the agent sent one, including a command passed as a list of arguments, instead of only the working folder. A file location includes its line. A link or an embedded file in an agent message is shown instead of being dropped, and a picture-only prompt from another device still appears. A diff whose old or new text is not a string no longer drops the whole tool call.
 - A chat message longer than Android's cursor window (a large attached file) no longer crashes when the chat is opened, when History or Roleplay asks for the last line, or when chats are exported. The text is read in slices. Opening a chat that the database cannot return shows a notice instead of closing the app.
 - A preference stored as the wrong type (a restored backup, or a key whose type changed) no longer crash-loops launch. The value is left in place and the default is used. A chat fork this version cannot read is left in place instead of being deleted. Saving the tool list archives an unreadable copy first, the same way the model list does.
 - If the chat database cannot be opened and the file cannot be moved aside, the app starts a new database file instead of crash-looping on the same one. The old file stays where it is.

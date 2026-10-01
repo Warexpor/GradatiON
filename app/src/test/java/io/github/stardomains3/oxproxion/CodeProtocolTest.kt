@@ -210,6 +210,75 @@ class CodeProtocolTest {
         assertEquals("Done.", (list[2] as CodeEvent.AgentText).text)
     }
 
+    @Test fun executeDetailKeepsCommandWhenLocationIsTheFolder() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Bash","kind":"execute","status":"pending",
+               "locations":[{"path":"/home/me/repo"}],
+               "rawInput":{"command":"npm test"}}"""
+        )))
+        assertEquals("npm test", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
+    @Test fun executeDetailJoinsArgvCommand() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Bash","kind":"execute","status":"pending",
+               "rawInput":{"command":["./gradlew",":app:testDebugUnitTest"]}}"""
+        )))
+        assertEquals("./gradlew :app:testDebugUnitTest", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
+    @Test fun readDetailIncludesLineAndCapsExtraLocations() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"r1","title":"Read","kind":"read","status":"completed",
+               "locations":[
+                 {"path":"src/A.kt","line":18},
+                 {"path":"src/B.kt","line":2},
+                 {"path":"src/C.kt","line":3},
+                 {"path":"src/D.kt","line":4}
+               ],
+               "rawInput":{"file_path":"src/A.kt"}}"""
+        )))
+        assertEquals("src/A.kt:18 · src/B.kt:2 · src/C.kt:3 +1", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
+    @Test fun malformedDiffTextDoesNotDropTheToolCall() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"e1","title":"Edit","kind":"edit","status":"completed",
+               "content":[
+                 {"type":"diff","path":"a.kt","oldText":{"nope":true},"newText":"x"},
+                 {"type":"content","content":{"type":"text","text":"kept"}}
+               ]}"""
+        )))
+        assertTrue(list.none { it is CodeEvent.FileDiff })
+        val tool = list.filterIsInstance<CodeEvent.ToolCall>().single()
+        assertEquals("kept", tool.output)
+    }
+
+    @Test fun agentResourceLinkAppendsOnItsOwnLine() {
+        val list = fold(listOf(
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"See"}}""", seq = 1),
+            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"resource_link","name":"a.kt","uri":"file:///a.kt"}}""", seq = 2),
+        ))
+        assertEquals("See\na.kt (file:///a.kt)", (list.single() as CodeEvent.AgentText).text)
+    }
+
+    @Test fun agentEmbeddedResourceShowsFileText() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"agent_message_chunk","content":{"type":"resource","resource":{"uri":"file:///a.kt","text":"fun main() {}"}}}"""
+        )))
+        assertEquals("fun main() {}", (list.single() as CodeEvent.AgentText).text)
+    }
+
+    @Test fun userImageOnlyPromptStillShows() {
+        val png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12P4z8AAAAADAAEABf4C/gAAAABJRU5ErkJggg=="
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"user_message_chunk","content":{"type":"image","mimeType":"image/png","data":"$png"}}"""
+        )))
+        val prompt = list.single() as CodeEvent.UserPrompt
+        assertEquals("", prompt.text)
+        assertEquals(1, prompt.attachmentCount)
+    }
+
     @Test fun diffContentBecomesFileDiff() {
         val list = fold(listOf(update(
             """{"sessionUpdate":"tool_call","toolCallId":"e1","title":"Edit a.kt","kind":"edit","status":"completed",
