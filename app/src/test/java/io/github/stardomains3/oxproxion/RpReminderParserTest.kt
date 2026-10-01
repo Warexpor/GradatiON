@@ -47,9 +47,16 @@ class RpReminderParserTest {
     }
 
     @Test
-    fun firstReminderWinsWhenMultiple() {
+    fun everyReminderIsKept() {
         val parsed = RpReminderParser.parse("_(Reminder: one)_ and _(Reminder: two)_")
-        assertEquals("one", parsed.reminder)
-        assertTrue(parsed.userText.contains("two") || parsed.userText.contains("and"))
+        assertEquals("one\ntwo", parsed.reminder)
+        assertEquals("and", parsed.userText)
+    }
+
+    @Test
+    fun aNoteMayContainParentheses() {
+        val parsed = RpReminderParser.parse("Hello _(Reminder: stay (tense))_ there")
+        assertEquals("stay (tense)", parsed.reminder)
+        assertEquals("Hello  there", parsed.userText)
     }
 }

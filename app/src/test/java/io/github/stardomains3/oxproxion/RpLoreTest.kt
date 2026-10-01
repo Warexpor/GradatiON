@@ -65,6 +65,16 @@ class RpLoreTest {
     }
 
     @Test
+    fun semicolonAndIdeographicCommaAreKeySeparators() {
+        val book = """
+            [keys: docks; pier、lantern]
+            The docks flood at high tide.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She lights the lantern.").contains("flood"))
+        assertFalse(RpLore.select(book, "She waits.").contains("flood"))
+    }
+
+    @Test
     fun entryCanPullAnother() {
         val linked = """
             [keys: map]
@@ -76,6 +86,24 @@ class RpLoreTest {
         val out = RpLore.select(linked, "She unfolds the map.")
         assertTrue(out.contains("marks the vault"))
         assertTrue(out.contains("under the pier"))
+    }
+
+    @Test
+    fun aChainOfThreeStillArrives() {
+        val linked = """
+            [keys: map]
+            The map marks the vault.
+
+            [keys: vault]
+            The vault hides the locket.
+
+            [keys: locket]
+            The locket opens only at dawn.
+        """.trimIndent()
+        val out = RpLore.select(linked, "She unfolds the map.")
+        assertTrue(out.contains("marks the vault"))
+        assertTrue(out.contains("hides the locket"))
+        assertTrue(out.contains("only at dawn"))
     }
 
     @Test
@@ -111,5 +139,26 @@ class RpLoreTest {
         assertFalse(scan.contains("cket"))
         assertFalse(RpLore.keyHits("locket", scan))
         assertTrue(RpLore.keyHits("docks", scan))
+    }
+
+    @Test
+    fun sceneScanKeepsTheNameAndMemoryWhenTheChatIsLong() {
+        val recent = listOf("x".repeat(6_000), "only the locket remains")
+        val dropped = RpLore.scanOf(listOf("Mira", "The docks flood") + recent)
+        assertFalse(RpLore.keyHits("Mira", dropped))
+        assertFalse(RpLore.keyHits("docks", dropped))
+        val scan = RpLore.sceneScan(listOf("Mira", "The docks flood", "{{user}} keeps the map"), recent)
+        assertTrue(RpLore.keyHits("Mira", scan))
+        assertTrue(RpLore.keyHits("docks", scan))
+        assertTrue(RpLore.keyHits("locket", scan))
+        assertTrue(scan.length <= 4_000)
+    }
+
+    @Test
+    fun clipTailStopsOnALine() {
+        val text = "Mira\n" + "word ".repeat(40)
+        val out = RpLore.clipTail(text, 30)
+        assertTrue(out.startsWith("Mira"))
+        assertFalse(out.endsWith("wor"))
     }
 }

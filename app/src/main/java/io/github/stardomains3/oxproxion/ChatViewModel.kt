@@ -3919,25 +3919,41 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * What lore keys are matched against: the character's name and scenario, the open chat,
-     * and the line about to be sent. Only the newest slice is kept.
+     * What lore keys are matched against. The character's name and scenario, the persona's
+     * name, the Memory note and this chat's facts stay even when the chat is long. The open
+     * chat and [extra] (the line about to be sent, a scene reminder, a rewrite note) fill
+     * the rest, newest last.
      */
-    private fun rpLoreScan(outgoing: String = ""): String {
-        val lines = ArrayList<String>()
-        if (!sharedPreferencesHelper.isRpLlmMode()) {
-            _activeRpCharacter.value?.let { char ->
-                if (char.name.isNotBlank()) lines += char.name
-                if (char.scenario.isNotBlank()) lines += char.scenario
-            }
+    private fun rpLoreScan(vararg extra: String): String {
+        val pinned = ArrayList<String>()
+        val recent = ArrayList<String>()
+        val llm = sharedPreferencesHelper.isRpLlmMode()
+        val char = if (llm) null else _activeRpCharacter.value
+        val userName = sharedPreferencesHelper.activeRpPersonaName().ifBlank { "the user" }
+        val charName = char?.name?.takeIf { it.isNotBlank() } ?: "GradatiON"
+        fun expand(text: String) = RpPromptEngine.expandMacros(text, charName, userName)
+        if (char != null) {
+            if (char.name.isNotBlank()) pinned += char.name
+            if (char.scenario.isNotBlank()) pinned += expand(char.scenario)
+        }
+        val persona = sharedPreferencesHelper.activeRpPersonaName()
+        if (persona.isNotBlank()) pinned += persona
+        if (llm || char != null) {
+            val memory = sharedPreferencesHelper.getRpMemory(if (llm) null else char!!.id)
+            if (memory.isNotBlank()) pinned += expand(memory)
+        }
+        if (sharedPreferencesHelper.isRpAutoMemory()) {
+            val facts = currentRpFacts()
+            if (facts.isNotBlank()) pinned += expand(facts)
         }
         _chatMessages.value.orEmpty().forEach { msg ->
             if ((msg.role == "user" || msg.role == "assistant") && !isAssistantPlaceholder(msg)) {
                 val text = getMessageText(msg.content)
-                if (text.isNotBlank()) lines += text
+                if (text.isNotBlank()) recent += text
             }
         }
-        if (outgoing.isNotBlank()) lines += outgoing
-        return RpLore.scanOf(lines)
+        extra.forEach { if (it.isNotBlank()) recent += expand(it) }
+        return RpLore.sceneScan(pinned, recent)
     }
 
     /** History is cut before the card. Null means the whole definition still fits. */
@@ -3963,14 +3979,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         continueBeat: Boolean = false,
         imageUrl: String? = null
     ): Boolean {
-        val parsed = rpDelegate.parseSendText(rawText).let {
-            if (!continueBeat) it
-            else it.copy(reminder = listOfNotNull(RpPromptEngine.CONTINUE_DIRECTION, it.reminder).joinToString("\n"))
+        val parsed = rpDelegate.parseSendText(rawText)
+        // A reminder is a scene note, not the user's next line. Continue stays its own instruction.
+        val scene = parsed.reminder?.takeIf { it.isNotBlank() }?.let(RpPromptEngine::sceneNote)
+        val extraInstruction = if (continueBeat) {
+            listOfNotNull(RpPromptEngine.CONTINUE_DIRECTION, scene).joinToString("\n").ifBlank { null }
+        } else {
+            scene
         }
         val app = getApplication<Application>()
         // Reminder-only sends still need a visible user beat so the model has a turn to answer.
         val userText = when {
-            continueBeat && parsed.userText.isBlank() -> app.getString(R.string.rp_continue_prompt)
+            continueBeat && parsed.userText.isBlank() -> RpPromptEngine.CONTINUE_USER_TURN
             parsed.userText.isNotBlank() -> parsed.userText
             !parsed.reminder.isNullOrBlank() -> app.getString(R.string.rp_reminder_continue)
             imageUrl != null -> ""
@@ -4003,8 +4023,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 val systemPrompt = rpDelegate.buildSystemPrompt(
                     character = rpDelegate.getActiveCharacter(),
-                    extraInstruction = parsed.reminder,
-                    loreScan = rpLoreScan(parsed.userText),
+                    extraInstruction = extraInstruction,
+                    loreScan = rpLoreScan(parsed.userText, parsed.reminder.orEmpty()),
                     definitionCap = rpDefinitionCap(),
                     facts = currentRpFacts()
                 )
@@ -4133,7 +4153,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val systemPrompt = rpDelegate.buildSystemPrompt(
                     character = rpDelegate.getActiveCharacter(),
                     extraInstruction = null,
-                    loreScan = rpLoreScan(),
+                    loreScan = rpLoreScan(rewrite.orEmpty()),
                     definitionCap = rpDefinitionCap(),
                     facts = currentRpFacts()
                 )
@@ -4201,7 +4221,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val systemPrompt = rpDelegate.buildSystemPrompt(
                     character = rpDelegate.getActiveCharacter(),
                     extraInstruction = null,
-                    loreScan = rpLoreScan(),
+                    loreScan = rpLoreScan(note),
                     definitionCap = rpDefinitionCap(),
                     facts = currentRpFacts()
                 )

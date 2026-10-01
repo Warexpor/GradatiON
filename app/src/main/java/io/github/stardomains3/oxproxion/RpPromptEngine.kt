@@ -37,6 +37,29 @@ object RpPromptEngine {
     const val PHOTO_TURN =
         "(The user shows a photo and says nothing. It is in the scene. React only to what the picture actually shows.)"
 
+    /**
+     * The hidden user line for Continue. Same words as `rp_continue_prompt`: the transcript
+     * must not treat it as something the user said.
+     */
+    const val CONTINUE_USER_TURN =
+        "Continue your last message from exactly where it stopped. Write only what comes next."
+
+    /** Wraps a `_(Reminder:)_` so the model does not play it as the user's next line. */
+    const val SCENE_NOTE_OPEN = "(Scene note, not spoken aloud:\n"
+    private const val SCENE_NOTE_CLOSE = "\n)"
+
+    fun sceneNote(body: String): String = SCENE_NOTE_OPEN + body.trim() + SCENE_NOTE_CLOSE
+
+    /** The note inside [sceneNote], or null when [text] has none. */
+    fun sceneNoteBody(text: String): String? {
+        val start = text.indexOf(SCENE_NOTE_OPEN)
+        if (start < 0) return null
+        val from = start + SCENE_NOTE_OPEN.length
+        val end = text.indexOf(SCENE_NOTE_CLOSE, from)
+        val body = if (end < 0) text.substring(from) else text.substring(from, end)
+        return body.trim().ifBlank { null }
+    }
+
     /** Scene-craft rules shared by every character reply. */
     private const val CRAFT =
         "- Never speak, act or decide for the user. End your turn where the user can respond.\n" +

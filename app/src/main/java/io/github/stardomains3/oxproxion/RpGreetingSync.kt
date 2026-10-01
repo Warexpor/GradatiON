@@ -6,6 +6,9 @@
 object RpGreetingSync {
     data class Refresh(val expandedBefore: String, val templateChanged: Boolean)
 
+    /** Trailing space from the editor is not a new greeting, so it must not replace a rewrite. */
+    fun greetingTextChanged(before: String, after: String): Boolean = before.trim() != after.trim()
+
     fun shouldReplace(
         current: String,
         expandedBefore: String?,

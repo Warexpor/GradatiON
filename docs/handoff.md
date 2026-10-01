@@ -1,3 +1,11 @@
+# Handoff (2026-10-01, RP scene, lore, memory)
+
+On `cursor/rp-scene-lore-memory-7ec9`, targeting `gradation/app-pass`.
+- Lore keys keep matching the character's name and scenario, the persona's name, the Memory note and this chat's facts after the recent scene is all that fits (`RpLore.sceneScan`). Entries pull each other until the chain stops, not just one hop. Keys may be separated with a semicolon or an ideographic comma.
+- A `_(Reminder:)_` is a scene note, not the user's line. Every reminder in the message is kept (a second one used to be deleted), parentheses inside it are kept, and it is part of the lore scan, as is a rewrite note. The demo model adds one beat naming the note; a reply with no note is the same script as before.
+- A trailing space or newline on the greeting is not a new greeting, so it does not replace a rewrite. Fact notes skip the Continue prompt and a bare scene note. A reply that goes on after echoing the note still counts.
+- Phone: write two reminders in one send (the second should matter), mention a lore key only in Memory on a long chat, rewrite the greeting and save the character with a trailing newline on the greeting (the rewrite stays).
+
 # Handoff (2026-10-01, cursor window, wrong-type prefs, stuck recovery)
 
 On `cursor/stability-db-prefs-81e2`, targeting `gradation/app-pass`.

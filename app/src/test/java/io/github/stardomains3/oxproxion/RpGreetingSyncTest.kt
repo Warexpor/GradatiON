@@ -56,4 +56,10 @@ class RpGreetingSyncTest {
     fun aBubbleAlreadyOnTheNewLineIsLeftAlone() {
         assertFalse(RpGreetingSync.shouldReplace("You again?", "Hello.", "You again?", true))
     }
+
+    @Test
+    fun trailingSpaceIsNotANewGreeting() {
+        assertFalse(RpGreetingSync.greetingTextChanged("Hello.", "Hello.\n"))
+        assertTrue(RpGreetingSync.greetingTextChanged("Hello.", "You again?"))
+    }
 }

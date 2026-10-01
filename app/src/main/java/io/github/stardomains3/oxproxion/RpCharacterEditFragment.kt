@@ -204,7 +204,7 @@ class RpCharacterEditFragment : Fragment() {
                     val greetingRefresh = existing?.let {
                         RpGreetingSync.Refresh(
                             expandedBefore = rpDelegate.greetingMessage(it),
-                            templateChanged = it.greeting != newGreeting
+                            templateChanged = RpGreetingSync.greetingTextChanged(it.greeting, newGreeting)
                         )
                     }
                     val examplesRaw = examplesInput.text?.toString().orEmpty()

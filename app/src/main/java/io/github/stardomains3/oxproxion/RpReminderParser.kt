@@ -1,7 +1,8 @@
 package io.github.stardomains3.oxproxion
 
 object RpReminderParser {
-    private val reminderRegex = Regex("""_\(Reminder:\s*(.+?)\)_""", RegexOption.DOT_MATCHES_ALL)
+    /** Stops at the closing `)_`, so a note may contain parentheses. Every note is kept. */
+    private val reminderRegex = Regex("""_\(Reminder:\s*(.*?)\)_""", RegexOption.DOT_MATCHES_ALL)
 
     data class Parsed(
         val userText: String,
@@ -9,9 +10,11 @@ object RpReminderParser {
     )
 
     fun parse(input: String): Parsed {
-        val match = reminderRegex.find(input) ?: return Parsed(input.trim(), null)
-        val reminder = match.groupValues[1].trim()
-        val cleaned = input.replace(reminderRegex, "").trim()
-        return Parsed(cleaned, reminder)
+        val matches = reminderRegex.findAll(input).toList()
+        if (matches.isEmpty()) return Parsed(input.trim(), null)
+        val bodies = matches.map { it.groupValues[1].trim() }
+        val cleaned = reminderRegex.replace(input, "").trim()
+        val reminder = bodies.filter { it.isNotEmpty() }.joinToString("\n")
+        return Parsed(cleaned, if (bodies.all { it.isEmpty() }) "" else reminder)
     }
 }

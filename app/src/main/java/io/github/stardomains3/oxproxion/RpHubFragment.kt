@@ -403,7 +403,8 @@ class RpHubFragment : Fragment() {
             val delegate = RpChatDelegate(repo, prefs)
             val expandedBefore = activeBefore?.let { delegate.greetingMessage(it) }
             val greetingChanged = activeBefore != null && backup.characters.any { ex ->
-                ex.exportKey == activeBefore.exportKey && ex.greeting != activeBefore.greeting
+                ex.exportKey == activeBefore.exportKey &&
+                    RpGreetingSync.greetingTextChanged(activeBefore.greeting, ex.greeting)
             }
             val imported = repo.importCharacters(backup.characters)
             imported.forEach { row ->

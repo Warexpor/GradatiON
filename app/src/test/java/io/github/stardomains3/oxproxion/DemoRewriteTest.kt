@@ -56,4 +56,20 @@ class DemoRewriteTest {
         }.toString()
         assertEquals("Hello there.", DemoModel.previousAssistant(body))
     }
+
+    @Test
+    fun aSceneNoteIsSpokenIntoTheDemoReply() {
+        val script = DemoModel.Script(null, "*She waits.*")
+        assertEquals("*She waits.*", DemoModel.applySceneNote(script, "No note here.").text)
+        val noted = DemoModel.applySceneNote(script, RpPromptEngine.sceneNote("mention the locket."))
+        assertTrue(noted.text.startsWith("*She waits.*"))
+        assertTrue(noted.text.contains("Your note stays in the scene: mention the locket."))
+    }
+
+    @Test
+    fun sceneNoteRoundTrip() {
+        val wrapped = RpPromptEngine.sceneNote("stay (tense)\nand quiet")
+        assertEquals("stay (tense)\nand quiet", RpPromptEngine.sceneNoteBody(wrapped))
+        assertEquals(null, RpPromptEngine.sceneNoteBody("no note"))
+    }
 }
