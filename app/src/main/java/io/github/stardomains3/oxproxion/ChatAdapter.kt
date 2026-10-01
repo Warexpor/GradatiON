@@ -752,6 +752,7 @@ class ChatAdapter(
         maxW: Int,
         maxH: Int,
         onFramed: (Int, Int) -> Unit = { _, _ -> },
+        onFailed: () -> Unit = {},
     ) {
         view.scaleType = ImageView.ScaleType.CENTER_CROP
         if (view.getTag(tagKey) == tag && view.drawable != null && view.layoutParams.width > 0) {
@@ -777,6 +778,11 @@ class ChatAdapter(
                     }
                     view.setImageDrawable(result)
                     onFramed(w, h)
+                }
+
+                override fun onError(error: Drawable?) {
+                    if (view.getTag(tagKey) != tag) return
+                    onFailed()
                 }
             })
             .build()
@@ -830,7 +836,7 @@ class ChatAdapter(
         private val editButton: ImageButton = itemView.findViewById(R.id.editButton)
         private val imageView: ImageView = itemView.findViewById(R.id.userImageView)
         private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
-        private val collapseToggleButton: ImageButton = itemView.findViewById(R.id.collapseToggleButton)
+        private val collapseToggleButton: TextView = itemView.findViewById(R.id.collapseToggleButton)
         private var actionsMsgKey: String = ""
 
         private fun applyActionsVisibility(expanded: Boolean, animate: Boolean) {
@@ -912,7 +918,13 @@ class ChatAdapter(
                 val screenWidthDp = displayMetrics.widthPixels / displayMetrics.density
                 val isTablet = screenWidthDp >= 600
                 val maxChars = if (isTablet) 300 else 150
-                val msgKey = rawUserContent.hashCode().toString()
+                val copy = UserMessageFold.earlierCopies(pos) { i ->
+                    val other = messages[i]
+                    other.role == "user" &&
+                        getMessageText(other.content) == rawUserContent &&
+                        other.imageUri == message.imageUri
+                }
+                val msgKey = rawUserContent.hashCode().toString() + ":" + (message.imageUri ?: "") + ":" + copy
                 val longMessage = UserMessageFold.isLong(rawUserContent, maxChars)
                 val collapsed = collapsedStates.getOrDefault(msgKey, true)
                 val displayContent = if (longMessage && collapsed) {
@@ -923,12 +935,11 @@ class ChatAdapter(
                 setCachedUserMarkdown(messageTextView, displayContent)
                 if (longMessage) {
                     collapseToggleButton.visibility = View.VISIBLE
-                    collapseToggleButton.setImageResource(
-                        if (collapsed) R.drawable.ic_msg_expand else R.drawable.ic_msg_collapse
-                    )
-                    collapseToggleButton.contentDescription = itemView.context.getString(
+                    val label = itemView.context.getString(
                         if (collapsed) R.string.cd_show_more else R.string.cd_show_less
                     )
+                    collapseToggleButton.text = label
+                    collapseToggleButton.contentDescription = label
                     collapseToggleButton.setOnClickListener {
                         val current = bindingAdapterPosition
                         if (current == RecyclerView.NO_POSITION) return@setOnClickListener
@@ -944,7 +955,8 @@ class ChatAdapter(
             }
 
             // A data URL is not a file. The picture then comes from the message itself,
-            // which is also how a photo shows after its file is gone.
+            // which is also how a photo shows after its file is gone. A file that fails to
+            // load falls back the same way, and drops the tap that would have opened the dead link.
             val fileUri = message.imageUri?.takeUnless { it.startsWith("data:") }.orEmpty()
             val inline = getImageBase64(message.content)
             val d = itemView.resources.displayMetrics.density
@@ -956,9 +968,14 @@ class ChatAdapter(
                 if (fileUri.isNotEmpty()) {
                     try {
                         val userImageUri = fileUri.toUri()
-                        loadFramedPhoto(imageView, userImageUri, R.id.userImageView, fileUri, maxW, maxH) { w, _ ->
-                            messageTextView.maxWidth = captionWidthForPhoto(w, maxW, d)
-                        }
+                        val inlineTag = "inline:${inline?.hashCode()}"
+                        loadFramedPhoto(
+                            imageView, userImageUri, R.id.userImageView, fileUri, maxW, maxH,
+                            onFramed = { w, _ -> messageTextView.maxWidth = captionWidthForPhoto(w, maxW, d) },
+                            onFailed = {
+                                if (inline != null) showInlinePhoto(inline, inlineTag, maxW, maxH, d)
+                            },
+                        )
                         wirePhotoOpen(imageView, userImageUri)
                     } catch (e: Exception) {
                         if (inline != null) showInlinePhoto(inline, fileUri, maxW, maxH, d)

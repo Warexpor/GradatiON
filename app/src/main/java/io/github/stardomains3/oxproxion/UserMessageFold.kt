@@ -11,6 +11,17 @@ object UserMessageFold {
     fun isLong(text: String, maxChars: Int): Boolean =
         text.length > maxChars || text.lineSequence().count() > MAX_LINES
 
+    /** How many earlier rows are the same message, so two copies fold on their own. */
+    fun earlierCopies(index: Int, same: (Int) -> Boolean): Int {
+        var count = 0
+        var i = 0
+        while (i < index) {
+            if (same(i)) count++
+            i++
+        }
+        return count
+    }
+
     /**
      * [text] when it fits. Otherwise the first [MAX_LINES] lines, and within that a word
      * (or a line end) when the characters are what still overflow. Length used to win

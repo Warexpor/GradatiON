@@ -1371,15 +1371,51 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     }
 
     /** After a Chat send, the line that went out is not still waiting in that thread. */
-    private fun forgetAskDraft() {
+    private fun forgetAskDraft(sessionId: Long? = null) {
         if (viewModel.isRpMode()) return
-        if (askComposer.bound && askComposer.mode != ChatMode.ASK) return
-        val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
-        askComposerDirty = true
+        if (sessionId == null && askComposer.bound && askComposer.mode != ChatMode.ASK) return
+        val id = sessionId ?: if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+        val open = ComposerDrafts.key(
+            if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+        ) == ComposerDrafts.key(id)
+        if (open) askComposerDirty = true
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.remember(sharedPreferencesHelper.getAskComposerDrafts(), id, "")
         )
-        mirrorAskModeDraft("")
+        if (open) mirrorAskModeDraft("")
+    }
+
+    /** The send was refused. Put the line, and a staged photo, back on that thread. */
+    private fun restoreUnsentAsk(
+        sessionId: Long?,
+        text: String,
+        image: ByteArray?,
+        mime: String?,
+        imageUri: String?,
+        files: List<AttachedFile>,
+    ) {
+        val openId = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+        val here = ComposerDrafts.key(openId) == ComposerDrafts.key(sessionId)
+        if (here && ::chatEditText.isInitialized && chatEditText.text.isNullOrEmpty()) {
+            suppressDraftDirty = true
+            chatEditText.setText(text)
+            if (text.isNotEmpty()) chatEditText.setSelection(text.length)
+            suppressDraftDirty = false
+            askComposerDirty = true
+            if (image != null && selectedImageBytes == null) {
+                selectedImageBytes = image
+                selectedImageMime = mime
+                viewModel.setPendingUserImageUri(imageUri)
+                showStagedPhoto(image, image)
+            }
+            if (files.isNotEmpty() && pendingFiles.isEmpty()) pendingFiles.addAll(files)
+            if (::attachmentButton.isInitialized) updateAttachmentButton() else updateSendButtonChrome()
+            parkAskDraft(sessionId)
+        } else if (text.isNotBlank()) {
+            sharedPreferencesHelper.saveAskComposerDrafts(
+                ComposerDrafts.remember(sharedPreferencesHelper.getAskComposerDrafts(), sessionId, text)
+            )
+        }
     }
 
     /** The Ask snapshot follows the open thread, so a later restore does not bring back another chat's line. */
@@ -2374,6 +2410,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (viewModel.isAwaitingResponse.value == true) {
                 viewModel.cancelCurrentRequest()
                 //   viewModel.playCancelTone()
+            } else if (photoSendInFlight) {
+                return@setOnClickListener
             } else {
                 // --- API Key Check ---
                 if (viewModel.activeModelIsLan()) {
@@ -2497,12 +2535,12 @@ $cleanContent
                         return@setOnClickListener
                     }
 
-                    chatEditText.setText("")
-                    chatEditText.text.clear()
-                    forgetAskDraft()
-
+                    val unsentField = chatEditText.text?.toString().orEmpty()
                     val stagedImage = selectedImageBytes
                     val stagedImageMime = selectedImageMime
+                    val stagedUri = viewModel.pendingImageUri()
+                    val stagedFiles = pendingFiles.toList()
+                    val draftSession = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
                     fun imageContent(base64: String) = run {
                         val imageUrl = "data:$stagedImageMime;base64,$base64"
                         buildJsonArray {
@@ -2532,19 +2570,54 @@ $cleanContent
                             )
                         }
                     }
-                    if (stagedImage != null) {
-                        // A 12 MB photo is a 16 MB string: encode it off the main thread.
-                        lifecycleScope.launch {
-                            val base64 = withContext(Dispatchers.Default) { Base64.encodeToString(stagedImage, Base64.NO_WRAP) }
-                            viewModel.sendUserMessage(imageContent(base64), substitutedSystemPrompt)
-                        }
-                    } else {
-                        viewModel.sendUserMessage(JsonPrimitive(substitutedPrompt), substitutedSystemPrompt) //#subpromptcode
+                    fun clearComposerAfterSend() {
+                        // Not an edit: a pause while a photo is still encoding must not wipe the draft.
+                        suppressDraftDirty = true
+                        chatEditText.setText("")
+                        chatEditText.text.clear()
+                        suppressDraftDirty = false
+                        askComposerDirty = false
+                        forgetAskDraft()
+                        hideMenu()
+                        clearStagedAttachment()
+                        pendingFiles.clear()
+                        updateAttachmentButton()
                     }
-                    hideMenu()
-                    clearStagedAttachment()
-                    pendingFiles.clear()
-                    updateAttachmentButton()
+                    if (stagedImage != null) {
+                        if (photoSendInFlight) return@setOnClickListener
+                        photoSendInFlight = true
+                        // Hide the chip now. Leave the file URI until the message copies it:
+                        // clearing it first sent the picture with nowhere for the bubble to load it.
+                        attachmentPreviewContainer.visibility = View.GONE
+                        selectedImageBytes = null
+                        suppressDraftDirty = true
+                        chatEditText.setText("")
+                        chatEditText.text.clear()
+                        suppressDraftDirty = false
+                        askComposerDirty = false
+                        hideMenu()
+                        pendingFiles.clear()
+                        updateAttachmentButton()
+                        lifecycleScope.launch {
+                            val accepted = try {
+                                val base64 = withContext(Dispatchers.Default) {
+                                    Base64.encodeToString(stagedImage, Base64.NO_WRAP)
+                                }
+                                viewModel.sendUserMessage(imageContent(base64), substitutedSystemPrompt)
+                            } finally {
+                                photoSendInFlight = false
+                            }
+                            if (!isAdded) return@launch
+                            if (accepted) {
+                                forgetAskDraft(draftSession)
+                                clearStagedAttachment()
+                            } else {
+                                restoreUnsentAsk(draftSession, unsentField, stagedImage, stagedImageMime, stagedUri, stagedFiles)
+                            }
+                        }
+                    } else if (viewModel.sendUserMessage(JsonPrimitive(substitutedPrompt), substitutedSystemPrompt)) {
+                        clearComposerAfterSend()
+                    }
                 }
             }
         }

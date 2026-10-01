@@ -13,6 +13,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.View
 import android.widget.PopupWindow
+import android.widget.TextView
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
@@ -268,6 +269,21 @@ class ScreenshotTest {
 
     @Test fun chatConversationDark() = withChat { a, _ ->
         seedConversation(a); idle(); snap(root(a), "chat_conversation_dark")
+    }
+
+    /** A long message you sent folds, with Show more under the bubble. */
+    @Test fun userMessageFoldDark() = withChat { a, _ ->
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        val f = ChatViewModel::class.java.getDeclaredField("_chatMessages").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val live = f.get(vm) as MutableLiveData<List<FlexibleMessage>>
+        val long = (1..8).joinToString("\n") { "line $it stays in the message you sent" }
+        live.value = listOf(FlexibleMessage("user", JsonPrimitive(long)))
+        idle()
+        val expand = a.findViewById<TextView>(R.id.collapseToggleButton)
+        org.junit.Assert.assertEquals(View.VISIBLE, expand.visibility)
+        org.junit.Assert.assertEquals(a.getString(R.string.cd_show_more), expand.text.toString())
+        snap(root(a), "user_message_fold_dark")
     }
 
     /** A sent photo keeps its shape inside the bubble, and the composer chip can send with no text. */

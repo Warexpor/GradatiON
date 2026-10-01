@@ -77,20 +77,25 @@
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <!-- Always under the bubble. The action row below stays hidden until a tap, so a
-             long message could not be opened from there. -->
-        <ImageButton
+             long message could not be opened from there. A label, not a chevron: the
+             control has to say what it does. -->
+        <TextView
             android:id="@+id/collapseToggleButton"
-            android:layout_width="44dp"
+            android:layout_width="wrap_content"
             android:layout_height="44dp"
-            android:layout_marginTop="0dp"
+            android:minWidth="44dp"
+            android:gravity="center_vertical|end"
+            android:paddingStart="12dp"
+            android:paddingEnd="2dp"
             android:background="@drawable/bg_action_press"
             android:contentDescription="@string/cd_show_more"
-            android:padding="13dp"
-            android:src="@drawable/ic_msg_expand"
+            android:fontFamily="@font/app_sans"
+            android:text="@string/cd_show_more"
+            android:textColor="@color/xai_mute"
+            android:textSize="13sp"
             android:visibility="gone"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/messageContainer"
-            app:tint="@color/xai_mute" />
+            app:layout_constraintTop_toBottomOf="@id/messageContainer" />
 
         <!-- Edit + copy primary (right), then local extras; hidden until tap. Bare icons, no
              capsule, the same row the reply has under it. -->

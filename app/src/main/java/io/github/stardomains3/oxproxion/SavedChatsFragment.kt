@@ -197,7 +197,9 @@ class SavedChatsFragment : Fragment() {
     private var filterJob: Job? = null
     private var filterGeneration = 0
 
-    private fun filterSessions(query: String) {
+    private fun filterSessions(rawQuery: String) {
+        // A trailing space used to miss every row and drop the bold on the word before it.
+        val query = rawQuery.trim()
         val generation = ++filterGeneration
         filterJob?.cancel()
         filterJob = viewLifecycleOwner.lifecycleScope.launch {

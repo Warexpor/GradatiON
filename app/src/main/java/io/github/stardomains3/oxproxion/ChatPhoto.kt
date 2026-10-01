@@ -74,6 +74,23 @@ object ChatPhoto {
         else -> DpBox(16, 12, 16, 12)
     }
 
+    /**
+     * Where the bubble should load a picture from. A content or file URI wins. A data URL
+     * (or a missing URI, which is what a reopened chat has) is the JPEG stored in the message,
+     * so the picture still shows after the gallery or cache link is gone.
+     */
+    fun bubbleSource(imageUri: String?, contentUrl: String?): BubbleSource? {
+        val file = imageUri?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("data:") }
+        if (file != null) return BubbleSource.File(file)
+        val embedded = contentUrl?.trim()?.takeIf { it.startsWith("data:image") }
+        return embedded?.let { BubbleSource.Embedded(it) }
+    }
+
+    sealed class BubbleSource {
+        data class File(val uri: String) : BubbleSource()
+        data class Embedded(val dataUrl: String) : BubbleSource()
+    }
+
     /** Extra padding on the caption so it lines up with a text-only bubble (4dp rim + 12dp = 16dp). */
     fun captionInsets(hasPhoto: Boolean, photoOnly: Boolean): DpBox = when {
         hasPhoto && !photoOnly -> DpBox(12, 0, 12, 0)

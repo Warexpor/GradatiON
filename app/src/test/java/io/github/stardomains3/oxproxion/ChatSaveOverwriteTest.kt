@@ -171,6 +171,41 @@ class ChatSaveOverwriteTest {
         assertTrue(line.contains("lantern"))
         assertFalse(line.contains("goodbye"))
         assertTrue(repository.searchWindows(repository.searchSessions("zebra").map { it.id }, "zebra").isEmpty())
+        assertEquals(listOf("notes"), repository.searchSessions("  lantern").map { it.title })
+        assertTrue(repository.searchSessions("   ").isEmpty())
+    }
+
+    @Test
+    fun searchSkipsPhotoBytesAndJsonKeys() = runBlocking {
+        val repository = ChatRepository(dao)
+        val photo = """[{"type":"text","text":"sunset on the pier"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,${"A".repeat(4000)}JPEGDATA"}}]"""
+        dao.insertSessionAndMessages(
+            ChatSession(title = "morning", modelUsed = "m"),
+            listOf(ChatMessage(sessionId = 0, role = "user", content = photo)),
+        )
+        dao.insertSessionAndMessages(
+            ChatSession(title = "plain", modelUsed = "m"),
+            listOf(message("user", "text")),
+        )
+        dao.insertSessionAndMessages(
+            ChatSession(title = "hello chat", modelUsed = "m"),
+            listOf(ChatMessage(sessionId = 0, role = "user", content = """[{"type":"text","text":"hello"}]""")),
+        )
+
+        assertEquals(listOf("morning"), repository.searchSessions("sunset").map { it.title })
+        assertEquals(listOf("morning"), repository.searchSessions("pier").map { it.title })
+        assertTrue(repository.searchSessions("JPEGDATA").isEmpty())
+        assertTrue(repository.searchSessions("jpeg").isEmpty())
+        assertTrue(repository.searchSessions("image").isEmpty())
+        assertTrue(repository.searchSessions("url").isEmpty())
+        assertEquals(listOf("plain"), repository.searchSessions("text").map { it.title })
+        assertEquals(listOf("hello chat"), repository.searchSessions("hello").map { it.title })
+        assertTrue(repository.searchSessions("type").isEmpty())
+
+        val hit = repository.searchWindows(repository.searchSessions("pier").map { it.id }, "pier").single()
+        assertTrue(hit.content.contains("pier"))
+        assertFalse(hit.content.contains("JPEGDATA"))
+        assertFalse(hit.content.contains("base64"))
     }
 
     @Test
