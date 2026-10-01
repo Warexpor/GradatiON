@@ -1514,9 +1514,47 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             override fun onEnd(animation: androidx.core.view.WindowInsetsAnimationCompat) {
                 if (animation.typeMask and imeType == 0 || !imeAnimating) return
                 imeAnimating = false
-                listFollows = false
-                move(0f)
+                // Hand the pose from translation to layout on one frame. Dropping the translation
+                // here, before the new inset is laid out (and before the transcript's padding and
+                // scroll, which are posted, catch up), showed one frame of the old layout: the
+                // composer and the text flashed through each other.
+                val ri = ViewCompat.getRootWindowInsets(content)
+                val target = dockBottom + maxOf(
+                    ri?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())?.bottom ?: 0,
+                    ri?.getInsets(imeType)?.bottom ?: 0
+                )
+                val pending = dock.paddingBottom != target
+                val listPad = list.paddingBottom
                 ViewCompat.requestApplyInsets(content)
+                if (!pending) {
+                    listFollows = false
+                    move(0f)
+                    return
+                }
+                var frames = 0
+                content.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+                    override fun onPreDraw(): Boolean {
+                        // A new keyboard animation owns the pose now.
+                        if (imeAnimating) {
+                            content.viewTreeObserver.removeOnPreDrawListener(this)
+                            return true
+                        }
+                        frames++
+                        val dockLanded = dock.paddingBottom == target && !dock.isLayoutRequested
+                        if (dockLanded) {
+                            dock.translationY = 0f
+                            fade.translationY = 0f
+                        }
+                        val listLanded = !listFollows ||
+                            (list.paddingBottom != listPad && !list.isLayoutRequested && !list.canScrollVertically(1))
+                        if ((dockLanded && listLanded) || frames > 8) {
+                            listFollows = false
+                            move(0f)
+                            content.viewTreeObserver.removeOnPreDrawListener(this)
+                        }
+                        return true
+                    }
+                })
             }
         })
         ViewCompat.requestApplyInsets(content)
