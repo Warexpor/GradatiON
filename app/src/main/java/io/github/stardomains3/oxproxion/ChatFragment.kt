@@ -1443,7 +1443,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val frame = root.findViewById<ViewGroup>(R.id.chatFrameView)
         val backdrop = root.findViewById<View>(R.id.chatBackdrop)
         val topBar = root.findViewById<View>(R.id.topBarGlass)
-        val dock = root.findViewById<View>(R.id.composerDock)
+        val dock = root.findViewById<ViewGroup>(R.id.composerDock)
         val code = root.findViewById<View>(R.id.codeModeContainer)
         val fade = root.findViewById<View>(R.id.composerFade)
         val list = root.findViewById<View>(R.id.chatRecyclerView)
@@ -1483,8 +1483,26 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         fun move(offset: Float) {
             dock.translationY = offset
-            fade.translationY = offset
             list.translationY = if (listFollows) offset else 0f
+        }
+        // The fade under the composer follows where the composer is drawn this frame, not where
+        // a posted layout last put it: scaled from its bottom edge, so it never lags a frame
+        // behind the keyboard (it used to drop away, or stand a keyboard tall, at the handoff).
+        val fadeGap = 28 * resources.displayMetrics.density
+        content.viewTreeObserver.addOnPreDrawListener {
+            if (fade.height > 0 && dock.height > 0) {
+                var top = dock.height
+                for (i in 0 until dock.childCount) {
+                    val c = dock.getChildAt(i)
+                    if (c.visibility == View.VISIBLE) top = minOf(top, c.top)
+                }
+                val composerTop = dock.top + top + dock.translationY
+                val want = ((fade.parent as View).height - composerTop + fadeGap).coerceAtLeast(1f)
+                val scale = want / fade.height
+                if (fade.pivotY != fade.height.toFloat()) fade.pivotY = fade.height.toFloat()
+                if (abs(fade.scaleY - scale) > 0.001f) fade.scaleY = scale
+            }
+            true
         }
         val imeType = WindowInsetsCompat.Type.ime()
         ViewCompat.setWindowInsetsAnimationCallback(content, object : androidx.core.view.WindowInsetsAnimationCompat.Callback(
@@ -1541,10 +1559,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         }
                         frames++
                         val dockLanded = dock.paddingBottom == target && !dock.isLayoutRequested
-                        if (dockLanded) {
-                            dock.translationY = 0f
-                            fade.translationY = 0f
-                        }
+                        if (dockLanded) dock.translationY = 0f
                         val listLanded = !listFollows ||
                             (list.paddingBottom != listPad && !list.isLayoutRequested && !list.canScrollVertically(1))
                         if ((dockLanded && listLanded) || frames > 8) {
@@ -1658,13 +1673,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
             emptyStateContainer.setPadding(0, top, 0, bottom)
-            root.findViewById<View>(R.id.composerFade)?.let { fade ->
-                val h = bottom + (28 * d).toInt()
-                if (fade.layoutParams.height != h) {
-                    fade.layoutParams.height = h
-                    fade.requestLayout()
-                }
-            }
             updateTopBarEdge()
         }
     }
