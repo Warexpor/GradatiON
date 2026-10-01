@@ -1489,6 +1489,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         // a posted layout last put it: scaled from its bottom edge, so it never lags a frame
         // behind the keyboard (it used to drop away, or stand a keyboard tall, at the handoff).
         val fadeGap = 28 * resources.displayMetrics.density
+        val empty = root.findViewById<ViewGroup>(R.id.emptyStateContainer)
+        val emptyContent = empty.getChildAt(0) as ViewGroup
+        // Overflow when the room is short draws (then scales) instead of being cut off.
+        emptyContent.clipChildren = false
         content.viewTreeObserver.addOnPreDrawListener {
             if (fade.height > 0 && dock.height > 0) {
                 var top = dock.height
@@ -1501,6 +1505,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 val scale = want / fade.height
                 if (fade.pivotY != fade.height.toFloat()) fade.pivotY = fade.height.toFloat()
                 if (abs(fade.scaleY - scale) > 0.001f) fade.scaleY = scale
+                fitEmptyState(empty, emptyContent, dock.top + top + dock.translationY, fade.parent as View)
             }
             true
         }
@@ -1573,6 +1578,42 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
         })
         ViewCompat.requestApplyInsets(content)
+    }
+
+    private val emptyLoc = IntArray(2)
+    private val chromeLoc = IntArray(2)
+
+    /**
+     * The empty-state mark and greeting sit centred in the room between the top bar and the
+     * composer as it is drawn this frame, and shrink when that room gets short. Run every frame,
+     * so they glide and scale with the keyboard instead of jumping when its posted layout lands.
+     */
+    private fun fitEmptyState(empty: ViewGroup, content: ViewGroup, composerTop: Float, chromeParent: View) {
+        if (!empty.isShown || content.height == 0) return
+        empty.getLocationInWindow(emptyLoc)
+        chromeParent.getLocationInWindow(chromeLoc)
+        val bottom = composerTop + chromeLoc[1] - emptyLoc[1]
+        val lp = content.layoutParams as ViewGroup.MarginLayoutParams
+        // Its natural height: a short room clamps the column, and the rest overflows below it.
+        var natural = 0
+        for (i in 0 until content.childCount) {
+            val c = content.getChildAt(i)
+            if (c.visibility == View.GONE) continue
+            val clp = c.layoutParams as ViewGroup.MarginLayoutParams
+            natural += c.height + clp.topMargin + clp.bottomMargin
+        }
+        natural = maxOf(natural, content.height)
+        val room = bottom - empty.paddingTop - lp.bottomMargin
+        val scale = (room / natural).coerceIn(0.5f, 1f)
+        val target = (empty.paddingTop + bottom - lp.bottomMargin) / 2f
+        val ty = target - (content.top + natural / 2f)
+        content.pivotX = content.width / 2f
+        content.pivotY = natural / 2f
+        if (abs(content.translationY - ty) > 0.5f) content.translationY = ty
+        if (abs(content.scaleX - scale) > 0.001f) {
+            content.scaleX = scale
+            content.scaleY = scale
+        }
     }
 
     private fun setupGlassChrome(root: View) {
