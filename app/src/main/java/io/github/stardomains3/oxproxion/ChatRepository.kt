@@ -54,4 +54,10 @@ class ChatRepository(private val chatDao: ChatDao) {
         val sessionIds = chatDao.searchSessionIds("%$escaped%", mode.storageValue)
         return sessionIds.mapNotNull { chatDao.getSessionById(it) }
     }
+
+    /** Empty input stays out of the DAO: SQLite rejects `IN ()`. Chunked under the variable cap. */
+    suspend fun lastMessagePrefixes(sessionIds: List<Long>): List<ChatMessage> {
+        if (sessionIds.isEmpty()) return emptyList()
+        return sessionIds.distinct().chunked(200).flatMap { chatDao.lastMessagePrefixes(it) }
+    }
 }

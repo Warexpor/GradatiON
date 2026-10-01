@@ -208,8 +208,12 @@
     <string name="rp_discard_edits_confirm">Discard</string>
     <string name="rp_llm_chip">LLM</string>
     <string name="rp_history_empty">No roleplay chats yet</string>
-    <string name="history_mode_ask">Chats</string>
-    <string name="history_mode_rp">Roleplay chats</string>
+    <string name="history_section_today">Today</string>
+    <string name="history_section_yesterday">Yesterday</string>
+    <string name="history_section_week">This week</string>
+    <string name="history_section_earlier">Earlier</string>
+    <string name="history_preview_you">You: %1$s</string>
+    <string name="history_preview_photo">Photo</string>
     <string name="rp_attachments_disabled">Roleplay takes photos only, not files or audio</string>
     <string name="rp_llm_wipe_title">Enable LLM mode?</string>
     <string name="rp_llm_wipe_body">This starts a new RP chat in LLM mode (no character card) and clears the current transcript. Your selected character is kept for when you turn LLM mode off.</string>

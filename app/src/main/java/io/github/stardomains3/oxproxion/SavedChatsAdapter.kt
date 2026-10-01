@@ -9,14 +9,8 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-
-sealed class HistoryListItem {
-    data class Header(val title: String) : HistoryListItem()
-    data class Session(val session: ChatSession, val pinned: Boolean) : HistoryListItem()
-}
 
 class SavedChatsAdapter(
     private val onClick: (ChatSession) -> Unit,
@@ -49,7 +43,7 @@ class SavedChatsAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = getItem(position)) {
             is HistoryListItem.Header -> (holder as HeaderViewHolder).bind(item.title)
-            is HistoryListItem.Session -> (holder as ChatSessionViewHolder).bind(item.session)
+            is HistoryListItem.Session -> (holder as ChatSessionViewHolder).bind(item.session, item.preview)
         }
     }
 
@@ -66,6 +60,7 @@ class SavedChatsAdapter(
         val onOverflowClick: (ChatSession, View) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
         private val titleTextView: TextView = itemView.findViewById(R.id.savedChatTitle)
+        private val previewTextView: TextView = itemView.findViewById(R.id.savedChatPreview)
         private val timestampTextView: TextView = itemView.findViewById(R.id.savedChatTimestamp)
         private val overflowButton: ImageButton = itemView.findViewById(R.id.iconEditt)
         private var currentSession: ChatSession? = null
@@ -92,24 +87,27 @@ class SavedChatsAdapter(
             }
         }
 
-        fun bind(session: ChatSession) {
+        fun bind(session: ChatSession, preview: String) {
             currentSession = session
             titleTextView.text = TitleMarkdown.render(session.title)
             timestampTextView.text = formatHistoryTimestamp(session.timestamp)
+            if (preview.isBlank()) {
+                previewTextView.visibility = View.GONE
+                previewTextView.text = ""
+            } else {
+                previewTextView.visibility = View.VISIBLE
+                previewTextView.text = preview
+            }
         }
 
         private fun formatHistoryTimestamp(timestamp: Long): String {
             val formats = HistoryTimeFormats.get(itemView.context)
-            val now = Calendar.getInstance()
-            val then = Calendar.getInstance().apply { timeInMillis = timestamp }
             val date = Date(timestamp)
-            return when {
-                now.get(Calendar.YEAR) == then.get(Calendar.YEAR) &&
-                    now.get(Calendar.DAY_OF_YEAR) == then.get(Calendar.DAY_OF_YEAR) -> formats.time.format(date)
-                now.get(Calendar.YEAR) == then.get(Calendar.YEAR) &&
-                    now.get(Calendar.WEEK_OF_YEAR) == then.get(Calendar.WEEK_OF_YEAR) -> formats.weekday.format(date)
-                now.get(Calendar.YEAR) == then.get(Calendar.YEAR) -> formats.monthDay.format(date)
-                else -> formats.full.format(date)
+            return when (HistoryList.timestampKind(timestamp, System.currentTimeMillis())) {
+                HistoryList.TimestampKind.TIME -> formats.time.format(date)
+                HistoryList.TimestampKind.WEEKDAY -> formats.weekday.format(date)
+                HistoryList.TimestampKind.MONTH_DAY -> formats.monthDay.format(date)
+                HistoryList.TimestampKind.FULL -> formats.full.format(date)
             }
         }
     }

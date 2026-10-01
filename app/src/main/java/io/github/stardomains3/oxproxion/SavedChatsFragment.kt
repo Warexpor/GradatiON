@@ -194,25 +194,30 @@ class SavedChatsFragment : Fragment() {
             } else {
                 savedChatsViewModel.searchSessions(query, mode)
             }
-            val pinnedIds = prefs.getPinnedSessionIds()
-            val pinned = filtered.filter { it.id in pinnedIds }
-                .sortedByDescending { it.timestamp }
-            val rest = filtered.filter { it.id !in pinnedIds }
-                .sortedByDescending { it.timestamp }
-
-            val items = buildList {
-                if (pinned.isNotEmpty()) {
-                    add(HistoryListItem.Header(getString(R.string.grok_history_pinned_title)))
-                    pinned.forEach { add(HistoryListItem.Session(it, pinned = true)) }
-                }
-                if (rest.isNotEmpty()) {
-                    // One section, named for the mode (the header has no subtitle line).
-                    add(HistoryListItem.Header(getString(
-                        if (mode == ChatMode.RP) R.string.history_mode_rp else R.string.history_mode_ask
-                    )))
-                    rest.forEach { add(HistoryListItem.Session(it, pinned = false)) }
-                }
+            val prefixes = savedChatsViewModel.lastMessagePrefixes(filtered.map { it.id })
+            val photo = getString(R.string.history_preview_photo)
+            val you = getString(R.string.history_preview_you)
+            val previews = prefixes.associate { message ->
+                message.sessionId to HistoryList.preview(
+                    role = message.role,
+                    storedPrefix = message.content,
+                    youLabel = { text -> you.replace("%1\$s", text) },
+                    photoLabel = photo,
+                )
             }
+            val items = HistoryList.build(
+                sessions = filtered,
+                pinnedIds = prefs.getPinnedSessionIds(),
+                previews = previews,
+                now = System.currentTimeMillis(),
+                labels = HistoryList.Labels(
+                    pinned = getString(R.string.grok_history_pinned_title),
+                    today = getString(R.string.history_section_today),
+                    yesterday = getString(R.string.history_section_yesterday),
+                    week = getString(R.string.history_section_week),
+                    earlier = getString(R.string.history_section_earlier),
+                ),
+            )
             savedChatsAdapter.submitList(items)
 
             val empty = filtered.isEmpty()

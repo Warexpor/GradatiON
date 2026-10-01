@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- History groups chats by day (Today, Yesterday, This week, Earlier), with pinned chats still first, and shows the last line under the title. A photo with no caption reads as "Photo".
 - Roleplay rewrite quotes the reply you are changing and offers Shorter, Longer and More dialogue. The demo model accepts a scene photo and answers it. A photo with no caption still tells the character the picture is in the scene.
 - RP character panel pages: every tile (History, Memory, Lore, Edit, Voice, Persona, Wallpaper, Layout, Style) opens its own full-screen page with a drawn hero, cards and a Save pinned above the keyboard. The sheet stays open under the page and refreshes when you come back. History lists that character's chats by day (current one marked "Open now") with a New chat button. Layout shows three drawings with a ring on the chosen one; Wallpaper previews the picture in a phone shape; Voice lists Default at once and adds the engine's voices when speech is ready; Style is Writing, Story and Mode cards.
 - Persona can be switched off once one exists: a "Use persona in chats" switch on the Persona screen. Off keeps it saved but characters stop seeing your name and description; saving a persona turns it back on. The persona screen now has a tappable portrait, a name and About field, and your saved personas as rows (up to 12).
@@ -27,6 +28,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A taller composer (another line, or a staged photo) no longer yanks a short thread up by the full growth. A message the composer would cover moves by only the covered amount, and one resting on the composer rides back down when the composer shrinks.
+- History dates no longer treat early January and late December as the same week. Today and yesterday show the time, the rest of the week shows the weekday, and older chats show the date.
 - A roleplay greeting you rewrote stays when you save the character, switch persona, or import, unless the greeting text on the card itself changed. A bubble that is still the card's line still follows a rename or a new persona name.
 - Rewriting the greeting, or any earlier reply, holds the turn: Send becomes Stop, and that tap cancels the rewrite instead of dropping it with no notice.
 - Lore matching starts on a word when a long scene is cut down to the recent part, so a key sliced by that cut is not missed or half-matched.

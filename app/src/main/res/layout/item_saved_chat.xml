@@ -1,40 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- History row: title with its date at the end of the line, rounded press highlight. Rename,
+<!-- History row: title with its date, and the last line under it when there is one. Rename,
      pin and delete open on long-press; the overflow button stays hidden as the sheet's anchor. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?android:attr/selectableItemBackground"
-    android:gravity="center_vertical"
     android:minHeight="50dp"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:paddingStart="12dp"
     android:paddingTop="12dp"
     android:paddingEnd="12dp"
     android:paddingBottom="12dp">
 
-    <TextView
-        android:id="@+id/savedChatTitle"
-        android:layout_width="0dp"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/savedChatTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="@color/xai_ink"
+            android:textFontWeight="500"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/savedChatTimestamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="@color/xai_mute"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/savedChatPreview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:includeFontPadding="false"
         android:maxLines="1"
-        android:textColor="@color/xai_ink"
-        android:textSize="16sp"
-        android:textFontWeight="500" />
-
-    <TextView
-        android:id="@+id/savedChatTimestamp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:includeFontPadding="false"
-        android:maxLines="1"
         android:textColor="@color/xai_mute"
-        android:textSize="13sp" />
+        android:textSize="13sp"
+        android:visibility="gone" />
 
     <ImageButton
         android:id="@+id/iconEditt"

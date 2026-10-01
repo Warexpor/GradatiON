@@ -29,4 +29,21 @@ object KeyboardFollow {
         val wasPinned = kotlin.math.abs(lastBottom - oldLine) <= pinnedSlack
         return if (wasPinned) overflow else 0
     }
+
+    /**
+     * Scroll when the composer itself changes height (another line, a staged photo).
+     * [following] is false on the first measure, and when the reader has scrolled up.
+     * [lastBottom] is negative when the newest row is not on screen.
+     */
+    fun composerScroll(
+        following: Boolean,
+        lastBottom: Int,
+        listHeight: Int,
+        newBottomPad: Int,
+        oldBottomPad: Int,
+        pinnedSlack: Int,
+    ): Int {
+        if (!following || lastBottom < 0) return 0
+        return scroll(lastBottom, listHeight, newBottomPad, oldBottomPad, pinnedSlack)
+    }
 }

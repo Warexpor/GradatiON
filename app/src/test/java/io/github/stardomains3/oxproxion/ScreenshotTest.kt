@@ -177,7 +177,8 @@ class ScreenshotTest {
         ).forEachIndexed { i, t ->
             dao.insertSessionAndMessages(
                 ChatSession(title = t, modelUsed = "openrouter/free", timestamp = System.currentTimeMillis() - i * 26L * 3600_000L),
-                emptyList()
+                if (i == 0) listOf(ChatMessage(sessionId = 0, role = "assistant", content = "\"Attention maps the query to the keys.\""))
+                else emptyList()
             )
         }
     }
@@ -436,6 +437,13 @@ class ScreenshotTest {
     @Test fun historyDark() = withChat { a, _ ->
         seedHistory()
         a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
+        val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.savedChatsRecyclerView)
+        val header = list.findViewHolderForAdapterPosition(0)?.itemView
+            ?.findViewById<android.widget.TextView>(R.id.historySectionHeader)
+        org.junit.Assert.assertEquals(a.getString(R.string.history_section_today), header?.text?.toString())
+        val preview = list.findViewHolderForAdapterPosition(1)?.itemView
+            ?.findViewById<android.widget.TextView>(R.id.savedChatPreview)
+        org.junit.Assert.assertEquals("Attention maps the query to the keys.", preview?.text?.toString())
         snap(root(a), "history_dark")
     }
 

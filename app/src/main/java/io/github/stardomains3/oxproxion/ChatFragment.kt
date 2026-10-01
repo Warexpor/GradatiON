@@ -1711,22 +1711,46 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         // The keyboard part is laid out frame by frame (layTranscriptForKeyboard), not from here.
         val bottom = (dock.height - contentTop - imePx).coerceAtLeast(0)
         if (top == chromeTop && bottom == chromeBottom) return
-        val grew = if (chromeBottom >= 0) bottom - chromeBottom else 0
+        // The first measure only installs the padding. Following starts once a later resize
+        // (a new line, a staged photo) actually moves the composer.
+        val followComposer = chromeBottom >= 0
         chromeTop = top
         chromeBottom = bottom
         // Post: we are inside a layout pass; padding/margin changes request another one.
         root.post {
             if (view == null) return@post
             val d = resources.displayMetrics.density
-            val atBottom = !chatRecyclerView.canScrollVertically(1)
+            val list = chatRecyclerView
+            val atBottom = !list.canScrollVertically(1)
+            val lm = list.layoutManager as? LinearLayoutManager
+            val last = (list.adapter?.itemCount ?: 0) - 1
+            val lastView = if (last >= 0) lm?.findViewByPosition(last) else null
+            val lastBottom = if (lastView != null && lm != null) lm.getDecoratedBottom(lastView) else -1
+            val oldPad = list.paddingBottom
             listChromePad = bottom + (14 * d).toInt()
-            chatRecyclerView.setPadding(
-                chatRecyclerView.paddingLeft,
+            val newPad = listChromePad + imePx
+            list.setPadding(
+                list.paddingLeft,
                 top + (8 * d).toInt(),
-                chatRecyclerView.paddingRight,
-                listChromePad + imePx
+                list.paddingRight,
+                newPad
             )
-            if (atBottom && grew > 0) chatRecyclerView.post { chatRecyclerView.scrollBy(0, grew) }
+            // Same rule as the keyboard: a short thread that still clears the composer stays put.
+            if (lastView != null && lm != null) {
+                val scroll = KeyboardFollow.composerScroll(
+                    following = followComposer && atBottom,
+                    lastBottom = lastBottom,
+                    listHeight = list.height,
+                    newBottomPad = newPad,
+                    oldBottomPad = oldPad,
+                    pinnedSlack = (12 * d).toInt(),
+                )
+                if (scroll != 0) {
+                    val lp = lastView.layoutParams as ViewGroup.MarginLayoutParams
+                    val current = lm.getDecoratedTop(lastView) - lp.topMargin - list.paddingTop
+                    lm.scrollToPositionWithOffset(last, current - scroll)
+                }
+            }
             placeBottomFloaters()
             (progressBar.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
                 if (lp.topMargin != top) {
