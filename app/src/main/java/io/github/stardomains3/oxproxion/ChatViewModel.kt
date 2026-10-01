@@ -1484,24 +1484,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     ): Boolean {
         rpRewriteJob?.cancel()
         rpRewriteJob = null
-        val restore = sessionTransitionJob
-        if (restore != null && restore.isActive) {
-            _isAwaitingResponse.value = true
-            viewModelScope.launch {
-                restore.join()
-                if (!sendUserMessage(
-                        userContent,
-                        systemMessage,
-                        clearRpSwipeOnStart,
-                        continueInPlace,
-                        capturedImageUri,
-                        useCapturedImageUri,
-                    )
-                ) {
-                    if (networkJob?.isActive != true) _isAwaitingResponse.value = false
-                }
-            }
-            return true
+        // The field still belongs to the chat on screen. Waiting, then sending, used to
+        // report success first (the composer cleared, and an open edit closed) and append
+        // the line to whichever chat finished loading. Stop could not cancel that turn.
+        if (ChatSend.decide(sessionTransitionJob?.isActive == true) == ChatSend.Outcome.Keep) {
+            _toastUiEvent.postValue(Event(str(R.string.notice_chat_still_opening)))
+            return false
         }
         toolCallsHandledForTurn = false
         toolRecursionDepth = 0
