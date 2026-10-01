@@ -83,4 +83,15 @@ class KeyboardFollowTest {
         assertEquals(0, KeyboardFollow.composerScroll(false, lastBottom, height, 280, 200, slack))
         assertEquals(0, KeyboardFollow.composerScroll(true, -1, height, 280, 200, slack))
     }
+
+    @Test fun full_screen_composer_keeps_the_keyboard_inset() {
+        val open = KeyboardFollow.dockPadding(expanded = true, topBarHeight = 120, left = 0, right = 0, bottom = 480)
+        assertEquals(120, open[1])
+        assertEquals(480, open[3])
+        val shut = KeyboardFollow.dockPadding(expanded = false, topBarHeight = 120, left = 4, right = 8, bottom = 160)
+        assertEquals(0, shut[1])
+        assertEquals(4, shut[0])
+        assertEquals(8, shut[2])
+        assertEquals(160, shut[3])
+    }
 }
