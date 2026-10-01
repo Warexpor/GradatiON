@@ -23,6 +23,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
 
@@ -50,12 +51,12 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             result.data?.data?.let { uri ->
                 viewLifecycleOwner.lifecycleScope.launch {
                     try {
-                        val json = savedChatsViewModel.getChatsAsJson()
-                        requireContext().contentResolver.openOutputStream(uri)?.use { outputStream ->
-                            outputStream.write(json.toByteArray())
-                        }
+                        savedChatsViewModel.exportChatsTo(uri)
                         GlassNotice.show(requireContext(), getString(R.string.notice_chats_exported))
-                    } catch (_: Exception) {
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Throwable) {
+                        // OutOfMemoryError is an Error, not an Exception; a long history used to kill the process.
                         GlassNotice.show(requireContext(), getString(R.string.notice_export_chats_failed))
                     }
                 }

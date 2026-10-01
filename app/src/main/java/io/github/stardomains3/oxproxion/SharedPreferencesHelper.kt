@@ -120,13 +120,33 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_TRUST_SELF_SIGNED_LAN = "trust_self_signed_lan"
         private const val KEY_LAN_CERT_PIN_PREFIX = "lan_cert_pin:"
         private const val KEY_CHAT_DB_RECOVERED = "chat_db_recovered"
+        /** Stamp of a recovery that has moved the database aside and not finished opening a fresh one. */
+        private const val KEY_CHAT_DB_RECOVERY_STAMP = "chat_db_recovery_stamp"
         private const val KEY_ALLOW_DESTRUCTIVE_TOOLS = "allow_destructive_tools"
         private const val KEY_HAPTIC_BUTTONS = "haptic_buttons"
         private const val KEY_HAPTIC_RESPONDING = "haptic_responding"
         private const val KEY_PINNED_SESSION_IDS = "pinned_session_ids"
         private const val KEY_CONVERSATION_MODE_ENABLED = "conversation_mode_enabled"
         private const val LAN_API_KEY_ALIAS = "lan_api_key"
-        private const val CHAT_DB_PASSPHRASE_ALIAS = "chat_db_passphrase"
+        internal const val CHAT_DB_PASSPHRASE_ALIAS = "chat_db_passphrase"
+
+        /** Prefs prefix for a passphrase archived beside `chat_database.unreadable-<stamp>`. */
+        internal fun chatDbPassphraseArchivePrefix(stamp: Long) =
+            "${CHAT_DB_PASSPHRASE_ALIAS}_unreadable_$stamp"
+
+        /**
+         * Decodes a stored passphrase. A wrong length is refused: opening SQLCipher with a truncated
+         * key would look like a corrupt database and recovery would then throw the real key away.
+         */
+        internal fun decodeChatDbPassphrase(existing: String): ByteArray {
+            val first = runCatching { Base64.decode(existing, Base64.NO_WRAP) }.getOrNull()
+            if (first != null && first.size == 32) return first
+            val second = Base64.decode(existing, Base64.DEFAULT)
+            if (second.size != 32) {
+                throw IllegalStateException("Chat DB passphrase has the wrong length")
+            }
+            return second
+        }
         private const val KEY_LAN_API_KEY_MIGRATED = "lan_api_key_migrated"
         private const val API_KEYS_PREFS_STORE = "ApiKeysPrefsStore"
         const val MAIN_PREFS = "MainAppPrefs"
@@ -384,7 +404,10 @@ class SharedPreferencesHelper(context: Context) {
 
     /** Set when the chat database could not be opened and a fresh one was started; read once by the UI. */
     fun markChatDbRecovered() {
-        mainPrefs.edit(commit = true) { putBoolean(KEY_CHAT_DB_RECOVERED, true) }
+        mainPrefs.edit(commit = true) {
+            putBoolean(KEY_CHAT_DB_RECOVERED, true)
+            remove(KEY_CHAT_DB_RECOVERY_STAMP)
+        }
     }
 
     /** True once after [markChatDbRecovered]; clears the flag. */
@@ -392,6 +415,22 @@ class SharedPreferencesHelper(context: Context) {
         if (!mainPrefs.getBoolean(KEY_CHAT_DB_RECOVERED, false)) return false
         mainPrefs.edit { remove(KEY_CHAT_DB_RECOVERED) }
         return true
+    }
+
+    /**
+     * Written after the old database files are moved aside and before the fresh one is open, so a
+     * process death in between does not create an empty database and forget to say so.
+     */
+    fun markRecoveryPending(stamp: Long) {
+        mainPrefs.edit(commit = true) { putLong(KEY_CHAT_DB_RECOVERY_STAMP, stamp) }
+    }
+
+    fun recoveryPendingStamp(): Long? =
+        if (mainPrefs.contains(KEY_CHAT_DB_RECOVERY_STAMP)) mainPrefs.getLong(KEY_CHAT_DB_RECOVERY_STAMP, 0L)
+        else null
+
+    fun clearRecoveryPending() {
+        mainPrefs.edit(commit = true) { remove(KEY_CHAT_DB_RECOVERY_STAMP) }
     }
 
     fun getAllowDestructiveTools(): Boolean = mainPrefs.getBoolean(KEY_ALLOW_DESTRUCTIVE_TOOLS, false)
@@ -874,14 +913,7 @@ class SharedPreferencesHelper(context: Context) {
     /** 32-byte SQLCipher passphrase, wrapped by Keystore in ApiKeysPrefsStore. */
     fun getOrCreateChatDbPassphrase(): ByteArray {
         val existing = getApiKeyFromPrefs(CHAT_DB_PASSPHRASE_ALIAS).trim()
-        if (existing.isNotBlank()) {
-            return try {
-                Base64.decode(existing, Base64.NO_WRAP)
-            } catch (e: Exception) {
-                // Prefer DEFAULT (whitespace-tolerant) before minting a new key.
-                Base64.decode(existing, Base64.DEFAULT)
-            }
-        }
+        if (existing.isNotBlank()) return decodeChatDbPassphrase(existing)
         // Encrypted prefs present but decrypt failed — do not mint a new key
         // (that would brick an existing SQLCipher DB).
         val hasWrapped = !apiKeysPrefs.getString("${CHAT_DB_PASSPHRASE_ALIAS}_encrypted", null)
@@ -899,17 +931,41 @@ class SharedPreferencesHelper(context: Context) {
         }
         return bytes
     }
+
+    /**
+     * Copies the wrapped chat-database passphrase under [stamp] before recovery replaces the
+     * active one. The set-aside file can only be opened with this blob; deleting the active copy
+     * used to make the backup permanently unreadable.
+     * Returns false when there was nothing to copy.
+     */
+    fun archiveChatDbPassphrase(stamp: Long): Boolean {
+        val encrypted = apiKeysPrefs.getString("${CHAT_DB_PASSPHRASE_ALIAS}_encrypted", null)
+        val iv = apiKeysPrefs.getString("${CHAT_DB_PASSPHRASE_ALIAS}_iv", null)
+        if (encrypted.isNullOrBlank() && iv.isNullOrBlank()) return false
+        val prefix = chatDbPassphraseArchivePrefix(stamp)
+        apiKeysPrefs.edit(commit = true) {
+            if (!encrypted.isNullOrBlank()) putString("${prefix}_encrypted", encrypted)
+            if (!iv.isNullOrBlank()) putString("${prefix}_iv", iv)
+        }
+        return true
+    }
+
     /**
      * Last resort when the chat database cannot be opened with the stored key (Keystore wiped or
-     * restored from a backup): forget the unreadable wrapped passphrase and mint a new one. The
-     * caller has already set the old database aside; nothing here deletes it.
+     * restored from a backup): forget the active wrapped passphrase and mint a new one. The caller
+     * has already archived the old blob and set the old database aside; nothing here deletes either.
      */
     fun resetChatDbPassphrase(): ByteArray {
+        discardActiveChatDbPassphrase()
+        return getOrCreateChatDbPassphrase()
+    }
+
+    /** Drops the active wrapped passphrase. Archived copies (see [archiveChatDbPassphrase]) stay. */
+    internal fun discardActiveChatDbPassphrase() {
         apiKeysPrefs.edit(commit = true) {
             remove("${CHAT_DB_PASSPHRASE_ALIAS}_encrypted")
             remove("${CHAT_DB_PASSPHRASE_ALIAS}_iv")
         }
-        return getOrCreateChatDbPassphrase()
     }
     fun getShowCitations(): Boolean = mainPrefs.getBoolean(KEY_SHOW_CITATIONS, true)  // Default true (show citations)
 

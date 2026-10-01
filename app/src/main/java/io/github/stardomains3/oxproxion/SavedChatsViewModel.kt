@@ -1,12 +1,16 @@
 package io.github.stardomains3.oxproxion
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 
 sealed class ChatImportResult {
@@ -50,28 +54,57 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
     fun updateSessionTitle(sessionId: Long, newTitle: String) = viewModelScope.launch {
         repository.updateSessionTitle(sessionId, newTitle)
     }
-    suspend fun getChatsAsJson(): String {
-        val sessionsWithMessages = repository.getAllSessionsWithMessages()
-        val exportedSessions = sessionsWithMessages.map { sessionWithMessages ->
-            val charId = sessionWithMessages.session.characterId
-            val exportKey = charId?.let { rpRepository.getCharacterById(it)?.exportKey }
-            ExportedChatSession(
-                title = sessionWithMessages.session.title,
-                modelUsed = sessionWithMessages.session.modelUsed,
-                messages = sessionWithMessages.messages.map { message ->
-                    ExportedChatMessage(
-                        role = message.role,
-                        content = message.content
-                    )
-                },
-                mode = sessionWithMessages.session.mode,
-                characterId = charId,
-                characterExportKey = exportKey,
-                isLlm = sessionWithMessages.session.isLlm
-            )
+    suspend fun getChatsAsJson(): String = buildString { writeChatsBackup(this) }
+
+    /**
+     * Writes the backup one chat at a time. The whole history used to be loaded, then copied into
+     * one string, which was enough to kill the process on a long chat list.
+     */
+    suspend fun writeChatsBackup(out: Appendable) {
+        val sessions = repository.getAllSessionsOnce()
+        out.append("{\"sessions\":[")
+        sessions.forEachIndexed { index, session ->
+            if (index > 0) out.append(',')
+            out.append(json.encodeToString(exportedSession(session)))
         }
-        val backup = ChatBackup(sessions = exportedSessions)
-        return json.encodeToString(backup)
+        out.append("]}")
+    }
+
+    /**
+     * Writes the backup to a cache file first, then copies it to [uri]. A failure leaves the
+     * destination untouched instead of a truncated JSON file.
+     */
+    suspend fun exportChatsTo(uri: Uri) {
+        val app = getApplication<Application>()
+        val cache = File(app.cacheDir, "chat-export-${System.nanoTime()}.json")
+        try {
+            withContext(Dispatchers.IO) {
+                cache.outputStream().buffered().use { stream ->
+                    stream.writer(Charsets.UTF_8).buffered().use { writeChatsBackup(it) }
+                }
+                app.contentResolver.openOutputStream(uri)?.use { dest ->
+                    cache.inputStream().buffered().use { src -> src.copyTo(dest) }
+                } ?: error("Could not open the export file")
+            }
+        } finally {
+            cache.delete()
+        }
+    }
+
+    private suspend fun exportedSession(session: ChatSession): ExportedChatSession {
+        val messages = repository.getMessagesForSession(session.id)
+        val exportKey = session.characterId?.let { rpRepository.getCharacterById(it)?.exportKey }
+        return ExportedChatSession(
+            title = session.title,
+            modelUsed = session.modelUsed,
+            messages = messages.map { message ->
+                ExportedChatMessage(role = message.role, content = message.content)
+            },
+            mode = session.mode,
+            characterId = session.characterId,
+            characterExportKey = exportKey,
+            isLlm = session.isLlm
+        )
     }
 
     fun importChatsFromJson(jsonText: String, onResult: (ChatImportResult) -> Unit) {

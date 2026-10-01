@@ -48,6 +48,10 @@ interface ChatDao {
     @Query("SELECT * FROM chat_sessions")
     suspend fun getAllSessionsWithMessages(): List<SessionWithMessages>
 
+    /** Sessions only. Export walks messages one chat at a time so a long history is not all in memory. */
+    @Query("SELECT * FROM chat_sessions")
+    suspend fun getAllSessionsOnce(): List<ChatSession>
+
     @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY id ASC")
     suspend fun getMessagesForSession(sessionId: Long): List<ChatMessage>
 
