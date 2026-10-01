@@ -161,6 +161,11 @@ class SharedPreferencesHelper(context: Context) {
         /** Stamp of a recovery that has moved the database aside and not finished opening a fresh one. */
         private const val KEY_CHAT_DB_RECOVERY_STAMP = "chat_db_recovery_stamp"
         /**
+         * Set before the fresh database file is created, cleared only after the old notes were
+         * set aside. A kill in between has no aside file when the old one could not be moved.
+         */
+        private const val KEY_CHAT_DB_QUARANTINE_DUE = "chat_db_quarantine_due"
+        /**
          * Short file name when the original chat_database could not be moved
          * (`chat_database.recovered-<stamp>`). Resolved under noBackupFilesDir at open.
          */
@@ -451,6 +456,7 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit(commit = true) {
             putBoolean(KEY_CHAT_DB_RECOVERED, true)
             remove(KEY_CHAT_DB_RECOVERY_STAMP)
+            remove(KEY_CHAT_DB_QUARANTINE_DUE)
         }
     }
 
@@ -491,8 +497,21 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit(commit = true) { putString(KEY_CHAT_DB_FILE, name) }
     }
 
+    /**
+     * The fresh file is about to be created. The next launch quarantines notes when that file
+     * is still empty, even if the old database could not be moved aside.
+     */
+    fun markChatDbQuarantineDue() {
+        mainPrefs.edit(commit = true) { putBoolean(KEY_CHAT_DB_QUARANTINE_DUE, true) }
+    }
+
+    fun isChatDbQuarantineDue(): Boolean = mainPrefs.getBoolean(KEY_CHAT_DB_QUARANTINE_DUE, false)
+
     fun clearRecoveryPending() {
-        mainPrefs.edit(commit = true) { remove(KEY_CHAT_DB_RECOVERY_STAMP) }
+        mainPrefs.edit(commit = true) {
+            remove(KEY_CHAT_DB_RECOVERY_STAMP)
+            remove(KEY_CHAT_DB_QUARANTINE_DUE)
+        }
     }
 
     fun getAllowDestructiveTools(): Boolean = mainPrefs.getBoolean(KEY_ALLOW_DESTRUCTIVE_TOOLS, false)
@@ -1597,7 +1616,8 @@ class SharedPreferencesHelper(context: Context) {
 
     fun saveComposerDraft(mode: ChatMode, text: String) {
         val key = if (mode == ChatMode.ASK) KEY_COMPOSER_DRAFT_ASK else KEY_COMPOSER_DRAFT_RP
-        mainPrefs.edit { putString(key, text) }
+        // commit: Roleplay's unsent line lives only here. apply() can still be in memory when the process dies.
+        mainPrefs.edit(commit = true) { putString(key, text) }
     }
 
     fun getAskComposerDrafts(): Map<String, String> =

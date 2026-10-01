@@ -111,7 +111,17 @@ abstract class AppDatabase : RoomDatabase() {
             for (attempt in 1..2) {
                 try {
                     val db = open(context, passphrase, dbName, vault)
-                    if (pending != null) finishInterruptedRecovery(context, prefs, databasesDir, vault, pending, db)
+                    if (pending != null) {
+                        finishInterruptedRecovery(
+                            context,
+                            prefs,
+                            databasesDir,
+                            vault,
+                            pending,
+                            db,
+                            openedRecoveredFile = ChatDbVault.isRecoveredName(File(dbName).name),
+                        )
+                    }
                     return db
                 } catch (e: Exception) {
                     Log.e(TAG, "Chat database could not be opened (attempt $attempt)", e)
@@ -122,9 +132,10 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * The recovery marker was left set. If this open is the fresh database from a recovery that
-         * died before the notice was recorded, record it. If the original database opened after all
-         * (a transient failure, the move never happened), drop the marker and say nothing.
+         * The recovery marker was left set. An empty file still restarts Room ids, including when
+         * the old file could not be moved aside (no aside copy) or was already gone. Notes are
+         * set aside before the marker is cleared, so a failed commit is tried again. A file that
+         * already has rows is the original database, or a fresh one the user has already used.
          */
         private fun finishInterruptedRecovery(
             context: Context,
@@ -132,36 +143,63 @@ abstract class AppDatabase : RoomDatabase() {
             databasesDir: File?,
             vault: File,
             pendingStamp: Long,
-            db: AppDatabase
+            db: AppDatabase,
+            openedRecoveredFile: Boolean,
         ) {
             // The set-aside file is named from the original database, not from a recovered path.
             // Appending ".unreadable-" to the file Room just opened would miss it.
             val aside = ChatDbVault.unreadable(vault, pendingStamp)
             val legacy = databasesDir?.let { File(it, "${DB_NAME}.unreadable-$pendingStamp") }
             val asideExists = aside.exists() || legacy?.exists() == true
-            // Any row means this file has already been used. An empty one is the fresh database
-            // from a recovery that died before it could set the old notes aside.
-            if (asideExists && !hasUserRows(db)) {
-                quarantineRowPrefs(context, prefs, vault, pendingStamp)
+            if (!shouldQuarantineInterruptedRecovery(
+                    databaseEmpty = !hasUserRows(db),
+                    asideExists = asideExists,
+                    openedRecoveredFile = openedRecoveredFile,
+                    quarantineArmed = prefs.isChatDbQuarantineDue(),
+                )
+            ) {
+                prefs.clearRecoveryPending()
+                return
+            }
+            if (quarantineRowPrefs(context, prefs, vault, pendingStamp)) {
                 prefs.markChatDbRecovered()
             } else {
-                prefs.clearRecoveryPending()
+                Log.e(TAG, "Row-scoped preferences could not be set aside; will retry next launch")
             }
+        }
+
+        /**
+         * True when a pending recovery still has to move notes aside.
+         * Rows mean this file is already in use, so its notes are the current ones.
+         * An empty file restarts ids. The aside copy is missing when the old file could not be
+         * moved ([openedRecoveredFile]) and when the fresh file was created after the old one
+         * was already gone ([quarantineArmed], set before Room ran).
+         */
+        @androidx.annotation.VisibleForTesting
+        internal fun shouldQuarantineInterruptedRecovery(
+            databaseEmpty: Boolean,
+            asideExists: Boolean,
+            openedRecoveredFile: Boolean,
+            quarantineArmed: Boolean,
+        ): Boolean {
+            if (!databaseEmpty) return false
+            return asideExists || openedRecoveredFile || quarantineArmed
         }
 
         /**
          * A fresh database starts its ids over. Move the notes keyed by the old ids aside before
          * clearing the recovery stamp, so a kill here is tried again instead of inherited.
+         * Returns false when the preference edit did not commit. The stamp stays set in that case.
          */
         private fun quarantineRowPrefs(
             context: Context,
             prefs: SharedPreferencesHelper,
             vault: File,
             stamp: Long
-        ) {
-            if (!DbPrefQuarantine.quarantine(prefs.mainPrefs, context.filesDir, vault, stamp)) {
-                Log.e(TAG, "Row-scoped preferences could not be set aside")
-            }
+        ): Boolean {
+            if (DbPrefQuarantine.quarantine(prefs.mainPrefs, context.filesDir, vault, stamp)) return true
+            Log.e(TAG, "Row-scoped preferences could not be set aside")
+            return false
         }
 
         /**
@@ -240,6 +278,9 @@ abstract class AppDatabase : RoomDatabase() {
             stamp: Long
         ): AppDatabase {
             clearPlaintextBackupConfirmation(vault)
+            // Before Room creates the file. A kill after that file exists and before the notes
+            // are moved has nothing set aside when the old database could not be moved.
+            prefs.markChatDbQuarantineDue()
             // Replacing the key is safe only when the previous blob was archived, or when there
             // was nothing to archive. A failed archive used to mint a new key and leave the
             // set-aside file with no passphrase.
@@ -250,8 +291,11 @@ abstract class AppDatabase : RoomDatabase() {
                 prefs.getOrCreateChatDbPassphrase()
             }
             val fresh = open(context, passphrase, dbName, vault, restoreEmpty = false)
-            quarantineRowPrefs(context, prefs, vault, stamp)
-            prefs.markChatDbRecovered()
+            if (quarantineRowPrefs(context, prefs, vault, stamp)) {
+                prefs.markChatDbRecovered()
+            } else {
+                Log.e(TAG, "Row-scoped preferences could not be set aside; will retry next launch")
+            }
             return fresh
         }
 
