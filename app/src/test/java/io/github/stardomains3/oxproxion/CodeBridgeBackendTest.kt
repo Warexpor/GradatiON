@@ -2229,6 +2229,48 @@ class CodeBridgeBackendTest {
         }
     }
 
+    @Test fun failedSeqHoleLoadResumesFromTheNearSide() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
+        val answers = autoAnswer(transport, adapter)
+        fun chunk(text: String, seq: Long) =
+            """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":$seq},
+            "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"$text"}}}}"""
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            backend.attach(summary())
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("session/load") }) delay(5)
+            }
+            // The refill cannot leave. The frame past the hole must not become the resume cursor.
+            transport.failNonPromptSends = true
+            transport.deliver(chunk("A", 1))
+            transport.deliver(chunk("D", 4))
+            delay(80)
+            assertEquals(1L, adapter.lastSeq("s1"))
+            transport.failNonPromptSends = false
+            transport.drop()
+            delay(20)
+            val loadsBefore = transport.sent.count { it.contains("session/load") }
+            transport.restore()
+            withTimeout(5_000) {
+                while (transport.sent.count { it.contains("session/load") } <= loadsBefore) delay(10)
+            }
+            val load = transport.sent.last { it.contains("session/load") }
+            val meta = json.parseToJsonElement(load).jsonObject["params"]!!.jsonObject["_meta"]!!.jsonObject
+            assertEquals(1L, meta["afterSeq"]!!.jsonPrimitive.longOrNull)
+            withTimeout(3_000) { while (adapter.lastSeq("s1") != 4L) delay(10) }
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
     private fun sentMethod(frame: String): String =
         runCatching {
             json.parseToJsonElement(frame).jsonObject["method"]?.jsonPrimitive?.content

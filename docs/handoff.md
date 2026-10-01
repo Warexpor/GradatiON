@@ -1,3 +1,9 @@
+# Handoff (2026-10-01, code seq hole resume)
+
+On `cursor/code-seq-gap-resume-d98a`, targeting `gradation/app-pass`. Code mode only:
+- A bridge frame that skips ahead used to move the resume cursor to that frame. The line showed, but a reload that failed (or a reconnect before the missing frames arrived) asked only for what came after it, so the gap was gone for good. The cursor now stays on the near side until those frames have been applied. A reload that finishes still moves it, including when the bridge does not number every frame. A second copy of the line that already showed is dropped.
+- Phone: in a Code session, drop the link while a reply is arriving and come back (the part that already showed should not repeat, and the reply should continue). Leave the session and open it again (the earlier part of the turn should still be there).
+
 # Handoff (2026-10-01, history search labels and a finished stream)
 
 On `cursor/chat-history-search-stream-3acd`, targeting `gradation/app-pass`. Chat only:

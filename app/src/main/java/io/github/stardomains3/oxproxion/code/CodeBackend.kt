@@ -615,24 +615,27 @@ class BridgeBackend(
     /**
      * A seq jump means the transport dropped frames for [sessionId]. Replay from [afterSeq]
      * (the adapter drops repeats). Capped per connection: a bridge whose seqs are not
-     * consecutive must not turn this into a reload loop.
+     * consecutive must not turn this into a reload loop. Only a load that finishes moves
+     * the resume cursor past the hole; a failure leaves it so the next reconnect asks again.
      */
     private fun reloadAfterGap(sessionId: String, afterSeq: Long) {
         val session = attached[sessionId]
         val tries = gapReloads.merge(sessionId, 1) { a, b -> a + b } ?: 1 // merge never returns null here
         if (session == null || tries > MAX_GAP_RELOADS || !ready.value) {
-            (adapter as? AcpAdapter)?.endGap(sessionId)
+            (adapter as? AcpAdapter)?.endGap(sessionId, filled = false)
             return
         }
         scope.launch {
+            var filled = false
             try {
                 rawCall({ adapter.loadSession(it, session.id, session.workspace, afterSeq) }, DEFAULT_TIMEOUT_MS)
+                filled = true
             } catch (e: CancellationException) {
                 if (e !is TimeoutCancellationException) throw e
             } catch (_: Exception) {
-                // The next gap (or the next reconnect) tries again; nothing to show.
+                // Cursor stays on the near side. The next reconnect's session/load asks again.
             } finally {
-                (adapter as? AcpAdapter)?.endGap(sessionId)
+                (adapter as? AcpAdapter)?.endGap(sessionId, filled = filled)
             }
         }
     }
@@ -652,6 +655,9 @@ class BridgeBackend(
                 DEFAULT_TIMEOUT_MS
             )
             loadFailed.remove(session.id)
+            // The bridge has finished this history. A hole it did not refill is consumed
+            // so a skipped sequence number does not reload the session forever.
+            (adapter as? AcpAdapter)?.sealResumeCursor(session.id)
             true
         } catch (e: Exception) {
             // A timed-out load is a failed resume, not a cancelled job; real cancels (socket drop,
@@ -938,6 +944,7 @@ class BridgeBackend(
         }
         val after = peekLastSeq(session.id) ?: session.lastSeq
         rawCall({ adapter.loadSession(it, session.id, session.workspace, after) }, DEFAULT_TIMEOUT_MS)
+        (adapter as? AcpAdapter)?.sealResumeCursor(session.id)
     }
 
     override suspend fun prompt(sessionId: String, text: String, attachments: List<PromptAttachment>) {

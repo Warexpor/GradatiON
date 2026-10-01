@@ -58,15 +58,24 @@ class AcpAdapter : HarnessAdapter {
     /** Keys of the currently open agent message / thought per session, so chunks merge. */
     private val openText = ConcurrentHashMap<String, String>()
     private val openThought = ConcurrentHashMap<String, String>()
-    /** Highest bridge `_meta.seq` seen per session (for session/load afterSeq resume). */
+    /**
+     * Resume cursor: the highest seq with no hole in front of it. A frame that jumps
+     * ahead is shown, but this stays put so `session/load` still asks for the missing ones.
+     */
     private val lastSeqBySession = ConcurrentHashMap<String, Long>()
+    /**
+     * Seqs already on screen that sit past [lastSeqBySession]. A replay must not append
+     * them again, and a failed load must not treat the far side of the hole as consumed.
+     */
+    private val appliedPastCursor = ConcurrentHashMap<String, MutableSet<Long>>()
+    private val cursorLock = Any()
     /** Fallback key counter when a frame has no `_meta.seq` (non-bridge / tests). */
     private val localKeyCounter = AtomicLong(0L)
 
     /**
-     * A seq hole being refilled. [floor] is the last seq already applied, so an inclusive
-     * replay (`seq >= afterSeq`) does not append that chunk again. [seen] holds seqs delivered
-     * past the hole (including the frame that opened it).
+     * A seq hole being refilled. [floor] is the resume cursor when the hole opened, so an
+     * inclusive replay (`seq >= afterSeq`) does not append that chunk again. [seen] holds
+     * seqs delivered while this reload is in flight (including the frame that opened it).
      */
     private class OpenGap(
         val floor: Long,
@@ -229,7 +238,8 @@ class AcpAdapter : HarnessAdapter {
     /**
      * Seq bookkeeping for one notification, before it is decoded. Bridge seqs are consecutive per
      * session, so a jump means frames were dropped in flight; the first frame past the hole opens
-     * a [OpenGap] until the backend's reload finishes.
+     * a [OpenGap] until the backend's reload finishes. The resume cursor stays on the near side
+     * for that whole time: moving it to the jumped seq used to make a failed replay permanent.
      *
      * Text and image chunks append, so a seq that was already applied must not be decoded again
      * (a bridge that replays `seq >= afterSeq`, or a duplicate frame on the socket). Tools and
@@ -240,16 +250,26 @@ class AcpAdapter : HarnessAdapter {
         val params = obj["params"] as? JsonObject ?: return Admit.Ok
         val sid = params.str("sessionId") ?: return Admit.Ok
         val seq = bridgeSeq(params, obj) ?: return Admit.Ok
-        openGaps[sid]?.let { gap ->
-            // Anything at or below the last applied seq is already on screen.
-            if (seq <= gap.floor) return Admit.Drop
-            return if (gap.seen.add(seq)) Admit.Ok else Admit.Drop
+        synchronized(cursorLock) {
+            val prev = lastSeqBySession[sid]
+            if (prev != null && seq <= prev) return Admit.Drop
+            if (appliedPastCursor[sid]?.contains(seq) == true) {
+                // The next seq was shown before the hole filled. Close the cursor over it
+                // so the frame after it is not another hole, and do not append it again.
+                if (prev != null && seq == prev + 1L) advanceCursor(sid, seq)
+                return Admit.Drop
+            }
+            openGaps[sid]?.let { gap ->
+                if (seq <= gap.floor) return Admit.Drop
+                if (!gap.seen.add(seq)) return Admit.Drop
+                parked(sid).add(seq)
+                return Admit.Ok
+            }
+            if (prev == null || seq == prev + 1L) return Admit.Ok
+            openGaps[sid] = OpenGap(floor = prev).also { it.seen.add(seq) }
+            parked(sid).add(seq)
+            return Admit.Hole(sid, prev)
         }
-        val prev = lastSeqBySession[sid] ?: return Admit.Ok
-        if (seq <= prev) return Admit.Drop
-        if (seq == prev + 1L) return Admit.Ok
-        openGaps[sid] = OpenGap(floor = prev).also { it.seen.add(seq) }
-        return Admit.Hole(sid, prev)
     }
 
     private fun decodeBody(method: String?, idEl: JsonElement?, obj: JsonObject): List<AdapterOutput> {
@@ -602,29 +622,56 @@ class AcpAdapter : HarnessAdapter {
     /** Call when a prompt's response arrives, so the next turn starts fresh text. */
     fun endTurn(sessionId: String) = closeText(sessionId)
 
-    /** Highest bridge `_meta.seq` seen for [sessionId], or null if none yet. */
+    /** Contiguous resume cursor for [sessionId], or null if none yet. A hole does not move this. */
     fun lastSeq(sessionId: String): Long? = lastSeqBySession[sessionId]
 
     /** Restore a resume cursor from Room after process death (keeps the higher value). */
     fun seedLastSeq(sessionId: String, seq: Long) {
-        lastSeqBySession.merge(sessionId, seq) { a, b -> maxOf(a, b) }
+        synchronized(cursorLock) {
+            val merged = lastSeqBySession.merge(sessionId, seq) { a, b -> maxOf(a, b) } ?: seq
+            appliedPastCursor[sessionId]?.let { extra ->
+                extra.removeIf { it <= merged }
+                if (extra.isEmpty()) appliedPastCursor.remove(sessionId)
+            }
+        }
     }
 
     /** Drop resume cursor when the hub forgets a session (B2). */
     fun clearLastSeq(sessionId: String) {
-        lastSeqBySession.remove(sessionId)
+        synchronized(cursorLock) {
+            lastSeqBySession.remove(sessionId)
+            appliedPastCursor.remove(sessionId)
+            openGaps.remove(sessionId)
+        }
         openText.remove(sessionId)
         openThought.remove(sessionId)
-        openGaps.remove(sessionId)
         val prefix = "$sessionId\u0000"
         toolKinds.keys.removeAll { it.startsWith(prefix) }
         toolDetailSet.removeAll { it.startsWith(prefix) }
         cursor.clearSession(sessionId)
     }
 
-    /** The replay that refilled a seq hole has finished (or failed); stop dropping repeats. */
-    fun endGap(sessionId: String) {
-        openGaps.remove(sessionId)
+    /**
+     * The replay for a seq hole has finished. [filled] means the load completed, so a
+     * bridge that skips sequence numbers can move the cursor to what is already on screen.
+     * A failed load leaves the cursor on the near side; the next resume still asks for the hole.
+     */
+    fun endGap(sessionId: String, filled: Boolean = false) {
+        synchronized(cursorLock) {
+            openGaps.remove(sessionId)
+            if (filled) commitParked(sessionId)
+        }
+    }
+
+    /**
+     * A `session/load` that was not itself a gap refill has finished, and nothing is
+     * waiting on a hole. Parked seqs the bridge did not replay are then consumed.
+     */
+    fun sealResumeCursor(sessionId: String) {
+        synchronized(cursorLock) {
+            if (openGaps.containsKey(sessionId)) return
+            commitParked(sessionId)
+        }
     }
 
     /**
@@ -638,7 +685,42 @@ class AcpAdapter : HarnessAdapter {
 
     private fun noteSeq(sessionId: String, seq: Long?) {
         if (seq == null) return
-        lastSeqBySession.merge(sessionId, seq) { a, b -> maxOf(a, b) }
+        advanceCursor(sessionId, seq)
+    }
+
+    private fun parked(sessionId: String): MutableSet<Long> =
+        appliedPastCursor.getOrPut(sessionId) { ConcurrentHashMap.newKeySet() }
+
+    /**
+     * Move the resume cursor only through seqs that have actually been applied.
+     * A jump is remembered and skipped over once the missing numbers arrive, or
+     * once [commitParked] accepts a finished load.
+     */
+    private fun advanceCursor(sessionId: String, seq: Long) {
+        synchronized(cursorLock) {
+            val prev = lastSeqBySession[sessionId]
+            if (prev != null && seq <= prev) return
+            if (prev != null && seq != prev + 1L) {
+                parked(sessionId).add(seq)
+                return
+            }
+            var cursor = seq
+            val extra = appliedPastCursor[sessionId]
+            extra?.remove(seq)
+            if (extra != null) {
+                while (extra.remove(cursor + 1L)) cursor++
+                if (extra.isEmpty()) appliedPastCursor.remove(sessionId)
+            }
+            lastSeqBySession[sessionId] = cursor
+        }
+    }
+
+    /** Caller holds [cursorLock]. */
+    private fun commitParked(sessionId: String) {
+        val extra = appliedPastCursor.remove(sessionId) ?: return
+        val high = extra.maxOrNull() ?: return
+        val current = lastSeqBySession[sessionId]
+        if (current == null || high > current) lastSeqBySession[sessionId] = high
     }
 
     /** Bridge (or top-level) `_meta.seq` on a notification / permission request. */
