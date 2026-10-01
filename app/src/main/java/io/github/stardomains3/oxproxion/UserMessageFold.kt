@@ -15,6 +15,14 @@ object UserMessageFold {
         return body.length > maxChars || body.lineSequence().count() > MAX_LINES
     }
 
+    /**
+     * Fold state and the action row share one key. The [copy] index is how many
+     * identical rows sit above this one, so two sends of the same line stay apart.
+     * A content hash used to be the whole key, and opening one row opened the other.
+     */
+    fun rowKey(text: String, imageUri: String?, copy: Int): String =
+        text.hashCode().toString() + ":" + (imageUri ?: "") + ":" + copy
+
     /** How many earlier rows are the same message, so two copies fold on their own. */
     fun earlierCopies(index: Int, same: (Int) -> Boolean): Int {
         var count = 0

@@ -838,7 +838,7 @@ class ChatAdapter(
     // --- VIEW HOLDERS ---
 
     inner class UserViewHolder(itemView: View, private val markwon: Markwon) : RecyclerView.ViewHolder(itemView) {
-        val messageTextView: TextView = itemView.findViewById(R.id.messageTextView)
+        val messageTextView: ChatTextView = itemView.findViewById(R.id.messageTextView)
         private val messageContainer: ConstraintLayout = itemView.findViewById(R.id.messageContainer)
         private val buttonContainer: LinearLayout = itemView.findViewById(R.id.buttonContainer)
         private val copyButtonuser: ImageButton = itemView.findViewById(R.id.copyButtonuser)
@@ -874,12 +874,28 @@ class ChatAdapter(
 
         /** A tap on the bubble opens or closes the action row; TalkBack says so instead of a bare "double tap to activate". */
         private fun labelActionsClick(expanded: Boolean) {
-            ViewCompat.replaceAccessibilityAction(
-                messageContainer,
-                AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_CLICK,
-                itemView.context.getString(if (expanded) R.string.a11y_hide_message_actions else R.string.a11y_show_message_actions),
-                null
+            val label = itemView.context.getString(
+                if (expanded) R.string.a11y_hide_message_actions else R.string.a11y_show_message_actions
             )
+            val click = AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_CLICK
+            ViewCompat.replaceAccessibilityAction(messageContainer, click, label, null)
+            ViewCompat.replaceAccessibilityAction(messageTextView, click, label, null)
+        }
+
+        /**
+         * The words of the message, including when the bubble is folded. Opens the action
+         * row so the copy check has somewhere to show.
+         */
+        private fun copyFullMessage(text: String) {
+            val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Copied Text", text))
+            if (actionsMsgKey.isNotEmpty() && !userActionsExpanded.contains(actionsMsgKey)) {
+                userActionsExpanded.add(actionsMsgKey)
+                applyActionsVisibility(true, animate = true)
+                labelActionsClick(true)
+            }
+            Haptics.tap(copyButtonuser, android.view.HapticFeedbackConstants.CONFIRM)
+            CopyFeedbackAnimator.play(copyButtonuser)
         }
 
         /** The picture stored on the message, when the file link is missing or will not open. */
@@ -916,28 +932,50 @@ class ChatAdapter(
             val rawUserContent = getMessageText(message.content)
             val pos = bindingAdapterPosition
             collapseToggleButton.visibility = View.GONE
-            actionsMsgKey = rawUserContent.hashCode().toString() + "_" + (message.imageUri ?: "")
+            val copy = if (pos >= 0 && message.role == "user") {
+                UserMessageFold.earlierCopies(pos) { i ->
+                    val other = messages[i]
+                    other.role == "user" &&
+                        getMessageText(other.content) == rawUserContent &&
+                        other.imageUri == message.imageUri
+                }
+            } else {
+                0
+            }
+            actionsMsgKey = UserMessageFold.rowKey(rawUserContent, message.imageUri, copy)
             applyActionsVisibility(userActionsExpanded.contains(actionsMsgKey), animate = false)
             labelActionsClick(userActionsExpanded.contains(actionsMsgKey))
 
-            val tapToggle = View.OnClickListener { toggleActions() }
+            // A link's own click still runs. This one stays quiet when the finger is on that link.
+            val tapToggle = View.OnClickListener {
+                if (!messageTextView.gestureOnClickableSpan) toggleActions()
+            }
             messageContainer.setOnClickListener(tapToggle)
             messageTextView.setOnClickListener(tapToggle)
+            val longClick = AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_LONG_CLICK
+            if (rawUserContent.isNotBlank()) {
+                // Hold the words to copy them all. A hold on a link does not copy the message.
+                messageTextView.setOnLongClickListener {
+                    if (messageTextView.gestureOnClickableSpan) return@setOnLongClickListener false
+                    copyFullMessage(rawUserContent)
+                    true
+                }
+                ViewCompat.replaceAccessibilityAction(
+                    messageTextView, longClick, itemView.context.getString(R.string.cd_copy_text), null
+                )
+            } else {
+                messageTextView.setOnLongClickListener(null)
+                messageTextView.isLongClickable = false
+                ViewCompat.replaceAccessibilityAction(messageTextView, longClick, null, null)
+            }
 
             if (pos >= 0 && message.role == "user") {
                 val displayMetrics = itemView.resources.displayMetrics
                 val screenWidthDp = displayMetrics.widthPixels / displayMetrics.density
                 val isTablet = screenWidthDp >= 600
                 val maxChars = if (isTablet) 300 else 150
-                val copy = UserMessageFold.earlierCopies(pos) { i ->
-                    val other = messages[i]
-                    other.role == "user" &&
-                        getMessageText(other.content) == rawUserContent &&
-                        other.imageUri == message.imageUri
-                }
-                val msgKey = rawUserContent.hashCode().toString() + ":" + (message.imageUri ?: "") + ":" + copy
                 val longMessage = UserMessageFold.isLong(rawUserContent, maxChars)
-                val collapsed = collapsedStates.getOrDefault(msgKey, true)
+                val collapsed = collapsedStates.getOrDefault(actionsMsgKey, true)
                 val displayContent = if (longMessage && collapsed) {
                     UserMessageFold.collapse(rawUserContent, maxChars)
                 } else {
@@ -954,7 +992,7 @@ class ChatAdapter(
                     collapseToggleButton.setOnClickListener {
                         val current = bindingAdapterPosition
                         if (current == RecyclerView.NO_POSITION) return@setOnClickListener
-                        collapsedStates[msgKey] = !collapsed
+                        collapsedStates[actionsMsgKey] = !collapsed
                         this@ChatAdapter.notifyItemChanged(current)
                         onCollapse()
                     }
@@ -1014,13 +1052,7 @@ class ChatAdapter(
             // picture keeps a 4dp rim and the words stay on the same inset as a text bubble.
             applyFrame()
 
-            copyButtonuser.setOnClickListener {
-                val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("Copied Text", rawUserContent)
-                clipboard.setPrimaryClip(clip)
-                Haptics.tap(copyButtonuser, android.view.HapticFeedbackConstants.CONFIRM)
-                CopyFeedbackAnimator.play(copyButtonuser)
-            }
+            copyButtonuser.setOnClickListener { copyFullMessage(rawUserContent) }
             copyButtonuser.setOnLongClickListener {
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Copied Markdown", rawUserContent)
