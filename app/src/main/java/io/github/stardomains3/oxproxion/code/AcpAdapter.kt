@@ -562,6 +562,9 @@ class AcpAdapter : HarnessAdapter {
         // R6: non-primitive JSON-RPC id must not ClassCastException out of decode.
         val requestId = (idEl as? JsonPrimitive)?.contentOrNull
             ?: return ignored("non-primitive permission id")
+        // The agent reuses ids. A question or plan that held this one must not
+        // rewrite the permission result the next Allow sends.
+        cursor.release(requestId)
         val options = params["options"]?.jsonArray?.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             val id = o.str("optionId") ?: return@mapNotNull null

@@ -19,16 +19,20 @@ import java.util.concurrent.ConcurrentHashMap
  * and a plan approval use the same card as an ACP permission. Several questions at once
  * are skipped so the agent can continue. `cursor/update_todos` is a notification and
  * becomes the session's todo card. A later update with `merge` replaces rows by id.
+ *
+ * One JSON-RPC id is one live request. Agents restart that counter, so a later ACP
+ * permission can reuse an id this class already answered. [release] drops the Cursor
+ * shape; a failed send can still rebuild it until then.
  */
 internal class CursorMethods {
 
     private val todos = ConcurrentHashMap<String, List<PlanEntry>>()
-    /** requestId → question id, for a single-choice ask still waiting on a tap. */
-    private val asks = ConcurrentHashMap<String, String>()
-    private val plans = ConcurrentHashMap.newKeySet<String>()
+    /** requestId → the Cursor request still using that id. */
+    private val requests = ConcurrentHashMap<String, CursorRequest>()
 
     fun clearSession(sessionId: String) {
         todos.remove(sessionKey(sessionId))
+        requests.entries.removeIf { it.value.sessionId == sessionId }
     }
 
     /**
@@ -37,9 +41,19 @@ internal class CursorMethods {
      * build so a send that failed can try the same frame again.
      */
     fun answer(requestId: String, optionId: String?): String? {
-        asks[requestId]?.let { return askResult(requestId, it, optionId) }
-        if (requestId in plans) return planResult(requestId, optionId)
-        return null
+        val req = requests[requestId] ?: return null
+        return when (req.kind) {
+            CursorRequestKind.ASK -> askResult(requestId, req.questionId, optionId)
+            CursorRequestKind.PLAN -> planResult(requestId, optionId)
+        }
+    }
+
+    /**
+     * This id now belongs to an ACP permission (or the session is gone). A later
+     * Allow must use the permission result, not the question or plan that used it.
+     */
+    fun release(requestId: String) {
+        requests.remove(requestId)
     }
 
     fun handle(
@@ -67,6 +81,8 @@ internal class CursorMethods {
         val merged = merge(sessionId, incoming, params.bool("merge") == true)
         val update = AdapterOutput.Update(sessionId, CodeUpdate.Upsert(planEvent(now, merged)), seq)
         val id = rpcId(idEl) ?: return listOf(update)
+        // This id is answered here. It must not stay a question or a plan.
+        requests.remove(id)
         // A request-shaped notification still needs a result, or the agent waits.
         return listOf(update, AdapterOutput.Reply(acceptedTodos(id, merged)))
     }
@@ -85,7 +101,11 @@ internal class CursorMethods {
         if (only == null || options == null) {
             return skipAsk(sessionId, requestId, seq, now)
         }
-        asks[requestId] = only.str("id") ?: "q"
+        requests[requestId] = CursorRequest(
+            CursorRequestKind.ASK,
+            only.str("id") ?: "q",
+            sessionId,
+        )
         val title = params.str("title")?.trim()?.ifEmpty { null }
             ?: only.str("prompt")?.trim()?.ifEmpty { null }
             ?: "Question"
@@ -110,7 +130,7 @@ internal class CursorMethods {
         now: Long,
     ): List<AdapterOutput> {
         val requestId = rpcId(idEl) ?: return listOf(AdapterOutput.Ignored("cursor plan without id"))
-        plans.add(requestId)
+        requests[requestId] = CursorRequest(CursorRequestKind.PLAN, "", sessionId)
         val entries = merge(sessionId, todoEntries(params["todos"]), merge = false)
         val title = params.str("name")?.trim()?.ifEmpty { null } ?: "Plan"
         val detail = params.str("overview")?.trim()?.ifEmpty { null }
@@ -147,6 +167,7 @@ internal class CursorMethods {
     }
 
     private fun skipAsk(sessionId: String, requestId: String, seq: Long?, now: Long): List<AdapterOutput> {
+        requests.remove(requestId)
         val reply = AdapterOutput.Reply(askSkipped(requestId))
         if (sessionId.isBlank()) return listOf(reply)
         val notice = AdapterOutput.Update(
@@ -267,6 +288,14 @@ internal class CursorMethods {
     private fun JsonObject.str(k: String): String? = (this[k] as? JsonPrimitive)?.contentOrNull
 
     private fun JsonObject.bool(k: String): Boolean? = (this[k] as? JsonPrimitive)?.booleanOrNull
+
+    private enum class CursorRequestKind { ASK, PLAN }
+
+    private class CursorRequest(
+        val kind: CursorRequestKind,
+        val questionId: String,
+        val sessionId: String,
+    )
 
     companion object {
         const val TODO_KEY = "todos"

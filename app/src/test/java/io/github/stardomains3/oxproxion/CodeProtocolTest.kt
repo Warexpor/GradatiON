@@ -1509,13 +1509,48 @@ class CodeProtocolTest {
         assertEquals("cancelled", cancel["result"]!!.jsonObject["outcome"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
     }
 
+    @Test fun cursorRequestIdDoesNotRewriteALaterPermission() {
+        acp.decode("""{"jsonrpc":"2.0","id":9,"method":"cursor/ask_question","params":{"sessionId":"s1","questions":[{"id":"q1","prompt":"Which mode?","options":[{"id":"agent","label":"Agent"},{"id":"plan","label":"Plan"}]}]}}""")
+        val asked = Json.parseToJsonElement(acp.answerApproval("9", "agent")).jsonObject
+        assertEquals("answered", asked["result"]!!.jsonObject["outcome"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
+        // A failed send rebuilds the same Cursor result until a new request takes the id.
+        val retry = Json.parseToJsonElement(acp.answerApproval("9", "agent")).jsonObject
+        assertEquals("answered", retry["result"]!!.jsonObject["outcome"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
+        acp.decode("""{"jsonrpc":"2.0","id":9,"method":"session/request_permission","params":{"sessionId":"s1","toolCall":{"toolCallId":"c1","title":"Run tests","kind":"execute"},"options":[{"optionId":"allow-once","name":"Allow once","kind":"allow_once"},{"optionId":"reject-once","name":"Reject","kind":"reject_once"}]}}""")
+        val perm = Json.parseToJsonElement(acp.answerApproval("9", "allow-once")).jsonObject
+        val outcome = perm["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("selected", outcome["outcome"]!!.jsonPrimitive.content)
+        assertEquals("allow-once", outcome["optionId"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun cursorPlanIdReusedAsAQuestionUsesTheQuestionShape() {
+        acp.decode("""{"jsonrpc":"2.0","id":11,"method":"cursor/create_plan","params":{"sessionId":"s1","name":"Refactor","overview":"Tighten.","todos":[{"id":"1","content":"Inspect","status":"pending"}]}}""")
+        acp.decode("""{"jsonrpc":"2.0","id":11,"method":"cursor/ask_question","params":{"sessionId":"s1","questions":[{"id":"q1","prompt":"Go?","options":[{"id":"yes","label":"Yes"}]}]}}""")
+        val reply = Json.parseToJsonElement(acp.answerApproval("11", "yes")).jsonObject
+        val outcome = reply["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("answered", outcome["outcome"]!!.jsonPrimitive.content)
+        assertEquals("q1", outcome["answers"]!!.jsonArray.single().jsonObject["questionId"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun forgottenSessionDropsItsCursorQuestion() {
+        acp.decode("""{"jsonrpc":"2.0","id":4,"method":"cursor/ask_question","params":{"sessionId":"s1","questions":[{"id":"q1","prompt":"Go?","options":[{"id":"yes","label":"Yes"}]}]}}""")
+        acp.clearLastSeq("s1")
+        val reply = Json.parseToJsonElement(acp.answerApproval("4", "yes")).jsonObject
+        val outcome = reply["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("selected", outcome["outcome"]!!.jsonPrimitive.content)
+        assertEquals("yes", outcome["optionId"]!!.jsonPrimitive.content)
+    }
+
     @Test fun cursorAskWithSeveralQuestionsIsSkipped() {
+        acp.decode("""{"jsonrpc":"2.0","id":"ask-2","method":"cursor/create_plan","params":{"sessionId":"s1","name":"Old","overview":"Before.","todos":[{"id":"1","content":"Inspect","status":"pending"}]}}""")
         val out = acp.decode("""{"jsonrpc":"2.0","id":"ask-2","method":"cursor/ask_question","params":{"sessionId":"s1","questions":[{"id":"q1","prompt":"A","options":[{"id":"a","label":"A"}]},{"id":"q2","prompt":"B","options":[{"id":"b","label":"B"}]}]}}""")
         assertTrue(out.any { it is AdapterOutput.Update && (it.update as? CodeUpdate.Upsert)?.event is CodeEvent.Notice })
         val reply = out.filterIsInstance<AdapterOutput.Reply>().single().frame
         val outcome = Json.parseToJsonElement(reply).jsonObject["result"]!!.jsonObject["outcome"]!!.jsonObject
         assertEquals("skipped", outcome["outcome"]!!.jsonPrimitive.content)
         assertEquals("ask-2", Json.parseToJsonElement(reply).jsonObject["id"]!!.jsonPrimitive.content)
+        val later = Json.parseToJsonElement(acp.answerApproval("ask-2", "accept")).jsonObject
+        assertEquals("selected", later["result"]!!.jsonObject["outcome"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
     }
 
     @Test fun cursorCreatePlanIsATodoCardAndAnApproval() {
