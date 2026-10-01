@@ -38,8 +38,15 @@ class RpHubFragment : Fragment() {
             val app = requireContext().applicationContext
             try {
                 withContext(Dispatchers.IO) {
-                    val chars = chatViewModel.getRpRepository().getAllCharactersOnce()
+                    val repo = chatViewModel.getRpRepository()
+                    val chars = repo.getAllCharactersOnce()
+                    val loreNameById = repo.getAllLorebooksOnce().associate { it.id to it.name }
+                    val sidePrefs = SharedPreferencesHelper(app)
                     val exports = chars.map { c ->
+                        val voice = sidePrefs.getRpVoice(c.id)
+                        val loreName = sidePrefs.getRpLorebookId(c.id)?.let { loreNameById[it] }
+                            ?: sidePrefs.getPendingRpLorebookName(c.id)
+                            ?: ""
                         RpCharacterExport(
                             name = c.name,
                             personality = c.personality,
@@ -51,7 +58,13 @@ class RpHubFragment : Fragment() {
                             instruction = c.instruction,
                             exportKey = c.exportKey,
                             avatarBase64 = RpAvatarStorage.encodeAvatarBase64(app, c.id),
-                            photoUri = null
+                            photoUri = null,
+                            memory = sidePrefs.getRpMemory(c.id),
+                            layout = sidePrefs.getRpLayout(c.id),
+                            voiceName = voice.name,
+                            voicePitch = voice.pitch,
+                            voiceRate = voice.rate,
+                            lorebookName = loreName,
                         )
                     }
                     val cache = File(app.cacheDir, "rp-chars-${System.nanoTime()}.json")
@@ -407,7 +420,11 @@ class RpHubFragment : Fragment() {
                     RpGreetingSync.greetingTextChanged(activeBefore.greeting, ex.greeting)
             }
             val imported = repo.importCharacters(backup.characters)
-            imported.forEach { row ->
+            val lorebooks = repo.getAllLorebooksOnce()
+            imported.forEachIndexed { index, row ->
+                backup.characters.getOrNull(index)?.let { exported ->
+                    RpCharacterPrefsBackup.apply(prefs, row.id, exported, lorebooks)
+                }
                 if (row.isNew && row.exportKey.isNotBlank()) {
                     val oldId = prefs.takeDeletedRpCharacterId(row.exportKey)
                     if (oldId != null && oldId != row.id) {
@@ -449,6 +466,7 @@ class RpHubFragment : Fragment() {
         try {
             val repo = chatViewModel.getRpRepository()
             val imported = repo.importLorebooks(backup.lorebooks)
+            RpCharacterPrefsBackup.bindPending(prefs, repo.getAllLorebooksOnce())
             if (!isAdded) return
             val prefs = SharedPreferencesHelper(requireContext())
             val loreHint = if (!prefs.isRpLoreEnabled() && repo.getActiveLorebook() != null) {

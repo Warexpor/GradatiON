@@ -21,7 +21,6 @@ sealed class ChatImportResult {
 
 class SavedChatsViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
-        private val json = Json { prettyPrint = true }
         // A backup from a newer version may carry fields this one doesn't know.
         private val importJson = Json { ignoreUnknownKeys = true }
         private const val MAX_IMPORT_MESSAGES = 5000
@@ -62,11 +61,21 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
      */
     suspend fun writeChatsBackup(out: Appendable) {
         val sessions = repository.getAllSessionsOnce()
+        val prefs = SharedPreferencesHelper(getApplication())
         out.append("{\"sessions\":[")
         sessions.forEachIndexed { index, session ->
             if (index > 0) out.append(',')
             try {
-                out.append(json.encodeToString(exportedSession(session)))
+                val exportKey = session.characterId?.let { rpRepository.getCharacterById(it)?.exportKey }
+                ChatBackupWriter.writeSession(
+                    out,
+                    session,
+                    characterExportKey = exportKey,
+                    facts = prefs.getRpFacts(session.id).takeIf { it.isNotBlank() },
+                    pinned = prefs.isSessionPinned(session.id),
+                ) { emit ->
+                    repository.forEachMessage(session.id, emit)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -91,22 +100,6 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
                 stream.writer(Charsets.UTF_8).buffered().use { writeChatsBackup(it) }
             }
         }
-    }
-
-    private suspend fun exportedSession(session: ChatSession): ExportedChatSession {
-        val messages = repository.getMessagesForSession(session.id)
-        val exportKey = session.characterId?.let { rpRepository.getCharacterById(it)?.exportKey }
-        return ExportedChatSession(
-            title = session.title,
-            modelUsed = session.modelUsed,
-            messages = messages.map { message ->
-                ExportedChatMessage(role = message.role, content = message.content)
-            },
-            mode = session.mode,
-            characterId = session.characterId,
-            characterExportKey = exportKey,
-            isLlm = session.isLlm
-        )
     }
 
     fun importChatsFromJson(jsonText: String, onResult: (ChatImportResult) -> Unit) {
@@ -153,6 +146,7 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
                 val session = ChatSession(
                     title = exportedSession.title,
                     modelUsed = exportedSession.modelUsed,
+                    timestamp = exportedSession.timestamp?.takeIf { it > 0L } ?: System.currentTimeMillis(),
                     mode = exportedSession.mode,
                     characterId = characterId,
                     isLlm = exportedSession.isLlm
@@ -170,7 +164,15 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
             val newIds = repository.insertImportedSessions(batch)
             // A new row can take an id a deleted chat used to have; drop that chat's leftovers.
             val prefs = SharedPreferencesHelper(app)
-            newIds.forEach { prefs.clearSessionPrefs(it) }
+            newIds.forEachIndexed { index, id ->
+                prefs.clearSessionPrefs(id)
+                val exported = backup.sessions[index]
+                if (!exported.facts.isNullOrBlank()) {
+                    prefs.saveRpFacts(id, exported.facts.take(RpPromptEngine.MEMORY_MAX_CHARS))
+                }
+                if (exported.pinned) prefs.setSessionPinned(id, true)
+                else if (prefs.isSessionPinned(id)) prefs.setSessionPinned(id, false)
+            }
             ChatImportResult.Success
         } catch (e: CancellationException) {
             throw e

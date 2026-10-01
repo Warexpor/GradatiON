@@ -2,11 +2,9 @@ package io.github.stardomains3.oxproxion
 
 import androidx.lifecycle.LiveData
 import androidx.room.Dao
-import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Relation
 import androidx.room.Transaction
 import androidx.room.Update
 
@@ -18,11 +16,7 @@ data class MessageWindow(
 )
 
 data class SessionWithMessages(
-    @Embedded val session: ChatSession,
-    @Relation(
-        parentColumn = "id",
-        entityColumn = "sessionId"
-    )
+    val session: ChatSession,
     val messages: List<ChatMessage>
 )
 
@@ -51,12 +45,17 @@ interface ChatDao {
     /** [query] is a LIKE pattern whose `%`, `_` and `\` are escaped with `\` (see [ChatRepository.searchSessions]). */
     suspend fun searchSessionIds(query: String, mode: String): List<Long>
 
-    @Transaction
-    @Query("SELECT * FROM chat_sessions")
-    suspend fun getAllSessionsWithMessages(): List<SessionWithMessages>
+    /**
+     * Every chat with its messages. Not a Room relation: that loads `SELECT *` and a long
+     * attachment used to throw once the row no longer fit in the cursor window.
+     */
+    suspend fun getAllSessionsWithMessages(): List<SessionWithMessages> =
+        getAllSessionsOnce().map { session ->
+            SessionWithMessages(session, getMessagesForSession(session.id))
+        }
 
-    /** Sessions only. Export walks messages one chat at a time so a long history is not all in memory. */
-    @Query("SELECT * FROM chat_sessions")
+    /** Sessions only, oldest id first so a backup is the same file twice in a row. */
+    @Query("SELECT * FROM chat_sessions ORDER BY id ASC")
     suspend fun getAllSessionsOnce(): List<ChatSession>
 
     /**

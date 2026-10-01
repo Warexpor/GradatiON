@@ -8,6 +8,7 @@ import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -146,6 +147,84 @@ class RpLibraryImportTest {
 
         val active = repo.getAllLorebooksOnce().single { it.isActive }
         assertEquals("First", active.name)
+    }
+
+    @Test
+    fun characterBackupRestoresMemoryAndWaitsForTheLorebook() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val kept = 7L
+        prefs.saveRpMemory(kept, "stay")
+        prefs.saveRpLayout(kept, SharedPreferencesHelper.RP_LAYOUT_BOOK)
+        prefs.saveRpVoice(kept, SharedPreferencesHelper.RpVoice("alto", 0.8f, 1.1f))
+        prefs.saveRpLorebookId(kept, 4L)
+
+        val older = Json { ignoreUnknownKeys = true }.decodeFromString(
+            RpCharacterBackup.serializer(),
+            """{"characters":[{"name":"Mira","exportKey":"k"}]}""",
+        )
+        RpCharacterPrefsBackup.apply(prefs, kept, older.characters.single(), emptyList())
+        assertEquals("stay", prefs.getRpMemory(kept))
+        assertEquals(SharedPreferencesHelper.RP_LAYOUT_BOOK, prefs.getRpLayout(kept))
+        assertEquals("alto", prefs.getRpVoice(kept).name)
+        assertEquals(4L, prefs.getRpLorebookId(kept))
+
+        val exported = RpCharacterExport(
+            name = "Mira",
+            exportKey = "k",
+            memory = "owes a favor",
+            layout = SharedPreferencesHelper.RP_LAYOUT_BUBBLES,
+            voiceName = "alto",
+            voicePitch = 0.8f,
+            voiceRate = 1.2f,
+            lorebookName = "World",
+        )
+        val text = buildString { RpBackupWriter.writeCharacters(this, listOf(exported)) }
+        val decoded = Json { ignoreUnknownKeys = true }
+            .decodeFromString(RpCharacterBackup.serializer(), text)
+            .characters.single()
+        assertEquals("owes a favor", decoded.memory)
+        assertEquals(SharedPreferencesHelper.RP_LAYOUT_BUBBLES, decoded.layout)
+
+        val fresh = 8L
+        prefs.saveRpMemory(fresh, "old note")
+        prefs.saveRpVoice(fresh, SharedPreferencesHelper.RpVoice("tenor", 1f, 1f))
+        RpCharacterPrefsBackup.apply(prefs, fresh, decoded, emptyList())
+        assertEquals("owes a favor", prefs.getRpMemory(fresh))
+        assertEquals(SharedPreferencesHelper.RP_LAYOUT_BUBBLES, prefs.getRpLayout(fresh))
+        assertEquals("alto", prefs.getRpVoice(fresh).name)
+        assertEquals(0.8f, prefs.getRpVoice(fresh).pitch, 0.001f)
+        assertEquals("World", prefs.getPendingRpLorebookName(fresh))
+        assertNull(prefs.getRpLorebookId(fresh))
+
+        val bookId = repo.saveLorebook(RpLorebook(name = "world", content = "w"))
+        RpCharacterPrefsBackup.bindPending(prefs, repo.getAllLorebooksOnce())
+        assertEquals(bookId, prefs.getRpLorebookId(fresh))
+        assertNull(prefs.getPendingRpLorebookName(fresh))
+
+        RpCharacterPrefsBackup.apply(
+            prefs,
+            fresh,
+            RpCharacterExport(
+                name = "Mira",
+                memory = "",
+                layout = "nope",
+                voicePitch = 99f,
+                voiceRate = 1f,
+                lorebookName = "",
+            ),
+            emptyList(),
+        )
+        assertEquals("", prefs.getRpMemory(fresh))
+        assertEquals(SharedPreferencesHelper.RP_LAYOUT_BUBBLES, prefs.getRpLayout(fresh))
+        assertNull(prefs.getRpVoice(fresh).name)
+        assertEquals(1f, prefs.getRpVoice(fresh).rate, 0.001f)
+        assertEquals(0.8f, prefs.getRpVoice(fresh).pitch, 0.001f)
+        assertNull(prefs.getRpLorebookId(fresh))
+        prefs.savePendingRpLorebookName(fresh, "later")
+        prefs.clearRpCharacterPrefs(fresh)
+        assertNull(prefs.getPendingRpLorebookName(fresh))
     }
 
     @Test

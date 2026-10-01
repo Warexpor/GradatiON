@@ -386,7 +386,8 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun getLastAiResponseForChannel(channelId: Int): String? {
-        val prefs: SharedPreferences = getSharedPreferences("MainAppPrefs", Context.MODE_PRIVATE)
+        val prefs: SharedPreferences =
+            TolerantPrefs(getSharedPreferences("MainAppPrefs", Context.MODE_PRIVATE))
         return prefs.getString("last_ai_response_channel_$channelId", null)
     }
 }

@@ -13,6 +13,13 @@ class ChatRepository(private val chatDao: ChatDao) {
         return chatDao.getMessagesForSession(sessionId)
     }
 
+    /** One message at a time, so an export can write a chat without holding every row. */
+    suspend fun forEachMessage(sessionId: Long, block: suspend (ChatMessage) -> Unit) {
+        for (head in chatDao.messageHeads(sessionId)) {
+            block(head.load(chatDao))
+        }
+    }
+
     suspend fun getLastMessage(sessionId: Long): ChatMessage? = chatDao.getLastMessage(sessionId)
 
     suspend fun getSessionById(sessionId: Long): ChatSession? {
@@ -44,9 +51,7 @@ class ChatRepository(private val chatDao: ChatDao) {
     }
 
     suspend fun getAllSessionsWithMessages(): List<SessionWithMessages> =
-        chatDao.getAllSessionsOnce().map { session ->
-            SessionWithMessages(session, getMessagesForSession(session.id))
-        }
+        chatDao.getAllSessionsWithMessages()
 
     suspend fun getAllSessionsOnce(): List<ChatSession> = chatDao.getAllSessionsOnce()
     suspend fun searchSessions(query: String, mode: ChatMode = ChatMode.ASK): List<ChatSession> {
