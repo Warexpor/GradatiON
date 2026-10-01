@@ -122,6 +122,10 @@ class ScenePhotoTest {
         val uri = "content://app.fileprovider/owned/scene_photos/$name"
         assertEquals(name, ScenePhoto.sceneFileName(uri))
         assertEquals(name, ScenePhoto.fileNameIn("caption scene_photos/notes then $uri tail"))
+        val other = "22222222-2222-2222-2222-222222222222.jpg"
+        val both = "$uri and content://app.fileprovider/owned/scene_photos/$other"
+        assertEquals(listOf(name, other), ScenePhoto.fileNamesIn(both))
+        assertEquals(name, ScenePhoto.fileNameIn(both))
         assertNull(ScenePhoto.sceneFileName("content://app.fileprovider/temp_images/scene_photos/$name"))
         assertNull(ScenePhoto.fileNameIn("scene_photos/not-a-uuid.jpg"))
         assertFalse(ScenePhoto.isSceneFileName("../$name"))

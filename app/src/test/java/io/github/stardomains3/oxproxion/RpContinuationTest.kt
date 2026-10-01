@@ -124,6 +124,40 @@ class RpContinuationTest {
         assertEquals(null, MessageContent.imageUrl(plain.content))
     }
 
+    @Test fun eachSwipeVersionKeepsItsOwnPicture() {
+        val jpeg = "data:image/jpeg;base64,qq"
+        val prior = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "text")
+                put("text", "She holds it up.")
+            })
+            add(buildJsonObject {
+                put("type", "image_url")
+                put("image_url", buildJsonObject { put("url", jpeg) })
+            })
+        }
+        val message = FlexibleMessage(
+            role = "assistant",
+            content = prior,
+            imageUri = "content://scene/1",
+        )
+        val same = RpContinuation.withVersion(message, "She turns.", "content://scene/1")
+        assertEquals("She turns.", MessageContent.text(same.content))
+        assertEquals(jpeg, MessageContent.imageUrl(same.content))
+        assertEquals("content://scene/1", same.imageUri)
+        val other = RpContinuation.withVersion(message, "She waits.", "content://scene/2")
+        assertEquals("She waits.", MessageContent.text(other.content))
+        assertEquals("content://scene/2", other.imageUri)
+        assertEquals(null, MessageContent.imageUrl(other.content))
+        val none = RpContinuation.withVersion(message, "She speaks.", "")
+        assertEquals("She speaks.", MessageContent.text(none.content))
+        assertEquals(null, none.imageUri)
+        assertEquals(null, MessageContent.imageUrl(none.content))
+        val legacy = RpContinuation.withVersion(message, "She nods.", null)
+        assertEquals(jpeg, MessageContent.imageUrl(legacy.content))
+        assertEquals("content://scene/1", legacy.imageUri)
+    }
+
     @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)

@@ -1,3 +1,9 @@
+# Handoff (2026-10-01, RP swipe pictures)
+
+On `cursor/rp-swipe-version-photos-5930`, targeting `gradation/app-pass`.
+- Each version of a roleplay reply remembers its own picture. Swiping shows that file, and a version with no picture does not keep the previous one. Stop during a new version puts the previous picture back. An older chat that never stored those links still keeps the picture already on the reply. Deleting the chat removes a picture that only a version was using.
+- Phone: in Roleplay, get a reply that includes a picture, swipe for another version (the new line should not keep that picture unless the new reply has one), then swipe back (the first picture is there). Stop while the new version is still arriving (the first picture comes back).
+
 # Handoff (2026-10-01, chat send while a chat is opening)
 
 On `cursor/chat-send-while-opening-0ddc`, targeting `gradation/app-pass`. Chat only:

@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Roleplay's Continue: the character carries on inside its last reply instead of starting a new
@@ -60,6 +61,30 @@ object RpContinuation {
             reasoning = null,
             thinking = null,
         )
+
+    /**
+     * One version of a reply. [pictureUri] null means this save does not remember pictures,
+     * so the one already on the reply stays. A blank means this version has none, and a
+     * link puts that file back. The same link keeps the JPEG stored in the message.
+     */
+    fun withVersion(message: FlexibleMessage, text: String, pictureUri: String?): FlexibleMessage {
+        if (pictureUri == null) return withWords(message, text)
+        if (pictureUri.isEmpty()) {
+            return message.copy(
+                content = JsonPrimitive(text),
+                imageUri = null,
+                reasoning = null,
+                thinking = null,
+            )
+        }
+        if (message.imageUri == pictureUri) return withWords(message, text)
+        return message.copy(
+            content = JsonPrimitive(text),
+            imageUri = pictureUri,
+            reasoning = null,
+            thinking = null,
+        )
+    }
 
     fun join(base: String, addition: String): String {
         if (addition.isEmpty()) return base
