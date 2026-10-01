@@ -96,7 +96,8 @@ abstract class AppDatabase : RoomDatabase() {
                     prefs,
                     dbName,
                     vault,
-                    prefs.hasArchivedChatDbPassphrase(pending)
+                    prefs.hasArchivedChatDbPassphrase(pending),
+                    pending
                 )
             }
             val passphrase = try {
@@ -110,7 +111,7 @@ abstract class AppDatabase : RoomDatabase() {
             for (attempt in 1..2) {
                 try {
                     val db = open(context, passphrase, dbName, vault)
-                    if (pending != null) finishInterruptedRecovery(prefs, databasesDir, vault, pending, db)
+                    if (pending != null) finishInterruptedRecovery(context, prefs, databasesDir, vault, pending, db)
                     return db
                 } catch (e: Exception) {
                     Log.e(TAG, "Chat database could not be opened (attempt $attempt)", e)
@@ -126,6 +127,7 @@ abstract class AppDatabase : RoomDatabase() {
          * (a transient failure, the move never happened), drop the marker and say nothing.
          */
         private fun finishInterruptedRecovery(
+            context: Context,
             prefs: SharedPreferencesHelper,
             databasesDir: File?,
             vault: File,
@@ -137,21 +139,35 @@ abstract class AppDatabase : RoomDatabase() {
             val aside = ChatDbVault.unreadable(vault, pendingStamp)
             val legacy = databasesDir?.let { File(it, "${DB_NAME}.unreadable-$pendingStamp") }
             val asideExists = aside.exists() || legacy?.exists() == true
-            if (asideExists && !hasChatRows(db)) prefs.markChatDbRecovered()
-            else prefs.clearRecoveryPending()
+            // Any row means this file has already been used. An empty one is the fresh database
+            // from a recovery that died before it could set the old notes aside.
+            if (asideExists && !hasUserRows(db)) {
+                quarantineRowPrefs(context, prefs, vault, pendingStamp)
+                prefs.markChatDbRecovered()
+            } else {
+                prefs.clearRecoveryPending()
+            }
         }
 
-        private fun hasChatRows(db: AppDatabase): Boolean = try {
-            db.openHelper.writableDatabase.query("SELECT 1 FROM chat_sessions LIMIT 1").use { it.moveToFirst() }
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not tell whether the chat database has rows", e)
-            false
+        /**
+         * A fresh database starts its ids over. Move the notes keyed by the old ids aside before
+         * clearing the recovery stamp, so a kill here is tried again instead of inherited.
+         */
+        private fun quarantineRowPrefs(
+            context: Context,
+            prefs: SharedPreferencesHelper,
+            vault: File,
+            stamp: Long
+        ) {
+            if (!DbPrefQuarantine.quarantine(prefs.mainPrefs, context.filesDir, vault, stamp)) {
+                Log.e(TAG, "Row-scoped preferences could not be set aside")
+            }
         }
 
         /**
          * True when any user table has a row. A failure counts as "has rows": an empty result is
          * the only signal that an encrypted file is the blank one a crash left behind, and a
-         * query error must not cause that file to be replaced.
+         * query error must not cause that file to be replaced or its notes to be set aside.
          */
         private fun hasUserRows(db: AppDatabase): Boolean = try {
             val sql = db.openHelper.writableDatabase
@@ -200,12 +216,19 @@ abstract class AppDatabase : RoomDatabase() {
                 val fallback = recoveredFileName(vault, stamp, databasesDir)
                 prefs.saveChatDbFileName(fallback)
                 prefs.markRecoveryPending(stamp)
-                return openFreshAfterRecovery(context, prefs, File(vault, fallback).absolutePath, vault, archived)
+                return openFreshAfterRecovery(
+                    context,
+                    prefs,
+                    File(vault, fallback).absolutePath,
+                    vault,
+                    archived,
+                    stamp
+                )
             }
             val actual = stampOf(moved) ?: stamp
             val archivedActual = if (actual != stamp) prefs.archiveChatDbPassphrase(actual) else archived
             prefs.markRecoveryPending(actual)
-            return openFreshAfterRecovery(context, prefs, dbName, vault, archivedActual)
+            return openFreshAfterRecovery(context, prefs, dbName, vault, archivedActual, actual)
         }
 
         private fun openFreshAfterRecovery(
@@ -213,7 +236,8 @@ abstract class AppDatabase : RoomDatabase() {
             prefs: SharedPreferencesHelper,
             dbName: String,
             vault: File,
-            archiveSaved: Boolean
+            archiveSaved: Boolean,
+            stamp: Long
         ): AppDatabase {
             clearPlaintextBackupConfirmation(vault)
             // Replacing the key is safe only when the previous blob was archived, or when there
@@ -226,6 +250,7 @@ abstract class AppDatabase : RoomDatabase() {
                 prefs.getOrCreateChatDbPassphrase()
             }
             val fresh = open(context, passphrase, dbName, vault, restoreEmpty = false)
+            quarantineRowPrefs(context, prefs, vault, stamp)
             prefs.markChatDbRecovered()
             return fresh
         }

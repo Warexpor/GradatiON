@@ -4,6 +4,9 @@ import android.content.Context
 import android.util.Log
 import java.io.File
 import java.io.IOException
+import java.io.RandomAccessFile
+import java.nio.channels.FileChannel
+import java.nio.file.StandardOpenOption
 
 /**
  * Chat-database files that are not the live `chat_database`.
@@ -164,10 +167,22 @@ internal object ChatDbVault {
     fun moveReplacing(from: File, to: File) {
         to.parentFile?.mkdirs()
         if (from.renameTo(to)) return
+        // rename across directories can fail. The copy has to reach disk before the source
+        // is removed, or a kill in between loses both.
         from.copyTo(to, overwrite = true)
+        RandomAccessFile(to, "rw").use { it.fd.sync() }
+        syncDirectory(to.parentFile)
         if (!from.delete() && from.exists()) {
             to.delete()
             throw IOException("Could not remove ${from.path} after copying it aside")
+        }
+    }
+
+    private fun syncDirectory(dir: File?) {
+        if (dir == null) return
+        try {
+            FileChannel.open(dir.toPath(), StandardOpenOption.READ).use { it.force(true) }
+        } catch (_: Exception) {
         }
     }
 }
