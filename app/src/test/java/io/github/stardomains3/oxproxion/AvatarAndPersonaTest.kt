@@ -2,10 +2,15 @@ package io.github.stardomains3.oxproxion
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.media.ExifInterface
+import android.util.Base64
 import android.view.View
 import androidx.test.core.app.ApplicationProvider
+import java.io.ByteArrayOutputStream
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -74,6 +79,27 @@ class AvatarAndPersonaTest {
         assertEquals("Lilith", prefs.getRpPersonaName())
         prefs.setRpPersonaEnabled(true)
         assertEquals("A tall stranger", prefs.activeRpPersona())
+    }
+
+    /** A camera JPEG is stored on its side. The portrait written for a character has to be upright. */
+    @Test fun aSidewaysPortraitIsStoredUpright() {
+        val wide = Bitmap.createBitmap(24, 8, Bitmap.Config.ARGB_8888)
+        wide.eraseColor(Color.DKGRAY)
+        val raw = ByteArrayOutputStream().also { wide.compress(Bitmap.CompressFormat.JPEG, 90, it) }.toByteArray()
+        wide.recycle()
+        val src = File(ctx.cacheDir, "sideways-portrait.jpg")
+        src.writeBytes(raw)
+        ExifInterface(src.absolutePath).apply {
+            setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_90.toString())
+            saveAttributes()
+        }
+        val encoded = Base64.encodeToString(src.readBytes(), Base64.NO_WRAP)
+        val saved = RpAvatarStorage.saveFromBase64(ctx, encoded, 42L)
+        assertNotNull(saved)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(RpAvatarStorage.avatarFile(ctx, 42L).absolutePath, bounds)
+        assertEquals(8, bounds.outWidth)
+        assertEquals(24, bounds.outHeight)
     }
 
     /** The crop screen must inflate: the crop view needs the (Context, AttributeSet) constructor. */

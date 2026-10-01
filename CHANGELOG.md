@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Sending a photo in Roleplay keeps the file on that message, so the picture can be opened from the bubble. The composer used to clear the link before the message was saved. A photo you remove, or leave behind by starting another chat, is deleted. Deleting a chat deletes its pictures too, unless another chat still uses the same file. A character or persona portrait taken sideways is stored upright.
 - Tapping a link in a message you sent opens the link and leaves the action row as it was. Press and hold that message to copy all of it, including when Show more has folded it. Two copies of the same message open their own action rows.
 - Code: a shell or search log no longer shows terminal color codes, and a progress line that rewrites itself shows the last line. A file the agent opened still keeps those bytes. A tool reported as `in-progress` or `running` shows as running, and a plan step spelled that way does too. On Changes, a renamed file opens and copies the new path, and a path git quoted (a space, or a name outside ASCII) is the real path.
 - A character backup keeps that character's wallpaper. An older backup still imports, and it does not remove a wallpaper it does not mention. Clearing the wallpaper in the backup removes it on the next phone.

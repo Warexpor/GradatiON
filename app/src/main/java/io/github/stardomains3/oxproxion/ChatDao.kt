@@ -213,6 +213,23 @@ interface ChatDao {
     suspend fun deleteMessagesForSession(sessionId: Long)
 
     /**
+     * A short slice around each scene-photo link in this chat. The JPEG in the row is not returned.
+     * The marker is our file-provider path, so a caption cannot look like one.
+     */
+    @Query(
+        """
+        SELECT substr(content, instr(content, '/owned/scene_photos/'), 80)
+        FROM chat_messages
+        WHERE sessionId = :sessionId AND instr(content, '/owned/scene_photos/') > 0
+        """
+    )
+    suspend fun scenePhotoSlices(sessionId: Long): List<String>
+
+    /** The id of one message that contains [needle], or null. Stops at the first hit. */
+    @Query("SELECT id FROM chat_messages WHERE instr(content, :needle) > 0 LIMIT 1")
+    suspend fun messageMentioning(needle: String): Long?
+
+    /**
      * Saves a chat that has no row yet and returns the id SQLite generated. The id on [session]
      * is ignored (AUTOINCREMENT never hands one out twice, even after the newest chat is deleted),
      * so two saves racing each other cannot land on the same id.

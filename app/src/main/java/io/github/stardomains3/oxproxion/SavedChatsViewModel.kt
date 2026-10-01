@@ -42,7 +42,10 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         val prefs = SharedPreferencesHelper(getApplication())
         // Before the row goes: the open chat just parked its field under this id.
         prefs.saveAskComposerDrafts(ComposerDrafts.drop(prefs.getAskComposerDrafts(), sessionId))
+        val photos = repository.scenePhotoNames(sessionId)
         repository.deleteSession(sessionId)
+        val unused = photos.filter { !repository.scenePhotoStillUsed(it) }
+        ScenePhoto.deleteSceneFiles(getApplication(), unused)
         listOf(ChatMode.ASK, ChatMode.RP).forEach { mode ->
             if (prefs.getRpDraftSessionId(mode) == sessionId) {
                 prefs.saveRpDraftSessionId(mode, null)

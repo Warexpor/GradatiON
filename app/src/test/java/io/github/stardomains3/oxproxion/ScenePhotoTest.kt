@@ -79,6 +79,39 @@ class ScenePhotoTest {
         assertFalse(moved.contains("/temp_images/"))
     }
 
+    @Test fun aRoleplaySendKeepsTheFileItCaptured() {
+        val captured = "content://app.fileprovider/owned/scene_photos/11111111-1111-1111-1111-111111111111.jpg"
+        assertEquals(captured, ScenePhoto.uriForTurn(useCaptured = true, captured = captured, live = null))
+        assertNull(ScenePhoto.uriForTurn(useCaptured = true, captured = null, live = captured))
+        assertEquals("content://live", ScenePhoto.uriForTurn(useCaptured = false, captured = captured, live = "content://live"))
+        assertNull(ScenePhoto.uriForTurn(useCaptured = true, captured = "data:image/jpeg;base64,qq", live = null))
+        assertNull(ScenePhoto.uriForTurn(useCaptured = true, captured = "  ", live = captured))
+    }
+
+    @Test fun aSceneFileNameIsTheUuidAndNothingElse() {
+        val name = "11111111-1111-1111-1111-111111111111.jpg"
+        val uri = "content://app.fileprovider/owned/scene_photos/$name"
+        assertEquals(name, ScenePhoto.sceneFileName(uri))
+        assertEquals(name, ScenePhoto.fileNameIn("caption scene_photos/notes then $uri tail"))
+        assertNull(ScenePhoto.sceneFileName("content://app.fileprovider/temp_images/scene_photos/$name"))
+        assertNull(ScenePhoto.fileNameIn("scene_photos/not-a-uuid.jpg"))
+        assertFalse(ScenePhoto.isSceneFileName("../$name"))
+        assertFalse(ScenePhoto.isSceneFileName("notes.jpg"))
+    }
+
+    @Test fun deleteSceneFilesRemovesOnlyThatName() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val name = "22222222-2222-2222-2222-222222222222.jpg"
+        val dir = File(context.filesDir, "scene_photos").apply { mkdirs() }
+        val file = File(dir, name).apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val other = File(dir, "33333333-3333-3333-3333-333333333333.jpg").apply { writeBytes(byteArrayOf(4)) }
+        val sneaky = File(dir, "notes.jpg").apply { writeBytes(byteArrayOf(5)) }
+        ScenePhoto.deleteSceneFiles(context, listOf(name, "../$name", "notes.jpg"))
+        assertFalse(file.exists())
+        assertTrue(other.exists())
+        assertTrue(sneaky.exists())
+    }
+
     private fun tinyJpeg(): ByteArray {
         val bmp = Bitmap.createBitmap(8, 4, Bitmap.Config.ARGB_8888)
         bmp.eraseColor(Color.DKGRAY)
