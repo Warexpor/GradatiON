@@ -27,10 +27,12 @@ class UserMessageFoldTest {
     }
 
     @Test fun two_copies_of_a_long_message_fold_on_their_own() {
-        val same = { i: Int -> i == 0 || i == 2 }
-        assertEquals(0, UserMessageFold.earlierCopies(0, same))
-        assertEquals(0, UserMessageFold.earlierCopies(1, same))
-        assertEquals(1, UserMessageFold.earlierCopies(2, same))
+        // The predicate is "same text as the row being folded", the way the bubble uses it.
+        val copies = setOf(0, 2)
+        fun sameAs(target: Int): (Int) -> Boolean = { i -> i in copies && target in copies }
+        assertEquals(0, UserMessageFold.earlierCopies(0, sameAs(0)))
+        assertEquals(0, UserMessageFold.earlierCopies(1, sameAs(1)))
+        assertEquals(1, UserMessageFold.earlierCopies(2, sameAs(2)))
     }
 
     @Test fun many_short_lines_still_stop_at_three() {

@@ -88,6 +88,13 @@ object RpChatSummaries {
         return named.replace(Regex("[*_#>`~]"), "").take(140)
     }
 
+    /**
+     * The Lore tile lights only when a book would actually be used. A pin that was deleted
+     * still counts when the active book is the fallback.
+     */
+    fun loreTileOn(loreEnabled: Boolean, pinnedBookExists: Boolean, activeBookExists: Boolean): Boolean =
+        loreEnabled && (pinnedBookExists || activeBookExists)
+
     /** A stored message as one line of plain text: markdown marks and line breaks folded away. */
     fun previewOf(storedContent: String): String {
         val text = try {

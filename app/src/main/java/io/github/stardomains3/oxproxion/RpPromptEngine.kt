@@ -38,6 +38,13 @@ object RpPromptEngine {
         "(The user shows a photo and says nothing. It is in the scene. React only to what the picture actually shows.)"
 
     /**
+     * Replaces a photo that is no longer attached. Later turns keep the words and this note
+     * instead of sending every earlier picture again.
+     */
+    const val PHOTO_EARLIER =
+        "(A photo was shown with this message. It is no longer attached.)"
+
+    /**
      * The hidden user line for Continue. Same words as `rp_continue_prompt`: the transcript
      * must not treat it as something the user said.
      */

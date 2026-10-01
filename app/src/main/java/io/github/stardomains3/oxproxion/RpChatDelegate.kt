@@ -41,7 +41,8 @@ class RpChatDelegate(
             showThoughts = prefs.isRpShowThoughts(),
             isLlm = isLlm,
             memory = prefs.getRpMemory(if (isLlm) null else character?.id),
-            facts = if (prefs.isRpAutoMemory()) facts else "",
+            // The switch only stops the quiet rewrite. Notes already written still go out.
+            facts = facts,
             userName = prefs.activeRpPersonaName(),
             definitionCap = definitionCap
         )

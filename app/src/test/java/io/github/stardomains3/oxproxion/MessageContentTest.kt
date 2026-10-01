@@ -134,4 +134,84 @@ class MessageContentTest {
         val assistant = FlexibleMessage(role = "assistant", content = photo).toApiMessage()
         assertEquals("", MessageContent.text(assistant.content))
     }
+
+    @Test
+    fun aBlankCaptionDoesNotStayBesideTheSceneLine() {
+        val blankCaption = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "text")
+                put("text", "  ")
+            })
+            add(buildJsonObject {
+                put("type", "image_url")
+                put("image_url", buildJsonObject { put("url", "data:image/jpeg;base64,qq") })
+            })
+        }
+        val noted = MessageContent.withScenePhotoNote(blankCaption, RpPromptEngine.PHOTO_TURN)
+        assertEquals(RpPromptEngine.PHOTO_TURN, MessageContent.text(noted))
+        assertEquals("data:image/jpeg;base64,qq", MessageContent.imageUrl(noted))
+        assertEquals(listOf(RpPromptEngine.PHOTO_TURN), MessageContent.allText(noted as kotlinx.serialization.json.JsonArray))
+    }
+
+    @Test
+    fun aSavedPictureRoundTripsAndStaysOffTheWire() {
+        val story = JsonPrimitive("*She smiles.*")
+        val stored = MessageContent.forStorage(story, "content://generated/1")
+        assertEquals("*She smiles.*", MessageContent.text(stored))
+        assertEquals("content://generated/1", MessageContent.unwrap(stored).fileUri)
+        val wire = FlexibleMessage(role = "assistant", content = stored, imageUri = "content://generated/1").toApiMessage()
+        assertEquals("*She smiles.*", MessageContent.text(wire.content))
+        assertEquals(null, wire.imageUri)
+        assertFalse(wire.content.toString().contains("kept"))
+        assertFalse(wire.content.toString().contains("content://"))
+        val photo = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "text")
+                put("text", "look")
+            })
+            add(buildJsonObject {
+                put("type", "image_url")
+                put("image_url", buildJsonObject { put("url", "data:image/jpeg;base64,qq") })
+            })
+        }
+        val savedPhoto = MessageContent.forStorage(photo, "content://scene/1")
+        assertEquals("look", MessageContent.text(savedPhoto))
+        assertEquals("data:image/jpeg;base64,qq", MessageContent.imageUrl(savedPhoto))
+        assertEquals("content://scene/1", MessageContent.unwrap(savedPhoto).fileUri)
+    }
+
+    @Test
+    fun olderScenePhotosLeaveTheRequest() {
+        fun photo(caption: String?) = buildJsonArray {
+            if (caption != null) {
+                add(buildJsonObject {
+                    put("type", "text")
+                    put("text", caption)
+                })
+            }
+            add(buildJsonObject {
+                put("type", "image_url")
+                put("image_url", buildJsonObject { put("url", "data:image/jpeg;base64,qq") })
+            })
+        }
+        val messages = listOf(
+            FlexibleMessage(role = "user", content = photo("first light")),
+            FlexibleMessage(role = "user", content = photo(null)),
+            FlexibleMessage(role = "assistant", content = JsonPrimitive("She looks.")),
+            FlexibleMessage(role = "user", content = photo("the docks")),
+            FlexibleMessage(role = "user", content = photo("the key")),
+        )
+        val wire = messages.toApiMessages()
+        assertEquals("first light", MessageContent.text(wire[0].content))
+        assertTrue(wire[0].content.toString().contains(RpPromptEngine.PHOTO_EARLIER))
+        assertFalse(MessageContent.hasImage(wire[0].content))
+        assertEquals(RpPromptEngine.PHOTO_EARLIER, MessageContent.text(wire[1].content))
+        assertFalse(MessageContent.hasImage(wire[1].content))
+        assertEquals("She looks.", MessageContent.text(wire[2].content))
+        assertEquals("the docks", MessageContent.text(wire[3].content))
+        assertTrue(MessageContent.hasImage(wire[3].content))
+        assertFalse(wire[3].content.toString().contains(RpPromptEngine.PHOTO_EARLIER))
+        assertEquals("the key", MessageContent.text(wire[4].content))
+        assertTrue(MessageContent.hasImage(wire[4].content))
+    }
 }

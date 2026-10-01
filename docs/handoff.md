@@ -1,3 +1,11 @@
+# Handoff (2026-10-01, RP photos, Continue, and the panel)
+
+On `cursor/rp-photos-scene-menus-c189`, targeting `gradation/app-pass`.
+- A scene photo and a generated picture are written with the chat. Reopening restores the JPEG and the file, and the request does not send that file URI. Only the two newest pictures stay attached; older ones keep their caption plus a note that a photo was shown. A blank caption is not left next to the scene line.
+- Continue that fails (including HTTP 4xx/5xx) keeps the reply and uses a notice. Swipe versions stay until the new text arrives. A model that echoes the rewrite note, including the multi-line `(OOC:)` this app sends, has that note removed.
+- "Keep Facts up to date" only stops the quiet rewrite. Facts still go out, and they name you the same way the prompt does (`the user` when no persona). A captioned photo is still a photo in that summary. A caption-less photo is a lore beat. The panel subtitle expands `{{char}}` and `{{user}}`. The Lore tile is on when lore is on and a pin or the active book exists.
+- Phone: send a photo, leave the chat, come back (the picture is there). Send three photos, then a line (the story should still answer). Continue, then force a failure if you can (the reply stays). Rewrite a reply. Turn Facts off after writing a note and send (the character should still know it). Open the panel with an active lorebook and no pin (the Lore tile is on). A card line `{{char}} waits for {{user}}` shows the names under the title.
+
 # Handoff (2026-10-01, database copies stay out of backup)
 
 On `cursor/db-backup-vault-4a6e`, targeting `gradation/app-pass`.

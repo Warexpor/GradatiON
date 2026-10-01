@@ -80,16 +80,19 @@ data class FlexibleMessage(
 fun FlexibleMessage.toApiMessage(): FlexibleMessage {
     // A caption-less photo is stored as the picture alone. Every request, including a
     // rewrite or the next turn, still needs words or some providers reject the image.
+    // A file URI stashed for reopen is not part of the request.
+    val body = MessageContent.unwrap(content).body
     val wire = if (role == "user") {
-        MessageContent.withScenePhotoNote(content, RpPromptEngine.PHOTO_TURN)
+        MessageContent.withScenePhotoNote(body, RpPromptEngine.PHOTO_TURN)
     } else {
-        content
+        body
     }
     if (wire === content && !toolsUsed && reasoning == null && thinking == null && imageUri == null) return this
     return copy(content = wire, toolsUsed = false, reasoning = null, thinking = null, imageUri = null)
 }
 
-fun List<FlexibleMessage>.toApiMessages(): List<FlexibleMessage> = map { it.toApiMessage() }
+fun List<FlexibleMessage>.toApiMessages(): List<FlexibleMessage> =
+    MessageContent.keepRecentPhotos(this).map { it.toApiMessage() }
 
 @Serializable
 data class Plugin(

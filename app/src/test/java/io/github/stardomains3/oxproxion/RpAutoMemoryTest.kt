@@ -98,6 +98,13 @@ class RpAutoMemoryTest {
         val t = RpAutoMemory.transcript(turns, "Mira", "Sam")
         assertTrue(t.contains("Sam: ${RpAutoMemory.PHOTO_BEAT}"))
         assertTrue(t.contains("Mira: She waits."))
+        val captioned = RpAutoMemory.transcript(
+            listOf("user" to RpAutoMemory.turnBody("the docks at dusk", showedPhoto = true)),
+            "Mira",
+            "Sam"
+        )
+        assertTrue(captioned.contains("the docks at dusk"))
+        assertTrue(captioned.contains(RpAutoMemory.PHOTO_BEAT))
         assertFalse(t.contains("Rewrite your last reply"))
         assertFalse(t.contains("says nothing"))
     }
