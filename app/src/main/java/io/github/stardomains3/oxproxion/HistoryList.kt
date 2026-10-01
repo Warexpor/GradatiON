@@ -39,6 +39,12 @@ object HistoryList {
     private const val DAY_MS = 24L * 60 * 60 * 1000
     /** One preview line. Longer unsent text is cut, with the match kept in view. */
     private const val DRAFT_LINE = 160
+    /**
+     * A History row is one line. A match already in that window stays as written;
+     * a later one is pulled forward so the bold word is not ellipsized off the end.
+     */
+    private const val LINE = 36
+    private const val LEAD = 10
     /** Today plus the six days before it. Matches the Roleplay history page. */
     private const val WEEK_DAYS = 6
 
@@ -117,7 +123,8 @@ object HistoryList {
         if (raw.isEmpty()) return ""
         val parsed = runCatching { json.parseToJsonElement(raw) }.getOrNull()
         val text = when {
-            parsed != null -> RpChatSummaries.previewOf(raw)
+            // Not previewOf: that strips every underscore, so snake_case no longer matches.
+            parsed != null -> fold(MessageContent.text(parsed))
             raw.startsWith("\"") -> fold(jsonStringPrefix(raw))
             else -> fold(textFieldPrefix(raw))
         }.takeUnless { it.startsWith("data:") || it.contains("base64,") }.orEmpty()
@@ -210,12 +217,13 @@ object HistoryList {
         if (needle.isEmpty()) return ""
         val parsed = preview(role, window, youLabel, photoLabel)
         // A slice of a photo's data URL is one long token. It is not a line of the chat.
-        if (isChatLine(parsed) && parsed.contains(needle, ignoreCase = true)) return parsed
-        val readable = readableWindow(window)
-        if (!isChatLine(readable)) return ""
-        val at = readable.indexOf(needle, ignoreCase = true)
-        if (at < 0) return ""
-        val body = clipAround(readable, at, needle.length)
+        // A line with no spaces still is: a link, or Chinese, Japanese or Korean.
+        if (isChatLine(parsed) && parsed.contains(needle, ignoreCase = true)) {
+            return clipMatch(parsed, needle)
+        }
+        val readable = lineFor(readableSource(window), needle)
+        if (!isChatLine(readable) || !readable.contains(needle, ignoreCase = true)) return ""
+        val body = clipAround(readable, readable.indexOf(needle, ignoreCase = true), needle.length)
         return if (role == "user") youLabel(body) else body
     }
 
@@ -234,15 +242,37 @@ object HistoryList {
         return text.indexOf(needle, ignoreCase = true)
     }
 
-    /** A sentence or a short token. A spaceless run is a piece of a data URL. */
+    /**
+     * A sentence, a short token, or a line with no spaces that is still words.
+     * A long run of the base64 alphabet is a slice of a photo, not a line.
+     */
     private fun isChatLine(text: String): Boolean {
         val body = text.substringAfter(": ", text).trim()
-        return body.isNotEmpty() && (body.length <= 40 || body.contains(' '))
+        if (body.isEmpty()) return false
+        if (body.length <= 40 || body.any { it.isWhitespace() }) return true
+        return !isBase64Run(body)
     }
 
-    private fun readableWindow(raw: String): String {
-        val stripped = raw.replace(Regex("data:[^\"\\s]*;base64,[A-Za-z0-9+/=]+"), " ")
-        return fold(unescape(stripped))
+    private fun isBase64Run(text: String): Boolean {
+        if (text.length <= 40) return false
+        for (c in text) {
+            val alphabet = c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '+' || c == '/' || c == '='
+            if (!alphabet) return false
+        }
+        return true
+    }
+
+    private fun readableSource(raw: String): String {
+        val stripped = raw.replace(DATA_URL, " ")
+        return unescape(stripped)
+    }
+
+    /** Folded markdown when that still contains [needle]; otherwise the characters the query needs. */
+    private fun lineFor(text: String, needle: String): String {
+        val folded = fold(text)
+        if (needle.isEmpty() || folded.contains(needle, ignoreCase = true)) return folded
+        val plain = WHITESPACE.replace(text, " ").trim()
+        return if (plain.contains(needle, ignoreCase = true)) plain else folded
     }
 
     private fun unescape(raw: String): String {
@@ -272,9 +302,17 @@ object HistoryList {
         return out.toString()
     }
 
+    private fun clipMatch(text: String, needle: String): String {
+        val at = emphasisAt(text, needle)
+        if (at < 0) return text
+        return clipAround(text, at, needle.length)
+    }
+
     private fun clipAround(text: String, at: Int, needleLen: Int): String {
-        val start = (at - 28).coerceAtLeast(0)
-        val end = (at + needleLen + 48).coerceAtMost(text.length)
+        if (at < 0) return text
+        if (at < LINE && text.length <= LINE + LEAD) return text.trim()
+        val start = (at - LEAD).coerceAtLeast(0)
+        val end = (at + needleLen + LINE).coerceAtMost(text.length)
         var snippet = text.substring(start, end).trim()
         if (start > 0) snippet = "…$snippet"
         if (end < text.length) snippet = "$snippet…"
@@ -333,8 +371,22 @@ object HistoryList {
         return out.toString()
     }
 
+    /**
+     * Markdown marks come off for the preview. An underscore inside a word stays:
+     * stripping every `_` turned a search for `snake_case` into a line that no longer
+     * contained it, so the row could not show why it matched.
+     */
     private fun fold(text: String): String =
-        text.replace(Regex("[*_#>`~]"), "").replace(Regex("\\s+"), " ").trim()
+        WHITESPACE.replace(
+            MD_EDGE_UNDERSCORE.replace(MD_STARS.replace(text, ""), "").replace(MD_MARKS, ""),
+            " ",
+        ).trim()
+
+    private val DATA_URL = Regex("data:[^\"\\s]*;base64,[A-Za-z0-9+/=]+")
+    private val MD_STARS = Regex("\\*+")
+    private val MD_MARKS = Regex("[#>`~]")
+    private val MD_EDGE_UNDERSCORE = Regex("(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])")
+    private val WHITESPACE = Regex("\\s+")
 
     private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 }

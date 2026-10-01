@@ -46,4 +46,14 @@ object KeyboardFollow {
         if (!following || lastBottom < 0) return 0
         return scroll(lastBottom, listHeight, newBottomPad, oldBottomPad, pinnedSlack)
     }
+
+    /**
+     * Padding for the composer dock when the field takes the screen.
+     * [bottom] is the nav bar plus the keyboard. Replacing it with 0 drops the
+     * buttons under the keys until the next inset event, which may not come.
+     */
+    fun dockPadding(expanded: Boolean, topBarHeight: Int, left: Int, right: Int, bottom: Int): IntArray {
+        val top = if (expanded) topBarHeight.coerceAtLeast(0) else 0
+        return intArrayOf(left, top, right, bottom)
+    }
 }

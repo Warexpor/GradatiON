@@ -711,6 +711,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 if (!suppressDraftDirty && composerStateRestored) askComposerDirty = true
                 updateComposerAccessoryVisibility()
                 updateSendButtonChrome()
+                // Past six lines the field scrolls inside itself. Without this the caret
+                // stays under the last visible line and the new words are typed blind.
+                chatEditText.post {
+                    if (!chatEditText.isAttachedToWindow || chatEditText.layout == null) return@post
+                    chatEditText.bringPointIntoView(chatEditText.selectionEnd)
+                }
             }
         })
         updateSendButtonChrome()
@@ -1505,8 +1511,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val rightCollapsed = listOf(speechButton, sendChatButton)
 
         view?.findViewById<View>(R.id.composerDock)?.let { dock ->
-            val topPad = if (expanded) view?.findViewById<View>(R.id.topBarGlass)?.height ?: 0 else 0
-            dock.setPadding(0, topPad, 0, 0)
+            val topBar = view?.findViewById<View>(R.id.topBarGlass)?.height ?: 0
+            val pad = KeyboardFollow.dockPadding(
+                expanded, topBar, dock.paddingLeft, dock.paddingRight, dock.paddingBottom,
+            )
+            dock.setPadding(pad[0], pad[1], pad[2], pad[3])
         }
         if (expanded) {
             containerParams.height = LinearLayout.LayoutParams.MATCH_PARENT
@@ -3607,7 +3616,11 @@ $cleanContent
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val staged = withContext(Dispatchers.IO) { loadEditPhoto(appContext, editPhoto) }
-                if (!isAdded || staged == null) return@launch
+                if (!isAdded) return@launch
+                if (staged == null) {
+                    GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_image))
+                    return@launch
+                }
                 selectedImageBytes = staged.bytes
                 selectedImageMime = staged.mime
                 val stored = staged.fileUri ?: withContext(Dispatchers.IO) {

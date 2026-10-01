@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Calendar
@@ -119,6 +120,8 @@ class HistoryListTest {
         assertEquals("hello", HistoryList.preview("assistant", "\"hello", you, "Photo"))
         assertEquals("", HistoryList.preview("user", "", you, "Photo"))
         assertEquals("You: 100% sure", HistoryList.preview("user", "\"100% sure\"", you, "Photo"))
+        assertEquals("You: snake_case", HistoryList.preview("user", "\"snake_case\"", you, "Photo"))
+        assertEquals("You: hello", HistoryList.preview("user", "\"_hello_\"", you, "Photo"))
     }
 
     @Test fun search_line_uses_a_clean_parse_and_a_mid_string_slice() {
@@ -136,6 +139,21 @@ class HistoryListTest {
         assertEquals(
             "",
             HistoryList.searchLine("user", "A".repeat(80), "AAAA", you, "Photo"),
+        )
+        val late = "alpha ".repeat(30) + "lantern " + "omega ".repeat(8)
+        val lateLine = HistoryList.searchLine("user", "\"$late\"", "lantern", you, "Photo")
+        assertTrue(lateLine.contains("lantern"))
+        assertTrue(lateLine.indexOf("lantern") < 28)
+        val cjk = "我们走在安静的街道上".repeat(4) + "公园" + "然后回家休息"
+        assertTrue(cjk.length > 40)
+        assertFalse(cjk.any { it.isWhitespace() })
+        assertTrue(HistoryList.searchLine("user", "\"$cjk\"", "公园", you, "Photo").contains("公园"))
+        val url = "https://example.com/" + "segment/".repeat(6)
+        assertTrue(url.length > 40)
+        assertFalse(url.contains(' '))
+        assertTrue(HistoryList.searchLine("assistant", "\"$url\"", "example", you, "Photo").contains("example"))
+        assertTrue(
+            HistoryList.searchLine("user", "\"use snake_case here\"", "snake_case", you, "Photo").contains("snake_case"),
         )
     }
 

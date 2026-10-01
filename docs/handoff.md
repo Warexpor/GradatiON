@@ -4,6 +4,23 @@ On `cursor/db-backup-vault-4a6e`, targeting `gradation/app-pass`.
 - Auto Backup included every file in the databases directory except `chat_database` and its wal/shm. The plaintext pre-SQLCipher copy, the encrypt temp, and a database set aside after a failed open lived there under other names, so a backup could upload the history in the clear. Those copies now go to `no_backup/chat-db`. A recovered database (used when the original file cannot be moved) is created there too; the preference stays the short name `chat_database.recovered-<stamp>`. While a copy is still in the databases directory, that file is the one opened, so a failed move does not start an empty database. The backup rules also exclude the journal, the old plaintext name, and `code_mode_secrets`.
 - Phone: install over a build that already has chats and confirm they still open. Export chats, delete one, import, and confirm the pin and the fact notes.
 
+# Handoff (2026-10-01, chat search lines and photo taps)
+
+On `cursor/chat-search-lines-and-photo-0fbc`, targeting `gradation/app-pass`.
+- History search keeps the matching words on the one-line row. A hit late in the message is pulled forward. A line with no spaces still shows (a link, or Chinese, Japanese or Korean). `snake_case` stays `snake_case`, so the row can mark it. A slice of a photo's data is still not a line.
+- A sent or generated picture is tappable only after the file has drawn. If that file is gone, the JPEG stored in the message is shown and the dead link is not tappable. If neither loads, the empty frame is removed.
+- Edit says so when the photo cannot be put back. The full-screen composer keeps the keyboard inset instead of clearing it. Typing past the sixth line keeps the caret in view.
+- Phone: search History for a word near the end of a long message, and for a line with no spaces. Open a chat whose photo file is gone (the picture stays, and it does not offer to open the dead link). Turn on expandable input, open the keyboard, and confirm the buttons sit above the keys.
+
+# Handoff (2026-10-01, code reconnect, tools, session)
+
+On `cursor/code-reconnect-tools-session-0d3f`, targeting `gradation/app-pass`. Code mode only:
+- A `tool_call_update` that omits `kind` still clips a file read from the start and a shell log from the end. A path fills an empty card. A folder-only update still does not replace the command. `rawOutput` (a string, or `stdout`) is shown when there is no content block. A unified patch of a new file is marked new. A deletion is not. Status `R100` shows R.
+- A file or terminal request forwarded to the phone is answered again if the first send does not go out. The reply is dropped when the socket drops, so it cannot land on the next link. `authenticate` that answers "Unknown method" or "not implemented" still continues. "Sign in required" does not.
+- The session menu has Rename (the bridge cannot replace that name). Leaving the session keeps the unsent line and pictures until you send or clear them. Changes, and a file diff, say to tap when the load fails and that tap tries again.
+
+Phone: drop the link during a tool call and come back. On a long Read, confirm the start of the file is on the card after the tool finishes. Open Changes with the bridge down and tap the message. Type in a session, leave, come back (the line is there). Rename from the session menu.
+
 # Handoff (2026-10-01, chat search and bubbles)
 
 On `cursor/chat-search-and-bubbles-ab1f`, targeting `gradation/app-pass`.

@@ -92,6 +92,8 @@ class CodeBridgeBackendTest {
         @Volatile var promptsSentAtFailure = -1
         /** When true, the next non-prompt send fails once (approval answer / cancel). */
         var failNextNonPromptSend = false
+        /** When true, the next client reply (no method) fails once, as a full send queue. */
+        var failNextClientReply = false
 
         /** When true, every non-prompt send fails until cleared (approval retry budget). */
         var failNonPromptSends = false
@@ -117,6 +119,11 @@ class CodeBridgeBackendTest {
 
         override fun send(frame: String): Boolean {
             if (!open.get() || _state.value != ConnectionState.CONNECTED) return false
+            if (failNextClientReply && !frame.contains("\"method\"")) {
+                failNextClientReply = false
+                lastError = "Send queue full"
+                return false
+            }
             if (failPromptSendOnce && frame.contains("session/prompt")) {
                 promptsSentAtFailure = sent.count { it.contains("session/prompt") }
                 failPromptSendOnce = false
@@ -2158,6 +2165,46 @@ class CodeBridgeBackendTest {
             assertTrue(transport.sent.none { sentMethod(it) == "session/prompt" })
         } finally {
             collectJob.cancel()
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun unknownAuthenticateMethodStillBecomesReady() = runBlocking {
+        val transport = FakeTransport()
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
+        val answers = scriptedHandshake(
+            transport,
+            """{"protocolVersion":1,"authMethods":[{"id":"agent-login","name":"Agent login"}]}""",
+            onAuthenticate = { id ->
+                """{"jsonrpc":"2.0","id":$id,"error":{"code":-32601,"message":"Unknown method: authenticate"}}"""
+            },
+        )
+        try {
+            backend.connect()
+            withTimeout(3_000) { backend.listSessions() }
+            assertTrue(transport.sent.any { sentMethod(it) == "authenticate" })
+            assertNull(backend.lastError)
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
+    @Test fun forwardedFileReadIsRetriedWhenTheSendQueueIsFull() = runBlocking {
+        val transport = FakeTransport()
+        val backend = BridgeBackend(host(), transport, AcpAdapter(), scope, Dispatchers.Unconfined)
+        val answers = autoAnswer(transport, AcpAdapter())
+        try {
+            backend.connect()
+            withTimeout(3_000) { backend.listSessions() }
+            transport.failNextClientReply = true
+            transport.deliver("""{"jsonrpc":"2.0","id":44,"method":"fs/read_text_file","params":{"path":"a.kt"}}""")
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("Method not found") && it.contains("44") }) delay(10)
+            }
+            assertEquals(1, transport.sent.count { it.contains("Method not found") && it.contains("\"id\":44") })
+        } finally {
             answers.cancel()
             backend.close()
         }

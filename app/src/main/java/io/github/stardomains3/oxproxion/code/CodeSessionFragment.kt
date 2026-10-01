@@ -26,6 +26,7 @@ import io.github.stardomains3.oxproxion.GlassBackdropLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
 import io.github.stardomains3.oxproxion.GlassTextView
 import io.github.stardomains3.oxproxion.GrokConfirmDialog
+import io.github.stardomains3.oxproxion.GrokInputDialog
 import io.github.stardomains3.oxproxion.Motion
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.PickerPopover
@@ -137,9 +138,20 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         )
         composer.showPills(agent = false, folder = false, permission = true)
         composer.enableVoice(this)
+        val draft = hub.sessionDraft(sessionId)
+        if (draft != null) {
+            if (draft.text.isNotEmpty()) {
+                composer.input.setText(draft.text)
+                composer.input.setSelection(draft.text.length)
+            }
+            draft.attachments.forEach { composer.addAttachment(it) }
+        }
         composer.onSend = { text, attachments ->
             follow = true
-            if (hub.prompt(sessionId, text, attachments)) composer.clear()
+            if (hub.prompt(sessionId, text, attachments)) {
+                hub.clearSessionDraft(sessionId)
+                composer.clear()
+            }
         }
         composer.onStop = { hub.cancel(sessionId) }
         composer.onAttachClick = {
@@ -202,6 +214,13 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
     }
 
     override fun onDestroyView() {
+        if (::hub.isInitialized && ::composer.isInitialized) {
+            hub.parkSessionDraft(
+                sessionId,
+                composer.input.text?.toString().orEmpty(),
+                composer.attachmentsSnapshot(),
+            )
+        }
         // An idle session stops being tracked on the machine link once its screen is gone.
         if (::hub.isInitialized) hub.release(sessionId)
         // Recycle the rows so their per-row work (the "Working" sweep, stream fades) stops.
@@ -450,6 +469,9 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         rows += PickerPopover.Row(getString(R.string.code_session_changes), iconRes = R.drawable.ic_code_branch) {
             openChanges()
         }
+        rows += PickerPopover.Row(getString(R.string.code_home_rename), iconRes = R.drawable.ic_code_pencil) {
+            promptRename(s)
+        }
         rows += PickerPopover.Row(getString(R.string.code_session_copy_id), subtitle = sessionId, iconRes = R.drawable.ic_copi) {
             requireContext().getSystemService(ClipboardManager::class.java)
                 ?.setPrimaryClip(ClipData.newPlainText("session", sessionId))
@@ -462,6 +484,18 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             })
         }
         composer.pick(anchor, null, rows)
+    }
+
+    private fun promptRename(s: CodeSessionState) {
+        GrokInputDialog.show(
+            this,
+            getString(R.string.code_home_rename),
+            getString(R.string.code_home_rename),
+            s.summary.title,
+            getString(R.string.code_host_save),
+        ) { newTitle ->
+            if (newTitle.isNotBlank()) hub.rename(sessionId, newTitle)
+        }
     }
 
     private fun openDiff(e: CodeEvent.FileDiff) {
