@@ -1,3 +1,9 @@
+# Handoff (2026-10-01, fresh database does not inherit notes)
+
+On `cursor/fresh-db-pref-quarantine-67e8`, targeting `gradation/app-pass`.
+- A failed open starts a new chat database, and Room ids start at 1 again. Facts, pins, forks, unsent lines, and a character's Memory, layout, voice, lore pin, portrait, and wallpaper used to stay under the old ids, so the next chat inherited them. They are renamed (`aside.<stamp>.…`) and the pictures move next to the set-aside database. The GradatiON memory note (not a Room row) and the app background stay. A stamp that already has an archive uses the next one. Fact notes, Memory, and pins are `commit()`ed. Deleting a chat drops its pin in that same write.
+- Phone: install over a build that already has chats (they should still open, with the same facts and pin). The failed-open path is not something to force on a phone; the unit tests cover it.
+
 # Handoff (2026-10-01, chat reply text)
 
 On `cursor/chat-reply-text-276b`, targeting `gradation/app-pass`.

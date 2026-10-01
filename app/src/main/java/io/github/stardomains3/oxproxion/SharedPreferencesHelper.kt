@@ -512,7 +512,8 @@ class SharedPreferencesHelper(context: Context) {
     fun setSessionPinned(sessionId: Long, pinned: Boolean) {
         val next = getPinnedSessionIds().toMutableSet()
         if (pinned) next.add(sessionId) else next.remove(sessionId)
-        mainPrefs.edit {
+        // commit: apply() can still be in flight when the process is killed, and the pin is lost.
+        mainPrefs.edit(commit = true) {
             putStringSet(KEY_PINNED_SESSION_IDS, next.map { it.toString() }.toSet())
         }
     }
@@ -687,12 +688,19 @@ class SharedPreferencesHelper(context: Context) {
      * inherits another chat's leftovers.
      */
     fun clearSessionPrefs(sessionId: Long) {
-        mainPrefs.edit {
+        val pins = getPinnedSessionIds()
+        mainPrefs.edit(commit = true) {
             remove("$KEY_CHAT_FORK_INDEX_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_PREFIX$sessionId")
             remove("$KEY_RP_SWIPE_PREFIX$sessionId")
             remove("rp_facts_$sessionId")
+            if (sessionId in pins) {
+                putStringSet(
+                    KEY_PINNED_SESSION_IDS,
+                    (pins - sessionId).map { it.toString() }.toSet()
+                )
+            }
         }
     }
 
@@ -1397,7 +1405,7 @@ class SharedPreferencesHelper(context: Context) {
     /** Per-character story memory (pinned facts), injected into every RP prompt. Null id = GradatiON (LLM mode). */
     fun getRpMemory(characterId: Long?): String =
         mainPrefs.getString(rpMemoryKey(characterId), "") ?: ""
-    fun saveRpMemory(characterId: Long?, text: String) = mainPrefs.edit {
+    fun saveRpMemory(characterId: Long?, text: String) = mainPrefs.edit(commit = true) {
         if (text.isBlank()) remove(rpMemoryKey(characterId)) else putString(rpMemoryKey(characterId), text.trim())
     }
     private fun rpMemoryKey(characterId: Long?) = "rp_memory_" + (characterId?.toString() ?: "llm")
@@ -1461,9 +1469,9 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     /**
-     * Everything stored per character outside Room, for when the character is deleted. Ids are
-     * never reused by Room's autoincrement, so these would otherwise sit there for good (the
-     * wallpaper photo most visibly, as a file the user can no longer reach).
+     * Everything stored per character outside Room, for when the character is deleted. Room does
+     * not reuse an id inside one file; a fresh file after recovery sets these aside first
+     * ([DbPrefQuarantine]). The wallpaper is removed here because this character is gone.
      */
     fun clearRpCharacterPrefs(characterId: Long) {
         mainPrefs.edit {
@@ -1569,7 +1577,7 @@ class SharedPreferencesHelper(context: Context) {
 
     /** Facts the model keeps for one chat. Separate from the Memory note the user wrote. */
     fun getRpFacts(sessionId: Long): String = mainPrefs.getString("rp_facts_$sessionId", "") ?: ""
-    fun saveRpFacts(sessionId: Long, text: String) = mainPrefs.edit {
+    fun saveRpFacts(sessionId: Long, text: String) = mainPrefs.edit(commit = true) {
         if (text.isBlank()) remove("rp_facts_$sessionId") else putString("rp_facts_$sessionId", text.trim())
     }
 
