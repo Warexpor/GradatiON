@@ -1138,7 +1138,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             ChatSaveGate.autoSaveKind(
                 sessionId = snap.sessionId,
                 hasAssistant = hasAssistant,
-                messagesEmpty = snap.messages.isEmpty()
+                messagesEmpty = snap.messages.isEmpty(),
+                hasUser = snap.messages.any { it.role == "user" }
             )
         ) {
             ChatSaveGate.AutoSaveKind.Skip -> return

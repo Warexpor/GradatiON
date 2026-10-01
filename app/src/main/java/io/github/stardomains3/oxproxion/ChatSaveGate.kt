@@ -62,17 +62,19 @@ object ChatSaveGate {
         Skip,
         /** Existing session — overwrite with current transcript (even if emptied). */
         ReuseExisting,
-        /** First save — needs an assistant message to create a history row. */
+        /** First save — needs a user turn and an assistant reply to create a history row. */
         FirstSaveNeedsAssistant
     }
 
     fun autoSaveKind(
         sessionId: Long?,
         hasAssistant: Boolean,
-        messagesEmpty: Boolean
+        messagesEmpty: Boolean,
+        hasUser: Boolean = true
     ): AutoSaveKind = when {
         sessionId != null -> AutoSaveKind.ReuseExisting
-        messagesEmpty || !hasAssistant -> AutoSaveKind.Skip
+        // A Roleplay greeting alone is not a chat yet. Leaving it would add a row to History.
+        messagesEmpty || !hasAssistant || !hasUser -> AutoSaveKind.Skip
         else -> AutoSaveKind.FirstSaveNeedsAssistant
     }
 

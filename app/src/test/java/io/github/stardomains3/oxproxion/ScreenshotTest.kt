@@ -324,8 +324,14 @@ class ScreenshotTest {
         val f = ChatViewModel::class.java.getDeclaredField("_chatMessages").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
         val live = f.get(vm) as MutableLiveData<List<FlexibleMessage>>
+        // A real file: a missing one with no stored JPEG drops the frame once the load fails.
+        val photo = java.io.File(a.cacheDir, "chat_photo_test.jpg")
+        photo.outputStream().use {
+            android.graphics.Bitmap.createBitmap(60, 100, android.graphics.Bitmap.Config.ARGB_8888)
+                .compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, it)
+        }
         live.value = listOf(
-            FlexibleMessage("user", JsonPrimitive("The north window, this morning."), imageUri = "file:///no/such/photo.jpg")
+            FlexibleMessage("user", JsonPrimitive("The north window, this morning."), imageUri = android.net.Uri.fromFile(photo).toString())
         )
         idle()
         val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
@@ -727,8 +733,12 @@ class ScreenshotTest {
     }
 
     /** Room LiveData and Coil decode on real background threads; give them a moment. */
+    /**
+     * A mode switch lands the leaving chat's save first: several hops between the main looper
+     * and Room's thread. Short real-time steps let each hop through; four long ones did not.
+     */
     private fun settle() {
-        repeat(4) { Thread.sleep(250); idle() }
+        repeat(20) { Thread.sleep(50); idle() }
     }
 
     private fun rpScreen(name: String, f: () -> androidx.fragment.app.Fragment) = withChat { a, _ ->
