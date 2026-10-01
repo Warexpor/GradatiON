@@ -24,10 +24,14 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.button.MaterialButton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import java.io.File
+import kotlin.coroutines.cancellation.CancellationException
 import java.util.Collections
 
 class SystemMessageLibraryFragment : Fragment() {
@@ -43,22 +47,24 @@ class SystemMessageLibraryFragment : Fragment() {
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { uri ->
                 viewLifecycleOwner.lifecycleScope.launch {
+                    val app = requireContext().applicationContext
                     try {
-                        val customMessages = sharedPreferencesHelper.getCustomSystemMessages()
-                        val defaultMessage = sharedPreferencesHelper.getDefaultSystemMessage()
-
-                        // Create a new list with default message first, then custom messages
-                        val allMessages = mutableListOf<SystemMessage>().apply {
-                            // Add default message without the isDefault property
-                            add(SystemMessage(defaultMessage.title, defaultMessage.prompt))
-                            addAll(customMessages)
-                        }
-
-                        val json = Json.encodeToString(allMessages)
-                        requireContext().contentResolver.openOutputStream(uri)?.use { outputStream ->
-                            outputStream.write(json.toByteArray())
+                        withContext(Dispatchers.IO) {
+                            val customMessages = sharedPreferencesHelper.getCustomSystemMessages()
+                            val defaultMessage = sharedPreferencesHelper.getDefaultSystemMessage()
+                            val allMessages = mutableListOf<SystemMessage>().apply {
+                                add(SystemMessage(defaultMessage.title, defaultMessage.prompt))
+                                addAll(customMessages)
+                            }
+                            val json = Json.encodeToString(allMessages)
+                            val cache = File(app.cacheDir, "system-messages-${System.nanoTime()}.json")
+                            BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri) }) { stream ->
+                                stream.write(json.toByteArray(Charsets.UTF_8))
+                            }
                         }
                         GlassNotice.show(requireContext(), getString(R.string.notice_system_messages_exported))
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         GlassNotice.show(requireContext(), getString(R.string.notice_export_system_messages_failed))
                     }
@@ -72,9 +78,12 @@ class SystemMessageLibraryFragment : Fragment() {
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { uri ->
                 viewLifecycleOwner.lifecycleScope.launch {
+                    val app = requireContext().applicationContext
                     try {
-                        val jsonString = requireContext().contentResolver.openInputStream(uri)?.use {
-                            it.bufferedReader().readText()
+                        val jsonString = withContext(Dispatchers.IO) {
+                            app.contentResolver.openInputStream(uri)?.use {
+                                ImportBounds.readUtf8(it)
+                            }
                         }
                         if (jsonString != null) {
                             val importedMessages = Json.decodeFromString<List<SystemMessage>>(jsonString)
@@ -99,6 +108,13 @@ class SystemMessageLibraryFragment : Fragment() {
                         } else {
                             throw Exception("Failed to read file content.")
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: ImportBounds.TooLarge) {
+                        GlassNotice.show(
+                            requireContext(),
+                            getString(R.string.import_error_too_large, e.limitBytes / (1024 * 1024))
+                        )
                     } catch (e: SerializationException) {
                         // Log.e("Import", "Import failed due to JSON format", e)
                         GlassNotice.show(requireContext(), getString(R.string.notice_import_failed_format))

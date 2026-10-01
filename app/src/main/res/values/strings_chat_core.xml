@@ -49,7 +49,7 @@
     <string name="lan_models_failed">LAN fetch failed (%1$s): %2$s</string>
 
     <!-- Import -->
-    <string name="import_error_too_large">Import file too large (max 5 MB)</string>
+    <string name="import_error_too_large">Import file too large (max %1$d MB)</string>
     <string name="import_error_too_many">Too many messages (max 5,000)</string>
     <string name="import_error_format">Invalid backup format</string>
     <string name="import_error_database">Couldn\'t save the imported chats. Nothing was changed.</string>

@@ -23,7 +23,6 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         private val json = Json { prettyPrint = true }
         // A backup from a newer version may carry fields this one doesn't know.
         private val importJson = Json { ignoreUnknownKeys = true }
-        private const val MAX_IMPORT_BYTES = 5 * 1024 * 1024
         private const val MAX_IMPORT_MESSAGES = 5000
     }
     // Lazy, so building the ViewModel never opens the encrypted database on the main thread; the
@@ -71,23 +70,18 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Writes the backup to a cache file first, then copies it to [uri]. A failure leaves the
-     * destination untouched instead of a truncated JSON file.
+     * Writes the backup to a cache file and syncs it, then copies it to [uri]. [uri] is not opened
+     * until the cache file is complete. A copy that stops early throws, so the caller does not
+     * report success. A content URI truncates when it is opened, so a failed copy can still leave
+     * a short file there.
      */
     suspend fun exportChatsTo(uri: Uri) {
         val app = getApplication<Application>()
         val cache = File(app.cacheDir, "chat-export-${System.nanoTime()}.json")
-        try {
-            withContext(Dispatchers.IO) {
-                cache.outputStream().buffered().use { stream ->
-                    stream.writer(Charsets.UTF_8).buffered().use { writeChatsBackup(it) }
-                }
-                app.contentResolver.openOutputStream(uri)?.use { dest ->
-                    cache.inputStream().buffered().use { src -> src.copyTo(dest) }
-                } ?: error("Could not open the export file")
+        withContext(Dispatchers.IO) {
+            BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri) }) { stream ->
+                stream.writer(Charsets.UTF_8).buffered().use { writeChatsBackup(it) }
             }
-        } finally {
-            cache.delete()
         }
     }
 
@@ -116,14 +110,19 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
 
     internal suspend fun importChatsFromJsonInternal(jsonText: String): ChatImportResult {
         val app = getApplication<Application>()
+        // Editors on Windows save a BOM. It is not JSON, and it used to fail an otherwise valid file.
+        val text = jsonText.removePrefix("\uFEFF")
+        val maxBytes = ImportBounds.MAX_TEXT_BYTES
         // The limit is in bytes; a string's length counts UTF-16 units, which undercounts non-ASCII text.
-        if (jsonText.length > MAX_IMPORT_BYTES || jsonText.toByteArray(Charsets.UTF_8).size > MAX_IMPORT_BYTES) {
-            return ChatImportResult.Error(app.getString(R.string.import_error_too_large))
+        if (text.length > maxBytes || text.toByteArray(Charsets.UTF_8).size > maxBytes) {
+            return ChatImportResult.Error(
+                app.getString(R.string.import_error_too_large, maxBytes / (1024 * 1024))
+            )
         }
 
         // Reading the file and writing the database fail for different reasons, so the user is told which.
         val backup = try {
-            importJson.decodeFromString<ChatBackup>(jsonText)
+            importJson.decodeFromString<ChatBackup>(text)
         } catch (e: SerializationException) {
             return ChatImportResult.Error(app.getString(R.string.import_error_format))
         } catch (e: IllegalArgumentException) {

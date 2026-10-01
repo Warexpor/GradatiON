@@ -36,6 +36,40 @@ class SharedPreferencesHelper(context: Context) {
             fallback()
         }
 
+    /** True when [key] is present and this version cannot decode it. Absent is not unreadable. */
+    private inline fun <reified T> storedJsonUnreadable(key: String): Boolean {
+        val raw = mainPrefs.getString(key, null) ?: return false
+        return runCatching { json.decodeFromString<T>(raw) }.isFailure
+    }
+
+    /**
+     * The model list could not be decoded. Launch work that would rewrite it (seeding, the
+     * Maverick scrub) must wait: decoding a failure as "no models" and saving that used to
+     * delete the only copy.
+     */
+    internal fun customModelsUnreadable(): Boolean =
+        storedJsonUnreadable<List<LlmModel>>(KEY_CUSTOM_MODELS)
+
+    private fun unreadableArchiveKey(key: String) = "$key.unreadable"
+
+    /**
+     * Writes [value]. When the current blob does not decode, that blob is copied to
+     * `key.unreadable` in the same edit first, so a save is not what deletes it.
+     * The first unreadable copy is kept; a later save does not overwrite the archive.
+     */
+    private inline fun <reified T> putStoredJson(key: String, value: T) {
+        val encoded = json.encodeToString(value)
+        val archive = unreadableArchiveKey(key)
+        val torn = mainPrefs.getString(key, null)?.takeIf { raw ->
+            !mainPrefs.contains(archive) &&
+                runCatching { json.decodeFromString<T>(raw) }.isFailure
+        }
+        mainPrefs.edit {
+            torn?.let { putString(archive, it) }
+            putString(key, encoded)
+        }
+    }
+
     companion object {
 
         private const val KEY_VOICE_INPUT_MODEL = "voice_input_model"
@@ -353,8 +387,7 @@ class SharedPreferencesHelper(context: Context) {
         return mainPrefs.getBoolean(KEY_OPENROUTER_TRANSFORMS_ENABLED, false)
     }
     fun saveCustomPrompts(prompts: List<Prompt>) {
-        val jsonString = json.encodeToString(prompts)
-        mainPrefs.edit { putString(KEY_CUSTOM_PROMPTS, jsonString) }
+        putStoredJson(KEY_CUSTOM_PROMPTS, prompts)
     }
     fun getUseCopyButton(): Boolean {
         return mainPrefs.getBoolean(KEY_USE_COPY_BUTTON, false)  // false = Open, true = Copy
@@ -653,8 +686,7 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun saveOpenRouterModels(models: List<LlmModel>) {
-        val jsonString = json.encodeToString(models)
-        mainPrefs.edit { putString(KEY_OPEN_ROUTER_MODELS, jsonString) }
+        putStoredJson(KEY_OPEN_ROUTER_MODELS, models)
     }
 
     fun getOpenRouterModels(): List<LlmModel> {
@@ -1066,8 +1098,7 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun saveCustomModels(models: List<LlmModel>) {
-        val jsonString = json.encodeToString(models)
-        mainPrefs.edit { putString(KEY_CUSTOM_MODELS, jsonString) }
+        putStoredJson(KEY_CUSTOM_MODELS, models)
     }
 
     /**
@@ -1076,6 +1107,10 @@ class SharedPreferencesHelper(context: Context) {
      * left exactly as seeded, except the model in use.
      */
     fun seedDefaultModelsIfNeeded() {
+        if (customModelsUnreadable()) {
+            Log.w("SharedPrefs", "Leaving unreadable $KEY_CUSTOM_MODELS in place")
+            return
+        }
         ensureDemoModel()
         if (mainPrefs.getBoolean(KEY_DEFAULT_MODELS_SEEDED, false) && !mainPrefs.getBoolean(KEY_OLD_DEFAULTS_PRUNED, false)) {
             val active = getPreferenceModelnew()
@@ -1112,8 +1147,7 @@ class SharedPreferencesHelper(context: Context) {
     // --- System Message Preferences ---
 
     fun saveSelectedSystemMessage(systemMessage: SystemMessage) {
-        val jsonString = json.encodeToString(systemMessage)
-        mainPrefs.edit { putString(KEY_SELECTED_SYSTEM_MESSAGE, jsonString) }
+        putStoredJson(KEY_SELECTED_SYSTEM_MESSAGE, systemMessage)
     }
 
     fun getSelectedSystemMessage(): SystemMessage {
@@ -1136,11 +1170,14 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun saveCustomSystemMessages(systemMessages: List<SystemMessage>) {
-        val jsonString = json.encodeToString(systemMessages)
-        mainPrefs.edit { putString(KEY_CUSTOM_SYSTEM_MESSAGES, jsonString) }
+        putStoredJson(KEY_CUSTOM_SYSTEM_MESSAGES, systemMessages)
     }
 
     fun seedDefaultSystemMessagesIfNeeded() {
+        if (storedJsonUnreadable<List<SystemMessage>>(KEY_CUSTOM_SYSTEM_MESSAGES)) {
+            Log.w("SharedPrefs", "Leaving unreadable $KEY_CUSTOM_SYSTEM_MESSAGES in place")
+            return
+        }
         if (!mainPrefs.getBoolean(KEY_DEFAULT_SYSTEM_MESSAGES_SEEDED, false)) {
             val defaultSystemMessages = listOf(
                 SystemMessage("Spelling Corrector", "Correct the spelling and grammar of the following text. Only provide the corrected text, without any additional commentary or explanation.", isDefault = false),
@@ -1167,12 +1204,10 @@ class SharedPreferencesHelper(context: Context) {
 
     // Add this method to save the default system message
     fun saveDefaultSystemMessage(systemMessage: SystemMessage) {
-        val jsonString = json.encodeToString(systemMessage)
-        mainPrefs.edit { putString(KEY_DEFAULT_SYSTEM_MESSAGE, jsonString) }
+        putStoredJson(KEY_DEFAULT_SYSTEM_MESSAGE, systemMessage)
     }
     fun savePresets(presets: List<Preset>) {
-        val jsonString = json.encodeToString(presets)
-        mainPrefs.edit { putString(KEY_PRESETS, jsonString) }
+        putStoredJson(KEY_PRESETS, presets)
     }
 
     fun getPresets(): List<Preset> {
@@ -1284,7 +1319,7 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun saveRpPersonaPresets(presets: List<RpPersonaPreset>) {
-        mainPrefs.edit { putString(KEY_RP_PERSONA_PRESETS, json.encodeToString(presets)) }
+        putStoredJson(KEY_RP_PERSONA_PRESETS, presets)
     }
 
     /** Per-character story memory (pinned facts), injected into every RP prompt. Null id = GradatiON (LLM mode). */
@@ -1437,14 +1472,16 @@ class SharedPreferencesHelper(context: Context) {
         if (exportKey.isBlank() || oldId <= 0L) return
         val map = getDeletedRpCharacterRemap().toMutableMap()
         map[exportKey] = oldId
-        mainPrefs.edit { putString(KEY_RP_DELETED_CHAR_REMAP, json.encodeToString(map)) }
+        putStoredJson<Map<String, Long>>(KEY_RP_DELETED_CHAR_REMAP, map)
     }
 
     fun takeDeletedRpCharacterId(exportKey: String): Long? {
         if (exportKey.isBlank()) return null
+        // An unreadable map decodes as empty, so "removing" a key would replace it with {}.
+        if (storedJsonUnreadable<Map<String, Long>>(KEY_RP_DELETED_CHAR_REMAP)) return null
         val map = getDeletedRpCharacterRemap().toMutableMap()
         val oldId = map.remove(exportKey) ?: return null
-        mainPrefs.edit { putString(KEY_RP_DELETED_CHAR_REMAP, json.encodeToString(map)) }
+        putStoredJson<Map<String, Long>>(KEY_RP_DELETED_CHAR_REMAP, map)
         return oldId
     }
 
