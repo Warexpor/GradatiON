@@ -1,3 +1,9 @@
+# Handoff (2026-10-01, database copies stay out of backup)
+
+On `cursor/db-backup-vault-4a6e`, targeting `gradation/app-pass`.
+- Auto Backup included every file in the databases directory except `chat_database` and its wal/shm. The plaintext pre-SQLCipher copy, the encrypt temp, and a database set aside after a failed open lived there under other names, so a backup could upload the history in the clear. Those copies now go to `no_backup/chat-db`. A recovered database (used when the original file cannot be moved) is created there too; the preference stays the short name `chat_database.recovered-<stamp>`. While a copy is still in the databases directory, that file is the one opened, so a failed move does not start an empty database. The backup rules also exclude the journal, the old plaintext name, and `code_mode_secrets`.
+- Phone: install over a build that already has chats and confirm they still open. Export chats, delete one, import, and confirm the pin and the fact notes.
+
 # Handoff (2026-10-01, chat search lines and photo taps)
 
 On `cursor/chat-search-lines-and-photo-0fbc`, targeting `gradation/app-pass`.

@@ -31,9 +31,6 @@ abstract class AppDatabase : RoomDatabase() {
         private const val TAG = "AppDatabase"
         private val SQLITE_MAGIC = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
 
-        /** Written only after a plaintext file has been encrypted and that encrypted file has opened. */
-        private const val ENCRYPT_OK_NAME = "$DB_NAME.encrypt_ok"
-
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -72,7 +69,20 @@ abstract class AppDatabase : RoomDatabase() {
         private fun build(context: Context): AppDatabase {
             ensureNativeLoaded()
             val prefs = SharedPreferencesHelper(context)
-            val dbName = prefs.chatDbFileName()
+            val vault = ChatDbVault.directory(context)
+            val databasesDir = context.getDatabasePath(DB_NAME).parentFile
+            // Before Room opens: a plaintext copy or a recovered file left in the databases
+            // directory would be eligible for Auto Backup. A move that fails is left in place
+            // and still opened (see ChatDbVault.roomDatabaseName), not replaced with an empty file.
+            if (databasesDir != null) {
+                val stored = prefs.chatDbFileName()
+                ChatDbVault.relocateLegacy(
+                    databasesDir,
+                    vault,
+                    stored.takeIf { ChatDbVault.isRecoveredName(it) }
+                )
+            }
+            val dbName = ChatDbVault.roomDatabaseName(context, prefs.chatDbFileName())
             val dbFile = context.getDatabasePath(dbName)
             val pending = prefs.recoveryPendingStamp()
             // A previous launch moved the file aside and died before the fresh database existed.
@@ -85,6 +95,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context,
                     prefs,
                     dbName,
+                    vault,
                     prefs.hasArchivedChatDbPassphrase(pending)
                 )
             }
@@ -92,21 +103,21 @@ abstract class AppDatabase : RoomDatabase() {
                 prefs.getOrCreateChatDbPassphrase()
             } catch (e: Exception) {
                 Log.e(TAG, "Chat database passphrase could not be read", e)
-                return recover(context, prefs, dbName)
+                return recover(context, prefs, dbName, vault)
             }
             // One retry first: the Keystore can answer badly for a moment (right after unlock, say),
             // and setting a healthy database aside for that would look like lost history.
             for (attempt in 1..2) {
                 try {
-                    val db = open(context, passphrase, dbName)
-                    if (pending != null) finishInterruptedRecovery(prefs, dbFile, pending, db)
+                    val db = open(context, passphrase, dbName, vault)
+                    if (pending != null) finishInterruptedRecovery(prefs, databasesDir, vault, pending, db)
                     return db
                 } catch (e: Exception) {
                     Log.e(TAG, "Chat database could not be opened (attempt $attempt)", e)
                     if (attempt == 1) Thread.sleep(300)
                 }
             }
-            return recover(context, prefs, dbName)
+            return recover(context, prefs, dbName, vault)
         }
 
         /**
@@ -116,12 +127,17 @@ abstract class AppDatabase : RoomDatabase() {
          */
         private fun finishInterruptedRecovery(
             prefs: SharedPreferencesHelper,
-            dbFile: File,
+            databasesDir: File?,
+            vault: File,
             pendingStamp: Long,
             db: AppDatabase
         ) {
-            val aside = File(dbFile.path + ".unreadable-$pendingStamp")
-            if (aside.exists() && !hasChatRows(db)) prefs.markChatDbRecovered()
+            // The set-aside file is named from the original database, not from a recovered path.
+            // Appending ".unreadable-" to the file Room just opened would miss it.
+            val aside = ChatDbVault.unreadable(vault, pendingStamp)
+            val legacy = databasesDir?.let { File(it, "${DB_NAME}.unreadable-$pendingStamp") }
+            val asideExists = aside.exists() || legacy?.exists() == true
+            if (asideExists && !hasChatRows(db)) prefs.markChatDbRecovered()
             else prefs.clearRecoveryPending()
         }
 
@@ -147,51 +163,59 @@ abstract class AppDatabase : RoomDatabase() {
             true
         }
 
-        private fun recover(context: Context, prefs: SharedPreferencesHelper, dbName: String): AppDatabase {
+        private fun recover(
+            context: Context,
+            prefs: SharedPreferencesHelper,
+            dbName: String,
+            vault: File
+        ): AppDatabase {
             val dbFile = context.getDatabasePath(dbName)
             // A leftover confirm mark belongs to an encrypt that did not finish cleanly. A fresh
             // database must not treat it as permission to delete the plaintext copy.
-            clearPlaintextBackupConfirmation(dbFile)
+            clearPlaintextBackupConfirmation(vault)
             // A half-finished encrypt leaves the plaintext copy. Prefer that over an empty database.
-            if (restorePlaintextBackup(dbFile)) {
+            // Only the primary file: restoring onto a recovered path would hide the set-aside original.
+            if (dbFile.name == DB_NAME && restorePlaintextBackup(dbFile, vault)) {
                 try {
-                    val db = open(context, prefs.getOrCreateChatDbPassphrase(), dbName)
+                    val db = open(context, prefs.getOrCreateChatDbPassphrase(), dbName, vault)
                     prefs.clearRecoveryPending()
                     return db
                 } catch (e: Exception) {
                     Log.e(TAG, "Restored plaintext chat database still could not be opened", e)
                 }
             }
-            val stamp = firstFreeStamp(dbFile, System.currentTimeMillis())
+            val stamp = firstFreeStamp(vault, System.currentTimeMillis())
             // Copy the wrapped passphrase before anything deletes it. The set-aside file is
             // unreadable without this blob, and recovery used to throw the only copy away.
             val archived = prefs.archiveChatDbPassphrase(stamp)
             val moved = try {
-                setAside(dbFile, stamp)
+                setAside(dbFile, stamp, vault)
             } catch (e: Exception) {
                 // The corrupt file is still in place. Opening it again next launch would crash-loop,
                 // so the app switches to a new file and leaves this one where it is.
                 Log.e(TAG, "Could not move the chat database aside; opening a new file", e)
-                val directory = dbFile.parentFile ?: throw e
-                val fallback = recoveredFileName(directory, stamp)
+                // The file Room failed to open may already live in the vault. The name to avoid
+                // is the one in the databases directory, which backup would upload.
+                val databasesDir = context.getDatabasePath(DB_NAME).parentFile
+                val fallback = recoveredFileName(vault, stamp, databasesDir)
                 prefs.saveChatDbFileName(fallback)
                 prefs.markRecoveryPending(stamp)
-                return openFreshAfterRecovery(context, prefs, fallback, archived)
+                return openFreshAfterRecovery(context, prefs, File(vault, fallback).absolutePath, vault, archived)
             }
             val actual = stampOf(moved) ?: stamp
             val archivedActual = if (actual != stamp) prefs.archiveChatDbPassphrase(actual) else archived
             prefs.markRecoveryPending(actual)
-            return openFreshAfterRecovery(context, prefs, dbName, archivedActual)
+            return openFreshAfterRecovery(context, prefs, dbName, vault, archivedActual)
         }
 
         private fun openFreshAfterRecovery(
             context: Context,
             prefs: SharedPreferencesHelper,
             dbName: String,
+            vault: File,
             archiveSaved: Boolean
         ): AppDatabase {
-            val dbFile = context.getDatabasePath(dbName)
-            clearPlaintextBackupConfirmation(dbFile)
+            clearPlaintextBackupConfirmation(vault)
             // Replacing the key is safe only when the previous blob was archived, or when there
             // was nothing to archive. A failed archive used to mint a new key and leave the
             // set-aside file with no passphrase.
@@ -201,7 +225,7 @@ abstract class AppDatabase : RoomDatabase() {
                 Log.e(TAG, "Keeping the chat database passphrase; it could not be archived")
                 prefs.getOrCreateChatDbPassphrase()
             }
-            val fresh = open(context, passphrase, dbName, restoreEmpty = false)
+            val fresh = open(context, passphrase, dbName, vault, restoreEmpty = false)
             prefs.markChatDbRecovered()
             return fresh
         }
@@ -220,9 +244,14 @@ abstract class AppDatabase : RoomDatabase() {
          * A stamp that is already taken uses the next free one.
          */
         @androidx.annotation.VisibleForTesting
-        internal fun recoveredFileName(directory: File, stamp: Long): String {
+        internal fun recoveredFileName(directory: File, stamp: Long, alsoAvoid: File? = null): String {
             var s = stamp
-            while (File(directory, "$DB_NAME.recovered-$s").exists()) s++
+            while (
+                File(directory, "$DB_NAME.recovered-$s").exists() ||
+                (alsoAvoid != null && ChatDbVault.dbSetPresent(alsoAvoid, "$DB_NAME.recovered-$s"))
+            ) {
+                s++
+            }
             return "$DB_NAME.recovered-$s"
         }
 
@@ -238,22 +267,26 @@ abstract class AppDatabase : RoomDatabase() {
             context: Context,
             passphrase: ByteArray,
             dbName: String,
+            vault: File,
             restoreEmpty: Boolean = true
         ): AppDatabase {
             val dbFile = context.getDatabasePath(dbName)
+            // Plaintext restore applies only to the primary file. Doing it for a recovered file
+            // would rename the snapshot onto that path and leave the original database behind.
+            val primary = dbFile.name == DB_NAME
             // Died after the plaintext file was renamed aside and before the encrypted file was
             // installed. Opening now would create an empty database, and the next successful open
             // used to delete the plaintext copy.
-            if (restoreEmpty && shouldRestorePlaintextBackup(dbFile)) {
+            if (restoreEmpty && primary && shouldRestorePlaintextBackup(dbFile, vault)) {
                 Log.w(TAG, "Chat database file is missing; restoring the plaintext copy")
-                clearPlaintextBackupConfirmation(dbFile)
-                if (!restorePlaintextBackup(dbFile)) {
+                clearPlaintextBackupConfirmation(vault)
+                if (!restorePlaintextBackup(dbFile, vault)) {
                     // Leave the plaintext copy where it is. The empty-database check below tries
                     // once more after Room opens, instead of minting a fresh database every launch.
                     Log.e(TAG, "Missing chat database could not be restored from the plaintext copy")
                 }
             }
-            val migrated = encryptPlaintextIfNeeded(dbFile, passphrase)
+            val migrated = if (primary) encryptPlaintextIfNeeded(dbFile, passphrase, vault) else false
             val factory = SupportOpenHelperFactory(passphrase.copyOf())
             val db = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
                 .openHelperFactory(factory)
@@ -272,45 +305,50 @@ abstract class AppDatabase : RoomDatabase() {
                 }
                 throw e
             }
-            if (migrated) {
-                confirmPlaintextBackupDisposable(dbFile)
-            } else if (
-                restoreEmpty &&
-                isPlaintextSqliteHeader(plaintextBackupFile(dbFile)) &&
-                !hasUserRows(db)
-            ) {
-                // An older launch created an empty encrypted file and died before it could delete
-                // the plaintext copy. That copy is the history. Put it back and encrypt it.
-                try {
-                    db.close()
-                } catch (_: Exception) {
+            if (primary) {
+                if (migrated) {
+                    confirmPlaintextBackupDisposable(dbFile, vault)
+                } else if (
+                    restoreEmpty &&
+                    isPlaintextSqliteHeader(ChatDbVault.plaintextBackup(vault)) &&
+                    !hasUserRows(db)
+                ) {
+                    // An older launch created an empty encrypted file and died before it could delete
+                    // the plaintext copy. That copy is the history. Put it back and encrypt it.
+                    try {
+                        db.close()
+                    } catch (_: Exception) {
+                    }
+                    clearPlaintextBackupConfirmation(vault)
+                    if (!restorePlaintextBackup(dbFile, vault)) {
+                        Log.e(TAG, "Empty chat database could not be replaced with the plaintext copy")
+                        return open(context, passphrase, dbName, vault, restoreEmpty = false)
+                    }
+                    return open(context, passphrase, dbName, vault, restoreEmpty = false)
                 }
-                clearPlaintextBackupConfirmation(dbFile)
-                if (!restorePlaintextBackup(dbFile)) {
-                    Log.e(TAG, "Empty chat database could not be replaced with the plaintext copy")
-                    return open(context, passphrase, dbName, restoreEmpty = false)
-                }
-                return open(context, passphrase, dbName, restoreEmpty = false)
+                discardPlaintextBackupIfConfirmed(dbFile, vault)
             }
-            discardPlaintextBackupIfConfirmed(dbFile)
             return db
         }
 
         /**
-         * Moves [dbFile] and its -wal/-shm/-journal next to it as `chat_database.unreadable-<stamp>`
-         * (sidecars keep their suffix after that). A stamp that is already taken uses the next free
-         * one, so a second recovery never overwrites the first. A failure puts back anything already
-         * moved: the original name is never left half-moved beside a new database.
+         * Moves [dbFile] and its -wal/-shm/-journal into [vault] as `chat_database.unreadable-<stamp>`
+         * (sidecars keep their suffix after that). [vault] defaults to the database's own directory
+         * so a caller that has no backup vault still keeps the old layout. Production passes the
+         * no-backup directory: a set-aside file next to the live database would be uploaded.
+         * A stamp that is already taken uses the next free one, so a second recovery never
+         * overwrites the first. A failure puts back anything already moved: the original name is
+         * never left half-moved beside a new database.
          * Never deletes: the file may still be recoverable.
          * Returns the moved main file, or null when there was nothing to move.
          */
         @androidx.annotation.VisibleForTesting
-        internal fun setAside(dbFile: File, stamp: Long): File? {
+        internal fun setAside(dbFile: File, stamp: Long, vault: File = dbFile.parentFile ?: dbFile): File? {
             val suffixes = listOf("", "-wal", "-shm", "-journal")
             val present = suffixes.filter { File(dbFile.path + it).exists() }
             if (present.isEmpty()) return null
-            val chosen = firstFreeStamp(dbFile, stamp)
-            val target = File(dbFile.path + ".unreadable-$chosen")
+            val chosen = firstFreeStamp(vault, stamp)
+            val target = File(vault, "$DB_NAME.unreadable-$chosen")
             val moved = ArrayList<Pair<File, File>>(present.size)
             try {
                 for (suffix in present) {
@@ -349,10 +387,10 @@ abstract class AppDatabase : RoomDatabase() {
 
         /** First stamp at or after [stamp] whose aside files are all free. */
         @androidx.annotation.VisibleForTesting
-        internal fun firstFreeStamp(dbFile: File, stamp: Long): Long {
+        internal fun firstFreeStamp(vault: File, stamp: Long): Long {
             var s = stamp
             while (listOf("", "-wal", "-shm", "-journal").any {
-                    File(dbFile.path + ".unreadable-$s" + it).exists()
+                    File(vault, "$DB_NAME.unreadable-$s$it").exists()
                 }
             ) {
                 s++
@@ -360,17 +398,7 @@ abstract class AppDatabase : RoomDatabase() {
             return s
         }
 
-        private fun moveReplacing(from: File, to: File) {
-            if (from.renameTo(to)) return
-            // Rename can fail across mounts; a copy that finished is as good as a move.
-            from.copyTo(to, overwrite = true)
-            if (!from.delete() && from.exists()) {
-                // The original is still in place. Drop the copy so a later open does not see two
-                // files, and fail so the caller can put back what it already moved.
-                to.delete()
-                throw java.io.IOException("Could not remove ${from.path} after copying it aside")
-            }
-        }
+        private fun moveReplacing(from: File, to: File) = ChatDbVault.moveReplacing(from, to)
 
         /**
          * One-shot: if an unencrypted Room DB already exists, rewrite it via
@@ -380,13 +408,14 @@ abstract class AppDatabase : RoomDatabase() {
          * Already-encrypted (or corrupt) files must not enter this path — probing
          * them with an empty key throws and used to crash cold start.
          */
-        private fun encryptPlaintextIfNeeded(dbFile: File, passphrase: ByteArray): Boolean {
+        private fun encryptPlaintextIfNeeded(dbFile: File, passphrase: ByteArray, vault: File): Boolean {
             if (!dbFile.exists() || dbFile.length() == 0L) return false
             if (!isPlaintextSqliteHeader(dbFile)) return false
 
-            val parent = dbFile.parentFile ?: return false
-            val encryptedTemp = File(parent, "$DB_NAME.encrypting")
-            val backup = File(parent, "$DB_NAME.pre_sqlcipher")
+            // Temp and plaintext snapshot go to the vault. Writing them beside the live file put
+            // the plaintext history in a directory Auto Backup uploads.
+            val encryptedTemp = ChatDbVault.encrypting(vault)
+            val backup = ChatDbVault.plaintextBackup(vault)
             encryptedTemp.delete()
             backup.delete()
 
@@ -412,12 +441,12 @@ abstract class AppDatabase : RoomDatabase() {
                 plaintext.close()
                 plaintext = null
 
-                if (!dbFile.renameTo(backup)) {
+                if (!moveIntoPlace(dbFile, backup)) {
                     encryptedTemp.delete()
                     throw IllegalStateException("Could not backup plaintext chat DB before encryption")
                 }
-                if (!encryptedTemp.renameTo(dbFile)) {
-                    backup.renameTo(dbFile)
+                if (!moveIntoPlace(encryptedTemp, dbFile)) {
+                    moveIntoPlace(backup, dbFile)
                     encryptedTemp.delete()
                     throw IllegalStateException("Could not install encrypted chat DB")
                 }
@@ -433,50 +462,67 @@ abstract class AppDatabase : RoomDatabase() {
                 }
                 encryptedTemp.delete()
                 if (backup.exists() && !dbFile.exists()) {
-                    backup.renameTo(dbFile)
+                    moveIntoPlace(backup, dbFile)
                 }
                 Log.e(TAG, "Failed to encrypt existing chat DB", e)
                 throw e
             }
         }
 
-        /** `chat_database.pre_sqlcipher`, the plaintext copy kept across the encrypt step. */
-        private fun plaintextBackupFile(dbFile: File): File =
-            File(dbFile.parentFile, "$DB_NAME.pre_sqlcipher")
+        /**
+         * Rename, or copy when the two directories will not rename (the plaintext snapshot lives
+         * in the no-backup directory, the live file in databases/). A failed copy leaves [from]
+         * in place and removes a partial [to].
+         */
+        private fun moveIntoPlace(from: File, to: File): Boolean {
+            if (!from.exists()) return false
+            if (from.renameTo(to)) return true
+            return try {
+                moveReplacing(from, to)
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Could not move ${from.path} to ${to.path}", e)
+                false
+            }
+        }
 
         /**
-         * The encrypted file is missing or empty and [chat_database.pre_sqlcipher] is still a
-         * plaintext database. A wal/shm/journal next to the main name belongs to that file, so
-         * it is left alone.
+         * The encrypted file is missing or empty and the plaintext snapshot in [vault] is still a
+         * database. [vault] defaults to the database's own directory. A wal/shm/journal next to
+         * the main name belongs to that file, so it is left alone.
          */
         @androidx.annotation.VisibleForTesting
-        internal fun shouldRestorePlaintextBackup(dbFile: File): Boolean {
-            if (!isPlaintextSqliteHeader(plaintextBackupFile(dbFile))) return false
+        internal fun shouldRestorePlaintextBackup(
+            dbFile: File,
+            vault: File = dbFile.parentFile ?: dbFile
+        ): Boolean {
+            if (!isPlaintextSqliteHeader(ChatDbVault.plaintextBackup(vault))) return false
             if (sidecarExists(dbFile)) return false
             return !dbFile.exists() || dbFile.length() == 0L
         }
 
         /**
          * Puts a leftover plaintext copy back when the encrypted file did not open. The failed
-         * encrypted file is moved aside first, not deleted.
+         * encrypted file is moved aside first, not deleted. The snapshot is read from [vault].
          */
         @androidx.annotation.VisibleForTesting
-        internal fun restorePlaintextBackup(dbFile: File): Boolean {
-            val backup = plaintextBackupFile(dbFile)
+        internal fun restorePlaintextBackup(
+            dbFile: File,
+            vault: File = dbFile.parentFile ?: dbFile
+        ): Boolean {
+            val backup = ChatDbVault.plaintextBackup(vault)
             if (!backup.exists() || !isPlaintextSqliteHeader(backup)) return false
             if (dbFile.exists() || sidecarExists(dbFile)) {
                 try {
-                    setAside(dbFile, System.currentTimeMillis())
+                    setAside(dbFile, System.currentTimeMillis(), vault)
                 } catch (e: Exception) {
                     Log.e(TAG, "Could not set the failed encrypted database aside", e)
                     return false
                 }
             }
-            if (!backup.renameTo(dbFile)) {
-                backup.copyTo(dbFile, overwrite = true)
-                if (!backup.delete() && backup.exists()) {
-                    Log.w(TAG, "Plaintext backup was copied back but the copy could not be removed")
-                }
+            if (!moveIntoPlace(backup, dbFile)) {
+                Log.e(TAG, "Could not put the plaintext copy back at ${dbFile.path}")
+                return false
             }
             deleteSidecars(dbFile)
             return isPlaintextSqliteHeader(dbFile)
@@ -485,38 +531,38 @@ abstract class AppDatabase : RoomDatabase() {
         private fun sidecarExists(dbFile: File): Boolean =
             listOf("-wal", "-shm", "-journal").any { File(dbFile.path + it).exists() }
 
-        private fun encryptMarker(dbFile: File): File =
-            File(dbFile.parentFile, ENCRYPT_OK_NAME)
-
         /** Marks the plaintext copy as safe to remove. Call only after the encrypted file has opened. */
         @androidx.annotation.VisibleForTesting
-        internal fun confirmPlaintextBackupDisposable(dbFile: File) {
-            encryptMarker(dbFile).writeText("ok")
+        internal fun confirmPlaintextBackupDisposable(
+            dbFile: File,
+            vault: File = dbFile.parentFile ?: dbFile
+        ) {
+            ChatDbVault.encryptMarker(vault).writeText("ok")
         }
 
         @androidx.annotation.VisibleForTesting
-        internal fun clearPlaintextBackupConfirmation(dbFile: File) {
-            encryptMarker(dbFile).delete()
+        internal fun clearPlaintextBackupConfirmation(vault: File) {
+            ChatDbVault.encryptMarker(vault).delete()
         }
 
         /**
-         * Removes [chat_database.pre_sqlcipher] only after [confirmPlaintextBackupDisposable].
+         * Removes the plaintext snapshot only after [confirmPlaintextBackupDisposable].
          * Deleting it on every successful open used to erase the chats when the process died
          * mid-encrypt and the next launch created an empty database.
          */
         @androidx.annotation.VisibleForTesting
-        internal fun discardPlaintextBackupIfConfirmed(dbFile: File) {
-            val marker = encryptMarker(dbFile)
+        internal fun discardPlaintextBackupIfConfirmed(
+            dbFile: File,
+            vault: File = dbFile.parentFile ?: dbFile
+        ) {
+            val marker = ChatDbVault.encryptMarker(vault)
             if (!marker.exists()) return
-            discardPlaintextBackup(dbFile)
+            val backup = ChatDbVault.plaintextBackup(vault)
+            if (backup.exists()) {
+                deleteSidecars(backup)
+                if (!backup.delete()) Log.w(TAG, "Could not remove plaintext backup ${backup.path}")
+            }
             if (!marker.delete()) Log.w(TAG, "Could not remove encrypt marker ${marker.path}")
-        }
-
-        private fun discardPlaintextBackup(dbFile: File) {
-            val backup = plaintextBackupFile(dbFile)
-            if (!backup.exists()) return
-            deleteSidecars(backup)
-            if (!backup.delete()) Log.w(TAG, "Could not remove plaintext backup ${backup.path}")
         }
 
         /** True only when the file header is standard unencrypted SQLite. */

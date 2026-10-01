@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A backup or a phone-to-phone transfer no longer uploads the plaintext copy of the chat database, or a database the app had to set aside. Those copies live in a directory the system does not back up, and the backup rules also name the old plaintext file in case it is still in place. Code mode host tokens are excluded the same way. A recovered database is opened from that directory, and a preference that names any other file is ignored.
+- A photo that lives only in the message, with no file link, shows in the bubble. That branch did not compile.
 - History search keeps the matching words on the one line under the title, including a hit late in the message, a line with no spaces, and a word that contains an underscore. A slice of a photo's data is still not shown as a line.
 - A sent or generated picture is only tappable once the file has loaded. A missing file shows the picture stored in the message, and drops the frame when that is gone too, instead of leaving an empty box that cannot open. Edit says so when the photo cannot be put back in the composer.
 - The full-screen composer keeps the space for the keyboard. It used to clear that inset, so the buttons sat under the keys. Typing past the sixth line keeps the caret in view.

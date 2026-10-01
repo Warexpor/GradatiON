@@ -157,7 +157,10 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_CHAT_DB_RECOVERED = "chat_db_recovered"
         /** Stamp of a recovery that has moved the database aside and not finished opening a fresh one. */
         private const val KEY_CHAT_DB_RECOVERY_STAMP = "chat_db_recovery_stamp"
-        /** File name under the databases directory when the original chat_database could not be moved. */
+        /**
+         * Short file name when the original chat_database could not be moved
+         * (`chat_database.recovered-<stamp>`). Resolved under noBackupFilesDir at open.
+         */
         private const val KEY_CHAT_DB_FILE = "chat_db_file"
         private const val KEY_ALLOW_DESTRUCTIVE_TOOLS = "allow_destructive_tools"
         private const val KEY_HAPTIC_BUTTONS = "haptic_buttons"
@@ -471,16 +474,14 @@ class SharedPreferencesHelper(context: Context) {
 
     /**
      * Which file Room opens. The default is [AppDatabase.DB_NAME]. A recovery that could not move
-     * the unreadable file stores a new name here so the next launch does not open the bad one again.
-     * Anything that is not a single safe file name is ignored.
+     * the unreadable file stores `chat_database.recovered-<stamp>` here so the next launch does not
+     * open the bad one again. The file itself lives under noBackupFilesDir; this value stays the
+     * short name. A path, or the plaintext snapshot's name, is ignored.
      */
     fun chatDbFileName(): String {
         val name = mainPrefs.getString(KEY_CHAT_DB_FILE, null)?.trim().orEmpty()
         if (name.isEmpty()) return AppDatabase.DB_NAME
-        val safe = name.length <= 80 &&
-            name.startsWith(AppDatabase.DB_NAME) &&
-            name.all { it.isLetterOrDigit() || it == '.' || it == '_' || it == '-' }
-        return if (safe) name else AppDatabase.DB_NAME
+        return if (ChatDbVault.isStoredDatabaseName(name)) name else AppDatabase.DB_NAME
     }
 
     fun saveChatDbFileName(name: String) {

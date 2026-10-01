@@ -49,6 +49,8 @@ class AndroidKeystoreKeySource(
 /**
  * Android Keystore-backed vault for Code mode host pairing tokens.
  * Ciphertext lives in a dedicated prefs file; the AES key never leaves the Keystore.
+ * That file is excluded from Auto Backup and device transfer (`code_mode_secrets.xml`):
+ * a restore would keep ciphertext it can no longer decrypt.
  * Non-secret host fields (url, name, …) stay in the plain [CodeStore] prefs.
  */
 class CodeHostSecrets @VisibleForTesting constructor(
