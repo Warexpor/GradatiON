@@ -50,6 +50,16 @@ class ChatRepository(private val chatDao: ChatDao) {
         chatDao.deleteSession(sessionId)
     }
 
+    /** Scene-photo file names stored on this chat's messages. */
+    suspend fun scenePhotoNames(sessionId: Long): List<String> =
+        chatDao.scenePhotoSlices(sessionId).mapNotNull { ScenePhoto.fileNameIn(it) }.distinct()
+
+    /** True when a saved message still names this scene photo. */
+    suspend fun scenePhotoStillUsed(name: String): Boolean {
+        if (!ScenePhoto.isSceneFileName(name)) return false
+        return chatDao.messageMentioning("/owned/scene_photos/$name") != null
+    }
+
     suspend fun getAllSessionsWithMessages(): List<SessionWithMessages> =
         chatDao.getAllSessionsWithMessages()
 

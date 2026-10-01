@@ -107,6 +107,30 @@ class ChatSaveOverwriteTest {
     }
 
     @Test
+    fun scenePhotoNamesStayWithTheChatThatStillHasThem() = runBlocking {
+        val name = "11111111-1111-1111-1111-111111111111.jpg"
+        val link = "/owned/scene_photos/$name"
+        val kept = dao.insertSessionAndMessages(
+            ChatSession(title = "kept", modelUsed = "m"),
+            listOf(message("user", "plain"), message("assistant", "see $link later")),
+        )
+        val gone = dao.insertSessionAndMessages(
+            ChatSession(title = "gone", modelUsed = "m"),
+            listOf(message("user", "photo $link")),
+        )
+        val repo = ChatRepository(dao)
+        assertEquals(listOf(name), repo.scenePhotoNames(gone))
+        assertEquals(listOf(name), repo.scenePhotoNames(kept))
+        assertTrue(repo.scenePhotoStillUsed(name))
+        dao.deleteSession(gone)
+        assertEquals(listOf(name), repo.scenePhotoNames(kept))
+        assertTrue(repo.scenePhotoStillUsed(name))
+        dao.deleteSession(kept)
+        assertFalse(repo.scenePhotoStillUsed(name))
+        assertTrue(repo.scenePhotoNames(kept).isEmpty())
+    }
+
+    @Test
     fun idsAreNotReusedAfterDeletingTheNewestChat() = runBlocking {
         dao.insertSessionAndMessages(ChatSession(title = "a", modelUsed = "m"), listOf(message("user", "a")))
         val newest = dao.insertSessionAndMessages(ChatSession(title = "b", modelUsed = "m"), listOf(message("user", "b")))

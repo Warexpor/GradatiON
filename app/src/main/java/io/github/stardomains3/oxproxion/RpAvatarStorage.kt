@@ -101,7 +101,11 @@ object RpAvatarStorage {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         val sample = sampleSize(bounds.outWidth, bounds.outHeight, MAX_EDGE)
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
+        // A camera JPEG is stored sideways. Re-encoding drops the flag, so turn it now.
+        val upright = ScenePhoto.upright(decoded, bytes)
+        if (upright !== decoded) decoded.recycle()
+        return upright
     }
 
     private fun sampleSize(width: Int, height: Int, maxEdge: Int): Int {

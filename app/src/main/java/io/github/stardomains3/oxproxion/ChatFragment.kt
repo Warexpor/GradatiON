@@ -789,7 +789,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
                 // Clear staged image if model doesn't support vision
                 if (selectedImageBytes != null && !viewModel.isVisionModel(model)) {
-                    clearStagedAttachment()
+                    clearStagedAttachment(discardSceneFile = true)
                     GlassNotice.show(requireContext(), getString(R.string.toast_image_removed_no_vision))
                 }
                 // Clear staged audio if model doesn't support transcription
@@ -1374,7 +1374,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private fun switchAskDraft(from: Long?, to: Long?) {
         parkAskDraft(from)
         applyAskDraft(to)
-        clearStagedAttachment()
+        clearStagedAttachment(discardSceneFile = true)
         pendingFiles.clear()
         if (::attachmentButton.isInitialized) updateAttachmentButton()
     }
@@ -2349,7 +2349,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val previous = viewModel.getCurrentSessionId()
         viewModel.startFreshChatForCurrentMode()
         finishNewChatComposer(previous)
-        clearStagedAttachment()
+        clearStagedAttachment(discardSceneFile = true)
         pendingFiles.clear()
         updateAttachmentButton()
         chatAdapter.clearCache()
@@ -2375,7 +2375,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupClickListeners() {
-        removeAttachmentButton.setOnClickListener { clearStagedAttachment() }
+        removeAttachmentButton.setOnClickListener { clearStagedAttachment(discardSceneFile = true) }
         webSearchButton.setOnClickListener {
             //  hideMenu()
             viewModel.toggleWebSearch()
@@ -2456,7 +2456,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         viewModel.sendTranscriptionOpenRouter(audioBytes, audioFormat)
                     }
 
-                    clearStagedAttachment()
+                    clearStagedAttachment(discardSceneFile = true)
 
                     return@setOnClickListener
                 }
@@ -2847,7 +2847,7 @@ $cleanContent
             val previous = viewModel.getCurrentSessionId()
             viewModel.startFreshChatForCurrentMode()
             finishNewChatComposer(previous)
-            clearStagedAttachment()
+            clearStagedAttachment(discardSceneFile = true)
             pendingFiles.clear()
             updateAttachmentButton()
             chatAdapter.clearCache()
@@ -2863,7 +2863,7 @@ $cleanContent
             val previous = viewModel.getCurrentSessionId()
             viewModel.startFreshChatForCurrentMode()
             finishNewChatComposer(previous)
-            clearStagedAttachment()
+            clearStagedAttachment(discardSceneFile = true)
             pendingFiles.clear()
             updateAttachmentButton()
             chatAdapter.clearCache()
@@ -3602,7 +3602,7 @@ $cleanContent
             message?.imageUri
         )
         if (editPhoto != null) photoSendInFlight = true
-        clearStagedAttachment()
+        clearStagedAttachment(discardSceneFile = true)
         if (viewModel.isRpMode()) {
             viewModel.truncateForRpEdit(position)
         } else {
@@ -3654,13 +3654,25 @@ $cleanContent
         return ScenePhoto.Staged(bytes, ScenePhoto.MIME, photo.fileUri)
     }
 
-    /** Drops a photo or audio clip staged in the composer, and lets Send follow. */
-    private fun clearStagedAttachment() {
+    /**
+     * Drops a photo or audio clip staged in the composer, and lets Send follow.
+     * [discardSceneFile] deletes the copy we made for a photo that was never sent.
+     * A send leaves the file: the message is what opens it.
+     */
+    private fun clearStagedAttachment(discardSceneFile: Boolean = false) {
+        val discardUri = if (discardSceneFile) viewModel.pendingImageUri() else null
         selectedImageBytes = null
         selectedImageMime = null
         selectedAudioBytes = null
         selectedAudioFormat = null
         viewModel.setPendingUserImageUri(null)
+        discardUri?.let { uri ->
+            val name = ScenePhoto.sceneFileName(uri) ?: return@let
+            val app = context?.applicationContext ?: return@let
+            lifecycleScope.launch(Dispatchers.IO) {
+                if (!viewModel.scenePhotoStillUsed(name)) ScenePhoto.deleteSceneFiles(app, listOf(name))
+            }
+        }
         currentTempImageFile?.delete()
         currentTempImageFile = null
         if (::attachmentPreviewContainer.isInitialized) {

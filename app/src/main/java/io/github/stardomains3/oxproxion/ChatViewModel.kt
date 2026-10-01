@@ -863,9 +863,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             if (epoch != sessionEpoch) return@launch
+            // Names before the write, so a picture this save dropped can be removed afterwards.
+            val previousPhotos = if (existingId != null) repository.scenePhotoNames(existingId) else emptyList()
             // Null: the open chat was deleted while this save waited. Nothing was written.
             val sessionId = ChatSessionSaver.save(repository, existingId, session, chatMessages)
                 ?: return@launch
+            releaseDroppedScenePhotos(previousPhotos, messagesSnapshot)
             if (
                 ChatSaveGate.decide(
                     epochAtSchedule = epoch,
@@ -1140,6 +1143,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return if (changed) out else messages
     }
 
+    /** A picture this save no longer names. Another chat that still has the file keeps it. */
+    private suspend fun releaseDroppedScenePhotos(previous: List<String>, messages: List<FlexibleMessage>) {
+        if (previous.isEmpty()) return
+        val kept = messages.mapNotNull { ScenePhoto.sceneFileName(it.imageUri) }.toSet()
+        val dropped = previous.filter { it !in kept }
+        if (dropped.isEmpty()) return
+        val app = getApplication<Application>()
+        val unused = dropped.filter { !repository.scenePhotoStillUsed(it) }
+        ScenePhoto.deleteSceneFiles(app, unused)
+    }
+
+    /** True when some saved message still points at this scene photo. */
+    suspend fun scenePhotoStillUsed(name: String): Boolean = repository.scenePhotoStillUsed(name)
+
     fun onModelPreferenceSaved() {
         _modelPreferenceToSave.value = null
     }
@@ -1315,7 +1332,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         systemMessage: String? = null,
         clearRpSwipeOnStart: Boolean = false,
         /** Roleplay's Continue: [userContent] is a hidden prompt, and the reply grows the last bubble. */
-        continueInPlace: Boolean = false
+        continueInPlace: Boolean = false,
+        /**
+         * The staged file at the moment send was asked for. Roleplay clears [pendingUserImageUri]
+         * before this runs; [useCapturedImageUri] keeps that file on the message anyway.
+         */
+        capturedImageUri: String? = null,
+        useCapturedImageUri: Boolean = false,
     ): Boolean {
         rpRewriteJob?.cancel()
         rpRewriteJob = null
@@ -1324,7 +1347,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _isAwaitingResponse.value = true
             viewModelScope.launch {
                 restore.join()
-                if (!sendUserMessage(userContent, systemMessage, clearRpSwipeOnStart, continueInPlace)) {
+                if (!sendUserMessage(
+                        userContent,
+                        systemMessage,
+                        clearRpSwipeOnStart,
+                        continueInPlace,
+                        capturedImageUri,
+                        useCapturedImageUri,
+                    )
+                ) {
                     if (networkJob?.isActive != true) _isAwaitingResponse.value = false
                 }
             }
@@ -1335,14 +1366,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         var userMessage = FlexibleMessage(role = "user", content = userContent)
 
         // Keep the URI if the send is refused, so the picture is still staged.
-        val attachedUri = pendingUserImageUri
+        val attachedUri = ScenePhoto.uriForTurn(useCapturedImageUri, capturedImageUri, pendingUserImageUri)
         if (attachedUri != null) userMessage = userMessage.copy(imageUri = attachedUri)
 
         if (!bindChatEndpoint()) {
             _isAwaitingResponse.value = false
             return false
         }
-        pendingUserImageUri = null
+        // A photo captured for this turn must not clear a different picture staged since.
+        if (!useCapturedImageUri || pendingUserImageUri == attachedUri) {
+            pendingUserImageUri = null
+        }
 
         // Only wipe alts once the send is known to proceed (after early returns above).
         if (clearRpSwipeOnStart && isRpMode()) {
@@ -4087,6 +4121,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         continueBeat: Boolean = false,
         imageUrl: String? = null
     ): Boolean {
+        // The composer clears the staged file as soon as this returns. The message is built
+        // later, on the prep job, so the URI has to be taken now or the bubble cannot open it.
+        val capturedImageUri = if (imageUrl != null) pendingUserImageUri else null
         val parsed = rpDelegate.parseSendText(rawText)
         // A reminder is a scene note, not the user's next line. Continue stays its own instruction.
         val scene = parsed.reminder?.takeIf { it.isNotBlank() }?.let(RpPromptEngine::sceneNote)
@@ -4156,7 +4193,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         systemPrompt,
                         // Continue keeps swipe alts until the new text actually arrives.
                         clearRpSwipeOnStart = !continueBeat,
-                        continueInPlace = continueBeat
+                        continueInPlace = continueBeat,
+                        capturedImageUri = capturedImageUri,
+                        useCapturedImageUri = imageUrl != null,
                     )
                 ) {
                     _composerRestoreEvent.postValue(Event(draftToRestore))

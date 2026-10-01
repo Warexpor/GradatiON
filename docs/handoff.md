@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, RP photo file, portraits, cleanup)
+
+On `cursor/rp-photo-file-portrait-cdde`, targeting `gradation/app-pass`.
+- A Roleplay photo send takes the file link when Send is tapped. The composer clears that link before the message is built, and the bubble could not open the picture until the chat was opened again. Removing the chip, or leaving it behind for another chat, deletes that file. Saving a chat that no longer has the picture, or deleting the chat, deletes the file too, unless another chat still names it.
+- A character or persona portrait from a sideways camera JPEG is stored upright.
+- Phone: in Roleplay, send a photo and tap it (it should open). Remove a photo you have not sent (it should not come back). Delete a chat that has a photo, leave the app, and confirm the picture is not still taking space. Set a character portrait from a camera shot that was sideways.
+
 # Handoff (2026-10-01, chat message tap and copy)
 
 On `cursor/chat-message-tap-copy-a4f5`, targeting `gradation/app-pass`.

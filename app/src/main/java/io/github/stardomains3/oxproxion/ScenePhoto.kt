@@ -226,7 +226,64 @@ object ScenePhoto {
         return message.copy(content = content, imageUri = picture.uri)
     }
 
+    /**
+     * The file a turn should keep. Roleplay returns as soon as send is asked for, and the
+     * composer then clears the staged URI, before the message is built. [useCaptured] means
+     * that earlier URI is the one that belongs on the message, even when nothing is staged now.
+     * A data URL is not a file.
+     */
+    fun uriForTurn(useCaptured: Boolean, captured: String?, live: String?): String? {
+        val raw = if (useCaptured) captured else live
+        return raw?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("data:", ignoreCase = true) }
+    }
+
+    /** The file name of one of our scene photos, or null when [uriString] is some other link. */
+    fun sceneFileName(uriString: String?): String? {
+        if (uriString.isNullOrBlank()) return null
+        return fileNameIn(uriString)
+    }
+
+    /**
+     * The `UUID.jpg` in a stored message or a content URI. Anything else is left alone so a
+     * caption that mentions the folder cannot delete a file.
+     */
+    fun fileNameIn(slice: String): String? {
+        var from = 0
+        while (from < slice.length) {
+            val i = slice.indexOf(FILE_MARKER, from)
+            if (i < 0) return null
+            val start = i + FILE_MARKER.length
+            val end = start + FILE_NAME_LENGTH
+            if (end <= slice.length) {
+                val name = slice.substring(start, end)
+                if (isSceneFileName(name)) return name
+            }
+            from = start
+        }
+        return null
+    }
+
+    fun isSceneFileName(name: String): Boolean = SCENE_FILE.matches(name)
+
+    /** Deletes scene photos we own. A name that is not one of ours is ignored. */
+    fun deleteSceneFiles(context: Context, names: Collection<String>) {
+        if (names.isEmpty()) return
+        val dir = File(context.filesDir, DIR)
+        for (name in names) {
+            if (!isSceneFileName(name)) continue
+            File(dir, name).delete()
+        }
+    }
+
+    /** [src] turned upright for the EXIF flag in [raw]. The same bitmap when it already is. */
+    internal fun upright(src: Bitmap, raw: ByteArray): Bitmap = applyExif(src, raw)
+
     private const val DIR = "scene_photos"
+    private const val FILE_MARKER = "/owned/scene_photos/"
+    private const val FILE_NAME_LENGTH = 40
+    private val SCENE_FILE = Regex(
+        "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\.jpg"
+    )
     private const val CACHE_ROOT = "temp_images"
     private const val FILES_ROOT = "owned"
     private const val MAX_READ = 8_000_000
