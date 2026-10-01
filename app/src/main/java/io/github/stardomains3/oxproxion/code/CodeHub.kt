@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
+import kotlin.coroutines.cancellation.CancellationException
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -132,17 +133,19 @@ class CodeHub internal constructor(context: Context) {
 
     /** Load Room index; one-shot merge of any leftover prefs session list. Runs on IO. */
     private suspend fun loadSessionsFromRoom(): Map<String, CodeSessionState> {
-        val legacy = store.peekLegacySessions()
-        if (legacy != null) {
+        if (!store.sessionsMigratedToRoom) {
             try {
+                val legacy = store.peekLegacySessions().orEmpty()
                 if (legacy.isNotEmpty()) {
                     val existing = sessionDao.getAll()
                     val toUpsert = mergeLegacySessionRows(existing, legacy)
                     if (toUpsert.isNotEmpty()) sessionDao.upsertAll(toUpsert)
                 }
                 // Mark migrated only after merge/upsert succeeds (or nothing to import).
-                // Failure leaves prefs so the next launch retries — never clear on error.
+                // A corrupt list throws and stays in prefs so the next launch retries.
                 store.markSessionsMigrated()
+            } catch (e: CancellationException) {
+                throw e
             } catch (t: Throwable) {
                 Log.w(TAG, "Prefs→Room session migration deferred", t)
             }

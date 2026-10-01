@@ -1,3 +1,7 @@
+# Handoff (2026-10-01, chat photo and keyboard)
+
+A staged photo (or audio clip) with an empty composer now enables Send. New chat, remove, and a model that can't see photos all drop the staged attachment, so it can't ride into the next thread. Composer thumbnails keep the picture's aspect (EXIF quarter-turns included) inside a 156dp cap; the remove disc is a real 44dp hit target. Sent and generated photos use that same rounded frame, and a caption stays on the 16dp text inset. Keyboard follow no longer scrolls a short thread by the full keyboard travel: only a message the composer would cover moves, and a message pinned to the composer rides back down when it closes (`KeyboardFollow`, `ChatPhoto`). Phone: send a photo with no caption, open the keyboard on a short chat and on a long one, and check a portrait from the camera isn't sideways in the chip.
+
 # Handoff (2026-10-01)
 
 ## Code reconnect reliability (2026-10-01)
@@ -8,6 +12,13 @@ On `cursor/code-reconnect-reliability-05bf` (PR into `gradation/app-pass`). Four
 - WebSocket open/send/close share one lock: a second connect during open does not leak a socket, and send after retire returns false.
 
 Phone still has the polish-wave checklist below. Not on a device: drop Wi-Fi mid prompt, and a prompt with leading spaces, to see one bubble and one turn.
+
+## Stability pass (2026-10-01, database recovery)
+On `cursor/db-recovery-hardening-700c`, targeting `gradation/app-pass`.
+- Recovery used to delete the only wrapped SQLCipher passphrase after moving `chat_database` aside, so the backup could not be opened. The wrapped blob is now copied under `chat_db_passphrase_unreadable_<stamp>` before the active one is replaced. A pending-recovery stamp covers a process death between the move and the fresh database. A taken stamp uses the next free one, and a failed move puts the files back.
+- Plaintext-to-SQLCipher keeps `chat_database.pre_sqlcipher` until the encrypted file has opened. If that open fails, the plaintext copy is restored and tried once before a fresh database is minted.
+- A corrupt Code prefs session list used to decode as "nothing" and was then deleted. It now stays for the next launch, and Room rows still load.
+- Chat export writes one session at a time to a cache file, then copies it. The destination is not opened until the cache file is complete.
 
 ## Polish wave 2 (2026-10-01)
 Clears every wave-1 leftover. Suite (`-Pfull`) and `assembleDev` pass. Also: Code composer buttons 40dp like Chat; Code strings use plurals and "Thinking view"; lint is clean (unused resources, dead commented-out menu code and the `ktor-client-android` engine removed); the History and RP home lists open the DB on IO; Chat memory's value in Advanced matches the other row values. Schemas 1-3 are hand-reconstructed (history is squashed), so the migration test proves the SQL against them, not against byte-exact old installs. Phone: the wave-1 checklist below, plus a self-signed LAN server (first request pins; toggle Trust off/on after a cert change) and each Settings section.

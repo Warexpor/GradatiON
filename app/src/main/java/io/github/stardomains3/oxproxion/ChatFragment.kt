@@ -424,12 +424,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     }
                     selectedImageBytes = rawBytes  // Raw for send (EXIF intact)
                     selectedImageMime = "image/jpeg"
-                    previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
-                    previewImageView.load(imageUri)  // Coil decodes off the main thread and honours EXIF
-                    attachmentPreviewContainer.visibility = View.VISIBLE
-
-                    // Set pending as string for FlexibleMessage (MediaStore Uri already persistent)
                     viewModel.setPendingUserImageUri(imageUri.toString())
+                    showStagedPhoto(rawBytes, imageUri)
 
                     // Notify for gallery refresh
                     resolver.notifyChange(imageUri, null)
@@ -566,6 +562,18 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         applyChatMark()
         emptyStateContainer = view.findViewById(R.id.emptyStateContainer)
         removeAttachmentButton = view.findViewById(R.id.removeAttachmentButton)
+        // The disc is drawn on the physical top-end corner. The XML inset assumes LTR.
+        if (resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+            val d = resources.displayMetrics.density
+            val near = (2 * d).toInt()
+            val far = (20 * d).toInt()
+            val icon = (3 * d).toInt()
+            removeAttachmentButton.background = android.graphics.drawable.InsetDrawable(
+                ContextCompat.getDrawable(requireContext(), R.drawable.bg_circle_soft),
+                near, near, far, far
+            )
+            removeAttachmentButton.setPadding(near + icon, near + icon, far + icon, far + icon)
+        }
         headerContainer = view.findViewById(R.id.headerContainer)
         (headerContainer as? GlassLinearLayout)?.dragDismiss = DragDismiss(
             headerContainer,
@@ -677,7 +685,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             rpReminderButton, rpStreamButton, rpSwipePrevButton, rpSwipeNextButton
         )
         TouchTargets.expand(view.findViewById(R.id.extBG), scrollToTopButton, scrollToBottomButton, presetsButton2)
-        TouchTargets.expand(removeAttachmentButton.parent as ViewGroup, removeAttachmentButton)
+        // The remove badge is already 44dp. Growing it further would leave the hit area
+        // outside the chip, where touches never arrive.
         // The extended top bar's toggles and the return buttons under the bar are 40dp discs.
         TouchTargets.expand(
             extendedTopBarContainer,
@@ -769,16 +778,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
                 // Clear staged image if model doesn't support vision
                 if (selectedImageBytes != null && !viewModel.isVisionModel(model)) {
-                    selectedImageBytes = null
-                    selectedImageMime = null
-                    attachmentPreviewContainer.visibility = View.GONE
+                    clearStagedAttachment()
                     GlassNotice.show(requireContext(), getString(R.string.toast_image_removed_no_vision))
                 }
                 // Clear staged audio if model doesn't support transcription
                 if (selectedAudioBytes != null && !viewModel.isTranscriptionModel(model)) {
-                    selectedAudioBytes = null
-                    selectedAudioFormat = null
-                    attachmentPreviewContainer.visibility = View.GONE
+                    clearStagedAttachment()
                     GlassNotice.show(requireContext(), getString(R.string.toast_audio_removed_no_transcription))
                 }
             }
@@ -1556,7 +1561,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     /**
      * The keyboard moved by [delta]: grow (or shrink) the transcript's bottom padding by it and,
-     * when following, move the last message by the same amount, all in the coming layout pass.
+     * when following, keep the newest message clear of the composer. A short thread that already
+     * sits above the composer stays where it is; scrolling by the whole keyboard travel yanked it.
      */
     private fun layTranscriptForKeyboard(delta: Int) {
         val list = chatRecyclerView
@@ -1564,12 +1570,23 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val pad = listChromePad + imePx
         if (list.paddingBottom != pad) list.setPadding(list.paddingLeft, list.paddingTop, list.paddingRight, pad)
         placeBottomFloaters()
-        if (!imeFollow) return
+        if (!imeFollow || delta == 0) return
         val lm = list.layoutManager as? LinearLayoutManager ?: return
         val last = (list.adapter?.itemCount ?: 0) - 1
+        if (last < 0) return
         val lastView = lm.findViewByPosition(last) ?: return
         val lp = lastView.layoutParams as ViewGroup.MarginLayoutParams
-        lm.scrollToPositionWithOffset(last, lm.getDecoratedTop(lastView) - lp.topMargin - list.paddingTop - delta)
+        val slack = (12 * list.resources.displayMetrics.density).toInt()
+        val scroll = KeyboardFollow.scroll(
+            lastBottom = lm.getDecoratedBottom(lastView),
+            listHeight = list.height,
+            newBottomPad = pad,
+            oldBottomPad = pad - delta,
+            pinnedSlack = slack,
+        )
+        if (scroll == 0) return
+        val current = lm.getDecoratedTop(lastView) - lp.topMargin - list.paddingTop
+        lm.scrollToPositionWithOffset(last, current - scroll)
     }
 
     /** The scroll buttons and font controls ride above the composer and the keyboard. */
@@ -1900,10 +1917,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             { text, position -> synthesizeToWavFile(text, position) },
             ttsAvailable,
             onEditMessage = { position, text ->
-                selectedImageBytes = null
-                selectedImageMime = null
-                attachmentPreviewContainer.visibility = View.GONE
-                viewModel.setPendingUserImageUri(null)
+                clearStagedAttachment()
                 if (viewModel.isRpMode()) {
                     viewModel.truncateForRpEdit(position)
                 } else {
@@ -2107,11 +2121,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         viewModel.startFreshChatForCurrentMode()
         chatEditText.setText("")
         chatEditText.text.clear()
-        currentTempImageFile?.delete()
-        currentTempImageFile = null
-        selectedAudioBytes = null
-        selectedAudioFormat = null
-        clearPreview()
+        clearStagedAttachment()
         pendingFiles.clear()
         updateAttachmentButton()
         chatAdapter.clearCache()
@@ -2119,17 +2129,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupClickListeners() {
-        removeAttachmentButton.setOnClickListener {
-            selectedImageBytes = null
-            selectedImageMime = null
-            selectedAudioBytes = null
-            selectedAudioFormat = null
-            attachmentPreviewContainer.visibility = View.GONE
-            viewModel.setPendingUserImageUri(null)
-            clearPreview()
-            currentTempImageFile?.delete()
-            currentTempImageFile = null
-        }
+        removeAttachmentButton.setOnClickListener { clearStagedAttachment() }
         webSearchButton.setOnClickListener {
             //  hideMenu()
             viewModel.toggleWebSearch()
@@ -2208,10 +2208,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         viewModel.sendTranscriptionOpenRouter(audioBytes, audioFormat)
                     }
 
-                    // Clear audio attachment
-                    selectedAudioBytes = null
-                    selectedAudioFormat = null
-                    attachmentPreviewContainer.visibility = View.GONE
+                    clearStagedAttachment()
 
                     return@setOnClickListener
                 }
@@ -2281,9 +2278,7 @@ $cleanContent
                             if (!viewModel.sendRpUserMessage(substitutedPrompt, imageUrl = "data:$photoMime;base64,$base64")) return@launch
                             chatEditText.setText("")
                             chatEditText.text.clear()
-                            selectedImageBytes = null
-                            selectedImageMime = null
-                            attachmentPreviewContainer.visibility = View.GONE
+                            clearStagedAttachment()
                         }
                         return@setOnClickListener
                     }
@@ -2332,9 +2327,7 @@ $cleanContent
                         viewModel.sendUserMessage(JsonPrimitive(substitutedPrompt), substitutedSystemPrompt) //#subpromptcode
                     }
                     hideMenu()
-                    selectedImageBytes = null
-                    selectedImageMime = null
-                    attachmentPreviewContainer.visibility = View.GONE
+                    clearStagedAttachment()
                     pendingFiles.clear()
                     updateAttachmentButton()
                 }
@@ -2554,10 +2547,7 @@ $cleanContent
             viewModel.startFreshChatForCurrentMode()
             chatEditText.setText("")
             chatEditText.text.clear()
-            currentTempImageFile?.delete()
-            currentTempImageFile = null
-            clearPreview()
-            // Add to reset logic
+            clearStagedAttachment()
             pendingFiles.clear()
             updateAttachmentButton()
             chatAdapter.clearCache()
@@ -2573,10 +2563,7 @@ $cleanContent
             viewModel.startFreshChatForCurrentMode()
             chatEditText.setText("")
             chatEditText.text.clear()
-            currentTempImageFile?.delete()
-            currentTempImageFile = null
-            clearPreview()
-            // Add to reset logic
+            clearStagedAttachment()
             pendingFiles.clear()
             updateAttachmentButton()
             chatAdapter.clearCache()
@@ -3106,12 +3093,19 @@ $cleanContent
 
                 selectedAudioBytes = bytes
                 selectedAudioFormat = audioFormat
+                selectedImageBytes = null
+                selectedImageMime = null
+                viewModel.setPendingUserImageUri(null)
+                currentTempImageFile?.delete()
+                currentTempImageFile = null
 
-                // Show audio attachment indicator
+                resetPreviewFrame()
                 previewImageView.dispose()
                 previewImageView.scaleType = ImageView.ScaleType.CENTER_INSIDE
-                previewImageView.setImageResource(android.R.drawable.ic_media_play) // or use a custom ic_audio
+                previewImageView.contentDescription = getString(R.string.cd_audio_attachment)
+                previewImageView.setImageResource(android.R.drawable.ic_media_play)
                 attachmentPreviewContainer.visibility = View.VISIBLE
+                updateSendButtonChrome()
             } catch (e: Exception) {
                 GlassNotice.show(requireContext(), getString(R.string.toast_audio_read_failed, e.message ?: ""))
             }
@@ -3256,6 +3250,62 @@ $cleanContent
     private fun clearPreview() {
         previewImageView.dispose()
         previewImageView.setImageDrawable(null)
+    }
+
+    /** The chip goes back to a square so the next photo isn't framed by the previous one. */
+    private fun resetPreviewFrame() {
+        if (!::previewImageView.isInitialized) return
+        val px = (72 * resources.displayMetrics.density).toInt()
+        val lp = previewImageView.layoutParams ?: return
+        if (lp.width != px || lp.height != px) {
+            lp.width = px
+            lp.height = px
+            previewImageView.layoutParams = lp
+        }
+    }
+
+    /**
+     * Shows [bytes] in the composer at its own aspect ratio (EXIF rotation included) and
+     * wakes Send. [preview] is what Coil loads: a content uri, so the phone's rotation flag
+     * is honoured, or the file itself.
+     */
+    private fun showStagedPhoto(bytes: ByteArray, preview: Any) {
+        // One staged attachment at a time: a photo replaces a clip.
+        selectedAudioBytes = null
+        selectedAudioFormat = null
+        updateSendButtonChrome()
+        previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
+        previewImageView.contentDescription = getString(R.string.cd_attachment_preview)
+        attachmentPreviewContainer.visibility = View.VISIBLE
+        val max = (156 * resources.displayMetrics.density).toInt()
+        val minEdge = (64 * resources.displayMetrics.density).toInt()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val (sw, sh) = withContext(Dispatchers.Default) { ChatPhoto.orientedBounds(bytes) }
+            if (!isAdded || selectedImageBytes !== bytes) return@launch
+            val (w, h) = ChatPhoto.frame(sw, sh, max, max, minEdge)
+            val lp = previewImageView.layoutParams
+            lp.width = w
+            lp.height = h
+            previewImageView.layoutParams = lp
+            previewImageView.load(preview)
+        }
+    }
+
+    /** Drops a photo or audio clip staged in the composer, and lets Send follow. */
+    private fun clearStagedAttachment() {
+        selectedImageBytes = null
+        selectedImageMime = null
+        selectedAudioBytes = null
+        selectedAudioFormat = null
+        viewModel.setPendingUserImageUri(null)
+        currentTempImageFile?.delete()
+        currentTempImageFile = null
+        if (::attachmentPreviewContainer.isInitialized) {
+            attachmentPreviewContainer.visibility = View.GONE
+            clearPreview()
+            resetPreviewFrame()
+        }
+        updateSendButtonChrome()
     }
     override fun handleKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
@@ -3707,9 +3757,7 @@ $cleanContent
             }
             selectedImageBytes = bytes
             selectedImageMime = mime
-            previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
-            previewImageView.load(uri)  // Coil decodes and downsamples off the main thread
-            attachmentPreviewContainer.visibility = View.VISIBLE
+            showStagedPhoto(bytes, uri)
             try {
                 val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
                 resolver.takePersistableUriPermission(uri, takeFlags)
@@ -5012,12 +5060,8 @@ $cleanContent
             tempPngFile
         )
 
-        // Set for ViewModel (enables bubble preview)
         viewModel.setPendingUserImageUri(pngUri.toString())
-
-        previewImageView.scaleType = ImageView.ScaleType.CENTER_CROP
-        previewImageView.load(tempPngFile)
-        attachmentPreviewContainer.visibility = View.VISIBLE
+        showStagedPhoto(bytes, tempPngFile)
     }
 
 
@@ -5177,6 +5221,7 @@ $cleanContent
         }
         val hasContent = !chatEditText.text.isNullOrBlank() ||
             pendingFiles.isNotEmpty() ||
+            selectedImageBytes != null ||
             currentTempImageFile != null ||
             selectedAudioBytes != null
         // RP with nothing typed: the button turns into Continue (fast-forward the story).

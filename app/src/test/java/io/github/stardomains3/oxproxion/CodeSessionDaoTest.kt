@@ -18,6 +18,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -256,6 +257,35 @@ class CodeSessionDaoTest {
         assertNull(
             ctx.getSharedPreferences(CodeStore.PREFS_NAME, 0).getString(CodeStore.KEY_SESSIONS, null)
         )
+    }
+
+    @Test
+    fun corruptLegacySessionJsonIsKeptAndDoesNotWipeRoom() {
+        runBlocking {
+            dao.upsert(
+                CodeSessionEntity.from(
+                    CodeSessionSummary(
+                        id = "room-1",
+                        hostId = "demo",
+                        harness = HarnessKind.CLAUDE_CODE,
+                        workspace = "~/code",
+                        title = "Kept",
+                        createdAt = 1L,
+                        updatedAt = 2L
+                    )
+                )
+            )
+        }
+        val prefs = ctx.getSharedPreferences(CodeStore.PREFS_NAME, 0)
+        prefs.edit()
+            .putString(CodeStore.KEY_SESSIONS, "{not a session list")
+            .putBoolean("sessions_migrated_to_room", false)
+            .commit()
+
+        val hub = CodeHub.getLoaded(ctx)
+        assertEquals("Kept", hub.sessions.value["room-1"]?.summary?.title)
+        assertFalse(hub.store.sessionsMigratedToRoom)
+        assertEquals("{not a session list", prefs.getString(CodeStore.KEY_SESSIONS, null))
     }
 
     @Test
