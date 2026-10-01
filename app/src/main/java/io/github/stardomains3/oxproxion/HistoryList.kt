@@ -128,6 +128,16 @@ object HistoryList {
         return if (role == "user" && text.isNotBlank()) youLabel(body) else body
     }
 
+    /**
+     * Where to scroll so the open chat is on screen, including its section header when
+     * that header sits directly above the row. -1 when no row is the open chat.
+     */
+    fun openAnchor(items: List<HistoryListItem>): Int {
+        val index = items.indexOfFirst { it is HistoryListItem.Session && it.open }
+        if (index <= 0) return index
+        return if (items[index - 1] is HistoryListItem.Header) index - 1 else index
+    }
+
     /** Marks [openId] and carries [query] onto each row so a search rebinds the highlight. */
     fun present(items: List<HistoryListItem>, openId: Long?, query: String): List<HistoryListItem> {
         val q = query.trim()

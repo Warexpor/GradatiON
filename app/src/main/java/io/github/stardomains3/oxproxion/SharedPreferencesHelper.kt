@@ -245,6 +245,8 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_RP_DRAFT_SESSION_RP = "rp_draft_session_rp"
         private const val KEY_COMPOSER_DRAFT_ASK = "composer_draft_ask"
         private const val KEY_COMPOSER_DRAFT_RP = "composer_draft_rp"
+        /** Per-thread unsent text for Chat. Survives leaving a thread; the mode drafts do not. */
+        private const val KEY_ASK_COMPOSER_DRAFTS = "ask_composer_drafts"
         private const val KEY_RP_SWIPE_PREFIX = "rp_swipe_"
         private const val KEY_RP_PENDING_INSTRUCT = "rp_pending_instruct"
         private const val KEY_RP_DELETED_CHAR_REMAP = "rp_deleted_char_remap"
@@ -1459,6 +1461,16 @@ class SharedPreferencesHelper(context: Context) {
     fun saveComposerDraft(mode: ChatMode, text: String) {
         val key = if (mode == ChatMode.ASK) KEY_COMPOSER_DRAFT_ASK else KEY_COMPOSER_DRAFT_RP
         mainPrefs.edit { putString(key, text) }
+    }
+
+    fun getAskComposerDrafts(): Map<String, String> =
+        ComposerDrafts.decode(mainPrefs.getString(KEY_ASK_COMPOSER_DRAFTS, "") ?: "")
+
+    fun saveAskComposerDrafts(store: Map<String, String>) {
+        mainPrefs.edit {
+            if (store.isEmpty()) remove(KEY_ASK_COMPOSER_DRAFTS)
+            else putString(KEY_ASK_COMPOSER_DRAFTS, ComposerDrafts.encode(store))
+        }
     }
 
     fun getRpSwipeJson(sessionId: Long): String? =

@@ -346,6 +346,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
     private val rpSwipeStore: RpSwipeStore
     private var currentSessionId: Long? = null
+    /** True once the cold-start restore has settled, so a later id change is a real switch. */
+    private val _sessionReady = MutableLiveData(false)
+    val sessionReady: LiveData<Boolean> = _sessionReady
+    private val _openSessionId = MutableLiveData<Long?>(null)
+    val openSessionId: LiveData<Long?> = _openSessionId
+    /** The unsaved chat just received its row id. The composer text stays; only the key moves. */
+    private var openSessionPromoted = false
 
     private val _chatMode = MutableLiveData<ChatMode>()
     val chatMode: LiveData<ChatMode> = _chatMode
@@ -657,10 +664,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _toastUiEvent.postValue(Event(str(R.string.notice_chat_db_recovered)))
             }
         }
+        val launchEpoch = sessionEpoch
         sessionTransitionJob = viewModelScope.launch {
-            dbWarmup?.join()
-            refreshActiveRpCharacter()
-            restoreDraftOrNewChat(_chatMode.value ?: ChatMode.ASK)
+            try {
+                dbWarmup?.join()
+                refreshActiveRpCharacter()
+                restoreDraftOrNewChat(_chatMode.value ?: ChatMode.ASK)
+            } finally {
+                // A new chat or a mode switch that cancelled this launch publishes its own id.
+                if (launchEpoch == sessionEpoch) markSessionReady()
+            }
         }
         httpClient = createHttpClient()
         lanHttpClient = createLanHttpClient()
@@ -704,14 +717,51 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getCurrentSessionId(): Long? = currentSessionId
 
+    /**
+     * The open row changed. Before [sessionReady], callers still write [currentSessionId]
+     * but the composer waits: the first id is the restored thread, not a switch.
+     * [promoted] is an unsaved chat receiving the id the database just minted.
+     */
+    private fun assignOpenSession(id: Long?, promoted: Boolean = false) {
+        currentSessionId = id
+        if (_sessionReady.value != true) return
+        val publish = {
+            if (promoted) openSessionPromoted = true
+            _openSessionId.value = id
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) publish()
+        else viewModelScope.launch(Dispatchers.Main.immediate) { publish() }
+    }
+
+    private fun markSessionReady() {
+        if (_sessionReady.value == true) return
+        _openSessionId.value = currentSessionId
+        _sessionReady.value = true
+    }
+
+    /** True once, when the open chat just gained its first saved id. */
+    fun consumeOpenSessionPromoted(): Boolean {
+        val was = openSessionPromoted
+        openSessionPromoted = false
+        return was
+    }
+
     /** Cancel overlapping session transitions (load / mode switch / character start / cold restore). */
     private fun beginSessionTransition(block: suspend () -> Unit): Job {
         // Restore mid-regen first so a truncated hole isn't autosaved into the old session.
         cancelCurrentRequest(restoreSwipeAlt = true)
         sessionEpoch++
+        val epoch = sessionEpoch
         rpMemoryJob?.cancel() // Its note was written for the chat being left.
         sessionTransitionJob?.cancel()
-        val job = viewModelScope.launch { block() }
+        val job = viewModelScope.launch {
+            try {
+                block()
+            } finally {
+                // The cold-start launch skips ready when a transition cancels it.
+                if (epoch == sessionEpoch) markSessionReady()
+            }
+        }
         sessionTransitionJob = job
         return job
     }
@@ -732,7 +782,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _isChatLoading.value = false
         _chatMessages.value = emptyList()
         pendingUserImageUri = null
-        currentSessionId = null
+        assignOpenSession(null)
         preservedSessionCharacterId = null
         clearForkMemory()
         clearRpSwipeMemory()
@@ -825,7 +875,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             ) {
                 return@launch
             }
-            this@ChatViewModel.currentSessionId = sessionId
+            assignOpenSession(sessionId, promoted = openSessionId == null)
             sharedPreferencesHelper.saveRpDraftSessionId(
                 ChatMode.fromStorage(modeAtSave),
                 sessionId
@@ -1005,7 +1055,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 sessionDeferred.await() to messagesDeferred.await()
             }
 
-            currentSessionId = sessionId
+            assignOpenSession(sessionId)
             draftRpFacts = null
             _chatMessages.value = messages.map {
                 FlexibleMessage(
@@ -1537,7 +1587,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (isRpMode()) {
             // Greeting in-memory only — autosave would immediately resurrect a history row.
             beginSessionTransition {
-                currentSessionId = null
+                assignOpenSession(null)
                 clearForkMemory()
                 clearRpSwipeMemory()
                 sharedPreferencesHelper.saveRpDraftSessionId(ChatMode.RP, null)
@@ -2033,6 +2083,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         sessionEpoch++
         rpMemoryJob?.cancel()
         clearOpenTranscript()
+        // The launch job skips its own ready when this bump wins. Publish the cleared id.
+        markSessionReady()
     }
 
     /** Ask: empty thread. RP: reinject active character greeting when applicable. */

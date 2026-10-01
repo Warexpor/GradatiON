@@ -164,4 +164,24 @@ class HistoryListTest {
         assertEquals("lantern", other.query)
         assertEquals("lantern", pinned.query)
     }
+
+    @Test fun the_open_chat_scrolls_up_to_its_section_header() {
+        val shown = HistoryList.present(
+            HistoryList.build(
+                sessions = listOf(session(4, now, "notes"), session(9, now - 86_400_000L, "other")),
+                pinnedIds = emptySet(),
+                previews = emptyMap(),
+                now = now,
+                labels = labels,
+                zone = zone,
+            ),
+            openId = 9,
+            query = "",
+        )
+        val anchor = HistoryList.openAnchor(shown)
+        assertTrue(anchor > 0)
+        assertTrue(shown[anchor] is HistoryListItem.Header)
+        assertTrue((shown[anchor + 1] as HistoryListItem.Session).open)
+        assertEquals(-1, HistoryList.openAnchor(emptyList()))
+    }
 }
