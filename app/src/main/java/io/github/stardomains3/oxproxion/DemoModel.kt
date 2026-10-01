@@ -60,10 +60,11 @@ object DemoModel {
             }.getOrDefault(true)
             val inRoleplay = roleplay()
             if (!streaming) return oneShot(request, userText, body)
+            val systemText = runCatching { systemTextOf(body) }.getOrDefault("")
             val script = if (inRoleplay && isRewriteRequest(userText)) {
                 Script(null, demoRewrite(previousAssistant(body), rewriteNote(userText)))
             } else {
-                reply(userText, inRoleplay, sawPhoto = "image_url" in body)
+                reply(userText, inRoleplay, sawPhoto = "image_url" in body, systemText = systemText)
             }
             val pipe = Pipe(64 * 1024)
             Thread({ play(script, pipe) }, "demo-stream").apply { isDaemon = true }.start()
@@ -233,10 +234,31 @@ object DemoModel {
         else -> ""
     }
 
-    fun reply(userText: String, roleplay: Boolean, sawPhoto: Boolean = false): Script {
-        if (sawPhoto) return if (roleplay) PHOTO_RP else PHOTO_ASK
+    private fun systemTextOf(body: String): String {
+        val messages = Json.parseToJsonElement(body).jsonObject["messages"]?.jsonArray ?: return ""
+        return messages.filter { it.jsonObject["role"]?.jsonPrimitive?.contentOrNull == "system" }
+            .joinToString("\n") { textOf(it.jsonObject["content"]) }
+    }
+
+    /**
+     * A scene reminder is not in the user's line, so the scripted reply would miss it.
+     * One short beat names the note. A reply with no note is unchanged.
+     */
+    fun applySceneNote(script: Script, systemText: String): Script {
+        val note = RpPromptEngine.sceneNoteBody(systemText) ?: return script
+        val bit = note.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" ").take(90).trimEnd('.', '!', '…')
+        if (bit.isEmpty()) return script
+        return Script(script.thinking, script.text + "\n\n*Your note stays in the scene: $bit.*")
+    }
+
+    fun reply(userText: String, roleplay: Boolean, sawPhoto: Boolean = false, systemText: String = ""): Script {
+        val base = when {
+            sawPhoto -> if (roleplay) PHOTO_RP else PHOTO_ASK
+            roleplay -> ROLEPLAY[turn.getAndIncrement() % ROLEPLAY.size]
+            else -> null
+        }
+        if (base != null) return if (roleplay) applySceneNote(base, systemText) else base
         val t = userText.lowercase()
-        if (roleplay) return ROLEPLAY[turn.getAndIncrement() % ROLEPLAY.size]
         return when {
             "code" in t || "kotlin" in t || "function" in t -> CODE
             "table" in t || "compare" in t -> TABLE

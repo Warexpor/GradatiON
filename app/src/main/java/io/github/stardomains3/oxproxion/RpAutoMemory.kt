@@ -57,19 +57,43 @@ object RpAutoMemory {
         return if (showedPhoto) PHOTO_BEAT else ""
     }
 
-    /** Hidden rewrite and photo-boilerplate turns are not story, so they never become facts. */
+    /** Hidden rewrite, continue, scene-note and photo-boilerplate turns are not story, so they never become facts. */
     fun isMachinery(text: String): Boolean {
         val t = text.trim()
         return t == RpPromptEngine.PHOTO_TURN ||
+            t == RpPromptEngine.CONTINUE_USER_TURN ||
+            t == RpPromptEngine.CONTINUE_DIRECTION ||
+            isSceneNote(t) ||
             (t.startsWith("(OOC:") && "Rewrite your last reply" in t)
+    }
+
+    /** The reminder wrapper on its own. A reply that merely starts with one still counts as story. */
+    private fun isSceneNote(text: String): Boolean {
+        val body = RpPromptEngine.sceneNoteBody(text) ?: return false
+        return text == RpPromptEngine.sceneNote(body)
+    }
+
+    /**
+     * Drop a scene-note wrapper. A turn that is only the note becomes empty; a reply that
+     * echoes the note and then continues keeps the rest.
+     */
+    fun storyText(text: String): String {
+        val trimmed = text.trim()
+        val body = RpPromptEngine.sceneNoteBody(trimmed) ?: return trimmed
+        val wrapped = RpPromptEngine.sceneNote(body)
+        if (trimmed == wrapped) return ""
+        if (trimmed.startsWith(wrapped)) return trimmed.removePrefix(wrapped).trim()
+        return trimmed
     }
 
     /** "Name: text" lines, newest last, trimmed from the front to [TRANSCRIPT_CHARS]. */
     fun transcript(turns: List<Pair<String, String>>, charName: String, userName: String): String {
-        val lines = turns.filter { it.second.isNotBlank() && !isMachinery(it.second) }.map { (role, text) ->
-            val who = if (role == "assistant") charName else userName
-            "$who: ${text.trim()}"
-        }
+        val lines = turns.map { (role, text) -> role to storyText(text) }
+            .filter { it.second.isNotBlank() && !isMachinery(it.second) }
+            .map { (role, text) ->
+                val who = if (role == "assistant") charName else userName
+                "$who: ${text.trim()}"
+            }
         val out = ArrayDeque<String>()
         var size = 0
         for (line in lines.asReversed()) {

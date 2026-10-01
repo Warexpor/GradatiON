@@ -72,7 +72,7 @@ Inside a chat, each reply carries the character's portrait and name. Tap it to o
 Other things to know:
 *   On an empty composer, send becomes **Continue** (»). It extends the last reply from where it stopped.
 *   Swipe a reply, or use the arrows, for alternate replies.
-*   Lorebooks are plain text. Text above the first `[keys: word, phrase]` line is always included; each block under it joins when the chat mentions a key.
+*   Lorebooks are plain text. Text above the first `[keys: word, phrase]` line is always included; each block under it joins when the recent chat, the character, your memory, the facts, or a scene reminder mentions a key. A block can pull the next one in the chain. A reminder is a note for the scene, not a line you say.
 *   The **+** menu attaches a photo for the scene (from the library or the camera), inserts a scene reminder, and opens Controls or the character library. Files and audio stay in Chat. A photo on its own is enough to send; say what it is if you want the character to treat it a certain way.
 *   A reply's menu can **Rewrite** it. The latest reply comes back as another swipe; an earlier one, including the greeting, changes where it is and can be undone.
 *   Characters and lorebooks export and import as JSON from the library.

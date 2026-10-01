@@ -5,12 +5,15 @@ package io.github.stardomains3.oxproxion
  *
  * Text before the first `[keys: …]` line is always included, so an old book that is one
  * block of prose still goes in whole. A block under `[keys: docks, grey haven]` is included
- * only when the recent scene mentions one of those keys. One extra pass picks up an entry
- * whose key appears only inside lore that already came in.
+ * only when the scan mentions one of those keys. Entries keep pulling each other until
+ * nothing new matches, so a chain of three still arrives together.
  */
 object RpLore {
     private const val SCAN_CHARS = 4_000
+    /** Name, scenario, memory and facts stay in the scan even when the chat is long. */
+    private const val PIN_CHARS = 1_500
     private val header = Regex("""(?m)^[ \t]*\[keys:[ \t]*(.*?)[ \t]*][ \t]*$""")
+    private val keySplit = Regex("[,;、]")
 
     data class Entry(val keys: List<String>, val text: String) {
         internal val matchers: List<KeyMatcher> by lazy { keys.map(::KeyMatcher) }
@@ -27,7 +30,7 @@ object RpLore {
         val head = content.substring(0, marks.first().range.first).trim()
         if (head.isNotEmpty()) out += Entry(emptyList(), head)
         marks.forEachIndexed { i, mark ->
-            val keys = mark.groupValues[1].split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            val keys = mark.groupValues[1].split(keySplit).map { it.trim() }.filter { it.isNotEmpty() }
             val start = mark.range.last + 1
             val end = marks.getOrNull(i + 1)?.range?.first ?: content.length
             val text = content.substring(start, end).trim()
@@ -42,6 +45,7 @@ object RpLore {
      * leftover letters could match a shorter key.
      */
     fun scanOf(parts: List<String>, maxChars: Int = SCAN_CHARS): String {
+        if (maxChars <= 0) return ""
         val text = parts.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
         if (text.length <= maxChars) return text
         val start = text.length - maxChars
@@ -51,6 +55,38 @@ object RpLore {
         if (i >= text.length) return text.substring(start)
         return text.substring(i).trimStart()
     }
+
+    /**
+     * [pinned] is the part that must survive a long chat: the character's name and scenario,
+     * who the user is, the Memory note, and this chat's facts. [recent] is the conversation,
+     * newest last, and fills whatever of [maxChars] the pin did not use.
+     */
+    fun sceneScan(pinned: List<String>, recent: List<String>, maxChars: Int = SCAN_CHARS): String {
+        if (maxChars <= 0) return ""
+        val pin = clipTail(join(pinned), minOf(PIN_CHARS, maxChars))
+        val room = maxChars - pin.length - if (pin.isEmpty()) 0 else 1
+        val scene = if (room <= 0) "" else scanOf(recent, room)
+        return when {
+            pin.isEmpty() -> scene
+            scene.isEmpty() -> pin
+            else -> pin + "\n" + scene
+        }
+    }
+
+    /** Keep the start. Step back to a line, then a word, so a pinned fact is not cut in half. */
+    fun clipTail(text: String, maxChars: Int): String {
+        if (maxChars <= 0) return ""
+        if (text.length <= maxChars) return text
+        val cut = text.take(maxChars)
+        val line = cut.lastIndexOf('\n')
+        if (line > maxChars / 2) return cut.take(line).trimEnd()
+        val word = cut.lastIndexOf(' ')
+        if (word > maxChars / 2) return cut.take(word).trimEnd()
+        return cut.trimEnd()
+    }
+
+    private fun join(parts: List<String>) =
+        parts.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
 
     fun select(content: String, scan: String, maxChars: Int = 12_000): String {
         val entries = parse(content)
@@ -63,8 +99,16 @@ object RpLore {
             }
         }
         take(scan)
-        val broughtIn = picked.joinToString("\n") { entries[it].text }
-        if (broughtIn.isNotBlank()) take(broughtIn)
+        // A key that lives only inside an entry that just came in still gets its block.
+        // Stop when a pass adds nothing; the set cannot grow past the book.
+        var guard = entries.size
+        while (guard-- > 0) {
+            val before = picked.size
+            val broughtIn = picked.joinToString("\n") { entries[it].text }
+            if (broughtIn.isBlank()) break
+            take(broughtIn)
+            if (picked.size == before) break
+        }
 
         val sb = StringBuilder()
         for (i in picked.sorted()) {

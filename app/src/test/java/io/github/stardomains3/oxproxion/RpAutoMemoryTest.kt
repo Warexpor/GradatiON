@@ -95,6 +95,21 @@ class RpAutoMemoryTest {
         assertFalse(t.contains("says nothing"))
     }
 
+    @Test fun transcriptDropsContinueAndABareSceneNote() {
+        val note = RpPromptEngine.sceneNote("mention the locket")
+        val turns = listOf(
+            "user" to RpPromptEngine.CONTINUE_USER_TURN,
+            "user" to note,
+            "assistant" to note + "\n\nShe opens it.",
+            "assistant" to "The locket is warm."
+        )
+        val t = RpAutoMemory.transcript(turns, "Mira", "Sam")
+        assertFalse(t.contains("Continue your last message"))
+        assertFalse(t.contains("Scene note"))
+        assertTrue(t.contains("She opens it."))
+        assertTrue(t.contains("The locket is warm."))
+    }
+
     @Test fun cleanDropsAnUnclosedThinkAndCopiedMemory() {
         assertEquals("- They leave at dawn", RpAutoMemory.clean("- They leave at dawn\n<think>still scratching"))
         assertNull(RpAutoMemory.clean("<think>the facts never got written"))
