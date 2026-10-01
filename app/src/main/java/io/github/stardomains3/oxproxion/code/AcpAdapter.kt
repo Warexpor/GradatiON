@@ -326,13 +326,33 @@ class AcpAdapter : HarnessAdapter {
         )
     }
 
-    private fun optionKind(s: String?): ApprovalOption.Kind = when (s) {
-        "allow_always" -> ApprovalOption.Kind.ALLOW_ALWAYS
-        "reject_once" -> ApprovalOption.Kind.REJECT_ONCE
-        "reject_always" -> ApprovalOption.Kind.REJECT_ALWAYS
-        "allow_once" -> ApprovalOption.Kind.ALLOW_ONCE
-        else -> ApprovalOption.Kind.ALLOW_ONCE
+    private fun optionKind(s: String?): ApprovalOption.Kind = approvalKind(s)
+
+    /**
+     * ACP's four kinds, plus the short names some agents still send (`reject`, `deny`).
+     * An unknown kind falls back to the option's name, so a button labelled Deny is not
+     * drawn and notified as Allow. A name we cannot read stays allow-once, as before.
+     */
+    private fun approvalKind(kind: String?, name: String? = null): ApprovalOption.Kind {
+        when (normalizeKind(kind)) {
+            "allow_always", "always_allow", "allow_all" -> return ApprovalOption.Kind.ALLOW_ALWAYS
+            "reject_always", "deny_always" -> return ApprovalOption.Kind.REJECT_ALWAYS
+            "reject_once", "reject", "deny", "deny_once", "cancelled", "canceled" ->
+                return ApprovalOption.Kind.REJECT_ONCE
+            "allow_once", "allow", "approve" -> return ApprovalOption.Kind.ALLOW_ONCE
+        }
+        val n = name?.trim()?.lowercase().orEmpty()
+        if (n.startsWith("deny") || n.startsWith("reject") || n.startsWith("don't") || n.startsWith("dont")) {
+            return if (n.contains("always")) ApprovalOption.Kind.REJECT_ALWAYS else ApprovalOption.Kind.REJECT_ONCE
+        }
+        if (n.contains("always") && (n.startsWith("allow") || n.startsWith("always"))) {
+            return ApprovalOption.Kind.ALLOW_ALWAYS
+        }
+        return ApprovalOption.Kind.ALLOW_ONCE
     }
+
+    private fun normalizeKind(kind: String?): String =
+        kind?.trim()?.lowercase()?.replace('-', '_')?.replace(' ', '_').orEmpty()
 
     private fun decodeUpdate(params: JsonObject, seq: Long?): List<AdapterOutput> {
         val sid = params.str("sessionId") ?: return ignored("no sessionId")
@@ -456,7 +476,9 @@ class AcpAdapter : HarnessAdapter {
             title = u.str("title"),
             // A location-only update must not wipe the command the tool_call already showed.
             detail = detailForUpdate(sid, callId, u),
-            output = outputOf(sid, callId, u)
+            output = outputOf(sid, callId, u),
+            // Omitted kind must stay null so a status-only update does not reset the icon.
+            kind = toolKindIfPresent(u.str("kind")),
         ), seq)
         diffs(callId, u["content"], now).forEach {
             result += AdapterOutput.Update(sid, CodeUpdate.Upsert(it), seq)
@@ -473,13 +495,9 @@ class AcpAdapter : HarnessAdapter {
             ?: return ignored("non-primitive permission id")
         val options = params["options"]?.jsonArray?.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
-            val kind = when (o.str("kind")) {
-                "allow_always" -> ApprovalOption.Kind.ALLOW_ALWAYS
-                "reject_once" -> ApprovalOption.Kind.REJECT_ONCE
-                "reject_always" -> ApprovalOption.Kind.REJECT_ALWAYS
-                else -> ApprovalOption.Kind.ALLOW_ONCE
-            }
-            ApprovalOption(o.str("optionId") ?: return@mapNotNull null, o.str("name") ?: kind.name, kind)
+            val id = o.str("optionId") ?: return@mapNotNull null
+            val kind = approvalKind(o.str("kind"), o.str("name"))
+            ApprovalOption(id, o.str("name") ?: kind.name, kind)
         }.orEmpty()
         val now = System.currentTimeMillis()
         closeText(sid)
@@ -563,10 +581,10 @@ class AcpAdapter : HarnessAdapter {
      * A later frame that only repeats the working folder used to replace `npm test`.
      */
     private fun detailForUpdate(sid: String, callId: String, u: JsonObject): String? {
-        val raw = u["rawInput"] as? JsonObject
+        val raw = rawInputOf(u)
         val specific = commandOf(raw) != null ||
-            firstRaw(raw, "pattern", "query", "url") != null ||
-            firstRaw(raw, "file_path", "path") != null
+            firstRaw(raw, "pattern", "query", "url", "regex") != null ||
+            firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile") != null
         val hasLine = (u["locations"] as? JsonArray).orEmpty().any { e ->
             val line = (e as? JsonObject)?.str("line")?.toIntOrNull()
             line != null && line > 0
@@ -618,28 +636,60 @@ class AcpAdapter : HarnessAdapter {
             val path = o.str("path") ?: return@mapNotNull null
             ToolCallDetail.Location(path, o.str("line")?.toIntOrNull())
         }
-        val raw = u["rawInput"] as? JsonObject
+        val raw = rawInputOf(u)
         return ToolCallDetail.format(
             kind = u.str("kind"),
             locations = locations,
             command = commandOf(raw),
-            query = firstRaw(raw, "pattern", "query", "url"),
-            filePath = firstRaw(raw, "file_path", "path"),
+            query = firstRaw(raw, "pattern", "query", "url", "regex"),
+            filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile"),
         )
     }
 
-    /** `command` may be a string or an argv array. */
+    /**
+     * `rawInput` is an object, or a JSON string of one (some agents stringify the tool args).
+     * A string that is not an object is ignored; the title still shows.
+     */
+    private fun rawInputOf(u: JsonObject): JsonObject? = when (val el = u["rawInput"]) {
+        is JsonObject -> el
+        is JsonPrimitive -> {
+            val text = if (el is JsonNull) null else el.contentOrNull
+            if (text.isNullOrBlank()) null
+            else runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull()
+        }
+        else -> null
+    }
+
+    /**
+     * `command` may be a string or an argv array. A separate `args` / `arguments` list is
+     * appended when the command itself is not already that list, so `git` plus `["status"]`
+     * reads `git status`. Pieces that contain spaces are quoted.
+     */
     private fun commandOf(raw: JsonObject?): String? {
         if (raw == null) return null
-        val el = raw["command"] ?: raw["cmd"] ?: return null
-        val text = when (el) {
-            is JsonArray -> el.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.takeIf { s -> s.isNotEmpty() } }
-                .joinToString(" ")
+        val el = raw["command"] ?: raw["cmd"]
+        val base = when (el) {
+            is JsonArray -> joinArgs(el)
             is JsonPrimitive -> if (el is JsonNull) "" else el.contentOrNull.orEmpty()
             else -> ""
         }.trim()
+        if (el is JsonArray) return base.ifEmpty { null }
+        val extra = when (val args = raw["args"] ?: raw["arguments"]) {
+            is JsonArray -> joinArgs(args)
+            is JsonPrimitive -> if (args is JsonNull) "" else args.contentOrNull.orEmpty().trim()
+            else -> ""
+        }
+        val text = when {
+            base.isEmpty() -> extra
+            extra.isEmpty() -> base
+            else -> "$base $extra"
+        }.trim()
         return text.ifEmpty { null }
     }
+
+    private fun joinArgs(arr: JsonArray): String =
+        arr.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.takeIf { s -> s.isNotEmpty() } }
+            .joinToString(" ") { piece -> if (piece.any { it.isWhitespace() }) "\"$piece\"" else piece }
 
     private fun firstRaw(raw: JsonObject?, vararg keys: String): String? {
         if (raw == null) return null
@@ -709,6 +759,10 @@ class AcpAdapter : HarnessAdapter {
             CodeEvent.FileDiff("diff:$callId:$path", now, callId, path, lines, add, del, isNewFile = old == null)
         }
     }
+
+    /** Null when the frame omitted kind, so a status update does not reset the icon. */
+    private fun toolKindIfPresent(s: String?): ToolKind? =
+        if (s.isNullOrBlank()) null else toolKind(s)
 
     private fun toolKind(s: String?) = when (s) {
         "read" -> ToolKind.READ

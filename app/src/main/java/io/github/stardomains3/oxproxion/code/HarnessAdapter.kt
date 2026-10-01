@@ -20,13 +20,19 @@ sealed class CodeUpdate {
      */
     data class ImageChunk(val key: String, val mimeType: String, val data: String) : CodeUpdate()
 
-    /** Partial update of a tool call; null fields keep their value. */
+    /**
+     * Partial update of a tool call; null fields keep their value.
+     * [kind] is set only when this frame named one, so a later status does not
+     * wipe Read back to Other. A patch for an id the transcript has not seen yet
+     * still becomes a card (some agents send the update without a first `tool_call`).
+     */
     data class ToolPatch(
         val callId: String,
         val status: ToolStatus? = null,
         val title: String? = null,
         val detail: String? = null,
-        val output: String? = null
+        val output: String? = null,
+        val kind: ToolKind? = null,
     ) : CodeUpdate()
 
     /** An approval was answered, here or elsewhere. */
@@ -173,14 +179,26 @@ object TranscriptReducer {
             }
             is CodeUpdate.ToolPatch -> {
                 val i = list.indexOfLast { it is CodeEvent.ToolCall && it.callId == update.callId }
-                if (i < 0) list else {
+                if (i < 0) {
+                    list + CodeEvent.ToolCall(
+                        key = "tool:${update.callId}",
+                        at = now,
+                        callId = update.callId,
+                        kind = update.kind ?: ToolKind.OTHER,
+                        title = update.title?.takeIf { it.isNotBlank() } ?: "Tool call",
+                        detail = update.detail,
+                        status = update.status ?: ToolStatus.PENDING,
+                        output = update.output,
+                    )
+                } else {
                     val t = list[i] as CodeEvent.ToolCall
                     list.toMutableList().also {
                         it[i] = t.copy(
                             status = update.status ?: t.status,
                             title = update.title ?: t.title,
                             detail = update.detail ?: t.detail,
-                            output = update.output ?: t.output
+                            output = update.output ?: t.output,
+                            kind = update.kind ?: t.kind,
                         )
                     }
                 }
