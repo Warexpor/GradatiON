@@ -923,7 +923,11 @@ class SharedPreferencesHelper(context: Context) {
         // Keep the old key until the new one proves it decrypts, so a failed save is not a lost key.
         val oldEncrypted = apiKeysPrefs.getString("${alias}_encrypted", null)
         val oldIv = apiKeysPrefs.getString("${alias}_iv", null)
-        fun restoreOld() = apiKeysPrefs.edit {
+        // The chat database passphrase is the only copy of the key that opens the file. apply()
+        // can still be sitting in memory when the process is killed, and the next launch then
+        // mints a new key and locks the database that was just encrypted.
+        val durable = alias == CHAT_DB_PASSPHRASE_ALIAS
+        fun restoreOld() = apiKeysPrefs.edit(commit = durable) {
             if (oldEncrypted != null && oldIv != null) {
                 putString("${alias}_encrypted", oldEncrypted)
                 putString("${alias}_iv", oldIv)
@@ -943,7 +947,7 @@ class SharedPreferencesHelper(context: Context) {
             val ivString = Base64.encodeToString(iv, Base64.DEFAULT)
             val encryptedKeyString = Base64.encodeToString(encryptedApiKey, Base64.DEFAULT)
 
-            apiKeysPrefs.edit {
+            apiKeysPrefs.edit(commit = durable) {
                 putString("${alias}_encrypted", encryptedKeyString)
                 putString("${alias}_iv", ivString)
             }
@@ -1360,6 +1364,31 @@ class SharedPreferencesHelper(context: Context) {
         else putLong("rp_lorebook_$characterId", lorebookId)
     }
 
+    /**
+     * Lorebook name from a character backup, kept until a book with that name exists.
+     * The pin itself is a Room id, which a backup from another phone does not have.
+     */
+    fun getPendingRpLorebookName(characterId: Long): String? =
+        mainPrefs.getString(pendingLorebookKey(characterId), null)?.trim()?.takeIf { it.isNotEmpty() }
+
+    fun savePendingRpLorebookName(characterId: Long, name: String?) = mainPrefs.edit {
+        if (name.isNullOrBlank()) remove(pendingLorebookKey(characterId))
+        else putString(pendingLorebookKey(characterId), name.trim())
+    }
+
+    fun pendingRpLorebookNames(): Map<Long, String> {
+        val prefix = "rp_lorebook_pending_"
+        return mainPrefs.all.keys.mapNotNull { key ->
+            if (!key.startsWith(prefix)) return@mapNotNull null
+            val id = key.removePrefix(prefix).toLongOrNull() ?: return@mapNotNull null
+            val name = mainPrefs.getString(key, null)?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return@mapNotNull null
+            id to name
+        }.toMap()
+    }
+
+    private fun pendingLorebookKey(characterId: Long) = "rp_lorebook_pending_$characterId"
+
     /** RP chat layout per character: [RP_LAYOUT_CLASSIC], [RP_LAYOUT_BUBBLES] or [RP_LAYOUT_BOOK]. */
     fun getRpLayout(characterId: Long?): String =
         mainPrefs.getString("rp_layout_" + (characterId?.toString() ?: "llm"), RP_LAYOUT_CLASSIC) ?: RP_LAYOUT_CLASSIC
@@ -1396,6 +1425,7 @@ class SharedPreferencesHelper(context: Context) {
             remove("rp_voice_pitch_$characterId")
             remove("rp_voice_rate_$characterId")
             remove("rp_lorebook_$characterId")
+            remove("rp_lorebook_pending_$characterId")
         }
         BackgroundPhoto.delete(appContext, BackgroundPhoto.slotForCharacter(characterId))
     }

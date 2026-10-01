@@ -2,6 +2,7 @@ package io.github.stardomains3.oxproxion.code.store
 
 import android.content.Context
 import android.content.SharedPreferences
+import io.github.stardomains3.oxproxion.TolerantPrefs
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -57,7 +58,7 @@ class CodeHostSecrets @VisibleForTesting constructor(
     constructor(context: Context) : this(context, AndroidKeystoreKeySource())
 
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        TolerantPrefs(context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
 
     /** Persist [token] for [hostId]. Returns false if encrypt failed (caller must not scrub plaintext). */
     fun putToken(hostId: String, token: String): Boolean {

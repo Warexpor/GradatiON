@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, backup carries prefs)
+
+On `cursor/export-prefs-stability-1a11`, targeting `gradation/app-pass`.
+- A chat backup now keeps the date, the pin, and that chat's fact notes. A character backup keeps Memory, layout, read-aloud voice, and the lorebook pin (by name). A pin whose book is not imported yet is applied when the lorebook backup comes in. An older backup still imports and does not wipe notes it does not contain.
+- Export writes one message at a time. `getAllSessionsWithMessages` uses the sliced reader, so a long attachment is not loaded with `SELECT *`. The chat database passphrase is `commit()`ed. Code prefs and host-token prefs go through `TolerantPrefs`.
+- Phone: export chats, delete one, import, and confirm the date, the pin, and the fact notes. Export a character, import on a fresh library, and confirm Memory, layout, and voice. Import the lorebook after the character and confirm the pin attaches.
+
 # Handoff (2026-10-01, chat composer drafts)
 
 On `cursor/chat-composer-drafts-2822`, targeting `gradation/app-pass`.

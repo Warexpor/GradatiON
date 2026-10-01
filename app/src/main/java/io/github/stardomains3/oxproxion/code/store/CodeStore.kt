@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.core.content.edit
+import io.github.stardomains3.oxproxion.TolerantPrefs
 import io.github.stardomains3.oxproxion.code.CodeHost
 import io.github.stardomains3.oxproxion.code.CodeSessionSummary
 import io.github.stardomains3.oxproxion.code.PermissionMode
@@ -26,7 +27,7 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
 
     private val appContext = context.applicationContext
     private val prefs: SharedPreferences =
-        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        TolerantPrefs(appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     /** Code tab on the main screen. Off until Settings > Modes turns it on. */

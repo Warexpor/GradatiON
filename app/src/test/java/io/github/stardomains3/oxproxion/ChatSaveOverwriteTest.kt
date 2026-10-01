@@ -268,6 +268,7 @@ class ChatSaveOverwriteTest {
                 listOf(ChatMessage(sessionId = 0, role = "user", content = body)),
             )
             assertEquals(body, dao.getMessagesForSession(dao.getAllSessionsOnce().single().id).single().content)
+            assertEquals(body, dao.getAllSessionsWithMessages().single().messages.single().content)
             assertEquals(body, dao.getLastMessage(dao.getAllSessionsOnce().single().id)!!.content)
 
             val viewModel = SavedChatsViewModel(app)
@@ -280,5 +281,48 @@ class ChatSaveOverwriteTest {
             ChatMessageText.safeCharsForTest = null
             ChatMessageText.sliceCharsForTest = null
         }
+    }
+
+    @Test
+    fun exportKeepsTheDateThePinTheFactsAndOddCharacters() = runBlocking {
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val whenSaved = 1_700_000_000_000L
+        val id = dao.insertSessionAndMessages(
+            ChatSession(title = "A \"b\"", modelUsed = "m/x", timestamp = whenSaved, mode = ChatMode.RP.storageValue),
+            listOf(ChatMessage(sessionId = 0, role = "user", content = "say \"hi\"\nnext")),
+        )
+        prefs.saveRpFacts(id, "fact \"one\"")
+        prefs.setSessionPinned(id, true)
+
+        val viewModel = SavedChatsViewModel(app)
+        val exported = viewModel.getChatsAsJson()
+        dao.getAllSessionsWithMessages().forEach { dao.deleteSession(it.session.id) }
+        prefs.clearSessionPrefs(id)
+        prefs.setSessionPinned(id, false)
+
+        assertTrue(viewModel.importChatsFromJsonInternal(exported) is ChatImportResult.Success)
+        val restored = dao.getAllSessionsWithMessages().single()
+        assertEquals("A \"b\"", restored.session.title)
+        assertEquals(whenSaved, restored.session.timestamp)
+        assertEquals(ChatMode.RP.storageValue, restored.session.mode)
+        assertEquals("say \"hi\"\nnext", restored.messages.single().content)
+        assertEquals("fact \"one\"", prefs.getRpFacts(restored.session.id))
+        assertTrue(prefs.isSessionPinned(restored.session.id))
+    }
+
+    @Test
+    fun anOlderChatBackupStillImports() = runBlocking {
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val viewModel = SavedChatsViewModel(app)
+        val older = """{"sessions":[{"title":"Old","modelUsed":"m","messages":[{"role":"user","content":"\"hi\""}]}]}"""
+        assertTrue(viewModel.importChatsFromJsonInternal(older) is ChatImportResult.Success)
+        val restored = dao.getAllSessionsWithMessages().single()
+        assertEquals("Old", restored.session.title)
+        assertEquals("\"hi\"", restored.messages.single().content)
+        assertTrue(restored.session.timestamp > 0L)
+        assertEquals("", prefs.getRpFacts(restored.session.id))
+        assertFalse(prefs.isSessionPinned(restored.session.id))
     }
 }

@@ -49,6 +49,20 @@ class CodeHostSecretsTest {
     private fun store() = CodeStore(ctx, vault())
 
     @Test
+    fun aWrongTypeCodePrefDoesNotCrash() {
+        ctx.getSharedPreferences(CodeStore.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString("enabled", "yes")
+            .putString("pinned_session_titles", "nope")
+            .commit()
+        val s = store()
+        assertFalse(s.enabled)
+        assertTrue(s.pinnedSessionTitles().isEmpty())
+        s.enabled = true
+        assertTrue(s.enabled)
+    }
+
+    @Test
     fun aesGcmRoundTripWithInjectedKey() {
         val sealed = CodeAesGcm.seal(softKey, "pairing-secret".toByteArray(Charsets.UTF_8))
         assertTrue(sealed.iv.isNotEmpty())
