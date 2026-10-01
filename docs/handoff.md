@@ -1,3 +1,10 @@
+# Handoff (2026-10-01, RP swipe pictures and wallpapers)
+
+On `cursor/rp-photo-swipe-wallpaper-1214`, targeting `gradation/app-pass`.
+- Swiping to another version of a roleplay reply keeps a picture already on that reply, including the JPEG stored in the message. Opening the chat does the same. A detailed photo that is still too big after it is compressed is scaled down until it fits, instead of being refused as an unreadable format.
+- A character wallpaper, and the app background photo, is read from the picker once and stored upright, with the long edge capped. A backup of a large or sideways wallpaper is stored the same way. The preview matches the chat. A picture already on the phone that still has a sideways flag is drawn upright.
+- Phone: in Roleplay, get a reply that includes a picture, swipe to another version and back (the picture stays, and it still opens). Send a large, detailed photo. Set a character wallpaper from a sideways camera shot, leave the chat and come back (the picture is upright). Import a character backup that has a wallpaper.
+
 # Handoff (2026-10-01, code tool kinds and the session line)
 
 On `cursor/code-tool-kinds-preview-b6a3`, targeting `gradation/app-pass`. Code mode only:

@@ -92,6 +92,38 @@ class RpContinuationTest {
         assertFalse(wire.content.toString().contains("qq"))
     }
 
+    @Test fun swipeKeepsThePictureStoredOnTheReply() {
+        val jpeg = "data:image/jpeg;base64,qq"
+        val prior = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "text")
+                put("text", "She holds it up.")
+            })
+            add(buildJsonObject {
+                put("type", "image_url")
+                put("image_url", buildJsonObject { put("url", jpeg) })
+            })
+        }
+        val message = FlexibleMessage(
+            role = "assistant",
+            content = prior,
+            imageUri = "content://scene/1",
+            reasoning = "hmm",
+        )
+        val next = RpContinuation.withWords(message, "She turns.")
+        assertEquals("She turns.", MessageContent.text(next.content))
+        assertEquals(jpeg, MessageContent.imageUrl(next.content))
+        assertEquals("content://scene/1", next.imageUri)
+        assertEquals(null, next.reasoning)
+        assertEquals(null, next.thinking)
+        val plain = RpContinuation.withWords(
+            FlexibleMessage(role = "assistant", content = JsonPrimitive("Hello")),
+            "Hello again",
+        )
+        assertEquals("Hello again", MessageContent.text(plain.content))
+        assertEquals(null, MessageContent.imageUrl(plain.content))
+    }
+
     @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)
