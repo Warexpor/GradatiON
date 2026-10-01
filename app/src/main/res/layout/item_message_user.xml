@@ -76,6 +76,22 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
+        <!-- Always under the bubble. The action row below stays hidden until a tap, so a
+             long message could not be opened from there. -->
+        <ImageButton
+            android:id="@+id/collapseToggleButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginTop="0dp"
+            android:background="@drawable/bg_action_press"
+            android:contentDescription="@string/cd_show_more"
+            android:padding="13dp"
+            android:src="@drawable/ic_msg_expand"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/messageContainer"
+            app:tint="@color/xai_mute" />
+
         <!-- Edit + copy primary (right), then local extras; hidden until tap. Bare icons, no
              capsule, the same row the reply has under it. -->
         <LinearLayout
@@ -88,7 +104,7 @@
             android:layout_marginTop="2dp"
             android:layout_marginBottom="2dp"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/messageContainer">
+            app:layout_constraintTop_toBottomOf="@id/collapseToggleButton">
 
             <ImageButton
                 android:id="@+id/editButton"
@@ -121,17 +137,6 @@
                 android:src="@drawable/ic_msg_delete"
                 android:visibility="visible"
                 app:tint="@color/delete_action" />
-
-            <ImageButton
-                android:id="@+id/collapseToggleButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="@drawable/bg_action_press"
-                android:contentDescription="@string/cd_toggle_expand"
-                android:padding="7dp"
-                android:src="@drawable/ic_msg_expand"
-                android:visibility="gone"
-                app:tint="@color/xai_mute" />
 
             <!-- Kept for ID stability; regenerate lives under AI responses now -->
             <ImageButton

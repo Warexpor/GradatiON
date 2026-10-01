@@ -177,4 +177,7 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
 
     suspend fun lastMessagePrefixes(sessionIds: List<Long>): List<ChatMessage> =
         repository.lastMessagePrefixes(sessionIds)
+
+    suspend fun searchWindows(sessionIds: List<Long>, query: String): List<MessageWindow> =
+        repository.searchWindows(sessionIds, query)
 }

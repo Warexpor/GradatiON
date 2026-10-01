@@ -317,6 +317,8 @@
     <string name="cd_view_html">View in HTML</string>
     <string name="cd_save_file">Save as file</string>
     <string name="cd_toggle_expand">Toggle expand</string>
+    <string name="cd_show_more">Show more</string>
+    <string name="cd_show_less">Show less</string>
     <string name="cd_active_model">Active model</string>
     <string name="cd_attach_file">Attach file</string>
     <string name="cd_attach_media">Attach image or audio</string>

@@ -1463,10 +1463,21 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         // its scroll all move in one layout pass. A translate-then-hand-off scheme always left a
         // frame where one of them was a step behind, which flashed at the end of every slide.
         var imeAnimating = false
+        var barsLeft = 0
+        var barsRight = 0
         var barsTop = 0
         var barsBottom = 0
+        // Sibling of this content. The listener below consumes insets, so History never
+        // hears the keyboard on its own and the search field would sit under it.
+        val history = root.findViewById<View>(R.id.historyDrawerContainer)
+        fun kbAboveNav(imeBottom: Int) = HistoryChrome.bottom(barsBottom, imeBottom) - barsBottom
         fun applyKb(kb: Int) {
             val bottom = barsBottom + kb
+            if (history.paddingLeft != barsLeft || history.paddingTop != barsTop ||
+                history.paddingRight != barsRight || history.paddingBottom != bottom
+            ) {
+                history.setPadding(barsLeft, barsTop, barsRight, bottom)
+            }
             if (frame.paddingTop != barsTop || frame.paddingBottom != bottom) frame.setPadding(0, barsTop, 0, bottom)
             // Everything in the chat frame keeps its place; only the backdrop bleeds out.
             (backdrop.layoutParams as ViewGroup.MarginLayoutParams).let { lp ->
@@ -1489,6 +1500,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            barsLeft = bars.left
+            barsRight = bars.right
             barsTop = bars.top
             barsBottom = bars.bottom
             v.setPadding(bars.left, 0, bars.right, 0)
@@ -1498,7 +1511,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 applyKb(imePx)
             } else {
                 imeFollow = !list.canScrollVertically(1)
-                applyKb(maxOf(0, ime.bottom - bars.bottom))
+                applyKb(kbAboveNav(ime.bottom))
             }
             WindowInsetsCompat.CONSUMED
         }
@@ -1540,7 +1553,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 insets: WindowInsetsCompat,
                 runningAnimations: MutableList<androidx.core.view.WindowInsetsAnimationCompat>
             ): WindowInsetsCompat {
-                if (imeAnimating) applyKb(maxOf(0, insets.getInsets(imeType).bottom - barsBottom))
+                if (imeAnimating) applyKb(kbAboveNav(insets.getInsets(imeType).bottom))
                 return insets
             }
 
@@ -1548,7 +1561,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 if (animation.typeMask and imeType == 0 || !imeAnimating) return
                 imeAnimating = false
                 val ri = ViewCompat.getRootWindowInsets(content)
-                if (ri != null) applyKb(maxOf(0, ri.getInsets(imeType).bottom - barsBottom))
+                if (ri != null) applyKb(kbAboveNav(ri.getInsets(imeType).bottom))
                 else ViewCompat.requestApplyInsets(content)
             }
         })

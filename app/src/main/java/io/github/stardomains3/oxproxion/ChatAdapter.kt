@@ -904,45 +904,33 @@ class ChatAdapter(
                 val displayMetrics = itemView.resources.displayMetrics
                 val screenWidthDp = displayMetrics.widthPixels / displayMetrics.density
                 val isTablet = screenWidthDp >= 600
-                val MAX_CHARS_THRESHOLD = if (isTablet) 300 else 150
-                val MAX_LINES_THRESHOLD = 3
-
-                val lines = rawUserContent.lines()
-                val rawLines = lines.size
-                val charLength = rawUserContent.length
-                val isLongMessage = rawLines > MAX_LINES_THRESHOLD || charLength > MAX_CHARS_THRESHOLD
-
-                if (isLongMessage) {
-                    // Use stable key (content hash) instead of position
-                    val msgKey = rawUserContent.hashCode().toString()
-                    val isCollapsed = collapsedStates.getOrDefault(msgKey, true)
-
-                    val displayContent = if (isCollapsed) {
-                        if (charLength > MAX_CHARS_THRESHOLD) {
-                            val cutOffIndex =
-                                rawUserContent.take(MAX_CHARS_THRESHOLD).lastIndexOf(' ')
-                            val safeIndex = if (cutOffIndex > 0) cutOffIndex else MAX_CHARS_THRESHOLD
-                            rawUserContent.take(safeIndex) + "...(continued)"
-                        } else {
-                            lines.take(MAX_LINES_THRESHOLD).joinToString("\n") + "\n\n**...(continued)**"
-                        }
-                    } else {
-                        rawUserContent
-                    }
-
-                    setCachedUserMarkdown(messageTextView, displayContent)
-
+                val maxChars = if (isTablet) 300 else 150
+                val msgKey = rawUserContent.hashCode().toString()
+                val longMessage = UserMessageFold.isLong(rawUserContent, maxChars)
+                val collapsed = collapsedStates.getOrDefault(msgKey, true)
+                val displayContent = if (longMessage && collapsed) {
+                    UserMessageFold.collapse(rawUserContent, maxChars)
+                } else {
+                    rawUserContent
+                }
+                setCachedUserMarkdown(messageTextView, displayContent)
+                if (longMessage) {
                     collapseToggleButton.visibility = View.VISIBLE
                     collapseToggleButton.setImageResource(
-                        if (isCollapsed) R.drawable.ic_msg_expand else R.drawable.ic_msg_collapse
+                        if (collapsed) R.drawable.ic_msg_expand else R.drawable.ic_msg_collapse
+                    )
+                    collapseToggleButton.contentDescription = itemView.context.getString(
+                        if (collapsed) R.string.cd_show_more else R.string.cd_show_less
                     )
                     collapseToggleButton.setOnClickListener {
-                        collapsedStates[msgKey] = !isCollapsed
-                        this@ChatAdapter.notifyItemChanged(pos)
+                        val current = bindingAdapterPosition
+                        if (current == RecyclerView.NO_POSITION) return@setOnClickListener
+                        collapsedStates[msgKey] = !collapsed
+                        this@ChatAdapter.notifyItemChanged(current)
                         onCollapse()
                     }
                 } else {
-                    setCachedUserMarkdown(messageTextView, rawUserContent)
+                    collapseToggleButton.setOnClickListener(null)
                 }
             } else {
                 setCachedUserMarkdown(messageTextView, rawUserContent)

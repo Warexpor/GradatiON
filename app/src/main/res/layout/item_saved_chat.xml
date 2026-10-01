@@ -31,6 +31,16 @@
             android:textFontWeight="500"
             android:textSize="16sp" />
 
+        <ImageView
+            android:id="@+id/savedChatPin"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_marginStart="8dp"
+            android:contentDescription="@string/grok_history_pinned_title"
+            android:src="@drawable/ic_pin"
+            android:visibility="gone"
+            app:tint="@color/xai_mute" />
+
         <TextView
             android:id="@+id/savedChatTimestamp"
             android:layout_width="wrap_content"
