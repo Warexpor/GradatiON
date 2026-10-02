@@ -404,6 +404,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * still finds rows (active prefs are cleared when the character row is missing).
      */
     private var preservedSessionCharacterId: Long? = null
+    /** Earlier replies gained or lost versions: their rows redraw the control. */
+    private val _rpEarlierVersionsChanged = MutableLiveData<Event<Unit>>()
+    val rpEarlierVersionsChanged: LiveData<Event<Unit>> = _rpEarlierVersionsChanged
     private val _rpSwipeNav = MutableLiveData<RpSwipeNav?>()
     val rpSwipeNav: LiveData<RpSwipeNav?> = _rpSwipeNav
 
@@ -577,12 +580,30 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return piece.copy(content = JsonPrimitive(RpContinuation.join(base, text)))
     }
 
-    private fun clearRpSwipeAlts() {
+    /**
+     * The newest reply's versions stop being the swipe bar's. With [archive] (a new turn) they
+     * stay on that reply as earlier versions; a Continue changed its text, so they go.
+     */
+    private fun clearRpSwipeAlts(archive: Boolean = false) {
         if (rpSwipeState.alts.isEmpty() && rpSwipeState.pictureUris.isEmpty()) return
-        dropUnreferencedSwipePictures()
-        rpSwipeState = RpSwipeState()
-        currentSessionId?.let { rpSwipeStore.clear(it) }
+        val messages = _chatMessages.value.orEmpty()
+        val position = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val earlier = if (archive && position >= 0) {
+            RpSwipeRules.archive(rpSwipeState, position, getMessageText(messages[position].content))
+        } else {
+            rpSwipeState.earlier
+        }
+        val archived = earlier !== rpSwipeState.earlier
+        if (!archived) dropUnreferencedSwipePictures()
+        rpSwipeState = RpSwipeState(earlier = earlier)
+        persistOrClearRpSwipe()
         _rpSwipeNav.value = null
+        if (archived) _rpEarlierVersionsChanged.value = Event(Unit)
+    }
+
+    private fun persistOrClearRpSwipe() {
+        val id = currentSessionId ?: return
+        if (rpSwipeState.isEmpty) rpSwipeStore.clear(id) else rpSwipeStore.save(id, rpSwipeState)
     }
 
     /**
@@ -591,20 +612,43 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun forgetRpSwipeVersions() {
         dropUnreferencedSwipePictures()
+        val earlier = reconciledEarlier()
+        dropEarlierPictures(rpSwipeState.earlier - earlier.keys)
         clearRpSwipeMemory()
-        currentSessionId?.let { rpSwipeStore.clear(it) }
+        rpSwipeState = RpSwipeState(earlier = earlier)
+        persistOrClearRpSwipe()
+    }
+
+    /** Earlier versions whose reply is still on screen at the same place, as one of them. */
+    private fun reconciledEarlier(): Map<Int, RpVersions> =
+        RpSwipeRules.reconcileEarlier(rpSwipeState.earlier, _chatMessages.value.orEmpty()) { m ->
+            if (m.role == "assistant" && !isAssistantPlaceholder(m)) getMessageText(m.content) else null
+        }
+
+    private fun dropEarlierPictures(gone: Map<Int, RpVersions>) {
+        if (gone.isEmpty()) return
+        val kept = swipePictureNames(rpSwipeState.copy(earlier = rpSwipeState.earlier - gone.keys))
+        val names = gone.values.flatMap { it.pictureUris }.mapNotNull { ScenePhoto.sceneFileName(it) }.toSet() - kept
+        deleteUnusedScenePhotos(names)
     }
 
     /** File names remembered on swipe versions, so a save of a different version does not delete them. */
     private fun swipePictureNames(swipe: RpSwipeState?): Set<String> =
-        swipe?.pictureUris.orEmpty().mapNotNull { ScenePhoto.sceneFileName(it) }.toSet()
+        (swipe?.pictureUris.orEmpty() + swipe?.earlier?.values.orEmpty().flatMap { it.pictureUris })
+            .mapNotNull { ScenePhoto.sceneFileName(it) }.toSet()
 
     /**
      * A version that is no longer kept. The file on the reply still showing stays; one that
      * is only named here, and not in any saved message, is removed.
      */
     private fun dropUnreferencedSwipePictures() {
-        val names = swipePictureNames(rpSwipeState)
+        // The newest reply's versions only. An earlier reply still keeps its own.
+        val names = swipePictureNames(RpSwipeState(pictureUris = rpSwipeState.pictureUris)) -
+            swipePictureNames(RpSwipeState(earlier = rpSwipeState.earlier))
+        deleteUnusedScenePhotos(names)
+    }
+
+    private fun deleteUnusedScenePhotos(names: Set<String>) {
         if (names.isEmpty()) return
         val live = _chatMessages.value.orEmpty().mapNotNull { ScenePhoto.sceneFileName(it.imageUri) }.toSet()
         val held = synchronized(scenePhotosHeld) { scenePhotosHeld.toSet() }
@@ -975,7 +1019,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 anchor = forkAnchorAssistantIndex,
                 messages = stashedForkTail.map { it.copy() },
             ),
-            swipe = rpSwipeState.takeIf { it.alts.isNotEmpty() },
+            swipe = rpSwipeState.takeIf { !it.isEmpty },
             editDraft = composerEditDrafts[ComposerDrafts.key(id)]
                 .takeIf { composerEditKey == ComposerDrafts.key(id) },
         )
@@ -1646,7 +1690,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // Only wipe alts once the send is known to proceed (after early returns above).
         if (clearRpSwipeOnStart && isRpMode()) {
             pendingRpSwipeAppend = false
-            clearRpSwipeAlts()
+            clearRpSwipeAlts(archive = true)
         }
 
         val thinkingMessage = THINKING_MESSAGE
@@ -1888,7 +1932,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Keep swipe alts in sync when the user edits the last assistant bubble. */
     private fun syncRpSwipeAltAfterAssistantEdit(position: Int, newContent: String) {
-        if (!isRpMode() || rpSwipeState.alts.isEmpty()) return
+        if (!isRpMode()) return
+        rpSwipeState.earlier[position]?.let { v ->
+            if (v.alts[v.index] == newContent) return
+            val alts = v.alts.toMutableList().also { it[v.index] = newContent }
+            rpSwipeState = rpSwipeState.copy(earlier = rpSwipeState.earlier + (position to v.copy(alts = alts)))
+            persistRpSwipeState()
+            return
+        }
+        if (rpSwipeState.alts.isEmpty()) return
         val messages = _chatMessages.value ?: return
         val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
         if (position != lastAssistantIndex) return
@@ -2657,12 +2709,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             forgetRpSwipeVersions()
             return
         }
+        val promoted = rpSwipeState.earlier[lastAssistantIndex]?.takeIf { lastText in it.alts }
+        if (promoted != null) {
+            dropUnreferencedSwipePictures()
+            rpSwipeState = RpSwipeState(
+                alts = promoted.alts,
+                index = promoted.alts.indexOf(lastText),
+                pictureUris = promoted.pictureUris,
+                earlier = rpSwipeState.earlier - lastAssistantIndex,
+            )
+        }
         val (alts, index) = RpSwipeRules.reconcileAltsAfterTruncate(rpSwipeState.alts, lastText)
         if (alts != rpSwipeState.alts) dropUnreferencedSwipePictures()
         val pictures = if (alts == rpSwipeState.alts) rpSwipeState.pictureUris else emptyList()
-        rpSwipeState = RpSwipeState(alts = alts, index = index, pictureUris = pictures)
+        val earlier = reconciledEarlier()
+        dropEarlierPictures(rpSwipeState.earlier - earlier.keys)
+        rpSwipeState = RpSwipeState(alts = alts, index = index, pictureUris = pictures, earlier = earlier)
         persistRpSwipeState()
         updateRpSwipeNav()
+        _rpEarlierVersionsChanged.value = Event(Unit)
     }
 
     fun getForkNavForMessage(position: Int): ForkNavState? {
@@ -4335,7 +4400,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } else if (rpSwipeState.alts.isEmpty()) {
             // Seed first alt so the swipe bar (and ›) is available after a normal reply.
             // The picture is filled in when the message lands, a moment after this text.
-            rpSwipeState = RpSwipeState(alts = listOf(cleaned), index = 0)
+            rpSwipeState = rpSwipeState.copy(alts = listOf(cleaned), index = 0, pictureUris = emptyList())
             persistRpSwipeState()
             updateRpSwipeNav()
         }
@@ -4880,6 +4945,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _toastUiEvent.postValue(Event(str(R.string.rp_rewrite_failed)))
                     return@launch
                 }
+                noteEarlierVersion(position, original, rewritten)
                 updateMessageAt(position, rewritten)
                 _rpRewriteDone.value = Event(RpRewriteDone(position, original, rewritten))
             } catch (e: CancellationException) {
@@ -4905,7 +4971,50 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun undoRpRewrite(done: RpRewriteDone) {
         val current = _chatMessages.value?.getOrNull(done.position) ?: return
         if (getMessageText(current.content) != done.rewritten) return
+        noteEarlierVersion(done.position, done.rewritten, done.original)
         updateMessageAt(done.position, done.original)
+    }
+
+    /** A Rewrite of an earlier reply is one more version of it, so the old one stays a swipe away. */
+    private fun noteEarlierVersion(position: Int, currentText: String, text: String) {
+        val current = _chatMessages.value?.getOrNull(position) ?: return
+        rpSwipeState = rpSwipeState.copy(
+            earlier = RpSwipeRules.addEarlierVersion(
+                rpSwipeState.earlier, position, currentText, RpSwipeRules.pictureUriOf(current.imageUri), text,
+            )
+        )
+        persistRpSwipeState()
+    }
+
+    /** The versions control on an earlier reply. The newest reply uses the swipe bar instead. */
+    fun getRpVersionNav(position: Int): ForkNavState? {
+        if (!isRpMode()) return null
+        val v = rpSwipeState.earlier[position]?.takeIf { it.alts.size > 1 } ?: return null
+        val messages = _chatMessages.value ?: return null
+        if (position == messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }) return null
+        return ForkNavState(
+            variantIndex = v.index + 1,
+            totalVariants = v.alts.size,
+            canGoPrev = v.index > 0,
+            canGoNext = v.index < v.alts.lastIndex,
+        )
+    }
+
+    /** Swap an earlier reply for another of its versions. What came after it stays as it was. */
+    fun swipeEarlierRpReply(position: Int, direction: Int) {
+        if (!canInteractWithRpSwipe() || rpRewriteJob?.isActive == true) return
+        val v = rpSwipeState.earlier[position] ?: return
+        val next = (v.index + direction).coerceIn(0, v.alts.lastIndex)
+        if (next == v.index) return
+        val messages = _chatMessages.value?.toMutableList() ?: return
+        val target = messages.getOrNull(position) ?: return
+        if (getMessageText(target.content) != v.alts[v.index]) return
+        val picture = RpSwipeRules.pictureForAlt(v.pictureUris, v.alts.size, next)
+        messages[position] = RpContinuation.withVersion(target, v.alts[next], picture)
+        rpSwipeState = rpSwipeState.copy(earlier = rpSwipeState.earlier + (position to v.copy(index = next)))
+        persistRpSwipeState()
+        _chatMessages.value = messages
+        autoSaveChat()
     }
 
     /** Drop messages from [startIndex] onward without stashing an Ask-mode fork. */
@@ -4942,7 +5051,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             currentText,
             picture,
         )
-        rpSwipeState = RpSwipeState(alts = alts, index = index, pictureUris = pictures)
+        rpSwipeState = rpSwipeState.copy(alts = alts, index = index, pictureUris = pictures)
         persistRpSwipeState()
         updateRpSwipeNav()
     }
@@ -4957,7 +5066,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             rpSwipeState.pictureUris,
             text,
         )
-        rpSwipeState = RpSwipeState(alts = alts, index = index, pictureUris = pictures)
+        rpSwipeState = rpSwipeState.copy(alts = alts, index = index, pictureUris = pictures)
         persistRpSwipeState()
         updateRpSwipeNav()
     }
@@ -4988,7 +5097,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun persistRpSwipeState() {
         val id = currentSessionId ?: return
-        if (rpSwipeState.alts.isEmpty()) return
+        if (rpSwipeState.isEmpty) return
         rpSwipeStore.save(id, rpSwipeState)
     }
 
@@ -5102,6 +5211,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadRpSwipeForSession(sessionId: Long) {
         pendingRpSwipeAppend = false
         rpSwipeState = rpSwipeStore.load(sessionId) ?: RpSwipeState()
+        rpSwipeState = rpSwipeState.copy(earlier = reconciledEarlier())
         val messages = _chatMessages.value.orEmpty()
         val swipeable = RpSwipeRules.isSwipeableMessages(
             messages,

@@ -1311,6 +1311,25 @@ class ScreenshotTest {
         org.junit.Assert.assertTrue(msgs.none { vm.getMessageText(it.content) == a.getString(R.string.rp_continue_prompt) })
         org.junit.Assert.assertNull("nothing left to extend once the turn is over", vm.continuationText)
         snap(root(a), "rp_conversation_dark")
+        // A second version of that reply, then a new turn: the reply keeps both, a swipe away.
+        val replyAt = msgs.lastIndex
+        vm.swipeRpNext()
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.rpSwipeNav.value?.total == 2 }
+        val second = vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content)
+        input.setText("I slide the map across the table.")
+        send.performClick()
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().size == replyAt + 3 }
+        settle()
+        org.junit.Assert.assertEquals(2, vm.getRpVersionNav(replyAt)?.totalVariants)
+        val transcript = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        transcript.scrollToPosition(replyAt); idle()
+        val versions = transcript.findViewHolderForAdapterPosition(replyAt)!!.itemView.findViewById<View>(R.id.forkNavigator)
+        org.junit.Assert.assertEquals("the earlier reply shows its versions", View.VISIBLE, versions.visibility)
+        vm.swipeEarlierRpReply(replyAt, -1); idle()
+        org.junit.Assert.assertEquals("swapped in place", afterText, vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content))
+        org.junit.Assert.assertEquals("what came after stays", replyAt + 3, vm.chatMessages.value.orEmpty().size)
+        vm.swipeEarlierRpReply(replyAt, 1); idle()
+        org.junit.Assert.assertEquals(second, vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content))
         SharedPreferencesHelper(a).saveRpMemory(mira.id, "Owes Sam a favor from the Kessel run. Hates the innkeeper.")
         // Top of a chat with messages: no stray rule under the tabs (the old scroll-progress bar).
         org.junit.Assert.assertEquals(0f, a.findViewById<View>(R.id.progressBar).alpha)
