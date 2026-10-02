@@ -383,7 +383,31 @@ class RpContinuationTest {
         assertEquals("Hello꤯\n\nShe waits.", RpContinuation.join("Hello꤯", "She waits."))
     }
 
-        @Test fun theContinueDirectionAsksForAnExactSeam() {
+    @Test fun mediumFlattenedMediumAngleAndLightTortoiseQuotesStillCountAsFinished() {
+        assertEquals("❪Hallo.❫\n\nShe waits.", RpContinuation.join("❪Hallo.❫", "She waits."))
+        assertEquals("❪Hallo", RpContinuation.join("❪", "Hallo"))
+        assertEquals("❬Hallo.❭\n\nShe waits.", RpContinuation.join("❬Hallo.❭", "She waits."))
+        assertEquals("❬Hallo", RpContinuation.join("❬", "Hallo"))
+        assertEquals("❲Hallo.❳\n\nShe waits.", RpContinuation.join("❲Hallo.❳", "She waits."))
+        assertEquals("❲Hallo", RpContinuation.join("❲", "Hallo"))
+    }
+
+    @Test fun hanunooThaiKhmerTibetanCopticAndMongolianEndsStartANewParagraph() {
+        assertEquals("Hello᜵\n\nShe waits.", RpContinuation.join("Hello᜵", "She waits."))
+        assertEquals("Hello᜶\n\nShe waits.", RpContinuation.join("Hello᜶", "She waits."))
+        assertEquals("Hello๚\n\nShe waits.", RpContinuation.join("Hello๚", "She waits."))
+        assertEquals("Hello๛\n\nShe waits.", RpContinuation.join("Hello๛", "She waits."))
+        assertEquals("Hello៚\n\nShe waits.", RpContinuation.join("Hello៚", "She waits."))
+        assertEquals("Hello༑\n\nShe waits.", RpContinuation.join("Hello༑", "She waits."))
+        assertEquals("Hello༒\n\nShe waits.", RpContinuation.join("Hello༒", "She waits."))
+        assertEquals("Hello⳺\n\nShe waits.", RpContinuation.join("Hello⳺", "She waits."))
+        assertEquals("Hello⳻\n\nShe waits.", RpContinuation.join("Hello⳻", "She waits."))
+        assertEquals("Hello⳼\n\nShe waits.", RpContinuation.join("Hello⳼", "She waits."))
+        assertEquals("Hello⳽\n\nShe waits.", RpContinuation.join("Hello⳽", "She waits."))
+        assertEquals("Hello᠉\n\nShe waits.", RpContinuation.join("Hello᠉", "She waits."))
+    }
+
+    @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)
         assert("mid-sentence" in d)
