@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Stability wave 15)
+
+On `gradation/w15-stability` (PR into `gradation/app-pass`). Recovery naming respects `chat_db_hold`:
+- `recoveredFileName` and `firstFreeStamp` skip names already parked under the hold folder (and the databases root), so a fresh recovered file is not opened as the parked history.
+- Passphrase archive under a stamp that already holds one is refused, and recovery walks to a free stamp first.
+- Interrupted recovery treats a hold-parked `unreadable-<stamp>` as present for note quarantine.
+
+Phone: after a failed open that left files in `databases/chat_db_hold/`, force another recovery (or install over a broken DB) and confirm History stays the fresh empty one, not the parked copy.
+
 # Handoff (2026-10-02, Code wave 15)
 
 On `gradation/w15-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):

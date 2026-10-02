@@ -119,6 +119,28 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun anExistingPassphraseArchiveIsNotOverwritten() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = app.getSharedPreferences("ApiKeysPrefsStore", 0)
+        prefs.edit().clear().commit()
+        val prefix = SharedPreferencesHelper.chatDbPassphraseArchivePrefix(7L)
+        prefs.edit()
+            .putString("${prefix}_encrypted", "old-key")
+            .putString("${prefix}_iv", "old-iv")
+            .putString("chat_db_passphrase_encrypted", "new-key")
+            .putString("chat_db_passphrase_iv", "new-iv")
+            .commit()
+
+        val helper = SharedPreferencesHelper(app)
+        assertFalse(helper.archiveChatDbPassphrase(7L))
+        assertEquals("old-key", prefs.getString("${prefix}_encrypted", null))
+        assertEquals("old-iv", prefs.getString("${prefix}_iv", null))
+        assertTrue(helper.archiveChatDbPassphrase(8L))
+        val next = SharedPreferencesHelper.chatDbPassphraseArchivePrefix(8L)
+        assertEquals("new-key", prefs.getString("${next}_encrypted", null))
+    }
+
+    @Test
     fun aFailedArchiveDoesNotReplaceThePassphrase() {
         assertFalse(AppDatabase.replacesPassphraseAfterRecovery(archiveSaved = false, wrappedPresent = true))
         assertTrue(AppDatabase.replacesPassphraseAfterRecovery(archiveSaved = true, wrappedPresent = true))
@@ -530,6 +552,33 @@ class ChatDatabaseRecoveryTest {
             resolved.delete()
             File(resolved.path + "-wal").delete()
         }
+    }
+
+    @Test
+    fun aRecoveredNameInTheHoldFolderIsNotReused() {
+        val vault = tmp.newFolder("hold-name-vault")
+        val databases = tmp.newFolder("hold-name-databases")
+        val hold = File(databases, ChatDbVault.HOLD_DIR).apply { mkdirs() }
+        File(hold, "chat_database.recovered-5").writeText("parked")
+
+        assertEquals("chat_database.recovered-6", AppDatabase.recoveredFileName(vault, 5L, databases))
+    }
+
+    @Test
+    fun aStampTakenInTheHoldFolderUsesTheNextFreeOne() {
+        val vault = tmp.newFolder("hold-stamp-vault")
+        val databases = tmp.newFolder("hold-stamp-databases")
+        val hold = File(databases, ChatDbVault.HOLD_DIR).apply { mkdirs() }
+        File(hold, "chat_database.unreadable-5").writeText("parked")
+        File(hold, "chat_database.unreadable-5-wal").writeText("wal")
+
+        assertEquals(6L, AppDatabase.firstFreeStamp(vault, 5L, databases))
+
+        val db = File(databases, "chat_database").apply { writeText("live") }
+        val moved = AppDatabase.setAside(db, 5L, vault, databases)!!
+        assertEquals("chat_database.unreadable-6", moved.name)
+        assertEquals("parked", File(hold, "chat_database.unreadable-5").readText())
+        assertEquals("live", moved.readText())
     }
 
     @Test

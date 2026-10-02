@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A later chat-database recovery no longer reuses a stamp or recovered name that is only parked under `chat_db_hold`, so Room does not open the parked copy as the fresh file, and an earlier set-aside database keeps the passphrase archived for it.
 - Code: a JSON-RPC id written as a whole number like `9.0` still matches the pending call and an Allow still answers with a number. Handshake refuses protocol `2.0` the same way as `2`. Cursor Agent tools named WriteFile, DeleteFile, or RunTerminalCmd get the edit, delete, or shell card.
 - Code: the home composer keeps the line you were typing (and any pictures) when the screen is rebuilt or you switch machines. Sending clears that draft. Cursor Agent tools named WebSearch, ListDir, or EditNotebook get the fetch, search, or edit card. A bridge `_meta.seq` written as a whole number like `2.0` still moves the resume cursor.
 - Continue starts a new paragraph after Russian or French dialogue in «guillemets», and after Arabic ؟۔, Devanagari ।॥, Armenian ։ and Myanmar ၊။ sentence ends. A space before a closing guillemet still counts as finished.
