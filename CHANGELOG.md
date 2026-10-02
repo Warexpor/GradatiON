@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- History shows "Draft: Photo" (or Audio / files) when the only thing waiting is a staged attachment, matching Discard draft for a picture with no caption. A rebuilt chat view puts that staged preview chip back. Parking past the per-thread cap deletes the oldest scene JPEGs that fell off.
 - Roleplay Bubbles shrink around a pictured reply the same way a user bubble does. Recycling a text bubble onto a pictured one no longer keeps the 16dp text inset. Classic stays a flat 4dp rim.
 - A torn wallpaper file (a kill mid-write) no longer counts as a picture: the Wallpaper tile stays off, and a character backup leaves the phone's copy alone instead of encoding the torn bytes.
 - Continue starts a new paragraph after Armenian ՜՞, Syriac ܀܁܂, Mongolian ᠃ and doubled !!?? marks. Unfinished Tibetan and Ethiopic no longer gain a Latin space between beats.

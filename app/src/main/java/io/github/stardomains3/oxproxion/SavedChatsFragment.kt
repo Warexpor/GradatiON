@@ -238,10 +238,14 @@ class SavedChatsFragment : Fragment() {
                 }
             }
             if (mode == ChatMode.ASK) {
+                val host = (parentFragment as? HistoryPanelHost)
+                    ?: parentFragmentManager.fragments.filterIsInstance<HistoryPanelHost>().firstOrNull()
                 for (session in filtered) {
+                    val draft = host?.unsentDraftPreview(session.id)
+                        ?: drafts[ComposerDrafts.key(session.id)].orEmpty()
                     previews[session.id] = HistoryList.rowPreview(
                         messageLine = previews[session.id].orEmpty(),
-                        draft = drafts[ComposerDrafts.key(session.id)].orEmpty(),
+                        draft = draft,
                         query = query,
                         draftLabel = draftLabel,
                     )

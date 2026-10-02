@@ -218,6 +218,11 @@
     <string name="history_preview_you">You: %1$s</string>
     <string name="history_preview_photo">Photo</string>
     <string name="history_preview_draft">Draft: %1$s</string>
+    <string name="history_preview_audio">Audio</string>
+    <plurals name="history_preview_files">
+        <item quantity="one">File</item>
+        <item quantity="other">%d files</item>
+    </plurals>
     <string name="rp_attachments_disabled">Roleplay takes photos only, not files or audio</string>
     <string name="rp_llm_wipe_title">Enable LLM mode?</string>
     <string name="rp_llm_wipe_body">This starts a new RP chat in LLM mode (no character card) and clears the current transcript. Your selected character is kept for when you turn LLM mode off.</string>

@@ -51,6 +51,18 @@ class ComposerStagedTest {
         assertEquals("file://${ComposerDrafts.MAX_KEPT + 3}.jpg", ComposerStaged.get(store, (ComposerDrafts.MAX_KEPT + 3).toLong()).imageUri)
     }
 
+    @Test fun eviction_lists_the_photos_that_fell_off() {
+        val before = ComposerStaged.remember(emptyMap(), 1L, photo("file://1.jpg"))
+        var store = before
+        for (id in 2..ComposerDrafts.MAX_KEPT + 1) {
+            store = ComposerStaged.remember(store, id.toLong(), photo("file://$id.jpg"))
+        }
+        val gone = ComposerStaged.evicted(before, store)
+        assertEquals(1, gone.size)
+        assertEquals("file://1.jpg", gone.single().imageUri)
+        assertTrue(ComposerStaged.evicted(store, store).isEmpty())
+    }
+
     @Test fun files_and_audio_park_with_the_photo() {
         val entry = ComposerStaged.Entry(
             audioBytes = byteArrayOf(9),
