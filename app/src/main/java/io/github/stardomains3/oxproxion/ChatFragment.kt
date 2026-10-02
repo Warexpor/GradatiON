@@ -1316,6 +1316,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 is AskComposerDraft.Effect.Switch -> switchAskDraft(effect.from, effect.to)
                 else -> Unit
             }
+            if (mode == ChatMode.ASK) askStageSessionId = id
         }
         // ViewModel keeps parked stages across a rebuild; fragment fields do not. Restore
         // the open thread's photo/audio/files (or reload JPEG bytes from the pending URI).
@@ -1328,6 +1329,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var suppressDraftDirty = false
     private var composerStateRestored = false
     /** Staged photos/files park on [ChatViewModel.stagedAttachments] so rotation and Code keep them. */
+    /**
+     * Ask thread that owns parked composer attachments. After Ask→RP, [askComposer] may already
+     * name the Roleplay session, so restore (and late gallery/camera results) use this id.
+     */
+    private var askStageSessionId: Long? = null
 
     override fun onViewStateRestored(savedInstanceState: Bundle?) {
         super.onViewStateRestored(savedInstanceState)
@@ -1349,6 +1355,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val (next, _) = AskComposerDraft.bind(askComposer, mode, id)
         askComposer = next
         if (mode != ChatMode.ASK) return
+        askStageSessionId = id
         if (promoted) {
             promoteAskDraft(id)
         } else if (AskComposerDraft.takeStoredDraft(
@@ -1395,6 +1402,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.rekey(sharedPreferencesHelper.getAskComposerDrafts(), from = null, to = sessionId, text = text)
         )
+        askStageSessionId = sessionId
         val beforePromote = viewModel.stagedAttachments()
         val afterPromote = ComposerStaged.rekey(beforePromote, from = null, to = sessionId, entry = currentStagedEntry())
         viewModel.setStagedAttachments(afterPromote)
@@ -1408,6 +1416,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private fun switchAskDraft(from: Long?, to: Long?) {
         parkAskDraft(from)
         parkStagedAttachment(from)
+        askStageSessionId = to
         applyAskDraft(to)
         applyStagedAttachment(to)
     }
@@ -3937,6 +3946,7 @@ $cleanContent
     /** Keep this thread's staged photo/files without deleting the JPEG on disk. */
     private fun parkStagedAttachment(sessionId: Long?) {
         if (viewModel.isRpMode()) return
+        askStageSessionId = sessionId
         rememberStaged(sessionId, currentStagedEntry())
         // Clear the field only; the parked entry still owns the scene file.
         clearStagedAttachment(discardSceneFile = false)
@@ -4542,9 +4552,30 @@ $cleanContent
                 GlassNotice.show(requireContext(), getString(R.string.toast_image_need_vision))
             }
             val stored = withContext(Dispatchers.IO) { ScenePhoto.store(requireContext(), jpeg) }
+            val uri = stored?.toString()
+            // Encode can outlive an Ask→RP / Code flip. Park for the Ask thread; do not put
+            // the chip on Roleplay (or leave it stranded while Code is showing).
+            val away = viewModel.isRpMode() || (::codeMode.isInitialized && codeMode.isActive)
+            if (away) {
+                val askId = askStageSessionId
+                    ?: if (askComposer.bound && askComposer.mode == ChatMode.ASK) askComposer.sessionId
+                    else null
+                rememberStaged(
+                    askId,
+                    ComposerStaged.Entry(
+                        imageBytes = if (uri != null) null else jpeg,
+                        imageMime = ScenePhoto.MIME,
+                        imageUri = uri,
+                    ),
+                )
+                if (viewModel.isRpMode()) {
+                    GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
+                }
+                return@launch
+            }
             selectedImageBytes = jpeg
             selectedImageMime = ScenePhoto.MIME
-            viewModel.setPendingUserImageUri(stored?.toString())
+            viewModel.setPendingUserImageUri(uri)
             showStagedPhoto(jpeg, jpeg)
             if (viewModel.isRpMode()) applyRpComposerHint()
         }
@@ -4815,7 +4846,9 @@ $cleanContent
             codeMode.refresh()
             // Settings can disable Code while it is showing; deactivate skips leaveCodeMode.
             if (codeWasActive && !codeMode.isActive && !viewModel.isRpMode()) {
-                val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+                val id = askStageSessionId
+                    ?: if (askComposer.bound) askComposer.sessionId
+                    else viewModel.getCurrentSessionId()
                 applyStagedAttachment(id)
             }
         }
@@ -4998,7 +5031,9 @@ $cleanContent
         if (!::codeMode.isInitialized || !codeMode.isActive) return
         codeMode.deactivate()
         if (!viewModel.isRpMode()) {
-            val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+            val id = askStageSessionId
+                ?: if (askComposer.bound) askComposer.sessionId
+                else viewModel.getCurrentSessionId()
             applyStagedAttachment(id)
         }
     }
@@ -5677,6 +5712,7 @@ $cleanContent
     /** Copy a non-empty live stage into the ViewModel map without clearing the chip. */
     private fun softParkLiveStaged(sessionId: Long?) {
         if (viewModel.isRpMode()) return
+        askStageSessionId = sessionId
         val entry = currentStagedEntry()
         if (!entry.isEmpty) rememberStaged(sessionId, entry)
     }
@@ -5690,7 +5726,9 @@ $cleanContent
     private fun syncStagedForAskRpFlip(from: ChatMode, to: ChatMode) {
         if (from == to) return
         if (from == ChatMode.ASK && to == ChatMode.RP) {
+            // Remember the Ask thread now: after the flip askComposer may name the RP session.
             val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+            askStageSessionId = id
             val live = currentStagedEntry()
             if (!live.isEmpty) rememberStaged(id, live)
             clearStagedAttachment(discardSceneFile = false)
@@ -5700,8 +5738,8 @@ $cleanContent
             clearStagedAttachment(discardSceneFile = true)
             pendingFiles.clear()
             if (::attachmentButton.isInitialized) updateAttachmentButton()
-            val askId = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
-            applyStagedAttachment(askId)
+            // Prefer the Ask id we parked under — askComposer still names the RP session here.
+            applyStagedAttachment(askStageSessionId)
         }
     }
 

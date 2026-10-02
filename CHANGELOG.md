@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Coming back from Roleplay restores a parked Chat photo using the Ask thread id remembered on the way out (askComposer may still name the Roleplay session during the flip), so Hub Continue / tab swipe / Settings no longer leave the chip missing on a saved Chat.
+- A gallery or camera pick that finishes after an Ask→Roleplay or Code flip parks the JPEG for that Ask thread instead of staging it on Roleplay (or dropping it while Code is showing).
+- History draft rows clip around a gapped multi-word hit (e.g. "hello photo" across a long "hello … Photo" draft) so the bold span still lands; contiguous hits are unchanged.
 - Code: ACP permission `optionId` written as a whole-number double like `5.0` / `"5.0"` still matches as `"5"`. Tool detail lines coerce stringified whole-number doubles the same way (a `"5.0"` shell_id shows as `5`). Cursor Agent tools named PatchEdit, ReadTodos, RunTerminalCommandV2, Gotodef, NotebookRead, Sleep, Wait, WakeParent, SendToUser, BrowserNavigate, OpenBrowser, or CreatePullRequest get the edit, think, execute, search, read, or fetch card. CopyToBox / UploadFile / WriteShellStdin / ListMachines detail lines read `computer_path`, `box_path`, `sourcePath`, `connection`, `chars`, and `machineId`.
 - Hub Continue / Start chat (and Settings disabling Roleplay) park and restore staged Chat photos the same way a tab swipe already did, so Roleplay no longer inherits the chip and coming back still has it.
 - History draft search matches query words in order with gaps (like sent-message LIKE), so "hello photo" still finds a caption of "hello there" plus a staged Photo, and the row can bold that span.

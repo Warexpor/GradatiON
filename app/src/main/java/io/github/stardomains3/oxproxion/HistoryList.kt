@@ -158,10 +158,18 @@ object HistoryList {
         if (folded.isEmpty()) return messageLine
         val needle = foldSpace(query)
         if (needle.isNotEmpty() && matchesBeyondLabel(messageLine, needle)) return messageLine
-        val body = if (needle.isEmpty() || !folded.contains(needle, ignoreCase = true)) {
-            if (folded.length <= DRAFT_LINE) folded else folded.take(DRAFT_LINE).trimEnd() + "…"
-        } else {
-            clipAround(folded, folded.indexOf(needle, ignoreCase = true), needle.length)
+        // Word-order hits (e.g. "hello photo" across "hello there Photo") must clip around
+        // the span like [searchLine], not only a contiguous substring — otherwise a long
+        // draft truncates from the start and drops the bold words.
+        val body = when {
+            needle.isEmpty() || !wordsMatch(folded, query) ->
+                if (folded.length <= DRAFT_LINE) folded else folded.take(DRAFT_LINE).trimEnd() + "…"
+            else -> {
+                val hit = emphasis(folded, needle)
+                if (hit != null) clipAround(folded, hit.start, hit.length)
+                else if (folded.length <= DRAFT_LINE) folded
+                else folded.take(DRAFT_LINE).trimEnd() + "…"
+            }
         }
         return draftLabel(body)
     }

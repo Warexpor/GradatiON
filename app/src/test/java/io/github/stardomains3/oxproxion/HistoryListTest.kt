@@ -405,4 +405,31 @@ class HistoryListTest {
         assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "there photo"))
         assertTrue(HistoryList.draftMatchIds(drafts, "photo hello").isEmpty())
     }
+
+    @Test fun row_preview_clips_around_gapped_draft_hits() {
+        val label = { text: String -> "Draft: $text" }
+        // Short gapped hit still shows the full draft line (and bolds across the gap).
+        val short = HistoryList.rowPreview(
+            "You: sent",
+            HistoryList.draftRowText("hello there", "Photo", "hello photo"),
+            "hello photo",
+            label,
+        )
+        assertEquals("Draft: hello there Photo", short)
+        val shortHit = HistoryList.emphasis(short, "hello photo")
+        assertEquals(7, shortHit!!.start)
+        assertTrue(shortHit.length >= "hello photo".length)
+        // A long caption that only matches with a trailing Photo must clip around that span,
+        // not truncate from the start (which would drop Photo and leave nothing to bold).
+        val filler = "word ".repeat(40).trimEnd()
+        val caption = "hello $filler"
+        assertTrue(caption.length > 160)
+        val draft = HistoryList.draftRowText(caption, "Photo", "hello photo")
+        val row = HistoryList.rowPreview("You: sent", draft, "hello photo", label)
+        assertTrue(row.contains("Photo"))
+        assertTrue(row.contains("hello"))
+        val hit = HistoryList.emphasis(row, "hello photo")
+        assertTrue(hit != null)
+        assertTrue(hit!!.length >= "hello photo".length)
+    }
 }
