@@ -42,8 +42,8 @@ import java.util.concurrent.atomic.AtomicLong
  * Tool detail prefers the command for a shell call, and a file location includes its line.
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
- * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`),
- * and a tool `name` when `kind` is missing or `other`.
+ * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
+ * `EditFile`, `SearchReplace`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -371,7 +371,10 @@ class AcpAdapter : HarnessAdapter {
 
     private fun decodePermissionResolved(params: JsonObject, seq: Long?): List<AdapterOutput> {
         val sid = params.str("sessionId") ?: return ignored("permissionResolved without session")
-        val requestId = params.str("requestId") ?: return ignored("permissionResolved without requestId")
+        // Same whole-number coercion as the permission id: a bridge/proxy that writes
+        // requestId as 9 or 9.0 must still match the card stored as "9".
+        val requestId = rpcIdString(params["requestId"])
+            ?: return ignored("permissionResolved without requestId")
         noteSeq(sid, seq)
         val kind = optionKind(params.str("optionKind"))
         return listOf(AdapterOutput.Update(sid, CodeUpdate.ApprovalAnswered(requestId, kind), seq))
@@ -442,19 +445,31 @@ class AcpAdapter : HarnessAdapter {
         val n = normalizeKind(kind)
         if (n.isEmpty()) return null
         return when (n) {
-            "read", "read_file", "readfile", "cat" -> "read"
+            "read", "read_file", "readfile", "cat",
+            "read_file_v2", "readfilev2" -> "read"
             "edit", "write", "write_file", "writefile", "str_replace", "strreplace",
-            "apply_patch", "patch" -> "edit"
+            "apply_patch", "patch",
+            "edit_file", "editfile", "edit_file_v2", "editfilev2",
+            "search_replace", "searchreplace", "reapply" -> "edit"
             "delete", "remove", "rm", "delete_file", "deletefile", "unlink" -> "delete"
             "move", "rename", "mv" -> "move"
             "search", "grep", "glob", "find", "rg",
             "listdir", "list_dir", "listdirectory", "list_directory",
-            "semanticsearch", "semantic_search" -> "search"
+            "listdir_v2", "list_dir_v2", "listdirv2", "listdirectoryv2",
+            "semanticsearch", "semantic_search",
+            "glob_file_search", "globfilesearch", "file_search", "filesearch",
+            "grep_search", "grepsearch",
+            "codebase_search", "codebasesearch", "deep_search", "deepsearch",
+            "read_lints", "readlints", "fix_lints", "fixlints" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command",
             "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
             "runterminalcommand" -> "execute"
-            "think", "thought", "reasoning" -> "think"
-            "fetch", "web_fetch", "webfetch", "websearch", "web_search", "http" -> "fetch"
+            "think", "thought", "reasoning",
+            "await", "await_task", "awaittask" -> "think"
+            "fetch", "web_fetch", "webfetch", "websearch", "web_search", "http",
+            "fetch_mcp_resource", "fetchmcpresource",
+            "read_mcp_resource", "readmcpresource",
+            "fetch_rules", "fetchrules" -> "fetch"
             "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
             else -> n
         }
@@ -923,8 +938,11 @@ class AcpAdapter : HarnessAdapter {
     }
 
     private fun joinArgs(arr: JsonArray): String =
-        arr.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.takeIf { s -> s.isNotEmpty() } }
-            .joinToString(" ") { piece -> if (piece.any { it.isWhitespace() }) "\"$piece\"" else piece }
+        arr.mapNotNull { el ->
+            val p = el as? JsonPrimitive ?: return@mapNotNull null
+            wholeNumberLong(p)?.toString()
+                ?: p.contentOrNull?.takeIf { s -> s.isNotEmpty() }
+        }.joinToString(" ") { piece -> if (piece.any { it.isWhitespace() }) "\"$piece\"" else piece }
 
     private fun firstRaw(raw: JsonObject?, vararg keys: String): String? {
         if (raw == null) return null

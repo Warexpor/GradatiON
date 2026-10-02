@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 16)
+
+On `gradation/w16-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
+- A bridge `permissionResolved` whose `requestId` is a whole-number double (`9.0`) still matches the approval card stored as `"9"`, so Allow from another device (and the away alert cancel) clear the right card.
+- Cursor Agent tool names `EditFile`, `SearchReplace`, `ReadFileV2`, `ListDirV2`, `GlobFileSearch`, `ReadLints`, `Await`, `FetchMcpResource`, and `Reapply` map to edit / search / think / fetch cards (icon and log clipping).
+- A shell argv piece written as a whole-number double (`5.0`) shows as `5` on the tool detail line.
+
+Phone: on Cursor Agent, an EditFile or SearchReplace card should show the edit icon. A permission resolved from another client after a proxy rewrites ids as doubles should clear the card and the away notification.
+
 # Handoff (2026-10-02, Stability wave 15)
 
 On `gradation/w15-stability` (PR into `gradation/app-pass`). Recovery naming respects `chat_db_hold`:
