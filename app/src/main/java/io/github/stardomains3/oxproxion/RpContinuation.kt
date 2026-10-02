@@ -17,16 +17,17 @@ object RpContinuation {
      */
     private const val CLOSERS = ",.;:!?)]}%\u2026\u2019\u201D\u00BB\u203A。！？」』؟۔।॥։၊။"
 
-    /** Characters that hug the text after them: a reply that stops on one has more to say right after it. */
-    private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C\u00AB\u2039「『"
+    /** Characters that hug the text after them: a reply that stops on one has more to say right after it. Spanish ¿¡ start the next beat the same way. */
+    private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C\u00AB\u2039「『¿¡"
 
     /**
      * Sentence enders, and the markup/quotes that may trail one (`*She smiles.*`, `"Come in."`,
-     * 「来て。」, «Привет.», مرحبا؟). Arabic ؟۔, Devanagari ।॥, Armenian ։ and Myanmar ၊။ count too.
+     * 「来て。」, «Привет.», مرحبا؟). Arabic ؟۔, Devanagari ।॥, Armenian ։, Myanmar ၊။,
+     * Hebrew ׃, Ethiopic ።, Greek ;, Tibetan ། and Khmer ។ count too.
      */
-    private const val ENDERS = ".!?…。！？؟۔।॥։၊။"
+    private const val ENDERS = ".!?…。！？؟۔।॥։၊။׃።;།។"
     // Guillemets and a space before a closing one (French « … . ») are not part of the sentence end.
-    private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A"
+    private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״"
 
     /**
      * Continue replaces the reply with the joined text. A picture already on that reply stays
@@ -88,7 +89,7 @@ object RpContinuation {
 
     /**
      * [base] followed by [addition], with a separator only where the model left none: a new
-     * paragraph after a finished sentence or closed action (including «…», ؟۔ and ।॥), a plain
+     * paragraph after a finished sentence or closed action (including «…», ؟۔, ।॥, ׃ and ።), a plain
      * space after unfinished text. A sentence in an unspaced script gets no space.
      */
     fun join(base: String, addition: String): String {
