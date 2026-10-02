@@ -332,7 +332,9 @@ class MainActivity : AppCompatActivity() {
                     CodePairing.Reason.BAD_FINGERPRINT -> R.string.code_pair_bad_fingerprint
                     CodePairing.Reason.PIN_REQUIRES_WSS -> R.string.code_pair_pin_requires_wss
                 }
-                GlassNotice.show(this, getString(msg))
+                // Same queue as a failed QR: clears a stale successful pending, and
+                // CodeModeHost toasts once Chat is up (cold start runs before ChatFragment).
+                CodePairPending.offerError(getString(msg))
                 intent.data = null
             }
         }

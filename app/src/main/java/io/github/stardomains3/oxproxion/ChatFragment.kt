@@ -7291,11 +7291,15 @@ $cleanContent
      * Hub Continue / Start chat popped back onto chat. Code is not a ChatMode, so
      * [ChatViewModel.setChatMode] alone leaves the Code overlay covering Roleplay —
      * deactivate it here so the flipped mode is actually visible.
+     *
+     * Prefer [CodeModeHost.deactivate] over [leaveCodeMode]: Hub paths always target
+     * Roleplay, and setChatMode(RP) flips asynchronously. leaveCodeMode would restore
+     * an Ask chip mid-flip when isRpMode is still false.
      */
     fun uncoverFromHub() {
         closeHistoryPanel(animated = false)
         closeRpHome()
-        if (::codeMode.isInitialized && codeMode.isActive) leaveCodeMode()
+        if (::codeMode.isInitialized && codeMode.isActive) codeMode.deactivate()
     }
 
     fun openRpHub() {
