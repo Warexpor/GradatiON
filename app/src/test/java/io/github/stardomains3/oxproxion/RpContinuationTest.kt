@@ -158,6 +158,22 @@ class RpContinuationTest {
         assertEquals("content://scene/1", legacy.imageUri)
     }
 
+    @Test fun aFinishedRussianOrFrenchLineStartsANewParagraph() {
+        assertEquals("«Привет.»\n\nОна ждёт.", RpContinuation.join("«Привет.»", "Она ждёт."))
+        assertEquals("« Bonjour. »\n\nElle attend.", RpContinuation.join("« Bonjour. »", "Elle attend."))
+        assertEquals("Он улыбнулся.\n\nПотом обернулся.", RpContinuation.join("Он улыбнулся.", "Потом обернулся."))
+    }
+
+    @Test fun arabicAndIndicSentenceEndsStartANewParagraph() {
+        assertEquals("مرحبا؟\n\nهي تنتظر.", RpContinuation.join("مرحبا؟", "هي تنتظر."))
+        assertEquals("नमस्ते।\n\nवह प्रतीक्षा करती है।", RpContinuation.join("नमस्ते।", "वह प्रतीक्षा करती है।"))
+    }
+
+    @Test fun guillemetsHugLikeOtherClosers() {
+        assertEquals("Да»", RpContinuation.join("Да", "»"))
+        assertEquals("«Да", RpContinuation.join("«", "Да"))
+    }
+
     @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)

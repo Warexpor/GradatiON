@@ -13,21 +13,21 @@ object RpContinuation {
     /**
      * Characters that hug the text before them: no space goes in front of these. Straight quotes
      * are left out on purpose: a reply that opens with `"` is starting new dialogue.
+     * Guillemets and Arabic/Indic closers hug the same way as Latin ones.
      */
-    private const val CLOSERS = ",.;:!?)]}%\u2026\u2019\u201D。！？」』"
+    private const val CLOSERS = ",.;:!?)]}%\u2026\u2019\u201D\u00BB\u203A。！？」』؟۔।॥։၊။"
 
     /** Characters that hug the text after them: a reply that stops on one has more to say right after it. */
-    private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C「『"
-
-    /** Sentence enders, and the markup/quotes that may trail one (`*She smiles.*`, `"Come in."`, 「来て。」). */
-    private const val ENDERS = ".!?…。！？"
-    private const val TRAILERS = "*_~\"')]’”」』"
+    private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C\u00AB\u2039「『"
 
     /**
-     * [base] followed by [addition], with a separator only where the model left none: a new
-     * paragraph after a finished sentence or closed action, a plain space after unfinished
-     * text. A sentence in an unspaced script gets no space, and 。！？ count as sentence ends.
+     * Sentence enders, and the markup/quotes that may trail one (`*She smiles.*`, `"Come in."`,
+     * 「来て。」, «Привет.», مرحبا؟). Arabic ؟۔, Devanagari ।॥, Armenian ։ and Myanmar ၊။ count too.
      */
+    private const val ENDERS = ".!?…。！？؟۔।॥։၊။"
+    // Guillemets and a space before a closing one (French « … . ») are not part of the sentence end.
+    private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A"
+
     /**
      * Continue replaces the reply with the joined text. A picture already on that reply stays
      * unless the new piece brought one of its own. A data URL is not a file we can show.
@@ -86,6 +86,11 @@ object RpContinuation {
         )
     }
 
+    /**
+     * [base] followed by [addition], with a separator only where the model left none: a new
+     * paragraph after a finished sentence or closed action (including «…», ؟۔ and ।॥), a plain
+     * space after unfinished text. A sentence in an unspaced script gets no space.
+     */
     fun join(base: String, addition: String): String {
         if (addition.isEmpty()) return base
         if (base.isEmpty()) return addition
@@ -93,7 +98,8 @@ object RpContinuation {
         val first = addition.first()
         if (last.isWhitespace() || first.isWhitespace()) return base + addition
         if (first in CLOSERS || last in OPENERS) return base + addition
-        val end = base.trimEnd { it in TRAILERS }.lastOrNull()
+        // Skip trailers and spaces so «Привет. » and « Bonjour. » still count as finished.
+        val end = base.trimEnd { it in TRAILERS || it.isWhitespace() }.lastOrNull()
         if (end != null && end in ENDERS) return "$base\n\n$addition"
         // Japanese, Chinese, Korean and the other unspaced scripts do not take a space between words.
         if (unspaced(last) || unspaced(first)) return base + addition

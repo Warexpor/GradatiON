@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Continue starts a new paragraph after Russian or French dialogue in «guillemets», and after Arabic ؟۔, Devanagari ।॥, Armenian ։ and Myanmar ၊။ sentence ends. A space before a closing guillemet still counts as finished.
+- Rewriting an earlier roleplay reply that already had other versions starts tracking its picture once a file is known, so swiping those versions keeps the photo.
 - A recovered or set-aside chat database that could not enter the no-backup vault is parked under `chat_db_hold` instead of sitting at the databases root. Auto Backup and device transfer skip that folder, so those copies are no longer uploaded. Room opens a parked recovered file by absolute path, and a later launch moves it into the vault when that name is free.
 - History search still bolds the matching words when the query has extra spaces (the draft path already folded those spaces to find the chat).
 - A photo or file staged on a Chat thread comes back when you open that thread again. Leaving used to clear it so it did not ride into the next chat, and deleted the JPEG.
