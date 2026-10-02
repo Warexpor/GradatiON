@@ -2,6 +2,8 @@
  * When an idle roleplay thread (no user turn yet) should take the card's greeting again.
  * A rewrite of that opening stays until the greeting text on the card itself changes.
  * A bubble that is still the card's line follows a rename or a new persona name.
+ * Replacing the bubble drops any rewrite versions of that opening: they would otherwise
+ * linger and show a version navigator after the next user turn for text that is gone.
  */
 object RpGreetingSync {
     data class Refresh(val expandedBefore: String, val templateChanged: Boolean)

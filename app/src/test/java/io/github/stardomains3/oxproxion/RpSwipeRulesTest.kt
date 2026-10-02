@@ -171,4 +171,12 @@ class RpSwipeRulesTest {
             untracked[2]!!.pictureUris,
         )
     }
+
+    @Test
+    fun aCardGreetingThatReplacesARewriteDropsItsVersions() {
+        // Rewrite left versions on the opening; the card line then overwrote the bubble.
+        val earlier = mapOf(0 to RpVersions(listOf("*Mira looks at you.*", "She does not look up."), 1))
+        val kept = RpSwipeRules.reconcileEarlier(earlier, listOf("You again?")) { it }
+        assertTrue(kept.isEmpty())
+    }
 }
