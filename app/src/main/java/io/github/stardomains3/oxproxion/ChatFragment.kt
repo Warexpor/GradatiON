@@ -832,6 +832,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             // Only swap composer text on an actual Ask↔RP change. Re-emitting the same mode
             // (draft restore) must not wipe autosend / in-progress typing.
             if (appliedComposerMode != next) {
+                val previous = appliedComposerMode
+                // Hub Continue / Start chat / Settings disable RP flip mode without switchToTab.
+                // Park or restore staged Chat attachments on every Ask↔RP path.
+                if (previous != null) syncStagedForAskRpFlip(previous, next)
                 appliedComposerMode = next
                 val draft = sharedPreferencesHelper.getComposerDraft(next)
                 chatEditText.setText(draft)
@@ -5015,15 +5019,8 @@ $cleanContent
         if (target != current) {
             val leavingId = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
             if (current == ChatMode.ASK) {
-                // Park Chat text and staged photo so they do not ride into Roleplay.
+                // Park Chat text; staged attachments follow in the chatMode observer.
                 parkAskDraft(leavingId)
-                parkStagedAttachment(leavingId)
-            } else {
-                // Roleplay has no per-thread attachment park; drop a staged RP photo
-                // so it does not land on the Chat composer when coming back.
-                clearStagedAttachment(discardSceneFile = true)
-                pendingFiles.clear()
-                if (::attachmentButton.isInitialized) updateAttachmentButton()
             }
             sharedPreferencesHelper.saveComposerDraft(current, chatEditText.text?.toString().orEmpty())
             modeSwitchedAt = android.os.SystemClock.uptimeMillis()
@@ -5032,10 +5029,6 @@ $cleanContent
             pendingSpot = modeSpots[target]
             viewModel.toggleChatMode()
             showCachedThread(target)
-            if (target == ChatMode.ASK) {
-                val askId = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
-                applyStagedAttachment(askId)
-            }
         }
         return true
     }
@@ -5686,6 +5679,30 @@ $cleanContent
         if (viewModel.isRpMode()) return
         val entry = currentStagedEntry()
         if (!entry.isEmpty) rememberStaged(sessionId, entry)
+    }
+
+    /**
+     * Ask↔RP flipped (tab, Hub Continue/Start chat, or Settings disabling Roleplay).
+     * Park a live Chat stage so Roleplay does not inherit it; on the way back drop a
+     * Roleplay-only stage and restore the parked Chat chip. An empty live stage must not
+     * wipe a map entry (Code / History may already have parked it).
+     */
+    private fun syncStagedForAskRpFlip(from: ChatMode, to: ChatMode) {
+        if (from == to) return
+        if (from == ChatMode.ASK && to == ChatMode.RP) {
+            val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+            val live = currentStagedEntry()
+            if (!live.isEmpty) rememberStaged(id, live)
+            clearStagedAttachment(discardSceneFile = false)
+            pendingFiles.clear()
+            if (::attachmentButton.isInitialized) updateAttachmentButton()
+        } else if (from == ChatMode.RP && to == ChatMode.ASK) {
+            clearStagedAttachment(discardSceneFile = true)
+            pendingFiles.clear()
+            if (::attachmentButton.isInitialized) updateAttachmentButton()
+            val askId = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+            applyStagedAttachment(askId)
+        }
     }
 
     private fun prepareHistoryList() {
