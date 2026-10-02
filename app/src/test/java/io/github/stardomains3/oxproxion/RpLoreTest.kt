@@ -491,4 +491,30 @@ class RpLoreTest {
         assertTrue(RpLore.select(tortoise, "The pier is quiet.").contains("dawn"))
     }
 
+    @Test
+    fun mediumCurlyWhiteParenQuotesAndMoreTrailersAreNotPartOfTheKey() {
+        val book = """
+            [keys: ❴locket❵, docks꯫, pier꛲]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(book, "The pier is quiet.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+        val paren = """
+            [keys: ⦅locket⦆, docks៖, pier᠀]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(paren, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(paren, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(paren, "The pier is quiet.").contains("dawn"))
+        val tortoise = """
+            [keys: ⦗locket⦘, docks༈, pier꧌]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(tortoise, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(tortoise, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(tortoise, "The pier is quiet.").contains("dawn"))
+    }
+
 }
