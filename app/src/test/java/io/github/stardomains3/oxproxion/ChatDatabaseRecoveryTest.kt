@@ -859,6 +859,39 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun encryptMarkerAtRootIsDiscardedWhenVaultAlreadyHasOne() {
+        val databases = tmp.newFolder("encrypt-ok-collide-databases")
+        val vault = tmp.newFolder("encrypt-ok-collide-vault")
+        File(vault, "chat_database.encrypt_ok").writeText("vault")
+        File(databases, "chat_database.encrypt_ok").writeText("root")
+        File(databases, "chat_database.encrypt_ok-wal").writeText("wal")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertFalse(File(databases, "chat_database.encrypt_ok").exists())
+        assertFalse(File(databases, "chat_database.encrypt_ok-wal").exists())
+        assertEquals("vault", File(vault, "chat_database.encrypt_ok").readText())
+        assertEquals(0, vault.listFiles()?.count { it.name.startsWith("chat_database.encrypt_ok.kept-") } ?: 0)
+        val hold = ChatDbVault.holdDirectory(databases)
+        assertFalse(File(hold, "chat_database.encrypt_ok").exists())
+        assertFalse(File(hold, "chat_database.encrypt_ok-wal").exists())
+    }
+
+    @Test
+    fun encryptMarkerSidecarOnlyIsParkedThenDiscarded() {
+        val databases = tmp.newFolder("encrypt-ok-sidecar-databases")
+        val vault = tmp.newFolder("encrypt-ok-sidecar-vault")
+        File(databases, "chat_database.encrypt_ok-shm").writeText("shm")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertFalse(File(databases, "chat_database.encrypt_ok-shm").exists())
+        assertFalse(File(vault, "chat_database.encrypt_ok-shm").exists())
+        val hold = ChatDbVault.holdDirectory(databases)
+        assertFalse(File(hold, "chat_database.encrypt_ok-shm").exists())
+    }
+
+    @Test
     fun backupRulesExcludePlaintextCopiesAndHostTokens() {
         val rules = xmlText("backup_rules.xml")
         val extraction = xmlText("data_extraction_rules.xml")
@@ -873,8 +906,12 @@ class ChatDatabaseRecoveryTest {
             "chat_database.encrypting-shm",
             "chat_database.encrypting-journal",
             "chat_database.encrypt_ok",
+            "chat_database.encrypt_ok-wal",
+            "chat_database.encrypt_ok-shm",
+            "chat_database.encrypt_ok-journal",
             "chat_db_hold",
             "code_mode_secrets.xml",
+            "code_mode.xml",
             "code_away_open_tokens.xml",
             "code_away_notif_ids.xml",
         )
