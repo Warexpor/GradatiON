@@ -233,21 +233,38 @@ object HistoryList {
         return if (role == "user") youLabel(body) else body
     }
 
+    /** Start and length of [query] in [text], after folding runs of spaces the same way a draft row does. */
+    data class Emphasis(val start: Int, val length: Int)
+
     /**
      * Where to mark [query] in a row. Skips a short "You: " or "Draft: " lead when the
      * words after it also match, so the highlight lands on the message rather than the
      * prefix. A hit that is only that prefix is not a match: the label is not the line.
+     * Runs of spaces in the query match any whitespace in the row, so a draft found by
+     * [draftMatchIds] still gets a bold span.
      */
-    fun emphasisAt(text: String, query: String): Int {
-        val needle = query.trim()
-        if (needle.isEmpty() || text.isEmpty()) return -1
+    fun emphasis(text: String, query: String): Emphasis? {
+        val needle = foldSpace(query)
+        if (needle.isEmpty() || text.isEmpty()) return null
         val labelEnd = historyLabelEnd(text)
-        if (labelEnd >= 0) {
-            val later = text.indexOf(needle, startIndex = labelEnd, ignoreCase = true)
-            if (later >= 0) return later
-            return -1
-        }
-        return text.indexOf(needle, ignoreCase = true)
+        val bodyStart = if (labelEnd >= 0) labelEnd else 0
+        findEmphasis(text, needle, bodyStart)?.let { return it }
+        // The label is not the line. Only fall back to the whole string when there is no label.
+        if (labelEnd >= 0) return null
+        return findEmphasis(text, needle, 0)
+    }
+
+    fun emphasisAt(text: String, query: String): Int = emphasis(text, query)?.start ?: -1
+
+    private fun findEmphasis(text: String, needle: String, from: Int): Emphasis? {
+        if (from > text.length) return null
+        val exact = text.indexOf(needle, startIndex = from, ignoreCase = true)
+        if (exact >= 0) return Emphasis(exact, needle.length)
+        val words = needle.split(' ').filter { it.isNotEmpty() }
+        if (words.size < 2) return null
+        val pattern = words.joinToString("\\s+") { Regex.escape(it) }
+        val match = Regex(pattern, RegexOption.IGNORE_CASE).find(text, from) ?: return null
+        return Emphasis(match.range.first, match.value.length)
     }
 
     /**
@@ -334,9 +351,8 @@ object HistoryList {
     }
 
     private fun clipMatch(text: String, needle: String): String {
-        val at = emphasisAt(text, needle)
-        if (at < 0) return text
-        return clipAround(text, at, needle.length)
+        val hit = emphasis(text, needle) ?: return text
+        return clipAround(text, hit.start, hit.length)
     }
 
     private fun clipAround(text: String, at: Int, needleLen: Int): String {
