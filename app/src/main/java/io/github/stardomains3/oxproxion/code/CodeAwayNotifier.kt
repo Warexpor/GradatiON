@@ -30,7 +30,8 @@ import java.util.concurrent.ConcurrentHashMap
  * Notification ids are allocated collision-free (AWAY-03): key→id is persisted and
  * cancel/eviction use that allocation rather than recomputing the lossy 24-bit hash alone.
  * Cold-start allocation also treats prefs-held ids as taken so a new alert cannot reuse
- * a shade entry that survived process death.
+ * a shade entry that survived process death. Cold-start also seeds the dedup set from those
+ * prefs so a reconnect cannot re-alert the same shade entry.
  */
 class CodeAwayNotifier(
     context: Context,
@@ -45,6 +46,10 @@ class CodeAwayNotifier(
 
     /** Dedup keys currently showing (or suppressed after post). */
     private val posted = LinkedHashSet<String>()
+
+    /** True once [posted] has been seeded from [idPrefs] after process death. */
+    @Volatile
+    private var postedSeeded: Boolean = false
 
     /** dedupKey → allocated notificationId (AWAY-03). */
     private val keyToId = HashMap<String, Int>()
@@ -83,6 +88,7 @@ class CodeAwayNotifier(
         update: CodeUpdate,
         sessionWasRunning: Boolean = true,
     ) {
+        ensurePostedSeeded()
         when (update) {
             is CodeUpdate.ApprovalAnswered -> cancelApproval(sessionId, update.requestId)
             is CodeUpdate.Upsert -> {
@@ -109,6 +115,7 @@ class CodeAwayNotifier(
     }
 
     fun cancelSession(sessionId: String) {
+        ensurePostedSeeded()
         val toRemove = posted.filter {
             it == CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId) ||
                 it.startsWith("approval:$sessionId:")
@@ -177,9 +184,10 @@ class CodeAwayNotifier(
      * Keeps the key→id allocation so the next post updates the same shade id (AWAY-03).
      */
     fun clearTurnDoneDedup(sessionId: String) {
+        ensurePostedSeeded()
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId)
         // Remove memory only — leave any still-visible shade entry until open/auto-cancel;
-        // the next TurnDone will post (updating the allocated id).
+        // the next TurnDone will post (updating the allocated id). Prefs keep the allocation.
         posted.remove(key)
     }
 
@@ -332,6 +340,20 @@ class CodeAwayNotifier(
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+    }
+
+    /**
+     * After process death [posted] is empty while prefs (and often the shade) still hold
+     * every key that was allocated. Seed once so reconnect cannot re-alert those entries.
+     * [clearTurnDoneDedup] still clears memory only so a later finished turn can post.
+     */
+    private fun ensurePostedSeeded() {
+        if (postedSeeded) return
+        synchronized(posted) {
+            if (postedSeeded) return
+            posted.addAll(CodeAwayFormat.postedKeysFromPrefs(idPrefs.all))
+            postedSeeded = true
+        }
     }
 
     /**

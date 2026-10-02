@@ -32,8 +32,9 @@ import java.nio.file.StandardOpenOption
  * The backup rules also name those sidecars so a backup before the next open cannot upload them.
  *
  * The live `chat_database` stays in the databases directory. The backup rules exclude it, its
- * journal, and the old plaintext / encrypting names (and their wal/shm/journal) in case a move
- * out of that directory fails.
+ * journal, and the old plaintext / encrypting / encrypt_ok names (and their wal/shm/journal) in
+ * case a move out of that directory fails. `code_mode.xml` is excluded too: a failed Keystore
+ * vault write can leave a pairing token in the hosts JSON until the next successful scrub.
  */
 internal object ChatDbVault {
     private const val TAG = "ChatDbVault"
@@ -104,8 +105,10 @@ internal object ChatDbVault {
      * beside the orphan. Legacy `pre_sqlcipher` / `encrypting` copies (and their sidecars) move as
      * one set into the vault, or park under hold when that name is taken — a lone `-wal` was not
      * in the backup rules. Move temps (`.partial` / `.ready` / `.bak`) and `.kept-*` leftovers of
-     * those names are parked the same way: the backup rules do not list them. A failure to move
-     * the encrypt marker is logged and left in place; the backup rules still name that file.
+     * those names are parked the same way: the backup rules do not list them. When the vault
+     * already has the encrypt marker, a leftover at the databases root is discarded (not
+     * `uniqueKept` into the vault). A failure to move it is logged and left in place; the backup
+     * rules still name that file and its sidecars.
      */
     fun relocateLegacy(databasesDir: File, vault: File, storedRecovered: String?): Boolean {
         vault.mkdirs()
@@ -117,7 +120,7 @@ internal object ChatDbVault {
         // left sidecars at the databases root, and Auto Backup has no wildcards for those names.
         relocateLegacyNamed(databasesDir, vault, "${AppDatabase.DB_NAME}.pre_sqlcipher")
         relocateLegacyNamed(databasesDir, vault, "${AppDatabase.DB_NAME}.encrypting")
-        moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.encrypt_ok"), encryptMarker(vault))
+        relocateEncryptMarker(databasesDir, vault)
         // Set-aside (unreadable) copies use the same set move as recovered names: when the vault
         // already has that stamp, park under hold. moveBestEffort used to uniqueKept into the vault,
         // which could split a main file from its wal and still leave a stamp collision for the key.
@@ -213,7 +216,7 @@ internal object ChatDbVault {
     }
 
     /**
-     * Drops recovered/unreadable/legacy-plaintext sidecar leftovers that have no main file.
+     * Drops recovered/unreadable/legacy-plaintext/encrypt_ok sidecar leftovers that have no main file.
      * An orphan -wal in the vault used to block a later hold drain, and Room opening that
      * recovered name would mint an empty main beside it.
      */
@@ -319,13 +322,15 @@ internal object ChatDbVault {
 
     private fun isLegacyPlainName(name: String): Boolean =
         name == "${AppDatabase.DB_NAME}.pre_sqlcipher" ||
-            name == "${AppDatabase.DB_NAME}.encrypting"
+            name == "${AppDatabase.DB_NAME}.encrypting" ||
+            name == "${AppDatabase.DB_NAME}.encrypt_ok"
 
-    /** Main or `-wal`/`-shm`/`-journal` of a legacy plaintext / encrypting copy. */
+    /** Main or `-wal`/`-shm`/`-journal` of a legacy plaintext / encrypting / encrypt_ok copy. */
     private fun legacyPlainBaseName(fileName: String): String? {
         for (base in listOf(
             "${AppDatabase.DB_NAME}.pre_sqlcipher",
             "${AppDatabase.DB_NAME}.encrypting",
+            "${AppDatabase.DB_NAME}.encrypt_ok",
         )) {
             if (fileName == base) return base
             for (suffix in listOf("-wal", "-shm", "-journal")) {
@@ -333,6 +338,33 @@ internal object ChatDbVault {
             }
         }
         return null
+    }
+
+    /**
+     * Moves a leftover encrypt marker into [vault]. When the vault already has one, discard
+     * the databases-root copy (and any unexpected sidecars) instead of `uniqueKept` into the vault.
+     * Sidecar-only leftovers are discarded: a marker has no useful wal/shm.
+     */
+    private fun relocateEncryptMarker(databasesDir: File, vault: File) {
+        val name = "${AppDatabase.DB_NAME}.encrypt_ok"
+        val from = File(databasesDir, name)
+        if (encryptMarker(vault).isFile) {
+            if (dbSetPresent(databasesDir, name)) {
+                discardShortNameSet(databasesDir, name)
+            }
+            return
+        }
+        if (!from.isFile) {
+            if (dbSetPresent(databasesDir, name)) {
+                discardShortNameSet(databasesDir, name)
+            }
+            return
+        }
+        moveBestEffort(from, encryptMarker(vault))
+        // Sidecars of a marker are unexpected; drop any that the main move left behind.
+        if (dbSetPresent(databasesDir, name) && !from.isFile) {
+            discardShortNameSet(databasesDir, name)
+        }
     }
 
     /**

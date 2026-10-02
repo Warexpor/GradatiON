@@ -76,6 +76,25 @@ object CodeAwayFormat {
     }
 
     /**
+     * Dedup keys already allocated in persisted key→id prefs.
+     * After process death [CodeAwayNotifier]'s in-memory [posted] set is empty; seeding
+     * from prefs keeps reconnect from re-alerting a shade entry that survived the kill.
+     * [clearTurnDoneDedup] still clears memory only so a later finished turn can post again.
+     */
+    fun postedKeysFromPrefs(entries: Map<String, *>): Set<String> {
+        val out = LinkedHashSet<String>()
+        for ((k, v) in entries) {
+            val id = when (v) {
+                is Int -> v
+                is Number -> v.toInt()
+                else -> continue
+            }
+            if (isAwayNotifId(id)) out += k
+        }
+        return out
+    }
+
+    /**
      * Activity PendingIntent request code. One per posted notification.
      * A hash of the session id collides, and FLAG_UPDATE_CURRENT then opens the wrong session.
      */
