@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code: a bridge `permissionResolved` whose `requestId` is a whole number like `9.0` still clears the matching approval card (and the away alert). Cursor Agent tools named EditFile, SearchReplace, ReadFileV2, ListDirV2, GlobFileSearch, ReadLints, Await, FetchMcpResource, or Reapply get the edit, search, think, or fetch card. A shell argv piece written as `5.0` shows as `5`.
 - Replacing an idle roleplay greeting with the card's line drops rewrite versions of that opening, so a later turn does not show a version navigator for text that is gone.
 - Continue starts a new paragraph after Hebrew ׃, Ethiopic ።, Greek ;, Tibetan ། and Khmer ។ sentence ends. Hebrew ׳״ trail those ends like quotes, and Spanish ¿¡ hug the next word like other openers.
 - History search treats extra spaces and line breaks the same way draft rows already did: "see you" finds a sent line that has a newline between those words, and the hit stays bold. Discard draft also clears a parked photo on a chat that is not open, and offers Discard when only a picture is staged. A refused send that finished after you had already opened another chat keeps that photo on the thread you sent from.
