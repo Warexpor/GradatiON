@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -447,7 +447,8 @@ class AcpAdapter : HarnessAdapter {
         return when (n) {
             "read", "read_file", "readfile", "cat",
             "read_file_v2", "readfilev2",
-            "read_project", "readproject" -> "read"
+            "read_project", "readproject",
+            "notebook_read", "notebookread" -> "read"
             "edit", "write", "write_file", "writefile", "str_replace", "strreplace",
             "apply_patch", "applypatch", "patch",
             "edit_file", "editfile", "edit_file_v2", "editfilev2",
@@ -458,7 +459,9 @@ class AcpAdapter : HarnessAdapter {
             "apply_agent_diff", "applyagentdiff",
             "create_diagram", "creatediagram",
             "update_project", "updateproject",
-            "draft_external_message", "draftexternalmessage" -> "edit"
+            "draft_external_message", "draftexternalmessage",
+            "patch_edit", "patchedit",
+            "create_pull_request", "createpullrequest", "create_pr", "createpr" -> "edit"
             "delete", "remove", "rm", "delete_file", "deletefile", "unlink" -> "delete"
             "move", "rename", "mv", "move_file", "movefile", "rename_file", "renamefile",
             "copy_to_box", "copytobox", "copy_from_box", "copyfrombox" -> "move"
@@ -473,7 +476,7 @@ class AcpAdapter : HarnessAdapter {
             "ripgrep_search", "ripgrepsearch",
             "ripgrep_raw_search", "ripgreprawsearch",
             "search_symbols", "searchsymbols",
-            "go_to_definition", "gotodefinition",
+            "go_to_definition", "gotodefinition", "gotodef",
             "codebase_search", "codebasesearch", "deep_search", "deepsearch",
             "read_lints", "readlints",
             "get_diagnostics", "getdiagnostics",
@@ -490,7 +493,10 @@ class AcpAdapter : HarnessAdapter {
             "runterminalcommand",
             "write_shell_stdin", "writeshellstdin",
             "computer_use", "computeruse",
-            "record_screen", "recordscreen" -> "execute"
+            "record_screen", "recordscreen",
+            "run_terminal_command_v2", "runterminalcommandv2",
+            "browser_navigate", "browsernavigate",
+            "open_browser", "openbrowser" -> "execute"
             "think", "thought", "reasoning",
             "await", "await_task", "awaittask",
             "await_shell", "awaitshell",
@@ -504,7 +510,10 @@ class AcpAdapter : HarnessAdapter {
             "cloud_agent", "cloudagent",
             "create_agent", "createagent",
             "send_to_agent", "sendtoagent",
-            "check_subagent", "checksubagent" -> "think"
+            "check_subagent", "checksubagent",
+            "read_todos", "readtodos",
+            "sleep", "wait",
+            "wake_parent", "wakeparent" -> "think"
             "fetch", "web_fetch", "webfetch", "websearch", "web_search", "http",
             "fetch_mcp_resource", "fetchmcpresource",
             "read_mcp_resource", "readmcpresource",
@@ -514,7 +523,8 @@ class AcpAdapter : HarnessAdapter {
             "call_dynamic_tool", "calldynamictool",
             "mcp",
             "upload_file", "uploadfile",
-            "download_file", "downloadfile" -> "fetch"
+            "download_file", "downloadfile",
+            "send_to_user", "sendtouser" -> "fetch"
             "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
             else -> n
         }
@@ -691,7 +701,8 @@ class AcpAdapter : HarnessAdapter {
         cursor.release(requestId)
         val options = params["options"]?.jsonArray?.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
-            val id = o.str("optionId") ?: return@mapNotNull null
+            // Whole-number doubles (5.0 / "5.0") must match the answer's optionId as "5".
+            val id = rpcIdString(o["optionId"])?.trim()?.ifEmpty { null } ?: return@mapNotNull null
             val kind = approvalKind(o.str("kind"), o.str("name"))
             ApprovalOption(id, o.str("name") ?: kind.name, kind)
         }.orEmpty()
@@ -860,12 +871,17 @@ class AcpAdapter : HarnessAdapter {
                 "tool_name", "toolName", "uri", "server",
                 "prompt", "description", "task_description", "taskDescription",
                 "pr_url", "prUrl", "pull_request_url", "pullRequestUrl",
-                "shell_id", "shellId", "terminal_instance_id", "terminalInstanceId") != null ||
+                "shell_id", "shellId", "terminal_instance_id", "terminalInstanceId",
+                "chars", "connection",
+                "computer_path", "computerPath", "box_path", "boxPath",
+                "source_path", "sourcePath", "machine_id", "machineId") != null ||
             firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
                 "directory_path", "directoryPath",
-                "working_directory", "workingDirectory", "cwd") != null
+                "working_directory", "workingDirectory", "cwd",
+                "computer_path", "computerPath", "box_path", "boxPath",
+                "source_path", "sourcePath", "download_path", "downloadPath") != null
         val hasLine = (u["locations"] as? JsonArray).orEmpty().any { e ->
             val line = lineNumber((e as? JsonObject)?.get("line"))
             line != null && line > 0
@@ -951,12 +967,17 @@ class AcpAdapter : HarnessAdapter {
                 "tool_name", "toolName", "uri", "server",
                 "prompt", "description", "task_description", "taskDescription",
                 "pr_url", "prUrl", "pull_request_url", "pullRequestUrl",
-                "shell_id", "shellId", "terminal_instance_id", "terminalInstanceId"),
+                "shell_id", "shellId", "terminal_instance_id", "terminalInstanceId",
+                "chars", "connection",
+                "computer_path", "computerPath", "box_path", "boxPath",
+                "source_path", "sourcePath", "machine_id", "machineId"),
             filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
                 "directory_path", "directoryPath",
-                "working_directory", "workingDirectory", "cwd"),
+                "working_directory", "workingDirectory", "cwd",
+                "computer_path", "computerPath", "box_path", "boxPath",
+                "source_path", "sourcePath", "download_path", "downloadPath"),
         )
     }
 
@@ -1016,10 +1037,9 @@ class AcpAdapter : HarnessAdapter {
         if (raw == null) return null
         for (k in keys) {
             val p = raw[k] as? JsonPrimitive ?: continue
-            // Numeric shell_id / offset written as 5.0 still shows as "5". String patterns stay.
-            if (!p.isString) {
-                wholeNumberLong(p)?.let { return it.toString() }
-            }
+            // Numeric shell_id / offset written as 5.0 or "5.0" still shows as "5".
+            // Non-numeric strings (patterns, paths, URLs) stay as sent.
+            wholeNumberLong(p)?.let { return it.toString() }
             val s = p.contentOrNull?.trim()?.ifEmpty { null } ?: continue
             return s
         }

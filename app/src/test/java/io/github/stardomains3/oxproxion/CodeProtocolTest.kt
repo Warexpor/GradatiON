@@ -1983,6 +1983,78 @@ class CodeProtocolTest {
         assertEquals("a red cube", byId["g1"]?.detail)
     }
 
+
+    @Test fun permissionOptionIdWrittenAsDoubleMatchesAnswer() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":9,"method":"session/request_permission","params":{"sessionId":"s1","toolCall":{"toolCallId":"c1","title":"Run","kind":"execute"},"options":[{"optionId":5.0,"name":"Allow","kind":"allow_once"},{"optionId":"6.0","name":"Deny","kind":"reject_once"}]}}""")
+        val approval = out.filterIsInstance<AdapterOutput.Update>().map { it.update }
+            .filterIsInstance<CodeUpdate.Upsert>().map { it.event }
+            .filterIsInstance<CodeEvent.Approval>().single()
+        assertEquals(listOf("5", "6"), approval.options.map { it.id })
+        val answer = Json.parseToJsonElement(acp.answerApproval(approval.requestId, "5")).jsonObject
+        val outcome = answer["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("5", outcome["optionId"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun shellIdWrittenAsDoubleStringShowsAsDigit() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"s1","title":"Stdin","kind":"other","name":"WriteShellStdin","status":"completed",
+               "rawInput":{"shell_id":"5.0","chars":"y\n"}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("5", byId["s1"]?.detail)
+    }
+
+    @Test fun evenMoreCursorNativeToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"pe","title":"Patch","kind":"other","name":"PatchEdit","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rt","title":"Todos","kind":"other","name":"ReadTodos","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rv","title":"Shell","kind":"other","name":"RunTerminalCommandV2","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gd","title":"Def","kind":"other","name":"Gotodef","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"nr","title":"Notebook","kind":"other","name":"NotebookRead","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sl","title":"Sleep","kind":"other","name":"Sleep","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wt","title":"Wait","kind":"other","name":"Wait","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wp","title":"Wake","kind":"other","name":"WakeParent","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"su","title":"Send","kind":"other","name":"SendToUser","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bn","title":"Browse","kind":"other","name":"BrowserNavigate","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ob","title":"Browse","kind":"other","name":"OpenBrowser","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"pr","title":"PR","kind":"other","name":"CreatePullRequest","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EDIT, byId["pe"]?.kind)
+        assertEquals(ToolKind.THINK, byId["rt"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["rv"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["gd"]?.kind)
+        assertEquals(ToolKind.READ, byId["nr"]?.kind)
+        assertEquals(ToolKind.THINK, byId["sl"]?.kind)
+        assertEquals(ToolKind.THINK, byId["wt"]?.kind)
+        assertEquals(ToolKind.THINK, byId["wp"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["su"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["bn"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["ob"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["pr"]?.kind)
+    }
+
+    @Test fun cursorCopyAndUploadDetailUseNativeRawInputKeys() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"c1","title":"Copy","kind":"other","name":"CopyToBox","status":"completed",
+               "rawInput":{"computer_path":"/home/u/a.kt","box_path":"/workspace/a.kt"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"u1","title":"Upload","kind":"other","name":"UploadFile","status":"completed",
+               "rawInput":{"connection":"user-onedrive","sourcePath":"/workspace/out.pdf"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"s1","title":"Stdin","kind":"other","name":"WriteShellStdin","status":"completed",
+               "rawInput":{"chars":"y\n"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"m1","title":"Machines","kind":"other","name":"ListMachines","status":"completed",
+               "rawInput":{"machineId":7.0}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("/home/u/a.kt", byId["c1"]?.detail)
+        assertEquals("user-onedrive", byId["u1"]?.detail)
+        assertEquals("y", byId["s1"]?.detail?.trim())
+        assertEquals("7", byId["m1"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()

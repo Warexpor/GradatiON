@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 21)
+
+On `gradation/w21-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
+- ACP permission `optionId` written as a whole-number double (`5.0` / `"5.0"`) still matches as `"5"`, so Allow answers with the digit string the agent expects. Tool detail lines coerce stringified whole-number doubles the same way (a `"5.0"` shell_id shows as `5`).
+- Cursor Agent tool names `PatchEdit`, `ReadTodos`, `RunTerminalCommandV2`, `Gotodef`, `NotebookRead`, `Sleep`, `Wait`, `WakeParent`, `SendToUser`, `BrowserNavigate`, `OpenBrowser`, and `CreatePullRequest` map to edit / think / execute / search / read / fetch cards (icon and log clipping).
+- Tool detail lines read Cursor's native rawInput keys `computer_path` / `box_path`, `sourcePath`, `connection`, `chars`, and `machineId` (a whole-number double shows as `5`).
+
+Phone: on Cursor Agent, a PatchEdit or ReadTodos card should show the edit or think icon. A CopyToBox card with `computer_path` should show that path under the title. An approval whose optionId a proxy rewrote as `5.0` should still Allow as `"5"`.
+
 # Handoff (2026-10-02, Chat wave 21)
 
 On `gradation/w21-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w20:
@@ -5,6 +14,7 @@ On `gradation/w21-chat` (PR into `gradation/app-pass`). Chat/History follow-ups 
 - History draft search matches query words in order with gaps, same idea as sent-message LIKE, so "hello photo" finds "hello there" + Photo and the bold span can cover that hit.
 
 Phone: stage a photo in Chat, open History → Roleplay → Continue (no chip in RP); swipe back to Chat (chip returns). Caption "hello there" + photo, History search "hello photo" (row shows Draft: hello there Photo with the phrase bold).
+
 
 # Handoff (2026-10-02, Code wave 20)
 
