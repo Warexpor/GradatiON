@@ -55,4 +55,50 @@ object ComposerStaged {
     /** Entries [remember] dropped when the store grew past [ComposerDrafts.MAX_KEPT]. */
     fun evicted(before: Map<String, Entry>, after: Map<String, Entry>): List<Entry> =
         before.mapNotNull { (k, v) -> if (k in after) null else v }
+
+    /**
+     * Live composer wins when it has anything staged. When the open thread's live stage
+     * is empty (parked for Code), History still needs the parked Photo / Audio / files.
+     */
+    data class Presence(val hasPhoto: Boolean, val hasAudio: Boolean, val fileCount: Int) {
+        val isEmpty: Boolean get() = !hasPhoto && !hasAudio && fileCount <= 0
+    }
+
+    fun presence(
+        livePhoto: Boolean,
+        liveAudio: Boolean,
+        liveFileCount: Int,
+        parked: Entry,
+    ): Presence {
+        if (livePhoto || liveAudio || liveFileCount > 0) {
+            return Presence(livePhoto, liveAudio, liveFileCount)
+        }
+        return Presence(
+            hasPhoto = parked.imageBytes != null || !parked.imageUri.isNullOrBlank(),
+            hasAudio = parked.audioBytes != null,
+            fileCount = parked.files.size,
+        )
+    }
+
+    /** Merge a late photo onto a parked entry without dropping audio/files already there. */
+    fun withPhoto(base: Entry, bytes: ByteArray?, mime: String?, uri: String?): Entry =
+        base.copy(imageBytes = bytes, imageMime = mime, imageUri = uri)
+
+    /**
+     * Merge a late audio clip onto a parked entry. Clears the picture fields the same way
+     * the live composer does when audio replaces a staged photo.
+     */
+    fun withAudio(base: Entry, bytes: ByteArray?, format: String?): Entry =
+        base.copy(
+            audioBytes = bytes,
+            audioFormat = format,
+            imageBytes = null,
+            imageMime = null,
+            imageUri = null,
+        )
+
+    /** Append a late file onto a parked entry. */
+    fun withFile(base: Entry, file: FilePart): Entry =
+        base.copy(files = base.files + file)
+
 }

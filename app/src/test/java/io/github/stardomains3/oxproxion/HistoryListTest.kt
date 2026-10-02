@@ -432,4 +432,16 @@ class HistoryListTest {
         assertTrue(hit != null)
         assertTrue(hit!!.length >= "hello photo".length)
     }
+
+    @Test fun draft_row_shows_audio_when_search_needs_parked_label() {
+        // Same path History uses when the open Chat stage is parked for Code: caption in
+        // prefs, attachment label from the park map (Audio), query spans both.
+        val draft = HistoryList.draftRowText("hello there", "Audio", "hello audio")
+        assertEquals("hello there Audio", draft)
+        val row = HistoryList.rowPreview("You: sent", draft, "hello audio") { "Draft: $it" }
+        assertTrue(row.contains("Audio"))
+        val hit = HistoryList.emphasis(row, "hello audio")
+        assertTrue(hit != null)
+        assertTrue(hit!!.length >= "hello audio".length)
+    }
 }
