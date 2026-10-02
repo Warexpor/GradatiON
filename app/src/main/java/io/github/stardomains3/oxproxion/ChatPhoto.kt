@@ -96,4 +96,12 @@ object ChatPhoto {
         hasPhoto && !photoOnly -> DpBox(12, 0, 12, 0)
         else -> DpBox(0, 0, 0, 0)
     }
+
+    /**
+     * Padding for a character reply. Bubbles use the same frame as a user bubble; Classic stays
+     * a flat 4dp rim (no chrome). [hasPhoto] must be re-checked every bind: recycling from a
+     * text bubble to a pictured one used to keep the 16dp text inset.
+     */
+    fun assistantBubbleInsets(bubbles: Boolean, hasPhoto: Boolean, photoOnly: Boolean): DpBox =
+        if (bubbles) containerInsets(hasPhoto, photoOnly) else DpBox(4, 4, 4, 4)
 }

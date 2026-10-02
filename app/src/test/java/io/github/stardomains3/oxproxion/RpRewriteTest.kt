@@ -32,5 +32,8 @@ class RpRewriteTest {
         val reply = "\n*She waits.*\n\n\"You're late.\""
         assertEquals("She waits.", RpRewrite.snippet(reply))
         assertEquals("abcd…", RpRewrite.snippet("abcdef", limit = 5))
+        assertEquals("Come in.", RpRewrite.snippet("«Come in.»"))
+        assertEquals("You're late.", RpRewrite.snippet("“You're late.”"))
+        assertEquals("来て。", RpRewrite.snippet("「来て。」"))
     }
 }

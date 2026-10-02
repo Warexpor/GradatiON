@@ -22,10 +22,19 @@ object RpRewrite {
     /** First line of the reply, markdown marks stripped, so the dialog shows which bubble the note is for. */
     fun snippet(reply: String, limit: Int = 90): String {
         val line = reply.lineSequence()
-            .map { it.trim().trim('*', '_', '"', '\'') }
+            .map { stripMarks(it.trim()) }
             .firstOrNull { it.isNotBlank() }
             .orEmpty()
         if (line.length <= limit) return line
         return line.take((limit - 1).coerceAtLeast(1)).trimEnd() + "…"
+    }
+
+    /** Markdown emphasis and the quotes a dialogue line may wear, including «guillemets». */
+    private fun stripMarks(line: String): String {
+        var s = line
+        val marks = charArrayOf('*', '_', '"', '\'', '“', '”', '«', '»', '「', '」', '『', '』', '‹', '›')
+        while (s.isNotEmpty() && s.first() in marks) s = s.drop(1).trimStart()
+        while (s.isNotEmpty() && s.last() in marks) s = s.dropLast(1).trimEnd()
+        return s
     }
 }

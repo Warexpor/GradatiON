@@ -49,6 +49,25 @@ class ChatPhotoTest {
         assertEquals(ChatPhoto.DpBox(0, 0, 0, 0), ChatPhoto.captionInsets(hasPhoto = false, photoOnly = false))
     }
 
+    @Test fun bubbles_shrink_around_a_picture_and_classic_stays_flat() {
+        assertEquals(
+            ChatPhoto.DpBox(4, 4, 4, 4),
+            ChatPhoto.assistantBubbleInsets(bubbles = true, hasPhoto = true, photoOnly = true),
+        )
+        assertEquals(
+            ChatPhoto.DpBox(16, 12, 16, 12),
+            ChatPhoto.assistantBubbleInsets(bubbles = true, hasPhoto = false, photoOnly = false),
+        )
+        assertEquals(
+            ChatPhoto.DpBox(4, 4, 4, 4),
+            ChatPhoto.assistantBubbleInsets(bubbles = false, hasPhoto = false, photoOnly = false),
+        )
+        assertEquals(
+            ChatPhoto.DpBox(4, 4, 4, 4),
+            ChatPhoto.assistantBubbleInsets(bubbles = false, hasPhoto = true, photoOnly = true),
+        )
+    }
+
     @Test fun a_file_uri_wins_and_a_data_url_is_the_stored_picture() {
         val data = "data:image/jpeg;base64,AAAA"
         assertEquals(ChatPhoto.BubbleSource.File("content://photo/1"), ChatPhoto.bubbleSource("content://photo/1", data))

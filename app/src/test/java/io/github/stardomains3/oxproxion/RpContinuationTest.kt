@@ -192,6 +192,19 @@ class RpContinuationTest {
         assertEquals("Dijo: ¿Qué?", RpContinuation.join("Dijo: ¿", "Qué?"))
     }
 
+    @Test fun armenianSyriacAndMongolianEndsStartANewParagraph() {
+        assertEquals("Բարև՞\n\nՆա սպասում է։", RpContinuation.join("Բարև՞", "Նա սպասում է։"))
+        assertEquals("Բարև՜\n\nՆա սպասում է։", RpContinuation.join("Բարև՜", "Նա սպասում է։"))
+        assertEquals("ܫܠܡܐ܁\n\nܗܝ ܡܣܟܝܐ.", RpContinuation.join("ܫܠܡܐ܁", "ܗܝ ܡܣܟܝܐ."))
+        assertEquals("Сайн᠃\n\nТэр хүлээнэ.", RpContinuation.join("Сайн᠃", "Тэр хүлээнэ."))
+        assertEquals("Really‼\n\nShe waits.", RpContinuation.join("Really‼", "She waits."))
+    }
+
+    @Test fun unfinishedTibetanAndEthiopicDoNotGainASpace() {
+        assertEquals("བཀྲ་ཤིསམོ", RpContinuation.join("བཀྲ་ཤིས", "མོ"))
+        assertEquals("ሰላምእሷ", RpContinuation.join("ሰላም", "እሷ"))
+    }
+
         @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)
