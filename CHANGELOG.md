@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A late audio, file or PDF pick that finishes after an Ask→Roleplay or Code flip parks for that Ask thread (like a late gallery photo), instead of being dropped on Roleplay or wiped when leaving Code.
+- History still shows Photo / Audio / files for the open Chat when the stage is only in the park map (Code cleared the live chip), so search and the draft row can bold those labels.
 - Continue starts a new paragraph after white square 〚…〛, math double angle ⟪…⟫ and math white tortoise ⟬…⟭ dialogue, and after Batak ᯼᯽᯾᯿, Runic ᛫᛬᛭, Mandaic ࡞, Tifinagh ⵰, Samaritan ࠹࠾ and Javanese ꧈꧋꧞꧟. Opening 〚⟪⟬ hug the next word like other openers.
 - Lore keys wrapped in 〚white square〛 / ⟪math double⟫ / ⟬math tortoise⟭, and keys trailed by ᯼᛫࡞⵰࠾꧈, still match.
 - The rewrite dialog quote drops 〚white square〛, ⟪math double⟫ and ⟬math tortoise⟭ quotes around the first line.

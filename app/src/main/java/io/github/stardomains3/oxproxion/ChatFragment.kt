@@ -1565,23 +1565,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         } else if (stored.isNotBlank()) {
             return stored
         }
-        val hasPhoto: Boolean
-        val hasAudio: Boolean
-        val fileCount: Int
-        if (open) {
-            hasPhoto = selectedImageBytes != null || !viewModel.pendingImageUri().isNullOrBlank()
-            hasAudio = selectedAudioBytes != null
-            fileCount = pendingFiles.size
-        } else {
-            val entry = ComposerStaged.get(viewModel.stagedAttachments(), sessionId)
-            hasPhoto = entry.imageBytes != null || !entry.imageUri.isNullOrBlank()
-            hasAudio = entry.audioBytes != null
-            fileCount = entry.files.size
-        }
+        val flags = unsentAttachmentPresence(sessionId, open)
         return HistoryList.attachmentDraft(
-            hasPhoto = hasPhoto,
-            hasAudio = hasAudio,
-            fileCount = fileCount,
+            hasPhoto = flags.hasPhoto,
+            hasAudio = flags.hasAudio,
+            fileCount = flags.fileCount,
             photoLabel = getString(R.string.history_preview_photo),
             audioLabel = getString(R.string.history_preview_audio),
             filesLabel = { n -> resources.getQuantityString(R.plurals.history_preview_files, n, n) },
@@ -1592,26 +1580,36 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         if (viewModel.isRpMode()) return ""
         val open = askComposer.bound &&
             ComposerDrafts.key(askComposer.sessionId) == ComposerDrafts.key(sessionId)
-        val hasPhoto: Boolean
-        val hasAudio: Boolean
-        val fileCount: Int
-        if (open) {
-            hasPhoto = selectedImageBytes != null || !viewModel.pendingImageUri().isNullOrBlank()
-            hasAudio = selectedAudioBytes != null
-            fileCount = pendingFiles.size
-        } else {
-            val entry = ComposerStaged.get(viewModel.stagedAttachments(), sessionId)
-            hasPhoto = entry.imageBytes != null || !entry.imageUri.isNullOrBlank()
-            hasAudio = entry.audioBytes != null
-            fileCount = entry.files.size
-        }
+        val flags = unsentAttachmentPresence(sessionId, open)
         return HistoryList.attachmentDraft(
-            hasPhoto = hasPhoto,
-            hasAudio = hasAudio,
-            fileCount = fileCount,
+            hasPhoto = flags.hasPhoto,
+            hasAudio = flags.hasAudio,
+            fileCount = flags.fileCount,
             photoLabel = getString(R.string.history_preview_photo),
             audioLabel = getString(R.string.history_preview_audio),
             filesLabel = { n -> resources.getQuantityString(R.plurals.history_preview_files, n, n) },
+        )
+    }
+
+    /**
+     * Live stage wins while it has a chip. When Code (or a park path) cleared the live
+     * fields but left the entry in the ViewModel map, History still needs that label.
+     */
+    private fun unsentAttachmentPresence(sessionId: Long, open: Boolean): ComposerStaged.Presence {
+        val parked = ComposerStaged.get(viewModel.stagedAttachments(), sessionId)
+        if (!open) {
+            return ComposerStaged.presence(
+                livePhoto = false,
+                liveAudio = false,
+                liveFileCount = 0,
+                parked = parked,
+            )
+        }
+        return ComposerStaged.presence(
+            livePhoto = selectedImageBytes != null || !viewModel.pendingImageUri().isNullOrBlank(),
+            liveAudio = selectedAudioBytes != null,
+            liveFileCount = pendingFiles.size,
+            parked = parked,
         )
     }
 
@@ -3554,7 +3552,6 @@ $cleanContent
     }
 
     private fun processAudioUri(uri: Uri) {
-        if (discardAttachmentIfRp()) return
         lifecycleScope.launch {
             try {
                 val mimeType = requireContext().contentResolver.getType(uri)
@@ -3590,7 +3587,24 @@ $cleanContent
                     GlassNotice.show(requireContext(), getString(R.string.toast_audio_too_large))
                     return@launch
                 }
-                if (discardAttachmentIfRp()) return@launch
+                // Read can outlive an Ask→RP / Code flip. Park for Ask; do not put audio on RP
+                // (or leave it on live fields that leaveCodeMode would wipe from the park map).
+                if (askComposerAway()) {
+                    val askId = lateAskStageId()
+                    val base = ComposerStaged.get(viewModel.stagedAttachments(), askId)
+                    val previousUri = base.imageUri
+                    parkLateAskAttachment(ComposerStaged.withAudio(base, bytes, audioFormat))
+                    val goneName = previousUri?.let { ScenePhoto.sceneFileName(it) }
+                    val app = context?.applicationContext
+                    if (goneName != null && app != null) {
+                        launch(Dispatchers.IO) {
+                            if (!viewModel.scenePhotoStillUsed(goneName)) {
+                                ScenePhoto.deleteSceneFiles(app, listOf(goneName))
+                            }
+                        }
+                    }
+                    return@launch
+                }
 
                 selectedAudioBytes = bytes
                 selectedAudioFormat = audioFormat
@@ -4486,12 +4500,28 @@ $cleanContent
         }
     }
 
-    /** Late Ask picker results must not stage media after a flip to RP. */
-    private fun discardAttachmentIfRp(): Boolean {
-        if (!viewModel.isRpMode()) return false
-        GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
-        return true
+    /** Chat UI is not showing: Roleplay or Code. Late picker results park for Ask. */
+    private fun askComposerAway(): Boolean =
+        viewModel.isRpMode() || (::codeMode.isInitialized && codeMode.isActive)
+
+    /**
+     * Ask thread that should own a late picker result. Prefers [askStageSessionId] because
+     * after Ask→RP [askComposer] may already name the Roleplay session.
+     */
+    private fun lateAskStageId(): Long? =
+        askStageSessionId
+            ?: if (askComposer.bound && askComposer.mode == ChatMode.ASK) askComposer.sessionId
+            else null
+
+    /** Merge [entry] onto the Ask park map and notice when Roleplay is showing. */
+    private fun parkLateAskAttachment(entry: ComposerStaged.Entry) {
+        val askId = lateAskStageId()
+        rememberStaged(askId, entry)
+        if (viewModel.isRpMode()) {
+            GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
+        }
     }
+
 
     private fun processPickedImageUri(uri: Uri) {
         val resolver = requireContext().applicationContext.contentResolver
@@ -4555,22 +4585,16 @@ $cleanContent
             val uri = stored?.toString()
             // Encode can outlive an Ask→RP / Code flip. Park for the Ask thread; do not put
             // the chip on Roleplay (or leave it stranded while Code is showing).
-            val away = viewModel.isRpMode() || (::codeMode.isInitialized && codeMode.isActive)
-            if (away) {
-                val askId = askStageSessionId
-                    ?: if (askComposer.bound && askComposer.mode == ChatMode.ASK) askComposer.sessionId
-                    else null
-                rememberStaged(
-                    askId,
-                    ComposerStaged.Entry(
-                        imageBytes = if (uri != null) null else jpeg,
-                        imageMime = ScenePhoto.MIME,
-                        imageUri = uri,
+            if (askComposerAway()) {
+                val base = ComposerStaged.get(viewModel.stagedAttachments(), lateAskStageId())
+                parkLateAskAttachment(
+                    ComposerStaged.withPhoto(
+                        base,
+                        bytes = if (uri != null) null else jpeg,
+                        mime = ScenePhoto.MIME,
+                        uri = uri,
                     ),
                 )
-                if (viewModel.isRpMode()) {
-                    GlassNotice.show(requireContext(), getString(R.string.rp_attachments_disabled))
-                }
                 return@launch
             }
             selectedImageBytes = jpeg
@@ -5853,7 +5877,6 @@ $cleanContent
         }
     }
     private fun processPdfUri(pdfUri: Uri) {
-        if (discardAttachmentIfRp()) return
         lifecycleScope.launch {
             var parcelFd: ParcelFileDescriptor? = null
             var tempPdfFile: File? = null
@@ -5958,10 +5981,6 @@ $cleanContent
 
 
     private suspend fun processPdfBitmap(bitmap: Bitmap) {
-        if (discardAttachmentIfRp()) {
-            bitmap.recycle()
-            return
-        }
         // A page rendered at 2x is several megapixels: PNG-encoding it and writing the preview
         // file would stall the main thread, so both happen on IO.
         val tempPngFile = File(requireContext().cacheDir, "pdf_page_${System.currentTimeMillis()}.png")
@@ -5977,16 +5996,29 @@ $cleanContent
             return
         }
 
-        selectedImageBytes = bytes
-        selectedImageMime = "image/png"
-        currentTempImageFile = tempPngFile  // Track for cleanup
-
         val pngUri = FileProvider.getUriForFile(
             requireContext(),
             "${requireContext().packageName}.fileprovider",
             tempPngFile
         )
+        // Convert can outlive an Ask→RP / Code flip. Park for Ask like a late gallery photo.
+        if (askComposerAway()) {
+            val askId = lateAskStageId()
+            val base = ComposerStaged.get(viewModel.stagedAttachments(), askId)
+            parkLateAskAttachment(
+                ComposerStaged.withPhoto(
+                    base,
+                    bytes = null,
+                    mime = "image/png",
+                    uri = pngUri.toString(),
+                ),
+            )
+            return
+        }
 
+        selectedImageBytes = bytes
+        selectedImageMime = "image/png"
+        currentTempImageFile = tempPngFile  // Track for cleanup
         viewModel.setPendingUserImageUri(pngUri.toString())
         showStagedPhoto(bytes, tempPngFile)
     }
@@ -6031,7 +6063,6 @@ $cleanContent
             .show()
     }
     private fun processTextFile(uri: Uri) {
-        if (discardAttachmentIfRp()) return
         lifecycleScope.launch {
             try {
                 // Get file info (your existing query for filename)
@@ -6075,8 +6106,13 @@ $cleanContent
                     return@launch
                 }
 
-                // Check current total size first (your existing logic)
-                val currentTotalSize = pendingFiles.sumOf { it.size }
+                // Live pending list, or parked files when a late read finishes under Code/RP.
+                val askIdForSize = lateAskStageId()
+                val currentTotalSize = if (askComposerAway()) {
+                    ComposerStaged.get(viewModel.stagedAttachments(), askIdForSize).files.sumOf { it.size }
+                } else {
+                    pendingFiles.sumOf { it.size }
+                }
 
                 // Read content and check individual file size (your buffered reading)
                 val content = withContext(Dispatchers.IO) {
@@ -6103,7 +6139,19 @@ $cleanContent
                     GlassNotice.show(requireContext(), getString(R.string.toast_attachments_total_limit, fileName, (currentTotalSize + fileSize) / 1024 / 1024, MAX_FILE_SIZE / 1024 / 1024))
                     return@launch
                 }
-                if (discardAttachmentIfRp()) return@launch
+                // Read can outlive an Ask→RP / Code flip. Park for Ask; do not add the file
+                // on Roleplay (or leave it on live fields that leaveCodeMode would wipe).
+                if (askComposerAway()) {
+                    val askId = lateAskStageId()
+                    val base = ComposerStaged.get(viewModel.stagedAttachments(), askId)
+                    parkLateAskAttachment(
+                        ComposerStaged.withFile(
+                            base,
+                            ComposerStaged.FilePart(fileName, content, fileSize),
+                        ),
+                    )
+                    return@launch
+                }
 
                 // Add to pending files (your existing AttachedFile)
                 pendingFiles.add(AttachedFile(fileName, content, fileSize))

@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Chat wave 23)
+
+On `gradation/w23-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w22:
+- Late audio / file / PDF picks after an Ask→RP or Code flip park for the Ask thread (merging onto any entry already parked), matching late gallery/camera photos. Roleplay shows the attachments-disabled notice; Code restores the chip on return.
+- History draft presence for the open Chat falls back to the ViewModel park map when the live stage is empty (Code parked it), so search and the row still show Photo / Audio / files.
+
+Phone: stage a photo, open Code, History search "Photo" (row still shows it). Start an audio or file pick in Chat, flip to Roleplay before it lands (notice; chip back on Chat). Same with Code (chip returns on leave).
+
 # Handoff (2026-10-02, Stability wave 22)
 
 On `gradation/w22-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w20 incomplete DB sets (sat out w21):
