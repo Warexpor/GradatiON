@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Notifications/Away wave 26)
+
+On `gradation/w26-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after cold-start away ids (#92), away/pair park (#97), and prefs dedup seed (#102):
+- Answer-ready Speak defers until TTS `onInit`, and persists shade title/text so a cold Speak (notification posted without a live service) can flip to Stop. `clearLegacyRunningNotification` no longer `stopService()`s on every resume (that killed mid-utterance Speak).
+- Code away shade swipe-dismiss clears dedup and the prefs allocation so a still-pending approval can re-alert (including after a later cold start that would otherwise re-seed); a channel set to IMPORTANCE_NONE skips posting.
+
+Phone: background Chat with answer notifications on, tap Speak on the shade (speech should start; Stop appears), open the app briefly (speech should continue). Enable Notify when away, swipe an approval alert away while the request is still pending, then trigger the same approval again (shade should return). Block the Code away channel in system settings (no silent "posts").
+
 # Handoff (2026-10-02, Import wave 26)
 
 On `gradation/w26-import` (PR into `gradation/app-pass`). Import/export IO fixes, unit-tested (`RpLibraryImportTest`, `ImportBoundsTest`):
