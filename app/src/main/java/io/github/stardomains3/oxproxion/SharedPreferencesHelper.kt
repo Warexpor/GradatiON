@@ -562,7 +562,10 @@ class SharedPreferencesHelper(context: Context) {
         )
     }
     fun getVoiceInputModel(): String = mainPrefs.getString(KEY_VOICE_INPUT_MODEL, "") ?: ""
-    fun setVoiceInputModel(model: String) = mainPrefs.edit { putString(KEY_VOICE_INPUT_MODEL, model) }
+    fun setVoiceInputModel(model: String) {
+        // commit: Cloud/Local model sits beside the engine key; a kill after Save must keep both.
+        mainPrefs.edit(commit = true) { putString(KEY_VOICE_INPUT_MODEL, model) }
+    }
 
     fun getVoiceInputProvider(): String = mainPrefs.getString(KEY_VOICE_INPUT_PROVIDER, VoiceEngine.DEVICE.key) ?: VoiceEngine.DEVICE.key
 
@@ -972,7 +975,8 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun saveThemeMode(mode: Int) {
-        mainPrefs.edit { putInt(KEY_THEME_MODE, mode) }
+        // commit: MainActivity reads this on the next create; apply() can still be in flight after the tap.
+        mainPrefs.edit(commit = true) { putInt(KEY_THEME_MODE, mode) }
     }
 
     /** Off by default. */
@@ -986,7 +990,8 @@ class SharedPreferencesHelper(context: Context) {
     fun getBackgroundStyle(): String = mainPrefs.getString(KEY_BACKGROUND_STYLE, "off") ?: "off"
 
     fun saveBackgroundStyle(key: String) {
-        mainPrefs.edit { putString(KEY_BACKGROUND_STYLE, key) }
+        // commit: AmbientBackgroundView follows this; a kill right after the swatch must keep it.
+        mainPrefs.edit(commit = true) { putString(KEY_BACKGROUND_STYLE, key) }
     }
 
     /** Empty-chat icon. Unknown values read as liquid, the shipped default. */
@@ -1528,7 +1533,10 @@ class SharedPreferencesHelper(context: Context) {
     fun getRpPersona(): String = mainPrefs.getString(KEY_RP_PERSONA, "") ?: ""
     /** Whether chats use your persona. Off keeps it saved but sends and shows nothing of it. */
     fun isRpPersonaEnabled(): Boolean = mainPrefs.getBoolean(KEY_RP_PERSONA_ENABLED, true)
-    fun setRpPersonaEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_PERSONA_ENABLED, enabled) }
+    fun setRpPersonaEnabled(enabled: Boolean) {
+        // commit: chats hide or show the persona from this; do not lose a Style/Persona tap to apply().
+        mainPrefs.edit(commit = true) { putBoolean(KEY_RP_PERSONA_ENABLED, enabled) }
+    }
     /** What a chat should use: the persona's description, or nothing while it is off. */
     fun activeRpPersona(): String = if (isRpPersonaEnabled()) getRpPersona() else ""
     /** What a chat should call you: the persona's name, or nothing while it is off. */
