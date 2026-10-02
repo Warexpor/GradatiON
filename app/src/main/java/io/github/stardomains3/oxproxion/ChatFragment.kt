@@ -877,6 +877,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         // Code mode (third tab, off until Settings > Modes) lives in its own package; see CodeModeHost.
         codeMode = io.github.stardomains3.oxproxion.code.CodeModeHost(this, view)
+        // Away / pairing / last-tab restore call activate without enterCodeMode; park here.
+        codeMode.onBeforeActivate = { parkForCodeActivation() }
+        if (codeMode.isActive) parkForCodeActivation()
         codeMode.onTabsChanged = {
             val rp = viewModel.isRpMode()
             tabChat.isSelected = !codeMode.isActive && !rp
@@ -3990,6 +3993,8 @@ $cleanContent
      */
     private fun restoreLiveStagedAfterRebuild() {
         if (viewModel.isRpMode()) return
+        // Code already covers the composer; leave the chip in the park map until leaveCodeMode.
+        if (::codeMode.isInitialized && codeMode.isActive) return
         if (!::attachmentPreviewContainer.isInitialized) return
         val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
         val parked = ComposerStaged.get(viewModel.stagedAttachments(), id)
@@ -4888,6 +4893,8 @@ $cleanContent
                 val id = askStageSessionId
                     ?: if (askComposer.bound) askComposer.sessionId
                     else viewModel.getCurrentSessionId()
+                // Activate may have skipped park (away/pair); keep a live chip before apply clears it.
+                softParkLiveStaged(id)
                 applyStagedAttachment(id)
             }
         }
@@ -5046,23 +5053,36 @@ $cleanContent
     }
 
     /**
-     * Leave Chat for Code: park Ask text and staged attachments so they do not sit on a
-     * hidden composer (and so a rotation while on Code can still restore them).
+     * Leave Chat for Code. Parking runs in [parkForCodeActivation] via
+     * [io.github.stardomains3.oxproxion.code.CodeModeHost.onBeforeActivate], so away
+     * notifications and pairing that call activate directly park the same way.
      */
     private fun enterCodeMode(animate: Boolean = true) {
         if (!::codeMode.isInitialized || codeMode.isActive) return
-        if (!viewModel.isRpMode()) {
-            val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
-            parkAskDraft(id)
-            parkStagedAttachment(id)
-        } else {
-            // Roleplay has no per-thread park; drop a staged RP photo before Code hides the UI.
+        hideKeyboard()
+        codeMode.activate(animate)
+    }
+
+    /**
+     * Park Ask text and a live Chat stage before Code covers the composer. An empty live
+     * stage must not wipe a map entry (History / a prior park may already hold the chip).
+     * Roleplay has no per-thread park; drop a staged RP photo instead.
+     */
+    private fun parkForCodeActivation() {
+        if (viewModel.isRpMode()) {
             clearStagedAttachment(discardSceneFile = true)
             pendingFiles.clear()
             if (::attachmentButton.isInitialized) updateAttachmentButton()
+            return
         }
-        hideKeyboard()
-        codeMode.activate(animate)
+        val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+        askStageSessionId = id
+        parkAskDraft(id)
+        val live = ComposerStaged.liveToPark(currentStagedEntry()) ?: return
+        rememberStaged(id, live)
+        clearStagedAttachment(discardSceneFile = false)
+        pendingFiles.clear()
+        if (::attachmentButton.isInitialized) updateAttachmentButton()
     }
 
     /** Come back from Code; restore a parked Ask attachment onto the composer. */
@@ -5073,6 +5093,8 @@ $cleanContent
             val id = askStageSessionId
                 ?: if (askComposer.bound) askComposer.sessionId
                 else viewModel.getCurrentSessionId()
+            // Safety net when activate skipped park: keep a live chip before apply clears it.
+            softParkLiveStaged(id)
             applyStagedAttachment(id)
         }
     }
@@ -5752,8 +5774,8 @@ $cleanContent
     private fun softParkLiveStaged(sessionId: Long?) {
         if (viewModel.isRpMode()) return
         askStageSessionId = sessionId
-        val entry = currentStagedEntry()
-        if (!entry.isEmpty) rememberStaged(sessionId, entry)
+        val entry = ComposerStaged.liveToPark(currentStagedEntry()) ?: return
+        rememberStaged(sessionId, entry)
     }
 
     /**

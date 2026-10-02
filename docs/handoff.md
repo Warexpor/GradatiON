@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Chat wave 25)
+
+On `gradation/w25-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w24:
+- Code activate paths that skip `enterCodeMode` (away notification, pairing, last-tab restore) now park Ask caption and a live stage via `onBeforeActivate`, so `leaveCodeMode` / Settings disabling Code restore the chip instead of clearing an unparked live stage. Rebuild while Code is showing leaves the chip in the park map until leave.
+- History search still finds Photo / Audio / files for that parked Ask draft.
+
+Phone: stage a photo (or audio) in Chat, tap a Code away notification (or pair) without using the Code tab; leave Code (chip returns). Same after a rotation that restores the Code tab. History search "Photo" / "Audio" still finds the row.
+
 # Handoff (2026-10-02, Chat wave 24)
 
 On `gradation/w24-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w23:

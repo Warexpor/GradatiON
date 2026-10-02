@@ -80,6 +80,12 @@ object ComposerStaged {
         )
     }
 
+    /**
+     * What to write into the park map when entering Code (or soft-parking). Null means keep
+     * the map as-is: remembering an empty live stage would drop a chip already parked.
+     */
+    fun liveToPark(live: Entry): Entry? = if (live.isEmpty) null else live
+
     /** Merge a late photo onto a parked entry without dropping audio/files already there. */
     fun withPhoto(base: Entry, bytes: ByteArray?, mime: String?, uri: String?): Entry =
         base.copy(imageBytes = bytes, imageMime = mime, imageUri = uri)
