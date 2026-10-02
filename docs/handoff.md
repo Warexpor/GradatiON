@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 26)
+
+On `gradation/w26-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`, `CodeBridgeBackendTest`):
+- A bridge `listHarnesses` model id written as a whole-number double (`5.0` / `"5.0"`) still matches as `"5"`. Digit-string `model` values go out as JSON numbers on `session/new`, same as the request id / sessionId / methodId / modeId.
+- Cursor Agent tool names `ListPullRequestReviewComments`, `BrowserFillForm`, `BrowserGetAttribute`, `BrowserGetInputValue`, `ForkRepository`, `LinkWorkItems`, `ManagePipeline`, `AddCommit`, `SaveNote`, `SavePipeline`, `SaveMergeRequestReview`, `ListProjectMembers`, `ListRepositoryTree`, `SearchLabels`, `GetSavedViewWorkItems`, `GetWorkItemTypes`, `GetMergeRequestNotes`, `WorkersBuildsGetBuildLogs`, `WorkersGetWorkerCode`, `ObservabilityKeys`, `ObservabilityValues`, and `MigratePagesToWorkersGuide` map to search / execute / read / edit / fetch cards (icon and log clipping).
+- Tool detail lines read Cursor's native rawInput keys `artifact_path`, `saved_view_id`, `discussion_id`, `full_path`, `milestone_id`, `author_username` / `assignee_username` / `reviewer_username`, `source_branch` / `target_branch`, `ref_name`, `namespace_path`, `q`, `scope`, and `iid` (a whole-number double shows as `5`).
+
+Phone: on Cursor Agent, a ListPullRequestReviewComments or BrowserFillForm card should show the search or shell icon. A GetArtifactFile card with `artifact_path` should show that path under the title. A listHarnesses model whose id is `5.0` should still resolve as `"5"`.
+
 # Handoff (2026-10-02, Chat wave 26)
 
 On `gradation/w26-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w25:

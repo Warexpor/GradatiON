@@ -853,9 +853,8 @@ class BridgeBackend(
             val id = sessionIdOf(o["id"]) ?: return@mapNotNull null
             val name = (o["name"] as? JsonPrimitive)?.contentOrNull ?: id
             val available = (o["available"] as? JsonPrimitive)?.booleanOrNull ?: false
-            val models = (o["models"] as? JsonArray)?.mapNotNull {
-                (it as? JsonPrimitive)?.contentOrNull
-            }.orEmpty()
+            // Whole-number doubles (5.0 / "5.0") still match as "5", same as harness id.
+            val models = (o["models"] as? JsonArray)?.mapNotNull { sessionIdOf(it) }.orEmpty()
             HarnessInfo(id = id, name = name, available = available, models = models)
         }
     }
