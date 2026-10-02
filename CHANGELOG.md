@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code: the home composer keeps the line you were typing (and any pictures) when the screen is rebuilt or you switch machines. Sending clears that draft. Cursor Agent tools named WebSearch, ListDir, or EditNotebook get the fetch, search, or edit card. A bridge `_meta.seq` written as a whole number like `2.0` still moves the resume cursor.
 - Continue starts a new paragraph after Russian or French dialogue in «guillemets», and after Arabic ؟۔, Devanagari ।॥, Armenian ։ and Myanmar ၊။ sentence ends. A space before a closing guillemet still counts as finished.
 - Rewriting an earlier roleplay reply that already had other versions starts tracking its picture once a file is known, so swiping those versions keeps the photo.
 - A recovered or set-aside chat database that could not enter the no-backup vault is parked under `chat_db_hold` instead of sitting at the databases root. Auto Backup and device transfer skip that folder, so those copies are no longer uploaded. Room opens a parked recovered file by absolute path, and a later launch moves it into the vault when that name is free.

@@ -410,10 +410,13 @@ class AcpAdapter : HarnessAdapter {
             "edit", "write", "write_file", "str_replace", "strreplace", "apply_patch", "patch" -> "edit"
             "delete", "remove", "rm" -> "delete"
             "move", "rename", "mv" -> "move"
-            "search", "grep", "glob", "find", "rg" -> "search"
+            "search", "grep", "glob", "find", "rg",
+            "listdir", "list_dir", "listdirectory", "list_directory",
+            "semanticsearch", "semantic_search" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command" -> "execute"
             "think", "thought", "reasoning" -> "think"
-            "fetch", "web_fetch", "webfetch", "http" -> "fetch"
+            "fetch", "web_fetch", "webfetch", "websearch", "web_search", "http" -> "fetch"
+            "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
             else -> n
         }
     }
@@ -735,7 +738,11 @@ class AcpAdapter : HarnessAdapter {
     private fun metaSeq(obj: JsonObject): Long? {
         val meta = obj["_meta"] as? JsonObject ?: return null
         val el = meta["seq"] as? JsonPrimitive ?: return null
-        return el.longOrNull ?: el.contentOrNull?.toLongOrNull()
+        // Integers stay long. A JSON number written as 1.0 still has to move the resume cursor.
+        return el.longOrNull
+            ?: el.doubleOrNull?.takeIf { it.isFinite() && it == kotlin.math.floor(it) }?.toLong()
+            ?: el.contentOrNull?.toLongOrNull()
+            ?: el.contentOrNull?.toDoubleOrNull()?.takeIf { it.isFinite() && it == kotlin.math.floor(it) }?.toLong()
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 14)
+
+On `gradation/w14-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeComposerDraftsTest`, `CodeProtocolTest`):
+- Code home parks the unsent composer line and pictures per machine when the view is torn down or the host changes; sending clears that draft.
+- Cursor Agent tool names `WebSearch`, `ListDir`, and `EditNotebook` map to fetch / search / edit cards (icon and log clipping).
+- Bridge `_meta.seq` values written as whole-number doubles (e.g. `2.0`) still advance the resume cursor.
+
+Phone: type on Code home, open Settings or rotate, come back (the line is there). Switch machines and switch back. On Cursor Agent, a WebSearch or ListDir card should show the right icon.
+
 # Handoff (2026-10-01, Cursor's app pass merged)
 
 `gradation/app-pass` (about 50 Cursor PRs, 67 commits) is merged into `liquid-glass-redesign`. The per-branch notes
