@@ -7,6 +7,8 @@ import android.media.ExifInterface
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
+import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -74,5 +76,27 @@ class BackgroundPhotoUprightTest {
             assertEquals("orientation $o width", 8, turned.width)
             assertEquals("orientation $o height", 4, turned.height)
         }
+    }
+
+    @Test fun a_torn_wallpaper_file_is_not_a_photo() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val slot = BackgroundPhoto.slotForCharacter(42L)
+        BackgroundPhoto.delete(ctx, slot)
+        assertFalse(BackgroundPhoto.hasPhoto(ctx, slot))
+        val file = BackgroundPhoto.file(ctx, slot)
+        file.parentFile?.mkdirs()
+        // SOI only — recover cannot mint EOI, so this must not light the Wallpaper tile.
+        file.writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x01))
+        assertTrue(file.isFile)
+        assertFalse(BackgroundPhoto.hasPhoto(ctx, slot))
+        val jpeg = BackgroundPhoto.prepare(
+            ByteArrayOutputStream().also {
+                wide().compress(Bitmap.CompressFormat.JPEG, 90, it)
+            }.toByteArray()
+        )
+        assertNotNull(jpeg)
+        assertTrue(BackgroundPhoto.writeBytes(ctx, slot, jpeg!!))
+        assertTrue(BackgroundPhoto.hasPhoto(ctx, slot))
+        BackgroundPhoto.delete(ctx, slot)
     }
 }

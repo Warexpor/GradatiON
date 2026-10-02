@@ -23,9 +23,10 @@ object RpContinuation {
     /**
      * Sentence enders, and the markup/quotes that may trail one (`*She smiles.*`, `"Come in."`,
      * 「来て。」, «Привет.», مرحبا؟). Arabic ؟۔, Devanagari ।॥, Armenian ։, Myanmar ၊။,
-     * Hebrew ׃, Ethiopic ።, Greek ;, Tibetan ། and Khmer ។ count too.
+     * Hebrew ׃, Ethiopic ።, Greek ;, Tibetan །, Khmer ។, Armenian ՜՞,
+     * Syriac ܀܁܂, Mongolian ᠃ and doubled ¡¿ marks count too.
      */
-    private const val ENDERS = ".!?…。！？؟۔।॥։၊။׃።;།។"
+    private const val ENDERS = ".!?…。！？؟۔।॥։၊။׃።;།។՜՞܀܁܂᠃‼⁇⁈⁉"
     // Guillemets and a space before a closing one (French « … . ») are not part of the sentence end.
     private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״"
 
@@ -89,8 +90,9 @@ object RpContinuation {
 
     /**
      * [base] followed by [addition], with a separator only where the model left none: a new
-     * paragraph after a finished sentence or closed action (including «…», ؟۔, ।॥, ׃ and ።), a plain
-     * space after unfinished text. A sentence in an unspaced script gets no space.
+     * paragraph after a finished sentence or closed action (including «…», ؟۔, ।॥, ׃, ።,
+     * ՞ and ܁), a plain space after unfinished text. A sentence in an unspaced script
+     * (including Tibetan and Ethiopic) gets no space.
      */
     fun join(base: String, addition: String): String {
         if (addition.isEmpty()) return base
@@ -116,6 +118,8 @@ object RpContinuation {
             script == Character.UnicodeScript.THAI ||
             script == Character.UnicodeScript.LAO ||
             script == Character.UnicodeScript.KHMER ||
-            script == Character.UnicodeScript.MYANMAR
+            script == Character.UnicodeScript.MYANMAR ||
+            script == Character.UnicodeScript.TIBETAN ||
+            script == Character.UnicodeScript.ETHIOPIC
     }
 }

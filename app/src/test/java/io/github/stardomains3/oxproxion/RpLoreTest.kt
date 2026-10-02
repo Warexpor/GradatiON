@@ -276,4 +276,21 @@ class RpLoreTest {
         assertFalse(scan.contains("p".repeat(4_000)))
         assertTrue(scan.length <= 4_000)
     }
+
+    @Test
+    fun cornerBracketsAndArabicTrailersAreNotPartOfTheKey() {
+        val book = """
+            [keys: 『locket』, docks؟]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+    }
+
+    @Test
+    fun tibetanKeysMatchInsideRunningText() {
+        assertTrue(RpLore.keyHits("བཀྲ", "དེ་ནི་བཀྲ་ཤིས་ཡིན།"))
+        assertFalse(RpLore.keyHits("བཀྲ", "དེ་ནི་ཤིས་ཡིན།"))
+    }
 }
