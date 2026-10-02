@@ -232,6 +232,10 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
     }
 
     override fun onDestroyView() {
+        // Keep the unsent home line (and pictures) for this machine, like a session draft.
+        if (::hub.isInitialized && ::composer.isInitialized) {
+            parkHomeDraftFor(boundHostId)
+        }
         // The undo window ends with the screen: whatever is still pending is forgotten now.
         pendingForget.toList().forEach { hub.forget(it) }
         pendingForget.clear()
@@ -264,12 +268,16 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         composer.root.isVisible = host != null
         if (host == null) {
             if (boundHostId != null) {
+                parkHomeDraftFor(boundHostId)
+                composer.clear()
                 boundHostId = null
                 clearSearchQuery()
             }
             return
         }
         if (host.id == boundHostId) return
+        // Another machine: park this machine's unsent line, then put that one's back.
+        parkHomeDraftFor(boundHostId)
         boundHostId = host.id
         // U3: do not carry machine A's filter onto machine B.
         clearSearchQuery()
@@ -280,6 +288,27 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         lastModelsSyncKey = null
         refreshPills()
         refreshModelPill()
+        restoreHomeDraft(host.id)
+    }
+
+    private fun parkHomeDraftFor(hostId: String?) {
+        if (hostId.isNullOrBlank() || !::hub.isInitialized || !::composer.isInitialized) return
+        hub.parkHomeDraft(
+            hostId,
+            composer.input.text?.toString().orEmpty(),
+            composer.attachmentsSnapshot(),
+        )
+    }
+
+    private fun restoreHomeDraft(hostId: String) {
+        if (!::hub.isInitialized || !::composer.isInitialized) return
+        composer.clear()
+        val draft = hub.homeDraft(hostId) ?: return
+        if (draft.text.isNotEmpty()) {
+            composer.input.setText(draft.text)
+            composer.input.setSelection(draft.text.length)
+        }
+        draft.attachments.forEach { composer.addAttachment(it) }
     }
 
     /** Drop the in-memory filter and sync/clear the bound search field. */
@@ -600,6 +629,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     )
                 )
                 result.onSuccess { id ->
+                    hub.clearHomeDraft(host.id)
                     composer.clear()
                     composer.hideKeyboard()
                     openSession(id)
