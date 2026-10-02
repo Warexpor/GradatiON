@@ -174,7 +174,25 @@ class RpContinuationTest {
         assertEquals("«Да", RpContinuation.join("«", "Да"))
     }
 
-    @Test fun theContinueDirectionAsksForAnExactSeam() {
+    @Test fun hebrewEthiopicGreekAndTibetanEndsStartANewParagraph() {
+        assertEquals("שלום׃\n\nהיא מחכה.", RpContinuation.join("שלום׃", "היא מחכה."))
+        assertEquals("ሰላም።\n\nእሷ ትጠብቃለች።", RpContinuation.join("ሰላም።", "እሷ ትጠብቃለች።"))
+        assertEquals("Γεια σου;\n\nΠεριμένει.", RpContinuation.join("Γεια σου;", "Περιμένει."))
+        assertEquals("བཀྲ་ཤིས།\n\nམོ་འགུགས།", RpContinuation.join("བཀྲ་ཤིས།", "མོ་འགུགས།"))
+        assertEquals("សួស្តី។\n\nនាងរង់ចាំ។", RpContinuation.join("សួស្តី។", "នាងរង់ចាំ។"))
+    }
+
+    @Test fun hebrewQuoteTrailersStillCountAsFinished() {
+        assertEquals("שלום׃״\n\nהיא מחכה.", RpContinuation.join("שלום׃״", "היא מחכה."))
+    }
+
+    @Test fun spanishInvertedMarksHugLikeOpeners() {
+        assertEquals("¿Cómo", RpContinuation.join("¿", "Cómo"))
+        assertEquals("¡Hola", RpContinuation.join("¡", "Hola"))
+        assertEquals("Dijo: ¿Qué?", RpContinuation.join("Dijo: ¿", "Qué?"))
+    }
+
+        @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)
         assert("mid-sentence" in d)

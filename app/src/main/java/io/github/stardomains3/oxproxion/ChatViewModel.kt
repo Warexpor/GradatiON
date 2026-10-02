@@ -4455,6 +4455,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _chatMessages.value = listOf(
             FlexibleMessage(role = "assistant", content = JsonPrimitive(greeting))
         )
+        // A rewrite of that opening is gone with the card line. Drop its versions so a later
+        // user turn does not show a version navigator for text that is no longer there.
+        syncRpSwipeAfterTranscriptChange()
         // Don't mint a session while a parked keepDraftId owns the RP draft pointer
         // (LLM-mismatch ephemeral greeting). Rematch with draft cleared still autosaves.
         val parkedDraft = sharedPreferencesHelper.getRpDraftSessionId(ChatMode.RP)
