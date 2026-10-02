@@ -2220,6 +2220,97 @@ class CodeProtocolTest {
         assertEquals("55", byId["w1"]?.detail)
     }
 
+    @Test fun digitMethodIdGoesOutAsANumber() {
+        val auth = Json.parseToJsonElement(acp.authenticate(2, "5")).jsonObject
+        assertEquals(5L, auth["params"]!!.jsonObject["methodId"]!!.jsonPrimitive.long)
+        val asDouble = Json.parseToJsonElement(acp.authenticate(3, "6.0")).jsonObject
+        assertEquals(6L, asDouble["params"]!!.jsonObject["methodId"]!!.jsonPrimitive.long)
+        // Non-digit ids stay JSON strings.
+        val named = Json.parseToJsonElement(acp.authenticate(4, "agent-login")).jsonObject
+        assertEquals("agent-login", named["params"]!!.jsonObject["methodId"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun handshakeAuthMethodIdWrittenAsADoubleStillMatches() {
+        val numeric = Json.parseToJsonElement(
+            """{"protocolVersion":1,"authMethods":[{"id":5.0,"name":"Agent","type":"agent"}]}"""
+        ).jsonObject
+        val decision = AcpHandshake.decide(numeric) as AcpHandshake.Decision.Authenticate
+        assertEquals("5", decision.methodId)
+        val stringified = Json.parseToJsonElement(
+            """{"protocolVersion":1,"authMethods":[{"methodId":"7.0","type":"agent"}]}"""
+        ).jsonObject
+        val again = AcpHandshake.decide(stringified) as AcpHandshake.Decision.Authenticate
+        assertEquals("7", again.methodId)
+    }
+
+    @Test fun moreGithubOriginToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dd","title":"DelDisc","kind":"other","name":"DeleteDiscussionComment","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dl","title":"DelLabel","kind":"other","name":"DeleteLabel","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dp","title":"DelReview","kind":"other","name":"DeletePendingPullRequestReview","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gs","title":"Status","kind":"other","name":"GetCommitCombinedStatus","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gl","title":"Label","kind":"other","name":"GetLabel","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gr","title":"Release","kind":"other","name":"GetReleaseByTag","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lc","title":"Cats","kind":"other","name":"ListDiscussionCategories","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lj","title":"Jobs","kind":"other","name":"ListWorkflowRunJobs","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ln","title":"NS","kind":"other","name":"ListNamespaces","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lr","title":"Repos","kind":"other","name":"ListRepositories","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gc","title":"Grep","kind":"other","name":"GrepContents","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ma","title":"Answer","kind":"other","name":"MarkDiscussionCommentAsAnswer","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ud","title":"UpDisc","kind":"other","name":"UpdateDiscussionComment","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ul","title":"UpLabel","kind":"other","name":"UpdateLabel","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cc","title":"Comment","kind":"other","name":"CreatePullRequestComment","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cr","title":"Repo","kind":"other","name":"CreateRepository","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dr","title":"Dismiss","kind":"other","name":"DismissPullRequestReview","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rr","title":"Reviewers","kind":"other","name":"RequestPullRequestReviewers","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.DELETE, byId["dd"]?.kind)
+        assertEquals(ToolKind.DELETE, byId["dl"]?.kind)
+        assertEquals(ToolKind.DELETE, byId["dp"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["gs"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["gl"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["gr"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lc"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lj"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["ln"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lr"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["gc"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ma"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ud"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ul"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["cc"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["cr"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["dr"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["rr"]?.kind)
+    }
+
+    @Test fun cursorGithubOriginDetailUseNativeRawInputKeys() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Release","kind":"other","name":"GetReleaseByTag","status":"completed",
+               "rawInput":{"tag":"v1.2.3","owner":"Warexpor"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"j1","title":"Jobs","kind":"other","name":"ListWorkflowRunJobs","status":"completed",
+               "rawInput":{"job_id":"9.0"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"c1","title":"Comment","kind":"other","name":"UpdateDiscussionComment","status":"completed",
+               "rawInput":{"comment_id":42.0}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"r1","title":"Review","kind":"other","name":"DismissPullRequestReview","status":"completed",
+               "rawInput":{"review_id":7}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"u1","title":"User","kind":"other","name":"ListNamespaces","status":"completed",
+               "rawInput":{"username":"warexpor"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"o1","title":"Org","kind":"other","name":"ListRepositories","status":"completed",
+               "rawInput":{"org":"acme","category":"public"}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("v1.2.3", byId["t1"]?.detail)
+        assertEquals("9", byId["j1"]?.detail)
+        assertEquals("42", byId["c1"]?.detail)
+        assertEquals("7", byId["r1"]?.detail)
+        assertEquals("warexpor", byId["u1"]?.detail)
+        assertEquals("acme", byId["o1"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()

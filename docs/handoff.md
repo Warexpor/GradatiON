@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 24)
+
+On `gradation/w24-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
+- Digit-string `methodId` values go out as JSON numbers on `authenticate`, same as the request id / sessionId, so a proxy that rewrote `5.0` still gets a numeric method on the wire. An auth method id written as a whole-number double (`5.0` / `"5.0"`) still matches as `"5"`.
+- Cursor Agent tool names `DeleteDiscussionComment`, `DeleteLabel`, `DeletePendingPullRequestReview`, `GetCommitCombinedStatus`, `GetLabel`, `GetReleaseByTag`, `ListDiscussionCategories`, `ListWorkflowRunJobs`, `ListNamespaces`, `ListRepositories`, `GrepContents`, `MarkDiscussionCommentAsAnswer`, `UpdateDiscussionComment`, `UpdateLabel`, `CreatePullRequestComment`, `CreateRepository`, `DismissPullRequestReview`, and `RequestPullRequestReviewers` map to delete / fetch / search / edit cards (icon and log clipping).
+- Tool detail lines read Cursor's native rawInput keys `tag` / `tag_name`, `job_id`, `comment_id`, `review_id`, `username`, `org` / `organization`, `namespace`, and `category` (a whole-number double shows as `5`).
+
+Phone: on Cursor Agent, a GetLabel or CreateRepository card should show the fetch or edit icon. A GetReleaseByTag card with `tag` should show that tag under the title. An authenticate whose methodId is `5` should send JSON number `5`.
+
 # Handoff (2026-10-02, Stability wave 24)
 
 On `gradation/w24-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w22 plaintext sidecars:

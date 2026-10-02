@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion.code
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -102,10 +103,34 @@ object AcpHandshake {
         val arr = result["authMethods"] as? JsonArray ?: return emptyList()
         return arr.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
-            val id = o.str("id") ?: o.str("methodId") ?: return@mapNotNull null
+            // Whole-number doubles (5.0 / "5.0") still match the authenticate methodId as "5".
+            val id = idString(o["id"]) ?: idString(o["methodId"]) ?: return@mapNotNull null
             val type = o.str("type")?.lowercase() ?: "agent"
             AuthMethod(id, o.str("name") ?: id, type)
         }
+    }
+
+    /** Stable auth method id: numeric ids become `"5"`, not `"5.0"`. */
+    private fun idString(el: JsonElement?): String? {
+        val p = el as? JsonPrimitive ?: return null
+        wholeNumberLong(p)?.let { return it.toString() }
+        return p.contentOrNull?.trim()?.ifEmpty { null }
+    }
+
+    /** Integers stay long; a double like `5.0` and a string `"5.0"` still match. */
+    private fun wholeNumberLong(p: JsonPrimitive): Long? {
+        p.longOrNull?.let { return it }
+        p.doubleOrNull?.let { d ->
+            if (d.isFinite() && d == kotlin.math.floor(d) &&
+                d in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+            ) return d.toLong()
+        }
+        val c = p.contentOrNull ?: return null
+        c.toLongOrNull()?.let { return it }
+        return c.toDoubleOrNull()?.takeIf {
+            it.isFinite() && it == kotlin.math.floor(it) &&
+                it in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+        }?.toLong()
     }
 
     private fun JsonObject.str(k: String): String? =
