@@ -107,6 +107,14 @@ class AskComposerDraftTest {
         assertFalse(AskComposerDraft.takeStoredDraft(field = "", userEdited = true, modeSnapshot = ""))
     }
 
+    @Test fun leaving_ask_parks_typed_or_nonempty_text() {
+        // Hub Continue / Settings flip after isRpMode is already true; same rule as parkAskDraft.
+        assertTrue(AskComposerDraft.shouldParkText(dirty = true, text = ""))
+        assertTrue(AskComposerDraft.shouldParkText(dirty = false, text = "still writing"))
+        assertTrue(AskComposerDraft.shouldParkText(dirty = true, text = "still writing"))
+        assertFalse(AskComposerDraft.shouldParkText(dirty = false, text = ""))
+    }
+
     @Test fun a_relaunch_keeps_the_roleplay_line_and_drops_the_ask_snapshot() {
         assertTrue(AskComposerDraft.dropOnRelaunch(ChatMode.ASK))
         assertFalse(AskComposerDraft.dropOnRelaunch(ChatMode.RP))
