@@ -15,6 +15,7 @@ import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.os.Bundle
 import android.util.AttributeSet
 import android.view.View
@@ -284,9 +285,16 @@ class GlassDrawable() : Drawable() {
     )
 
     override fun getOutline(outline: Outline) {
-        shapeRect(rect)
-        val r = radiusFor(rect)
-        outline.setRoundRect(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt(), r)
+        // Bottom sheets only round the top; a full round-rect outline clipped the square
+        // bottom corners' elevation. Prefer the real path when the platform accepts it.
+        if (topOnly && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            rebuild()
+            outline.setPath(path)
+        } else {
+            shapeRect(rect)
+            val r = radiusFor(rect)
+            outline.setRoundRect(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt(), r)
+        }
         outline.alpha = 1f
     }
 

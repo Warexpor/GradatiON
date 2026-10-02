@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Hub Continue and Start chat leave Code when it was covering Chat, so Roleplay is actually visible after the mode flip (Code is not a ChatMode, so setChatMode alone left the overlay up).
+- Pair activate: a successful QR / deep-link after a failed scan no longer leaves the stale error queued (and a failed rescan drops an older pairing), so CodeModeHost does not toast the old failure while also opening the host form.
+- Bottom-sheet glass outlines use the real top-round path instead of a full round-rect, so elevation no longer rounds the square bottom corners.
 - Answer-ready Speak waits until Text-to-speech is ready (a cold tap used to no-op), and remembers the shade title so Stop can redraw after a post without a live service. Clearing legacy sticky "Running" chrome no longer stops that service mid-utterance on every resume.
 - Code away: swiping an approval alert out of the shade clears dedup and the prefs allocation so a still-pending request can re-alert (including after a later cold start); a user-blocked Code away channel no longer counts as a successful away post.
 - Settings > Voice remembers Cloud, Grok or Local after the master switch is turned off, so turning Voice back on restores the same engine instead of Phone.
