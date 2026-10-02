@@ -10,5 +10,7 @@
     <exclude domain="database" path="chat_database.pre_sqlcipher" />
     <exclude domain="database" path="chat_database.encrypting" />
     <exclude domain="database" path="chat_database.encrypt_ok" />
+    <!-- Recovered/unreadable copies that could not enter noBackupFilesDir. -->
+    <exclude domain="database" path="chat_db_hold" />
     <exclude domain="sharedpref" path="code_mode_secrets.xml" />
 </full-backup-content>
