@@ -135,7 +135,7 @@ and never auto-send, and there's no hold-to-talk. While listening:
 - Words still being recognized show in `xai_mute` until they settle.
 
 **Transcript.**
-- User turns are bubbles on the right. A flat neutral gradient (`bg_user_message`), not glass: every user turn on screen would otherwise be a blur layer.
+- User turns are bubbles on the right. A flat neutral fill (`bg_user_message`, no gradient anywhere), not glass: every user turn on screen would otherwise be a blur layer.
 - Assistant replies have no bubble.
 - Reasoning folds into a "Thinking" row.
 - Roleplay adds a speaker line (avatar and name) and swipe navigation between alternate replies.

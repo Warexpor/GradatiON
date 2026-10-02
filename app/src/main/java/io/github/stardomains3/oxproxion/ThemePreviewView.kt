@@ -46,7 +46,7 @@ class ThemePreviewView @JvmOverloads constructor(
         val c = context.createConfigurationContext(config)
         return Palette(
             canvas = c.getColor(R.color.xai_canvas),
-            bubble = c.getColor(R.color.grad_bubble_top),
+            bubble = c.getColor(R.color.bubble_fill),
             line = c.getColor(R.color.xai_mute),
             composer = c.getColor(R.color.xai_canvas_card),
             rim = c.getColor(R.color.xai_hairline)

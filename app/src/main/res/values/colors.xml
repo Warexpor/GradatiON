@@ -35,10 +35,8 @@
     <color name="ora">@color/xai_mute</color>
     <color name="xai_grouped">#FFE1E1E1</color>
     <color name="xai_cell">#FFEEEEEE</color>
-    <color name="grad_bubble_top">#FFDEDEDE</color>
-    <color name="grad_bubble_bottom">#FFD6D6D6</color>
-    <!-- RP Bubbles layout: one flat fill for both sides, no gradient (user call) -->
-    <color name="rp_bubble_fill">#FFDADADA</color>
+    <!-- Message bubbles: one flat fill, never a gradient (user call) -->
+    <color name="bubble_fill">#FFDADADA</color>
     <color name="grad_chip_top">#FFF0F0F0</color>
     <color name="grad_chip_bottom">#FFE4E4E4</color>
     <color name="grad_fade_clear">#00E8E8E8</color>
