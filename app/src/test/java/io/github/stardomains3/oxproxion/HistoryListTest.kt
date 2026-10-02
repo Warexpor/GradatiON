@@ -283,4 +283,29 @@ class HistoryListTest {
         assertEquals("see", HistoryList.searchAnchor("see  you later"))
         assertEquals("lantern", HistoryList.normalizeQuery("  lantern  "))
     }
+
+    @Test fun a_staged_attachment_without_text_still_gets_a_draft_line() {
+        val files = { n: Int -> if (n == 1) "File" else "$n files" }
+        assertEquals(
+            "Photo",
+            HistoryList.attachmentDraft(true, true, 2, "Photo", "Audio", files),
+        )
+        assertEquals(
+            "Audio",
+            HistoryList.attachmentDraft(false, true, 1, "Photo", "Audio", files),
+        )
+        assertEquals(
+            "2 files",
+            HistoryList.attachmentDraft(false, false, 2, "Photo", "Audio", files),
+        )
+        assertEquals(
+            "",
+            HistoryList.attachmentDraft(false, false, 0, "Photo", "Audio", files),
+        )
+        val label = { text: String -> "Draft: $text" }
+        assertEquals(
+            "Draft: Photo",
+            HistoryList.rowPreview("You: sent", "Photo", "", label),
+        )
+    }
 }

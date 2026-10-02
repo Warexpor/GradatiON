@@ -1313,6 +1313,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 else -> Unit
             }
         }
+        // Fragment fields survive a rebuild; the preview ImageView does not. Put the chip back.
+        refreshLiveStagedPreview()
         // end onviewcreated
     }
 
@@ -1389,7 +1391,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.rekey(sharedPreferencesHelper.getAskComposerDrafts(), from = null, to = sessionId, text = text)
         )
-        stagedByChat = ComposerStaged.rekey(stagedByChat, from = null, to = sessionId, entry = currentStagedEntry())
+        val beforePromote = stagedByChat
+        stagedByChat = ComposerStaged.rekey(beforePromote, from = null, to = sessionId, entry = currentStagedEntry())
+        for (gone in ComposerStaged.evicted(beforePromote, stagedByChat)) {
+            discardParkedScene(gone)
+        }
         mirrorAskModeDraft(text)
     }
 
@@ -1463,7 +1469,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (::attachmentButton.isInitialized) updateAttachmentButton() else updateSendButtonChrome()
             parkAskDraft(sessionId)
             if (!staged.isEmpty) {
-                stagedByChat = ComposerStaged.remember(stagedByChat, sessionId, staged)
+                rememberStaged(sessionId, staged)
             }
         } else {
             // Another chat is on screen, or they already typed something else. Keep the
@@ -1474,7 +1480,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 )
             }
             if (!staged.isEmpty) {
-                stagedByChat = ComposerStaged.remember(stagedByChat, sessionId, staged)
+                rememberStaged(sessionId, staged)
             }
         }
     }
@@ -1520,6 +1526,35 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         if (!open) return false
         return selectedImageBytes != null || selectedAudioBytes != null || pendingFiles.isNotEmpty() ||
             !viewModel.pendingImageUri().isNullOrBlank()
+    }
+
+    override fun unsentDraftPreview(sessionId: Long): String {
+        if (viewModel.isRpMode()) return ""
+        val text = ComposerDrafts.text(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
+        if (text.isNotBlank()) return text
+        val open = askComposer.bound &&
+            ComposerDrafts.key(askComposer.sessionId) == ComposerDrafts.key(sessionId)
+        val hasPhoto: Boolean
+        val hasAudio: Boolean
+        val fileCount: Int
+        if (open) {
+            hasPhoto = selectedImageBytes != null || !viewModel.pendingImageUri().isNullOrBlank()
+            hasAudio = selectedAudioBytes != null
+            fileCount = pendingFiles.size
+        } else {
+            val entry = ComposerStaged.get(stagedByChat, sessionId)
+            hasPhoto = entry.imageBytes != null || !entry.imageUri.isNullOrBlank()
+            hasAudio = entry.audioBytes != null
+            fileCount = entry.files.size
+        }
+        return HistoryList.attachmentDraft(
+            hasPhoto = hasPhoto,
+            hasAudio = hasAudio,
+            fileCount = fileCount,
+            photoLabel = getString(R.string.history_preview_photo),
+            audioLabel = getString(R.string.history_preview_audio),
+            filesLabel = { n -> resources.getQuantityString(R.plurals.history_preview_files, n, n) },
+        )
     }
 
     /** Delete a parked scene JPEG that History discarded and no message still names. */
@@ -3837,14 +3872,54 @@ $cleanContent
         )
     }
 
+    /**
+     * Park [entry] and delete scene JPEGs that fell off the oldest slots. The map is capped
+     * so a long History cannot keep every parked photo forever.
+     */
+    private fun rememberStaged(sessionId: Long?, entry: ComposerStaged.Entry) {
+        val before = stagedByChat
+        stagedByChat = ComposerStaged.remember(before, sessionId, entry)
+        for (gone in ComposerStaged.evicted(before, stagedByChat)) {
+            discardParkedScene(gone)
+        }
+    }
+
     /** Keep this thread's staged photo/files without deleting the JPEG on disk. */
     private fun parkStagedAttachment(sessionId: Long?) {
         if (viewModel.isRpMode()) return
-        stagedByChat = ComposerStaged.remember(stagedByChat, sessionId, currentStagedEntry())
+        rememberStaged(sessionId, currentStagedEntry())
         // Clear the field only; the parked entry still owns the scene file.
         clearStagedAttachment(discardSceneFile = false)
         pendingFiles.clear()
         if (::attachmentButton.isInitialized) updateAttachmentButton()
+    }
+
+    /**
+     * The staged bytes and URI survive a view rebuild; the preview chip does not.
+     * Call after the new attachment views exist so a rotation still shows the picture.
+     */
+    private fun refreshLiveStagedPreview() {
+        if (viewModel.isRpMode()) return
+        if (!::attachmentPreviewContainer.isInitialized) return
+        val imageBytes = selectedImageBytes
+        when {
+            imageBytes != null -> {
+                val uri = viewModel.pendingImageUri()
+                showStagedPhoto(imageBytes, uri ?: imageBytes)
+            }
+            selectedAudioBytes != null -> {
+                resetPreviewFrame()
+                previewImageView.dispose()
+                previewImageView.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                previewImageView.contentDescription = getString(R.string.cd_audio_attachment)
+                previewImageView.setImageResource(android.R.drawable.ic_media_play)
+                attachmentPreviewContainer.visibility = View.VISIBLE
+                updateSendButtonChrome()
+            }
+            pendingFiles.isNotEmpty() -> updateSendButtonChrome()
+            else -> Unit
+        }
+        if (::attachmentButton.isInitialized) updateAttachmentButton() else updateSendButtonChrome()
     }
 
     private fun applyStagedAttachment(sessionId: Long?) {
@@ -3887,7 +3962,7 @@ $cleanContent
     /** Drop the parked entry for the open thread after a send or an explicit clear. */
     private fun forgetStagedAttachment(sessionId: Long? = null) {
         val id = sessionId ?: if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
-        stagedByChat = ComposerStaged.remember(stagedByChat, id, ComposerStaged.Entry())
+        rememberStaged(id, ComposerStaged.Entry())
     }
 
     /**
