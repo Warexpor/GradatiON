@@ -155,6 +155,33 @@ class CodeAwayFormatTest {
     }
 
     @Test
+    fun postedKeysFromPrefsSkipsNonAwayIds() {
+        val keep = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "alive")
+        val other = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, "s", "r")
+        val keepId = CodeAwayFormat.NOTIF_ID_BASE + 0x11
+        val otherId = CodeAwayFormat.NOTIF_ID_BASE + 0x22
+        val entries = mapOf(
+            keep to keepId,
+            other to otherId,
+            "junk" to 1,
+            "also" to "nope",
+        )
+        assertEquals(setOf(keep, other), CodeAwayFormat.postedKeysFromPrefs(entries))
+    }
+
+    @Test
+    fun coldStartPostedKeysSuppressShouldPost() {
+        // Prefs-held key after process death must still dedup; clearing memory alone
+        // (clearTurnDoneDedup) allows a later turn to post again.
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess")
+        val id = CodeAwayFormat.notificationId(key)
+        val seeded = CodeAwayFormat.postedKeysFromPrefs(mapOf(key to id))
+        assertFalse(CodeAwayFormat.shouldPost(seeded, key))
+        val afterClear = seeded.toMutableSet().also { it.remove(key) }
+        assertTrue(CodeAwayFormat.shouldPost(afterClear, key))
+    }
+
+    @Test
     fun requestCodesStayDistinctAcrossAlerts() {
         val ids = listOf(
             CodeAwayFormat.NOTIF_ID_BASE,

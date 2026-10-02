@@ -17,9 +17,14 @@
         <exclude domain="database" path="chat_database.encrypting-shm" />
         <exclude domain="database" path="chat_database.encrypting-journal" />
         <exclude domain="database" path="chat_database.encrypt_ok" />
+        <exclude domain="database" path="chat_database.encrypt_ok-wal" />
+        <exclude domain="database" path="chat_database.encrypt_ok-shm" />
+        <exclude domain="database" path="chat_database.encrypt_ok-journal" />
         <!-- Recovered/unreadable copies that could not enter noBackupFilesDir. -->
         <exclude domain="database" path="chat_db_hold" />
         <exclude domain="sharedpref" path="code_mode_secrets.xml" />
+        <!-- Hosts JSON may still hold a pairing token when a Keystore vault write failed. -->
+        <exclude domain="sharedpref" path="code_mode.xml" />
         <!-- One-shot open nonces and shade ids; a restore must not unlock or collide. -->
         <exclude domain="sharedpref" path="code_away_open_tokens.xml" />
         <exclude domain="sharedpref" path="code_away_notif_ids.xml" />
@@ -40,9 +45,14 @@
         <exclude domain="database" path="chat_database.encrypting-shm" />
         <exclude domain="database" path="chat_database.encrypting-journal" />
         <exclude domain="database" path="chat_database.encrypt_ok" />
+        <exclude domain="database" path="chat_database.encrypt_ok-wal" />
+        <exclude domain="database" path="chat_database.encrypt_ok-shm" />
+        <exclude domain="database" path="chat_database.encrypt_ok-journal" />
         <!-- Recovered/unreadable copies that could not enter noBackupFilesDir. -->
         <exclude domain="database" path="chat_db_hold" />
         <exclude domain="sharedpref" path="code_mode_secrets.xml" />
+        <!-- Hosts JSON may still hold a pairing token when a Keystore vault write failed. -->
+        <exclude domain="sharedpref" path="code_mode.xml" />
         <!-- One-shot open nonces and shade ids; a restore must not unlock or collide. -->
         <exclude domain="sharedpref" path="code_away_open_tokens.xml" />
         <exclude domain="sharedpref" path="code_away_notif_ids.xml" />

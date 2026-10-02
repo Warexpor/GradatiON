@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Stability wave 26)
+
+On `gradation/w26-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w24:
+- Backup rules and data-extraction rules name `code_mode.xml` (hosts JSON can still hold a pairing token when a Keystore vault write failed) and `chat_database.encrypt_ok` `-wal`/`-shm`/`-journal`, so Auto Backup before the next open cannot upload them.
+- A leftover `encrypt_ok` (and unexpected sidecars) at the databases root is discarded when the vault already has the marker, instead of `uniqueKept` into the vault.
+- Code away-notification dedup after process death seeds from prefs-held keys (in-memory `posted` is empty), so a reconnect cannot re-alert a shade entry that survived the kill. `clearTurnDoneDedup` still clears memory only so a later finished turn can post again.
+
+Phone: leave `chat_database.encrypt_ok` beside the live DB while the vault already has one, force a cloud backup before relaunch (rules should skip it; after relaunch the root copy is gone). Save a Code host when Keystore is unavailable (token may sit in `code_mode`; backup must not upload it). Post a Code away approval, kill the process, reconnect the same pending approval (shade should not get a second alert).
+
 # Handoff (2026-10-02, Code wave 26)
 
 On `gradation/w26-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`, `CodeBridgeBackendTest`):
