@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 23)
+
+On `gradation/w23-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
+- Digit-string `sessionId` values go out as JSON numbers on `session/load`, `session/prompt`, `session/cancel`, `session/set_mode`, `bridge/gitStatus`, and `bridge/diff`, same as the request id, so a proxy that rewrote `5.0` still gets a numeric session on the wire.
+- Cursor Agent tool names `GetIssue`, `UpdateIssue`, `ListIssues`, `ListPullRequests`, `UpdatePullRequest`, `GetPullRequestDiff`, `ListPullRequestFiles`, `GetRepository`, `SearchRepositories`, `GetCommit`, `ListCommits`, `ListBranches`, `CreateLabel`, `AddDiscussionComment`, `GetDiscussion`, `CreatePullRequestReview`, `BrowserTabs`, and `BrowserEvaluate` map to fetch / edit / search / read / execute cards (icon and log clipping).
+- Tool detail lines read Cursor's native rawInput keys `issue_number`, `pull_number`, `number`, `sha` / `commit_sha`, `ref` / `branch` / `head` / `base`, `discussion_number`, `label`, and `workflow_id` / `run_id` (a whole-number double shows as `5`).
+
+Phone: on Cursor Agent, a GetIssue or UpdatePullRequest card should show the fetch or edit icon. A GetIssue card with `issue_number` should show that number under the title. A session whose id is `5` should send load/prompt with JSON number `5`.
+
 # Handoff (2026-10-02, Chat wave 23)
 
 On `gradation/w23-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w22:

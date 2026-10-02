@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -123,7 +123,8 @@ class AcpAdapter : HarnessAdapter {
     })
 
     override fun loadSession(id: Long, sessionId: String, workspace: String, afterSeq: Long?) = request(id, "session/load", buildJsonObject {
-        put("sessionId", sessionId)
+        // Digit strings go out as JSON numbers, same as the request id.
+        put("sessionId", jsonRpcIdValue(sessionId))
         put("cwd", workspace)
         put("mcpServers", JsonArray(emptyList()))
         // Bridge extension: replay only notifications with seq > afterSeq (idempotent with stable keys).
@@ -136,7 +137,7 @@ class AcpAdapter : HarnessAdapter {
         text: String,
         attachments: List<PromptAttachment>,
     ) = request(id, "session/prompt", buildJsonObject {
-        put("sessionId", sessionId)
+        put("sessionId", jsonRpcIdValue(sessionId))
         put("prompt", buildJsonArray {
             val trimmed = text.trim()
             if (trimmed.isNotEmpty()) {
@@ -156,10 +157,10 @@ class AcpAdapter : HarnessAdapter {
         })
     })
 
-    override fun cancel(sessionId: String) = notification("session/cancel", buildJsonObject { put("sessionId", sessionId) })
+    override fun cancel(sessionId: String) = notification("session/cancel", buildJsonObject { put("sessionId", jsonRpcIdValue(sessionId)) })
 
     override fun setMode(id: Long, sessionId: String, mode: PermissionMode) = request(id, "session/set_mode", buildJsonObject {
-        put("sessionId", sessionId)
+        put("sessionId", jsonRpcIdValue(sessionId))
         put("modeId", mode.id)
     })
 
@@ -194,11 +195,11 @@ class AcpAdapter : HarnessAdapter {
         request(id, "bridge/browse", buildJsonObject { put("path", path) })
 
     override fun gitStatus(id: Long, sessionId: String) =
-        request(id, "bridge/gitStatus", buildJsonObject { put("sessionId", sessionId) })
+        request(id, "bridge/gitStatus", buildJsonObject { put("sessionId", jsonRpcIdValue(sessionId)) })
 
     override fun diff(id: Long, sessionId: String, path: String) =
         request(id, "bridge/diff", buildJsonObject {
-            put("sessionId", sessionId)
+            put("sessionId", jsonRpcIdValue(sessionId))
             put("path", path)
         })
 
@@ -454,7 +455,13 @@ class AcpAdapter : HarnessAdapter {
             "read_project", "readproject",
             "notebook_read", "notebookread",
             "get_file_contents", "getfilecontents",
-            "browser_snapshot", "browsersnapshot" -> "read"
+            "get_pull_request_diff", "getpullrequestdiff",
+            "get_commit", "getcommit",
+            "get_git_tree", "getgittree",
+            "get_tag", "gettag",
+            "browser_snapshot", "browsersnapshot",
+            "browser_console_messages", "browserconsolemessages",
+            "browser_network_requests", "browsernetworkrequests" -> "read"
             "edit", "write", "write_file", "writefile", "str_replace", "strreplace",
             "apply_patch", "applypatch", "patch",
             "edit_file", "editfile", "edit_file_v2", "editfilev2",
@@ -471,7 +478,19 @@ class AcpAdapter : HarnessAdapter {
             "create_issue", "createissue",
             "create_branch", "createbranch",
             "merge_pull_request", "mergepullrequest",
-            "add_issue_comment", "addissuecomment" -> "edit"
+            "add_issue_comment", "addissuecomment",
+            "update_issue", "updateissue",
+            "update_pull_request", "updatepullrequest",
+            "update_pull_request_branch", "updatepullrequestbranch",
+            "set_pull_request_draft", "setpullrequestdraft",
+            "create_label", "createlabel",
+            "add_discussion_comment", "adddiscussioncomment",
+            "create_pull_request_review", "createpullrequestreview",
+            "submit_pending_pull_request_review", "submitpendingpullrequestreview",
+            "add_comment_to_pending_review", "addcommenttopendingreview",
+            "reply_to_pull_request_review_comment", "replytopullrequestreviewcomment",
+            "add_sub_issue", "addsubissue",
+            "remove_sub_issue", "removesubissue" -> "edit"
             "delete", "remove", "rm", "delete_file", "deletefile", "unlink" -> "delete"
             "move", "rename", "mv", "move_file", "movefile", "rename_file", "renamefile",
             "copy_to_box", "copytobox", "copy_from_box", "copyfrombox" -> "move"
@@ -501,6 +520,27 @@ class AcpAdapter : HarnessAdapter {
             "search_code", "searchcode",
             "search_issues", "searchissues",
             "search_pull_requests", "searchpullrequests",
+            "search_repositories", "searchrepositories",
+            "search_commits", "searchcommits",
+            "search_users", "searchusers",
+            "search_orgs", "searchorgs",
+            "list_issues", "listissues",
+            "list_pull_requests", "listpullrequests",
+            "list_pull_request_files", "listpullrequestfiles",
+            "list_commits", "listcommits",
+            "list_branches", "listbranches",
+            "list_discussions", "listdiscussions",
+            "list_releases", "listreleases",
+            "list_labels", "listlabels",
+            "list_tags", "listtags",
+            "list_workflows", "listworkflows",
+            "list_workflow_runs", "listworkflowruns",
+            "list_check_runs_for_ref", "listcheckrunsforref",
+            "list_issue_comments", "listissuecomments",
+            "list_pull_request_comments", "listpullrequestcomments",
+            "list_pull_request_reviews", "listpullrequestreviews",
+            "list_sub_issues", "listsubissues",
+            "list_repository_collaborators", "listrepositorycollaborators",
             "list_shells", "listshells", "list_shell", "listshell" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command",
             "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
@@ -522,6 +562,11 @@ class AcpAdapter : HarnessAdapter {
             "browser_forward", "browserforward",
             "take_screenshot", "takescreenshot",
             "browser_screenshot", "browserscreenshot",
+            "browser_tabs", "browsertabs",
+            "browser_evaluate", "browserevaluate",
+            "browser_handle_dialog", "browserhandledialog",
+            "browser_drag", "browserdrag",
+            "browser_resize", "browserresize",
             "kill_shell", "killshell" -> "execute"
             "think", "thought", "reasoning",
             "await", "await_task", "awaittask",
@@ -552,7 +597,21 @@ class AcpAdapter : HarnessAdapter {
             "upload_file", "uploadfile",
             "download_file", "downloadfile",
             "send_to_user", "sendtouser",
-            "get_pull_request", "getpullrequest" -> "fetch"
+            "get_pull_request", "getpullrequest",
+            "get_issue", "getissue",
+            "get_repository", "getrepository",
+            "get_discussion", "getdiscussion",
+            "get_discussion_comments", "getdiscussioncomments",
+            "get_latest_release", "getlatestrelease",
+            "get_me", "getme",
+            "get_workflow", "getworkflow",
+            "get_workflow_run", "getworkflowrun",
+            "get_job", "getjob",
+            "get_job_logs", "getjoblogs",
+            "compare_commits", "comparecommits",
+            "pull_request_read", "pullrequestread",
+            "checks_read", "checksread",
+            "commit_read", "commitread" -> "fetch"
             "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
             else -> n
         }
@@ -906,6 +965,11 @@ class AcpAdapter : HarnessAdapter {
                 "shell_id", "shellId", "terminal_instance_id", "terminalInstanceId",
                 "chars",
                 "file_id", "fileId", "draft_id", "draftId", "folder_id", "folderId",
+                "issue_number", "issueNumber", "pull_number", "pullNumber",
+                "number", "sha", "commit_sha", "commitSha",
+                "ref", "branch", "head", "base",
+                "discussion_number", "discussionNumber",
+                "label", "workflow_id", "workflowId", "run_id", "runId",
                 "owner", "repo", "repository",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
@@ -1007,6 +1071,11 @@ class AcpAdapter : HarnessAdapter {
                 "shell_id", "shellId", "terminal_instance_id", "terminalInstanceId",
                 "chars",
                 "file_id", "fileId", "draft_id", "draftId", "folder_id", "folderId",
+                "issue_number", "issueNumber", "pull_number", "pullNumber",
+                "number", "sha", "commit_sha", "commitSha",
+                "ref", "branch", "head", "base",
+                "discussion_number", "discussionNumber",
+                "label", "workflow_id", "workflowId", "run_id", "runId",
                 "owner", "repo", "repository",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
