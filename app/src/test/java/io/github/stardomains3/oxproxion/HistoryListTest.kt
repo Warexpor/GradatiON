@@ -463,4 +463,27 @@ class HistoryListTest {
         assertTrue(row.contains("Audio"))
         assertTrue(HistoryList.emphasis(row, "hello audio") != null)
     }
+
+    @Test fun switch_under_code_keeps_left_chat_parked_label_searchable() {
+        // After Code parks chat 4's Photo, opening chat 5 must not wipe 4's map entry
+        // (empty-live park). History still finds Photo on the chat you left.
+        val prefs = mapOf("4" to "hello there", "5" to "other")
+        val all = listOf(session(4, now, "notes"), session(5, now, "later"))
+        val host = { id: Long ->
+            when (id) {
+                4L -> HistoryList.draftSearchText("hello there", "Photo")
+                5L -> HistoryList.draftSearchText("other", "")
+                else -> ""
+            }
+        }
+        val drafts = HistoryList.draftTextsForSearch(all, prefs, host)
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "hello photo"))
+        val row = HistoryList.rowPreview(
+            "You: sent",
+            HistoryList.draftRowText("hello there", "Photo", "hello photo"),
+            "hello photo",
+        ) { "Draft: $it" }
+        assertTrue(row.contains("Photo"))
+        assertTrue(HistoryList.emphasis(row, "hello photo") != null)
+    }
 }

@@ -126,4 +126,14 @@ class ComposerStagedTest {
         assertNull(keep)
         assertEquals("file://parked.jpg", ComposerStaged.get(parked, 4L).imageUri)
     }
+
+    @Test fun park_live_skips_empty_so_switch_under_code_keeps_parked() {
+        // Code cleared the live chip into the map; switching chats must not remember empty
+        // for the chat you leave (that would drop the JPEG History / leaveCodeMode need).
+        val parked = ComposerStaged.remember(emptyMap(), 4L, photo("file://chat4.jpg"))
+        val kept = ComposerStaged.parkLive(parked, 4L, ComposerStaged.Entry())
+        assertEquals("file://chat4.jpg", ComposerStaged.get(kept, 4L).imageUri)
+        val moved = ComposerStaged.parkLive(parked, 4L, photo("file://fresh.jpg"))
+        assertEquals("file://fresh.jpg", ComposerStaged.get(moved, 4L).imageUri)
+    }
 }

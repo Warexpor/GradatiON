@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Chat wave 26)
+
+On `gradation/w26-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w25:
+- Switching chats while Code is showing no longer remembers an empty live stage for the thread you leave (that wiped a chip Code had already parked). `parkStagedAttachment` uses `liveToPark` / `parkLive`; apply onto live is skipped until `leaveCodeMode`, same as a rebuild under Code.
+- History search still finds Photo / Audio / files for the chat you left after that switch.
+
+Phone: stage a photo in Chat A, open Code, History → open Chat B (A's chip stays parked); leave Code on B (B restores if it had a stage). History search "Photo" still finds A. Switch back to A under Code, leave (chip returns).
+
 # Handoff (2026-10-02, Code wave 25)
 
 On `gradation/w25-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`, `CodeBridgeBackendTest`):
