@@ -7,6 +7,13 @@ On `gradation/w27-stability` (PR into `gradation/app-pass`). Persistence follow-
 - Keystore-wrapped API keys commit on save (same durability as the chat-database passphrase and Code host tokens).
 
 Phone: leave `chat_database.partial` or `chat_database.pre_sqlcipher.partial` beside the live DB and force a cloud backup before relaunch (rules should skip it). Leave `chat_database.encrypt_ok` in the vault with a root or hold `pre_sqlcipher` (after relaunch the plaintext leftover should be gone, not re-vaulted). Save an OpenRouter or xAI key and kill mid-save (key should still decrypt after relaunch).
+# Handoff (2026-10-02, Notifications/Away wave 27)
+
+On `gradation/w27-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after Speak/swipe (#105) and prefs dedup seed (#102):
+- `clearTurnDoneDedup` drops the turn-done prefs row (keeps in-memory id) so process-death seed cannot re-suppress the next finished turn.
+- Answer-ready skips post when the Answers channel is IMPORTANCE_NONE / notifications disabled / no POST_NOTIFICATIONS; `rememberAnswerMeta` commits; TTS init failure and Dismiss/Copy clear a queued Speak so Stop does not stick.
+
+Phone: Notify when away on, finish a turn (shade), send another prompt, kill the process, finish the next turn (shade should return). Background Chat with answer notifications on, block the Answers channel in system settings (no silent post). Cold Speak after a kill should still show Stop.
 
 # Handoff (2026-10-02, Chat wave 27)
 

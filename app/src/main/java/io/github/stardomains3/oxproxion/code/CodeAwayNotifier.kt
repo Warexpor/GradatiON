@@ -32,6 +32,8 @@ import java.util.concurrent.ConcurrentHashMap
  * Cold-start allocation also treats prefs-held ids as taken so a new alert cannot reuse
  * a shade entry that survived process death. Cold-start also seeds the dedup set from those
  * prefs so a reconnect cannot re-alert the same shade entry.
+ * [clearTurnDoneDedup] drops the turn-done prefs row so a later finished turn is not
+ * re-suppressed after process death.
  *
  * Shade swipe-dismiss ([onUserDismissed]) drops dedup and the prefs allocation so a still-pending
  * approval can re-alert (including after a later process death that would otherwise re-seed).
@@ -184,14 +186,18 @@ class CodeAwayNotifier(
 
     /**
      * Drop turn-done dedup so a subsequent finished turn can notify again (A3).
-     * Keeps the key→id allocation so the next post updates the same shade id (AWAY-03).
+     * Keeps the in-memory key→id so the next post updates the same shade id (AWAY-03).
+     * Clears the prefs row: [ensurePostedSeeded] would otherwise re-suppress after process
+     * death and the next finished turn would never alert.
      */
     fun clearTurnDoneDedup(sessionId: String) {
         ensurePostedSeeded()
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId)
-        // Remove memory only — leave any still-visible shade entry until open/auto-cancel;
-        // the next TurnDone will post (updating the allocated id). Prefs keep the allocation.
+        // Leave any still-visible shade entry until open/auto-cancel / next TurnDone notify.
         posted.remove(key)
+        if (idPrefs.contains(key)) {
+            idPrefs.edit().remove(key).commit()
+        }
     }
 
     /**
@@ -378,7 +384,8 @@ class CodeAwayNotifier(
     /**
      * After process death [posted] is empty while prefs (and often the shade) still hold
      * every key that was allocated. Seed once so reconnect cannot re-alert those entries.
-     * [clearTurnDoneDedup] still clears memory only so a later finished turn can post.
+     * [clearTurnDoneDedup] drops the turn-done prefs row so a later finished turn can still
+     * post after a kill (memory-only clear would be re-seeded from prefs).
      */
     private fun ensurePostedSeeded() {
         if (postedSeeded) return

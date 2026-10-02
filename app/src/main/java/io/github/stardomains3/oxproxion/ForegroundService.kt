@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion
 
+import android.Manifest
 import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -9,13 +10,16 @@ import android.app.Service
 import android.content.ClipboardManager
 import android.content.ClipData
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.os.IBinder
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.text.TextContentRenderer
 
@@ -67,6 +71,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         fun updateNotificationStatus(context: Context, title: String, contentText: String) {
             val app = context.applicationContext
             if (isAppInForeground(app)) return
+            if (!answerNotificationsAllowed(app)) return
             ensureAnswerChannel(app)
             instance?.let {
                 it.updateNotification(title, contentText)
@@ -109,6 +114,27 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             // never recreate a sticky FGS notif for it.
         }
 
+        /**
+         * User blocked notifications (or the Answers channel) — do not "post" into silence
+         * or remember Speak meta for chrome that never appeared.
+         */
+        private fun answerNotificationsAllowed(context: Context): Boolean {
+            val nm = context.getSystemService(NotificationManager::class.java) ?: return false
+            if (!nm.areNotificationsEnabled()) return false
+            if (Build.VERSION.SDK_INT >= 33) {
+                val granted = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+                if (!granted) return false
+            }
+            val channel = nm.getNotificationChannel(ANSWER_CHANNEL_ID)
+            if (channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE) {
+                return false
+            }
+            return true
+        }
+
         private fun isAppInForeground(context: Context): Boolean {
             val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             val appProcesses = activityManager.runningAppProcesses ?: return false
@@ -128,11 +154,12 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
 
         /** Survives a cold Speak tap when the answer was posted without a live service instance. */
         private fun rememberAnswerMeta(context: Context, title: String, contentText: String) {
+            // commit: Speak often starts this service after a kill; apply() can still be in flight.
             context.getSharedPreferences(ANSWER_META_PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_ANSWER_TITLE, title)
                 .putString(KEY_ANSWER_TEXT, contentText)
-                .apply()
+                .commit()
         }
 
         private fun postAnswerNotification(
@@ -271,6 +298,9 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             ttsReady = false
             pendingSpeak = false
             isTtsActive = false
+            // Speak had already flipped the shade to Stop; put Speak back.
+            restoreLastUpdateFromPrefs()
+            refreshAnswerChrome(silent = true)
         }
     }
 
@@ -312,6 +342,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
                     return START_NOT_STICKY
                 }
                 DISMISS_ACTION -> {
+                    pendingSpeak = false
                     getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
                     tts?.stop()
                     isTtsActive = false
@@ -319,6 +350,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
                     return START_NOT_STICKY
                 }
                 COPY_ACTION -> {
+                    pendingSpeak = false
                     copyLastResponseToClipboard()
                     getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
                     stopSelf()
