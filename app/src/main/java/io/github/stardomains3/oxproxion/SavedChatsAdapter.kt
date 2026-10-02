@@ -121,12 +121,11 @@ class SavedChatsAdapter(
         }
 
         private fun emphasize(text: CharSequence, query: String): CharSequence {
-            val at = HistoryList.emphasisAt(text.toString(), query)
-            if (at < 0) return text
-            val end = at + query.trim().length
-            if (end > text.length) return text
+            val hit = HistoryList.emphasis(text.toString(), query) ?: return text
+            val end = hit.start + hit.length
+            if (hit.start < 0 || end > text.length) return text
             return SpannableString(text).apply {
-                setSpan(StyleSpan(Typeface.BOLD), at, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                setSpan(StyleSpan(Typeface.BOLD), hit.start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
         }
 

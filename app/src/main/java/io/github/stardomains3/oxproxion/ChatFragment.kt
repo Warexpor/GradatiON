@@ -795,11 +795,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
                 // Clear staged image if model doesn't support vision
                 if (selectedImageBytes != null && !viewModel.isVisionModel(model)) {
+                    forgetStagedAttachment()
                     clearStagedAttachment(discardSceneFile = true)
                     GlassNotice.show(requireContext(), getString(R.string.toast_image_removed_no_vision))
                 }
                 // Clear staged audio if model doesn't support transcription
                 if (selectedAudioBytes != null && !viewModel.isTranscriptionModel(model)) {
+                    forgetStagedAttachment()
                     clearStagedAttachment()
                     GlassNotice.show(requireContext(), getString(R.string.toast_audio_removed_no_transcription))
                 }
@@ -1318,6 +1320,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var askComposerDirty = false
     private var suppressDraftDirty = false
     private var composerStateRestored = false
+    /** Staged photos/files parked per Chat thread (in memory for this process). */
+    private var stagedByChat: Map<String, ComposerStaged.Entry> = emptyMap()
 
     override fun onViewStateRestored(savedInstanceState: Bundle?) {
         super.onViewStateRestored(savedInstanceState)
@@ -1385,16 +1389,16 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.rekey(sharedPreferencesHelper.getAskComposerDrafts(), from = null, to = sessionId, text = text)
         )
+        stagedByChat = ComposerStaged.rekey(stagedByChat, from = null, to = sessionId, entry = currentStagedEntry())
         mirrorAskModeDraft(text)
     }
 
-    /** Leave the previous thread's text (and staged photo) behind, and show this thread's. */
+    /** Leave the previous thread's text and staged attachments parked, and show this thread's. */
     private fun switchAskDraft(from: Long?, to: Long?) {
         parkAskDraft(from)
+        parkStagedAttachment(from)
         applyAskDraft(to)
-        clearStagedAttachment(discardSceneFile = true)
-        pendingFiles.clear()
-        if (::attachmentButton.isInitialized) updateAttachmentButton()
+        applyStagedAttachment(to)
     }
 
     /** After a Chat send, the line that went out is not still waiting in that thread. */
@@ -1462,10 +1466,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             suppressDraftDirty = false
             askComposerDirty = false
             mirrorAskModeDraft("")
+            clearStagedAttachment(discardSceneFile = true)
+            pendingFiles.clear()
+            if (::attachmentButton.isInitialized) updateAttachmentButton()
         }
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.drop(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
         )
+        stagedByChat = ComposerStaged.drop(stagedByChat, sessionId)
     }
 
     private fun updateSystemMessageButtonState() {
@@ -2373,9 +2381,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         val previous = viewModel.getCurrentSessionId()
         viewModel.startFreshChatForCurrentMode()
         finishNewChatComposer(previous)
-        clearStagedAttachment(discardSceneFile = true)
-        pendingFiles.clear()
-        updateAttachmentButton()
+        // A switch parks the photo on the chat we left. The same unsaved slot is a wipe.
+        if (viewModel.getCurrentSessionId() == previous) {
+            forgetStagedAttachment(previous)
+            clearStagedAttachment(discardSceneFile = true)
+            pendingFiles.clear()
+            updateAttachmentButton()
+        }
         chatAdapter.clearCache()
     }
 
@@ -2399,7 +2411,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupClickListeners() {
-        removeAttachmentButton.setOnClickListener { clearStagedAttachment(discardSceneFile = true) }
+        removeAttachmentButton.setOnClickListener {
+            forgetStagedAttachment()
+            clearStagedAttachment(discardSceneFile = true)
+        }
         webSearchButton.setOnClickListener {
             //  hideMenu()
             viewModel.toggleWebSearch()
@@ -2480,6 +2495,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         viewModel.sendTranscriptionOpenRouter(audioBytes, audioFormat)
                     }
 
+                    forgetStagedAttachment()
                     clearStagedAttachment(discardSceneFile = true)
 
                     return@setOnClickListener
@@ -2563,6 +2579,7 @@ $cleanContent
                                 if (!viewModel.sendRpUserMessage(draft, imageUrl = "data:$photoMime;base64,$base64")) return@launch
                                 chatEditText.setText("")
                                 chatEditText.text.clear()
+                                forgetStagedAttachment()
                                 clearStagedAttachment()
                             } finally {
                                 photoSendInFlight = false
@@ -2615,6 +2632,7 @@ $cleanContent
                         askComposerDirty = false
                         forgetAskDraft()
                         hideMenu()
+                        forgetStagedAttachment()
                         clearStagedAttachment()
                         pendingFiles.clear()
                         updateAttachmentButton()
@@ -2647,6 +2665,7 @@ $cleanContent
                             if (accepted) {
                                 viewModel.finishComposerEdit()
                                 forgetAskDraft(draftSession)
+                                forgetStagedAttachment(draftSession)
                                 clearStagedAttachment()
                             } else {
                                 restoreUnsentAsk(draftSession, unsentField, stagedImage, stagedImageMime, stagedUri, stagedFiles)
@@ -2873,9 +2892,12 @@ $cleanContent
             val previous = viewModel.getCurrentSessionId()
             viewModel.startFreshChatForCurrentMode()
             finishNewChatComposer(previous)
-            clearStagedAttachment(discardSceneFile = true)
-            pendingFiles.clear()
-            updateAttachmentButton()
+            if (viewModel.getCurrentSessionId() == previous) {
+                forgetStagedAttachment(previous)
+                clearStagedAttachment(discardSceneFile = true)
+                pendingFiles.clear()
+                updateAttachmentButton()
+            }
             chatAdapter.clearCache()
             activity?.moveTaskToBack(true) ?: false
             true
@@ -2889,9 +2911,12 @@ $cleanContent
             val previous = viewModel.getCurrentSessionId()
             viewModel.startFreshChatForCurrentMode()
             finishNewChatComposer(previous)
-            clearStagedAttachment(discardSceneFile = true)
-            pendingFiles.clear()
-            updateAttachmentButton()
+            if (viewModel.getCurrentSessionId() == previous) {
+                forgetStagedAttachment(previous)
+                clearStagedAttachment(discardSceneFile = true)
+                pendingFiles.clear()
+                updateAttachmentButton()
+            }
             chatAdapter.clearCache()
             activity?.moveTaskToBack(true) ?: false
             true
@@ -3639,6 +3664,7 @@ $cleanContent
             chatEditText.text?.toString().orEmpty(),
             canceled.restoredUserText,
         )
+        forgetStagedAttachment()
         clearStagedAttachment(discardSceneFile = true)
         photoSendInFlight = false
         suppressDraftDirty = true
@@ -3666,6 +3692,7 @@ $cleanContent
             message?.imageUri
         )
         if (editPhoto != null) photoSendInFlight = true
+        forgetStagedAttachment()
         clearStagedAttachment(discardSceneFile = true)
         val heldUri = editPhoto?.fileUri?.takeIf { viewModel.isRpMode() }
         if (heldUri != null) viewModel.holdScenePhoto(heldUri)
@@ -3736,6 +3763,74 @@ $cleanContent
         } ?: return null
         if (bytes.isEmpty() || bytes.size > 12_000_000) return null
         return ScenePhoto.Staged(bytes, ScenePhoto.MIME, photo.fileUri)
+    }
+
+    private fun currentStagedEntry(): ComposerStaged.Entry {
+        val uri = viewModel.pendingImageUri()
+        // Prefer the on-disk JPEG: parking forty chats of raw bytes would grow RAM without need.
+        val ctx = context
+        val bytes = if (uri != null && ctx != null && ScenePhoto.canRead(ctx, uri)) null else selectedImageBytes
+        return ComposerStaged.Entry(
+            imageBytes = bytes,
+            imageMime = selectedImageMime,
+            imageUri = uri,
+            audioBytes = selectedAudioBytes,
+            audioFormat = selectedAudioFormat,
+            files = pendingFiles.map { ComposerStaged.FilePart(it.fileName, it.content, it.size) },
+        )
+    }
+
+    /** Keep this thread's staged photo/files without deleting the JPEG on disk. */
+    private fun parkStagedAttachment(sessionId: Long?) {
+        if (viewModel.isRpMode()) return
+        stagedByChat = ComposerStaged.remember(stagedByChat, sessionId, currentStagedEntry())
+        // Clear the field only; the parked entry still owns the scene file.
+        clearStagedAttachment(discardSceneFile = false)
+        pendingFiles.clear()
+        if (::attachmentButton.isInitialized) updateAttachmentButton()
+    }
+
+    private fun applyStagedAttachment(sessionId: Long?) {
+        if (viewModel.isRpMode()) return
+        clearStagedAttachment(discardSceneFile = false)
+        pendingFiles.clear()
+        val entry = ComposerStaged.get(stagedByChat, sessionId)
+        if (entry.isEmpty) {
+            if (::attachmentButton.isInitialized) updateAttachmentButton() else updateSendButtonChrome()
+            return
+        }
+        selectedAudioBytes = entry.audioBytes
+        selectedAudioFormat = entry.audioFormat
+        viewModel.setPendingUserImageUri(entry.imageUri)
+        pendingFiles.addAll(entry.files.map { AttachedFile(it.fileName, it.content, it.size) })
+        val imageBytes = entry.imageBytes ?: entry.imageUri?.let { uri ->
+            runCatching {
+                requireContext().contentResolver.openInputStream(uri.toUri())?.use { it.readBytes() }
+            }.getOrNull()?.takeIf { it.isNotEmpty() && it.size <= 12_000_000 }
+        }
+        selectedImageBytes = imageBytes
+        selectedImageMime = entry.imageMime
+        when {
+            imageBytes != null -> showStagedPhoto(imageBytes, entry.imageUri ?: imageBytes)
+            entry.audioBytes != null && ::previewImageView.isInitialized -> {
+                resetPreviewFrame()
+                previewImageView.dispose()
+                previewImageView.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                previewImageView.contentDescription = getString(R.string.cd_audio_attachment)
+                previewImageView.setImageResource(android.R.drawable.ic_media_play)
+                attachmentPreviewContainer.visibility = View.VISIBLE
+                updateSendButtonChrome()
+            }
+            pendingFiles.isNotEmpty() -> updateSendButtonChrome()
+            else -> updateSendButtonChrome()
+        }
+        if (::attachmentButton.isInitialized) updateAttachmentButton() else updateSendButtonChrome()
+    }
+
+    /** Drop the parked entry for the open thread after a send or an explicit clear. */
+    private fun forgetStagedAttachment(sessionId: Long? = null) {
+        val id = sessionId ?: if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+        stagedByChat = ComposerStaged.remember(stagedByChat, id, ComposerStaged.Entry())
     }
 
     /**

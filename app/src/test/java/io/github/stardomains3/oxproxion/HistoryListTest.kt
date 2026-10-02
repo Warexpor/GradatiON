@@ -173,6 +173,18 @@ class HistoryListTest {
         assertEquals(-1, HistoryList.emphasisAt("", "a"))
     }
 
+    @Test fun emphasis_folds_spaces_so_a_draft_hit_stays_bold() {
+        // draftMatchIds folds "see  you" to find the chat; the row must mark the same words.
+        val hit = HistoryList.emphasis("Draft: see you later", "see  you")
+        assertEquals(7, hit!!.start)
+        assertEquals(7, hit.length)
+        val spaced = HistoryList.emphasis("Draft: see   you later", "see you")
+        assertEquals(7, spaced!!.start)
+        assertEquals(9, spaced.length)
+        val preview = HistoryList.rowPreview("You: sent", "see\nyou later", "see  you") { "Draft: $it" }
+        assertEquals(7, HistoryList.emphasisAt(preview, "see  you"))
+    }
+
     @Test fun present_marks_the_open_chat_and_carries_the_query() {
         val items = HistoryList.build(
             sessions = listOf(session(4, now, "notes"), session(9, now, "other")),
