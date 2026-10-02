@@ -486,4 +486,33 @@ class HistoryListTest {
         assertTrue(row.contains("Photo"))
         assertTrue(HistoryList.emphasis(row, "hello photo") != null)
     }
+
+    @Test fun discard_under_code_drops_parked_label_from_search() {
+        // Discard draft while Code covers the open Chat drops the park map entry (and the
+        // JPEG). History must not keep finding Photo for that thread.
+        val prefs = mapOf("4" to "")
+        val all = listOf(session(4, now, "notes"))
+        val before = HistoryList.draftTextsForSearch(all, prefs) { id ->
+            if (id == 4L) HistoryList.draftSearchText("", "Photo") else ""
+        }
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(before, "photo"))
+        val afterDrop = ComposerStaged.drop(
+            ComposerStaged.remember(emptyMap(), 4L, ComposerStaged.Entry(imageUri = "file://a.jpg")),
+            4L,
+        )
+        assertTrue(ComposerStaged.get(afterDrop, 4L).isEmpty)
+        val after = HistoryList.draftTextsForSearch(all, prefs) { id ->
+            val parked = ComposerStaged.get(afterDrop, id)
+            val label = HistoryList.attachmentDraft(
+                hasPhoto = parked.imageBytes != null || !parked.imageUri.isNullOrBlank(),
+                hasAudio = parked.audioBytes != null,
+                fileCount = parked.files.size,
+                photoLabel = "Photo",
+                audioLabel = "Audio",
+                filesLabel = { n -> if (n == 1) "1 file" else "$n files" },
+            )
+            HistoryList.draftSearchText(prefs["$id"].orEmpty(), label)
+        }
+        assertTrue(HistoryList.draftMatchIds(after, "photo").isEmpty())
+    }
 }

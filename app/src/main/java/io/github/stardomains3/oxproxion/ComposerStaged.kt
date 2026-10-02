@@ -95,6 +95,17 @@ object ComposerStaged {
         return remember(store, sessionId, entry)
     }
 
+    /**
+     * Unsaved chat just received [to]. Prefer non-empty [live]; when live is empty (Code
+     * already parked the chip under [from]), move that map entry instead of rekeying with
+     * empty (which would drop the JPEG via eviction).
+     */
+    fun promote(store: Map<String, Entry>, from: Long?, to: Long?, live: Entry): Map<String, Entry> {
+        val entry = liveToPark(live) ?: get(store, from)
+        if (entry.isEmpty) return store
+        return rekey(store, from, to, entry)
+    }
+
     /** Merge a late photo onto a parked entry without dropping audio/files already there. */
     fun withPhoto(base: Entry, bytes: ByteArray?, mime: String?, uri: String?): Entry =
         base.copy(imageBytes = bytes, imageMime = mime, imageUri = uri)

@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Chat wave 27)
+
+On `gradation/w27-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w26:
+- History Discard draft on the open Chat while Code is showing deletes the parked scene JPEG (live was cleared into the map; `clearStagedAttachment` alone missed it).
+- First save / promote of an unsaved Chat whose stage Code already parked moves that map entry onto the new id (`ComposerStaged.promote`); empty-live rekey no longer evicts the photo.
+- History search no longer finds Photo for a draft Discard removed under Code.
+
+Phone: stage a photo in Chat, open Code, History → Discard draft (JPEG gone; search "Photo" misses that row). Stage a photo on a new Chat, open Code, wait for first save to mint an id (or send then stage before promote), leave Code (chip returns on the saved thread).
+
 # Handoff (2026-10-02, Code wave 27)
 
 On `gradation/w27-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`, `CodeBridgeBackendTest`, `ListSessionsJsonTest`):
