@@ -20,6 +20,28 @@
         <exclude domain="database" path="chat_database.encrypt_ok-wal" />
         <exclude domain="database" path="chat_database.encrypt_ok-shm" />
         <exclude domain="database" path="chat_database.encrypt_ok-journal" />
+        <!-- Move temps at the databases root before the next open parks/discards them. -->
+        <exclude domain="database" path="chat_database.partial" />
+        <exclude domain="database" path="chat_database.ready" />
+        <exclude domain="database" path="chat_database.bak" />
+        <exclude domain="database" path="chat_database-wal.partial" />
+        <exclude domain="database" path="chat_database-wal.ready" />
+        <exclude domain="database" path="chat_database-wal.bak" />
+        <exclude domain="database" path="chat_database-shm.partial" />
+        <exclude domain="database" path="chat_database-shm.ready" />
+        <exclude domain="database" path="chat_database-shm.bak" />
+        <exclude domain="database" path="chat_database-journal.partial" />
+        <exclude domain="database" path="chat_database-journal.ready" />
+        <exclude domain="database" path="chat_database-journal.bak" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher.partial" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher.ready" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher.bak" />
+        <exclude domain="database" path="chat_database.encrypting.partial" />
+        <exclude domain="database" path="chat_database.encrypting.ready" />
+        <exclude domain="database" path="chat_database.encrypting.bak" />
+        <exclude domain="database" path="chat_database.encrypt_ok.partial" />
+        <exclude domain="database" path="chat_database.encrypt_ok.ready" />
+        <exclude domain="database" path="chat_database.encrypt_ok.bak" />
         <!-- Recovered/unreadable copies that could not enter noBackupFilesDir. -->
         <exclude domain="database" path="chat_db_hold" />
         <exclude domain="sharedpref" path="code_mode_secrets.xml" />
@@ -48,6 +70,28 @@
         <exclude domain="database" path="chat_database.encrypt_ok-wal" />
         <exclude domain="database" path="chat_database.encrypt_ok-shm" />
         <exclude domain="database" path="chat_database.encrypt_ok-journal" />
+        <!-- Move temps at the databases root before the next open parks/discards them. -->
+        <exclude domain="database" path="chat_database.partial" />
+        <exclude domain="database" path="chat_database.ready" />
+        <exclude domain="database" path="chat_database.bak" />
+        <exclude domain="database" path="chat_database-wal.partial" />
+        <exclude domain="database" path="chat_database-wal.ready" />
+        <exclude domain="database" path="chat_database-wal.bak" />
+        <exclude domain="database" path="chat_database-shm.partial" />
+        <exclude domain="database" path="chat_database-shm.ready" />
+        <exclude domain="database" path="chat_database-shm.bak" />
+        <exclude domain="database" path="chat_database-journal.partial" />
+        <exclude domain="database" path="chat_database-journal.ready" />
+        <exclude domain="database" path="chat_database-journal.bak" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher.partial" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher.ready" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher.bak" />
+        <exclude domain="database" path="chat_database.encrypting.partial" />
+        <exclude domain="database" path="chat_database.encrypting.ready" />
+        <exclude domain="database" path="chat_database.encrypting.bak" />
+        <exclude domain="database" path="chat_database.encrypt_ok.partial" />
+        <exclude domain="database" path="chat_database.encrypt_ok.ready" />
+        <exclude domain="database" path="chat_database.encrypt_ok.bak" />
         <!-- Recovered/unreadable copies that could not enter noBackupFilesDir. -->
         <exclude domain="database" path="chat_db_hold" />
         <exclude domain="sharedpref" path="code_mode_secrets.xml" />

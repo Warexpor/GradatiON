@@ -841,9 +841,10 @@ class ChatDatabaseRecoveryTest {
         assertFalse(File(databases, "chat_database.unreadable-4.bak").exists())
         assertFalse(File(databases, "chat_database.pre_sqlcipher.kept-1").exists())
         val hold = ChatDbVault.holdDirectory(databases)
-        assertEquals("torn-main", File(hold, "chat_database.partial").readText())
-        assertEquals("ready", File(hold, "chat_database.recovered-4.ready").readText())
-        assertEquals("bak", File(hold, "chat_database.unreadable-4.bak").readText())
+        // Torn .partial/.ready/.bak are parked then discarded; .kept-* stays in hold.
+        assertFalse(File(hold, "chat_database.partial").exists())
+        assertFalse(File(hold, "chat_database.recovered-4.ready").exists())
+        assertFalse(File(hold, "chat_database.unreadable-4.bak").exists())
         assertEquals("kept", File(hold, "chat_database.pre_sqlcipher.kept-1").readText())
     }
 
@@ -892,6 +893,49 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun disposablePlaintextAtRootIsDiscardedWhenVaultHasEncryptMarker() {
+        val databases = tmp.newFolder("disposable-root-databases")
+        val vault = tmp.newFolder("disposable-root-vault")
+        File(vault, "chat_database.encrypt_ok").writeText("ok")
+        File(databases, "chat_database.pre_sqlcipher").writeText("plain")
+        File(databases, "chat_database.pre_sqlcipher-wal").writeText("wal")
+        File(databases, "chat_database.encrypting").writeText("mid")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertFalse(File(databases, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(databases, "chat_database.pre_sqlcipher-wal").exists())
+        assertFalse(File(databases, "chat_database.encrypting").exists())
+        // Must not resurrect disposable plaintext into the vault.
+        assertFalse(File(vault, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(vault, "chat_database.encrypting").exists())
+        assertEquals("ok", File(vault, "chat_database.encrypt_ok").readText())
+        val hold = ChatDbVault.holdDirectory(databases)
+        assertFalse(File(hold, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(hold, "chat_database.encrypting").exists())
+    }
+
+    @Test
+    fun holdDisposablePlaintextIsDroppedWhenVaultHasEncryptMarker() {
+        val databases = tmp.newFolder("disposable-hold-databases")
+        val vault = tmp.newFolder("disposable-hold-vault")
+        File(vault, "chat_database.encrypt_ok").writeText("ok")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(hold, "chat_database.pre_sqlcipher").writeText("held-plain")
+        File(hold, "chat_database.pre_sqlcipher-wal").writeText("held-wal")
+        File(hold, "chat_database.encrypting").writeText("held-mid")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertFalse(File(hold, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(hold, "chat_database.pre_sqlcipher-wal").exists())
+        assertFalse(File(hold, "chat_database.encrypting").exists())
+        assertFalse(File(vault, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(vault, "chat_database.encrypting").exists())
+        assertEquals("ok", File(vault, "chat_database.encrypt_ok").readText())
+    }
+
+    @Test
     fun backupRulesExcludePlaintextCopiesAndHostTokens() {
         val rules = xmlText("backup_rules.xml")
         val extraction = xmlText("data_extraction_rules.xml")
@@ -909,6 +953,12 @@ class ChatDatabaseRecoveryTest {
             "chat_database.encrypt_ok-wal",
             "chat_database.encrypt_ok-shm",
             "chat_database.encrypt_ok-journal",
+            "chat_database.partial",
+            "chat_database.ready",
+            "chat_database.bak",
+            "chat_database-wal.partial",
+            "chat_database.encrypting.partial",
+            "chat_database.encrypt_ok.bak",
             "chat_db_hold",
             "code_mode_secrets.xml",
             "code_mode.xml",

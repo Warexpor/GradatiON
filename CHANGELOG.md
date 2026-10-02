@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Auto Backup / device transfer exclude move temps (`.partial` / `.ready` / `.bak`) of the live `chat_database` set and of `pre_sqlcipher` / `encrypting` / `encrypt_ok`, so a torn copy beside the live database cannot upload before the next open. When the vault already has `encrypt_ok`, leftover `pre_sqlcipher` / `encrypting` at the databases root or under `chat_db_hold` are discarded (not drained back into the vault). Torn move temps parked under hold are discarded; `.kept-*` parks stay. Keystore-wrapped API keys (OpenRouter / xAI / LAN) `commit` on save like the chat-database passphrase and Code host tokens.
 - Continue starts a new paragraph after z-image ⦇…⦈, z-binding ⦉…⦊ and curled angle ⧼…⧽ dialogue, and after Syloti Nagri ꠨꠩꠪꠫, Tibetan ༉༊༐༴, Mongolian ᠂᠄᠇, Balinese ᭜᭝᭠ and stenographic ⸼⸽. Opening ⦇⦉⧼ hug the next word like other openers (and ❴⦅⦗ do too — they were trailers only).
 - Lore keys wrapped in ⦇z-image⦈ / ⦉z-binding⦊ / ⧼curled angle⧽, and keys trailed by ꠨༉᠂᭜⸼, still match.
 - The rewrite dialog quote drops ⦇z-image⦈, ⦉z-binding⦊ and ⧼curled angle⧽ quotes around the first line.

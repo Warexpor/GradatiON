@@ -33,8 +33,14 @@ import java.nio.file.StandardOpenOption
  *
  * The live `chat_database` stays in the databases directory. The backup rules exclude it, its
  * journal, and the old plaintext / encrypting / encrypt_ok names (and their wal/shm/journal) in
- * case a move out of that directory fails. `code_mode.xml` is excluded too: a failed Keystore
- * vault write can leave a pairing token in the hosts JSON until the next successful scrub.
+ * case a move out of that directory fails. Move temps (`.partial` / `.ready` / `.bak`) of those
+ * names are listed too, so a backup before the next open cannot upload a torn copy.
+ * `code_mode.xml` is excluded too: a failed Keystore vault write can leave a pairing token in the
+ * hosts JSON until the next successful scrub.
+ *
+ * When the vault already has the encrypt marker, leftover `pre_sqlcipher` / `encrypting` at the
+ * databases root or under hold are discarded rather than drained back into the vault: the marker
+ * means the plaintext snapshot was confirmed disposable.
  */
 internal object ChatDbVault {
     private const val TAG = "ChatDbVault"
@@ -108,7 +114,10 @@ internal object ChatDbVault {
      * those names are parked the same way: the backup rules do not list them. When the vault
      * already has the encrypt marker, a leftover at the databases root is discarded (not
      * `uniqueKept` into the vault). A failure to move it is logged and left in place; the backup
-     * rules still name that file and its sidecars.
+     * rules still name that file and its sidecars. When that marker is present, leftover
+     * `pre_sqlcipher` / `encrypting` at the root or under hold are discarded too (do not
+     * resurrect disposable plaintext). Move temps parked under hold are discarded after the
+     * park pass: Room never opens them, and the backup rules cover the root window.
      */
     fun relocateLegacy(databasesDir: File, vault: File, storedRecovered: String?): Boolean {
         vault.mkdirs()
@@ -162,8 +171,10 @@ internal object ChatDbVault {
             }
         }
         // A failed cross-directory move can leave .partial / .ready / .bak (or a .kept-* rename)
-        // next to the live database. Those names are not in the backup rules.
+        // next to the live database. Park under hold, then discard: Room never opens those names,
+        // and the backup rules list the finite root temps for the pre-open window.
         parkMoveTemps(databasesDir)
+        discardHoldMoveTemps(databasesDir)
         // Orphans parked after the first drain (sidecar-only sets) are discarded here.
         drainHold(databasesDir, vault)
         if (storedRecovered != null && isRecoveredName(storedRecovered) && dbSetPresent(databasesDir, storedRecovered)) {
@@ -205,6 +216,11 @@ internal object ChatDbVault {
                     discardShortNameSet(hold, name)
                 }
                 // Recovered/unreadable: leave the hold main for roomDatabaseName.
+                continue
+            }
+            if (isDisposableLegacyPlain(name) && encryptMarker(vault).isFile) {
+                // Migration was confirmed. Do not resurrect disposable plaintext into the vault.
+                discardShortNameSet(hold, name)
                 continue
             }
             if (dbSetPresent(vault, name)) {
@@ -369,8 +385,9 @@ internal object ChatDbVault {
 
     /**
      * Moves a legacy plaintext / encrypting copy (and its sidecars) into [vault].
-     * When the vault already has that short name, park under [HOLD_DIR] as one set so a
-     * leftover `-wal` is not left at the databases root for Auto Backup.
+     * When the vault already has that short name, the databases-root set is discarded.
+     * When the vault already has the encrypt marker, leftovers are discarded too (do not
+     * resurrect disposable plaintext). Otherwise a move failure parks under [HOLD_DIR].
      */
     private fun relocateLegacyNamed(databasesDir: File, vault: File, name: String) {
         if (File(vault, name).isFile) {
@@ -378,6 +395,18 @@ internal object ChatDbVault {
             // cannot upload a leftover -wal; do not uniqueKept into the vault.
             if (dbSetPresent(databasesDir, name)) {
                 discardShortNameSet(databasesDir, name)
+            }
+            return
+        }
+        if (isDisposableLegacyPlain(name) && encryptMarker(vault).isFile) {
+            // encrypt_ok means the plaintext snapshot was confirmed disposable. A leftover
+            // at the databases root (or under hold) must not re-enter the vault.
+            if (dbSetPresent(databasesDir, name)) {
+                discardShortNameSet(databasesDir, name)
+            }
+            val hold = File(databasesDir, HOLD_DIR)
+            if (hold.isDirectory && dbSetPresent(hold, name)) {
+                discardShortNameSet(hold, name)
             }
             return
         }
@@ -394,8 +423,9 @@ internal object ChatDbVault {
 
     /**
      * Parks cross-directory move leftovers at the databases root under [HOLD_DIR].
-     * Auto Backup has no wildcards for `chat_database*.partial` (or `.ready` / `.bak` / `.kept-*`),
-     * so those files would be uploaded if left beside the live database.
+     * Auto Backup has no wildcards for stamp-scoped temps; the backup rules name the finite
+     * live / plaintext / encrypting / encrypt_ok `.partial` / `.ready` / `.bak` set so a backup
+     * before the next open cannot upload those. Stamp-scoped temps still rely on this park.
      */
     private fun parkMoveTemps(databasesDir: File) {
         val hold = holdDirectory(databasesDir)
@@ -404,6 +434,28 @@ internal object ChatDbVault {
             moveBestEffort(file, File(hold, file.name))
         }
     }
+
+    /**
+     * Drops torn `.partial` / `.ready` / `.bak` copies under [HOLD_DIR]. Those are never opened
+     * by Room. `.kept-*` renames stay: [parkDbSet] may have just moved a previous hold main aside
+     * under that name, and deleting it would drop parked history after a failed set move.
+     */
+    private fun discardHoldMoveTemps(databasesDir: File) {
+        val hold = File(databasesDir, HOLD_DIR)
+        if (!hold.isDirectory) return
+        hold.listFiles()?.forEach { file ->
+            if (!file.isFile || !file.name.startsWith(AppDatabase.DB_NAME)) return@forEach
+            val n = file.name
+            if (n.endsWith(".partial") || n.endsWith(".ready") || n.endsWith(".bak")) {
+                file.delete()
+            }
+        }
+    }
+
+    /** Plaintext snapshot or in-progress encrypt file — disposable once [encryptMarker] exists. */
+    private fun isDisposableLegacyPlain(name: String): Boolean =
+        name == "${AppDatabase.DB_NAME}.pre_sqlcipher" ||
+            name == "${AppDatabase.DB_NAME}.encrypting"
 
     private fun isLiveDatabaseFileName(name: String): Boolean =
         name == AppDatabase.DB_NAME ||
