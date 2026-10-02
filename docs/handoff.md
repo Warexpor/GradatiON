@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 17)
+
+On `gradation/w17-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
+- A tool `toolCallId` written as a whole-number double (`5.0`) still matches a later update with `5`, so the card status and detail stay on one row.
+- Cursor Agent tool names `AwaitShell`, `TodoWrite`, `Task`, `SwitchMode`, `MultiEdit`, `CallMcpTool`, `GetMcpTools`, `CallDynamicTool`, and `Subagent` map to think / edit / fetch / search cards (icon and log clipping).
+- A shell command string with a scalar `args` whole-number double (`5.0`) shows as `5` on the tool detail line.
+
+Phone: on Cursor Agent, an AwaitShell or CallMcpTool card should show the think or fetch icon. A tool whose id a proxy rewrote as a double should still update in place.
+
 # Handoff (2026-10-02, Stability wave 16)
 
 On `gradation/w16-stability` (PR into `gradation/app-pass`). Persistence fixes after w15 hold stamps:
