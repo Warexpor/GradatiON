@@ -1430,6 +1430,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         parkStagedAttachment(from)
         askStageSessionId = to
         applyAskDraft(to)
+        // Code covers the composer; leave the chip in the park map until leaveCodeMode
+        // (same as restoreLiveStagedAfterRebuild). Applying onto live under Code would also
+        // risk the next empty-live park wiping the thread you just left.
+        if (::codeMode.isInitialized && codeMode.isActive) return
         applyStagedAttachment(to)
     }
 
@@ -3979,7 +3983,9 @@ $cleanContent
     private fun parkStagedAttachment(sessionId: Long?) {
         if (viewModel.isRpMode()) return
         askStageSessionId = sessionId
-        rememberStaged(sessionId, currentStagedEntry())
+        // Empty live must not wipe a chip already parked (switch while Code is showing).
+        val live = ComposerStaged.liveToPark(currentStagedEntry())
+        if (live != null) rememberStaged(sessionId, live)
         // Clear the field only; the parked entry still owns the scene file.
         clearStagedAttachment(discardSceneFile = false)
         pendingFiles.clear()

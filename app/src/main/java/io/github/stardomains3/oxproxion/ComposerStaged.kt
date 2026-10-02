@@ -86,6 +86,15 @@ object ComposerStaged {
      */
     fun liveToPark(live: Entry): Entry? = if (live.isEmpty) null else live
 
+    /**
+     * Park [live] for [sessionId] only when non-empty. An empty live (Code cleared the chip,
+     * or a switch while Code is showing) must not wipe a map entry History still needs.
+     */
+    fun parkLive(store: Map<String, Entry>, sessionId: Long?, live: Entry): Map<String, Entry> {
+        val entry = liveToPark(live) ?: return store
+        return remember(store, sessionId, entry)
+    }
+
     /** Merge a late photo onto a parked entry without dropping audio/files already there. */
     fun withPhoto(base: Entry, bytes: ByteArray?, mime: String?, uri: String?): Entry =
         base.copy(imageBytes = bytes, imageMime = mime, imageUri = uri)
