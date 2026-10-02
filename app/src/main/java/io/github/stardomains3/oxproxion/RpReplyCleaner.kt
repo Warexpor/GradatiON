@@ -47,8 +47,9 @@ object RpReplyCleaner {
      * `〔OOC：…〕` / white lenticular `〖OOC：…〗`, CJK angle `〈OOC：…〉` / `《OOC：…》`,
      * white paren `｟OOC：…｠`, white tortoise `〘OOC：…〙`, math angle `⟨OOC：…⟩`,
      * heavy ornament `❰OOC：…❱`, white square `〚OOC：…〛`, math double angle `⟪OOC：…⟫`,
-     * math white tortoise `⟬OOC：…⟭`, math white square `⟦OOC：…⟧`, white curly `⦃OOC：…⦄`, or
-     * flattened paren `❨OOC：…❩`) even when the note wraps, then a "here's the rewritten reply"
+     * math white tortoise `⟬OOC：…⟭`, math white square `⟦OOC：…⟧`, white curly `⦃OOC：…⦄`,
+     * flattened paren `❨OOC：…❩`, medium flattened `❪OOC：…❫`, medium angle `❬OOC：…❭`, or
+     * light tortoise `❲OOC：…❳`) even when the note wraps, then a "here's the rewritten reply"
      * label. An OOC line that is not that note stays: it can be the character talking.
      */
     private fun stripLeadingRewrite(text: String): String {
@@ -71,7 +72,7 @@ object RpReplyCleaner {
         return text.substring(close + 1)
     }
 
-    /** Length of a leading `(OOC:` / `【OOC：` / `[OOC:` / `{OOC:` / `〔OOC：` / `〈OOC：` / `｟OOC：` / `〘OOC：` / `⟨OOC：` / `❰OOC：` / `〚OOC：` / `⟪OOC：` / `⟬OOC：` / `⟦OOC：` / `⦃OOC：` / `❨OOC：` opener, or null when this is not that note. */
+    /** Length of a leading `(OOC:` / `【OOC：` / `[OOC:` / `{OOC:` / `〔OOC：` / `〈OOC：` / `｟OOC：` / `〘OOC：` / `⟨OOC：` / `❰OOC：` / `〚OOC：` / `⟪OOC：` / `⟬OOC：` / `⟦OOC：` / `⦃OOC：` / `❨OOC：` / `❪OOC：` / `❬OOC：` / `❲OOC：` opener, or null when this is not that note. */
     private fun rewriteOocOpen(text: String): Int? {
         val prefixes = listOf(
             "(OOC:", "（OOC:", "(OOC：", "（OOC：",
@@ -92,6 +93,9 @@ object RpReplyCleaner {
             "⟦OOC:", "⟦OOC：",
             "⦃OOC:", "⦃OOC：",
             "❨OOC:", "❨OOC：",
+            "❪OOC:", "❪OOC：",
+            "❬OOC:", "❬OOC：",
+            "❲OOC:", "❲OOC：",
         )
         for (p in prefixes) {
             if (text.startsWith(p, ignoreCase = true)) return p.length
@@ -103,8 +107,8 @@ object RpReplyCleaner {
      * Index of the closer that matches the open bracket at the start, or -1 when it never closes.
      * Parens mix ASCII and fullwidth; squares, lenticulars, braces, tortoise-shell, white
      * lenticular, CJK angles, white parens, white tortoise, math angles, heavy ornaments,
-     * white squares, math double angles, math white tortoise, math white squares, white curly
-     * and flattened parens stay in their own pair.
+     * white squares, math double angles, math white tortoise, math white squares, white curly,
+     * flattened parens, medium flattened, medium angles and light tortoise stay in their own pair.
      */
     private fun closingBracket(text: String): Int {
         val open = text.first()
@@ -127,6 +131,9 @@ object RpReplyCleaner {
             '⟦' -> setOf('⟦') to setOf('⟧')
             '⦃' -> setOf('⦃') to setOf('⦄')
             '❨' -> setOf('❨') to setOf('❩')
+            '❪' -> setOf('❪') to setOf('❫')
+            '❬' -> setOf('❬') to setOf('❭')
+            '❲' -> setOf('❲') to setOf('❳')
             else -> return -1
         }
         var depth = 0
