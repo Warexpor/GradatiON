@@ -221,6 +221,21 @@ class RpContinuationTest {
         assertEquals("සාදරයෙන්෴\n\nඇය බලා සිටී.", RpContinuation.join("සාදරයෙන්෴", "ඇය බලා සිටී."))
     }
 
+
+    @Test fun swissGermanAndAngleQuotesStillCountAsFinished() {
+        assertEquals("»Hallo.«\n\nSie wartet.", RpContinuation.join("»Hallo.«", "Sie wartet."))
+        assertEquals("›Hallo.‹\n\nSie wartet.", RpContinuation.join("›Hallo.‹", "Sie wartet."))
+        assertEquals("»Hallo", RpContinuation.join("»", "Hallo"))
+        assertEquals("《来吧。》\n\n他等待。", RpContinuation.join("《来吧。》", "他等待。"))
+        assertEquals("他说：《来", RpContinuation.join("他说：《", "来"))
+    }
+
+    @Test fun khmerThaiAndCopticEndsStartANewParagraph() {
+        assertEquals("សួស្តី៕\n\nនាងរង់ចាំ។", RpContinuation.join("សួស្តី៕", "នាងរង់ចាំ។"))
+        assertEquals("สวัสดีฯ\n\nเธอรออยู่", RpContinuation.join("สวัสดีฯ", "เธอรออยู่"))
+        assertEquals("Ⲭⲉⲣⲉ⳹\n\nShe waits.", RpContinuation.join("Ⲭⲉⲣⲉ⳹", "She waits."))
+    }
+
     @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)

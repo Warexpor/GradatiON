@@ -54,31 +54,55 @@ object RpPromptEngine {
     /** Wraps a `_(Reminder:)_` so the model does not play it as the user's next line. */
     const val SCENE_NOTE_OPEN = "(Scene note, not spoken aloud:\n"
     private const val SCENE_NOTE_CLOSE = "\n)"
+    /** Same note with fullwidth parens: some models echo it that way. */
+    private const val SCENE_NOTE_OPEN_FULLWIDTH = "（Scene note, not spoken aloud:\n"
+    private const val SCENE_NOTE_CLOSE_FULLWIDTH = "\n）"
 
     fun sceneNote(body: String): String = SCENE_NOTE_OPEN + body.trim() + SCENE_NOTE_CLOSE
 
     /** The note inside [sceneNote], or null when [text] has none. */
     fun sceneNoteBody(text: String): String? {
-        val start = text.indexOf(SCENE_NOTE_OPEN)
-        if (start < 0) return null
-        val from = start + SCENE_NOTE_OPEN.length
-        val end = text.indexOf(SCENE_NOTE_CLOSE, from)
-        val body = if (end < 0) text.substring(from) else text.substring(from, end)
+        val open = sceneNoteOpenAt(text, 0) ?: return null
+        val from = open.index + open.length
+        val close = sceneNoteCloseAfter(text, from, open.fullwidth)
+        val body = if (close < 0) text.substring(from) else text.substring(from, close)
         return body.trim().ifBlank { null }
     }
 
     /**
      * A reply that opens by echoing the scene note, with the story after it. The note on its
      * own is left in place, so a reply that is only the echo is not wiped to nothing.
+     * A fullwidth `（…）` echo is stripped the same way.
      */
     fun withoutLeadingSceneNote(text: String): String {
         val trimmed = text.trim()
-        if (!trimmed.startsWith(SCENE_NOTE_OPEN)) return text
-        val from = SCENE_NOTE_OPEN.length
-        val end = trimmed.indexOf(SCENE_NOTE_CLOSE, from)
+        val open = sceneNoteOpenAt(trimmed, 0) ?: return text
+        if (open.index != 0) return text
+        val from = open.length
+        val end = sceneNoteCloseAfter(trimmed, from, open.fullwidth)
         if (end < 0) return text
-        val rest = trimmed.substring(end + SCENE_NOTE_CLOSE.length).trim()
+        val closeLen = if (open.fullwidth) SCENE_NOTE_CLOSE_FULLWIDTH.length else SCENE_NOTE_CLOSE.length
+        val rest = trimmed.substring(end + closeLen).trim()
         return rest.ifEmpty { trimmed }
+    }
+
+    private data class SceneNoteOpen(val index: Int, val length: Int, val fullwidth: Boolean)
+
+    private fun sceneNoteOpenAt(text: String, from: Int): SceneNoteOpen? {
+        val ascii = text.indexOf(SCENE_NOTE_OPEN, from)
+        val wide = text.indexOf(SCENE_NOTE_OPEN_FULLWIDTH, from)
+        return when {
+            ascii < 0 && wide < 0 -> null
+            ascii < 0 -> SceneNoteOpen(wide, SCENE_NOTE_OPEN_FULLWIDTH.length, true)
+            wide < 0 -> SceneNoteOpen(ascii, SCENE_NOTE_OPEN.length, false)
+            ascii <= wide -> SceneNoteOpen(ascii, SCENE_NOTE_OPEN.length, false)
+            else -> SceneNoteOpen(wide, SCENE_NOTE_OPEN_FULLWIDTH.length, true)
+        }
+    }
+
+    private fun sceneNoteCloseAfter(text: String, from: Int, fullwidth: Boolean): Int {
+        val close = if (fullwidth) SCENE_NOTE_CLOSE_FULLWIDTH else SCENE_NOTE_CLOSE
+        return text.indexOf(close, from)
     }
 
     /** Scene-craft rules shared by every character reply. */
