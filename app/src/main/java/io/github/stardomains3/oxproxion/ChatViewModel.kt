@@ -63,6 +63,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -178,7 +179,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val customModels = sharedPreferencesHelper.getCustomModels()
         val allModels = getBuiltInModels() + customModels
         val model = allModels.find { it.apiIdentifier == modelIdentifier }
-        return model?.isVisionCapable ?: false
+        if (model?.isVisionCapable == true) return true
+        // A LAN model stored before its server was asked: the fresh list, then the name.
+        if (model?.isLANModel == true) {
+            _lanModels.value?.find { it.apiIdentifier == modelIdentifier }?.let { return it.isVisionCapable }
+            return LanVision.fromName(modelIdentifier)
+        }
+        return false
     }
     fun isLanModel(modelIdentifier: String?): Boolean {
         if (modelIdentifier == null) return false
@@ -397,6 +404,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * still finds rows (active prefs are cleared when the character row is missing).
      */
     private var preservedSessionCharacterId: Long? = null
+    /** Earlier replies gained or lost versions: their rows redraw the control. */
+    private val _rpEarlierVersionsChanged = MutableLiveData<Event<Unit>>()
+    val rpEarlierVersionsChanged: LiveData<Event<Unit>> = _rpEarlierVersionsChanged
     private val _rpSwipeNav = MutableLiveData<RpSwipeNav?>()
     val rpSwipeNav: LiveData<RpSwipeNav?> = _rpSwipeNav
 
@@ -510,6 +520,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val lanModels: LiveData<List<LlmModel>> = _lanModels
     private var lanFetchJob: Job? = null
 
+    private fun isThinkingBubble(message: FlexibleMessage): Boolean =
+        message.role == "assistant" &&
+            (message.content as? JsonPrimitive)?.contentOrNull?.let(ThinkingPlaceholder::matches) == true
+
     private fun isAssistantPlaceholder(message: FlexibleMessage): Boolean {
         if (message.role != "assistant") return false
         val text = (message.content as? JsonPrimitive)?.contentOrNull ?: return false
@@ -566,12 +580,30 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return piece.copy(content = JsonPrimitive(RpContinuation.join(base, text)))
     }
 
-    private fun clearRpSwipeAlts() {
+    /**
+     * The newest reply's versions stop being the swipe bar's. With [archive] (a new turn) they
+     * stay on that reply as earlier versions; a Continue changed its text, so they go.
+     */
+    private fun clearRpSwipeAlts(archive: Boolean = false) {
         if (rpSwipeState.alts.isEmpty() && rpSwipeState.pictureUris.isEmpty()) return
-        dropUnreferencedSwipePictures()
-        rpSwipeState = RpSwipeState()
-        currentSessionId?.let { rpSwipeStore.clear(it) }
+        val messages = _chatMessages.value.orEmpty()
+        val position = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val earlier = if (archive && position >= 0) {
+            RpSwipeRules.archive(rpSwipeState, position, getMessageText(messages[position].content))
+        } else {
+            rpSwipeState.earlier
+        }
+        val archived = earlier !== rpSwipeState.earlier
+        if (!archived) dropUnreferencedSwipePictures()
+        rpSwipeState = RpSwipeState(earlier = earlier)
+        persistOrClearRpSwipe()
         _rpSwipeNav.value = null
+        if (archived) _rpEarlierVersionsChanged.value = Event(Unit)
+    }
+
+    private fun persistOrClearRpSwipe() {
+        val id = currentSessionId ?: return
+        if (rpSwipeState.isEmpty) rpSwipeStore.clear(id) else rpSwipeStore.save(id, rpSwipeState)
     }
 
     /**
@@ -580,20 +612,43 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun forgetRpSwipeVersions() {
         dropUnreferencedSwipePictures()
+        val earlier = reconciledEarlier()
+        dropEarlierPictures(rpSwipeState.earlier - earlier.keys)
         clearRpSwipeMemory()
-        currentSessionId?.let { rpSwipeStore.clear(it) }
+        rpSwipeState = RpSwipeState(earlier = earlier)
+        persistOrClearRpSwipe()
+    }
+
+    /** Earlier versions whose reply is still on screen at the same place, as one of them. */
+    private fun reconciledEarlier(): Map<Int, RpVersions> =
+        RpSwipeRules.reconcileEarlier(rpSwipeState.earlier, _chatMessages.value.orEmpty()) { m ->
+            if (m.role == "assistant" && !isAssistantPlaceholder(m)) getMessageText(m.content) else null
+        }
+
+    private fun dropEarlierPictures(gone: Map<Int, RpVersions>) {
+        if (gone.isEmpty()) return
+        val kept = swipePictureNames(rpSwipeState.copy(earlier = rpSwipeState.earlier - gone.keys))
+        val names = gone.values.flatMap { it.pictureUris }.mapNotNull { ScenePhoto.sceneFileName(it) }.toSet() - kept
+        deleteUnusedScenePhotos(names)
     }
 
     /** File names remembered on swipe versions, so a save of a different version does not delete them. */
     private fun swipePictureNames(swipe: RpSwipeState?): Set<String> =
-        swipe?.pictureUris.orEmpty().mapNotNull { ScenePhoto.sceneFileName(it) }.toSet()
+        (swipe?.pictureUris.orEmpty() + swipe?.earlier?.values.orEmpty().flatMap { it.pictureUris })
+            .mapNotNull { ScenePhoto.sceneFileName(it) }.toSet()
 
     /**
      * A version that is no longer kept. The file on the reply still showing stays; one that
      * is only named here, and not in any saved message, is removed.
      */
     private fun dropUnreferencedSwipePictures() {
-        val names = swipePictureNames(rpSwipeState)
+        // The newest reply's versions only. An earlier reply still keeps its own.
+        val names = swipePictureNames(RpSwipeState(pictureUris = rpSwipeState.pictureUris)) -
+            swipePictureNames(RpSwipeState(earlier = rpSwipeState.earlier))
+        deleteUnusedScenePhotos(names)
+    }
+
+    private fun deleteUnusedScenePhotos(names: Set<String>) {
         if (names.isEmpty()) return
         val live = _chatMessages.value.orEmpty().mapNotNull { ScenePhoto.sceneFileName(it.imageUri) }.toSet()
         val held = synchronized(scenePhotosHeld) { scenePhotosHeld.toSet() }
@@ -954,7 +1009,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             characterId = sessionCharacterId(),
             isLlm = sessionIsLlm(),
             model = _activeChatModel.value ?: "",
-            messages = (_chatMessages.value ?: emptyList()).map { it.copy() },
+            // A reply still pending when the chat is left has only its placeholder. Saving it
+            // reopens a bubble that never resolves, and a new chat gets a row from it.
+            messages = (_chatMessages.value ?: emptyList()).filterNot(::isThinkingBubble).map { it.copy() },
             draftFacts = if (id == null) draftRpFacts else null,
             draftAtCapture = sharedPreferencesHelper.getRpDraftSessionId(ChatMode.fromStorage(mode)),
             fork = if (stashedForkTail.isEmpty() || forkIndex < 0) null else CapturedFork(
@@ -962,7 +1019,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 anchor = forkAnchorAssistantIndex,
                 messages = stashedForkTail.map { it.copy() },
             ),
-            swipe = rpSwipeState.takeIf { it.alts.isNotEmpty() },
+            swipe = rpSwipeState.takeIf { !it.isEmpty },
             editDraft = composerEditDrafts[ComposerDrafts.key(id)]
                 .takeIf { composerEditKey == ComposerDrafts.key(id) },
         )
@@ -1096,7 +1153,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         if (!chatSaveSerial.isCurrent(ticket)) return
-        releaseDroppedScenePhotos(previousPhotos, messagesToSave, snap.swipe)
+        releaseDroppedScenePhotos(previousPhotos, messagesToSave + snap.fork?.messages.orEmpty(), snap.swipe)
         if (
             ChatSaveGate.decide(
                 epochAtSchedule = snap.epoch,
@@ -1132,7 +1189,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             ChatSaveGate.autoSaveKind(
                 sessionId = snap.sessionId,
                 hasAssistant = hasAssistant,
-                messagesEmpty = snap.messages.isEmpty()
+                messagesEmpty = snap.messages.isEmpty(),
+                hasUser = snap.messages.any { it.role == "user" }
             )
         ) {
             ChatSaveGate.AutoSaveKind.Skip -> return
@@ -1352,7 +1410,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return if (changed) out else messages
     }
 
-    /** A picture this save no longer names. Another chat, or another version of this reply, keeps it. */
+    /**
+     * A picture this save no longer names. Another chat, another version of this reply, or the
+     * other branch ([messages] includes the stashed fork) keeps it.
+     */
     private suspend fun releaseDroppedScenePhotos(
         previous: List<String>,
         messages: List<FlexibleMessage>,
@@ -1629,7 +1690,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // Only wipe alts once the send is known to proceed (after early returns above).
         if (clearRpSwipeOnStart && isRpMode()) {
             pendingRpSwipeAppend = false
-            clearRpSwipeAlts()
+            clearRpSwipeAlts(archive = true)
         }
 
         val thinkingMessage = THINKING_MESSAGE
@@ -1871,7 +1932,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Keep swipe alts in sync when the user edits the last assistant bubble. */
     private fun syncRpSwipeAltAfterAssistantEdit(position: Int, newContent: String) {
-        if (!isRpMode() || rpSwipeState.alts.isEmpty()) return
+        if (!isRpMode()) return
+        rpSwipeState.earlier[position]?.let { v ->
+            if (v.alts[v.index] == newContent) return
+            val alts = v.alts.toMutableList().also { it[v.index] = newContent }
+            rpSwipeState = rpSwipeState.copy(earlier = rpSwipeState.earlier + (position to v.copy(alts = alts)))
+            persistRpSwipeState()
+            return
+        }
+        if (rpSwipeState.alts.isEmpty()) return
         val messages = _chatMessages.value ?: return
         val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
         if (position != lastAssistantIndex) return
@@ -2640,12 +2709,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             forgetRpSwipeVersions()
             return
         }
+        val promoted = rpSwipeState.earlier[lastAssistantIndex]?.takeIf { lastText in it.alts }
+        if (promoted != null) {
+            dropUnreferencedSwipePictures()
+            rpSwipeState = RpSwipeState(
+                alts = promoted.alts,
+                index = promoted.alts.indexOf(lastText),
+                pictureUris = promoted.pictureUris,
+                earlier = rpSwipeState.earlier - lastAssistantIndex,
+            )
+        }
         val (alts, index) = RpSwipeRules.reconcileAltsAfterTruncate(rpSwipeState.alts, lastText)
         if (alts != rpSwipeState.alts) dropUnreferencedSwipePictures()
         val pictures = if (alts == rpSwipeState.alts) rpSwipeState.pictureUris else emptyList()
-        rpSwipeState = RpSwipeState(alts = alts, index = index, pictureUris = pictures)
+        val earlier = reconciledEarlier()
+        dropEarlierPictures(rpSwipeState.earlier - earlier.keys)
+        rpSwipeState = RpSwipeState(alts = alts, index = index, pictureUris = pictures, earlier = earlier)
         persistRpSwipeState()
         updateRpSwipeNav()
+        _rpEarlierVersionsChanged.value = Event(Unit)
     }
 
     fun getForkNavForMessage(position: Int): ForkNavState? {
@@ -3523,7 +3605,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun fetchLanModels(provider: String): List<LlmModel> = when (provider) {
         "llama_cpp" -> fetchOpenAiModelList(LanListAuth.NONE) { id, obj -> llamaCppModel(id, obj) }
-        "lm_studio", "mlx_lm" -> fetchOpenAiModelList(LanListAuth.NONE) { id, _ -> plainLanModel(id) }
+        "lm_studio" -> {
+            val vlm = lmStudioVisionIds()
+            fetchOpenAiModelList(LanListAuth.NONE) { id, _ -> plainLanModel(id, vision = id in vlm || LanVision.fromName(id)) }
+        }
+        "mlx_lm" -> fetchOpenAiModelList(LanListAuth.NONE) { id, _ -> plainLanModel(id) }
         "ollama" -> fetchOllamaModels()
         "omlx" -> fetchOpenAiModelList(LanListAuth.PLACEHOLDER) { id, _ -> plainLanModel(id) }
         "nativ" -> fetchOpenAiModelList(LanListAuth.IF_PRESENT) { id, _ -> plainLanModel(id) }
@@ -3536,7 +3622,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         lanFetchJob?.cancel()
         lanFetchJob = viewModelScope.launch {
             try {
-                _lanModels.value = fetchLanModels(provider)
+                val models = fetchLanModels(provider)
+                _lanModels.value = models
+                upgradeStoredLanVision(models)
             } catch (e: CancellationException) {
                 if (e is TimeoutCancellationException) {
                     _lanModels.value = emptyList()
@@ -3589,10 +3677,42 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun plainLanModel(id: String) = LlmModel(
+    /**
+     * A LAN model added before its server said it sees pictures stays text-only in the stored
+     * list. Turn vision on there when the server now reports it; never turn a user's switch off.
+     */
+    private fun upgradeStoredLanVision(fresh: List<LlmModel>) {
+        val seeing = fresh.filter { it.isVisionCapable }.map { it.apiIdentifier }.toSet()
+        if (seeing.isEmpty()) return
+        val stored = sharedPreferencesHelper.getCustomModels()
+        if (stored.none { it.isLANModel && !it.isVisionCapable && it.apiIdentifier in seeing }) return
+        sharedPreferencesHelper.saveCustomModels(stored.map {
+            if (it.isLANModel && !it.isVisionCapable && it.apiIdentifier in seeing) it.copy(isVisionCapable = true) else it
+        })
+        _customModelsUpdated.value = Event(Unit)
+    }
+
+    /** LM Studio's own list says which models are vision (`vlm`); the OpenAI one does not. */
+    private suspend fun lmStudioVisionIds(): Set<String> = try {
+        withTimeout(5_000.milliseconds) {
+            withContext(Dispatchers.IO) {
+                val endpoint = sharedPreferencesHelper.getLanEndpoint() ?: return@withContext emptySet()
+                val response = lanHttpClient.get("$endpoint/api/v0/models")
+                if (!response.status.isSuccess()) emptySet()
+                else LanVision.lmStudioVisionIds(response.body<JsonObject>())
+            }
+        }
+    } catch (e: CancellationException) {
+        if (e !is TimeoutCancellationException) throw e
+        emptySet()
+    } catch (_: Exception) {
+        emptySet()
+    }
+
+    private fun plainLanModel(id: String, vision: Boolean = LanVision.fromName(id)) = LlmModel(
         displayName = id,
         apiIdentifier = id,
-        isVisionCapable = false,
+        isVisionCapable = vision,
         isImageGenerationCapable = false,
         isReasoningCapable = false,
         created = System.currentTimeMillis() / 1000,
@@ -3621,7 +3741,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return LlmModel(
             displayName = if (description.isNotEmpty()) "$id - $description" else id,
             apiIdentifier = id,
-            isVisionCapable = false,
+            isVisionCapable = LanVision.fromName(id),
             isImageGenerationCapable = false,
             isReasoningCapable = false,
             created = System.currentTimeMillis() / 1000,
@@ -3642,14 +3762,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 throw Exception("Failed to fetch LAN models: ${response.status}")
             }
             val modelsArray = response.body<JsonObject>()["models"]?.jsonArray ?: return@withContext emptyList()
-            modelsArray.mapNotNull { modelJson ->
-                try {
-                    val name = modelJson.jsonObject["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
-                    plainLanModel(name)
-                } catch (_: Exception) {
-                    null
+            val tags = modelsArray.mapNotNull { modelJson ->
+                val obj = modelJson as? JsonObject ?: return@mapNotNull null
+                val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                name to obj
+            }
+            // /api/tags has no capabilities. Ask each model, side by side; a server too old
+            // to answer falls back to the projector family, then the name.
+            tags.map { (name, tag) ->
+                async {
+                    val show = try {
+                        val r = lanHttpClient.post("$lanEndpoint/api/show") {
+                            contentType(ContentType.Application.Json)
+                            setBody(buildJsonObject { put("model", name) })
+                            timeout { requestTimeoutMillis = 5000 }
+                        }
+                        if (r.status.isSuccess()) r.body<JsonObject>() else null
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                    val vision = LanVision.fromOllamaShow(show)
+                        ?: (LanVision.fromOllamaTag(tag) || LanVision.fromName(name))
+                    plainLanModel(name, vision)
                 }
-            }.sortedBy { it.displayName.lowercase() }
+            }.awaitAll().sortedBy { it.displayName.lowercase() }
         }
     }
 
@@ -4262,7 +4400,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } else if (rpSwipeState.alts.isEmpty()) {
             // Seed first alt so the swipe bar (and ›) is available after a normal reply.
             // The picture is filled in when the message lands, a moment after this text.
-            rpSwipeState = RpSwipeState(alts = listOf(cleaned), index = 0)
+            rpSwipeState = rpSwipeState.copy(alts = listOf(cleaned), index = 0, pictureUris = emptyList())
             persistRpSwipeState()
             updateRpSwipeNav()
         }
@@ -4807,6 +4945,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _toastUiEvent.postValue(Event(str(R.string.rp_rewrite_failed)))
                     return@launch
                 }
+                noteEarlierVersion(position, original, rewritten)
                 updateMessageAt(position, rewritten)
                 _rpRewriteDone.value = Event(RpRewriteDone(position, original, rewritten))
             } catch (e: CancellationException) {
@@ -4832,7 +4971,50 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun undoRpRewrite(done: RpRewriteDone) {
         val current = _chatMessages.value?.getOrNull(done.position) ?: return
         if (getMessageText(current.content) != done.rewritten) return
+        noteEarlierVersion(done.position, done.rewritten, done.original)
         updateMessageAt(done.position, done.original)
+    }
+
+    /** A Rewrite of an earlier reply is one more version of it, so the old one stays a swipe away. */
+    private fun noteEarlierVersion(position: Int, currentText: String, text: String) {
+        val current = _chatMessages.value?.getOrNull(position) ?: return
+        rpSwipeState = rpSwipeState.copy(
+            earlier = RpSwipeRules.addEarlierVersion(
+                rpSwipeState.earlier, position, currentText, RpSwipeRules.pictureUriOf(current.imageUri), text,
+            )
+        )
+        persistRpSwipeState()
+    }
+
+    /** The versions control on an earlier reply. The newest reply uses the swipe bar instead. */
+    fun getRpVersionNav(position: Int): ForkNavState? {
+        if (!isRpMode()) return null
+        val v = rpSwipeState.earlier[position]?.takeIf { it.alts.size > 1 } ?: return null
+        val messages = _chatMessages.value ?: return null
+        if (position == messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }) return null
+        return ForkNavState(
+            variantIndex = v.index + 1,
+            totalVariants = v.alts.size,
+            canGoPrev = v.index > 0,
+            canGoNext = v.index < v.alts.lastIndex,
+        )
+    }
+
+    /** Swap an earlier reply for another of its versions. What came after it stays as it was. */
+    fun swipeEarlierRpReply(position: Int, direction: Int) {
+        if (!canInteractWithRpSwipe() || rpRewriteJob?.isActive == true) return
+        val v = rpSwipeState.earlier[position] ?: return
+        val next = (v.index + direction).coerceIn(0, v.alts.lastIndex)
+        if (next == v.index) return
+        val messages = _chatMessages.value?.toMutableList() ?: return
+        val target = messages.getOrNull(position) ?: return
+        if (getMessageText(target.content) != v.alts[v.index]) return
+        val picture = RpSwipeRules.pictureForAlt(v.pictureUris, v.alts.size, next)
+        messages[position] = RpContinuation.withVersion(target, v.alts[next], picture)
+        rpSwipeState = rpSwipeState.copy(earlier = rpSwipeState.earlier + (position to v.copy(index = next)))
+        persistRpSwipeState()
+        _chatMessages.value = messages
+        autoSaveChat()
     }
 
     /** Drop messages from [startIndex] onward without stashing an Ask-mode fork. */
@@ -4869,7 +5051,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             currentText,
             picture,
         )
-        rpSwipeState = RpSwipeState(alts = alts, index = index, pictureUris = pictures)
+        rpSwipeState = rpSwipeState.copy(alts = alts, index = index, pictureUris = pictures)
         persistRpSwipeState()
         updateRpSwipeNav()
     }
@@ -4884,7 +5066,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             rpSwipeState.pictureUris,
             text,
         )
-        rpSwipeState = RpSwipeState(alts = alts, index = index, pictureUris = pictures)
+        rpSwipeState = rpSwipeState.copy(alts = alts, index = index, pictureUris = pictures)
         persistRpSwipeState()
         updateRpSwipeNav()
     }
@@ -4915,7 +5097,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun persistRpSwipeState() {
         val id = currentSessionId ?: return
-        if (rpSwipeState.alts.isEmpty()) return
+        if (rpSwipeState.isEmpty) return
         rpSwipeStore.save(id, rpSwipeState)
     }
 
@@ -5029,6 +5211,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadRpSwipeForSession(sessionId: Long) {
         pendingRpSwipeAppend = false
         rpSwipeState = rpSwipeStore.load(sessionId) ?: RpSwipeState()
+        rpSwipeState = rpSwipeState.copy(earlier = reconciledEarlier())
         val messages = _chatMessages.value.orEmpty()
         val swipeable = RpSwipeRules.isSwipeableMessages(
             messages,

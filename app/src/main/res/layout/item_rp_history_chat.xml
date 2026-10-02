@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One chat on the chats page: when, the last line, how long it runs -->
+<!-- One chat on the chats page: when and how long on one line, then the last line. Kept short so a screen shows several. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="5dp"
-    android:layout_marginBottom="5dp"
+    android:layout_marginTop="4dp"
+    android:layout_marginBottom="4dp"
     android:clickable="true"
     android:focusable="true"
     android:orientation="vertical"
     android:paddingStart="18dp"
-    android:paddingTop="14dp"
+    android:paddingTop="10dp"
     android:paddingEnd="18dp"
-    android:paddingBottom="14dp">
+    android:paddingBottom="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -51,9 +51,9 @@
             android:id="@+id/rpHistoryMore"
             android:layout_width="44dp"
             android:layout_height="44dp"
-            android:layout_marginTop="-14dp"
+            android:layout_marginTop="-12dp"
             android:layout_marginEnd="-14dp"
-            android:layout_marginBottom="-14dp"
+            android:layout_marginBottom="-12dp"
             android:background="@null"
             android:contentDescription="@string/cd_more_actions"
             android:padding="12dp"
@@ -66,20 +66,11 @@
         android:id="@+id/rpHistoryPreview"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:ellipsize="end"
         android:fontFamily="@font/app_sans"
         android:lineSpacingMultiplier="1.15"
-        android:maxLines="3"
+        android:maxLines="2"
         android:textColor="@color/xai_ink"
         android:textSize="15.5sp" />
-
-    <TextView
-        android:id="@+id/rpHistoryLength"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:fontFamily="@font/app_sans"
-        android:textColor="@color/xai_mute"
-        android:textSize="13sp" />
 </LinearLayout>

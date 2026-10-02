@@ -54,7 +54,8 @@ class ChatAdapter(
     private val onEditAssistantMessage: (Int, String) -> Unit,
     private val onCollapse: () -> Unit,
     private val forkNavStateForPosition: (Int) -> ChatViewModel.ForkNavState?,
-    private val onForkNavigate: (Int) -> Unit
+    /** (position, direction). Chat steps its branch; Roleplay steps that earlier reply's versions. */
+    private val onForkNavigate: (Int, Int) -> Unit
 
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
@@ -559,6 +560,8 @@ class ChatAdapter(
     // --- VIEW HOLDER LOGIC ---
 
     companion object {
+        /** Only the versions control of a reply changed. */
+        const val RP_VERSIONS_PAYLOAD = "RP_VERSIONS"
         const val VIEW_TYPE_USER = 1
         const val VIEW_TYPE_ASSISTANT = 2
         const val VIEW_TYPE_THINKING = 3
@@ -685,6 +688,10 @@ class ChatAdapter(
             if (payloads.first() == "STREAMING" && holder is AssistantViewHolder) {
                 attachStreamRevealHolder(holder)
                 holder.bindTextOnly(messages[position])
+                return
+            }
+            if (payloads.all { it == RP_VERSIONS_PAYLOAD }) {
+                (holder as? AssistantViewHolder)?.bindVersionsOnly(position)
                 return
             }
         }
@@ -1286,11 +1293,9 @@ class ChatAdapter(
             actionRow.layoutParams = actionLp
         }
 
+        fun bindVersionsOnly(position: Int) = bindForkNavigator(position)
+
         private fun bindForkNavigator(position: Int) {
-            if (isRpMode) {
-                forkNavigator.visibility = View.GONE
-                return
-            }
             val forkNav = forkNavStateForPosition(position)
             if (forkNav == null) {
                 forkNavigator.visibility = View.GONE
@@ -1303,10 +1308,10 @@ class ChatAdapter(
             forkPrev.alpha = if (forkNav.canGoPrev) 1f else 0.35f
             forkNext.alpha = if (forkNav.canGoNext) 1f else 0.35f
             forkPrev.setOnClickListener {
-                if (forkNav.canGoPrev) onForkNavigate(-1)
+                if (forkNav.canGoPrev) onForkNavigate(bindingAdapterPosition, -1)
             }
             forkNext.setOnClickListener {
-                if (forkNav.canGoNext) onForkNavigate(1)
+                if (forkNav.canGoNext) onForkNavigate(bindingAdapterPosition, 1)
             }
         }
 

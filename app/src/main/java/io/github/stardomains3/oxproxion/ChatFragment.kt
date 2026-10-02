@@ -847,6 +847,16 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }
             }
         }
+        viewModel.rpEarlierVersionsChanged.observe(viewLifecycleOwner) { event ->
+            // A reply that just became earlier keeps its versions: redraw rows to show the control.
+            // Posted: the archive fires before the new turn is added, and until then that reply
+            // is still the newest, which uses the swipe bar instead.
+            event.getContentIfNotHandled()?.let {
+                chatRecyclerView.post {
+                    if (::chatAdapter.isInitialized) chatAdapter.notifyItemRangeChanged(0, chatAdapter.itemCount, ChatAdapter.RP_VERSIONS_PAYLOAD)
+                }
+            }
+        }
         viewModel.rpSwipeNav.observe(viewLifecycleOwner) { nav ->
             applyRpSwipeChrome(nav)
         }
@@ -2251,13 +2261,19 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     }
             },
             forkNavStateForPosition = { position ->
-                viewModel.getForkNavForMessage(position)
+                if (viewModel.isRpMode()) viewModel.getRpVersionNav(position)
+                else viewModel.getForkNavForMessage(position)
             },
-            onForkNavigate = { direction ->
-                viewModel.navigateFork(direction)
-                chatRecyclerView.post {
-                    if (chatAdapter.itemCount > 0) {
-                        layoutManager.scrollToPosition(chatAdapter.itemCount - 1)
+            onForkNavigate = { position, direction ->
+                if (viewModel.isRpMode()) {
+                    // An earlier reply swaps in place; the reader stays where they are.
+                    if (position >= 0) viewModel.swipeEarlierRpReply(position, direction)
+                } else {
+                    viewModel.navigateFork(direction)
+                    chatRecyclerView.post {
+                        if (chatAdapter.itemCount > 0) {
+                            layoutManager.scrollToPosition(chatAdapter.itemCount - 1)
+                        }
                     }
                 }
             }

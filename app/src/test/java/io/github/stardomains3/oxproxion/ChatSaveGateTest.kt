@@ -122,6 +122,14 @@ class ChatSaveGateTest {
     }
 
     @Test
+    fun autoSaveSkipsAGreetingNobodyAnswered() {
+        assertEquals(
+            ChatSaveGate.AutoSaveKind.Skip,
+            ChatSaveGate.autoSaveKind(sessionId = null, hasAssistant = true, messagesEmpty = false, hasUser = false)
+        )
+    }
+
+    @Test
     fun modeSwitchParksTheChatThatJustReceivedAnId() {
         assertTrue(park())
         assertTrue(park(draftAtCapture = null, draftNow = null))

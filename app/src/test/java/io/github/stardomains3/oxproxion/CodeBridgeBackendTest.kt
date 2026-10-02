@@ -774,10 +774,16 @@ class CodeBridgeBackendTest {
             )
             transport.failNextNonPromptSend = true
             val collected = CopyOnWriteArrayList<SessionUpdate>()
-            val collectJob = scope.launch { backend.updates.collect { collected += it } }
+            // Subscribed before answer() runs: launched on the scope's thread, the collector
+            // could still be starting when the update went out, and missed it.
+            val collectJob = scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                backend.updates.collect { collected += it }
+            }
             backend.answer("s1", "77", opt)
             val frames = transport.sent.filter { it.contains("\"id\":77") || it.contains("\"id\":\"77\"") }
             assertEquals("retried approval must be sent once", 1, frames.size)
+            withTimeout(2_000) { while (collected.none { it.update is CodeUpdate.ApprovalAnswered }) delay(5) }
+            delay(30)
             assertEquals(1, collected.count { it.update is CodeUpdate.ApprovalAnswered })
             collectJob.cancel()
         } finally {

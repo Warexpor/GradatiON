@@ -276,11 +276,10 @@ class RpChatHistoryFragment : Fragment() {
                 is Item.Section -> (v as TextView).text = item.label
                 Item.Empty -> Unit
                 is Item.Chat -> {
-                    v.findViewById<TextView>(R.id.rpHistoryWhen).text = item.whenLabel
+                    val length = resources.getQuantityString(R.plurals.rp_history_messages, item.messages, item.messages)
+                    v.findViewById<TextView>(R.id.rpHistoryWhen).text = "${item.whenLabel} · $length"
                     v.findViewById<View>(R.id.rpHistoryCurrent).visibility = if (item.current) View.VISIBLE else View.GONE
                     v.findViewById<TextView>(R.id.rpHistoryPreview).text = item.preview
-                    v.findViewById<TextView>(R.id.rpHistoryLength).text =
-                        resources.getQuantityString(R.plurals.rp_history_messages, item.messages, item.messages)
                     v.contentDescription = listOfNotNull(
                         item.whenLabel, getString(R.string.rp_history_current).takeIf { item.current }, item.preview
                     ).joinToString(", ")

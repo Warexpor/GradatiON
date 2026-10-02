@@ -174,4 +174,55 @@ object RpSwipeRules {
         if (alts.size != 1) return pictureUris
         return listOf(picture)
     }
+
+    /**
+     * The newest reply is being left behind by a new turn. Keep its versions under its position
+     * when there is more than one, so they can still be swiped later.
+     */
+    fun archive(state: RpSwipeState, position: Int, visibleText: String): Map<Int, RpVersions> {
+        if (position < 0 || state.alts.size < 2) return state.earlier
+        val index = state.alts.indexOf(visibleText).takeIf { it >= 0 } ?: return state.earlier
+        return state.earlier + (position to RpVersions(state.alts, index, state.pictureUris))
+    }
+
+    /**
+     * Keep the earlier versions the transcript still shows: the reply at that position is still
+     * one of them. A cut, a deletion that shifted the rows, or an edit drops the entry.
+     */
+    fun <T> reconcileEarlier(
+        earlier: Map<Int, RpVersions>,
+        messages: List<T>,
+        assistantText: (T) -> String?,
+    ): Map<Int, RpVersions> {
+        if (earlier.isEmpty()) return earlier
+        val kept = earlier.mapNotNull { (pos, v) ->
+            val text = messages.getOrNull(pos)?.let(assistantText) ?: return@mapNotNull null
+            val at = v.alts.indexOf(text)
+            if (at < 0) null else pos to v.copy(index = at)
+        }.toMap()
+        return if (kept == earlier) earlier else kept
+    }
+
+    /**
+     * A new text for an earlier reply (a Rewrite, or its Undo). It joins that reply's versions,
+     * or selects the one it already matches. [currentText] seeds a reply that had none yet.
+     */
+    fun addEarlierVersion(
+        earlier: Map<Int, RpVersions>,
+        position: Int,
+        currentText: String,
+        currentPicture: String,
+        text: String,
+    ): Map<Int, RpVersions> {
+        val base = earlier[position] ?: RpVersions(
+            alts = listOf(currentText),
+            index = 0,
+            pictureUris = if (currentPicture.isEmpty()) emptyList() else listOf(currentPicture),
+        )
+        val at = base.alts.indexOf(text)
+        if (at >= 0) return earlier + (position to base.copy(index = at))
+        val tracked = picturesTracked(base.pictureUris, base.alts.size)
+        val pictures = if (tracked) base.pictureUris + currentPicture else base.pictureUris
+        return earlier + (position to RpVersions(base.alts + text, base.alts.size, pictures))
+    }
 }

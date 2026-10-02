@@ -15,6 +15,22 @@ data class RpSwipeState(
      * The JPEG itself stays in the file: this list is only the link.
      */
     val pictureUris: List<String> = emptyList(),
+    /**
+     * Versions of earlier replies, by transcript position. The story moved on past them, so
+     * swiping one swaps that bubble in place and leaves what came after it as it was.
+     */
+    val earlier: Map<Int, RpVersions> = emptyMap(),
+) {
+    /** Anything worth saving: the newest reply's versions, or an earlier reply's. */
+    val isEmpty: Boolean get() = alts.isEmpty() && earlier.isEmpty()
+}
+
+/** The versions kept for one earlier reply. [pictureUris] follows the rules of [RpSwipeState]. */
+@Serializable
+data class RpVersions(
+    val alts: List<String>,
+    val index: Int,
+    val pictureUris: List<String> = emptyList(),
 )
 
 class RpSwipeStore(private val prefs: SharedPreferencesHelper) {

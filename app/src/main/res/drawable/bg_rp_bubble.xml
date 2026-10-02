@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RP "Bubbles" layout: the character's reply in the same soft bubble as the user's, tail toward the speaker -->
+<!-- RP "Bubbles" layout: the character's reply in the same flat bubble as the user's, tail toward the speaker -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <gradient
-        android:angle="270"
-        android:startColor="@color/grad_bubble_top"
-        android:endColor="@color/grad_bubble_bottom" />
+    <solid android:color="@color/bubble_fill" />
     <corners
         android:topLeftRadius="8dp"
         android:topRightRadius="22dp"

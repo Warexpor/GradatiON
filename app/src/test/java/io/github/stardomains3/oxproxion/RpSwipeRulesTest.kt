@@ -131,4 +131,37 @@ class RpSwipeRulesTest {
         assertEquals(1, state.index)
         assertTrue(state.pictureUris.isEmpty())
     }
+
+    @Test
+    fun aNewTurnKeepsTheVersionsOnThatReply() {
+        val state = RpSwipeState(alts = listOf("a", "b", "c"), index = 1)
+        val earlier = RpSwipeRules.archive(state, position = 3, visibleText = "b")
+        assertEquals(RpVersions(listOf("a", "b", "c"), 1), earlier[3])
+        // One version is nothing to swipe.
+        assertTrue(RpSwipeRules.archive(RpSwipeState(alts = listOf("a")), 3, "a").isEmpty())
+    }
+
+    @Test
+    fun earlierVersionsFollowTheTranscript() {
+        val earlier = mapOf(1 to RpVersions(listOf("x", "y"), 0), 3 to RpVersions(listOf("p", "q"), 0))
+        val text = { m: String? -> m }
+        // Reply 1 shows its other version now; reply 3 was cut off.
+        val kept = RpSwipeRules.reconcileEarlier(earlier, listOf(null, "y", null), text)
+        assertEquals(mapOf(1 to RpVersions(listOf("x", "y"), 1)), kept)
+        // An edit that is none of them drops the entry.
+        assertTrue(RpSwipeRules.reconcileEarlier(earlier, listOf(null, "z"), text).isEmpty())
+        assertSame(earlier, RpSwipeRules.reconcileEarlier(earlier, listOf(null, "x", null, "p"), text))
+    }
+
+    @Test
+    fun aRewriteOfAnEarlierReplyIsAnotherVersion() {
+        var earlier = RpSwipeRules.addEarlierVersion(emptyMap(), 2, "old", "", "new")
+        assertEquals(RpVersions(listOf("old", "new"), 1), earlier[2])
+        // Undo selects the old one rather than adding it again.
+        earlier = RpSwipeRules.addEarlierVersion(earlier, 2, "new", "", "old")
+        assertEquals(RpVersions(listOf("old", "new"), 0), earlier[2])
+        // A reply with a picture keeps it on the new version.
+        val pic = RpSwipeRules.addEarlierVersion(emptyMap(), 2, "old", "file:///p.jpg", "new")[2]!!
+        assertEquals(listOf("file:///p.jpg", "file:///p.jpg"), pic.pictureUris)
+    }
 }
