@@ -613,6 +613,62 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun anUnreadableSetThatCollidesInTheVaultIsParkedTogether() {
+        val databases = tmp.newFolder("unreadable-collide-databases")
+        val vault = tmp.newFolder("unreadable-collide-vault")
+        File(vault, "chat_database.unreadable-9").writeText("vaultcopy")
+        File(databases, "chat_database.unreadable-9").writeText("legacy")
+        File(databases, "chat_database.unreadable-9-wal").writeText("wal")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertFalse(File(databases, "chat_database.unreadable-9").exists())
+        assertFalse(File(databases, "chat_database.unreadable-9-wal").exists())
+        // Must not uniqueKept into the vault (that used to split main from wal).
+        assertEquals(0, vault.listFiles()?.count { it.name.startsWith("chat_database.unreadable-9.kept-") } ?: 0)
+        assertEquals("vaultcopy", File(vault, "chat_database.unreadable-9").readText())
+        assertFalse(File(vault, "chat_database.unreadable-9-wal").exists())
+        val hold = ChatDbVault.holdDirectory(databases)
+        assertEquals("legacy", File(hold, "chat_database.unreadable-9").readText())
+        assertEquals("wal", File(hold, "chat_database.unreadable-9-wal").readText())
+    }
+
+    @Test
+    fun moveTempsAtTheDatabasesRootAreParkedOutOfAutoBackup() {
+        val databases = tmp.newFolder("temp-databases")
+        val vault = tmp.newFolder("temp-vault")
+        File(databases, "chat_database").writeText("live")
+        File(databases, "chat_database.partial").writeText("torn-main")
+        File(databases, "chat_database.recovered-4.ready").writeText("ready")
+        File(databases, "chat_database.unreadable-4.bak").writeText("bak")
+        File(databases, "chat_database.pre_sqlcipher.kept-1").writeText("kept")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertEquals("live", File(databases, "chat_database").readText())
+        assertFalse(File(databases, "chat_database.partial").exists())
+        assertFalse(File(databases, "chat_database.recovered-4.ready").exists())
+        assertFalse(File(databases, "chat_database.unreadable-4.bak").exists())
+        assertFalse(File(databases, "chat_database.pre_sqlcipher.kept-1").exists())
+        val hold = ChatDbVault.holdDirectory(databases)
+        assertEquals("torn-main", File(hold, "chat_database.partial").readText())
+        assertEquals("ready", File(hold, "chat_database.recovered-4.ready").readText())
+        assertEquals("bak", File(hold, "chat_database.unreadable-4.bak").readText())
+        assertEquals("kept", File(hold, "chat_database.pre_sqlcipher.kept-1").readText())
+    }
+
+    @Test
+    fun isMoveTempOrKeptIgnoresTheLiveDatabaseFiles() {
+        assertFalse(ChatDbVault.isMoveTempOrKept("chat_database"))
+        assertFalse(ChatDbVault.isMoveTempOrKept("chat_database-wal"))
+        assertFalse(ChatDbVault.isMoveTempOrKept("chat_database.recovered-3"))
+        assertTrue(ChatDbVault.isMoveTempOrKept("chat_database.partial"))
+        assertTrue(ChatDbVault.isMoveTempOrKept("chat_database-wal.ready"))
+        assertTrue(ChatDbVault.isMoveTempOrKept("chat_database.recovered-3.bak"))
+        assertTrue(ChatDbVault.isMoveTempOrKept("chat_database.unreadable-3.kept-2"))
+    }
+
+    @Test
     fun backupRulesExcludePlaintextCopiesAndHostTokens() {
         val rules = xmlText("backup_rules.xml")
         val extraction = xmlText("data_extraction_rules.xml")

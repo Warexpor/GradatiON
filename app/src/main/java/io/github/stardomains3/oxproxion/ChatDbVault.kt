@@ -21,9 +21,10 @@ import java.nio.file.StandardOpenOption
  *
  * The preference stores the short file name. [roomDatabaseName] resolves it on each open: an
  * absolute path would point at the wrong place after the app moves to another user id. When a
- * recovered file cannot enter the vault (the vault already has that name, or the move fails), it
- * is parked under [HOLD_DIR] inside the databases directory. The backup rules exclude that folder,
- * and Room opens the parked file by absolute path so the history is not uploaded.
+ * recovered or set-aside (unreadable) file cannot enter the vault (the vault already has that
+ * name, or the move fails), it is parked under [HOLD_DIR] inside the databases directory. Move
+ * temps for those names are parked there too. The backup rules exclude that folder, and Room
+ * opens a parked recovered file by absolute path so the history is not uploaded.
  *
  * The live `chat_database` stays in the databases directory. The backup rules exclude it, its
  * journal, and the old plaintext name in case a move out of that directory fails.
@@ -35,6 +36,7 @@ internal object ChatDbVault {
     const val HOLD_DIR = "chat_db_hold"
     private val RECOVERED = Regex("^chat_database\\.recovered-[0-9]{1,16}$")
     private val UNREADABLE = Regex("^chat_database\\.unreadable-[0-9]{1,16}(-wal|-shm|-journal)?$")
+    private val KEEP_SUFFIX = Regex("\\.kept-[0-9]+$")
     private val SIDECARS = listOf("", "-wal", "-shm", "-journal")
 
     fun directory(context: Context): File =
@@ -87,10 +89,12 @@ internal object ChatDbVault {
     /**
      * Moves leftover copies out of [databasesDir].
      * Returns false when [storedRecovered] is still at the databases root afterwards, so the
-     * caller keeps opening that file. A recovered set that cannot enter the vault is parked under
-     * [HOLD_DIR] (excluded from Auto Backup) instead of being left at the root. A failure to move
-     * a plaintext or set-aside copy is logged and left in place; the backup rules still name those
-     * files.
+     * caller keeps opening that file. A recovered or set-aside (unreadable) set that cannot enter
+     * the vault is parked under [HOLD_DIR] (excluded from Auto Backup) instead of being left at
+     * the root or renamed aside inside the vault. Move temps (`.partial` / `.ready` / `.bak`) and
+     * `.kept-*` leftovers of those names are parked the same way: the backup rules do not list
+     * them. A failure to move a plaintext or encrypt copy is logged and left in place; the backup
+     * rules still name those files.
      */
     fun relocateLegacy(databasesDir: File, vault: File, storedRecovered: String?): Boolean {
         vault.mkdirs()
@@ -99,13 +103,16 @@ internal object ChatDbVault {
         moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.pre_sqlcipher"), plaintextBackup(vault))
         moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.encrypt_ok"), encryptMarker(vault))
         moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.encrypting"), encrypting(vault))
+        // Set-aside (unreadable) copies use the same set move as recovered names: when the vault
+        // already has that stamp, park under hold. moveBestEffort used to uniqueKept into the vault,
+        // which could split a main file from its wal and still leave a stamp collision for the key.
+        val unreadable = LinkedHashSet<String>()
         databasesDir.listFiles()?.forEach { file ->
-            if (!UNREADABLE.matches(file.name)) return@forEach
-            moveBestEffort(file, File(vault, file.name))
-            // A failed vault move used to leave the set-aside file at the databases root, where
-            // Auto Backup would upload it. The hold folder is excluded.
-            if (file.exists()) {
-                moveBestEffort(file, File(holdDirectory(databasesDir), file.name))
+            unreadableBaseName(file.name)?.let { unreadable += it }
+        }
+        for (name in unreadable) {
+            if (!relocateDbSet(databasesDir, vault, name)) {
+                parkDbSet(databasesDir, holdDirectory(databasesDir), name)
             }
         }
         val recovered = LinkedHashSet<String>()
@@ -123,6 +130,9 @@ internal object ChatDbVault {
                 }
             }
         }
+        // A failed cross-directory move can leave .partial / .ready / .bak (or a .kept-* rename)
+        // next to the live database. Those names are not in the backup rules.
+        parkMoveTemps(databasesDir)
         if (storedRecovered != null && isRecoveredName(storedRecovered) && dbSetPresent(databasesDir, storedRecovered)) {
             storedMoved = false
         }
@@ -217,6 +227,38 @@ internal object ChatDbVault {
             if (isRecoveredName(base)) return base
         }
         return null
+    }
+
+    private fun unreadableBaseName(fileName: String): String? {
+        if (!UNREADABLE.matches(fileName)) return null
+        return fileName.removeSuffix("-wal").removeSuffix("-shm").removeSuffix("-journal")
+    }
+
+    /**
+     * Parks cross-directory move leftovers at the databases root under [HOLD_DIR].
+     * Auto Backup has no wildcards for `chat_database*.partial` (or `.ready` / `.bak` / `.kept-*`),
+     * so those files would be uploaded if left beside the live database.
+     */
+    private fun parkMoveTemps(databasesDir: File) {
+        val hold = holdDirectory(databasesDir)
+        databasesDir.listFiles()?.forEach { file ->
+            if (!file.isFile || !isMoveTempOrKept(file.name)) return@forEach
+            moveBestEffort(file, File(hold, file.name))
+        }
+    }
+
+    private fun isLiveDatabaseFileName(name: String): Boolean =
+        name == AppDatabase.DB_NAME ||
+            name == "${AppDatabase.DB_NAME}-wal" ||
+            name == "${AppDatabase.DB_NAME}-shm" ||
+            name == "${AppDatabase.DB_NAME}-journal"
+
+    /** True for a chat-database move temp or `.kept-*` rename that the backup rules do not list. */
+    internal fun isMoveTempOrKept(name: String): Boolean {
+        if (!name.startsWith(AppDatabase.DB_NAME)) return false
+        if (isLiveDatabaseFileName(name)) return false
+        if (name.endsWith(".partial") || name.endsWith(".ready") || name.endsWith(".bak")) return true
+        return KEEP_SUFFIX.containsMatchIn(name)
     }
 
     private fun moveBestEffort(from: File, to: File) {

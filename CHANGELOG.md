@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A set-aside (unreadable) chat database that cannot enter the no-backup vault is parked under `chat_db_hold` as one set with its wal/shm, instead of being renamed aside inside the vault. Cross-directory move leftovers (`.partial` / `.ready` / `.bak` / `.kept-*`) next to the live database are parked there too, so Auto Backup cannot upload them. Clearing the one-time recovery notice commits so a kill does not show it again.
 - Leaving Chat for Roleplay parks a staged photo with that thread (and Roleplay no longer inherits it); coming back restores it. A staged Roleplay photo is dropped on the way back to Chat so it does not land on the wrong composer.
 - History search for "Photo" / "Audio" / files still finds a chat when a caption is also waiting (the row still shows the caption).
 - Continue starts a new paragraph after Swiss/German »…« and ›…‹ dialogue (the closing « ‹ no longer looks like an unfinished opener), and after CJK 《…》〈…〉 quotes. Opening » › 《 〈 hug the next word like other openers.
