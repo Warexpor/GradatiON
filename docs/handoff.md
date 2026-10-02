@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 25)
+
+On `gradation/w25-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`, `CodeBridgeBackendTest`):
+- A bridge `listHarnesses` id (and `listWorkspaces` path) written as a whole-number double (`5.0` / `"5.0"`) still matches as `"5"`. Digit-string `modeId` values go out as JSON numbers on `session/set_mode`, same as the request id / sessionId / methodId.
+- Cursor Agent tool names `GetMergeRequest`, `GetProject`, `GetWorkItem`, `GetArtifactFile`, `GetPipeline`, `GetRepositoryFile`, `GetUser`, `ListMergeRequests`, `ListPipelines`, `ListWorkItems`, `ListGroups`, `ListProjects`, `SaveMergeRequest`, `AcceptMergeRequest`, `AddBranch`, `SaveWorkItem`, `WorkersList`, `WorkersGetWorker`, `WorkersBuildsGetBuild`, `WorkersBuildsListBuilds`, `SearchCloudflareDocumentation`, and `QueryWorkerObservability` map to fetch / search / edit cards (icon and log clipping).
+- Tool detail lines read Cursor's native rawInput keys `merge_request_iid`, `pipeline_id`, `work_item_iid`, `project_id`, `group_id`, `buildUUID`, `scriptName`, `worker_id`, and `account_id` (a whole-number double shows as `5`).
+
+Phone: on Cursor Agent, a GetMergeRequest or WorkersList card should show the fetch or search icon. A GetMergeRequest card with `merge_request_iid` should show that number under the title. A listHarnesses row whose id is `5.0` should still resolve as `"5"`.
+
 # Handoff (2026-10-02, Chat wave 25)
 
 On `gradation/w25-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w24:

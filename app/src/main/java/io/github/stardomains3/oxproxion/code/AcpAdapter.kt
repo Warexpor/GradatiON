@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -162,7 +162,8 @@ class AcpAdapter : HarnessAdapter {
 
     override fun setMode(id: Long, sessionId: String, mode: PermissionMode) = request(id, "session/set_mode", buildJsonObject {
         put("sessionId", jsonRpcIdValue(sessionId))
-        put("modeId", mode.id)
+        // Digit strings go out as JSON numbers, same as the request id / sessionId / methodId.
+        put("modeId", jsonRpcIdValue(mode.id))
     })
 
     override fun answerApproval(requestId: String, optionId: String?): String {
@@ -507,7 +508,18 @@ class AcpAdapter : HarnessAdapter {
             "update_pull_request_comment", "updatepullrequestcomment",
             "update_pull_request_labels", "updatepullrequestlabels",
             "update_pull_request_review", "updatepullrequestreview",
-            "update_pull_request_review_thread", "updatepullrequestreviewthread" -> "edit"
+            "update_pull_request_review_thread", "updatepullrequestreviewthread",
+            "accept_merge_request", "acceptmergerequest",
+            "add_branch", "addbranch",
+            "add_commit", "addcommit",
+            "fork_repository", "forkrepository",
+            "link_work_items", "linkworkitems",
+            "manage_pipeline", "managepipeline",
+            "save_merge_request", "savemergerequest",
+            "save_merge_request_review", "savemergerequestreview",
+            "save_note", "savenote",
+            "save_pipeline", "savepipeline",
+            "save_work_item", "saveworkitem" -> "edit"
             "delete", "remove", "rm", "delete_file", "deletefile", "unlink",
             "delete_discussion_comment", "deletediscussioncomment",
             "delete_label", "deletelabel",
@@ -566,6 +578,18 @@ class AcpAdapter : HarnessAdapter {
             "list_namespaces", "listnamespaces",
             "list_repositories", "listrepositories",
             "grep_contents", "grepcontents",
+            "list_groups", "listgroups",
+            "list_merge_requests", "listmergerequests",
+            "list_pipelines", "listpipelines",
+            "list_project_members", "listprojectmembers",
+            "list_projects", "listprojects",
+            "list_repository_tree", "listrepositorytree",
+            "list_work_items", "listworkitems",
+            "search_labels", "searchlabels",
+            "workers_builds_list_builds", "workersbuildslistbuilds",
+            "workers_list", "workerslist",
+            "search_cloudflare_documentation", "searchcloudflaredocumentation",
+            "query_worker_observability", "queryworkerobservability",
             "list_shells", "listshells", "list_shell", "listshell" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command",
             "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
@@ -639,7 +663,25 @@ class AcpAdapter : HarnessAdapter {
             "commit_read", "commitread",
             "get_commit_combined_status", "getcommitcombinedstatus",
             "get_label", "getlabel",
-            "get_release_by_tag", "getreleasebytag" -> "fetch"
+            "get_release_by_tag", "getreleasebytag",
+            "get_artifact_file", "getartifactfile",
+            "get_merge_request", "getmergerequest",
+            "get_merge_request_notes", "getmergerequestnotes",
+            "get_pipeline", "getpipeline",
+            "get_project", "getproject",
+            "get_repository_file", "getrepositoryfile",
+            "get_saved_view_work_items", "getsavedviewworkitems",
+            "get_user", "getuser",
+            "get_work_item", "getworkitem",
+            "get_work_item_types", "getworkitemtypes",
+            "get_mcp_server_version", "getmcpserverversion",
+            "workers_builds_get_build", "workersbuildsgetbuild",
+            "workers_builds_get_build_logs", "workersbuildsgetbuildlogs",
+            "workers_get_worker", "workersgetworker",
+            "workers_get_worker_code", "workersgetworkercode",
+            "observability_keys", "observabilitykeys",
+            "observability_values", "observabilityvalues",
+            "migrate_pages_to_workers_guide", "migratepagestoworkersguide" -> "fetch"
             "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
             else -> n
         }
@@ -691,8 +733,10 @@ class AcpAdapter : HarnessAdapter {
             }
             "current_mode_update" -> {
                 // The harness (or another client) changed mode. Unknown ids must not snap the pill to Ask.
-                val mode = PermissionMode.fromAcpModeId(u.str("currentModeId") ?: u.str("modeId"))
-                    ?: return ignored("current_mode_update unknown mode")
+                // Whole-number doubles (5.0 / "5.0") still coerce before fromAcpModeId, same as methodId.
+                val mode = PermissionMode.fromAcpModeId(
+                    rpcIdString(u["currentModeId"]) ?: rpcIdString(u["modeId"])
+                ) ?: return ignored("current_mode_update unknown mode")
                 CodeUpdate.SessionInfo(permissionMode = mode)
             }
             "session_info_update" -> {
@@ -1004,6 +1048,16 @@ class AcpAdapter : HarnessAdapter {
                 "username", "org", "organization",
                 "namespace", "category",
                 "owner", "repo", "repository",
+                "merge_request_iid", "mergeRequestIid",
+                "pipeline_id", "pipelineId",
+                "work_item_iid", "workItemIid",
+                "project_id", "projectId",
+                "group_id", "groupId",
+                "namespace_id", "namespaceId",
+                "build_uuid", "buildUUID", "buildUuid",
+                "script_name", "scriptName",
+                "worker_id", "workerId",
+                "account_id", "accountId",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId") != null ||
@@ -1115,6 +1169,16 @@ class AcpAdapter : HarnessAdapter {
                 "username", "org", "organization",
                 "namespace", "category",
                 "owner", "repo", "repository",
+                "merge_request_iid", "mergeRequestIid",
+                "pipeline_id", "pipelineId",
+                "work_item_iid", "workItemIid",
+                "project_id", "projectId",
+                "group_id", "groupId",
+                "namespace_id", "namespaceId",
+                "build_uuid", "buildUUID", "buildUuid",
+                "script_name", "scriptName",
+                "worker_id", "workerId",
+                "account_id", "accountId",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId"),
