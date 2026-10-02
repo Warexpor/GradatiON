@@ -20,9 +20,10 @@ import java.nio.file.StandardOpenOption
  * not be moved) is created here too.
  *
  * The preference stores the short file name. [roomDatabaseName] resolves it on each open: an
- * absolute path would point at the wrong place after the app moves to another user id. While a
- * copy of that recovered file is still in the databases directory, the short name is returned so
- * Room keeps opening the file that has the history instead of creating an empty one here.
+ * absolute path would point at the wrong place after the app moves to another user id. When a
+ * recovered file cannot enter the vault (the vault already has that name, or the move fails), it
+ * is parked under [HOLD_DIR] inside the databases directory. The backup rules exclude that folder,
+ * and Room opens the parked file by absolute path so the history is not uploaded.
  *
  * The live `chat_database` stays in the databases directory. The backup rules exclude it, its
  * journal, and the old plaintext name in case a move out of that directory fails.
@@ -30,12 +31,17 @@ import java.nio.file.StandardOpenOption
 internal object ChatDbVault {
     private const val TAG = "ChatDbVault"
     const val DIR = "chat-db"
+    /** Leftover recovered/unreadable copies that could not enter the vault. Excluded from Auto Backup. */
+    const val HOLD_DIR = "chat_db_hold"
     private val RECOVERED = Regex("^chat_database\\.recovered-[0-9]{1,16}$")
     private val UNREADABLE = Regex("^chat_database\\.unreadable-[0-9]{1,16}(-wal|-shm|-journal)?$")
     private val SIDECARS = listOf("", "-wal", "-shm", "-journal")
 
     fun directory(context: Context): File =
         File(context.noBackupFilesDir, DIR).apply { mkdirs() }
+
+    fun holdDirectory(databasesDir: File): File =
+        File(databasesDir, HOLD_DIR).apply { mkdirs() }
 
     fun plaintextBackup(vault: File): File = File(vault, "${AppDatabase.DB_NAME}.pre_sqlcipher")
 
@@ -57,13 +63,21 @@ internal object ChatDbVault {
         name == AppDatabase.DB_NAME || isRecoveredName(name)
 
     /**
-     * The name passed to Room. See the class comment for why a recovered file stays a relative
-     * name while its copy in the databases directory is still present.
+     * The name passed to Room. A recovered file still at the databases root keeps a relative
+     * name so Room opens that copy. One parked under [HOLD_DIR], or only in the vault, is an
+     * absolute path: those directories are outside the default Room folder.
      */
     fun roomDatabaseName(context: Context, stored: String): String {
         if (!isRecoveredName(stored)) return AppDatabase.DB_NAME
         val databasesDir = context.getDatabasePath(AppDatabase.DB_NAME).parentFile
-        if (databasesDir != null && dbSetPresent(databasesDir, stored)) return stored
+        if (databasesDir != null) {
+            val hold = File(databasesDir, HOLD_DIR)
+            // Prefer the parked history over a stale vault copy that blocked the move.
+            if (hold.isDirectory && dbSetPresent(hold, stored)) {
+                return File(hold, stored).absolutePath
+            }
+            if (dbSetPresent(databasesDir, stored)) return stored
+        }
         return File(directory(context), stored).absolutePath
     }
 
@@ -72,17 +86,27 @@ internal object ChatDbVault {
 
     /**
      * Moves leftover copies out of [databasesDir].
-     * Returns false when [storedRecovered] is still in [databasesDir] afterwards, so the caller
-     * keeps opening that file. A failure to move a plaintext or set-aside copy is logged and
-     * left in place; the backup rules still name the plaintext file.
+     * Returns false when [storedRecovered] is still at the databases root afterwards, so the
+     * caller keeps opening that file. A recovered set that cannot enter the vault is parked under
+     * [HOLD_DIR] (excluded from Auto Backup) instead of being left at the root. A failure to move
+     * a plaintext or set-aside copy is logged and left in place; the backup rules still name those
+     * files.
      */
     fun relocateLegacy(databasesDir: File, vault: File, storedRecovered: String?): Boolean {
         vault.mkdirs()
+        // Earlier parks that the vault can take now.
+        drainHold(databasesDir, vault)
         moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.pre_sqlcipher"), plaintextBackup(vault))
         moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.encrypt_ok"), encryptMarker(vault))
         moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.encrypting"), encrypting(vault))
         databasesDir.listFiles()?.forEach { file ->
-            if (UNREADABLE.matches(file.name)) moveBestEffort(file, File(vault, file.name))
+            if (!UNREADABLE.matches(file.name)) return@forEach
+            moveBestEffort(file, File(vault, file.name))
+            // A failed vault move used to leave the set-aside file at the databases root, where
+            // Auto Backup would upload it. The hold folder is excluded.
+            if (file.exists()) {
+                moveBestEffort(file, File(holdDirectory(databasesDir), file.name))
+            }
         }
         val recovered = LinkedHashSet<String>()
         databasesDir.listFiles()?.forEach { file ->
@@ -91,12 +115,62 @@ internal object ChatDbVault {
         var storedMoved = true
         for (name in recovered) {
             val moved = relocateDbSet(databasesDir, vault, name)
-            if (name == storedRecovered && !moved) storedMoved = false
+            if (!moved) {
+                // Vault already has that name, or the move failed. Park under the excluded folder
+                // so Auto Backup cannot upload the history while Room still opens it.
+                if (!parkDbSet(databasesDir, holdDirectory(databasesDir), name)) {
+                    if (name == storedRecovered) storedMoved = false
+                }
+            }
         }
         if (storedRecovered != null && isRecoveredName(storedRecovered) && dbSetPresent(databasesDir, storedRecovered)) {
             storedMoved = false
         }
         return storedMoved
+    }
+
+    /**
+     * Moves a recovered set from [HOLD_DIR] into [vault] when the vault is free.
+     * Leftovers stay in the hold folder, which Auto Backup skips.
+     */
+    private fun drainHold(databasesDir: File, vault: File) {
+        val hold = File(databasesDir, HOLD_DIR)
+        if (!hold.isDirectory) return
+        val names = LinkedHashSet<String>()
+        hold.listFiles()?.forEach { file ->
+            recoveredBaseName(file.name)?.let { names += it }
+            if (UNREADABLE.matches(file.name)) {
+                val base = file.name.removeSuffix("-wal").removeSuffix("-shm").removeSuffix("-journal")
+                names += base
+            }
+        }
+        for (name in names) {
+            relocateDbSet(hold, vault, name)
+        }
+    }
+
+    /**
+     * Moves [name] and its sidecars from [fromDir] into [holdDir].
+     * A destination that already exists is renamed aside first, so the live history keeps the
+     * short name Room looks up. Returns false when nothing moved or a failure put the files back.
+     */
+    fun parkDbSet(fromDir: File, holdDir: File, name: String): Boolean {
+        val present = SIDECARS.filter { File(fromDir, name + it).exists() }
+        if (present.isEmpty()) return true
+        holdDir.mkdirs()
+        // Free the short name in the hold folder so Room can find this history there.
+        for (suffix in present) {
+            val dest = File(holdDir, name + suffix)
+            if (!dest.exists()) continue
+            val kept = uniqueKept(dest)
+            try {
+                moveReplacing(dest, kept)
+            } catch (e: Exception) {
+                Log.e(TAG, "Could not free ${dest.name} in the hold folder", e)
+                return false
+            }
+        }
+        return relocateDbSet(fromDir, holdDir, name)
     }
 
     /**
@@ -110,7 +184,7 @@ internal object ChatDbVault {
         if (present.isEmpty()) return true
         val destMain = File(vault, name)
         if (present.any { File(destMain.path + it).exists() }) {
-            Log.w(TAG, "Leaving $name in the databases directory; the vault already has that file")
+            Log.w(TAG, "Leaving $name in ${databasesDir.path}; the destination already has that file")
             return false
         }
         val moved = ArrayList<Pair<File, File>>(present.size)
