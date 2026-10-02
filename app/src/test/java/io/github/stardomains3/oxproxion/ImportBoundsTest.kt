@@ -46,9 +46,13 @@ class ImportBoundsTest {
 
     @Test
     fun rejectsUtf32() {
-        val bytes = byteArrayOf(0xFF.toByte(), 0xFE.toByte(), 0, 0, 0x7B, 0, 0, 0)
+        val le = byteArrayOf(0xFF.toByte(), 0xFE.toByte(), 0, 0, 0x7B, 0, 0, 0)
+        val be = byteArrayOf(0, 0, 0xFE.toByte(), 0xFF.toByte(), 0, 0, 0, 0x7B)
         assertThrows(java.io.IOException::class.java) {
-            ImportBounds.readUtf8(ByteArrayInputStream(bytes), maxBytes = 100)
+            ImportBounds.readUtf8(ByteArrayInputStream(le), maxBytes = 100)
+        }
+        assertThrows(java.io.IOException::class.java) {
+            ImportBounds.readUtf8(ByteArrayInputStream(be), maxBytes = 100)
         }
     }
 

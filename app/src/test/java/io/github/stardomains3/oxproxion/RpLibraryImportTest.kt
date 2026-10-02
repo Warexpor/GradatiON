@@ -41,12 +41,14 @@ class RpLibraryImportTest {
         repo = RpRepository(db.rpDao())
         RpImportGuard.failAt = null
         CharacterImportSideLog.failPictureRestoreForTest = false
+        CharacterImportSideLog.afterPrefsAppliedForTest = null
     }
 
     @After
     fun tearDown() {
         RpImportGuard.failAt = null
         CharacterImportSideLog.failPictureRestoreForTest = false
+        CharacterImportSideLog.afterPrefsAppliedForTest = null
         val app = ApplicationProvider.getApplicationContext<Application>()
         CharacterImportSideLog.clear(CharacterImportSideLog.file(app))
         db.close()
@@ -120,6 +122,128 @@ class RpLibraryImportTest {
             exported = exported.copy(name = "Other", memory = "nope"),
         )
         CharacterImportSideLog.write(log, listOf(wrong))
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("shy", prefs.getRpMemory(imported.single().id))
+        assertNull(CharacterImportSideLog.read(log))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun aRenameWhilePicturesWaitStillMatchesByExportKey() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        val exported = RpCharacterExport(
+            name = "Ada",
+            exportKey = "ada",
+            memory = "shy",
+            layout = SharedPreferencesHelper.RP_LAYOUT_BUBBLES,
+            wallpaperBase64 = "",
+        )
+        val imported = repo.importCharacters(listOf(exported)) { rows ->
+            val row = rows.single()
+            CharacterImportSideLog.write(
+                log,
+                listOf(ImportedCharacterNote(row.id, exported.name, row.exportKey, exported)),
+            )
+        }
+        val id = imported.single().id
+        CharacterImportSideLog.failPictureRestoreForTest = true
+        assertFalse(CharacterImportSideLog.resume(app, db))
+        assertNotNull(CharacterImportSideLog.read(log))
+
+        val row = repo.getCharacterById(id)!!
+        repo.saveCharacter(row.copy(name = "Ada Lovelace"))
+        assertTrue(
+            CharacterImportSideLog.matches(
+                ImportedCharacterNote(id, "Ada", "ada", exported),
+                repo.getCharacterById(id),
+            )
+        )
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("shy", prefs.getRpMemory(id))
+        assertNull(CharacterImportSideLog.read(log))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun resumeDoesNotWipeAConcurrentImportNote() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        val first = RpCharacterExport(
+            name = "Ada",
+            exportKey = "ada",
+            memory = "shy",
+            wallpaperBase64 = "",
+        )
+        val second = RpCharacterExport(
+            name = "Bea",
+            exportKey = "bea",
+            memory = "bold",
+        )
+        val imported = repo.importCharacters(listOf(first, second)) { rows ->
+            CharacterImportSideLog.write(
+                log,
+                rows.mapIndexed { index, row ->
+                    val exported = listOf(first, second)[index]
+                    ImportedCharacterNote(row.id, exported.name, row.exportKey, exported)
+                },
+            )
+        }
+        val adaId = imported[0].id
+        val beaId = imported[1].id
+        // Only Ada is in the snapshot resume will see; Bea is injected mid-resume.
+        CharacterImportSideLog.write(
+            log,
+            listOf(ImportedCharacterNote(adaId, first.name, "ada", first)),
+        )
+        CharacterImportSideLog.afterPrefsAppliedForTest = {
+            CharacterImportSideLog.write(
+                log,
+                CharacterImportSideLog.read(log).orEmpty() +
+                    ImportedCharacterNote(beaId, second.name, "bea", second),
+            )
+        }
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("shy", prefs.getRpMemory(adaId))
+        // Bea's note must still be waiting — a blind clear() used to wipe it.
+        val left = CharacterImportSideLog.read(log)
+        assertNotNull(left)
+        assertEquals(listOf(beaId), left!!.map { it.id })
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("bold", prefs.getRpMemory(beaId))
+        assertNull(CharacterImportSideLog.read(log))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun anUndecodeablePortraitIsLeftRatherThanRetriedForever() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        // SOI + EOI only: completeJpeg accepts it, BitmapFactory cannot decode it.
+        val fakeJpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte())
+        val encoded = android.util.Base64.encodeToString(fakeJpeg, android.util.Base64.NO_WRAP)
+        val exported = RpCharacterExport(
+            name = "Ada",
+            exportKey = "ada",
+            memory = "shy",
+            avatarBase64 = encoded,
+        )
+        val imported = repo.importCharacters(listOf(exported)) { rows ->
+            val row = rows.single()
+            CharacterImportSideLog.write(
+                log,
+                listOf(ImportedCharacterNote(row.id, exported.name, row.exportKey, exported)),
+            )
+        }
         assertTrue(CharacterImportSideLog.resume(app, db))
         assertEquals("shy", prefs.getRpMemory(imported.single().id))
         assertNull(CharacterImportSideLog.read(log))
