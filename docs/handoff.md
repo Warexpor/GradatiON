@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Chat wave 22)
+
+On `gradation/w22-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w21:
+- Restoring a parked Chat stage after Ask←RP uses the Ask session id remembered on the way out, because `askComposer` still names the Roleplay session during the mode observer (Hub Continue / tab / Settings).
+- A late gallery/camera encode after an Ask→RP or Code flip parks the JPEG for that Ask thread instead of putting the chip on Roleplay (or losing it under Code).
+- History draft `rowPreview` clips around gapped word-order hits (like `searchLine`), so a long "hello … Photo" draft searched as "hello photo" still shows Photo for the bold span.
+
+Phone: stage a photo on a saved Chat, Hub → Continue into Roleplay (no chip), back to Chat (chip returns). Start a gallery pick in Chat, flip to Roleplay before it lands (notice; chip back on Chat). Caption a long draft + photo, History search "hello photo" (row keeps Photo in view, bold span lands).
+
 # Handoff (2026-10-02, Code wave 21)
 
 On `gradation/w21-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
