@@ -71,5 +71,8 @@ class DemoRewriteTest {
         val wrapped = RpPromptEngine.sceneNote("stay (tense)\nand quiet")
         assertEquals("stay (tense)\nand quiet", RpPromptEngine.sceneNoteBody(wrapped))
         assertEquals(null, RpPromptEngine.sceneNoteBody("no note"))
+        val wide = "（Scene note, not spoken aloud:\nstay tense\n）"
+        assertEquals("stay tense", RpPromptEngine.sceneNoteBody(wide))
+        assertEquals("*She waits.*", RpPromptEngine.withoutLeadingSceneNote("$wide\n*She waits.*"))
     }
 }
