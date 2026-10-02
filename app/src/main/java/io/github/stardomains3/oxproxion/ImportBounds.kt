@@ -53,6 +53,15 @@ internal object ImportBounds {
         if (bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) {
             return String(bytes.copyOfRange(2, bytes.size), Charsets.UTF_16BE)
         }
+        // 00 00 FE FF is UTF-32 BE. Reading that as UTF-8 would look like a NUL-padded file.
+        if (bytes.size >= 4 &&
+            bytes[0] == 0.toByte() &&
+            bytes[1] == 0.toByte() &&
+            bytes[2] == 0xFE.toByte() &&
+            bytes[3] == 0xFF.toByte()
+        ) {
+            throw IOException("UTF-32 backups are not supported")
+        }
         return bytes.toString(Charsets.UTF_8)
     }
 }
