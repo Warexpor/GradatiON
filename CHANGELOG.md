@@ -36,6 +36,10 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Continue starts a new paragraph after white square 〚…〛, math double angle ⟪…⟫ and math white tortoise ⟬…⟭ dialogue, and after Batak ᯼᯽᯾᯿, Runic ᛫᛬᛭, Mandaic ࡞, Tifinagh ⵰, Samaritan ࠹࠾ and Javanese ꧈꧋꧞꧟. Opening 〚⟪⟬ hug the next word like other openers.
+- Lore keys wrapped in 〚white square〛 / ⟪math double⟫ / ⟬math tortoise⟭, and keys trailed by ᯼᛫࡞⵰࠾꧈, still match.
+- The rewrite dialog quote drops 〚white square〛, ⟪math double⟫ and ⟬math tortoise⟭ quotes around the first line.
+- A rewrite echo wrapped in `〚OOC：…〛`, `⟪OOC：…⟫` or `⟬OOC：…⟭` is stripped the same way as the paren note. A `〘Scene note…〙`, `⟨Scene note…⟩` or `❰Scene note…❱` echo is dropped like the ASCII one.
 - Legacy `chat_database.pre_sqlcipher` / `encrypting` copies move as a set with their `-wal`/`-shm` (or are discarded / parked under `chat_db_hold` when the vault name is taken), so Auto Backup cannot upload a leftover sidecar the rules did not list. Code away-notification id allocations commit when posted and cleared, and open-token / notif-id prefs are excluded from Auto Backup and device transfer.
 - Continue starts a new paragraph after white tortoise 〘…〙, math angle ⟨…⟩ and heavy ornament ❰…❱ dialogue, and after Tibetan ༎༏༔, Meetei ꫰꫱, Saurashtra ꣎꣏, Javanese ꧉, Phags-pa ꡶꡷, Rejang ꥟ and Buginese ᨞᨟. Opening 〘⟨❰ hug the next word like other openers.
 - Lore keys wrapped in 〘tortoise〙 / ⟨math angle⟩ / ❰ornament❱, and keys trailed by ༎꫰꣎꧉꡶꥟᨞, still match.

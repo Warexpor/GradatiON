@@ -412,4 +412,32 @@ class RpLoreTest {
         assertTrue(RpLore.select(ornament, "The pier is quiet.").contains("dawn"))
     }
 
+
+    @Test
+    fun whiteSquareMathDoubleQuotesAndMoreTrailersAreNotPartOfTheKey() {
+        val book = """
+            [keys: 〚locket〛, docks᯼, pier᛫]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(book, "The pier is quiet.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+        val math = """
+            [keys: ⟪locket⟫, docks࡞, pier⵰]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(math, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(math, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(math, "The pier is quiet.").contains("dawn"))
+        val tortoise = """
+            [keys: ⟬locket⟭, docks࠾, pier꧈]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(tortoise, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(tortoise, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(tortoise, "The pier is quiet.").contains("dawn"))
+    }
+
+
 }
