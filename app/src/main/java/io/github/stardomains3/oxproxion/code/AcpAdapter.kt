@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -108,7 +108,8 @@ class AcpAdapter : HarnessAdapter {
     })
 
     override fun authenticate(id: Long, methodId: String) = request(id, "authenticate", buildJsonObject {
-        put("methodId", methodId)
+        // Digit strings go out as JSON numbers, same as the request id / sessionId.
+        put("methodId", jsonRpcIdValue(methodId))
     })
 
     override fun newSession(id: Long, request: NewSessionRequest) = request(id, "session/new", buildJsonObject {
@@ -490,8 +491,27 @@ class AcpAdapter : HarnessAdapter {
             "add_comment_to_pending_review", "addcommenttopendingreview",
             "reply_to_pull_request_review_comment", "replytopullrequestreviewcomment",
             "add_sub_issue", "addsubissue",
-            "remove_sub_issue", "removesubissue" -> "edit"
-            "delete", "remove", "rm", "delete_file", "deletefile", "unlink" -> "delete"
+            "remove_sub_issue", "removesubissue",
+            "mark_discussion_comment_as_answer", "markdiscussioncommentasanswer",
+            "reprioritize_sub_issue", "reprioritizesubissue",
+            "update_discussion_comment", "updatediscussioncomment",
+            "update_label", "updatelabel",
+            "create_pull_request_comment", "createpullrequestcomment",
+            "create_pull_request_inline_comment", "createpullrequestinlinecomment",
+            "create_repository", "createrepository",
+            "dismiss_pull_request_review", "dismisspullrequestreview",
+            "remove_pull_request_reviewers", "removepullrequestreviewers",
+            "reply_pull_request_review_thread", "replypullrequestreviewthread",
+            "request_pull_request_reviewers", "requestpullrequestreviewers",
+            "update_pull_request_base", "updatepullrequestbase",
+            "update_pull_request_comment", "updatepullrequestcomment",
+            "update_pull_request_labels", "updatepullrequestlabels",
+            "update_pull_request_review", "updatepullrequestreview",
+            "update_pull_request_review_thread", "updatepullrequestreviewthread" -> "edit"
+            "delete", "remove", "rm", "delete_file", "deletefile", "unlink",
+            "delete_discussion_comment", "deletediscussioncomment",
+            "delete_label", "deletelabel",
+            "delete_pending_pull_request_review", "deletependingpullrequestreview" -> "delete"
             "move", "rename", "mv", "move_file", "movefile", "rename_file", "renamefile",
             "copy_to_box", "copytobox", "copy_from_box", "copyfrombox" -> "move"
             "search", "grep", "glob", "find", "rg", "ls",
@@ -541,6 +561,11 @@ class AcpAdapter : HarnessAdapter {
             "list_pull_request_reviews", "listpullrequestreviews",
             "list_sub_issues", "listsubissues",
             "list_repository_collaborators", "listrepositorycollaborators",
+            "list_discussion_categories", "listdiscussioncategories",
+            "list_workflow_run_jobs", "listworkflowrunjobs",
+            "list_namespaces", "listnamespaces",
+            "list_repositories", "listrepositories",
+            "grep_contents", "grepcontents",
             "list_shells", "listshells", "list_shell", "listshell" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command",
             "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
@@ -611,7 +636,10 @@ class AcpAdapter : HarnessAdapter {
             "compare_commits", "comparecommits",
             "pull_request_read", "pullrequestread",
             "checks_read", "checksread",
-            "commit_read", "commitread" -> "fetch"
+            "commit_read", "commitread",
+            "get_commit_combined_status", "getcommitcombinedstatus",
+            "get_label", "getlabel",
+            "get_release_by_tag", "getreleasebytag" -> "fetch"
             "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
             else -> n
         }
@@ -970,6 +998,11 @@ class AcpAdapter : HarnessAdapter {
                 "ref", "branch", "head", "base",
                 "discussion_number", "discussionNumber",
                 "label", "workflow_id", "workflowId", "run_id", "runId",
+                "tag", "tag_name", "tagName",
+                "job_id", "jobId", "comment_id", "commentId",
+                "review_id", "reviewId",
+                "username", "org", "organization",
+                "namespace", "category",
                 "owner", "repo", "repository",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
@@ -1076,6 +1109,11 @@ class AcpAdapter : HarnessAdapter {
                 "ref", "branch", "head", "base",
                 "discussion_number", "discussionNumber",
                 "label", "workflow_id", "workflowId", "run_id", "runId",
+                "tag", "tag_name", "tagName",
+                "job_id", "jobId", "comment_id", "commentId",
+                "review_id", "reviewId",
+                "username", "org", "organization",
+                "namespace", "category",
                 "owner", "repo", "repository",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
