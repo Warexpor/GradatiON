@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Hub Continue / Start chat (and Settings disabling Roleplay) park and restore staged Chat photos the same way a tab swipe already did, so Roleplay no longer inherits the chip and coming back still has it.
+- History draft search matches query words in order with gaps (like sent-message LIKE), so "hello photo" still finds a caption of "hello there" plus a staged Photo, and the row can bold that span.
 - Continue starts a new paragraph after fullwidth ＂…＂＇…＇, heavy angle ❮…❯ and white paren ｟…｠ dialogue, and after vertical ︖︕, Cham ꩝꩞꩟, Balinese ᭞᭟, Mongolian ᠅ and Lepcha ᰻᰼. Opening ❮｟ hug the next word like other openers.
 - Lore keys wrapped in ＂fullwidth＂ / ❮heavy❯ / ｟white paren｠, and keys trailed by ︖꩝᭞᠅᰻, still match.
 - The rewrite dialog quote drops ＂fullwidth＂, ❮heavy❯ and ｟white paren｠ quotes around the first line.

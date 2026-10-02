@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Chat wave 21)
+
+On `gradation/w21-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w20:
+- Ask↔RP mode flips that bypass the tab pager (Hub Continue / Start chat, Settings disabling Roleplay) park a live Chat stage and restore it on return, so Roleplay no longer inherits the chip (and a Roleplay-only stage is still dropped).
+- History draft search matches query words in order with gaps, same idea as sent-message LIKE, so "hello photo" finds "hello there" + Photo and the bold span can cover that hit.
+
+Phone: stage a photo in Chat, open History → Roleplay → Continue (no chip in RP); swipe back to Chat (chip returns). Caption "hello there" + photo, History search "hello photo" (row shows Draft: hello there Photo with the phrase bold).
+
 # Handoff (2026-10-02, Code wave 20)
 
 On `gradation/w20-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):

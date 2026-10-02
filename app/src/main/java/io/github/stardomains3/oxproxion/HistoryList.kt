@@ -172,12 +172,32 @@ object HistoryList {
      * for the words on that row still finds the chat.
      */
     fun draftMatchIds(drafts: Map<String, String>, query: String): Set<Long> {
-        val needle = foldSpace(query)
-        if (needle.isEmpty()) return emptySet()
+        if (foldSpace(query).isEmpty()) return emptySet()
         return drafts.mapNotNullTo(HashSet()) { (key, text) ->
             val id = key.toLongOrNull() ?: return@mapNotNullTo null
-            if (id > 0L && foldSpace(text).contains(needle, ignoreCase = true)) id else null
+            if (id > 0L && wordsMatch(text, query)) id else null
         }
+    }
+
+    /**
+     * True when [query] is in [text], or its words appear in order with anything between
+     * (the same idea as [likeContains] for sent messages). A draft of "hello there" plus
+     * "Photo" still matches "hello photo".
+     */
+    fun wordsMatch(text: String, query: String): Boolean {
+        val needle = foldSpace(query)
+        if (needle.isEmpty()) return false
+        val hay = foldSpace(text)
+        if (hay.contains(needle, ignoreCase = true)) return true
+        val words = needle.split(' ').filter { it.isNotEmpty() }
+        if (words.size < 2) return false
+        var from = 0
+        for (w in words) {
+            val at = hay.indexOf(w, startIndex = from, ignoreCase = true)
+            if (at < 0) return false
+            from = at + w.length
+        }
+        return true
     }
 
     /**
@@ -228,9 +248,9 @@ object HistoryList {
         if (attach.isEmpty()) return text
         if (text.isEmpty()) return attach
         val combined = if (text.contains(attach, ignoreCase = true)) text else "$text $attach"
-        if (!combined.contains(needle, ignoreCase = true)) return text
-        // Caption alone is enough when it already holds the whole query.
-        if (text.contains(needle, ignoreCase = true)) return text
+        if (!wordsMatch(combined, query)) return text
+        // Caption alone is enough when it already holds the query (adjacent or word-order).
+        if (wordsMatch(text, query)) return text
         return combined
     }
 
@@ -364,8 +384,14 @@ object HistoryList {
         if (exact >= 0) return Emphasis(exact, needle.length)
         val words = needle.split(' ').filter { it.isNotEmpty() }
         if (words.size < 2) return null
-        val pattern = words.joinToString("\\s+") { Regex.escape(it) }
-        val match = Regex(pattern, RegexOption.IGNORE_CASE).find(text, from) ?: return null
+        val tight = words.joinToString("\\s+") { Regex.escape(it) }
+        Regex(tight, RegexOption.IGNORE_CASE).find(text, from)?.let {
+            return Emphasis(it.range.first, it.value.length)
+        }
+        // LIKE-style gaps: "hello photo" still bolds across "hello there Photo".
+        val loose = words.joinToString(".*?") { Regex.escape(it) }
+        val match = Regex(loose, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            .find(text, from) ?: return null
         return Emphasis(match.range.first, match.value.length)
     }
 
@@ -449,8 +475,8 @@ object HistoryList {
         if (needle.isEmpty()) return false
         val labelEnd = historyLabelEnd(text)
         val body = if (labelEnd >= 0) text.substring(labelEnd) else text
-        // Fold the body too: a draft-style query of "see you" still hits "see\nyou".
-        return foldSpace(body).contains(needle, ignoreCase = true)
+        // Word-order match: "see you" hits "see\nyou", and "hello photo" hits "hello there photo".
+        return wordsMatch(body, needle)
     }
 
     private fun clipMatch(text: String, needle: String): String {
