@@ -182,7 +182,9 @@ object HistoryList {
 
     /**
      * Prefs drafts plus any richer host preview (a staged Photo/Audio/files line). The host
-     * wins so a chat with only a picture still matches a search for that label.
+     * wins so a chat with only a picture still matches a search for that label. Pass a
+     * [hostPreview] that already merges caption and attachment via [draftSearchText] when
+     * both are waiting.
      */
     fun draftTextsForSearch(
         sessions: List<ChatSession>,
@@ -196,6 +198,20 @@ object HistoryList {
             if (preview.isNotBlank()) out[ComposerDrafts.key(session.id)] = preview
         }
         return out
+    }
+
+    /**
+     * Search haystack for one chat's draft. A caption alone, or an attachment label alone,
+     * stays as written. When both are waiting, both words are kept so "Photo" still finds
+     * a draft that also has typed text (the row preview still shows only the caption).
+     */
+    fun draftSearchText(caption: String, attachmentLabel: String): String {
+        val text = foldSpace(caption)
+        val attach = foldSpace(attachmentLabel)
+        if (attach.isEmpty()) return text
+        if (text.isEmpty()) return attach
+        if (text.contains(attach, ignoreCase = true)) return text
+        return "$text $attach"
     }
 
     /** [matched] plus chats the database search missed because the words are only in a draft. */

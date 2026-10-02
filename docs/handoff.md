@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Chat wave 18)
+
+On `gradation/w18-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w17:
+- Ask↔Roleplay mode switches park and restore staged Chat attachments, so a Chat photo does not ride into Roleplay (and a Roleplay photo does not land on Chat).
+- History search merges caption + attachment label, so "Photo" still finds a draft that also has typed text; the row preview still shows the caption alone.
+
+Phone: stage a photo in Chat, swipe to Roleplay (no chip), swipe back (chip returns). Stage a caption + photo, search History for "Photo".
+
 # Handoff (2026-10-02, Code wave 18)
 
 On `gradation/w18-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`ListSessionsJsonTest`, `GitBridgeJsonTest`, `CodeProtocolTest`):
@@ -6,6 +14,7 @@ On `gradation/w18-code` (PR into `gradation/app-pass`). Three Code-mode fixes, u
 - Tool detail lines read Cursor's native rawInput keys: `glob_pattern`, `target_directory`, and `search_term` (and the camelCase spellings).
 
 Phone: on Cursor Agent, a GenerateImage or LS card should show the edit or search icon. A Glob card should show the pattern under the title. After a proxy rewrites listSessions lastSeq as a double, reopen a session and confirm it resumes instead of replaying from the start.
+
 
 # Handoff (2026-10-02, Chat wave 17)
 

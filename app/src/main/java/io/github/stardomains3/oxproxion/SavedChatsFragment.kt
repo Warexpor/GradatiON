@@ -208,9 +208,15 @@ class SavedChatsFragment : Fragment() {
             val prefsDrafts = if (mode == ChatMode.ASK) prefs.getAskComposerDrafts() else emptyMap()
             val host = (parentFragment as? HistoryPanelHost)
                 ?: parentFragmentManager.fragments.filterIsInstance<HistoryPanelHost>().firstOrNull()
-            // Host preview covers staged Photo/Audio/files; prefs alone miss those.
+            // Host preview covers staged Photo/Audio/files; merge caption + label so a
+            // chat that has both still matches a search for "Photo".
             val drafts = if (mode == ChatMode.ASK && host != null && query.isNotEmpty()) {
-                HistoryList.draftTextsForSearch(allSessions, prefsDrafts) { host.unsentDraftPreview(it) }
+                HistoryList.draftTextsForSearch(allSessions, prefsDrafts) { id ->
+                    HistoryList.draftSearchText(
+                        host.unsentDraftPreview(id),
+                        host.unsentAttachmentLabel(id),
+                    )
+                }
             } else {
                 prefsDrafts
             }
