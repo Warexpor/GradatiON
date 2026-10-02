@@ -1701,6 +1701,56 @@ class CodeProtocolTest {
         assertEquals(9L, answer["id"]!!.jsonPrimitive.long)
     }
 
+    @Test fun permissionResolvedRequestIdWrittenAsADoubleStillMatches() {
+        val a = AcpAdapter()
+        val ask = a.decode("""{"jsonrpc":"2.0","id":9.0,"method":"session/request_permission","params":{"sessionId":"s1","_meta":{"seq":1},"toolCall":{"toolCallId":"c1","title":"Run","kind":"execute"},"options":[{"optionId":"allow-once","name":"Allow once","kind":"allow_once"},{"optionId":"reject-once","name":"Reject","kind":"reject_once"}]}}""")
+        val approval = ((ask.filterIsInstance<AdapterOutput.Update>().single().update as CodeUpdate.Upsert).event as CodeEvent.Approval)
+        assertEquals("9", approval.requestId)
+        val resolved = a.decode("""{"jsonrpc":"2.0","method":"bridge/permissionResolved","params":{"sessionId":"s1","requestId":9.0,"optionKind":"allow_once","_meta":{"seq":2}}}""")
+        val answered = (resolved.filterIsInstance<AdapterOutput.Update>().single().update as CodeUpdate.ApprovalAnswered)
+        assertEquals("9", answered.requestId)
+        assertEquals(ApprovalOption.Kind.ALLOW_ONCE, answered.chosen)
+        var list = emptyList<CodeEvent>()
+        ask.filterIsInstance<AdapterOutput.Update>().forEach { list = TranscriptReducer.apply(list, it.update, now = 1L) }
+        resolved.filterIsInstance<AdapterOutput.Update>().forEach { list = TranscriptReducer.apply(list, it.update, now = 2L) }
+        val card = list.filterIsInstance<CodeEvent.Approval>().single()
+        assertEquals(ApprovalOption.Kind.ALLOW_ONCE, card.chosen)
+        assertFalse(card.pending)
+    }
+
+    @Test fun moreCursorToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ef","title":"Edit","kind":"other","name":"EditFile","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sr","title":"Replace","kind":"other","name":"SearchReplace","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rf2","title":"Read","kind":"other","name":"ReadFileV2","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ld2","title":"List","kind":"other","name":"ListDirV2","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gs","title":"Glob","kind":"other","name":"GlobFileSearch","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rl","title":"Lints","kind":"other","name":"ReadLints","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"aw","title":"Wait","kind":"other","name":"Await","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mr","title":"MCP","kind":"other","name":"FetchMcpResource","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"re","title":"Retry","kind":"other","name":"Reapply","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EDIT, byId["ef"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["sr"]?.kind)
+        assertEquals(ToolKind.READ, byId["rf2"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["ld2"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["gs"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["rl"]?.kind)
+        assertEquals(ToolKind.THINK, byId["aw"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["mr"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["re"]?.kind)
+    }
+
+    @Test fun argvWholeNumberDoublesShowAsIntegers() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Sleep","kind":"execute","status":"pending",
+               "rawInput":{"command":["sleep",5.0]}}"""
+        )))
+        assertEquals("sleep 5", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()
