@@ -36,6 +36,11 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Roleplay Bubbles shrink around a pictured reply the same way a user bubble does. Recycling a text bubble onto a pictured one no longer keeps the 16dp text inset. Classic stays a flat 4dp rim.
+- A torn wallpaper file (a kill mid-write) no longer counts as a picture: the Wallpaper tile stays off, and a character backup leaves the phone's copy alone instead of encoding the torn bytes.
+- Continue starts a new paragraph after Armenian ՜՞, Syriac ܀܁܂, Mongolian ᠃ and doubled !!?? marks. Unfinished Tibetan and Ethiopic no longer gain a Latin space between beats.
+- Lore keys wrapped in 『』 or low/angle quotes, and keys trailed by Arabic ؟۔ or other script ends, still match. Tibetan keys match inside running text the same way other unspaced scripts do.
+- The rewrite dialog's quote drops «guillemets» and curly quotes around the first line, the same way markdown marks already did.
 - Code: a bridge `permissionResolved` whose `requestId` is a whole number like `9.0` still clears the matching approval card (and the away alert). Cursor Agent tools named EditFile, SearchReplace, ReadFileV2, ListDirV2, GlobFileSearch, ReadLints, Await, FetchMcpResource, or Reapply get the edit, search, think, or fetch card. A shell argv piece written as `5.0` shows as `5`.
 - Replacing an idle roleplay greeting with the card's line drops rewrite versions of that opening, so a later turn does not show a version navigator for text that is gone.
 - Continue starts a new paragraph after Hebrew ׃, Ethiopic ።, Greek ;, Tibetan ། and Khmer ។ sentence ends. Hebrew ׳״ trail those ends like quotes, and Spanish ¿¡ hug the next word like other openers.

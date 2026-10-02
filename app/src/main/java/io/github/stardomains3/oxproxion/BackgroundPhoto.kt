@@ -85,7 +85,8 @@ object BackgroundPhoto {
     fun hasPhoto(ctx: Context, slot: String? = null): Boolean {
         val f = file(ctx, slot)
         ScenePhoto.recover(f)
-        return f.isFile
+        // A torn write left a file at the name; that is not a wallpaper we can draw.
+        return ScenePhoto.completeJpeg(f)
     }
 
     fun delete(ctx: Context, slot: String) {

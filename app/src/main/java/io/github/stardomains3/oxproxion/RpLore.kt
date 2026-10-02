@@ -24,7 +24,7 @@ object RpLore {
     /** ASCII or fullwidth brackets and colon, so a header typed either way still splits. */
     private val header = Regex("""(?m)^[ \t]*[\[［][ \t]*keys[ \t]*[:：][ \t]*(.*?)[ \t]*[\]］][ \t]*$""")
     private val keySplit = Regex("[,;、，|]")
-    private val wrappingQuotes = setOf('"', '\'', '“', '”', '「', '」', '«', '»')
+    private val wrappingQuotes = setOf('"', '\'', '“', '”', '「', '」', '『', '』', '«', '»', '‹', '›', '„', '‚')
 
     data class Entry(val keys: List<String>, val text: String) {
         internal val matchers: List<KeyMatcher> by lazy { keys.map(::KeyMatcher) }
@@ -148,7 +148,7 @@ object RpLore {
         parts.sumOf { it.length } + (parts.size - 1).coerceAtLeast(0)
 
     /** A period or comma stuck on the end of a key is not part of the word. */
-    private val keyTrail = setOf('.', ',', ';', ':', '!', '?', '。', '，', '、', '…')
+    private val keyTrail = setOf('.', ',', ';', ':', '!', '?', '。', '，', '、', '…', '؟', '۔', '।', '॥', '։', '၊', '။', '׃', '።', ';', '།', '។', '՜', '՞', '؛')
 
     /** Quotes around a key are not part of the word, so `"locket"` still matches locket. */
     private fun cleanKey(raw: String): String {
@@ -285,7 +285,8 @@ object RpLore {
     private val unspacedScripts = setOf(
         Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA,
         Character.UnicodeScript.HANGUL, Character.UnicodeScript.THAI, Character.UnicodeScript.LAO,
-        Character.UnicodeScript.KHMER, Character.UnicodeScript.MYANMAR
+        Character.UnicodeScript.KHMER, Character.UnicodeScript.MYANMAR,
+        Character.UnicodeScript.TIBETAN, Character.UnicodeScript.ETHIOPIC
     )
 
     /** A key compiled once, so a scan does not rebuild its regex for every entry and every pass. */

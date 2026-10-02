@@ -215,7 +215,10 @@ internal object RpWallpaperBackup {
 
     /** Empty when there is no picture. Null when the file cannot be carried. */
     fun encode(file: File): String? {
+        ScenePhoto.recover(file)
         if (!file.isFile || file.length() == 0L) return ""
+        // A half-written wallpaper is not a picture; leave the phone's copy alone.
+        if (!ScenePhoto.completeJpeg(file)) return null
         if (file.length() > MAX_BYTES) return null
         return try {
             Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)

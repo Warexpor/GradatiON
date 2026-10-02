@@ -858,6 +858,18 @@ class ChatAdapter(
         )
     }
 
+    /** Bubble chrome for a character reply. Classic ignores photo vs text; Bubbles do not. */
+    private fun applyAssistantPhotoFrame(
+        container: View,
+        caption: View,
+        bubble: Boolean,
+        hasPhoto: Boolean,
+        photoOnly: Boolean,
+    ) {
+        applyDpBox(container, ChatPhoto.assistantBubbleInsets(bubble, hasPhoto, photoOnly))
+        applyDpBox(caption, if (bubble) ChatPhoto.captionInsets(hasPhoto, photoOnly) else ChatPhoto.DpBox(0, 0, 0, 0))
+    }
+
     // --- VIEW HOLDERS ---
 
     inner class UserViewHolder(itemView: View, private val markwon: Markwon) : RecyclerView.ViewHolder(itemView) {
@@ -1515,17 +1527,12 @@ class ChatAdapter(
 
             val bubble = isRpMode && rpLayout == SharedPreferencesHelper.RP_LAYOUT_BUBBLES && !isThinking
             if (bubbleLookApplied != bubble) {
-                // Swapping the background drawable and padding re-lays the row out: only on a change.
+                // Swapping the background drawable re-lays the row: only on a layout change.
+                // Padding follows the photo below — a pictured bubble must not keep the text inset.
                 bubbleLookApplied = bubble
-                val d = itemView.resources.displayMetrics.density
-                if (bubble) {
-                    messageContainer.setBackgroundResource(R.drawable.bg_rp_bubble)
-                    messageContainer.setPadding((16 * d).toInt(), (12 * d).toInt(), (16 * d).toInt(), (12 * d).toInt())
-                } else {
-                    messageContainer.setBackgroundResource(R.drawable.bg_ai_message)
-                    val p = (4 * d).toInt()
-                    messageContainer.setPadding(p, p, p, p)
-                }
+                messageContainer.setBackgroundResource(
+                    if (bubble) R.drawable.bg_rp_bubble else R.drawable.bg_ai_message
+                )
             }
             applyRpBubbleLayout(bubble)
             if (isError) {
@@ -1588,15 +1595,32 @@ class ChatAdapter(
                             onFramed = { _, _ -> wirePhotoOpen(generatedImageView, generatedUri) },
                             onFailed = {
                                 val embedded = inlineUrl?.takeIf { it.startsWith("data:image") }
-                                if (embedded != null) showEmbedded(embedded) else hideGenerated()
+                                if (embedded != null) {
+                                    showEmbedded(embedded)
+                                } else {
+                                    hideGenerated()
+                                    applyAssistantPhotoFrame(messageContainer, messageTextView, bubble, hasPhoto = false, photoOnly = false)
+                                }
                             },
                         )
                     } catch (e: Exception) {
                         val embedded = inlineUrl?.takeIf { it.startsWith("data:image") }
-                        if (embedded != null) showEmbedded(embedded) else hideGenerated()
+                        if (embedded != null) {
+                            showEmbedded(embedded)
+                        } else {
+                            hideGenerated()
+                            applyAssistantPhotoFrame(messageContainer, messageTextView, bubble, hasPhoto = false, photoOnly = false)
+                        }
                     }
                 }
             }
+            // Bubbles share the user photo frame. Classic stays a flat 4dp rim.
+            // Re-apply every bind: recycling text→photo used to keep the 16dp text inset.
+            val photoOnly = source != null && text.isBlank()
+            if (!isThinking) {
+                messageTextView.visibility = if (photoOnly) View.GONE else View.VISIBLE
+            }
+            applyAssistantPhotoFrame(messageContainer, messageTextView, bubble, hasPhoto = source != null, photoOnly = photoOnly)
 
             // 6. BUTTON LISTENERS
             editButton.setOnClickListener {
