@@ -66,7 +66,9 @@ class SharedPreferencesHelper(context: Context) {
             !mainPrefs.contains(archive) &&
                 runCatching { json.decodeFromString<T>(raw) }.isFailure
         }
-        mainPrefs.edit {
+        // commit: archiving an unreadable blob must hit disk before the process continues,
+        // or a kill after apply() is scheduled can lose the only copy.
+        mainPrefs.edit(commit = true) {
             torn?.let { putString(archive, it) }
             putString(key, encoded)
         }

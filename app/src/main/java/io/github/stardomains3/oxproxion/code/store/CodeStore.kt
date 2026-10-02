@@ -203,7 +203,8 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         val torn = prefs.getString(KEY_HOSTS, null)?.takeIf {
             !prefs.contains(archive) && readHosts() is HostsRead.Unreadable
         }
-        prefs.edit {
+        // commit: the unreadable host list must be archived before this write replaces it.
+        prefs.edit(commit = true) {
             torn?.let { putString(archive, it) }
             putString(KEY_HOSTS, json.encodeToString(ListSerializer(CodeHost.serializer()), hosts))
         }
