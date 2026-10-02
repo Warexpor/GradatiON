@@ -76,4 +76,42 @@ class ComposerStagedTest {
         assertEquals("notes.txt", got.files[0].fileName)
         assertNull(got.imageUri)
     }
+
+    @Test fun open_thread_falls_back_to_parked_presence() {
+        val parked = photo("file://parked.jpg")
+        val liveEmpty = ComposerStaged.presence(
+            livePhoto = false,
+            liveAudio = false,
+            liveFileCount = 0,
+            parked = parked,
+        )
+        assertTrue(liveEmpty.hasPhoto)
+        assertFalse(liveEmpty.hasAudio)
+        assertEquals(0, liveEmpty.fileCount)
+        val liveWins = ComposerStaged.presence(
+            livePhoto = false,
+            liveAudio = true,
+            liveFileCount = 0,
+            parked = parked,
+        )
+        assertFalse(liveWins.hasPhoto)
+        assertTrue(liveWins.hasAudio)
+    }
+
+    @Test fun late_merges_keep_other_parked_parts() {
+        val base = ComposerStaged.Entry(
+            imageUri = "file://a.jpg",
+            files = listOf(ComposerStaged.FilePart("a.txt", "a", 1)),
+        )
+        val withPhoto = ComposerStaged.withPhoto(base, null, "image/jpeg", "file://b.jpg")
+        assertEquals("file://b.jpg", withPhoto.imageUri)
+        assertEquals(1, withPhoto.files.size)
+        val withFile = ComposerStaged.withFile(base, ComposerStaged.FilePart("b.txt", "b", 1))
+        assertEquals("file://a.jpg", withFile.imageUri)
+        assertEquals(2, withFile.files.size)
+        val withAudio = ComposerStaged.withAudio(base, byteArrayOf(1), "wav")
+        assertNull(withAudio.imageUri)
+        assertEquals("wav", withAudio.audioFormat)
+        assertEquals(1, withAudio.files.size)
+    }
 }
