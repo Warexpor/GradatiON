@@ -840,7 +840,8 @@ class BridgeBackend(
 
     override suspend fun listWorkspaces(harness: HarnessKind): List<String> {
         val result = call({ adapter.listWorkspaces(it, harness) }) as? JsonObject ?: return emptyList()
-        return (result["workspaces"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
+        // Whole-number doubles (5.0 / "5.0") still match as "5", same as sessionId.
+        return (result["workspaces"] as? JsonArray)?.mapNotNull { sessionIdOf(it) }.orEmpty()
     }
 
     override suspend fun listHarnesses(): List<HarnessInfo> {
@@ -848,7 +849,8 @@ class BridgeBackend(
         val arr = result["harnesses"] as? JsonArray ?: return emptyList()
         return arr.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
-            val id = (o["id"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            // Whole-number doubles (5.0 / "5.0") still match as "5", same as sessionId.
+            val id = sessionIdOf(o["id"]) ?: return@mapNotNull null
             val name = (o["name"] as? JsonPrimitive)?.contentOrNull ?: id
             val available = (o["available"] as? JsonPrimitive)?.booleanOrNull ?: false
             val models = (o["models"] as? JsonArray)?.mapNotNull {

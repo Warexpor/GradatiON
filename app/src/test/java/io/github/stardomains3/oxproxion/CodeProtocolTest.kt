@@ -2311,6 +2311,81 @@ class CodeProtocolTest {
         assertEquals("acme", byId["o1"]?.detail)
     }
 
+    @Test fun namedModeIdStaysAStringOnSetMode() {
+        val mode = Json.parseToJsonElement(acp.setMode(4, "s1", PermissionMode.ASK)).jsonObject
+        assertEquals("ask", mode["params"]!!.jsonObject["modeId"]!!.jsonPrimitive.content)
+        val auto = Json.parseToJsonElement(acp.setMode(5, "s1", PermissionMode.FULL_AUTO)).jsonObject
+        assertEquals("full-auto", auto["params"]!!.jsonObject["modeId"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun moreGitlabAndCloudflareToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gm","title":"MR","kind":"other","name":"GetMergeRequest","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gp","title":"Project","kind":"other","name":"GetProject","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gw","title":"Work","kind":"other","name":"GetWorkItem","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ga","title":"Artifact","kind":"other","name":"GetArtifactFile","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lm","title":"MRs","kind":"other","name":"ListMergeRequests","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lp","title":"Pipes","kind":"other","name":"ListPipelines","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lw","title":"Items","kind":"other","name":"ListWorkItems","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lg","title":"Groups","kind":"other","name":"ListGroups","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sm","title":"SaveMR","kind":"other","name":"SaveMergeRequest","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"am","title":"Accept","kind":"other","name":"AcceptMergeRequest","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ab","title":"Branch","kind":"other","name":"AddBranch","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sw","title":"SaveWI","kind":"other","name":"SaveWorkItem","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wl","title":"Workers","kind":"other","name":"WorkersList","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wg","title":"Worker","kind":"other","name":"WorkersGetWorker","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wb","title":"Build","kind":"other","name":"WorkersBuildsGetBuild","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wbl","title":"Builds","kind":"other","name":"WorkersBuildsListBuilds","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sc","title":"CFDocs","kind":"other","name":"SearchCloudflareDocumentation","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"qo","title":"Obs","kind":"other","name":"QueryWorkerObservability","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.FETCH, byId["gm"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["gp"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["gw"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["ga"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lm"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lp"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lw"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lg"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["sm"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["am"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ab"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["sw"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["wl"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["wg"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["wb"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["wbl"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["sc"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["qo"]?.kind)
+    }
+
+    @Test fun cursorGitlabCloudflareDetailUseNativeRawInputKeys() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"m1","title":"MR","kind":"other","name":"GetMergeRequest","status":"completed",
+               "rawInput":{"merge_request_iid":42.0,"project_id":"acme/app"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"p1","title":"Pipe","kind":"other","name":"GetPipeline","status":"completed",
+               "rawInput":{"pipeline_id":"9.0"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"w1","title":"Work","kind":"other","name":"GetWorkItem","status":"completed",
+               "rawInput":{"work_item_iid":7}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"g1","title":"Groups","kind":"other","name":"ListGroups","status":"completed",
+               "rawInput":{"group_id":"acme"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"b1","title":"Build","kind":"other","name":"WorkersBuildsGetBuild","status":"completed",
+               "rawInput":{"buildUUID":"abc-123","account_id":"acct"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"s1","title":"Worker","kind":"other","name":"WorkersGetWorker","status":"completed",
+               "rawInput":{"scriptName":"api","worker_id":"55.0"}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("42", byId["m1"]?.detail)
+        assertEquals("9", byId["p1"]?.detail)
+        assertEquals("7", byId["w1"]?.detail)
+        assertEquals("acme", byId["g1"]?.detail)
+        assertEquals("abc-123", byId["b1"]?.detail)
+        assertEquals("api", byId["s1"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()
