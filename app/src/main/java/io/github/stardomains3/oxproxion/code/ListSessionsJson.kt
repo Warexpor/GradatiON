@@ -13,6 +13,7 @@ import kotlinx.serialization.json.longOrNull
  *
  * Null / non-object [result] yields an empty list (same as a missing `sessions` array).
  * Whole-number doubles (`42.0`) and digit strings still become longs so resume and sort stay honest.
+ * A `sessionId` written the same way still matches live events as `"5"`, not `"5.0"`.
  */
 object ListSessionsJson {
 
@@ -22,8 +23,14 @@ object ListSessionsJson {
         return arr.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             fun s(k: String) = (o[k] as? JsonPrimitive)?.contentOrNull
+            fun idString(k: String): String? {
+                val p = o[k] as? JsonPrimitive ?: return null
+                wholeNumberLong(p)?.let { return it.toString() }
+                return p.contentOrNull?.takeIf { it.isNotEmpty() }
+            }
             CodeSessionSummary(
-                id = s("sessionId") ?: return@mapNotNull null,
+                // Whole-number doubles (5.0 / "5.0") still match live events as "5".
+                id = idString("sessionId") ?: return@mapNotNull null,
                 hostId = hostId,
                 harness = HarnessKind.fromId(s("harness")),
                 workspace = s("cwd") ?: "",

@@ -61,6 +61,14 @@ class ListSessionsJsonTest {
         assertEquals(9L, s.lastSeq)
     }
 
+    @Test fun sessionIdWrittenAsDoubleStillMatchesAsDigitString() {
+        val el = json.parseToJsonElement(
+            """{"sessions":[{"sessionId":5.0,"cwd":"/w","title":"T"},{"sessionId":"6.0","cwd":"/w","title":"U"}]}"""
+        )
+        val list = ListSessionsJson.parse(el, "h")
+        assertEquals(listOf("5", "6"), list.map { it.id })
+    }
+
     @Test fun missingLastSeqStaysNullAndEmptyResultIsEmpty() {
         assertNull(ListSessionsJson.parse(json.parseToJsonElement("""{"sessions":[{"sessionId":"s1"}]}"""), "h").single().lastSeq)
         assertTrue(ListSessionsJson.parse(null, "h").isEmpty())

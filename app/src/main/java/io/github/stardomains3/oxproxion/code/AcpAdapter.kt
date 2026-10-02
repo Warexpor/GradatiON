@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -174,7 +174,11 @@ class AcpAdapter : HarnessAdapter {
         put("result", buildJsonObject {
             put("outcome", buildJsonObject {
                 if (optionId.isNullOrEmpty()) put("outcome", "cancelled")
-                else { put("outcome", "selected"); put("optionId", optionId) }
+                else {
+                    put("outcome", "selected")
+                    // Digit strings go out as JSON numbers, same as the request id.
+                    put("optionId", jsonRpcIdValue(optionId))
+                }
             })
         })
     }.toString()
@@ -248,7 +252,7 @@ class AcpAdapter : HarnessAdapter {
     private fun admit(method: String?, obj: JsonObject): Admit {
         if (method !in SEQ_METHODS) return Admit.Ok
         val params = obj["params"] as? JsonObject ?: return Admit.Ok
-        val sid = params.str("sessionId") ?: return Admit.Ok
+        val sid = sessionIdString(params["sessionId"]) ?: return Admit.Ok
         val seq = bridgeSeq(params, obj) ?: return Admit.Ok
         synchronized(cursorLock) {
             val prev = lastSeqBySession[sid]
@@ -370,7 +374,7 @@ class AcpAdapter : HarnessAdapter {
     }.toString()
 
     private fun decodePermissionResolved(params: JsonObject, seq: Long?): List<AdapterOutput> {
-        val sid = params.str("sessionId") ?: return ignored("permissionResolved without session")
+        val sid = sessionIdString(params["sessionId"]) ?: return ignored("permissionResolved without session")
         // Same whole-number coercion as the permission id: a bridge/proxy that writes
         // requestId as 9 or 9.0 must still match the card stored as "9".
         val requestId = rpcIdString(params["requestId"])
@@ -381,7 +385,7 @@ class AcpAdapter : HarnessAdapter {
     }
 
     private fun decodeSessionStatus(params: JsonObject, seq: Long?): List<AdapterOutput> {
-        val sid = params.str("sessionId") ?: return ignored("sessionStatus without session")
+        val sid = sessionIdString(params["sessionId"]) ?: return ignored("sessionStatus without session")
         noteSeq(sid, seq)
         val status = when (params.str("status")?.lowercase()?.replace('-', '_')) {
             "running" -> SessionStatus.RUNNING
@@ -448,7 +452,9 @@ class AcpAdapter : HarnessAdapter {
             "read", "read_file", "readfile", "cat",
             "read_file_v2", "readfilev2",
             "read_project", "readproject",
-            "notebook_read", "notebookread" -> "read"
+            "notebook_read", "notebookread",
+            "get_file_contents", "getfilecontents",
+            "browser_snapshot", "browsersnapshot" -> "read"
             "edit", "write", "write_file", "writefile", "str_replace", "strreplace",
             "apply_patch", "applypatch", "patch",
             "edit_file", "editfile", "edit_file_v2", "editfilev2",
@@ -461,7 +467,11 @@ class AcpAdapter : HarnessAdapter {
             "update_project", "updateproject",
             "draft_external_message", "draftexternalmessage",
             "patch_edit", "patchedit",
-            "create_pull_request", "createpullrequest", "create_pr", "createpr" -> "edit"
+            "create_pull_request", "createpullrequest", "create_pr", "createpr",
+            "create_issue", "createissue",
+            "create_branch", "createbranch",
+            "merge_pull_request", "mergepullrequest",
+            "add_issue_comment", "addissuecomment" -> "edit"
             "delete", "remove", "rm", "delete_file", "deletefile", "unlink" -> "delete"
             "move", "rename", "mv", "move_file", "movefile", "rename_file", "renamefile",
             "copy_to_box", "copytobox", "copy_from_box", "copyfrombox" -> "move"
@@ -487,7 +497,11 @@ class AcpAdapter : HarnessAdapter {
             "knowledge_base", "knowledgebase",
             "list_machines", "listmachines",
             "get_mcp_server_status", "getmcpserverstatus",
-            "search_plugins", "searchplugins" -> "search"
+            "search_plugins", "searchplugins",
+            "search_code", "searchcode",
+            "search_issues", "searchissues",
+            "search_pull_requests", "searchpullrequests",
+            "list_shells", "listshells", "list_shell", "listshell" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command",
             "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
             "runterminalcommand",
@@ -496,7 +510,19 @@ class AcpAdapter : HarnessAdapter {
             "record_screen", "recordscreen",
             "run_terminal_command_v2", "runterminalcommandv2",
             "browser_navigate", "browsernavigate",
-            "open_browser", "openbrowser" -> "execute"
+            "open_browser", "openbrowser",
+            "browser_click", "browserclick",
+            "browser_type", "browsertype",
+            "browser_scroll", "browserscroll",
+            "browser_hover", "browserhover",
+            "browser_press_key", "browserpresskey",
+            "browser_select_option", "browserselectoption",
+            "browser_fill", "browserfill",
+            "browser_back", "browserback",
+            "browser_forward", "browserforward",
+            "take_screenshot", "takescreenshot",
+            "browser_screenshot", "browserscreenshot",
+            "kill_shell", "killshell" -> "execute"
             "think", "thought", "reasoning",
             "await", "await_task", "awaittask",
             "await_shell", "awaitshell",
@@ -513,7 +539,8 @@ class AcpAdapter : HarnessAdapter {
             "check_subagent", "checksubagent",
             "read_todos", "readtodos",
             "sleep", "wait",
-            "wake_parent", "wakeparent" -> "think"
+            "wake_parent", "wakeparent",
+            "browser_wait", "browserwait" -> "think"
             "fetch", "web_fetch", "webfetch", "websearch", "web_search", "http",
             "fetch_mcp_resource", "fetchmcpresource",
             "read_mcp_resource", "readmcpresource",
@@ -524,14 +551,15 @@ class AcpAdapter : HarnessAdapter {
             "mcp",
             "upload_file", "uploadfile",
             "download_file", "downloadfile",
-            "send_to_user", "sendtouser" -> "fetch"
+            "send_to_user", "sendtouser",
+            "get_pull_request", "getpullrequest" -> "fetch"
             "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
             else -> n
         }
     }
 
     private fun decodeUpdate(params: JsonObject, seq: Long?): List<AdapterOutput> {
-        val sid = params.str("sessionId") ?: return ignored("no sessionId")
+        val sid = sessionIdString(params["sessionId"]) ?: return ignored("no sessionId")
         val u = params["update"] as? JsonObject ?: return ignored("no update")
         noteSeq(sid, seq)
         val now = System.currentTimeMillis()
@@ -686,7 +714,7 @@ class AcpAdapter : HarnessAdapter {
     }
 
     private fun decodePermission(idEl: JsonElement, params: JsonObject, seq: Long?): List<AdapterOutput> {
-        val sid = params.str("sessionId") ?: return ignored("permission without session")
+        val sid = sessionIdString(params["sessionId"]) ?: return ignored("permission without session")
         noteSeq(sid, seq)
         val subject = params["subject"] as? JsonObject
         val call = params["toolCall"] as? JsonObject
@@ -844,8 +872,12 @@ class AcpAdapter : HarnessAdapter {
 
     /** ACP `sessionId`, or the same field a bridge stuffed in `_meta`. */
     private fun sessionOf(params: JsonObject): String? =
-        params.str("sessionId") ?: params.str("session_id")
-            ?: (params["_meta"] as? JsonObject)?.str("sessionId")
+        sessionIdString(params["sessionId"])
+            ?: sessionIdString(params["session_id"])
+            ?: (params["_meta"] as? JsonObject)?.let { sessionIdString(it["sessionId"]) }
+
+    /** Session id: whole-number doubles (`5.0` / `"5.0"`) still match as `"5"`. */
+    private fun sessionIdString(el: JsonElement?): String? = rpcIdString(el)
 
     private fun metaSeq(obj: JsonObject): Long? {
         val meta = obj["_meta"] as? JsonObject ?: return null
@@ -872,7 +904,10 @@ class AcpAdapter : HarnessAdapter {
                 "prompt", "description", "task_description", "taskDescription",
                 "pr_url", "prUrl", "pull_request_url", "pullRequestUrl",
                 "shell_id", "shellId", "terminal_instance_id", "terminalInstanceId",
-                "chars", "connection",
+                "chars",
+                "file_id", "fileId", "draft_id", "draftId", "folder_id", "folderId",
+                "owner", "repo", "repository",
+                "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId") != null ||
             firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
@@ -881,7 +916,9 @@ class AcpAdapter : HarnessAdapter {
                 "directory_path", "directoryPath",
                 "working_directory", "workingDirectory", "cwd",
                 "computer_path", "computerPath", "box_path", "boxPath",
-                "source_path", "sourcePath", "download_path", "downloadPath") != null
+                "source_path", "sourcePath", "download_path", "downloadPath",
+                "destination_path", "destinationPath",
+                "target_path", "targetPath") != null
         val hasLine = (u["locations"] as? JsonArray).orEmpty().any { e ->
             val line = lineNumber((e as? JsonObject)?.get("line"))
             line != null && line > 0
@@ -968,7 +1005,10 @@ class AcpAdapter : HarnessAdapter {
                 "prompt", "description", "task_description", "taskDescription",
                 "pr_url", "prUrl", "pull_request_url", "pullRequestUrl",
                 "shell_id", "shellId", "terminal_instance_id", "terminalInstanceId",
-                "chars", "connection",
+                "chars",
+                "file_id", "fileId", "draft_id", "draftId", "folder_id", "folderId",
+                "owner", "repo", "repository",
+                "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId"),
             filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
@@ -977,7 +1017,9 @@ class AcpAdapter : HarnessAdapter {
                 "directory_path", "directoryPath",
                 "working_directory", "workingDirectory", "cwd",
                 "computer_path", "computerPath", "box_path", "boxPath",
-                "source_path", "sourcePath", "download_path", "downloadPath"),
+                "source_path", "sourcePath", "download_path", "downloadPath",
+                "destination_path", "destinationPath",
+                "target_path", "targetPath"),
         )
     }
 
