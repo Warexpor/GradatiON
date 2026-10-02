@@ -517,4 +517,31 @@ class RpLoreTest {
         assertTrue(RpLore.select(tortoise, "The pier is quiet.").contains("dawn"))
     }
 
+
+    @Test
+    fun zImageZBindingQuotesAndMoreTrailersAreNotPartOfTheKey() {
+        val book = """
+            [keys: ⦇locket⦈, docks꠨, pier༉]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(book, "The pier is quiet.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+        val binding = """
+            [keys: ⦉locket⦊, docks᠂, pier᭜]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(binding, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(binding, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(binding, "The pier is quiet.").contains("dawn"))
+        val curled = """
+            [keys: ⧼locket⧽, docks⸼, pier༴]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(curled, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(curled, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(curled, "The pier is quiet.").contains("dawn"))
+    }
+
 }
