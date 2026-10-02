@@ -1160,9 +1160,11 @@ class SharedPreferencesHelper(context: Context) {
      * Copies the wrapped chat-database passphrase under [stamp] before recovery replaces the
      * active one. The set-aside file can only be opened with this blob; deleting the active copy
      * used to make the backup permanently unreadable.
-     * Returns false when there was nothing to copy.
+     * Returns false when there was nothing to copy, or when [stamp] already holds an archive:
+     * overwriting that would leave an earlier parked database without its key.
      */
     fun archiveChatDbPassphrase(stamp: Long): Boolean {
+        if (hasArchivedChatDbPassphrase(stamp)) return false
         val encrypted = apiKeysPrefs.getString("${CHAT_DB_PASSPHRASE_ALIAS}_encrypted", null)
         val iv = apiKeysPrefs.getString("${CHAT_DB_PASSPHRASE_ALIAS}_iv", null)
         if (encrypted.isNullOrBlank() && iv.isNullOrBlank()) return false
