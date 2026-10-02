@@ -2136,6 +2136,90 @@ class CodeProtocolTest {
         assertEquals("Warexpor", byId["g1"]?.detail)
     }
 
+
+    @Test fun digitSessionIdGoesOutAsANumber() {
+        val load = Json.parseToJsonElement(acp.loadSession(2, "5", "/w", afterSeq = 1)).jsonObject
+        assertEquals(5L, load["params"]!!.jsonObject["sessionId"]!!.jsonPrimitive.long)
+        val prompt = Json.parseToJsonElement(acp.prompt(3, "6.0", "hi")).jsonObject
+        assertEquals(6L, prompt["params"]!!.jsonObject["sessionId"]!!.jsonPrimitive.long)
+        val cancel = Json.parseToJsonElement(acp.cancel("7")).jsonObject
+        assertEquals(7L, cancel["params"]!!.jsonObject["sessionId"]!!.jsonPrimitive.long)
+        val mode = Json.parseToJsonElement(acp.setMode(4, "8", PermissionMode.ASK)).jsonObject
+        assertEquals(8L, mode["params"]!!.jsonObject["sessionId"]!!.jsonPrimitive.long)
+        val status = Json.parseToJsonElement(acp.gitStatus(5, "9")).jsonObject
+        assertEquals(9L, status["params"]!!.jsonObject["sessionId"]!!.jsonPrimitive.long)
+        val diff = Json.parseToJsonElement(acp.diff(6, "10", "a.kt")).jsonObject
+        assertEquals(10L, diff["params"]!!.jsonObject["sessionId"]!!.jsonPrimitive.long)
+        // Non-digit ids stay JSON strings.
+        val named = Json.parseToJsonElement(acp.loadSession(7, "sess-1", "/w", null)).jsonObject
+        assertEquals("sess-1", named["params"]!!.jsonObject["sessionId"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun moreGithubAndBrowserToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gi","title":"Issue","kind":"other","name":"GetIssue","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ui","title":"Update","kind":"other","name":"UpdateIssue","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"li","title":"Issues","kind":"other","name":"ListIssues","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lp","title":"PRs","kind":"other","name":"ListPullRequests","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"up","title":"UpdatePR","kind":"other","name":"UpdatePullRequest","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"pd","title":"Diff","kind":"other","name":"GetPullRequestDiff","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"pf","title":"Files","kind":"other","name":"ListPullRequestFiles","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gr","title":"Repo","kind":"other","name":"GetRepository","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sr","title":"Search","kind":"other","name":"SearchRepositories","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gc","title":"Commit","kind":"other","name":"GetCommit","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lc","title":"Commits","kind":"other","name":"ListCommits","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lb","title":"Branches","kind":"other","name":"ListBranches","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cl","title":"Label","kind":"other","name":"CreateLabel","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ad","title":"Discuss","kind":"other","name":"AddDiscussionComment","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gd","title":"GetDisc","kind":"other","name":"GetDiscussion","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cr","title":"Review","kind":"other","name":"CreatePullRequestReview","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bt","title":"Tabs","kind":"other","name":"BrowserTabs","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"be","title":"Eval","kind":"other","name":"BrowserEvaluate","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.FETCH, byId["gi"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ui"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["li"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lp"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["up"]?.kind)
+        assertEquals(ToolKind.READ, byId["pd"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["pf"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["gr"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["sr"]?.kind)
+        assertEquals(ToolKind.READ, byId["gc"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lc"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lb"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["cl"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ad"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["gd"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["cr"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["bt"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["be"]?.kind)
+    }
+
+    @Test fun cursorGithubDetailUseNativeRawInputKeys() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"i1","title":"Issue","kind":"other","name":"GetIssue","status":"completed",
+               "rawInput":{"issue_number":42.0,"owner":"Warexpor"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"p1","title":"PR","kind":"other","name":"UpdatePullRequest","status":"completed",
+               "rawInput":{"pull_number":"9.0","head":"feat"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"c1","title":"Commit","kind":"other","name":"GetCommit","status":"completed",
+               "rawInput":{"sha":"abc1234","ref":"main"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"d1","title":"Discuss","kind":"other","name":"GetDiscussion","status":"completed",
+               "rawInput":{"discussion_number":3,"label":"bug"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"w1","title":"Run","kind":"other","name":"GetWorkflowRun","status":"completed",
+               "rawInput":{"run_id":55.0}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("42", byId["i1"]?.detail)
+        assertEquals("9", byId["p1"]?.detail)
+        assertEquals("abc1234", byId["c1"]?.detail)
+        assertEquals("3", byId["d1"]?.detail)
+        assertEquals("55", byId["w1"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()
