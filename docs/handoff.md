@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Stability wave 24)
+
+On `gradation/w24-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w22 plaintext sidecars:
+- Backup rules and data-extraction rules name `chat_database.pre_sqlcipher` / `encrypting` `-wal`/`-shm`/`-journal` (not only the main files), so Auto Backup before the next open cannot upload a leftover sidecar the relocate pass would have moved.
+- Code away-notification id allocation after process death treats prefs-held ids as taken (in-memory maps are empty), so a new alert whose preferred hash matches a surviving shade entry probes instead of colliding.
+
+Phone: leave `chat_database.pre_sqlcipher-wal` beside the live DB and force a cloud backup before relaunch (rules should skip it). Post a Code away approval, kill the process, then post a second session whose preferred notif id collides (shade should keep both entries).
+
 # Handoff (2026-10-02, Code wave 23)
 
 On `gradation/w23-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):

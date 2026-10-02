@@ -865,7 +865,13 @@ class ChatDatabaseRecoveryTest {
         val names = listOf(
             "chat_database-journal",
             "chat_database.pre_sqlcipher",
+            "chat_database.pre_sqlcipher-wal",
+            "chat_database.pre_sqlcipher-shm",
+            "chat_database.pre_sqlcipher-journal",
             "chat_database.encrypting",
+            "chat_database.encrypting-wal",
+            "chat_database.encrypting-shm",
+            "chat_database.encrypting-journal",
             "chat_database.encrypt_ok",
             "chat_db_hold",
             "code_mode_secrets.xml",

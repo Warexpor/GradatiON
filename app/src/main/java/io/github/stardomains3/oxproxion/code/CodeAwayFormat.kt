@@ -56,6 +56,26 @@ object CodeAwayFormat {
         id >= NOTIF_ID_BASE && id <= NOTIF_ID_BASE + NOTIF_ID_MASK
 
     /**
+     * Ids already allocated in persisted key→id prefs, excluding [exceptKey].
+     * After process death [CodeAwayNotifier]'s in-memory maps are empty; allocation
+     * must still treat shade entries (and their prefs rows) as taken, or a new key
+     * can reuse an id that is still posted.
+     */
+    fun takenFromPrefs(entries: Map<String, *>, exceptKey: String? = null): Set<Int> {
+        val out = LinkedHashSet<Int>()
+        for ((k, v) in entries) {
+            if (exceptKey != null && k == exceptKey) continue
+            val id = when (v) {
+                is Int -> v
+                is Number -> v.toInt()
+                else -> continue
+            }
+            if (isAwayNotifId(id)) out += id
+        }
+        return out
+    }
+
+    /**
      * Activity PendingIntent request code. One per posted notification.
      * A hash of the session id collides, and FLAG_UPDATE_CURRENT then opens the wrong session.
      */
