@@ -13,6 +13,11 @@ interface HistoryPanelHost {
      * row reads as a draft the same way Discard draft does.
      */
     fun unsentDraftPreview(sessionId: Long): String
+    /**
+     * Photo / Audio / files label for this chat's staged attachment, even when a caption
+     * is also waiting. Search uses this so "Photo" still finds a draft that has both.
+     */
+    fun unsentAttachmentLabel(sessionId: Long): String
     /** Push Settings without flashing Ask under the history panel. */
     fun openSettingsFromHistory()
     /** Grouped drawer destinations (Code, Roleplay home, Models, Prompt library, Presets). */

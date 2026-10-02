@@ -324,4 +324,26 @@ class HistoryListTest {
             HistoryList.withDraftMatches(matched, all, drafts, "photo").map { it.id },
         )
     }
+
+    @Test fun search_finds_photo_even_when_a_caption_is_also_waiting() {
+        assertEquals("hello", HistoryList.draftSearchText("hello", ""))
+        assertEquals("Photo", HistoryList.draftSearchText("", "Photo"))
+        assertEquals("Photo", HistoryList.draftSearchText("Photo", "Photo"))
+        assertEquals("hello Photo", HistoryList.draftSearchText("hello", "Photo"))
+        assertEquals("see the Photo later", HistoryList.draftSearchText("see the Photo later", "Photo"))
+        val prefs = mapOf("4" to "hello")
+        val all = listOf(session(4, now, "notes"))
+        val host = { id: Long ->
+            if (id == 4L) HistoryList.draftSearchText("hello", "Photo") else ""
+        }
+        val drafts = HistoryList.draftTextsForSearch(all, prefs, host)
+        assertEquals("hello Photo", drafts["4"])
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "photo"))
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "hello"))
+        // Row preview still prefers the caption alone.
+        assertEquals(
+            "Draft: hello",
+            HistoryList.rowPreview("You: sent", "hello", "", { "Draft: $it" }),
+        )
+    }
 }

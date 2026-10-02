@@ -1574,6 +1574,33 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         )
     }
 
+    override fun unsentAttachmentLabel(sessionId: Long): String {
+        if (viewModel.isRpMode()) return ""
+        val open = askComposer.bound &&
+            ComposerDrafts.key(askComposer.sessionId) == ComposerDrafts.key(sessionId)
+        val hasPhoto: Boolean
+        val hasAudio: Boolean
+        val fileCount: Int
+        if (open) {
+            hasPhoto = selectedImageBytes != null || !viewModel.pendingImageUri().isNullOrBlank()
+            hasAudio = selectedAudioBytes != null
+            fileCount = pendingFiles.size
+        } else {
+            val entry = ComposerStaged.get(stagedByChat, sessionId)
+            hasPhoto = entry.imageBytes != null || !entry.imageUri.isNullOrBlank()
+            hasAudio = entry.audioBytes != null
+            fileCount = entry.files.size
+        }
+        return HistoryList.attachmentDraft(
+            hasPhoto = hasPhoto,
+            hasAudio = hasAudio,
+            fileCount = fileCount,
+            photoLabel = getString(R.string.history_preview_photo),
+            audioLabel = getString(R.string.history_preview_audio),
+            filesLabel = { n -> resources.getQuantityString(R.plurals.history_preview_files, n, n) },
+        )
+    }
+
     /** Delete a parked scene JPEG that History discarded and no message still names. */
     private fun discardParkedScene(entry: ComposerStaged.Entry) {
         if (entry.isEmpty) return
@@ -4912,7 +4939,18 @@ $cleanContent
         }
         codeMode.deactivate()
         if (target != current) {
-            parkAskDraft(viewModel.getCurrentSessionId())
+            val leavingId = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+            if (current == ChatMode.ASK) {
+                // Park Chat text and staged photo so they do not ride into Roleplay.
+                parkAskDraft(leavingId)
+                parkStagedAttachment(leavingId)
+            } else {
+                // Roleplay has no per-thread attachment park; drop a staged RP photo
+                // so it does not land on the Chat composer when coming back.
+                clearStagedAttachment(discardSceneFile = true)
+                pendingFiles.clear()
+                if (::attachmentButton.isInitialized) updateAttachmentButton()
+            }
             sharedPreferencesHelper.saveComposerDraft(current, chatEditText.text?.toString().orEmpty())
             modeSwitchedAt = android.os.SystemClock.uptimeMillis()
             captureListSpot()?.let { modeSpots[current] = it }
@@ -4920,6 +4958,10 @@ $cleanContent
             pendingSpot = modeSpots[target]
             viewModel.toggleChatMode()
             showCachedThread(target)
+            if (target == ChatMode.ASK) {
+                val askId = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+                applyStagedAttachment(askId)
+            }
         }
         return true
     }
