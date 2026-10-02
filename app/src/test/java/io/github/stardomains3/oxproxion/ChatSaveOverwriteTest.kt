@@ -203,6 +203,29 @@ class ChatSaveOverwriteTest {
     }
 
     @Test
+    fun searchFoldsWhitespaceBetweenWords() = runBlocking {
+        val repository = ChatRepository(dao)
+        dao.insertSessionAndMessages(
+            ChatSession(title = "split", modelUsed = "m"),
+            listOf(message("user", "see\nyou later")),
+        )
+        dao.insertSessionAndMessages(
+            ChatSession(title = "joined", modelUsed = "m"),
+            listOf(message("user", "see you later")),
+        )
+        assertEquals(setOf("split", "joined"), repository.searchSessions("see  you").map { it.title }.toSet())
+        assertEquals(setOf("split", "joined"), repository.searchSessions("see you").map { it.title }.toSet())
+        val hit = repository.searchWindows(
+            repository.searchSessions("see you").map { it.id },
+            "see you",
+        )
+        assertEquals(2, hit.size)
+        assertTrue(hit.all {
+            HistoryList.searchLine(it.role, it.content, "see  you", { t -> "You: $t" }, "Photo").contains("see")
+        })
+    }
+
+    @Test
     fun searchSkipsPhotoBytesAndJsonKeys() = runBlocking {
         val repository = ChatRepository(dao)
         val photo = """[{"type":"text","text":"sunset on the pier"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,${"A".repeat(4000)}JPEGDATA"}}]"""

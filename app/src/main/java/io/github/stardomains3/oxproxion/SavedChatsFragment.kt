@@ -198,8 +198,8 @@ class SavedChatsFragment : Fragment() {
     private var filterGeneration = 0
 
     private fun filterSessions(rawQuery: String) {
-        // A trailing space used to miss every row and drop the bold on the word before it.
-        val query = rawQuery.trim()
+        // Fold spaces the same way drafts and the bold span do, so "see  you" still hits.
+        val query = HistoryList.normalizeQuery(rawQuery)
         val generation = ++filterGeneration
         filterJob?.cancel()
         filterJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -356,12 +356,17 @@ class SavedChatsFragment : Fragment() {
         }
         val discard = sheet.findViewById<View>(R.id.menu_discard_draft)
         val ask = (viewModel.chatMode.value ?: ChatMode.ASK) != ChatMode.RP
-        val unsent = if (ask) ComposerDrafts.text(prefs.getAskComposerDrafts(), session.id) else ""
-        discard.isVisible = unsent.isNotBlank()
+        val host = (parentFragment as? HistoryPanelHost)
+            ?: parentFragmentManager.fragments.filterIsInstance<HistoryPanelHost>().firstOrNull()
+        val unsent = if (ask) {
+            host?.hasUnsentDraft(session.id)
+                ?: ComposerDrafts.text(prefs.getAskComposerDrafts(), session.id).isNotBlank()
+        } else {
+            false
+        }
+        discard.isVisible = unsent
         discard.setOnClickListener {
             dialog.dismiss()
-            val host = (parentFragment as? HistoryPanelHost)
-                ?: parentFragmentManager.fragments.filterIsInstance<HistoryPanelHost>().firstOrNull()
             if (host != null) host.forgetUnsentDraft(session.id)
             else prefs.saveAskComposerDrafts(ComposerDrafts.drop(prefs.getAskComposerDrafts(), session.id))
             filterSessions(searchView.query?.toString().orEmpty())
