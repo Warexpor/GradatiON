@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `EditFile`, `AwaitShell`, `MultiEdit`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -448,13 +448,14 @@ class AcpAdapter : HarnessAdapter {
             "read", "read_file", "readfile", "cat",
             "read_file_v2", "readfilev2" -> "read"
             "edit", "write", "write_file", "writefile", "str_replace", "strreplace",
-            "apply_patch", "patch",
+            "apply_patch", "applypatch", "patch",
             "edit_file", "editfile", "edit_file_v2", "editfilev2",
             "search_replace", "searchreplace", "reapply",
-            "multi_edit", "multiedit" -> "edit"
+            "multi_edit", "multiedit",
+            "generate_image", "generateimage" -> "edit"
             "delete", "remove", "rm", "delete_file", "deletefile", "unlink" -> "delete"
-            "move", "rename", "mv" -> "move"
-            "search", "grep", "glob", "find", "rg",
+            "move", "rename", "mv", "move_file", "movefile", "rename_file", "renamefile" -> "move"
+            "search", "grep", "glob", "find", "rg", "ls",
             "listdir", "list_dir", "listdirectory", "list_directory",
             "listdir_v2", "list_dir_v2", "listdirv2", "listdirectoryv2",
             "semanticsearch", "semantic_search",
@@ -462,6 +463,7 @@ class AcpAdapter : HarnessAdapter {
             "grep_search", "grepsearch",
             "codebase_search", "codebasesearch", "deep_search", "deepsearch",
             "read_lints", "readlints", "fix_lints", "fixlints",
+            "get_diagnostics", "getdiagnostics",
             "get_mcp_tools", "getmcptools",
             "get_dynamic_tools", "getdynamictools",
             "list_mcp_resources", "listmcpresources",
@@ -472,9 +474,11 @@ class AcpAdapter : HarnessAdapter {
             "think", "thought", "reasoning",
             "await", "await_task", "awaittask",
             "await_shell", "awaitshell",
-            "todo_write", "todowrite", "update_todos", "updatetodos",
+            "todo_write", "todowrite", "write_todos", "writetodos",
+            "update_todos", "updatetodos",
             "task", "subagent", "switch_mode", "switchmode",
-            "create_plan", "createplan" -> "think"
+            "create_plan", "createplan",
+            "ask_question", "askquestion" -> "think"
             "fetch", "web_fetch", "webfetch", "websearch", "web_search", "http",
             "fetch_mcp_resource", "fetchmcpresource",
             "read_mcp_resource", "readmcpresource",
@@ -821,8 +825,11 @@ class AcpAdapter : HarnessAdapter {
     private fun detailForUpdate(sid: String, callId: String, u: JsonObject): String? {
         val raw = rawInputOf(u)
         val specific = commandOf(raw) != null ||
-            firstRaw(raw, "pattern", "query", "url", "regex") != null ||
-            firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile") != null
+            firstRaw(raw, "pattern", "query", "url", "regex",
+                "glob_pattern", "globPattern", "search_term", "searchTerm") != null ||
+            firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
+                "target_directory", "targetDirectory", "relative_workspace_path",
+                "relativeWorkspacePath", "absolute_path", "absolutePath") != null
         val hasLine = (u["locations"] as? JsonArray).orEmpty().any { e ->
             val line = lineNumber((e as? JsonObject)?.get("line"))
             line != null && line > 0
@@ -903,8 +910,11 @@ class AcpAdapter : HarnessAdapter {
             kind = namedKind(u.str("kind"), u.str("name")),
             locations = locations,
             command = commandOf(raw),
-            query = firstRaw(raw, "pattern", "query", "url", "regex"),
-            filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile"),
+            query = firstRaw(raw, "pattern", "query", "url", "regex",
+                "glob_pattern", "globPattern", "search_term", "searchTerm"),
+            filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
+                "target_directory", "targetDirectory", "relative_workspace_path",
+                "relativeWorkspacePath", "absolute_path", "absolutePath"),
         )
     }
 

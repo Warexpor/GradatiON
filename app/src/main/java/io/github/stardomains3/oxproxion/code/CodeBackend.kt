@@ -27,7 +27,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.longOrNull
 import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -833,27 +832,8 @@ class BridgeBackend(
     }
 
     override suspend fun listSessions(): List<CodeSessionSummary> {
-        val result = call({ adapter.listSessions(it) }) as? JsonObject ?: return emptyList()
-        val arr = result["sessions"] as? JsonArray ?: return emptyList()
-        return arr.mapNotNull { e ->
-            val o = e as? JsonObject ?: return@mapNotNull null
-            fun s(k: String) = (o[k] as? JsonPrimitive)?.contentOrNull
-            fun l(k: String) = (o[k] as? JsonPrimitive)?.longOrNull ?: 0L
-            CodeSessionSummary(
-                id = s("sessionId") ?: return@mapNotNull null,
-                hostId = host.id,
-                harness = HarnessKind.fromId(s("harness")),
-                workspace = s("cwd") ?: "",
-                title = s("title") ?: "Session",
-                createdAt = l("createdAt"),
-                updatedAt = l("updatedAt"),
-                permissionMode = PermissionMode.fromId(s("permissionMode") ?: s("mode")),
-                model = s("model"),
-                preview = s("preview") ?: "",
-                branch = s("branch"),
-                lastSeq = (o["lastSeq"] as? JsonPrimitive)?.longOrNull
-            )
-        }
+        val result = call({ adapter.listSessions(it) })
+        return ListSessionsJson.parse(result, host.id)
     }
 
     override suspend fun listWorkspaces(harness: HarnessKind): List<String> {
