@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 18)
+
+On `gradation/w18-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`ListSessionsJsonTest`, `GitBridgeJsonTest`, `CodeProtocolTest`):
+- A bridge `listSessions` `lastSeq` (and `createdAt` / `updatedAt`) written as a whole-number double (`42.0`) still parses, so reconnect resume does not fall back to a full reload. Git `ahead` / `behind` counts written the same way still show on Changes.
+- Cursor Agent tool names `GenerateImage`, `LS`, `ApplyPatch`, `AskQuestion`, `WriteTodos`, `GetDiagnostics`, and `MoveFile` map to edit / search / think / move cards (icon and log clipping). `ApplyPatch` was already aliased as `apply_patch`; the camelCase form now matches too.
+- Tool detail lines read Cursor's native rawInput keys: `glob_pattern`, `target_directory`, and `search_term` (and the camelCase spellings).
+
+Phone: on Cursor Agent, a GenerateImage or LS card should show the edit or search icon. A Glob card should show the pattern under the title. After a proxy rewrites listSessions lastSeq as a double, reopen a session and confirm it resumes instead of replaying from the start.
+
 # Handoff (2026-10-02, Chat wave 17)
 
 On `gradation/w17-chat` (PR into `gradation/app-pass`). History draft follow-ups after w16:

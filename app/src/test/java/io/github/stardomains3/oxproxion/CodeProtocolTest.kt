@@ -1798,6 +1798,44 @@ class CodeProtocolTest {
         assertEquals(ToolKind.THINK, byId["sa"]?.kind)
     }
 
+
+    @Test fun moreCursorNativeToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gi","title":"Image","kind":"other","name":"GenerateImage","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ls","title":"List","kind":"other","name":"LS","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ap","title":"Patch","kind":"other","name":"ApplyPatch","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"aq","title":"Ask","kind":"other","name":"AskQuestion","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wt","title":"Todos","kind":"other","name":"WriteTodos","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gd","title":"Lints","kind":"other","name":"GetDiagnostics","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mf","title":"Move","kind":"other","name":"MoveFile","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EDIT, byId["gi"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["ls"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ap"]?.kind)
+        assertEquals(ToolKind.THINK, byId["aq"]?.kind)
+        assertEquals(ToolKind.THINK, byId["wt"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["gd"]?.kind)
+        assertEquals(ToolKind.MOVE, byId["mf"]?.kind)
+    }
+
+    @Test fun cursorGlobAndListDirDetailUseNativeRawInputKeys() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"g1","title":"Glob","kind":"other","name":"Glob","status":"completed",
+               "rawInput":{"glob_pattern":"**/*.kt"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"l1","title":"List","kind":"other","name":"LS","status":"completed",
+               "rawInput":{"target_directory":"app/src"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"w1","title":"Search","kind":"other","name":"WebSearch","status":"completed",
+               "rawInput":{"search_term":"ACP seq"}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("**/*.kt", byId["g1"]?.detail)
+        assertEquals("app/src", byId["l1"]?.detail)
+        assertEquals("ACP seq", byId["w1"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()
