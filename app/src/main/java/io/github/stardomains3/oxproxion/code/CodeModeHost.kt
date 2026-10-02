@@ -98,7 +98,10 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
             fragment.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 CodePairPending.error.collect { message ->
                     if (message == null) return@collect
-                    CodePairPending.consumeError()?.let { GlassNotice.show(fragment.requireContext(), it) }
+                    val err = CodePairPending.consumeError() ?: return@collect
+                    // offer() may have won after this emit; don't toast a superseded failure.
+                    if (CodePairPending.peek() != null) return@collect
+                    GlassNotice.show(fragment.requireContext(), err)
                 }
             }
         }
