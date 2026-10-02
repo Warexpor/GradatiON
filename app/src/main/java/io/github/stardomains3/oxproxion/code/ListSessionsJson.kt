@@ -13,7 +13,7 @@ import kotlinx.serialization.json.longOrNull
  *
  * Null / non-object [result] yields an empty list (same as a missing `sessions` array).
  * Whole-number doubles (`42.0`) and digit strings still become longs so resume and sort stay honest.
- * A `sessionId` written the same way still matches live events as `"5"`, not `"5.0"`.
+ * A `sessionId`, `model`, or `cwd` written the same way still matches as `"5"`, not `"5.0"`.
  */
 object ListSessionsJson {
 
@@ -33,12 +33,14 @@ object ListSessionsJson {
                 id = idString("sessionId") ?: return@mapNotNull null,
                 hostId = hostId,
                 harness = HarnessKind.fromId(s("harness")),
-                workspace = s("cwd") ?: "",
+                // Same whole-number coercion as listWorkspaces / listHarnesses models.
+                workspace = idString("cwd") ?: "",
                 title = s("title") ?: "Session",
                 createdAt = longField(o, "createdAt") ?: 0L,
                 updatedAt = longField(o, "updatedAt") ?: 0L,
                 permissionMode = PermissionMode.fromId(s("permissionMode") ?: s("mode")),
-                model = s("model"),
+                // Same whole-number coercion as listHarnesses models.
+                model = idString("model"),
                 preview = s("preview") ?: "",
                 branch = s("branch"),
                 lastSeq = longField(o, "lastSeq"),
