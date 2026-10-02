@@ -236,6 +236,25 @@ class RpContinuationTest {
         assertEquals("Ⲭⲉⲣⲉ⳹\n\nShe waits.", RpContinuation.join("Ⲭⲉⲣⲉ⳹", "She waits."))
     }
 
+    @Test fun halfwidthAndPrimeQuotesStillCountAsFinished() {
+        assertEquals("｢こんにちは。｣\n\n彼は待つ。", RpContinuation.join("｢こんにちは。｣", "彼は待つ。"))
+        assertEquals("〝来て。〞\n\n他等待。", RpContinuation.join("〝来て。〞", "他等待。"))
+        assertEquals("｢Hallo", RpContinuation.join("｢", "Hallo"))
+        assertEquals("〝来", RpContinuation.join("〝", "来"))
+        assertEquals("〟Hallo", RpContinuation.join("〟", "Hallo"))
+    }
+
+    @Test fun reversedLimbuLisuVaiAndHalfwidthEndsStartANewParagraph() {
+        assertEquals("Really⸮\n\nShe waits.", RpContinuation.join("Really⸮", "She waits."))
+        assertEquals("Hello᥄\n\nShe waits.", RpContinuation.join("Hello᥄", "She waits."))
+        assertEquals("Hello᥅\n\nShe waits.", RpContinuation.join("Hello᥅", "She waits."))
+        assertEquals("Hello꓿\n\nShe waits.", RpContinuation.join("Hello꓿", "She waits."))
+        assertEquals("Hello꘎\n\nShe waits.", RpContinuation.join("Hello꘎", "She waits."))
+        assertEquals("Hello꘏\n\nShe waits.", RpContinuation.join("Hello꘏", "She waits."))
+        assertEquals("彼女は待つ｡\n\nそして", RpContinuation.join("彼女は待つ｡", "そして"))
+        assertEquals("Really﹒\n\nShe waits.", RpContinuation.join("Really﹒", "She waits."))
+    }
+
     @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)

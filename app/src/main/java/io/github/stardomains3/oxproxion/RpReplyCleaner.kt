@@ -42,9 +42,10 @@ object RpReplyCleaner {
     }
 
     /**
-     * Drop a leading `(OOC: … Rewrite your last reply …)` (ASCII or fullwidth parens, or
-     * `[OOC: …]` / `【OOC：…】` brackets) even when the note wraps, then a "here's the rewritten
-     * reply" label. An OOC line that is not that note stays: it can be the character talking.
+     * Drop a leading `(OOC: … Rewrite your last reply …)` (ASCII or fullwidth parens,
+     * `[OOC: …]` / `【OOC：…】` brackets, or `{OOC: …}` / `｛OOC：…｝` braces) even when the note
+     * wraps, then a "here's the rewritten reply" label. An OOC line that is not that note stays:
+     * it can be the character talking.
      */
     private fun stripLeadingRewrite(text: String): String {
         var out = text.trimStart()
@@ -57,7 +58,7 @@ object RpReplyCleaner {
     }
 
     private fun stripRewriteOoc(text: String): String {
-        // ASCII or fullwidth paren/colon, and square or lenticular brackets: some models echo the note that way.
+        // ASCII or fullwidth paren/colon, square or lenticular brackets, and braces: some models echo the note that way.
         if (rewriteOocOpen(text) == null) return text
         val close = closingBracket(text)
         if (close < 0) return text
@@ -66,12 +67,13 @@ object RpReplyCleaner {
         return text.substring(close + 1)
     }
 
-    /** Length of a leading `(OOC:` / `【OOC：` / `[OOC:` opener, or null when this is not that note. */
+    /** Length of a leading `(OOC:` / `【OOC：` / `[OOC:` / `{OOC:` opener, or null when this is not that note. */
     private fun rewriteOocOpen(text: String): Int? {
         val prefixes = listOf(
             "(OOC:", "（OOC:", "(OOC：", "（OOC：",
             "[OOC:", "［OOC:", "[OOC：", "［OOC：",
             "【OOC:", "【OOC：",
+            "{OOC:", "｛OOC:", "{OOC：", "｛OOC：",
         )
         for (p in prefixes) {
             if (text.startsWith(p, ignoreCase = true)) return p.length
@@ -81,7 +83,7 @@ object RpReplyCleaner {
 
     /**
      * Index of the closer that matches the open bracket at the start, or -1 when it never closes.
-     * Parens mix ASCII and fullwidth; squares and lenticulars stay in their own pair.
+     * Parens mix ASCII and fullwidth; squares, lenticulars and braces stay in their own pair.
      */
     private fun closingBracket(text: String): Int {
         val open = text.first()
@@ -89,6 +91,7 @@ object RpReplyCleaner {
             '(', '（' -> setOf('(', '（') to setOf(')', '）')
             '[', '［' -> setOf('[', '［') to setOf(']', '］')
             '【' -> setOf('【') to setOf('】')
+            '{', '｛' -> setOf('{', '｛') to setOf('}', '｝')
             else -> return -1
         }
         var depth = 0
