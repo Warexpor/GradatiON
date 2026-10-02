@@ -36,6 +36,10 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Continue starts a new paragraph after halfwidth ｢…｣ and 〝…〞 dialogue, and after reversed ⸮, Limbu ᥄᥅, Lisu ꓿, Vai ꘎꘏, halfwidth ｡ and small ﹒. Opening ｢〝〟 hug the next word like other openers.
+- Lore keys wrapped in ｢halfwidth｣ or 〝primes〞, and keys trailed by ⸮꓿｡ and the new enders, still match.
+- The rewrite dialog quote drops ｢halfwidth｣ and 〝prime〞 quotes around the first line.
+- A rewrite echo wrapped in `{OOC: …}` or `｛OOC：…｝` braces is stripped the same way as the paren note. A `[Scene note…]` or `【Scene note…】` echo is dropped like the ASCII one.
 - Code: turn usage token counts written as a whole-number double string like `"1200.0"` still show on the finished-turn line. Cursor Agent tools named WriteShellStdin, TodoRead, SearchSymbols, RipgrepSearch, RipgrepRawSearch, FixLints, GoToDefinition, FetchPullRequest, ApplyAgentDiff, TaskV2, CreateDiagram, ComputerUse, KnowledgeBase, ReadProject, UpdateProject, SemanticSearchFull, or ReadSemsearchFiles get the shell, think, search, edit, fetch, or read card. CallMcpTool / FetchMcpResource detail lines read `toolName` / `tool_name`, `server`, and `uri`.
 - A set-aside (unreadable) chat database that cannot enter the no-backup vault is parked under `chat_db_hold` as one set with its wal/shm, instead of being renamed aside inside the vault. Cross-directory move leftovers (`.partial` / `.ready` / `.bak` / `.kept-*`) next to the live database are parked there too, so Auto Backup cannot upload them. Clearing the one-time recovery notice commits so a kill does not show it again.
 - Leaving Chat for Roleplay parks a staged photo with that thread (and Roleplay no longer inherits it); coming back restores it. A staged Roleplay photo is dropped on the way back to Chat so it does not land on the wrong composer.
