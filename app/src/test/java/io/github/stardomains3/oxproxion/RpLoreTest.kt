@@ -305,4 +305,17 @@ class RpLoreTest {
         assertTrue(RpLore.select(book, "The pier is quiet.").contains("dawn"))
         assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
     }
+
+    @Test
+    fun angleQuotesAndMoreTrailersAreNotPartOfTheKey() {
+        val book = """
+            [keys: 《locket》, docks៕, pierฯ]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(book, "The pier is quiet.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+    }
+
 }
