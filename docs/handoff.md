@@ -1,3 +1,13 @@
+# Handoff (2026-10-02, Stability wave 27)
+
+On `gradation/w27-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w26 encrypt_ok / code_mode backup:
+- Backup rules and data-extraction rules name `.partial` / `.ready` / `.bak` for the live `chat_database` set and for `pre_sqlcipher` / `encrypting` / `encrypt_ok`, so Auto Backup before the next open cannot upload a torn move temp.
+- When the vault already has `encrypt_ok`, leftover `pre_sqlcipher` / `encrypting` at the databases root or under `chat_db_hold` are discarded instead of being drained back into the vault (the marker means the plaintext snapshot was confirmed disposable).
+- Torn move temps under hold are discarded after the park pass (`.kept-*` stay so a failed `parkDbSet` cannot drop a previous hold main).
+- Keystore-wrapped API keys commit on save (same durability as the chat-database passphrase and Code host tokens).
+
+Phone: leave `chat_database.partial` or `chat_database.pre_sqlcipher.partial` beside the live DB and force a cloud backup before relaunch (rules should skip it). Leave `chat_database.encrypt_ok` in the vault with a root or hold `pre_sqlcipher` (after relaunch the plaintext leftover should be gone, not re-vaulted). Save an OpenRouter or xAI key and kill mid-save (key should still decrypt after relaunch).
+
 # Handoff (2026-10-02, Chat wave 27)
 
 On `gradation/w27-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w26:

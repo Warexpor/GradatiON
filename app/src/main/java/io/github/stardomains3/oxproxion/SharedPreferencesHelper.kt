@@ -1110,11 +1110,10 @@ class SharedPreferencesHelper(context: Context) {
         // Keep the old key until the new one proves it decrypts, so a failed save is not a lost key.
         val oldEncrypted = apiKeysPrefs.getString("${alias}_encrypted", null)
         val oldIv = apiKeysPrefs.getString("${alias}_iv", null)
-        // The chat database passphrase is the only copy of the key that opens the file. apply()
-        // can still be sitting in memory when the process is killed, and the next launch then
-        // mints a new key and locks the database that was just encrypted.
-        val durable = alias == CHAT_DB_PASSPHRASE_ALIAS
-        fun restoreOld() = apiKeysPrefs.edit(commit = durable) {
+        // commit: apply() can still be sitting in memory when the process is killed. For the chat
+        // database passphrase that mints a new key and locks the file; for OpenRouter / xAI / LAN
+        // keys the user loses the only wrapped copy the same way. Match CodeHostSecrets.
+        fun restoreOld() = apiKeysPrefs.edit(commit = true) {
             if (oldEncrypted != null && oldIv != null) {
                 putString("${alias}_encrypted", oldEncrypted)
                 putString("${alias}_iv", oldIv)
@@ -1137,13 +1136,8 @@ class SharedPreferencesHelper(context: Context) {
             val editor = apiKeysPrefs.edit()
             editor.putString("${alias}_encrypted", encryptedKeyString)
             editor.putString("${alias}_iv", ivString)
-            // commit() can return false when the write did not land. apply() hides that, and a
-            // lost chat-database passphrase is a database that can never be opened again.
-            val written = if (durable) editor.commit() else {
-                editor.apply()
-                true
-            }
-            if (!written) {
+            // commit() can return false when the write did not land. apply() hides that.
+            if (!editor.commit()) {
                 Log.e("API_KEY_STORAGE", "Could not commit $alias")
                 restoreOld()
                 return false
