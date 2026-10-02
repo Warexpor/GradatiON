@@ -289,23 +289,24 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         viewModel.isExtendedDockEnabled.observe(viewLifecycleOwner) { powerTools.isChecked = powerToolsOn() }
         viewModel.isExtendedTopBarEnabled.observe(viewLifecycleOwner) { powerTools.isChecked = powerToolsOn() }
 
-        // These follow the view model, which flips its own state: the listener only asks for the toggle.
-        bindSwitch(view, R.id.expandableInputSwitch, viewModel.isExpandableInputEnabled.value ?: false) {
-            viewModel.toggleExpandableInput()
+        // These follow the view model. Listeners only toggle when the switch disagrees with LiveData,
+        // so an observer writing isChecked does not flip the preference a second time.
+        bindSwitch(view, R.id.expandableInputSwitch, viewModel.isExpandableInputEnabled.value ?: false) { on ->
+            if ((viewModel.isExpandableInputEnabled.value ?: false) != on) viewModel.toggleExpandableInput()
         }
-        bindSwitch(view, R.id.scrollButtonsSwitch, viewModel.isScrollersEnabled.value ?: false) {
-            viewModel.toggleScrollers()
+        bindSwitch(view, R.id.scrollButtonsSwitch, viewModel.isScrollersEnabled.value ?: false) { on ->
+            if ((viewModel.isScrollersEnabled.value ?: false) != on) viewModel.toggleScrollers()
         }
-        val scrollProgress = bindSwitch(view, R.id.scrollProgressSwitch, viewModel.isScrollProgressEnabled.value ?: false) {
-            viewModel.toggleScrollProgress()
+        val scrollProgress = bindSwitch(view, R.id.scrollProgressSwitch, viewModel.isScrollProgressEnabled.value ?: false) { on ->
+            if ((viewModel.isScrollProgressEnabled.value ?: false) != on) viewModel.toggleScrollProgress()
         }
         viewModel.isScrollProgressEnabled.observe(viewLifecycleOwner) { scrollProgress.isChecked = it }
-        val volumeScroll = bindSwitch(view, R.id.volumeScrollSwitch, viewModel.isVolumeScrollEnabled.value ?: false) {
-            viewModel.toggleVolumeScroll()
+        val volumeScroll = bindSwitch(view, R.id.volumeScrollSwitch, viewModel.isVolumeScrollEnabled.value ?: false) { on ->
+            if ((viewModel.isVolumeScrollEnabled.value ?: false) != on) viewModel.toggleVolumeScroll()
         }
         viewModel.isVolumeScrollEnabled.observe(viewLifecycleOwner) { volumeScroll.isChecked = it }
-        val presetsExtended = bindSwitch(view, R.id.presetsExtendedSwitch, viewModel.isPresetsExtendedEnabled.value ?: false) {
-            viewModel.togglePresetsExtended()
+        val presetsExtended = bindSwitch(view, R.id.presetsExtendedSwitch, viewModel.isPresetsExtendedEnabled.value ?: false) { on ->
+            if ((viewModel.isPresetsExtendedEnabled.value ?: false) != on) viewModel.togglePresetsExtended()
         }
         viewModel.isPresetsExtendedEnabled.observe(viewLifecycleOwner) { presetsExtended.isChecked = it }
 
@@ -637,8 +638,15 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         }
 
         val current = VoiceEngine.fromKey(prefs.getVoiceInputProvider())
+        enabled.applyGrokionSwitchStyle()
         enabled.isChecked = current != VoiceEngine.OFF
-        toggle.check(ids[current] ?: R.id.voiceEnginePhone)
+        // Off used to overwrite the only engine key; restore the last non-off choice on the chips.
+        val shown = if (current == VoiceEngine.OFF) {
+            VoiceEngine.fromKey(prefs.getVoiceInputLastEngine())
+        } else {
+            current
+        }
+        toggle.check(ids[shown] ?: R.id.voiceEnginePhone)
         render()
 
         fun pickedEngine() = ids.entries.firstOrNull { it.value == toggle.checkedButtonId }?.key ?: VoiceEngine.DEVICE

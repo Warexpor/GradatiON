@@ -29,11 +29,13 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
 
         val prefs = SharedPreferencesHelper(requireContext())
         view.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsRoleplaySwitch).apply {
+            applyGrokionSwitchStyle()
             isChecked = prefs.isRoleplayEnabled()
             setOnCheckedChangeListener { _, on -> prefs.setRoleplayEnabled(on) }
         }
         val codeStore = io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store
         view.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsCodeSwitch).apply {
+            applyGrokionSwitchStyle()
             isChecked = codeStore.enabled
             setOnCheckedChangeListener { _, on ->
                 codeStore.enabled = on
@@ -88,7 +90,9 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
         super.onHiddenChanged(hidden)
         if (hidden) return
         view?.let { bindValues(it) }
-        // Code settings has its own switch for the same flag.
+        // Sub-screens (Code settings, Appearance…) may have changed a mode flag.
+        view?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsRoleplaySwitch)?.isChecked =
+            SharedPreferencesHelper(requireContext()).isRoleplayEnabled()
         view?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsCodeSwitch)?.isChecked =
             io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store.enabled
     }
