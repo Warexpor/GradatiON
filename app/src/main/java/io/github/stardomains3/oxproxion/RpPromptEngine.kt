@@ -107,6 +107,13 @@ object RpPromptEngine {
     private const val SCENE_NOTE_CLOSE_MEDIUM_ANGLE = "\n❭"
     private const val SCENE_NOTE_OPEN_LIGHT_TORTOISE = "❲Scene note, not spoken aloud:\n"
     private const val SCENE_NOTE_CLOSE_LIGHT_TORTOISE = "\n❳"
+    /** Medium curly / white paren / black tortoise: some models echo the note that way too (matching OOC). */
+    private const val SCENE_NOTE_OPEN_MEDIUM_CURLY = "❴Scene note, not spoken aloud:\n"
+    private const val SCENE_NOTE_CLOSE_MEDIUM_CURLY = "\n❵"
+    private const val SCENE_NOTE_OPEN_WHITE_PAREN_MATH = "⦅Scene note, not spoken aloud:\n"
+    private const val SCENE_NOTE_CLOSE_WHITE_PAREN_MATH = "\n⦆"
+    private const val SCENE_NOTE_OPEN_BLACK_TORTOISE = "⦗Scene note, not spoken aloud:\n"
+    private const val SCENE_NOTE_CLOSE_BLACK_TORTOISE = "\n⦘"
 
     private val sceneNoteForms = listOf(
         SCENE_NOTE_OPEN to SCENE_NOTE_CLOSE,
@@ -132,6 +139,9 @@ object RpPromptEngine {
         SCENE_NOTE_OPEN_MEDIUM_FLATTENED to SCENE_NOTE_CLOSE_MEDIUM_FLATTENED,
         SCENE_NOTE_OPEN_MEDIUM_ANGLE to SCENE_NOTE_CLOSE_MEDIUM_ANGLE,
         SCENE_NOTE_OPEN_LIGHT_TORTOISE to SCENE_NOTE_CLOSE_LIGHT_TORTOISE,
+        SCENE_NOTE_OPEN_MEDIUM_CURLY to SCENE_NOTE_CLOSE_MEDIUM_CURLY,
+        SCENE_NOTE_OPEN_WHITE_PAREN_MATH to SCENE_NOTE_CLOSE_WHITE_PAREN_MATH,
+        SCENE_NOTE_OPEN_BLACK_TORTOISE to SCENE_NOTE_CLOSE_BLACK_TORTOISE,
     )
 
     fun sceneNote(body: String): String = SCENE_NOTE_OPEN + body.trim() + SCENE_NOTE_CLOSE
@@ -148,7 +158,7 @@ object RpPromptEngine {
     /**
      * A reply that opens by echoing the scene note, with the story after it. The note on its
      * own is left in place, so a reply that is only the echo is not wiped to nothing.
-     * A fullwidth `（…）`, `[…]`, `【…】`, `{…}`, `｛…｝`, `〔…〕`, `〖…〗`, `〈…〉`, `《…》`, `｟…｠`, `〘…〙`, `⟨…⟩`, `❰…❱`, `〚…〛`, `⟪…⟫`, `⟬…⟭`, `⟦…⟧`, `⦃…⦄`, `❨…❩`, `❪…❫`, `❬…❭`, or `❲…❳` echo is stripped the same way.
+     * A fullwidth `（…）`, `[…]`, `【…】`, `{…}`, `｛…｝`, `〔…〕`, `〖…〗`, `〈…〉`, `《…》`, `｟…｠`, `〘…〙`, `⟨…⟩`, `❰…❱`, `〚…〛`, `⟪…⟫`, `⟬…⟭`, `⟦…⟧`, `⦃…⦄`, `❨…❩`, `❪…❫`, `❬…❭`, `❲…❳`, `❴…❵`, `⦅…⦆`, or `⦗…⦘` echo is stripped the same way.
      */
     fun withoutLeadingSceneNote(text: String): String {
         val trimmed = text.trim()

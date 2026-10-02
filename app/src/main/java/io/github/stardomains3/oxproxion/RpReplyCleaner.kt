@@ -49,8 +49,9 @@ object RpReplyCleaner {
      * heavy ornament `❰OOC：…❱`, white square `〚OOC：…〛`, math double angle `⟪OOC：…⟫`,
      * math white tortoise `⟬OOC：…⟭`, math white square `⟦OOC：…⟧`, white curly `⦃OOC：…⦄`,
      * flattened paren `❨OOC：…❩`, medium flattened `❪OOC：…❫`, medium angle `❬OOC：…❭`,
-     * light tortoise `❲OOC：…❳`, medium curly `❴OOC：…❵`, white paren `⦅OOC：…⦆`, or
-     * black tortoise `⦗OOC：…⦘`) even when the note wraps, then a "here's the rewritten reply"
+     * light tortoise `❲OOC：…❳`, medium curly `❴OOC：…❵`, white paren `⦅OOC：…⦆`,
+     * black tortoise `⦗OOC：…⦘`, z-image `⦇OOC：…⦈`, z-binding `⦉OOC：…⦊`, or
+     * curled angle `⧼OOC：…⧽`) even when the note wraps, then a "here's the rewritten reply"
      * label. An OOC line that is not that note stays: it can be the character talking.
      */
     private fun stripLeadingRewrite(text: String): String {
@@ -73,7 +74,7 @@ object RpReplyCleaner {
         return text.substring(close + 1)
     }
 
-    /** Length of a leading `(OOC:` / `【OOC：` / `[OOC:` / `{OOC:` / `〔OOC：` / `〈OOC：` / `｟OOC：` / `〘OOC：` / `⟨OOC：` / `❰OOC：` / `〚OOC：` / `⟪OOC：` / `⟬OOC：` / `⟦OOC：` / `⦃OOC：` / `❨OOC：` / `❪OOC：` / `❬OOC：` / `❲OOC：` / `❴OOC：` / `⦅OOC：` / `⦗OOC：` opener, or null when this is not that note. */
+    /** Length of a leading `(OOC:` / `【OOC：` / `[OOC:` / `{OOC:` / `〔OOC：` / `〈OOC：` / `｟OOC：` / `〘OOC：` / `⟨OOC：` / `❰OOC：` / `〚OOC：` / `⟪OOC：` / `⟬OOC：` / `⟦OOC：` / `⦃OOC：` / `❨OOC：` / `❪OOC：` / `❬OOC：` / `❲OOC：` / `❴OOC：` / `⦅OOC：` / `⦗OOC：` / `⦇OOC：` / `⦉OOC：` / `⧼OOC：` opener, or null when this is not that note. */
     private fun rewriteOocOpen(text: String): Int? {
         val prefixes = listOf(
             "(OOC:", "（OOC:", "(OOC：", "（OOC：",
@@ -100,6 +101,9 @@ object RpReplyCleaner {
             "❴OOC:", "❴OOC：",
             "⦅OOC:", "⦅OOC：",
             "⦗OOC:", "⦗OOC：",
+            "⦇OOC:", "⦇OOC：",
+            "⦉OOC:", "⦉OOC：",
+            "⧼OOC:", "⧼OOC：",
         )
         for (p in prefixes) {
             if (text.startsWith(p, ignoreCase = true)) return p.length
@@ -113,7 +117,7 @@ object RpReplyCleaner {
      * lenticular, CJK angles, white parens, white tortoise, math angles, heavy ornaments,
      * white squares, math double angles, math white tortoise, math white squares, white curly,
      * flattened parens, medium flattened, medium angles, light tortoise, medium curly, white
-     * parens and black tortoise stay in their own pair.
+     * parens, black tortoise, z-image, z-binding and curled angle stay in their own pair.
      */
     private fun closingBracket(text: String): Int {
         val open = text.first()
@@ -142,6 +146,9 @@ object RpReplyCleaner {
             '❴' -> setOf('❴') to setOf('❵')
             '⦅' -> setOf('⦅') to setOf('⦆')
             '⦗' -> setOf('⦗') to setOf('⦘')
+            '⦇' -> setOf('⦇') to setOf('⦈')
+            '⦉' -> setOf('⦉') to setOf('⦊')
+            '⧼' -> setOf('⧼') to setOf('⧽')
             else -> return -1
         }
         var depth = 0
