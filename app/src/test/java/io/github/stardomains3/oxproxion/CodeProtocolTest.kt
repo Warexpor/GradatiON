@@ -1644,6 +1644,27 @@ class CodeProtocolTest {
         assertFalse(AcpHandshake.isSkippableAuthError(null))
     }
 
+    @Test fun cursorToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ws","title":"Search","kind":"other","name":"WebSearch","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ld","title":"List","kind":"other","name":"ListDir","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"nb","title":"Notebook","kind":"other","name":"EditNotebook","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.FETCH, byId["ws"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["ld"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["nb"]?.kind)
+    }
+
+    @Test fun bridgeSeqAcceptsAWholeNumberWrittenAsADouble() {
+        val frame = """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","_meta":{"seq":2.0},"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"hi"}}}}"""
+        val outs = acp.decode(frame)
+        val update = outs.filterIsInstance<AdapterOutput.Update>().single()
+        assertEquals(2L, update.seq)
+        assertEquals(2L, acp.lastSeq("s1"))
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()

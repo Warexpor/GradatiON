@@ -642,6 +642,19 @@ class CodeHub internal constructor(context: Context) {
         composerDrafts.remove(sessionId)
     }
 
+    /** Unsent line on Code home for [hostId], parked when the home view is torn down or the machine changes. */
+    fun homeDraft(hostId: String): CodeComposerDrafts.Draft? =
+        CodeComposerDrafts.homeKey(hostId)?.let { composerDrafts[it] }
+
+    fun parkHomeDraft(hostId: String, text: String, attachments: List<PromptAttachment>) {
+        val key = CodeComposerDrafts.homeKey(hostId) ?: return
+        CodeComposerDrafts.park(composerDrafts, key, text, attachments)
+    }
+
+    fun clearHomeDraft(hostId: String) {
+        CodeComposerDrafts.homeKey(hostId)?.let { composerDrafts.remove(it) }
+    }
+
     /** Phone-local title edit; persists via the session index in Room. The bridge cannot replace it. */
     fun rename(sessionId: String, title: String) {
         val t = title.trim()

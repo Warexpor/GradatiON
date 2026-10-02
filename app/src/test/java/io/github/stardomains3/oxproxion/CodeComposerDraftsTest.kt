@@ -30,4 +30,24 @@ class CodeComposerDraftsTest {
         CodeComposerDrafts.park(drafts, "  ", "hello")
         assertEquals(0, drafts.size)
     }
+
+    @Test fun homeKeyIsPerHost() {
+        assertEquals("home\u0000laptop", CodeComposerDrafts.homeKey("laptop"))
+        assertNull(CodeComposerDrafts.homeKey("  "))
+        val drafts = HashMap<String, CodeComposerDrafts.Draft>()
+        val key = CodeComposerDrafts.homeKey("demo")!!
+        CodeComposerDrafts.park(drafts, key, "fix reconnect")
+        assertEquals("fix reconnect", drafts[key]?.text)
+        CodeComposerDrafts.park(drafts, key, "   ")
+        assertNull(drafts[key])
+    }
+
+    @Test fun homeDraftDoesNotCollideWithASessionId() {
+        val drafts = HashMap<String, CodeComposerDrafts.Draft>()
+        CodeComposerDrafts.park(drafts, "demo", "session line")
+        val home = CodeComposerDrafts.homeKey("demo")!!
+        CodeComposerDrafts.park(drafts, home, "home line")
+        assertEquals("session line", drafts["demo"]?.text)
+        assertEquals("home line", drafts[home]?.text)
+    }
 }
