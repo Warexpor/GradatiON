@@ -794,6 +794,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         getApplication<Application>().getString(id, *args)
     //val generatedImages = mutableMapOf<Int, String>()
     private var pendingUserImageUri: String? = null  // String (toString())
+    /**
+     * Staged Chat photos/files parked per thread. Lives on the activity ViewModel so a
+     * rotation (or leaving for Code) does not drop parked attachments the way a fragment
+     * field would.
+     */
+    private var stagedByChat: Map<String, ComposerStaged.Entry> = emptyMap()
     /** Scene photos an edit has cut out of the transcript but still has to put back. */
     private val scenePhotosHeld = mutableSetOf<String>()
     private var httpClient: HttpClient
@@ -3844,6 +3850,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The file URI for a photo still staged, so a refused send can put it back. */
     fun pendingImageUri(): String? = pendingUserImageUri
+
+    fun stagedAttachments(): Map<String, ComposerStaged.Entry> = stagedByChat
+
+    fun setStagedAttachments(store: Map<String, ComposerStaged.Entry>) {
+        stagedByChat = store
+    }
     fun isImageGenerationModel(modelIdentifier: String?): Boolean {
         if (modelIdentifier == null) return false
 

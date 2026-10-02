@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Chat wave 20)
+
+On `gradation/w20-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w19:
+- Staged Chat attachments park on the activity ViewModel, so a rotation restores photo/audio/files (not only the pending JPEG URI), and leaving Chat for Code parks and restores them the same way Ask↔Roleplay already did.
+- Soft-park on pause / History open skips an empty live stage so a photo parked for Code is not wiped.
+- History search for a multi-word query spanning caption + "Photo" (e.g. "hello photo") shows both on the row so the hit can stay bold.
+
+Phone: stage a photo (or audio), rotate (chip returns). Stage a photo, open Code, come back (chip returns). Caption + photo, History search "hello photo" (row shows Draft: hello Photo with the phrase bold).
+
 # Handoff (2026-10-02, Stability wave 19)
 
 On `gradation/w19-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w18 hold parking:

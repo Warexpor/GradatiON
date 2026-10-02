@@ -354,6 +354,9 @@ class HistoryListTest {
         assertEquals("hello Photo", HistoryList.draftRowText("hello", "Photo", "photo"))
         assertEquals("see the Photo later", HistoryList.draftRowText("see the Photo later", "Photo", "photo"))
         assertEquals("hello", HistoryList.draftRowText("hello", "Photo", "lantern"))
+        // Multi-word query spanning caption + label still needs both on the row.
+        assertEquals("hello Photo", HistoryList.draftRowText("hello", "Photo", "hello photo"))
+        assertEquals("hello Photo", HistoryList.draftRowText("hello", "Photo", "hello  photo"))
         val label = { text: String -> "Draft: $text" }
         val row = HistoryList.rowPreview(
             "You: sent",
@@ -363,5 +366,13 @@ class HistoryListTest {
         )
         assertEquals("Draft: hello Photo", row)
         assertEquals(13, HistoryList.emphasisAt(row, "photo"))
+        val phrase = HistoryList.rowPreview(
+            "You: sent",
+            HistoryList.draftRowText("hello", "Photo", "hello photo"),
+            "hello photo",
+            label,
+        )
+        assertEquals("Draft: hello Photo", phrase)
+        assertEquals(7, HistoryList.emphasisAt(phrase, "hello photo"))
     }
 }

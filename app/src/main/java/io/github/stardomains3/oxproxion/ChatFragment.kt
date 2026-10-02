@@ -1313,8 +1313,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 else -> Unit
             }
         }
-        // Fragment fields survive a rebuild; the preview ImageView does not. Put the chip back.
-        refreshLiveStagedPreview()
+        // ViewModel keeps parked stages across a rebuild; fragment fields do not. Restore
+        // the open thread's photo/audio/files (or reload JPEG bytes from the pending URI).
+        restoreLiveStagedAfterRebuild()
         // end onviewcreated
     }
 
@@ -1322,8 +1323,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var askComposerDirty = false
     private var suppressDraftDirty = false
     private var composerStateRestored = false
-    /** Staged photos/files parked per Chat thread (in memory for this process). */
-    private var stagedByChat: Map<String, ComposerStaged.Entry> = emptyMap()
+    /** Staged photos/files park on [ChatViewModel.stagedAttachments] so rotation and Code keep them. */
 
     override fun onViewStateRestored(savedInstanceState: Bundle?) {
         super.onViewStateRestored(savedInstanceState)
@@ -1391,9 +1391,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.rekey(sharedPreferencesHelper.getAskComposerDrafts(), from = null, to = sessionId, text = text)
         )
-        val beforePromote = stagedByChat
-        stagedByChat = ComposerStaged.rekey(beforePromote, from = null, to = sessionId, entry = currentStagedEntry())
-        for (gone in ComposerStaged.evicted(beforePromote, stagedByChat)) {
+        val beforePromote = viewModel.stagedAttachments()
+        val afterPromote = ComposerStaged.rekey(beforePromote, from = null, to = sessionId, entry = currentStagedEntry())
+        viewModel.setStagedAttachments(afterPromote)
+        for (gone in ComposerStaged.evicted(beforePromote, afterPromote)) {
             discardParkedScene(gone)
         }
         mirrorAskModeDraft(text)
@@ -1507,12 +1508,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (::attachmentButton.isInitialized) updateAttachmentButton()
         } else {
             // A parked photo for a chat that is not on screen would otherwise stay on disk.
-            discardParkedScene(ComposerStaged.get(stagedByChat, sessionId))
+            discardParkedScene(ComposerStaged.get(viewModel.stagedAttachments(), sessionId))
         }
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.drop(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
         )
-        stagedByChat = ComposerStaged.drop(stagedByChat, sessionId)
+        viewModel.setStagedAttachments(ComposerStaged.drop(viewModel.stagedAttachments(), sessionId))
     }
 
     override fun hasUnsentDraft(sessionId: Long): Boolean {
@@ -1529,7 +1530,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         if (ComposerDrafts.text(sharedPreferencesHelper.getAskComposerDrafts(), sessionId).isNotBlank()) {
             return true
         }
-        if (!ComposerStaged.get(stagedByChat, sessionId).isEmpty) return true
+        if (!ComposerStaged.get(viewModel.stagedAttachments(), sessionId).isEmpty) return true
         if (!open) return false
         return selectedImageBytes != null || selectedAudioBytes != null || pendingFiles.isNotEmpty() ||
             !viewModel.pendingImageUri().isNullOrBlank()
@@ -1559,7 +1560,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             hasAudio = selectedAudioBytes != null
             fileCount = pendingFiles.size
         } else {
-            val entry = ComposerStaged.get(stagedByChat, sessionId)
+            val entry = ComposerStaged.get(viewModel.stagedAttachments(), sessionId)
             hasPhoto = entry.imageBytes != null || !entry.imageUri.isNullOrBlank()
             hasAudio = entry.audioBytes != null
             fileCount = entry.files.size
@@ -1586,7 +1587,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             hasAudio = selectedAudioBytes != null
             fileCount = pendingFiles.size
         } else {
-            val entry = ComposerStaged.get(stagedByChat, sessionId)
+            val entry = ComposerStaged.get(viewModel.stagedAttachments(), sessionId)
             hasPhoto = entry.imageBytes != null || !entry.imageUri.isNullOrBlank()
             hasAudio = entry.audioBytes != null
             fileCount = entry.files.size
@@ -3921,9 +3922,10 @@ $cleanContent
      * so a long History cannot keep every parked photo forever.
      */
     private fun rememberStaged(sessionId: Long?, entry: ComposerStaged.Entry) {
-        val before = stagedByChat
-        stagedByChat = ComposerStaged.remember(before, sessionId, entry)
-        for (gone in ComposerStaged.evicted(before, stagedByChat)) {
+        val before = viewModel.stagedAttachments()
+        val after = ComposerStaged.remember(before, sessionId, entry)
+        viewModel.setStagedAttachments(after)
+        for (gone in ComposerStaged.evicted(before, after)) {
             discardParkedScene(gone)
         }
     }
@@ -3936,6 +3938,24 @@ $cleanContent
         clearStagedAttachment(discardSceneFile = false)
         pendingFiles.clear()
         if (::attachmentButton.isInitialized) updateAttachmentButton()
+    }
+
+    /**
+     * After a view rebuild, prefer the ViewModel park map (audio/files/photo URI) so a
+     * rotation restores more than the pending JPEG URI. Fall back to reloading bytes from
+     * that URI when the map has nothing for this thread.
+     */
+    private fun restoreLiveStagedAfterRebuild() {
+        if (viewModel.isRpMode()) return
+        if (!::attachmentPreviewContainer.isInitialized) return
+        val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+        val parked = ComposerStaged.get(viewModel.stagedAttachments(), id)
+        val liveBare = selectedImageBytes == null && selectedAudioBytes == null && pendingFiles.isEmpty()
+        if (!parked.isEmpty && liveBare) {
+            applyStagedAttachment(id)
+        } else {
+            refreshLiveStagedPreview()
+        }
     }
 
     /**
@@ -3983,7 +4003,7 @@ $cleanContent
         if (viewModel.isRpMode()) return
         clearStagedAttachment(discardSceneFile = false)
         pendingFiles.clear()
-        val entry = ComposerStaged.get(stagedByChat, sessionId)
+        val entry = ComposerStaged.get(viewModel.stagedAttachments(), sessionId)
         if (entry.isEmpty) {
             if (::attachmentButton.isInitialized) updateAttachmentButton() else updateSendButtonChrome()
             return
@@ -4786,7 +4806,15 @@ $cleanContent
             viewModel.toggleChatMode()
         }
         if (!rpOn) closeRpPanel(animated = false)
-        if (::codeMode.isInitialized) codeMode.refresh()
+        if (::codeMode.isInitialized) {
+            val codeWasActive = codeMode.isActive
+            codeMode.refresh()
+            // Settings can disable Code while it is showing; deactivate skips leaveCodeMode.
+            if (codeWasActive && !codeMode.isActive && !viewModel.isRpMode()) {
+                val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+                applyStagedAttachment(id)
+            }
+        }
         modeTabIndicator.post { placeModeTabIndicator(animate = false) }
     }
 
@@ -4813,7 +4841,10 @@ $cleanContent
         if (viewModel.isRpMode() && ::chatEditText.isInitialized) {
             sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, chatEditText.text?.toString().orEmpty())
         } else {
-            parkAskDraft(if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId())
+            val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+            parkAskDraft(id)
+            // Soft-park so a rotation can restore audio/files (and a photo) from the ViewModel map.
+            softParkLiveStaged(id)
         }
         super.onPause()
     }
@@ -4938,10 +4969,40 @@ $cleanContent
         updateJumpToBottom()
     }
 
+    /**
+     * Leave Chat for Code: park Ask text and staged attachments so they do not sit on a
+     * hidden composer (and so a rotation while on Code can still restore them).
+     */
+    private fun enterCodeMode(animate: Boolean = true) {
+        if (!::codeMode.isInitialized || codeMode.isActive) return
+        if (!viewModel.isRpMode()) {
+            val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+            parkAskDraft(id)
+            parkStagedAttachment(id)
+        } else {
+            // Roleplay has no per-thread park; drop a staged RP photo before Code hides the UI.
+            clearStagedAttachment(discardSceneFile = true)
+            pendingFiles.clear()
+            if (::attachmentButton.isInitialized) updateAttachmentButton()
+        }
+        hideKeyboard()
+        codeMode.activate(animate)
+    }
+
+    /** Come back from Code; restore a parked Ask attachment onto the composer. */
+    private fun leaveCodeMode() {
+        if (!::codeMode.isInitialized || !codeMode.isActive) return
+        codeMode.deactivate()
+        if (!viewModel.isRpMode()) {
+            val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+            applyStagedAttachment(id)
+        }
+    }
+
     /** Switch now, no animation. False when blocked (a reply is still streaming). */
     private fun switchToTab(tab: TextView): Boolean {
         if (tab == codeMode.tab) {
-            if (!codeMode.isActive) { hideKeyboard(); codeMode.activate(animate = false) }
+            if (!codeMode.isActive) enterCodeMode(animate = false)
             return true
         }
         val target = if (tab == tabRoleplay) ChatMode.RP else ChatMode.ASK
@@ -4950,7 +5011,7 @@ $cleanContent
             GlassNotice.show(requireContext(), getString(R.string.rp_wait_for_reply))
             return false
         }
-        codeMode.deactivate()
+        leaveCodeMode()
         if (target != current) {
             val leavingId = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
             if (current == ChatMode.ASK) {
@@ -5516,7 +5577,7 @@ $cleanContent
         when (destination) {
             HistoryPanelHost.Destination.CODE -> {
                 closeHistoryPanel()
-                if (::codeMode.isInitialized) codeMode.activate()
+                if (::codeMode.isInitialized) enterCodeMode()
             }
             HistoryPanelHost.Destination.ROLEPLAY -> openRpHub()
             HistoryPanelHost.Destination.MODELS -> openBotModelPicker()
@@ -5616,7 +5677,15 @@ $cleanContent
         parkAskDraft(id)
         // Mirror a live staged photo into the park map without clearing the composer chip,
         // so History delete / Discard still finds the JPEG if the open check misses.
-        if (!viewModel.isRpMode()) rememberStaged(id, currentStagedEntry())
+        // Skip an empty live stage: remembering empty would drop a photo parked for Code.
+        softParkLiveStaged(id)
+    }
+
+    /** Copy a non-empty live stage into the ViewModel map without clearing the chip. */
+    private fun softParkLiveStaged(sessionId: Long?) {
+        if (viewModel.isRpMode()) return
+        val entry = currentStagedEntry()
+        if (!entry.isEmpty) rememberStaged(sessionId, entry)
     }
 
     private fun prepareHistoryList() {
