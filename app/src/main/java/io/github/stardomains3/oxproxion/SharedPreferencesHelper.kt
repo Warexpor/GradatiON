@@ -466,7 +466,8 @@ class SharedPreferencesHelper(context: Context) {
     /** True once after [markChatDbRecovered]; clears the flag. */
     fun consumeChatDbRecovered(): Boolean {
         if (!mainPrefs.getBoolean(KEY_CHAT_DB_RECOVERED, false)) return false
-        mainPrefs.edit { remove(KEY_CHAT_DB_RECOVERED) }
+        // commit: a kill after apply() is scheduled would show the recovery notice again.
+        mainPrefs.edit(commit = true) { remove(KEY_CHAT_DB_RECOVERED) }
         return true
     }
 

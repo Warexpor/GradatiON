@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Stability wave 18)
+
+On `gradation/w18-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w16 recovered-name skips:
+- Set-aside (`unreadable`) copies that cannot enter the vault park under `chat_db_hold` as one set (main + wal/shm), matching recovered names. They are no longer `uniqueKept` into the vault (which could split a main file from its wal).
+- Move temps (`.partial` / `.ready` / `.bak`) and `.kept-*` leftovers of `chat_database*` at the databases root are parked under that hold folder too; Auto Backup has no wildcards for those names.
+- Clearing the one-time recovery notice commits the preference edit.
+
+Phone: force a recovery while the vault already holds `chat_database.unreadable-<stamp>`, and confirm the new set-aside lands under `databases/chat_db_hold/` with its wal. Kill mid-move and relaunch (temps should leave the databases root).
+
 # Handoff (2026-10-02, Chat wave 18)
 
 On `gradation/w18-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w17:
