@@ -15,20 +15,22 @@ object RpContinuation {
      * are left out on purpose: a reply that opens with `"` is starting new dialogue.
      * Guillemets and Arabic/Indic closers hug the same way as Latin ones.
      */
-    private const val CLOSERS = ",.;:!?)]}%\u2026\u2019\u201D\u00BB\u203A。！？」』؟۔।॥։၊။"
+    private const val CLOSERS = ",.;:!?)]}%\u2026\u2019\u201D\u00BB\u203A。！？」』؟۔।॥։၊။．"
 
     /** Characters that hug the text after them: a reply that stops on one has more to say right after it. Spanish ¿¡ start the next beat the same way. */
-    private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C\u00AB\u2039「『¿¡"
+    private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C\u00AB\u2039「『¿¡„‚"
 
     /**
      * Sentence enders, and the markup/quotes that may trail one (`*She smiles.*`, `"Come in."`,
      * 「来て。」, «Привет.», مرحبا؟). Arabic ؟۔, Devanagari ।॥, Armenian ։, Myanmar ၊။,
      * Hebrew ׃, Ethiopic ።, Greek ;, Tibetan །, Khmer ។, Armenian ՜՞,
-     * Syriac ܀܁܂, Mongolian ᠃ and doubled ¡¿ marks count too.
+     * Syriac ܀܁܂, Mongolian ᠃, doubled ¡¿ marks, fullwidth ．, interrobang ‽,
+     * Georgian ჻, Canadian Aboriginal ᙮ and Sinhala ෴ count too.
      */
-    private const val ENDERS = ".!?…。！？؟۔।॥։၊။׃።;།។՜՞܀܁܂᠃‼⁇⁈⁉"
+    private const val ENDERS = ".!?…。！？؟۔।॥։၊။׃።;།។՜՞܀܁܂᠃‼⁇⁈⁉．‽჻᙮෴"
     // Guillemets and a space before a closing one (French « … . ») are not part of the sentence end.
-    private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״"
+    // Left quotes “ ‘ trail too: German „…“ closes on “, which is an opener in English.
+    private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״\u201C\u2018"
 
     /**
      * Continue replaces the reply with the joined text. A picture already on that reply stays
@@ -90,9 +92,12 @@ object RpContinuation {
 
     /**
      * [base] followed by [addition], with a separator only where the model left none: a new
-     * paragraph after a finished sentence or closed action (including «…», ؟۔, ।॥, ׃, ።,
-     * ՞ and ܁), a plain space after unfinished text. A sentence in an unspaced script
+     * paragraph after a finished sentence or closed action (including «…», „…“, ؟۔, ।॥, ׃, ።,
+     * ՞, ܁, ． and ‽), a plain space after unfinished text. A sentence in an unspaced script
      * (including Tibetan and Ethiopic) gets no space.
+     *
+     * Finished ends are checked before openers: German „Hallo.“ closes on “, which is also an
+     * English opener, so treating openers first left a finished line glued to the next beat.
      */
     fun join(base: String, addition: String): String {
         if (addition.isEmpty()) return base
@@ -100,10 +105,11 @@ object RpContinuation {
         val last = base.last()
         val first = addition.first()
         if (last.isWhitespace() || first.isWhitespace()) return base + addition
-        if (first in CLOSERS || last in OPENERS) return base + addition
-        // Skip trailers and spaces so «Привет. » and « Bonjour. » still count as finished.
+        if (first in CLOSERS) return base + addition
+        // Skip trailers and spaces so «Привет. » and „Hallo.“ still count as finished.
         val end = base.trimEnd { it in TRAILERS || it.isWhitespace() }.lastOrNull()
         if (end != null && end in ENDERS) return "$base\n\n$addition"
+        if (last in OPENERS) return base + addition
         // Japanese, Chinese, Korean and the other unspaced scripts do not take a space between words.
         if (unspaced(last) || unspaced(first)) return base + addition
         return "$base $addition"

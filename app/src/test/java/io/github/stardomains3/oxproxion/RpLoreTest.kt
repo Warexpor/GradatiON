@@ -293,4 +293,16 @@ class RpLoreTest {
         assertTrue(RpLore.keyHits("བཀྲ", "དེ་ནི་བཀྲ་ཤིས་ཡིན།"))
         assertFalse(RpLore.keyHits("བཀྲ", "དེ་ནི་ཤིས་ཡིན།"))
     }
+
+    @Test
+    fun curlySingleQuotesAndMoreTrailersAreNotPartOfTheKey() {
+        val book = """
+            [keys: ‘locket’, docks．, pier‽]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(book, "The pier is quiet.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+    }
 }
