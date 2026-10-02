@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `EditFile`, `SearchReplace`), and a tool `name` when `kind` is missing or `other`.
+ * `EditFile`, `AwaitShell`, `MultiEdit`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -450,7 +450,8 @@ class AcpAdapter : HarnessAdapter {
             "edit", "write", "write_file", "writefile", "str_replace", "strreplace",
             "apply_patch", "patch",
             "edit_file", "editfile", "edit_file_v2", "editfilev2",
-            "search_replace", "searchreplace", "reapply" -> "edit"
+            "search_replace", "searchreplace", "reapply",
+            "multi_edit", "multiedit" -> "edit"
             "delete", "remove", "rm", "delete_file", "deletefile", "unlink" -> "delete"
             "move", "rename", "mv" -> "move"
             "search", "grep", "glob", "find", "rg",
@@ -460,16 +461,26 @@ class AcpAdapter : HarnessAdapter {
             "glob_file_search", "globfilesearch", "file_search", "filesearch",
             "grep_search", "grepsearch",
             "codebase_search", "codebasesearch", "deep_search", "deepsearch",
-            "read_lints", "readlints", "fix_lints", "fixlints" -> "search"
+            "read_lints", "readlints", "fix_lints", "fixlints",
+            "get_mcp_tools", "getmcptools",
+            "get_dynamic_tools", "getdynamictools",
+            "list_mcp_resources", "listmcpresources",
+            "list_mcp_tools", "listmcptools" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command",
             "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
             "runterminalcommand" -> "execute"
             "think", "thought", "reasoning",
-            "await", "await_task", "awaittask" -> "think"
+            "await", "await_task", "awaittask",
+            "await_shell", "awaitshell",
+            "todo_write", "todowrite", "update_todos", "updatetodos",
+            "task", "subagent", "switch_mode", "switchmode",
+            "create_plan", "createplan" -> "think"
             "fetch", "web_fetch", "webfetch", "websearch", "web_search", "http",
             "fetch_mcp_resource", "fetchmcpresource",
             "read_mcp_resource", "readmcpresource",
-            "fetch_rules", "fetchrules" -> "fetch"
+            "fetch_rules", "fetchrules",
+            "call_mcp_tool", "callmcptool",
+            "call_dynamic_tool", "calldynamictool" -> "fetch"
             "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
             else -> n
         }
@@ -563,7 +574,8 @@ class AcpAdapter : HarnessAdapter {
     }
 
     private fun toolCall(sid: String, u: JsonObject, now: Long, seq: Long?): List<AdapterOutput> {
-        val callId = u.str("toolCallId") ?: return ignored("tool_call without id")
+        // Same whole-number coercion as permission ids: toolCallId 5.0 still matches 5.
+        val callId = rpcIdString(u["toolCallId"]) ?: return ignored("tool_call without id")
         val canon = namedKind(u.str("kind"), u.str("name"))
         val kind = toolKind(canon)
         val result = ArrayList<AdapterOutput>()
@@ -587,7 +599,7 @@ class AcpAdapter : HarnessAdapter {
     }
 
     private fun toolCallUpdate(sid: String, u: JsonObject, now: Long, seq: Long?): List<AdapterOutput> {
-        val callId = u.str("toolCallId") ?: return ignored("tool_call_update without id")
+        val callId = rpcIdString(u["toolCallId"]) ?: return ignored("tool_call_update without id")
         val result = ArrayList<AdapterOutput>()
         result += AdapterOutput.Update(sid, CodeUpdate.ToolPatch(
             callId = callId,
@@ -608,7 +620,7 @@ class AcpAdapter : HarnessAdapter {
 
     /** One appended content item. A later `tool_call_update` with `content` still replaces. */
     private fun toolContentChunk(sid: String, u: JsonObject, now: Long, seq: Long?): List<AdapterOutput> {
-        val callId = u.str("toolCallId") ?: return ignored("tool_call_content_chunk without id")
+        val callId = rpcIdString(u["toolCallId"]) ?: return ignored("tool_call_content_chunk without id")
         val result = ArrayList<AdapterOutput>()
         val text = outputOf(sid, callId, u)
         if (!text.isNullOrEmpty()) {
@@ -659,7 +671,7 @@ class AcpAdapter : HarnessAdapter {
             key = "approval:$requestId",
             at = now,
             requestId = requestId,
-            callId = call?.str("toolCallId") ?: subject?.str("toolCallId"),
+            callId = rpcIdString(call?.get("toolCallId")) ?: rpcIdString(subject?.get("toolCallId")),
             title = params.str("title")?.trim()?.ifEmpty { null }
                 ?: call?.str("title")?.trim()?.ifEmpty { null }
                 ?: "The agent wants to continue",
@@ -920,13 +932,17 @@ class AcpAdapter : HarnessAdapter {
         val el = raw["command"] ?: raw["cmd"]
         val base = when (el) {
             is JsonArray -> joinArgs(el)
-            is JsonPrimitive -> if (el is JsonNull) "" else el.contentOrNull.orEmpty()
+            is JsonPrimitive -> if (el is JsonNull) "" else (
+                wholeNumberLong(el)?.toString() ?: el.contentOrNull.orEmpty()
+            )
             else -> ""
         }.trim()
         if (el is JsonArray) return base.ifEmpty { null }
         val extra = when (val args = raw["args"] ?: raw["arguments"]) {
             is JsonArray -> joinArgs(args)
-            is JsonPrimitive -> if (args is JsonNull) "" else args.contentOrNull.orEmpty().trim()
+            is JsonPrimitive -> if (args is JsonNull) "" else (
+                wholeNumberLong(args)?.toString() ?: args.contentOrNull.orEmpty()
+            ).trim()
             else -> ""
         }
         val text = when {
