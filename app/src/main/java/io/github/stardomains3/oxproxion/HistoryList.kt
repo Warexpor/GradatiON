@@ -214,6 +214,24 @@ object HistoryList {
         return "$text $attach"
     }
 
+    /**
+     * Draft line under a History title while searching. The caption alone stays when it already
+     * contains [query], or when you are not searching for the attachment. When the hit is only
+     * the Photo / Audio / files label, both are shown so the bold span has somewhere to land.
+     */
+    fun draftRowText(caption: String, attachmentLabel: String, query: String): String {
+        val needle = foldSpace(query)
+        val text = foldSpace(caption)
+        val attach = foldSpace(attachmentLabel)
+        if (needle.isEmpty()) return text.ifEmpty { attach }
+        if (attach.isEmpty()) return text
+        if (text.isEmpty()) return attach
+        if (text.contains(needle, ignoreCase = true)) return text
+        if (!attach.contains(needle, ignoreCase = true)) return text
+        if (text.contains(attach, ignoreCase = true)) return text
+        return "$text $attach"
+    }
+
     /** [matched] plus chats the database search missed because the words are only in a draft. */
     fun withDraftMatches(
         matched: List<ChatSession>,

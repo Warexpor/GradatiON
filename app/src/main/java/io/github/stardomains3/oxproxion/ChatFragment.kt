@@ -3939,12 +3939,25 @@ $cleanContent
     }
 
     /**
-     * The staged bytes and URI survive a view rebuild; the preview chip does not.
-     * Call after the new attachment views exist so a rotation still shows the picture.
+     * The ViewModel keeps a staged photo's URI across a rebuild; fragment bytes and the
+     * preview chip do not. Reload the JPEG when only the URI is left so Send still includes
+     * the picture (and does not clear the file while sending the caption alone).
      */
     private fun refreshLiveStagedPreview() {
         if (viewModel.isRpMode()) return
         if (!::attachmentPreviewContainer.isInitialized) return
+        if (selectedImageBytes == null) {
+            val uri = viewModel.pendingImageUri()
+            if (!uri.isNullOrBlank()) {
+                val bytes = runCatching {
+                    requireContext().contentResolver.openInputStream(uri.toUri())?.use { it.readBytes() }
+                }.getOrNull()?.takeIf { it.isNotEmpty() && it.size <= 12_000_000 }
+                if (bytes != null) {
+                    selectedImageBytes = bytes
+                    if (selectedImageMime.isNullOrBlank()) selectedImageMime = ScenePhoto.MIME
+                }
+            }
+        }
         val imageBytes = selectedImageBytes
         when {
             imageBytes != null -> {
@@ -5599,7 +5612,11 @@ $cleanContent
 
     /** Park the open line first, so the drawer's first load already includes it. */
     private fun parkOpenDraft() {
-        parkAskDraft(if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId())
+        val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+        parkAskDraft(id)
+        // Mirror a live staged photo into the park map without clearing the composer chip,
+        // so History delete / Discard still finds the JPEG if the open check misses.
+        if (!viewModel.isRpMode()) rememberStaged(id, currentStagedEntry())
     }
 
     private fun prepareHistoryList() {
