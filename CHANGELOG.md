@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code: ACP permission and Cursor ask answers send digit-string `optionId` / `questionId` / selected option ids as JSON numbers (same as the request id). A `sessionId` written as a whole-number double still matches live events as `"5"`. Cursor Agent tools named BrowserClick, BrowserType, BrowserSnapshot, BrowserWait, TakeScreenshot, KillShell, ListShells, CreateIssue, CreateBranch, MergePullRequest, AddIssueComment, GetPullRequest, GetFileContents, or SearchCode get the execute, read, think, edit, fetch, or search card. DownloadFile / UploadFile / CopyToBox / GetPullRequest detail lines read `fileId`, `draftId`, `destination_path`, `owner`, and `repo`.
 - Coming back from Roleplay restores a parked Chat photo using the Ask thread id remembered on the way out (askComposer may still name the Roleplay session during the flip), so Hub Continue / tab swipe / Settings no longer leave the chip missing on a saved Chat.
 - A gallery or camera pick that finishes after an Ask→Roleplay or Code flip parks the JPEG for that Ask thread instead of staging it on Roleplay (or dropping it while Code is showing).
 - History draft rows clip around a gapped multi-word hit (e.g. "hello photo" across a long "hello … Photo" draft) so the bold span still lands; contiguous hits are unchanged.
