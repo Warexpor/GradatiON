@@ -375,6 +375,51 @@ class CodeBridgeBackendTest {
         }
     }
 
+    @Test fun listHarnessesIdWrittenAsADoubleStillMatches() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
+        val answers = scope.launch {
+            val answered = HashSet<Long>()
+            while (true) {
+                for (frame in transport.sent.toList()) {
+                    val obj = runCatching { json.parseToJsonElement(frame).jsonObject }.getOrNull() ?: continue
+                    val id = obj["id"]?.jsonPrimitive?.longOrNull ?: continue
+                    if (id in answered) continue
+                    val method = obj["method"]?.jsonPrimitive?.content ?: continue
+                    val result = when (method) {
+                        "initialize" -> """{"protocolVersion":1}"""
+                        "bridge/listHarnesses" -> """{"harnesses":[
+                            {"id":5.0,"name":"Numeric","available":true},
+                            {"id":"7.0","name":"Stringified","available":false}
+                        ]}"""
+                        "bridge/listWorkspaces" -> """{"workspaces":[5.0,"/home/warexpor","9.0"]}"""
+                        else -> "{}"
+                    }
+                    answered += id
+                    transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":$result}""")
+                }
+                delay(5)
+            }
+        }
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            val list = backend.listHarnesses()
+            assertEquals(2, list.size)
+            assertEquals("5", list[0].id)
+            assertEquals("7", list[1].id)
+            val spaces = backend.listWorkspaces(HarnessKind.OPENCODE)
+            assertEquals(listOf("5", "/home/warexpor", "9"), spaces)
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
     @Test fun browseParsesDirectoryEntries() = runBlocking {
         val transport = FakeTransport()
         val adapter = AcpAdapter()
