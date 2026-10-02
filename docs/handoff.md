@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 27)
+
+On `gradation/w27-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`, `CodeBridgeBackendTest`, `ListSessionsJsonTest`):
+- A bridge `listSessions` `model` or `cwd` written as a whole-number double (`5.0` / `"5.0"`) still matches as `"5"` (same as listHarnesses models / listWorkspaces). A `bridge/browse` entry name written the same way still matches.
+- Cursor Agent tool names `BrowserFileUpload`, `BrowserClose`, `BrowserNavigateBack`, `BrowserPdfSave`, `BrowserIsVisible`, `BrowserIsEnabled`, `BrowserIsChecked`, `BrowserGetBoundingBox`, `BrowserLock`, `BrowserUnlock`, and `BrowserWaitFor` map to execute / read / think cards (icon and log clipping).
+- Tool detail lines read Cursor's native rawInput keys `search`, `labels` / `label_name`, `assignee` / `assignees`, `milestone` / `milestone_title`, `state`, `parent_id`, `todo_id`, `status_id`, `type_name`, `old_path` / `new_path`, `link_type`, `merge_method`, `expected_head_sha` / `head_sha`, `reply_to_id`, `color` / `new_name`, `check_name`, `actor` / `event`, `affiliation`, `verdict`, `job_status`, `health_status`, `weight`, `due_date` / `start_date`, `key` / `keys` / `index`, `zone_id`, `environment`, `element` / `attribute`, `is_project`, and `commit_message` (a whole-number double shows as `5`).
+
+Phone: on Cursor Agent, a BrowserFileUpload or BrowserIsVisible card should show the shell or read icon. A CreateIssue card with `labels` should show that label under the title. A listSessions row whose model is `5.0` should still resolve as `"5"`.
+
 # Handoff (2026-10-02, Notifications/Away wave 26)
 
 On `gradation/w26-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after cold-start away ids (#92), away/pair park (#97), and prefs dedup seed (#102):
