@@ -558,6 +558,8 @@ class ScreenshotTest {
         seedHistory()
         a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
         val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.savedChatsRecyclerView)
+        // History reads the database on its own thread; a busy run needs more than one idle.
+        waitFor(5000) { list.findViewHolderForAdapterPosition(firstSessionRow(list))?.itemView?.findViewById<View>(R.id.iconEditt) != null }
         list.findViewHolderForAdapterPosition(firstSessionRow(list))!!.itemView.performLongClick(); idle()
         snapDialog(a, "history_options_dark")
     }
