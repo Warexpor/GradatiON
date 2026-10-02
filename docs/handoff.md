@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Chat wave 19)
+
+On `gradation/w19-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w18:
+- A staged Chat photo whose URI survives a view rebuild reloads the JPEG bytes and preview chip, so Send still includes the picture.
+- Opening History mirrors the live stage into the park map without clearing the chip.
+- History search for "Photo" / "Audio" / files on a captioned draft shows (and bolds) that label on the row; idle rows keep the caption alone.
+
+Phone: stage a photo, rotate (chip returns; Send includes it). Stage a caption + photo, search History for "Photo" (row shows Draft: … Photo with Photo bold).
+
 # Handoff (2026-10-02, Code wave 19)
 
 On `gradation/w19-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`TurnEndFormatTest`, `CodeProtocolTest`):

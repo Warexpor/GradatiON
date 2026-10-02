@@ -340,10 +340,28 @@ class HistoryListTest {
         assertEquals("hello Photo", drafts["4"])
         assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "photo"))
         assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "hello"))
-        // Row preview still prefers the caption alone.
+        // Idle row preview still prefers the caption alone.
         assertEquals(
             "Draft: hello",
             HistoryList.rowPreview("You: sent", "hello", "", { "Draft: $it" }),
         )
+    }
+
+    @Test fun draft_row_shows_photo_when_search_hits_the_attachment() {
+        assertEquals("hello", HistoryList.draftRowText("hello", "Photo", ""))
+        assertEquals("Photo", HistoryList.draftRowText("", "Photo", "photo"))
+        assertEquals("hello", HistoryList.draftRowText("hello", "Photo", "hello"))
+        assertEquals("hello Photo", HistoryList.draftRowText("hello", "Photo", "photo"))
+        assertEquals("see the Photo later", HistoryList.draftRowText("see the Photo later", "Photo", "photo"))
+        assertEquals("hello", HistoryList.draftRowText("hello", "Photo", "lantern"))
+        val label = { text: String -> "Draft: $text" }
+        val row = HistoryList.rowPreview(
+            "You: sent",
+            HistoryList.draftRowText("hello", "Photo", "photo"),
+            "photo",
+            label,
+        )
+        assertEquals("Draft: hello Photo", row)
+        assertEquals(13, HistoryList.emphasisAt(row, "photo"))
     }
 }
