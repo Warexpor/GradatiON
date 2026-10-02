@@ -63,6 +63,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -178,7 +179,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val customModels = sharedPreferencesHelper.getCustomModels()
         val allModels = getBuiltInModels() + customModels
         val model = allModels.find { it.apiIdentifier == modelIdentifier }
-        return model?.isVisionCapable ?: false
+        if (model?.isVisionCapable == true) return true
+        // A LAN model stored before its server was asked: the fresh list, then the name.
+        if (model?.isLANModel == true) {
+            _lanModels.value?.find { it.apiIdentifier == modelIdentifier }?.let { return it.isVisionCapable }
+            return LanVision.fromName(modelIdentifier)
+        }
+        return false
     }
     fun isLanModel(modelIdentifier: String?): Boolean {
         if (modelIdentifier == null) return false
@@ -3533,7 +3540,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun fetchLanModels(provider: String): List<LlmModel> = when (provider) {
         "llama_cpp" -> fetchOpenAiModelList(LanListAuth.NONE) { id, obj -> llamaCppModel(id, obj) }
-        "lm_studio", "mlx_lm" -> fetchOpenAiModelList(LanListAuth.NONE) { id, _ -> plainLanModel(id) }
+        "lm_studio" -> {
+            val vlm = lmStudioVisionIds()
+            fetchOpenAiModelList(LanListAuth.NONE) { id, _ -> plainLanModel(id, vision = id in vlm || LanVision.fromName(id)) }
+        }
+        "mlx_lm" -> fetchOpenAiModelList(LanListAuth.NONE) { id, _ -> plainLanModel(id) }
         "ollama" -> fetchOllamaModels()
         "omlx" -> fetchOpenAiModelList(LanListAuth.PLACEHOLDER) { id, _ -> plainLanModel(id) }
         "nativ" -> fetchOpenAiModelList(LanListAuth.IF_PRESENT) { id, _ -> plainLanModel(id) }
@@ -3546,7 +3557,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         lanFetchJob?.cancel()
         lanFetchJob = viewModelScope.launch {
             try {
-                _lanModels.value = fetchLanModels(provider)
+                val models = fetchLanModels(provider)
+                _lanModels.value = models
+                upgradeStoredLanVision(models)
             } catch (e: CancellationException) {
                 if (e is TimeoutCancellationException) {
                     _lanModels.value = emptyList()
@@ -3599,10 +3612,42 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun plainLanModel(id: String) = LlmModel(
+    /**
+     * A LAN model added before its server said it sees pictures stays text-only in the stored
+     * list. Turn vision on there when the server now reports it; never turn a user's switch off.
+     */
+    private fun upgradeStoredLanVision(fresh: List<LlmModel>) {
+        val seeing = fresh.filter { it.isVisionCapable }.map { it.apiIdentifier }.toSet()
+        if (seeing.isEmpty()) return
+        val stored = sharedPreferencesHelper.getCustomModels()
+        if (stored.none { it.isLANModel && !it.isVisionCapable && it.apiIdentifier in seeing }) return
+        sharedPreferencesHelper.saveCustomModels(stored.map {
+            if (it.isLANModel && !it.isVisionCapable && it.apiIdentifier in seeing) it.copy(isVisionCapable = true) else it
+        })
+        _customModelsUpdated.value = Event(Unit)
+    }
+
+    /** LM Studio's own list says which models are vision (`vlm`); the OpenAI one does not. */
+    private suspend fun lmStudioVisionIds(): Set<String> = try {
+        withTimeout(5_000.milliseconds) {
+            withContext(Dispatchers.IO) {
+                val endpoint = sharedPreferencesHelper.getLanEndpoint() ?: return@withContext emptySet()
+                val response = lanHttpClient.get("$endpoint/api/v0/models")
+                if (!response.status.isSuccess()) emptySet()
+                else LanVision.lmStudioVisionIds(response.body<JsonObject>())
+            }
+        }
+    } catch (e: CancellationException) {
+        if (e !is TimeoutCancellationException) throw e
+        emptySet()
+    } catch (_: Exception) {
+        emptySet()
+    }
+
+    private fun plainLanModel(id: String, vision: Boolean = LanVision.fromName(id)) = LlmModel(
         displayName = id,
         apiIdentifier = id,
-        isVisionCapable = false,
+        isVisionCapable = vision,
         isImageGenerationCapable = false,
         isReasoningCapable = false,
         created = System.currentTimeMillis() / 1000,
@@ -3631,7 +3676,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return LlmModel(
             displayName = if (description.isNotEmpty()) "$id - $description" else id,
             apiIdentifier = id,
-            isVisionCapable = false,
+            isVisionCapable = LanVision.fromName(id),
             isImageGenerationCapable = false,
             isReasoningCapable = false,
             created = System.currentTimeMillis() / 1000,
@@ -3652,14 +3697,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 throw Exception("Failed to fetch LAN models: ${response.status}")
             }
             val modelsArray = response.body<JsonObject>()["models"]?.jsonArray ?: return@withContext emptyList()
-            modelsArray.mapNotNull { modelJson ->
-                try {
-                    val name = modelJson.jsonObject["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
-                    plainLanModel(name)
-                } catch (_: Exception) {
-                    null
+            val tags = modelsArray.mapNotNull { modelJson ->
+                val obj = modelJson as? JsonObject ?: return@mapNotNull null
+                val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                name to obj
+            }
+            // /api/tags has no capabilities. Ask each model, side by side; a server too old
+            // to answer falls back to the projector family, then the name.
+            tags.map { (name, tag) ->
+                async {
+                    val show = try {
+                        val r = lanHttpClient.post("$lanEndpoint/api/show") {
+                            contentType(ContentType.Application.Json)
+                            setBody(buildJsonObject { put("model", name) })
+                            timeout { requestTimeoutMillis = 5000 }
+                        }
+                        if (r.status.isSuccess()) r.body<JsonObject>() else null
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                    val vision = LanVision.fromOllamaShow(show)
+                        ?: (LanVision.fromOllamaTag(tag) || LanVision.fromName(name))
+                    plainLanModel(name, vision)
                 }
-            }.sortedBy { it.displayName.lowercase() }
+            }.awaitAll().sortedBy { it.displayName.lowercase() }
         }
     }
 
