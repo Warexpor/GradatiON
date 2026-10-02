@@ -34,6 +34,10 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var isTtsActive = false
     private var isTtsUpdate = false
+    /** Engine finished [onInit]; Speak before this must wait. */
+    private var ttsReady = false
+    /** Speak was tapped before [ttsReady]; run once init succeeds. */
+    private var pendingSpeak = false
     private var lastUpdateTitle: String? = null
     private var lastUpdateText: String? = null
 
@@ -56,7 +60,8 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
                 nm.deleteNotificationChannel("ForegroundChannel")
             } catch (_: Exception) {
             }
-            stopService()
+            // Do not stopService(): Speak starts this service for TTS, and onResume/onCreate
+            // call here often. Killing it mid-utterance left Stop dead and cut speech short.
         }
 
         fun updateNotificationStatus(context: Context, title: String, contentText: String) {
@@ -117,6 +122,19 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             return false
         }
 
+        private const val ANSWER_META_PREFS = "ForegroundServiceAnswer"
+        private const val KEY_ANSWER_TITLE = "title"
+        private const val KEY_ANSWER_TEXT = "text"
+
+        /** Survives a cold Speak tap when the answer was posted without a live service instance. */
+        private fun rememberAnswerMeta(context: Context, title: String, contentText: String) {
+            context.getSharedPreferences(ANSWER_META_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_ANSWER_TITLE, title)
+                .putString(KEY_ANSWER_TEXT, contentText)
+                .apply()
+        }
+
         private fun postAnswerNotification(
             context: Context,
             title: String,
@@ -124,6 +142,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             ttsActive: Boolean,
             silent: Boolean
         ) {
+            rememberAnswerMeta(context, title, contentText)
             val nm = context.getSystemService(NotificationManager::class.java) ?: return
             nm.notify(
                 ANSWER_NOTIFICATION_ID,
@@ -229,6 +248,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
+            ttsReady = true
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
                 override fun onDone(utteranceId: String?) {
@@ -243,22 +263,26 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
                     }
                 }
             })
+            if (pendingSpeak) {
+                pendingSpeak = false
+                speakNow()
+            }
+        } else {
+            ttsReady = false
+            pendingSpeak = false
+            isTtsActive = false
         }
     }
 
     private fun handleTtsFinished() {
         tts?.stop()
         isTtsActive = false
+        pendingSpeak = false
+        restoreLastUpdateFromPrefs()
         if (isAppInForeground()) {
             getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
         } else {
-            lastUpdateTitle?.let { title ->
-                lastUpdateText?.let { text ->
-                    isTtsUpdate = true
-                    updateNotificationWithChannel(title, text)
-                    isTtsUpdate = false
-                }
-            }
+            refreshAnswerChrome(silent = true)
         }
     }
 
@@ -267,6 +291,8 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         tts?.stop()
         tts?.shutdown()
         isTtsActive = false
+        ttsReady = false
+        pendingSpeak = false
         isRunningForeground = false
         instance = null
     }
@@ -315,7 +341,8 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         if (!isAppInForeground()) {
             lastUpdateTitle = title
             lastUpdateText = contentText
-            if (isTtsActive) {
+            if (isTtsActive || pendingSpeak) {
+                pendingSpeak = false
                 tts?.stop()
                 isTtsActive = false
             }
@@ -330,8 +357,10 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun stopTts(updateNotif: Boolean) {
+        pendingSpeak = false
         tts?.stop()
         isTtsActive = false
+        restoreLastUpdateFromPrefs()
         if (updateNotif && lastUpdateTitle != null && lastUpdateText != null && isNotificationActive(ANSWER_NOTIFICATION_ID)) {
             isTtsUpdate = true
             updateNotificationWithChannel(lastUpdateTitle!!, lastUpdateText!!)
@@ -340,19 +369,45 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun startTtsForChannel2() {
-        val lastResponse = getLastAiResponseForChannel(2) ?: return
+        restoreLastUpdateFromPrefs()
+        // Answer chrome is often posted without a live service; Speak starts us cold.
+        // TextToSpeech is async — speak before onInit is a no-op, so queue until ready.
+        if (!ttsReady) {
+            pendingSpeak = true
+            isTtsActive = true
+            refreshAnswerChrome(silent = true)
+            return
+        }
+        speakNow()
+    }
+
+    private fun speakNow() {
+        val lastResponse = getLastAiResponseForChannel(2)
+        if (lastResponse == null) {
+            pendingSpeak = false
+            isTtsActive = false
+            refreshAnswerChrome(silent = true)
+            return
+        }
         val cleanText = stripMarkdownWithCommonMark(lastResponse)
         tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "fg_tts")
         isTtsActive = true
-        if (lastUpdateTitle != null && lastUpdateText != null && isNotificationActive(ANSWER_NOTIFICATION_ID)) {
-            isTtsUpdate = true
-            updateNotificationWithChannel(lastUpdateTitle!!, lastUpdateText!!)
-            isTtsUpdate = false
-        } else if (lastUpdateTitle != null && lastUpdateText != null) {
-            isTtsUpdate = true
-            updateNotificationWithChannel(lastUpdateTitle!!, lastUpdateText!!)
-            isTtsUpdate = false
-        }
+        refreshAnswerChrome(silent = true)
+    }
+
+    private fun refreshAnswerChrome(silent: Boolean) {
+        val title = lastUpdateTitle ?: return
+        val text = lastUpdateText ?: return
+        isTtsUpdate = silent
+        updateNotificationWithChannel(title, text)
+        isTtsUpdate = false
+    }
+
+    private fun restoreLastUpdateFromPrefs() {
+        if (lastUpdateTitle != null && lastUpdateText != null) return
+        val prefs = getSharedPreferences(ANSWER_META_PREFS, Context.MODE_PRIVATE)
+        lastUpdateTitle = prefs.getString(KEY_ANSWER_TITLE, null)
+        lastUpdateText = prefs.getString(KEY_ANSWER_TEXT, null)
     }
 
     private fun stripMarkdownWithCommonMark(text: String): String {

@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Answer-ready Speak waits until Text-to-speech is ready (a cold tap used to no-op), and remembers the shade title so Stop can redraw after a post without a live service. Clearing legacy sticky "Running" chrome no longer stops that service mid-utterance on every resume.
+- Code away: swiping an approval alert out of the shade clears dedup and the prefs allocation so a still-pending request can re-alert (including after a later cold start); a user-blocked Code away channel no longer counts as a successful away post.
 - Settings > Voice remembers Cloud, Grok or Local after the master switch is turned off, so turning Voice back on restores the same engine instead of Phone.
 - Advanced settings switches that mirror LiveData (scroll progress, volume scroll, presets on chat) no longer flip twice when an observer writes `isChecked`.
 - Roleplay and RP LLM-mode preference writes commit before return, so a kill right after the Settings/Style tap cannot drop the change.

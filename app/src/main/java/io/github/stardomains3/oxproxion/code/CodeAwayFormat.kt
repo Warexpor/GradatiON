@@ -109,6 +109,19 @@ object CodeAwayFormat {
         return notifId xor tag
     }
 
+    /**
+     * Broadcast request code for shade swipe-dismiss. Stays out of content / Allow / Deny
+     * ranges so a DeleteIntent cannot replace another alert's extras.
+     */
+    fun dismissRequestCode(notifId: Int): Int = notifId xor ACTION_DISMISS_TAG
+
+    /**
+     * True when a notification channel can still alert.
+     * [importanceNone] is [android.app.NotificationManager.IMPORTANCE_NONE] (0).
+     */
+    fun channelCanNotify(importance: Int, importanceNone: Int = 0): Boolean =
+        importance != importanceNone
+
     fun approvalHeadline(title: String): String {
         val t = title.trim()
         return if (t.isEmpty()) "Approval needed" else "Approval needed · $t"
@@ -147,7 +160,8 @@ object CodeAwayFormat {
     const val NOTIF_ID_BASE = 0x5A00_0000
     const val NOTIF_ID_MASK = 0x00FF_FFFF
 
-    /** High bits clear of [NOTIF_ID_BASE] (0x5A…) so Allow, Deny, and the tap target never share a code. */
+    /** High bits clear of [NOTIF_ID_BASE] (0x5A…) so Allow, Deny, dismiss, and the tap target never share a code. */
     private const val ACTION_ALLOW_TAG = 0x0100_0000
     private const val ACTION_DENY_TAG = 0x0200_0000
+    private const val ACTION_DISMISS_TAG = 0x0300_0000
 }
