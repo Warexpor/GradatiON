@@ -149,4 +149,18 @@ class PrefsCorruptBlobTest {
         assertEquals("{torn", prefs.mainPrefs.getString("rp_deleted_char_remap", null))
         assertFalse(prefs.mainPrefs.contains("rp_deleted_char_remap.unreadable"))
     }
+
+    @Test
+    fun roleplayAndLlmModeSurviveAFreshHelper() {
+        val prefs = helper()
+        prefs.setRoleplayEnabled(true)
+        prefs.saveRpLlmMode(true)
+        val again = helper()
+        assertTrue(again.isRoleplayEnabled())
+        assertTrue(again.isRpLlmMode())
+        again.setRoleplayEnabled(false)
+        again.saveRpLlmMode(false)
+        assertFalse(helper().isRoleplayEnabled())
+        assertFalse(helper().isRpLlmMode())
+    }
 }
