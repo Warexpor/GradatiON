@@ -444,4 +444,23 @@ class HistoryListTest {
         assertTrue(hit != null)
         assertTrue(hit!!.length >= "hello audio".length)
     }
+
+    @Test fun code_away_activate_parked_label_still_searchable() {
+        // Away notification activates Code without clearing via enterCodeMode; after park
+        // the open Chat's stage is only in the map — History search must still find Audio.
+        val prefs = mapOf("4" to "hello there")
+        val all = listOf(session(4, now, "notes"))
+        val host = { id: Long ->
+            if (id == 4L) HistoryList.draftSearchText("hello there", "Audio") else ""
+        }
+        val drafts = HistoryList.draftTextsForSearch(all, prefs, host)
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "hello audio"))
+        val row = HistoryList.rowPreview(
+            "You: sent",
+            HistoryList.draftRowText("hello there", "Audio", "hello audio"),
+            "hello audio",
+        ) { "Draft: $it" }
+        assertTrue(row.contains("Audio"))
+        assertTrue(HistoryList.emphasis(row, "hello audio") != null)
+    }
 }

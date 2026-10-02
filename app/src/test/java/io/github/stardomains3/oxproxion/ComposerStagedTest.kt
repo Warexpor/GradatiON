@@ -114,4 +114,16 @@ class ComposerStagedTest {
         assertEquals("wav", withAudio.audioFormat)
         assertEquals(1, withAudio.files.size)
     }
+
+    @Test fun live_to_park_skips_empty_so_code_activate_keeps_parked() {
+        // Away / pairing activate Code without enterCodeMode; an empty live stage must not
+        // wipe a chip already in the park map (leaveCodeMode apply would then restore nothing).
+        assertNull(ComposerStaged.liveToPark(ComposerStaged.Entry()))
+        val live = photo("file://live.jpg")
+        assertEquals("file://live.jpg", ComposerStaged.liveToPark(live)!!.imageUri)
+        val parked = ComposerStaged.remember(emptyMap(), 4L, photo("file://parked.jpg"))
+        val keep = ComposerStaged.liveToPark(ComposerStaged.Entry())
+        assertNull(keep)
+        assertEquals("file://parked.jpg", ComposerStaged.get(parked, 4L).imageUri)
+    }
 }
