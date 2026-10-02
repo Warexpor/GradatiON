@@ -429,19 +429,75 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
-    fun aRecoveredFileAlreadyInTheVaultIsLeftBesideTheLiveDatabase() {
+    fun aRecoveredFileThatCannotEnterTheVaultIsParkedOutOfAutoBackup() {
         val databases = tmp.newFolder("split-databases")
         val vault = tmp.newFolder("split-vault")
         File(databases, "chat_database.recovered-2").writeText("legacy")
         File(databases, "chat_database.recovered-2-wal").writeText("wal")
         File(vault, "chat_database.recovered-2").writeText("vaultcopy")
 
-        assertFalse(ChatDbVault.relocateLegacy(databases, vault, "chat_database.recovered-2"))
+        // Vault already has that name. Parking under chat_db_hold keeps Auto Backup off it.
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, "chat_database.recovered-2"))
 
-        assertEquals("legacy", File(databases, "chat_database.recovered-2").readText())
-        assertEquals("wal", File(databases, "chat_database.recovered-2-wal").readText())
+        assertFalse(File(databases, "chat_database.recovered-2").exists())
+        assertFalse(File(databases, "chat_database.recovered-2-wal").exists())
+        val hold = ChatDbVault.holdDirectory(databases)
+        assertEquals("legacy", File(hold, "chat_database.recovered-2").readText())
+        assertEquals("wal", File(hold, "chat_database.recovered-2-wal").readText())
         assertEquals("vaultcopy", File(vault, "chat_database.recovered-2").readText())
         assertFalse(File(vault, "chat_database.recovered-2-wal").exists())
+    }
+
+    @Test
+    fun aParkedRecoveredNameOpensFromTheHoldFolder() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val databases = app.getDatabasePath(AppDatabase.DB_NAME).parentFile!!
+        databases.mkdirs()
+        val hold = ChatDbVault.holdDirectory(databases)
+        val stored = "chat_database.recovered-17"
+        val parked = File(hold, stored).apply { writeText("parked-history") }
+        File(hold, "$stored-wal").writeText("wal")
+        try {
+            val roomName = ChatDbVault.roomDatabaseName(app, stored)
+            assertEquals(parked.canonicalPath, File(roomName).canonicalPath)
+            assertEquals("parked-history", File(roomName).readText())
+        } finally {
+            parked.delete()
+            File(hold, "$stored-wal").delete()
+        }
+    }
+
+    @Test
+    fun aHoldCopyMovesIntoTheVaultWhenTheVaultIsFree() {
+        val databases = tmp.newFolder("drain-databases")
+        val vault = tmp.newFolder("drain-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(hold, "chat_database.recovered-8").writeText("held")
+        File(hold, "chat_database.recovered-8-wal").writeText("wal")
+
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, "chat_database.recovered-8"))
+
+        assertFalse(File(hold, "chat_database.recovered-8").exists())
+        assertFalse(File(hold, "chat_database.recovered-8-wal").exists())
+        assertEquals("held", File(vault, "chat_database.recovered-8").readText())
+        assertEquals("wal", File(vault, "chat_database.recovered-8-wal").readText())
+    }
+
+    @Test
+    fun anUnreadableFileThatCannotEnterTheVaultIsParkedOutOfAutoBackup() {
+        val databases = tmp.newFolder("unreadable-databases")
+        // A file named like the vault directory makes every vault destination unwritable.
+        val vaultBlock = File(tmp.root, "blocked-vault").apply { writeText("not-a-dir") }
+        File(databases, "chat_database.unreadable-9").writeText("old")
+        File(databases, "chat_database.unreadable-9-wal").writeText("wal")
+
+        ChatDbVault.relocateLegacy(databases, vaultBlock, null)
+
+        assertFalse(File(databases, "chat_database.unreadable-9").exists())
+        assertFalse(File(databases, "chat_database.unreadable-9-wal").exists())
+        val hold = File(databases, ChatDbVault.HOLD_DIR)
+        assertEquals("old", File(hold, "chat_database.unreadable-9").readText())
+        assertEquals("wal", File(hold, "chat_database.unreadable-9-wal").readText())
     }
 
     @Test
@@ -485,6 +541,7 @@ class ChatDatabaseRecoveryTest {
             "chat_database.pre_sqlcipher",
             "chat_database.encrypting",
             "chat_database.encrypt_ok",
+            "chat_db_hold",
             "code_mode_secrets.xml"
         )
         for (name in names) {
