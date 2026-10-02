@@ -1894,6 +1894,95 @@ class CodeProtocolTest {
         assertEquals("list_projects", byId["m3"]?.detail)
     }
 
+
+    @Test fun cursorAskToolCallIdWrittenAsDoubleLinksTheCard() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":9,"method":"cursor/ask_question","params":{"sessionId":"s1","toolCallId":5.0,"questions":[{"id":1.0,"prompt":"Go?","options":[{"id":2.0,"label":"Yes"},{"id":"no","label":"No"}]}]}}""")
+        val approval = out.filterIsInstance<AdapterOutput.Update>().map { it.update }
+            .filterIsInstance<CodeUpdate.Upsert>().map { it.event }
+            .filterIsInstance<CodeEvent.Approval>().single()
+        assertEquals("5", approval.callId)
+        assertEquals(listOf("2", "no"), approval.options.map { it.id })
+        val answer = Json.parseToJsonElement(acp.answerApproval(approval.requestId, "2")).jsonObject
+        val outcome = answer["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("1", outcome["answers"]!!.jsonArray.single().jsonObject["questionId"]!!.jsonPrimitive.content)
+        assertEquals("2", outcome["answers"]!!.jsonArray.single().jsonObject["selectedOptionIds"]!!.jsonArray.single().jsonPrimitive.content)
+    }
+
+    @Test fun cursorTodoIdWrittenAsDoubleMergesByDigitString() {
+        val first = acp.decode("""{"jsonrpc":"2.0","method":"cursor/update_todos","params":{"sessionId":"s1","todos":[{"id":3.0,"content":"One","status":"pending"}]}}""")
+        val second = acp.decode("""{"jsonrpc":"2.0","method":"cursor/update_todos","params":{"sessionId":"s1","merge":true,"todos":[{"id":"3.0","content":"One done","status":"completed"}]}}""")
+        val firstPlan = first.filterIsInstance<AdapterOutput.Update>().map { it.update }
+            .filterIsInstance<CodeUpdate.Upsert>().map { it.event }
+            .filterIsInstance<CodeEvent.Plan>().single()
+        assertEquals("3", firstPlan.entries.single().id)
+        val plan = second.filterIsInstance<AdapterOutput.Update>().map { it.update }
+            .filterIsInstance<CodeUpdate.Upsert>().map { it.event }
+            .filterIsInstance<CodeEvent.Plan>().single()
+        assertEquals(1, plan.entries.size)
+        assertEquals("3", plan.entries.single().id)
+        assertEquals("One done", plan.entries.single().content)
+        assertEquals(PlanStatus.COMPLETED, plan.entries.single().status)
+    }
+
+    @Test fun yetMoreCursorToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lm","title":"Machines","kind":"other","name":"ListMachines","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cb","title":"Copy","kind":"other","name":"CopyToBox","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cf","title":"Copy","kind":"other","name":"CopyFromBox","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"uf","title":"Upload","kind":"other","name":"UploadFile","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"df","title":"Download","kind":"other","name":"DownloadFile","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bf","title":"Followup","kind":"other","name":"BackgroundComposerFollowup","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ca","title":"Cloud","kind":"other","name":"CloudAgent","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cr","title":"Create","kind":"other","name":"CreateAgent","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sa","title":"Send","kind":"other","name":"SendToAgent","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cs","title":"Check","kind":"other","name":"CheckSubagent","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gs","title":"Status","kind":"other","name":"GetMcpServerStatus","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sp","title":"Plugins","kind":"other","name":"SearchPlugins","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rs","title":"Record","kind":"other","name":"RecordScreen","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mcp","title":"MCP","kind":"other","name":"Mcp","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"de","title":"Draft","kind":"other","name":"DraftExternalMessage","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.SEARCH, byId["lm"]?.kind)
+        assertEquals(ToolKind.MOVE, byId["cb"]?.kind)
+        assertEquals(ToolKind.MOVE, byId["cf"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["uf"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["df"]?.kind)
+        assertEquals(ToolKind.THINK, byId["bf"]?.kind)
+        assertEquals(ToolKind.THINK, byId["ca"]?.kind)
+        assertEquals(ToolKind.THINK, byId["cr"]?.kind)
+        assertEquals(ToolKind.THINK, byId["sa"]?.kind)
+        assertEquals(ToolKind.THINK, byId["cs"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["gs"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["sp"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["rs"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["mcp"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["de"]?.kind)
+    }
+
+    @Test fun cursorListDirAndTaskDetailUseNativeRawInputKeys() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"l1","title":"List","kind":"other","name":"ListDir","status":"completed",
+               "rawInput":{"directory_path":"app/src"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Task","kind":"other","name":"Task","status":"completed",
+               "rawInput":{"task_description":"Fix the flaky test"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"p1","title":"PR","kind":"other","name":"FetchPullRequest","status":"completed",
+               "rawInput":{"pr_url":"https://github.com/o/r/pull/1"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"s1","title":"Stdin","kind":"other","name":"WriteShellStdin","status":"completed",
+               "rawInput":{"shell_id":5.0,"content":"y\n"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"g1","title":"Image","kind":"other","name":"GenerateImage","status":"completed",
+               "rawInput":{"prompt":"a red cube"}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("app/src", byId["l1"]?.detail)
+        assertEquals("Fix the flaky test", byId["t1"]?.detail)
+        assertEquals("https://github.com/o/r/pull/1", byId["p1"]?.detail)
+        assertEquals("5", byId["s1"]?.detail)
+        assertEquals("a red cube", byId["g1"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()
