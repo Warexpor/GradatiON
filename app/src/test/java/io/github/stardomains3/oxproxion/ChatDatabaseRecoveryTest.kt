@@ -358,15 +358,92 @@ class ChatDatabaseRecoveryTest {
         val databases = tmp.newFolder("both-databases")
         val vault = tmp.newFolder("both-vault")
         File(databases, "chat_database.pre_sqlcipher").writeText("legacy")
+        File(databases, "chat_database.pre_sqlcipher-wal").writeText("legacy-wal")
         ChatDbVault.plaintextBackup(vault).writeText("already")
 
         assertTrue(ChatDbVault.relocateLegacy(databases, vault, null))
 
         assertEquals("already", ChatDbVault.plaintextBackup(vault).readText())
         assertFalse(File(databases, "chat_database.pre_sqlcipher").exists())
-        val kept = vault.listFiles()?.filter { it.name.startsWith("chat_database.pre_sqlcipher.kept-") }.orEmpty()
-        assertEquals(1, kept.size)
-        assertEquals("legacy", kept.single().readText())
+        assertFalse(File(databases, "chat_database.pre_sqlcipher-wal").exists())
+        // Must not uniqueKept into the vault (that used to leave the wal at the databases root).
+        assertEquals(0, vault.listFiles()?.count { it.name.startsWith("chat_database.pre_sqlcipher.kept-") } ?: 0)
+        // Vault already has the restore copy; the colliding set is discarded (not left for Auto Backup).
+        val hold = File(databases, ChatDbVault.HOLD_DIR)
+        assertFalse(File(hold, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(hold, "chat_database.pre_sqlcipher-wal").exists())
+    }
+
+    @Test
+    fun plaintextSidecarsAtTheDatabasesRootMoveWithTheMain() {
+        val databases = tmp.newFolder("plain-sidecar-databases")
+        val vault = tmp.newFolder("plain-sidecar-vault")
+        File(databases, "chat_database.pre_sqlcipher").writeText("plain")
+        File(databases, "chat_database.pre_sqlcipher-wal").writeText("plain-wal")
+        File(databases, "chat_database.encrypting").writeText("enc")
+        File(databases, "chat_database.encrypting-shm").writeText("enc-shm")
+
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, null))
+
+        assertFalse(File(databases, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(databases, "chat_database.pre_sqlcipher-wal").exists())
+        assertFalse(File(databases, "chat_database.encrypting").exists())
+        assertFalse(File(databases, "chat_database.encrypting-shm").exists())
+        assertEquals("plain", ChatDbVault.plaintextBackup(vault).readText())
+        assertEquals("plain-wal", File(vault, "chat_database.pre_sqlcipher-wal").readText())
+        assertEquals("enc", ChatDbVault.encrypting(vault).readText())
+        assertEquals("enc-shm", File(vault, "chat_database.encrypting-shm").readText())
+    }
+
+    @Test
+    fun incompletePlaintextSetsAtDatabasesRootDoNotStayForAutoBackup() {
+        val databases = tmp.newFolder("plain-orphan-databases")
+        val vault = tmp.newFolder("plain-orphan-vault")
+        File(databases, "chat_database.pre_sqlcipher-wal").writeText("orphan-wal")
+        File(databases, "chat_database.encrypting-shm").writeText("orphan-shm")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertFalse(File(databases, "chat_database.pre_sqlcipher-wal").exists())
+        assertFalse(File(databases, "chat_database.encrypting-shm").exists())
+        assertFalse(File(vault, "chat_database.pre_sqlcipher-wal").exists())
+        assertFalse(File(vault, "chat_database.encrypting-shm").exists())
+        val hold = File(databases, ChatDbVault.HOLD_DIR)
+        // Parked then discarded in the same relocateLegacy pass.
+        assertFalse(File(hold, "chat_database.pre_sqlcipher-wal").exists())
+        assertFalse(File(hold, "chat_database.encrypting-shm").exists())
+    }
+
+    @Test
+    fun aHoldPlaintextCopyDrainsWhenTheVaultIsFree() {
+        val databases = tmp.newFolder("plain-drain-databases")
+        val vault = tmp.newFolder("plain-drain-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(hold, "chat_database.pre_sqlcipher").writeText("held-plain")
+        File(hold, "chat_database.pre_sqlcipher-wal").writeText("held-wal")
+
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, null))
+
+        assertFalse(File(hold, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(hold, "chat_database.pre_sqlcipher-wal").exists())
+        assertEquals("held-plain", ChatDbVault.plaintextBackup(vault).readText())
+        assertEquals("held-wal", File(vault, "chat_database.pre_sqlcipher-wal").readText())
+    }
+
+    @Test
+    fun aHoldPlaintextDuplicateIsDroppedWhenTheVaultAlreadyHasOne() {
+        val databases = tmp.newFolder("plain-dup-databases")
+        val vault = tmp.newFolder("plain-dup-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        ChatDbVault.plaintextBackup(vault).writeText("vault-plain")
+        File(hold, "chat_database.pre_sqlcipher").writeText("held-plain")
+        File(hold, "chat_database.pre_sqlcipher-wal").writeText("held-wal")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertEquals("vault-plain", ChatDbVault.plaintextBackup(vault).readText())
+        assertFalse(File(hold, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(hold, "chat_database.pre_sqlcipher-wal").exists())
     }
 
     @Test
@@ -791,7 +868,9 @@ class ChatDatabaseRecoveryTest {
             "chat_database.encrypting",
             "chat_database.encrypt_ok",
             "chat_db_hold",
-            "code_mode_secrets.xml"
+            "code_mode_secrets.xml",
+            "code_away_open_tokens.xml",
+            "code_away_notif_ids.xml",
         )
         for (name in names) {
             assertTrue(name, rules.contains("path=\"$name\""))
