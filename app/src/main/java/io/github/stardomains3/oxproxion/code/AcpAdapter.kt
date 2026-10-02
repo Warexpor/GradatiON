@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`, `ListPullRequestReviewComments`, `BrowserFillForm`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -119,7 +119,8 @@ class AcpAdapter : HarnessAdapter {
         put("_meta", buildJsonObject {
             put("harness", request.harness.id)
             put("permissionMode", request.permissionMode.id)
-            request.model?.let { put("model", it) }
+            // Digit-string model ids go out as JSON numbers, same as sessionId / modeId.
+            request.model?.let { put("model", jsonRpcIdValue(it)) }
         })
     })
 
@@ -463,7 +464,9 @@ class AcpAdapter : HarnessAdapter {
             "get_tag", "gettag",
             "browser_snapshot", "browsersnapshot",
             "browser_console_messages", "browserconsolemessages",
-            "browser_network_requests", "browsernetworkrequests" -> "read"
+            "browser_network_requests", "browsernetworkrequests",
+            "browser_get_attribute", "browsergetattribute",
+            "browser_get_input_value", "browsergetinputvalue" -> "read"
             "edit", "write", "write_file", "writefile", "str_replace", "strreplace",
             "apply_patch", "applypatch", "patch",
             "edit_file", "editfile", "edit_file_v2", "editfilev2",
@@ -571,6 +574,7 @@ class AcpAdapter : HarnessAdapter {
             "list_issue_comments", "listissuecomments",
             "list_pull_request_comments", "listpullrequestcomments",
             "list_pull_request_reviews", "listpullrequestreviews",
+            "list_pull_request_review_comments", "listpullrequestreviewcomments",
             "list_sub_issues", "listsubissues",
             "list_repository_collaborators", "listrepositorycollaborators",
             "list_discussion_categories", "listdiscussioncategories",
@@ -613,6 +617,7 @@ class AcpAdapter : HarnessAdapter {
             "browser_screenshot", "browserscreenshot",
             "browser_tabs", "browsertabs",
             "browser_evaluate", "browserevaluate",
+            "browser_fill_form", "browserfillform",
             "browser_handle_dialog", "browserhandledialog",
             "browser_drag", "browserdrag",
             "browser_resize", "browserresize",
@@ -1058,6 +1063,20 @@ class AcpAdapter : HarnessAdapter {
                 "script_name", "scriptName",
                 "worker_id", "workerId",
                 "account_id", "accountId",
+                "artifact_path", "artifactPath",
+                "saved_view_id", "savedViewId",
+                "discussion_id", "discussionId",
+                "milestone_id", "milestoneId",
+                "full_path", "fullPath",
+                "author_username", "authorUsername",
+                "assignee_username", "assigneeUsername",
+                "reviewer_username", "reviewerUsername",
+                "source_branch", "sourceBranch",
+                "target_branch", "targetBranch",
+                "ref_name", "refName",
+                "namespace_path", "namespacePath",
+                "q", "scope",
+                "iid",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId") != null ||
@@ -1069,7 +1088,10 @@ class AcpAdapter : HarnessAdapter {
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "download_path", "downloadPath",
                 "destination_path", "destinationPath",
-                "target_path", "targetPath") != null
+                "target_path", "targetPath",
+                "artifact_path", "artifactPath",
+                "previous_path", "previousPath",
+                "full_path", "fullPath") != null
         val hasLine = (u["locations"] as? JsonArray).orEmpty().any { e ->
             val line = lineNumber((e as? JsonObject)?.get("line"))
             line != null && line > 0
@@ -1179,6 +1201,20 @@ class AcpAdapter : HarnessAdapter {
                 "script_name", "scriptName",
                 "worker_id", "workerId",
                 "account_id", "accountId",
+                "artifact_path", "artifactPath",
+                "saved_view_id", "savedViewId",
+                "discussion_id", "discussionId",
+                "milestone_id", "milestoneId",
+                "full_path", "fullPath",
+                "author_username", "authorUsername",
+                "assignee_username", "assigneeUsername",
+                "reviewer_username", "reviewerUsername",
+                "source_branch", "sourceBranch",
+                "target_branch", "targetBranch",
+                "ref_name", "refName",
+                "namespace_path", "namespacePath",
+                "q", "scope",
+                "iid",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId"),
@@ -1190,7 +1226,10 @@ class AcpAdapter : HarnessAdapter {
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "download_path", "downloadPath",
                 "destination_path", "destinationPath",
-                "target_path", "targetPath"),
+                "target_path", "targetPath",
+                "artifact_path", "artifactPath",
+                "previous_path", "previousPath",
+                "full_path", "fullPath"),
         )
     }
 

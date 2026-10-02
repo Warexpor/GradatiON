@@ -2386,6 +2386,117 @@ class CodeProtocolTest {
         assertEquals("api", byId["s1"]?.detail)
     }
 
+
+    @Test fun digitModelIdGoesOutAsANumberOnNewSession() {
+        val frame = Json.parseToJsonElement(
+            acp.newSession(
+                1,
+                NewSessionRequest("h", HarnessKind.CODEX, "/w", "hi", PermissionMode.ASK, model = "5"),
+            ),
+        ).jsonObject
+        val meta = frame["params"]!!.jsonObject["_meta"]!!.jsonObject
+        assertEquals(5L, meta["model"]!!.jsonPrimitive.long)
+        val named = Json.parseToJsonElement(
+            acp.newSession(
+                2,
+                NewSessionRequest("h", HarnessKind.CODEX, "/w", "hi", PermissionMode.ASK, model = "gpt-5"),
+            ),
+        ).jsonObject
+        assertEquals("gpt-5", named["params"]!!.jsonObject["_meta"]!!.jsonObject["model"]!!.jsonPrimitive.content)
+        val asDouble = Json.parseToJsonElement(
+            acp.newSession(
+                3,
+                NewSessionRequest("h", HarnessKind.CODEX, "/w", "hi", PermissionMode.ASK, model = "6.0"),
+            ),
+        ).jsonObject
+        assertEquals(6L, asDouble["params"]!!.jsonObject["_meta"]!!.jsonObject["model"]!!.jsonPrimitive.long)
+    }
+
+    @Test fun moreGithubBrowserAndGitlabToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rc","title":"ReviewComments","kind":"other","name":"ListPullRequestReviewComments","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bf","title":"Fill","kind":"other","name":"BrowserFillForm","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ba","title":"Attr","kind":"other","name":"BrowserGetAttribute","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bi","title":"Input","kind":"other","name":"BrowserGetInputValue","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"fk","title":"Fork","kind":"other","name":"ForkRepository","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lw","title":"Link","kind":"other","name":"LinkWorkItems","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mp","title":"Pipe","kind":"other","name":"ManagePipeline","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ac","title":"Commit","kind":"other","name":"AddCommit","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sn","title":"Note","kind":"other","name":"SaveNote","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sp","title":"SavePipe","kind":"other","name":"SavePipeline","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sr","title":"Review","kind":"other","name":"SaveMergeRequestReview","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lm","title":"Members","kind":"other","name":"ListProjectMembers","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lt","title":"Tree","kind":"other","name":"ListRepositoryTree","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sl","title":"Labels","kind":"other","name":"SearchLabels","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sv","title":"SavedView","kind":"other","name":"GetSavedViewWorkItems","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wt","title":"Types","kind":"other","name":"GetWorkItemTypes","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mn","title":"Notes","kind":"other","name":"GetMergeRequestNotes","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bl","title":"BuildLogs","kind":"other","name":"WorkersBuildsGetBuildLogs","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wc","title":"WorkerCode","kind":"other","name":"WorkersGetWorkerCode","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ok","title":"ObsKeys","kind":"other","name":"ObservabilityKeys","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ov","title":"ObsVals","kind":"other","name":"ObservabilityValues","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mg","title":"Migrate","kind":"other","name":"MigratePagesToWorkersGuide","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.SEARCH, byId["rc"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["bf"]?.kind)
+        assertEquals(ToolKind.READ, byId["ba"]?.kind)
+        assertEquals(ToolKind.READ, byId["bi"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["fk"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["lw"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["mp"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ac"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["sn"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["sp"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["sr"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lm"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["lt"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["sl"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["sv"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["wt"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["mn"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["bl"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["wc"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["ok"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["ov"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["mg"]?.kind)
+    }
+
+    @Test fun cursorGitlabGithubDetailUseMoreNativeRawInputKeys() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"a1","title":"Artifact","kind":"other","name":"GetArtifactFile","status":"completed",
+               "rawInput":{"artifact_path":"coverage/index.html"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"s1","title":"Saved","kind":"other","name":"GetSavedViewWorkItems","status":"completed",
+               "rawInput":{"saved_view_id":"55.0"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"d1","title":"Note","kind":"other","name":"SaveNote","status":"completed",
+               "rawInput":{"discussion_id":"42.0"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"l1","title":"Labels","kind":"other","name":"SearchLabels","status":"completed",
+               "rawInput":{"full_path":"acme/app"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"m1","title":"MR","kind":"other","name":"SaveMergeRequest","status":"completed",
+               "rawInput":{"milestone_id":7}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"u1","title":"List","kind":"other","name":"ListMergeRequests","status":"completed",
+               "rawInput":{"author_username":"warexpor"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"b1","title":"Branch","kind":"other","name":"AddBranch","status":"completed",
+               "rawInput":{"source_branch":"feat"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"q1","title":"Search","kind":"other","name":"SemanticSearch","status":"completed",
+               "rawInput":{"q":"auth middleware"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"i1","title":"Work","kind":"other","name":"GetWorkItem","status":"completed",
+               "rawInput":{"iid":3.0}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("coverage/index.html", byId["a1"]?.detail)
+        assertEquals("55", byId["s1"]?.detail)
+        assertEquals("42", byId["d1"]?.detail)
+        assertEquals("acme/app", byId["l1"]?.detail)
+        assertEquals("7", byId["m1"]?.detail)
+        assertEquals("warexpor", byId["u1"]?.detail)
+        assertEquals("feat", byId["b1"]?.detail)
+        assertEquals("auth middleware", byId["q1"]?.detail)
+        assertEquals("3", byId["i1"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()
