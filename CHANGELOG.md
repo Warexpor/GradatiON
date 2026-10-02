@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Legacy `chat_database.pre_sqlcipher` / `encrypting` copies move as a set with their `-wal`/`-shm` (or are discarded / parked under `chat_db_hold` when the vault name is taken), so Auto Backup cannot upload a leftover sidecar the rules did not list. Code away-notification id allocations commit when posted and cleared, and open-token / notif-id prefs are excluded from Auto Backup and device transfer.
 - Continue starts a new paragraph after white tortoise 〘…〙, math angle ⟨…⟩ and heavy ornament ❰…❱ dialogue, and after Tibetan ༎༏༔, Meetei ꫰꫱, Saurashtra ꣎꣏, Javanese ꧉, Phags-pa ꡶꡷, Rejang ꥟ and Buginese ᨞᨟. Opening 〘⟨❰ hug the next word like other openers.
 - Lore keys wrapped in 〘tortoise〙 / ⟨math angle⟩ / ❰ornament❱, and keys trailed by ༎꫰꣎꧉꡶꥟᨞, still match.
 - The rewrite dialog quote drops 〘tortoise〙, ⟨math angle⟩ and ❰ornament❱ quotes around the first line.

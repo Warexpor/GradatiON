@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Stability wave 22)
+
+On `gradation/w22-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w20 incomplete DB sets (sat out w21):
+- Legacy `pre_sqlcipher` / `encrypting` leftovers move as a set (main + wal/shm/journal) into the no-backup vault. When the vault already has that short name, the databases-root set is discarded (not `uniqueKept`, which left sidecars at the root). A move failure still parks under `chat_db_hold`. Sidecar-only leftovers are parked then discarded. Hold drains those names when the vault is free, and drops a hold duplicate when the vault already has the restore copy.
+- Code away-notification id allocations `commit` when posted and cleared (open tokens already did in wave 20), so a kill cannot leave the shade entry uncancelable or keep a stale id. `code_away_open_tokens` / `code_away_notif_ids` are excluded from Auto Backup and device transfer.
+
+Phone: park `chat_database.pre_sqlcipher` + `-wal` beside the live DB (or only a `-wal`); after relaunch both should leave the databases root. Force a vault name collision on `pre_sqlcipher` (root clears; vault copy stays). Post a Code away approval, kill mid-post, relaunch and dismiss (shade should clear).
+
 # Handoff (2026-10-02, Code wave 22)
 
 On `gradation/w22-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`, `ListSessionsJsonTest`):
