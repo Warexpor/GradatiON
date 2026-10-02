@@ -468,6 +468,51 @@ class CodeBridgeBackendTest {
         }
     }
 
+
+    @Test fun browseEntryNameWrittenAsADoubleStillMatches() = runBlocking {
+        val transport = FakeTransport()
+        val adapter = AcpAdapter()
+        val backend = BridgeBackend(host(), transport, adapter, scope, Dispatchers.Unconfined)
+        val answers = scope.launch {
+            val answered = HashSet<Long>()
+            while (true) {
+                for (frame in transport.sent.toList()) {
+                    val obj = runCatching { json.parseToJsonElement(frame).jsonObject }.getOrNull() ?: continue
+                    val id = obj["id"]?.jsonPrimitive?.longOrNull ?: continue
+                    if (id in answered) continue
+                    val method = obj["method"]?.jsonPrimitive?.content ?: continue
+                    val result = when (method) {
+                        "initialize" -> """{"protocolVersion":1}"""
+                        "bridge/browse" -> """{"entries":[
+                            {"name":5.0,"dir":true},
+                            {"name":"9.0","dir":false},
+                            {"name":"README.md","dir":false}
+                        ]}"""
+                        else -> "{}"
+                    }
+                    answered += id
+                    transport.deliver("""{"jsonrpc":"2.0","id":$id,"result":$result}""")
+                }
+                delay(5)
+            }
+        }
+        try {
+            backend.connect()
+            withTimeout(3_000) {
+                while (transport.sent.none { it.contains("\"initialize\"") }) delay(5)
+                delay(30)
+            }
+            val entries = backend.browse("/home/me/code")
+            assertEquals(
+                listOf(BrowseEntry("5", true), BrowseEntry("9", false), BrowseEntry("README.md", false)),
+                entries
+            )
+        } finally {
+            answers.cancel()
+            backend.close()
+        }
+    }
+
     @Test fun gitStatusAndDiffParseBridgeResults() = runBlocking {
         val transport = FakeTransport()
         val adapter = AcpAdapter()

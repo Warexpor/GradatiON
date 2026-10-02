@@ -2497,6 +2497,80 @@ class CodeProtocolTest {
         assertEquals("3", byId["i1"]?.detail)
     }
 
+
+    @Test fun moreBrowserToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"fu","title":"Upload","kind":"other","name":"BrowserFileUpload","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cl","title":"Close","kind":"other","name":"BrowserClose","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"nb","title":"Back","kind":"other","name":"BrowserNavigateBack","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"pdf","title":"Pdf","kind":"other","name":"BrowserPdfSave","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"iv","title":"Visible","kind":"other","name":"BrowserIsVisible","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ie","title":"Enabled","kind":"other","name":"BrowserIsEnabled","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ic","title":"Checked","kind":"other","name":"BrowserIsChecked","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bb","title":"Box","kind":"other","name":"BrowserGetBoundingBox","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"lk","title":"Lock","kind":"other","name":"BrowserLock","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"uk","title":"Unlock","kind":"other","name":"BrowserUnlock","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wf","title":"WaitFor","kind":"other","name":"BrowserWaitFor","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EXECUTE, byId["fu"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["cl"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["nb"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["pdf"]?.kind)
+        assertEquals(ToolKind.READ, byId["iv"]?.kind)
+        assertEquals(ToolKind.READ, byId["ie"]?.kind)
+        assertEquals(ToolKind.READ, byId["ic"]?.kind)
+        assertEquals(ToolKind.READ, byId["bb"]?.kind)
+        assertEquals(ToolKind.THINK, byId["lk"]?.kind)
+        assertEquals(ToolKind.THINK, byId["uk"]?.kind)
+        assertEquals(ToolKind.THINK, byId["wf"]?.kind)
+    }
+
+    @Test fun cursorGitlabGithubBrowserDetailUseMoreNativeRawInputKeys() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"s1","title":"Search","kind":"other","name":"Search","status":"completed",
+               "rawInput":{"search":"auth middleware"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"l1","title":"Labels","kind":"other","name":"CreateIssue","status":"completed",
+               "rawInput":{"labels":"bug"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"a1","title":"Assignee","kind":"other","name":"UpdateIssue","status":"completed",
+               "rawInput":{"assignee":"warexpor"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"m1","title":"Milestone","kind":"other","name":"SaveMergeRequest","status":"completed",
+               "rawInput":{"milestone":"v1"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"st","title":"State","kind":"other","name":"ListMergeRequests","status":"completed",
+               "rawInput":{"state":"opened"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"p1","title":"Parent","kind":"other","name":"LinkWorkItems","status":"completed",
+               "rawInput":{"parent_id":"55.0"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"op","title":"Diff","kind":"other","name":"SaveMergeRequestReview","status":"completed",
+               "rawInput":{"old_path":"a.kt","new_path":"b.kt"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mm","title":"Merge","kind":"other","name":"MergePullRequest","status":"completed",
+               "rawInput":{"merge_method":"squash"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"hs","title":"Head","kind":"other","name":"UpdatePullRequestBranch","status":"completed",
+               "rawInput":{"expected_head_sha":"abc1234"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ok","title":"Obs","kind":"other","name":"ObservabilityKeys","status":"completed",
+               "rawInput":{"key":"http.status","index":"7.0"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"el","title":"Attr","kind":"other","name":"BrowserGetAttribute","status":"completed",
+               "rawInput":{"element":"#submit","attribute":"disabled"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"vd","title":"Verdict","kind":"other","name":"SaveMergeRequestReview","status":"completed",
+               "rawInput":{"verdict":"approve"}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("auth middleware", byId["s1"]?.detail)
+        assertEquals("bug", byId["l1"]?.detail)
+        assertEquals("warexpor", byId["a1"]?.detail)
+        assertEquals("v1", byId["m1"]?.detail)
+        assertEquals("opened", byId["st"]?.detail)
+        assertEquals("55", byId["p1"]?.detail)
+        // firstRaw prefers first matching key: old_path before new_path
+        assertEquals("a.kt", byId["op"]?.detail)
+        assertEquals("squash", byId["mm"]?.detail)
+        assertEquals("abc1234", byId["hs"]?.detail)
+        assertEquals("http.status", byId["ok"]?.detail)
+        assertEquals("#submit", byId["el"]?.detail)
+        assertEquals("approve", byId["vd"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()

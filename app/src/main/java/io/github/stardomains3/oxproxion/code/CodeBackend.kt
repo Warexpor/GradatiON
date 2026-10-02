@@ -864,7 +864,8 @@ class BridgeBackend(
         val arr = result["entries"] as? JsonArray ?: return emptyList()
         return arr.mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
-            val name = (o["name"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            // Whole-number doubles (5.0 / "5.0") still match as "5", same as workspace paths.
+            val name = sessionIdOf(o["name"]) ?: return@mapNotNull null
             val dir = (o["dir"] as? JsonPrimitive)?.booleanOrNull ?: false
             BrowseEntry(name = name, dir = dir)
         }
