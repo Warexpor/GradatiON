@@ -40,6 +40,8 @@
 - Hub Continue / Start chat deactivate Code without restoring an Ask chip mid-flip: setChatMode(RP) is async, so leaveCodeMode would briefly apply a parked Ask stage before Roleplay lands.
 - A bad `gradation://pair` deep link queues via CodePairPending.offerError (clears a stale successful pending; CodeModeHost toasts once Chat is up) instead of a GlassNotice that left pending intact. CodeModeHost also skips toasting an error that a later successful offer already superseded.
 - Bottom-sheet glass: after glassing the Material container, drop a duplicate GlassDrawable on the content layout (bg_bottom_sheet) so tint and outline are not stacked.
+- Code away: clearing turn-done dedup on a new user prompt also drops the prefs allocation row, so after process death the next finished turn can still alert (memory-only clear was re-seeded from prefs).
+- Answer-ready: a user-blocked Answers channel (or notifications off / no POST_NOTIFICATIONS) skips posting and does not remember Speak meta; shade title/text commit so a cold Speak after a kill can still flip to Stop; TTS init failure and Dismiss/Copy clear a queued Speak so Stop does not stick.
 - Continue starts a new paragraph after z-image ⦇…⦈, z-binding ⦉…⦊ and curled angle ⧼…⧽ dialogue, and after Syloti Nagri ꠨꠩꠪꠫, Tibetan ༉༊༐༴, Mongolian ᠂᠄᠇, Balinese ᭜᭝᭠ and stenographic ⸼⸽. Opening ⦇⦉⧼ hug the next word like other openers (and ❴⦅⦗ do too — they were trailers only).
 - Lore keys wrapped in ⦇z-image⦈ / ⦉z-binding⦊ / ⧼curled angle⧽, and keys trailed by ꠨༉᠂᭜⸼, still match.
 - The rewrite dialog quote drops ⦇z-image⦈, ⦉z-binding⦊ and ⧼curled angle⧽ quotes around the first line.

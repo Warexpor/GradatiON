@@ -79,7 +79,8 @@ object CodeAwayFormat {
      * Dedup keys already allocated in persisted key→id prefs.
      * After process death [CodeAwayNotifier]'s in-memory [posted] set is empty; seeding
      * from prefs keeps reconnect from re-alerting a shade entry that survived the kill.
-     * [clearTurnDoneDedup] still clears memory only so a later finished turn can post again.
+     * [CodeAwayNotifier.clearTurnDoneDedup] removes the turn-done prefs row so a later
+     * finished turn is not re-suppressed after process death.
      */
     fun postedKeysFromPrefs(entries: Map<String, *>): Set<String> {
         val out = LinkedHashSet<String>()

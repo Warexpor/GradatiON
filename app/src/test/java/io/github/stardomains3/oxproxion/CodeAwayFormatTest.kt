@@ -171,14 +171,20 @@ class CodeAwayFormatTest {
 
     @Test
     fun coldStartPostedKeysSuppressShouldPost() {
-        // Prefs-held key after process death must still dedup; clearing memory alone
-        // (clearTurnDoneDedup) allows a later turn to post again.
+        // Prefs-held key after process death must still dedup. clearTurnDoneDedup also
+        // drops the prefs row so seed cannot re-suppress; memory-only clear is not enough.
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess")
         val id = CodeAwayFormat.notificationId(key)
         val seeded = CodeAwayFormat.postedKeysFromPrefs(mapOf(key to id))
         assertFalse(CodeAwayFormat.shouldPost(seeded, key))
         val afterClear = seeded.toMutableSet().also { it.remove(key) }
         assertTrue(CodeAwayFormat.shouldPost(afterClear, key))
+        assertTrue(
+            CodeAwayFormat.shouldPost(
+                CodeAwayFormat.postedKeysFromPrefs(emptyMap<String, Any>()),
+                key,
+            ),
+        )
     }
 
     @Test
