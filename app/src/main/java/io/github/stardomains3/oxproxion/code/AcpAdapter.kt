@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -457,9 +457,11 @@ class AcpAdapter : HarnessAdapter {
             "fix_lints", "fixlints",
             "apply_agent_diff", "applyagentdiff",
             "create_diagram", "creatediagram",
-            "update_project", "updateproject" -> "edit"
+            "update_project", "updateproject",
+            "draft_external_message", "draftexternalmessage" -> "edit"
             "delete", "remove", "rm", "delete_file", "deletefile", "unlink" -> "delete"
-            "move", "rename", "mv", "move_file", "movefile", "rename_file", "renamefile" -> "move"
+            "move", "rename", "mv", "move_file", "movefile", "rename_file", "renamefile",
+            "copy_to_box", "copytobox", "copy_from_box", "copyfrombox" -> "move"
             "search", "grep", "glob", "find", "rg", "ls",
             "listdir", "list_dir", "listdirectory", "list_directory",
             "listdir_v2", "list_dir_v2", "listdirv2", "listdirectoryv2",
@@ -479,12 +481,16 @@ class AcpAdapter : HarnessAdapter {
             "get_dynamic_tools", "getdynamictools",
             "list_mcp_resources", "listmcpresources",
             "list_mcp_tools", "listmcptools",
-            "knowledge_base", "knowledgebase" -> "search"
+            "knowledge_base", "knowledgebase",
+            "list_machines", "listmachines",
+            "get_mcp_server_status", "getmcpserverstatus",
+            "search_plugins", "searchplugins" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command",
             "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
             "runterminalcommand",
             "write_shell_stdin", "writeshellstdin",
-            "computer_use", "computeruse" -> "execute"
+            "computer_use", "computeruse",
+            "record_screen", "recordscreen" -> "execute"
             "think", "thought", "reasoning",
             "await", "await_task", "awaittask",
             "await_shell", "awaitshell",
@@ -493,14 +499,22 @@ class AcpAdapter : HarnessAdapter {
             "update_todos", "updatetodos",
             "task", "task_v2", "taskv2", "subagent", "switch_mode", "switchmode",
             "create_plan", "createplan",
-            "ask_question", "askquestion" -> "think"
+            "ask_question", "askquestion",
+            "background_composer_followup", "backgroundcomposerfollowup",
+            "cloud_agent", "cloudagent",
+            "create_agent", "createagent",
+            "send_to_agent", "sendtoagent",
+            "check_subagent", "checksubagent" -> "think"
             "fetch", "web_fetch", "webfetch", "websearch", "web_search", "http",
             "fetch_mcp_resource", "fetchmcpresource",
             "read_mcp_resource", "readmcpresource",
             "fetch_rules", "fetchrules",
             "fetch_pull_request", "fetchpullrequest",
             "call_mcp_tool", "callmcptool",
-            "call_dynamic_tool", "calldynamictool" -> "fetch"
+            "call_dynamic_tool", "calldynamictool",
+            "mcp",
+            "upload_file", "uploadfile",
+            "download_file", "downloadfile" -> "fetch"
             "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
             else -> n
         }
@@ -843,10 +857,15 @@ class AcpAdapter : HarnessAdapter {
         val specific = commandOf(raw) != null ||
             firstRaw(raw, "pattern", "query", "url", "regex",
                 "glob_pattern", "globPattern", "search_term", "searchTerm",
-                "tool_name", "toolName", "uri", "server") != null ||
+                "tool_name", "toolName", "uri", "server",
+                "prompt", "description", "task_description", "taskDescription",
+                "pr_url", "prUrl", "pull_request_url", "pullRequestUrl",
+                "shell_id", "shellId", "terminal_instance_id", "terminalInstanceId") != null ||
             firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
-                "relativeWorkspacePath", "absolute_path", "absolutePath") != null
+                "relativeWorkspacePath", "absolute_path", "absolutePath",
+                "directory_path", "directoryPath",
+                "working_directory", "workingDirectory", "cwd") != null
         val hasLine = (u["locations"] as? JsonArray).orEmpty().any { e ->
             val line = lineNumber((e as? JsonObject)?.get("line"))
             line != null && line > 0
@@ -929,10 +948,15 @@ class AcpAdapter : HarnessAdapter {
             command = commandOf(raw),
             query = firstRaw(raw, "pattern", "query", "url", "regex",
                 "glob_pattern", "globPattern", "search_term", "searchTerm",
-                "tool_name", "toolName", "uri", "server"),
+                "tool_name", "toolName", "uri", "server",
+                "prompt", "description", "task_description", "taskDescription",
+                "pr_url", "prUrl", "pull_request_url", "pullRequestUrl",
+                "shell_id", "shellId", "terminal_instance_id", "terminalInstanceId"),
             filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
-                "relativeWorkspacePath", "absolute_path", "absolutePath"),
+                "relativeWorkspacePath", "absolute_path", "absolutePath",
+                "directory_path", "directoryPath",
+                "working_directory", "workingDirectory", "cwd"),
         )
     }
 
@@ -991,7 +1015,12 @@ class AcpAdapter : HarnessAdapter {
     private fun firstRaw(raw: JsonObject?, vararg keys: String): String? {
         if (raw == null) return null
         for (k in keys) {
-            val s = raw.str(k)?.trim()?.ifEmpty { null } ?: continue
+            val p = raw[k] as? JsonPrimitive ?: continue
+            // Numeric shell_id / offset written as 5.0 still shows as "5". String patterns stay.
+            if (!p.isString) {
+                wholeNumberLong(p)?.let { return it.toString() }
+            }
+            val s = p.contentOrNull?.trim()?.ifEmpty { null } ?: continue
             return s
         }
         return null
