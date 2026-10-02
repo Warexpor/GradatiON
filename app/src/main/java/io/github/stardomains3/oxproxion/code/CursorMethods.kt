@@ -6,6 +6,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -276,12 +278,40 @@ internal class CursorMethods {
 
     private fun rpc(id: String, result: JsonObject) = buildJsonObject {
         put("jsonrpc", "2.0")
-        put("id", id.toLongOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(id))
+        put("id", jsonRpcIdValue(id))
         put("result", result)
     }.toString()
 
-    private fun rpcId(idEl: JsonElement?): String? =
-        (idEl as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotEmpty() }
+    /** Numeric ids become `"9"` (not `"9.0"`); string ids stay as sent. */
+    private fun rpcId(idEl: JsonElement?): String? {
+        val p = idEl as? JsonPrimitive ?: return null
+        wholeNumberLong(p)?.let { return it.toString() }
+        return p.contentOrNull?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun jsonRpcIdValue(id: String): JsonPrimitive {
+        id.toLongOrNull()?.let { return JsonPrimitive(it) }
+        id.toDoubleOrNull()?.takeIf {
+            it.isFinite() && it == kotlin.math.floor(it) &&
+                it in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+        }?.toLong()?.let { return JsonPrimitive(it) }
+        return JsonPrimitive(id)
+    }
+
+    private fun wholeNumberLong(p: JsonPrimitive): Long? {
+        p.longOrNull?.let { return it }
+        p.doubleOrNull?.let { d ->
+            if (d.isFinite() && d == kotlin.math.floor(d) &&
+                d in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+            ) return d.toLong()
+        }
+        val c = p.contentOrNull ?: return null
+        c.toLongOrNull()?.let { return it }
+        return c.toDoubleOrNull()?.takeIf {
+            it.isFinite() && it == kotlin.math.floor(it) &&
+                it in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+        }?.toLong()
+    }
 
     private fun clip(text: String) = if (text.length > PLAN_CHARS) text.take(PLAN_CHARS) + "…" else text
 

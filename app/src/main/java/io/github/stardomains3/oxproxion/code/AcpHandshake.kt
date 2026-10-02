@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
@@ -82,7 +83,19 @@ object AcpHandshake {
 
     private fun protocolVersion(result: JsonObject): Int? {
         val el = result["protocolVersion"] as? JsonPrimitive ?: return null
-        return el.intOrNull ?: el.longOrNull?.toInt() ?: el.contentOrNull?.toIntOrNull()
+        el.intOrNull?.let { return it }
+        el.longOrNull?.let { return it.toInt() }
+        // A JSON number written as 1.0 / 2.0 still has to refuse an unsupported dialect.
+        el.doubleOrNull?.let { d ->
+            if (d.isFinite() && d == kotlin.math.floor(d) &&
+                d in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble()
+            ) return d.toInt()
+        }
+        el.contentOrNull?.toIntOrNull()?.let { return it }
+        return el.contentOrNull?.toDoubleOrNull()?.takeIf {
+            it.isFinite() && it == kotlin.math.floor(it) &&
+                it in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble()
+        }?.toInt()
     }
 
     private fun authMethods(result: JsonObject): List<AuthMethod> {
