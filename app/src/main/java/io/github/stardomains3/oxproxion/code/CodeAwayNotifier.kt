@@ -32,6 +32,9 @@ import java.util.concurrent.ConcurrentHashMap
  * Cold-start allocation also treats prefs-held ids as taken so a new alert cannot reuse
  * a shade entry that survived process death. Cold-start also seeds the dedup set from those
  * prefs so a reconnect cannot re-alert the same shade entry.
+ *
+ * Shade swipe-dismiss ([onUserDismissed]) drops dedup and the prefs allocation so a still-pending
+ * approval can re-alert (including after a later process death that would otherwise re-seed).
  */
 class CodeAwayNotifier(
     context: Context,
@@ -191,6 +194,16 @@ class CodeAwayNotifier(
         posted.remove(key)
     }
 
+    /**
+     * Shade swipe-dismiss (DeleteIntent). Drops dedup and the prefs allocation so a
+     * still-pending approval can re-alert — including after process death, when
+     * [ensurePostedSeeded] would otherwise re-suppress from a leftover prefs row.
+     */
+    fun onUserDismissed(dedupKey: String) {
+        if (dedupKey.isBlank()) return
+        cancelKey(dedupKey)
+    }
+
     private fun maybePostApproval(
         sessionId: String,
         hostId: String,
@@ -211,7 +224,7 @@ class CodeAwayNotifier(
             approval.title.ifBlank { sessionTitle },
         )
         val id = idFor(key)
-        val builder = baseBuilder(sessionId, headline, sessionTitle.ifBlank { approval.title }, id)
+        val builder = baseBuilder(sessionId, headline, sessionTitle.ifBlank { approval.title }, id, key)
         // Optional Allow / Deny when wire options are present (answer without opening UI).
         val allow = CodeAwayFormat.pickAllow(approval.options)
         val deny = CodeAwayFormat.pickDeny(approval.options)
@@ -244,7 +257,7 @@ class CodeAwayNotifier(
             sessionTitle,
         )
         val id = idFor(key)
-        val builder = baseBuilder(sessionId, headline, sessionTitle, id)
+        val builder = baseBuilder(sessionId, headline, sessionTitle, id, key)
         nm?.notify(id, builder.build())
         markPosted(key, id)
     }
@@ -264,6 +277,11 @@ class CodeAwayNotifier(
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
             if (!granted) return false
+        }
+        // User blocked the Code away channel in system settings — do not "post" into silence.
+        val channel = nm.getNotificationChannel(CHANNEL_ID)
+        if (channel != null && !CodeAwayFormat.channelCanNotify(channel.importance)) {
+            return false
         }
         return true
     }
@@ -292,6 +310,7 @@ class CodeAwayNotifier(
         title: String,
         contentText: String,
         notifId: Int,
+        dedupKey: String,
     ): NotificationCompat.Builder {
         val token = issueOpenToken(sessionId)
         val open = Intent(appContext, MainActivity::class.java).apply {
@@ -311,11 +330,25 @@ class CodeAwayNotifier(
             .setContentTitle(title)
             .setContentText(contentText.ifBlank { title })
             .setContentIntent(contentPi)
+            .setDeleteIntent(dismissPending(dedupKey, notifId))
             .setAutoCancel(true)
             .setOngoing(false)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+    }
+
+    private fun dismissPending(dedupKey: String, notifId: Int): PendingIntent {
+        val intent = Intent(appContext, CodeAwayActionReceiver::class.java).apply {
+            action = ACTION_DISMISS
+            putExtra(EXTRA_DEDUP_KEY, dedupKey)
+        }
+        return PendingIntent.getBroadcast(
+            appContext,
+            CodeAwayFormat.dismissRequestCode(notifId),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private fun actionPending(
@@ -431,6 +464,8 @@ class CodeAwayNotifier(
         const val EXTRA_OPTION_KIND = "code_away_option_kind"
         const val EXTRA_OPTION_LABEL = "code_away_option_label"
         const val ACTION_ANSWER = "io.github.stardomains3.oxproxion.code.AWAY_ANSWER"
+        const val ACTION_DISMISS = "io.github.stardomains3.oxproxion.code.AWAY_DISMISS"
+        const val EXTRA_DEDUP_KEY = "code_away_dedup_key"
 
         private const val REQUEST_ALLOW = 0xA11
         private const val REQUEST_DENY = 0xDE1

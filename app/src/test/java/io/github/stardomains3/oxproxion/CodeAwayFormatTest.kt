@@ -239,4 +239,24 @@ class CodeAwayFormatTest {
         assertTrue(CodeAwayFormat.shouldNotifyTurnDone(true, "end_turn"))
         assertTrue(CodeAwayFormat.shouldNotifyTurnDone(true, "error"))
     }
+
+    @Test
+    fun dismissRequestCodesStayDistinct() {
+        val id = CodeAwayFormat.NOTIF_ID_BASE + 0x42
+        val codes = setOf(
+            CodeAwayFormat.contentRequestCode(id),
+            CodeAwayFormat.actionRequestCode(id, allow = true),
+            CodeAwayFormat.actionRequestCode(id, allow = false),
+            CodeAwayFormat.dismissRequestCode(id),
+        )
+        assertEquals(4, codes.size)
+    }
+
+    @Test
+    fun channelCanNotifyRejectsImportanceNone() {
+        assertFalse(CodeAwayFormat.channelCanNotify(0)) // IMPORTANCE_NONE
+        assertTrue(CodeAwayFormat.channelCanNotify(3)) // IMPORTANCE_DEFAULT
+        assertTrue(CodeAwayFormat.channelCanNotify(4)) // IMPORTANCE_HIGH
+    }
+
 }
