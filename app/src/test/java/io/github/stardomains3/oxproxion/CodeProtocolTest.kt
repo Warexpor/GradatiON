@@ -40,6 +40,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -1649,12 +1650,18 @@ class CodeProtocolTest {
             update("""{"sessionUpdate":"tool_call","toolCallId":"ws","title":"Search","kind":"other","name":"WebSearch","status":"completed"}"""),
             update("""{"sessionUpdate":"tool_call","toolCallId":"ld","title":"List","kind":"other","name":"ListDir","status":"completed"}"""),
             update("""{"sessionUpdate":"tool_call","toolCallId":"nb","title":"Notebook","kind":"other","name":"EditNotebook","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wf","title":"Write","kind":"other","name":"WriteFile","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"df","title":"Delete","kind":"other","name":"DeleteFile","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rt","title":"Shell","kind":"other","name":"RunTerminalCmd","status":"completed"}"""),
         )
         val list = foldFresh(frames)
         val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
         assertEquals(ToolKind.FETCH, byId["ws"]?.kind)
         assertEquals(ToolKind.SEARCH, byId["ld"]?.kind)
         assertEquals(ToolKind.EDIT, byId["nb"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["wf"]?.kind)
+        assertEquals(ToolKind.DELETE, byId["df"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["rt"]?.kind)
     }
 
     @Test fun bridgeSeqAcceptsAWholeNumberWrittenAsADouble() {
@@ -1663,6 +1670,35 @@ class CodeProtocolTest {
         val update = outs.filterIsInstance<AdapterOutput.Update>().single()
         assertEquals(2L, update.seq)
         assertEquals(2L, acp.lastSeq("s1"))
+    }
+
+    @Test fun permissionIdWrittenAsADoubleStillAnswersWithANumber() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":9.0,"method":"session/request_permission","params":{"sessionId":"s1","toolCall":{"toolCallId":"c1","title":"Run","kind":"execute"},"options":[{"optionId":"allow-once","name":"Allow once","kind":"allow_once"},{"optionId":"reject-once","name":"Reject","kind":"reject_once"}]}}""")
+        val approval = (out.filterIsInstance<AdapterOutput.Update>().single().update as CodeUpdate.Upsert).event as CodeEvent.Approval
+        assertEquals("9", approval.requestId)
+        val answer = Json.parseToJsonElement(acp.answerApproval("9", "allow-once")).jsonObject
+        assertEquals(9L, answer["id"]!!.jsonPrimitive.long)
+        assertEquals("selected", answer["result"]!!.jsonObject["outcome"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun rpcResultIdWrittenAsADoubleStillMatches() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":5.0,"result":{"stopReason":"end_turn"}}""").single() as AdapterOutput.Result
+        assertEquals(5L, out.id)
+        assertEquals(null, out.error)
+    }
+
+    @Test fun handshakeProtocolVersionWrittenAsADoubleIsHonoured() {
+        val ok = Json.parseToJsonElement("""{"protocolVersion":1.0}""").jsonObject
+        assertEquals(AcpHandshake.Decision.Ready, AcpHandshake.decide(ok))
+        val bad = Json.parseToJsonElement("""{"protocolVersion":2.0}""").jsonObject
+        val refused = AcpHandshake.decide(bad) as AcpHandshake.Decision.UnsupportedVersion
+        assertEquals(2, refused.version)
+    }
+
+    @Test fun cursorAskIdWrittenAsADoubleStillAnswersWithANumber() {
+        acp.decode("""{"jsonrpc":"2.0","id":9.0,"method":"cursor/ask_question","params":{"sessionId":"s1","questions":[{"id":"q1","prompt":"Go?","options":[{"id":"yes","label":"Yes"}]}]}}""")
+        val answer = Json.parseToJsonElement(acp.answerApproval("9", "yes")).jsonObject
+        assertEquals(9L, answer["id"]!!.jsonPrimitive.long)
     }
 
     private fun foldFresh(frames: List<String>): List<CodeEvent> {

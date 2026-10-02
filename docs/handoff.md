@@ -1,5 +1,13 @@
-# Handoff (2026-10-02, Code wave 14)
+# Handoff (2026-10-02, Code wave 15)
 
+On `gradation/w15-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
+- A JSON-RPC id written as a whole-number double (`9.0`) still completes the pending call and an Allow still answers with a number id (Cursor questions too). Handshake treats protocolVersion `2.0` as unsupported, same as `2`.
+- Cursor Agent tool names `WriteFile`, `DeleteFile`, and `RunTerminalCmd` map to edit / delete / execute cards (icon and log clipping).
+- Location lines sent as whole-number doubles still show on the tool detail line.
+
+Phone: on Cursor Agent, a WriteFile or DeleteFile card should show the right icon. A permission Allow after a proxy that rewrites ids as doubles should unblock the agent.
+
+# Handoff (2026-10-02, Code wave 14)
 On `gradation/w14-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeComposerDraftsTest`, `CodeProtocolTest`):
 - Code home parks the unsent composer line and pictures per machine when the view is torn down or the host changes; sending clears that draft.
 - Cursor Agent tool names `WebSearch`, `ListDir`, and `EditNotebook` map to fetch / search / edit cards (icon and log clipping).
