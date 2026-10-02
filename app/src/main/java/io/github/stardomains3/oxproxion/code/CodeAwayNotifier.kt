@@ -29,6 +29,8 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Notification ids are allocated collision-free (AWAY-03): key→id is persisted and
  * cancel/eviction use that allocation rather than recomputing the lossy 24-bit hash alone.
+ * Cold-start allocation also treats prefs-held ids as taken so a new alert cannot reuse
+ * a shade entry that survived process death.
  */
 class CodeAwayNotifier(
     context: Context,
@@ -342,7 +344,9 @@ class CodeAwayNotifier(
         val saved = savedRaw.takeIf { it != Int.MIN_VALUE && CodeAwayFormat.isAwayNotifId(it) }
         // Usable only if no other live key owns this id.
         val existing = saved?.takeIf { owner -> idToKey[owner] == null || idToKey[owner] == key }
-        val taken = idToKey.keys
+        // After process death idToKey is empty; prefs still hold every posted id. A new
+        // key whose preferred hash matches a surviving shade entry must probe, not reuse.
+        val taken = idToKey.keys + CodeAwayFormat.takenFromPrefs(idPrefs.all, exceptKey = key)
         val id = CodeAwayFormat.allocateNotificationId(key, taken, existing)
         keyToId[key] = id
         idToKey[id] = key
