@@ -163,5 +163,12 @@ class RpSwipeRulesTest {
         // A reply with a picture keeps it on the new version.
         val pic = RpSwipeRules.addEarlierVersion(emptyMap(), 2, "old", "file:///p.jpg", "new")[2]!!
         assertEquals(listOf("file:///p.jpg", "file:///p.jpg"), pic.pictureUris)
+        // Versions that never tracked pictures start tracking once a file is known.
+        var untracked = RpSwipeRules.addEarlierVersion(emptyMap(), 2, "old", "", "mid")
+        untracked = RpSwipeRules.addEarlierVersion(untracked, 2, "mid", "file:///late.jpg", "new")
+        assertEquals(
+            listOf("file:///late.jpg", "file:///late.jpg", "file:///late.jpg"),
+            untracked[2]!!.pictureUris,
+        )
     }
 }

@@ -206,6 +206,8 @@ object RpSwipeRules {
     /**
      * A new text for an earlier reply (a Rewrite, or its Undo). It joins that reply's versions,
      * or selects the one it already matches. [currentText] seeds a reply that had none yet.
+     * When a file is known for the first time, every prior version shares it: that is what
+     * those versions were already showing. The same rule as [stashAlt].
      */
     fun addEarlierVersion(
         earlier: Map<Int, RpVersions>,
@@ -222,7 +224,11 @@ object RpSwipeRules {
         val at = base.alts.indexOf(text)
         if (at >= 0) return earlier + (position to base.copy(index = at))
         val tracked = picturesTracked(base.pictureUris, base.alts.size)
-        val pictures = if (tracked) base.pictureUris + currentPicture else base.pictureUris
+        val pictures = when {
+            tracked -> base.pictureUris + currentPicture
+            currentPicture.isEmpty() -> base.pictureUris
+            else -> List(base.alts.size) { currentPicture } + currentPicture
+        }
         return earlier + (position to RpVersions(base.alts + text, base.alts.size, pictures))
     }
 }
