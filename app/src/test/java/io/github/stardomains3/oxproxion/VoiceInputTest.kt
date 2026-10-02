@@ -54,6 +54,24 @@ class VoiceInputTest {
         assertNull(VoiceInput.resolve(ctx, prefs))
     }
 
+    @Test fun turningVoiceOffRemembersTheEngine() {
+        prefs.setVoiceInputProvider(VoiceEngine.GROK.key)
+        assertEquals(VoiceEngine.GROK.key, prefs.getVoiceInputLastEngine())
+        prefs.setVoiceInputProvider(VoiceEngine.OFF.key)
+        assertEquals(VoiceEngine.OFF.key, prefs.getVoiceInputProvider())
+        assertEquals(VoiceEngine.GROK.key, prefs.getVoiceInputLastEngine())
+        // Settings turns the master switch back on with the remembered chip.
+        prefs.setVoiceInputProvider(prefs.getVoiceInputLastEngine())
+        assertEquals(VoiceEngine.GROK, VoiceInput.resolve(ctx, prefs))
+    }
+
+    @Test fun lastEngineFallsBackToPhoneWhenNeverSet() {
+        prefs.mainPrefs.edit().remove("voice_input_last_engine").remove("voice_input_provider").commit()
+        assertEquals(VoiceEngine.DEVICE.key, prefs.getVoiceInputLastEngine())
+        prefs.setVoiceInputProvider(VoiceEngine.OFF.key)
+        assertEquals(VoiceEngine.DEVICE.key, prefs.getVoiceInputLastEngine())
+    }
+
     @Test fun pickedEnginesAreKept() {
         prefs.setVoiceInputProvider(VoiceEngine.LAN.key)
         assertEquals(VoiceEngine.LAN, VoiceInput.resolve(ctx, prefs))

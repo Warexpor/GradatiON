@@ -78,6 +78,8 @@ class SharedPreferencesHelper(context: Context) {
 
         private const val KEY_VOICE_INPUT_MODEL = "voice_input_model"
         private const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // VoiceEngine keys: device, cloud, grok, lan, off
+        /** Last non-off engine so Settings > Voice can restore it after the master switch is turned off. */
+        private const val KEY_VOICE_INPUT_LAST_ENGINE = "voice_input_last_engine"
         /** Encrypted prefs alias for an xAI API key (Grok STT / future Grok voice). */
         const val XAI_API_KEY_ALIAS = "xai_api_key"
         private const val KEY_THEME_MODE = "theme_mode"
@@ -563,7 +565,25 @@ class SharedPreferencesHelper(context: Context) {
     fun setVoiceInputModel(model: String) = mainPrefs.edit { putString(KEY_VOICE_INPUT_MODEL, model) }
 
     fun getVoiceInputProvider(): String = mainPrefs.getString(KEY_VOICE_INPUT_PROVIDER, VoiceEngine.DEVICE.key) ?: VoiceEngine.DEVICE.key
-    fun setVoiceInputProvider(provider: String) = mainPrefs.edit { putString(KEY_VOICE_INPUT_PROVIDER, provider) }
+
+    /**
+     * Engine shown in Settings when Voice is off, or the live provider when it is on.
+     * Turning Voice off used to write `off` over the only copy of Cloud/Grok/Local.
+     */
+    fun getVoiceInputLastEngine(): String {
+        val saved = mainPrefs.getString(KEY_VOICE_INPUT_LAST_ENGINE, null)
+        if (!saved.isNullOrBlank() && saved != VoiceEngine.OFF.key) return saved
+        val current = getVoiceInputProvider()
+        return if (current != VoiceEngine.OFF.key) current else VoiceEngine.DEVICE.key
+    }
+
+    fun setVoiceInputProvider(provider: String) {
+        // commit: Voice on/off and the remembered engine must survive a kill right after the tap.
+        mainPrefs.edit(commit = true) {
+            putString(KEY_VOICE_INPUT_PROVIDER, provider)
+            if (provider != VoiceEngine.OFF.key) putString(KEY_VOICE_INPUT_LAST_ENGINE, provider)
+        }
+    }
     fun saveChatMemoryCount(count: Int) {
         mainPrefs.edit { putInt(KEY_CHAT_MEMORY_COUNT, count) }
     }
@@ -959,7 +979,8 @@ class SharedPreferencesHelper(context: Context) {
     fun isRoleplayEnabled(): Boolean = mainPrefs.getBoolean(KEY_ROLEPLAY_ENABLED, false)
 
     fun setRoleplayEnabled(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_ROLEPLAY_ENABLED, enabled) }
+        // commit: ChatFragment reacts to this; apply() can still be in flight when the process dies.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_ROLEPLAY_ENABLED, enabled) }
     }
 
     fun getBackgroundStyle(): String = mainPrefs.getString(KEY_BACKGROUND_STYLE, "off") ?: "off"
@@ -1657,7 +1678,10 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun isRpLlmMode(): Boolean = mainPrefs.getBoolean(KEY_RP_LLM_MODE, false)
-    fun saveRpLlmMode(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_LLM_MODE, enabled) }
+    fun saveRpLlmMode(enabled: Boolean) {
+        // commit: Style may wipe the open RP chat on this flag; do not lose it to a kill after apply().
+        mainPrefs.edit(commit = true) { putBoolean(KEY_RP_LLM_MODE, enabled) }
+    }
 
     fun getRpDraftSessionId(mode: ChatMode): Long? {
         val key = if (mode == ChatMode.ASK) KEY_RP_DRAFT_SESSION_ASK else KEY_RP_DRAFT_SESSION_RP

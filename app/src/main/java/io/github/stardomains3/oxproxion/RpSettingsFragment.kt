@@ -32,19 +32,23 @@ class RpSettingsFragment : Fragment() {
             RpPageKit.intro(requireContext(), getString(R.string.rp_page_style_caption)), 0
         )
         view.findViewById<SwitchCompat>(R.id.rpLoreEnabledSwitch).apply {
+            applyGrokionSwitchStyle()
             isChecked = prefs.isRpLoreEnabled()
             setOnCheckedChangeListener { _, checked -> prefs.saveRpLoreEnabled(checked) }
         }
         val thirdPersonSwitch = view.findViewById<SwitchCompat>(R.id.rpThirdPersonSwitch)
+        thirdPersonSwitch.applyGrokionSwitchStyle()
         thirdPersonSwitch.isChecked = prefs.isRpThirdPerson()
         thirdPersonSwitch.setOnCheckedChangeListener { _, checked -> prefs.saveRpThirdPerson(checked) }
 
         view.findViewById<SwitchCompat>(R.id.rpAutoMemorySwitch).apply {
+            applyGrokionSwitchStyle()
             isChecked = prefs.isRpAutoMemory()
             setOnCheckedChangeListener { _, checked -> prefs.saveRpAutoMemory(checked) }
         }
 
         val showThoughtsSwitch = view.findViewById<SwitchCompat>(R.id.rpShowThoughtsSwitch)
+        showThoughtsSwitch.applyGrokionSwitchStyle()
         showThoughtsSwitch.isChecked = prefs.isRpShowThoughts()
         showThoughtsSwitch.setOnCheckedChangeListener { _, checked -> prefs.saveRpShowThoughts(checked) }
 
@@ -58,6 +62,7 @@ class RpSettingsFragment : Fragment() {
         syncLlmGatedSwitches(prefs.isRpLlmMode())
 
         val llmSwitch = view.findViewById<SwitchCompat>(R.id.rpLlmModeSwitch)
+        llmSwitch.applyGrokionSwitchStyle()
         llmSwitch.isChecked = prefs.isRpLlmMode()
         llmSwitch.setOnCheckedChangeListener { button, checked ->
             if (!button.isPressed) {
