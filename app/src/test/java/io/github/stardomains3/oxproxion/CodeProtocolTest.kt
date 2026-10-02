@@ -1836,6 +1836,64 @@ class CodeProtocolTest {
         assertEquals("ACP seq", byId["w1"]?.detail)
     }
 
+
+    @Test fun evenMoreCursorToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ws","title":"Stdin","kind":"other","name":"WriteShellStdin","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"tr","title":"Todos","kind":"other","name":"TodoRead","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ss","title":"Symbols","kind":"other","name":"SearchSymbols","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rg","title":"Grep","kind":"other","name":"RipgrepSearch","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rr","title":"Grep","kind":"other","name":"RipgrepRawSearch","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"fl","title":"Fix","kind":"other","name":"FixLints","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gd","title":"Def","kind":"other","name":"GoToDefinition","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"pr","title":"PR","kind":"other","name":"FetchPullRequest","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ad","title":"Diff","kind":"other","name":"ApplyAgentDiff","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"t2","title":"Task","kind":"other","name":"TaskV2","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cd","title":"Diagram","kind":"other","name":"CreateDiagram","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cu","title":"UI","kind":"other","name":"ComputerUse","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"kb","title":"KB","kind":"other","name":"KnowledgeBase","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rp","title":"Project","kind":"other","name":"ReadProject","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"up","title":"Project","kind":"other","name":"UpdateProject","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sf","title":"Sem","kind":"other","name":"SemanticSearchFull","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rs","title":"Sem","kind":"other","name":"ReadSemsearchFiles","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EXECUTE, byId["ws"]?.kind)
+        assertEquals(ToolKind.THINK, byId["tr"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["ss"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["rg"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["rr"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["fl"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["gd"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["pr"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ad"]?.kind)
+        assertEquals(ToolKind.THINK, byId["t2"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["cd"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["cu"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["kb"]?.kind)
+        assertEquals(ToolKind.READ, byId["rp"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["up"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["sf"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["rs"]?.kind)
+    }
+
+    @Test fun cursorMcpDetailUsesNativeRawInputKeys() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"m1","title":"MCP","kind":"other","name":"CallMcpTool","status":"completed",
+               "rawInput":{"server":"cursor-github","toolName":"get_pull_request"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"m2","title":"Resource","kind":"other","name":"FetchMcpResource","status":"completed",
+               "rawInput":{"server":"docs","uri":"file:///readme.md"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"m3","title":"MCP","kind":"other","name":"CallMcpTool","status":"completed",
+               "rawInput":{"server":"user-GitLab","tool_name":"list_projects"}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("get_pull_request", byId["m1"]?.detail)
+        assertEquals("file:///readme.md", byId["m2"]?.detail)
+        assertEquals("list_projects", byId["m3"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()
