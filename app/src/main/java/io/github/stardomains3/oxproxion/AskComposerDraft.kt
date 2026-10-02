@@ -34,6 +34,13 @@ object AskComposerDraft {
     }
 
     /**
+     * True when leaving Ask should write [text] into the per-thread store. An empty
+     * field the user never edited is not a request to forget a stored draft.
+     */
+    fun shouldParkText(dirty: Boolean, text: String): Boolean =
+        dirty || text.isNotEmpty()
+
+    /**
      * A relaunch drops Ask's mode snapshot. That string is one line for every chat, and the
      * per-thread draft is what comes back. Roleplay's unsent line lives only in its mode draft,
      * so a relaunch keeps it.

@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Chat wave 24)
+
+On `gradation/w24-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w23:
+- Ask→Roleplay via Hub Continue / Start chat / Settings parks Ask caption and staged audio/files before Roleplay chrome clears them (photos already did), then restores that Ask thread's parked text on return. Tab swipe already parked text; Hub paths do too now.
+- History Discard draft falls back to the park map when the open composer is dirty but the live stage is empty (Code or a mode flip cleared it).
+
+Phone: type a caption + stage audio (or a file) in Chat, Hub → Continue into Roleplay (no chip / no audio in RP); back to Chat (caption and chip return). Same via Settings disabling Roleplay. Stage a photo, open Code, History → Discard draft (parked JPEG goes).
+
 # Handoff (2026-10-02, Code wave 24)
 
 On `gradation/w24-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
