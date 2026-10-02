@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- An orphan `-wal`/`-shm` left under `chat_db_hold` no longer makes Room open that path when the vault already has the recovered main file (that used to mint an empty database beside the sidecar). Drain drops those orphans; a hold set that still has its main still wins over a stale vault copy. Code host pairing tokens and the prefs→Room session migration flag commit to disk before the next step, so a kill after scrubbing plaintext hosts (or after Room import) cannot lose the only copy.
 - A staged Chat photo whose URI survives a view rebuild (rotation) puts the JPEG bytes and preview chip back, so Send still includes the picture instead of sending the caption alone or deleting the file. Opening History also mirrors that live stage into the park map without clearing the chip.
 - History search for "Photo" / "Audio" / files on a draft that also has a caption shows those words on the row (and bolds them). Idle rows still prefer the caption alone.
 - Continue starts a new paragraph after halfwidth ｢…｣ and 〝…〞 dialogue, and after reversed ⸮, Limbu ᥄᥅, Lisu ꓿, Vai ꘎꘏, halfwidth ｡ and small ﹒. Opening ｢〝〟 hug the next word like other openers.

@@ -24,7 +24,9 @@ import java.nio.file.StandardOpenOption
  * recovered or set-aside (unreadable) file cannot enter the vault (the vault already has that
  * name, or the move fails), it is parked under [HOLD_DIR] inside the databases directory. Move
  * temps for those names are parked there too. The backup rules exclude that folder, and Room
- * opens a parked recovered file by absolute path so the history is not uploaded.
+ * opens a parked recovered file by absolute path so the history is not uploaded. An orphan
+ * sidecar in the hold folder (no main file) is ignored so Room does not create an empty
+ * database beside it when the vault already has the history.
  *
  * The live `chat_database` stays in the databases directory. The backup rules exclude it, its
  * journal, and the old plaintext name in case a move out of that directory fails.
@@ -75,10 +77,12 @@ internal object ChatDbVault {
         if (databasesDir != null) {
             val hold = File(databasesDir, HOLD_DIR)
             // Prefer the parked history over a stale vault copy that blocked the move.
-            if (hold.isDirectory && dbSetPresent(hold, stored)) {
+            // Require the main file: an orphan -wal/-shm in hold must not hide the vault copy
+            // (Room would create an empty main beside that sidecar).
+            if (hold.isDirectory && File(hold, stored).isFile) {
                 return File(hold, stored).absolutePath
             }
-            if (dbSetPresent(databasesDir, stored)) return stored
+            if (File(databasesDir, stored).isFile) return stored
         }
         return File(directory(context), stored).absolutePath
     }
@@ -155,7 +159,21 @@ internal object ChatDbVault {
             }
         }
         for (name in names) {
+            // Vault already holds this history (the move that parked under hold left a stale
+            // vault copy). Drop orphan sidecars that lack a main file so Room does not open
+            // them. A hold set that still has its main stays put for roomDatabaseName.
+            if (File(vault, name).isFile && !File(hold, name).isFile) {
+                discardShortNameSet(hold, name)
+                continue
+            }
             relocateDbSet(hold, vault, name)
+        }
+    }
+
+    /** Removes short-name main/wal/shm/journal pieces. Leaves `.kept-*` renames alone. */
+    private fun discardShortNameSet(directory: File, name: String) {
+        for (suffix in SIDECARS) {
+            File(directory, name + suffix).delete()
         }
     }
 
