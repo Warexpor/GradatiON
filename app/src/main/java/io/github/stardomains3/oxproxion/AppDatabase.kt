@@ -264,15 +264,21 @@ abstract class AppDatabase : RoomDatabase() {
                 // is the one in the databases directory (or its hold folder), which backup would
                 // upload from the root, or which Room prefers when opening a recovered name.
                 val fallback = recoveredFileName(vault, stamp, databasesDir)
+                // recoveredFileName may walk past [stamp] when that recovered name is taken.
+                // Quarantine and the passphrase archive have to use the stamp in the file name.
+                val fallbackStamp = stampOfRecoveredName(fallback) ?: stamp
+                val archivedForName =
+                    if (fallbackStamp == stamp) archived
+                    else prefs.archiveChatDbPassphrase(fallbackStamp) || archived
                 prefs.saveChatDbFileName(fallback)
-                prefs.markRecoveryPending(stamp)
+                prefs.markRecoveryPending(fallbackStamp)
                 return openFreshAfterRecovery(
                     context,
                     prefs,
                     File(vault, fallback).absolutePath,
                     vault,
-                    archived,
-                    stamp
+                    archivedForName,
+                    fallbackStamp
                 )
             }
             val actual = stampOf(moved) ?: stamp
@@ -348,6 +354,13 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun stampOf(moved: File?): Long? =
             moved?.name?.substringAfterLast("unreadable-", "")?.toLongOrNull()
+
+        /** Stamp embedded in `chat_database.recovered-<stamp>`. */
+        @androidx.annotation.VisibleForTesting
+        internal fun stampOfRecoveredName(name: String): Long? {
+            if (!ChatDbVault.isRecoveredName(name)) return null
+            return name.substringAfterLast('-').toLongOrNull()
+        }
 
         /**
          * Encrypts a leftover plaintext file, opens Room, and forces the real open so a bad key surfaces here.
@@ -482,15 +495,21 @@ abstract class AppDatabase : RoomDatabase() {
         internal var movesBeforeFailure: Int? = null
 
         /**
-         * First stamp at or after [stamp] whose aside files are free in [vault].
+         * First stamp at or after [stamp] whose aside and recovered files are free in [vault].
          * [alsoAvoid] is the databases directory: stamps already used there or under
-         * [ChatDbVault.HOLD_DIR] are skipped so a later recovery cannot collide with a parked copy.
+         * [ChatDbVault.HOLD_DIR] are skipped so a later recovery cannot collide with a parked copy,
+         * or reuse a stamp that already names a recovered database (passphrase archives are per stamp).
          */
         @androidx.annotation.VisibleForTesting
         internal fun firstFreeStamp(vault: File, stamp: Long, alsoAvoid: File? = null): Long {
             var s = stamp
-            while (unreadableStampTaken(vault, s) ||
-                (alsoAvoid != null && unreadableStampTakenInDatabases(alsoAvoid, s))
+            while (
+                unreadableStampTaken(vault, s) ||
+                recoveredNameTaken(vault, s) ||
+                (alsoAvoid != null && (
+                    unreadableStampTakenInDatabases(alsoAvoid, s) ||
+                    recoveredNameTakenInDatabases(alsoAvoid, s)
+                ))
             ) {
                 if (s == Long.MAX_VALUE) return stamp
                 s++

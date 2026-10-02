@@ -40,11 +40,13 @@ class RpLibraryImportTest {
             .build()
         repo = RpRepository(db.rpDao())
         RpImportGuard.failAt = null
+        CharacterImportSideLog.failPictureRestoreForTest = false
     }
 
     @After
     fun tearDown() {
         RpImportGuard.failAt = null
+        CharacterImportSideLog.failPictureRestoreForTest = false
         val app = ApplicationProvider.getApplicationContext<Application>()
         CharacterImportSideLog.clear(CharacterImportSideLog.file(app))
         db.close()
@@ -120,6 +122,37 @@ class RpLibraryImportTest {
         CharacterImportSideLog.write(log, listOf(wrong))
         assertTrue(CharacterImportSideLog.resume(app, db))
         assertEquals("shy", prefs.getRpMemory(imported.single().id))
+        assertNull(CharacterImportSideLog.read(log))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun aFailedPictureRestoreLeavesTheLogForRetry() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        val exported = RpCharacterExport(
+            name = "Ada",
+            exportKey = "ada",
+            memory = "shy",
+            layout = SharedPreferencesHelper.RP_LAYOUT_BUBBLES,
+            wallpaperBase64 = "",
+        )
+        val imported = repo.importCharacters(listOf(exported)) { rows ->
+            val row = rows.single()
+            CharacterImportSideLog.write(
+                log,
+                listOf(ImportedCharacterNote(row.id, exported.name, row.exportKey, exported)),
+            )
+        }
+        CharacterImportSideLog.failPictureRestoreForTest = true
+        assertFalse(CharacterImportSideLog.resume(app, db))
+        assertEquals("shy", prefs.getRpMemory(imported.single().id))
+        assertNotNull(CharacterImportSideLog.read(log))
+
+        assertTrue(CharacterImportSideLog.resume(app, db))
         assertNull(CharacterImportSideLog.read(log))
         assertTrue(prefs.mainPrefs.edit().clear().commit())
     }
