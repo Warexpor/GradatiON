@@ -357,6 +357,9 @@ class HistoryListTest {
         // Multi-word query spanning caption + label still needs both on the row.
         assertEquals("hello Photo", HistoryList.draftRowText("hello", "Photo", "hello photo"))
         assertEquals("hello Photo", HistoryList.draftRowText("hello", "Photo", "hello  photo"))
+        // Words in order with a gap (like LIKE %hello%photo%) still need both on the row.
+        assertEquals("hello there Photo", HistoryList.draftRowText("hello there", "Photo", "hello photo"))
+        assertEquals("hello there", HistoryList.draftRowText("hello there", "Photo", "hello there"))
         val label = { text: String -> "Draft: $text" }
         val row = HistoryList.rowPreview(
             "You: sent",
@@ -374,5 +377,32 @@ class HistoryListTest {
         )
         assertEquals("Draft: hello Photo", phrase)
         assertEquals(7, HistoryList.emphasisAt(phrase, "hello photo"))
+        val gapped = HistoryList.rowPreview(
+            "You: sent",
+            HistoryList.draftRowText("hello there", "Photo", "hello photo"),
+            "hello photo",
+            label,
+        )
+        assertEquals("Draft: hello there Photo", gapped)
+        val gapHit = HistoryList.emphasis(gapped, "hello photo")
+        assertEquals(7, gapHit!!.start)
+        assertTrue(gapHit.length >= "hello photo".length)
+    }
+
+    @Test fun draft_search_matches_words_in_order_like_sent_messages() {
+        assertTrue(HistoryList.wordsMatch("hello there Photo", "hello photo"))
+        assertTrue(HistoryList.wordsMatch("hello Photo", "hello photo"))
+        assertFalse(HistoryList.wordsMatch("hello there", "hello photo"))
+        assertFalse(HistoryList.wordsMatch("Photo hello", "hello photo"))
+        val prefs = mapOf("4" to "hello there")
+        val all = listOf(session(4, now, "notes"))
+        val host = { id: Long ->
+            if (id == 4L) HistoryList.draftSearchText("hello there", "Photo") else ""
+        }
+        val drafts = HistoryList.draftTextsForSearch(all, prefs, host)
+        assertEquals("hello there Photo", drafts["4"])
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "hello photo"))
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "there photo"))
+        assertTrue(HistoryList.draftMatchIds(drafts, "photo hello").isEmpty())
     }
 }
