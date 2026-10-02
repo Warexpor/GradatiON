@@ -37,6 +37,8 @@ internal object BackupIo {
      * [openDest] runs only after [write] has finished and the cache file has been synced.
      * The cache file is removed afterwards, including when [write] or the copy fails.
      * [write] is suspending so a backup can read the database while it fills the cache file.
+     * Callers that open a content URI should use mode "wt" so an overwrite truncates; "w"
+     * alone can leave trailing bytes from a longer previous export.
      */
     suspend fun publish(cache: File, openDest: () -> OutputStream?, write: suspend (OutputStream) -> Unit) {
         try {

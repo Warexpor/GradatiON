@@ -71,7 +71,7 @@ class RpHubFragment : Fragment() {
                         )
                     }
                     val cache = File(app.cacheDir, "rp-chars-${System.nanoTime()}.json")
-                    BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri) }) { stream ->
+                    BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri, "wt") }) { stream ->
                         stream.writer(Charsets.UTF_8).buffered().use {
                             RpBackupWriter.writeCharacters(it, exports)
                         }
@@ -151,7 +151,7 @@ class RpHubFragment : Fragment() {
                         RpLorebookExport(name = b.name, content = b.content, isActive = b.isActive)
                     }
                     val cache = File(app.cacheDir, "rp-lore-${System.nanoTime()}.json")
-                    BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri) }) { stream ->
+                    BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri, "wt") }) { stream ->
                         stream.writer(Charsets.UTF_8).buffered().use {
                             RpBackupWriter.writeLorebooks(it, exports)
                         }

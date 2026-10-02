@@ -112,14 +112,14 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
     /**
      * Writes the backup to a cache file and syncs it, then copies it to [uri]. [uri] is not opened
      * until the cache file is complete. A copy that stops early throws, so the caller does not
-     * report success. A content URI truncates when it is opened, so a failed copy can still leave
-     * a short file there.
+     * report success. The destination is opened with mode "wt" so an overwrite truncates; a
+     * failed copy can still leave a short file there.
      */
     suspend fun exportChatsTo(uri: Uri) {
         val app = getApplication<Application>()
         val cache = File(app.cacheDir, "chat-export-${System.nanoTime()}.json")
         withContext(Dispatchers.IO) {
-            BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri) }) { stream ->
+            BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri, "wt") }) { stream ->
                 stream.writer(Charsets.UTF_8).buffered().use { writeChatsBackup(it) }
             }
         }

@@ -1,3 +1,14 @@
+# Handoff (2026-10-02, Import wave 27)
+
+On `gradation/w27-import` (PR into `gradation/app-pass`). Import/export IO fixes, unit-tested (`RpLibraryImportTest`, `ChatImportSideLogTest`):
+- Undecodeable / torn wallpaper (SOI/EOI or missing EOI) is left rather than written or retried every launch.
+- Chat import side log matches after a rename when timestamp and message count still fingerprint the row (title alone no longer drops waiting notes).
+- Chat / character / lore / prompt / system exports open the SAF destination with `"wt"` so an overwrite truncates.
+
+Phone: import a character pack with a junk wallpaper (Memory should apply; wallpaper tile stays empty or keeps the old one). Rename an imported chat before notes land (pins/facts should still apply). Export chats over an existing longer JSON file (re-import must parse).
+
+---
+
 # Handoff (2026-10-02, Stability wave 27)
 
 On `gradation/w27-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w26 encrypt_ok / code_mode backup:
@@ -7,6 +18,7 @@ On `gradation/w27-stability` (PR into `gradation/app-pass`). Persistence follow-
 - Keystore-wrapped API keys commit on save (same durability as the chat-database passphrase and Code host tokens).
 
 Phone: leave `chat_database.partial` or `chat_database.pre_sqlcipher.partial` beside the live DB and force a cloud backup before relaunch (rules should skip it). Leave `chat_database.encrypt_ok` in the vault with a root or hold `pre_sqlcipher` (after relaunch the plaintext leftover should be gone, not re-vaulted). Save an OpenRouter or xAI key and kill mid-save (key should still decrypt after relaunch).
+
 # Handoff (2026-10-02, Notifications/Away wave 27)
 
 On `gradation/w27-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after Speak/swipe (#105) and prefs dedup seed (#102):
@@ -178,7 +190,6 @@ On `gradation/w21-chat` (PR into `gradation/app-pass`). Chat/History follow-ups 
 
 Phone: stage a photo in Chat, open History → Roleplay → Continue (no chip in RP); swipe back to Chat (chip returns). Caption "hello there" + photo, History search "hello photo" (row shows Draft: hello there Photo with the phrase bold).
 
-
 # Handoff (2026-10-02, Code wave 20)
 
 On `gradation/w20-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
@@ -187,6 +198,7 @@ On `gradation/w20-code` (PR into `gradation/app-pass`). Three Code-mode fixes, u
 - Tool detail lines read Cursor's native rawInput keys `directory_path`, `working_directory` / `cwd`, `task_description` / `description` / `prompt`, `pr_url`, and `shell_id` (a whole-number double shows as `5`).
 
 Phone: on Cursor Agent, a ListMachines or CopyToBox card should show the search or move icon. A ListDir card with `directory_path` should show that path under the title. An ask_question whose toolCallId a proxy rewrote as `5.0` should still link the tool card.
+
 # Handoff (2026-10-02, Stability wave 20)
 
 On `gradation/w20-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w19 orphan hold sidecars:
@@ -257,7 +269,6 @@ On `gradation/w18-code` (PR into `gradation/app-pass`). Three Code-mode fixes, u
 
 Phone: on Cursor Agent, a GenerateImage or LS card should show the edit or search icon. A Glob card should show the pattern under the title. After a proxy rewrites listSessions lastSeq as a double, reopen a session and confirm it resumes instead of replaying from the start.
 
-
 # Handoff (2026-10-02, Chat wave 17)
 
 On `gradation/w17-chat` (PR into `gradation/app-pass`). History draft follow-ups after w16:
@@ -275,7 +286,6 @@ On `gradation/w17-code` (PR into `gradation/app-pass`). Three Code-mode fixes, u
 - A shell command string with a scalar `args` whole-number double (`5.0`) shows as `5` on the tool detail line.
 
 Phone: on Cursor Agent, an AwaitShell or CallMcpTool card should show the think or fetch icon. A tool whose id a proxy rewrote as a double should still update in place.
-
 
 # Handoff (2026-10-02, Stability wave 16)
 

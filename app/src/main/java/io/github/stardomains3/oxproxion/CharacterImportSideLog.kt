@@ -156,8 +156,12 @@ internal object CharacterImportSideLog {
                 }
                 is RpWallpaperBackup.Restore.Write -> {
                     val slot = BackgroundPhoto.slotForCharacter(note.id)
-                    val jpeg = BackgroundPhoto.prepare(action.jpeg) ?: action.jpeg
-                    if (!BackgroundPhoto.writeBytes(context, slot, jpeg)) {
+                    // prepare fails for undecodeable bytes; do not fall back to the raw
+                    // stub and retry forever the way a short SOI/EOI portrait used to.
+                    val jpeg = BackgroundPhoto.prepare(action.jpeg)
+                    if (jpeg == null) {
+                        Log.w(TAG, "Character wallpaper in the backup is not a picture; leaving it")
+                    } else if (!BackgroundPhoto.writeBytes(context, slot, jpeg)) {
                         Log.w(TAG, "Character wallpaper still waiting")
                         return false
                     }

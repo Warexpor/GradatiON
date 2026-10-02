@@ -257,6 +257,10 @@ internal object RpWallpaperBackup {
             return Restore.Leave
         }
         if (bytes.isEmpty() || bytes.size > MAX_BYTES) return Restore.Leave
+        // Incomplete or SOI/EOI-only stubs are not a wallpaper. BitmapFactory can still
+        // invent bounds for junk (and a truncated file with SOF), which used to return
+        // Write and then retry forever when writeBytes refused the incomplete JPEG.
+        if (!ScenePhoto.completeJpeg(bytes) || bytes.size < 64) return Restore.Leave
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return Restore.Leave
