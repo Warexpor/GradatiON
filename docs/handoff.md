@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Import wave 26)
+
+On `gradation/w26-import` (PR into `gradation/app-pass`). Import/export IO fixes, unit-tested (`RpLibraryImportTest`, `ImportBoundsTest`):
+- Character import side log matches by `exportKey` when present, so a rename while wallpaper/portrait is still waiting no longer drops those pictures.
+- Resume drops only finished or rejected snapshot rows (keeps notes a concurrent import wrote).
+- An undecodeable / tiny SOI-EOI portrait is left rather than retried every launch. UTF-32 BE backups are rejected like UTF-32 LE.
+
+Phone: import a character pack, kill before pictures land, rename the character, relaunch (Memory and portrait should still apply). Import while another import's pictures are still applying (second character's notes must not vanish).
+
 # Handoff (2026-10-02, Stability wave 26)
 
 On `gradation/w26-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w24:

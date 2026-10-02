@@ -28,13 +28,22 @@ internal object CharacterImportSideLog {
     @androidx.annotation.VisibleForTesting
     internal var failPictureRestoreForTest: Boolean = false
 
+    /**
+     * Test hook. Runs once after Memory/layout/voice are committed and before pictures,
+     * so a test can write another note into the log the way a concurrent import would.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var afterPrefsAppliedForTest: (() -> Unit)? = null
+
     fun file(context: Context): File = File(ChatDbVault.directory(context), NAME)
 
     fun matches(note: ImportedCharacterNote, character: RpCharacter?): Boolean {
         if (character == null) return false
-        if (note.name != character.name) return false
-        if (note.exportKey.isNotBlank() && note.exportKey != character.exportKey) return false
-        return true
+        // exportKey is the stable identity. A rename (or a pack that changes the display
+        // name) while pictures are still waiting must not drop the portrait forever.
+        if (note.exportKey.isNotBlank()) return note.exportKey == character.exportKey
+        // Old log without a key: the name must still match so a recycled id cannot inherit.
+        return note.name == character.name
     }
 
     /**
@@ -44,15 +53,15 @@ internal object CharacterImportSideLog {
      * tries the pictures again.
      */
     suspend fun resume(context: Context, db: AppDatabase): Boolean {
-        val notes = synchronized(lock) { read(file(context)) } ?: return true
+        val dest = file(context)
+        val snapshot = synchronized(lock) { read(dest) } ?: return true
         val dao = db.rpDao()
-        val accepted = notes.filter { matches(it, dao.getCharacterById(it.id)) }
-        if (accepted.size != notes.size) {
-            synchronized(lock) {
-                if (accepted.isEmpty()) clear(file(context))
-                else write(file(context), accepted)
-            }
-            if (accepted.isEmpty()) return true
+        val accepted = snapshot.filter { matches(it, dao.getCharacterById(it.id)) }
+        val acceptedIds = accepted.map { it.id }.toSet()
+        if (accepted.isEmpty()) {
+            // Drop only the rejected snapshot rows. A concurrent import may have added others.
+            reconcile(dest, snapshot, doneIds = emptySet(), acceptedIds = emptySet())
+            return true
         }
         val prefs = SharedPreferencesHelper(context)
         val saved = RpCharacterPrefsBackup.applyAll(
@@ -62,19 +71,52 @@ internal object CharacterImportSideLog {
         )
         if (!saved) {
             Log.e(TAG, "Imported character notes are still waiting")
+            // Still drop rejected snapshot rows; leave accepted for the next launch.
+            reconcile(dest, snapshot, doneIds = emptySet(), acceptedIds = acceptedIds)
             return false
         }
-        val waiting = ArrayList<ImportedCharacterNote>()
-        for (note in accepted) {
-            if (!restorePictures(context, dao, note)) waiting += note
+        afterPrefsAppliedForTest?.let { hook ->
+            afterPrefsAppliedForTest = null
+            hook()
         }
+        val doneIds = HashSet<Long>()
+        for (note in accepted) {
+            if (restorePictures(context, dao, note)) doneIds += note.id
+        }
+        val waiting = acceptedIds - doneIds
+        reconcile(dest, snapshot, doneIds = doneIds, acceptedIds = acceptedIds)
         if (waiting.isNotEmpty()) {
             Log.e(TAG, "Imported character pictures are still waiting")
-            write(file(context), waiting)
             return false
         }
-        clear(file(context))
         return true
+    }
+
+    /**
+     * Removes snapshot rows that this resume finished or rejected, without wiping notes a
+     * concurrent import wrote (or a newer note that replaced one we finished).
+     */
+    private fun reconcile(
+        dest: File,
+        snapshot: List<ImportedCharacterNote>,
+        doneIds: Set<Long>,
+        acceptedIds: Set<Long>,
+    ) {
+        synchronized(lock) {
+            val snapById = snapshot.associateBy { it.id }
+            val current = read(dest).orEmpty()
+            val still = current.filter { note ->
+                val original = snapById[note.id] ?: return@filter true
+                if (note != original) return@filter true
+                when {
+                    note.id in doneIds -> false
+                    note.id !in acceptedIds -> false
+                    else -> true
+                }
+            }
+            if (still.isEmpty()) clear(dest)
+            else if (still != current) write(dest, still)
+        }
     }
 
     fun write(dest: File, notes: List<ImportedCharacterNote>) {
@@ -122,16 +164,28 @@ internal object CharacterImportSideLog {
                 }
             }
             val encoded = note.exported.avatarBase64?.takeIf { it.isNotBlank() } ?: return true
+            val bytes = runCatching { Base64.decode(encoded, Base64.DEFAULT) }.getOrNull()
+            if (bytes == null || bytes.isEmpty() || !ScenePhoto.completeJpeg(bytes)) {
+                Log.w(TAG, "Character portrait in the backup is not a picture; leaving it")
+                return true
+            }
+            // SOI/EOI alone (or any tiny stub) is not a portrait. Robolectric's BitmapFactory
+            // can invent bounds for junk, so size is checked before a decode probe.
+            if (bytes.size < 64) {
+                Log.w(TAG, "Character portrait in the backup is not a picture; leaving it")
+                return true
+            }
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                Log.w(TAG, "Character portrait in the backup is not a picture; leaving it")
+                return true
+            }
             val photoUri = RpAvatarStorage.saveFromBase64(context, encoded, note.id)
             if (photoUri == null) {
                 val existing = RpAvatarStorage.avatarFile(context, note.id)
-                if (existing.isFile && existing.length() > 0L) return true
-                // A payload that is not a picture cannot succeed on retry. Leave the notes.
-                val bytes = runCatching { Base64.decode(encoded, Base64.DEFAULT) }.getOrNull()
-                if (bytes == null || bytes.isEmpty() || !ScenePhoto.completeJpeg(bytes)) {
-                    Log.w(TAG, "Character portrait in the backup is not a picture; leaving it")
-                    return true
-                }
+                // A torn leftover with length > 0 is not a finished portrait.
+                if (existing.isFile && ScenePhoto.completeJpeg(existing)) return true
                 Log.w(TAG, "Character portrait still waiting")
                 return false
             }
