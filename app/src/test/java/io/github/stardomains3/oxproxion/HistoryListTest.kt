@@ -260,4 +260,27 @@ class HistoryListTest {
         assertTrue((shown[anchor + 1] as HistoryListItem.Session).open)
         assertEquals(-1, HistoryList.openAnchor(emptyList()))
     }
+
+    @Test fun search_folds_spaces_like_a_draft_row() {
+        val you = { text: String -> "You: $text" }
+        assertEquals(
+            "You: see you later",
+            HistoryList.searchLine("user", "\"see you later\"", "see  you", you, "Photo"),
+        )
+        assertEquals(
+            "You: see you later",
+            HistoryList.searchLine("user", "\"see\\nyou later\"", "see you", you, "Photo"),
+        )
+        assertTrue(HistoryList.searchLine("user", "\"see you later\"", "  ", you, "Photo").isEmpty())
+    }
+
+    @Test fun like_contains_puts_percent_between_words() {
+        assertEquals("%lantern%", HistoryList.likeContains("  lantern "))
+        assertEquals("%see%you%", HistoryList.likeContains("see  you"))
+        assertEquals("%100\\%%", HistoryList.likeContains("100%"))
+        assertEquals("%snake\\_case%", HistoryList.likeContains("snake_case"))
+        assertEquals("%", HistoryList.likeContains("   "))
+        assertEquals("see", HistoryList.searchAnchor("see  you later"))
+        assertEquals("lantern", HistoryList.normalizeQuery("  lantern  "))
+    }
 }

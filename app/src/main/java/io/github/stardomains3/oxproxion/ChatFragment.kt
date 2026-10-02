@@ -1427,6 +1427,26 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     ) {
         val openId = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
         val here = ComposerDrafts.key(openId) == ComposerDrafts.key(sessionId)
+        val staged = ComposerStaged.Entry(
+            // Prefer the on-disk JPEG when it is still there; keep the bytes as a fallback.
+            imageBytes = if (imageUri != null) null else image,
+            imageMime = mime,
+            imageUri = imageUri,
+            files = files.map { ComposerStaged.FilePart(it.fileName, it.content, it.size) },
+        ).let { entry ->
+            // A URI that cannot be read still needs the in-memory bytes.
+            val uri = entry.imageUri
+            if (uri != null && entry.imageBytes == null && image != null) {
+                val ctx = context
+                if (ctx == null || !ScenePhoto.canRead(ctx, uri)) {
+                    entry.copy(imageBytes = image)
+                } else {
+                    entry
+                }
+            } else {
+                entry
+            }
+        }
         if (here && ::chatEditText.isInitialized && chatEditText.text.isNullOrEmpty()) {
             suppressDraftDirty = true
             chatEditText.setText(text)
@@ -1442,10 +1462,20 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (files.isNotEmpty() && pendingFiles.isEmpty()) pendingFiles.addAll(files)
             if (::attachmentButton.isInitialized) updateAttachmentButton() else updateSendButtonChrome()
             parkAskDraft(sessionId)
-        } else if (text.isNotBlank()) {
-            sharedPreferencesHelper.saveAskComposerDrafts(
-                ComposerDrafts.remember(sharedPreferencesHelper.getAskComposerDrafts(), sessionId, text)
-            )
+            if (!staged.isEmpty) {
+                stagedByChat = ComposerStaged.remember(stagedByChat, sessionId, staged)
+            }
+        } else {
+            // Another chat is on screen, or they already typed something else. Keep the
+            // refused send on its own thread so coming back still has the photo.
+            if (text.isNotBlank()) {
+                sharedPreferencesHelper.saveAskComposerDrafts(
+                    ComposerDrafts.remember(sharedPreferencesHelper.getAskComposerDrafts(), sessionId, text)
+                )
+            }
+            if (!staged.isEmpty) {
+                stagedByChat = ComposerStaged.remember(stagedByChat, sessionId, staged)
+            }
         }
     }
 
@@ -1469,11 +1499,38 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             clearStagedAttachment(discardSceneFile = true)
             pendingFiles.clear()
             if (::attachmentButton.isInitialized) updateAttachmentButton()
+        } else {
+            // A parked photo for a chat that is not on screen would otherwise stay on disk.
+            discardParkedScene(ComposerStaged.get(stagedByChat, sessionId))
         }
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.drop(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
         )
         stagedByChat = ComposerStaged.drop(stagedByChat, sessionId)
+    }
+
+    override fun hasUnsentDraft(sessionId: Long): Boolean {
+        if (viewModel.isRpMode()) return false
+        if (ComposerDrafts.text(sharedPreferencesHelper.getAskComposerDrafts(), sessionId).isNotBlank()) {
+            return true
+        }
+        if (!ComposerStaged.get(stagedByChat, sessionId).isEmpty) return true
+        val open = askComposer.bound &&
+            ComposerDrafts.key(askComposer.sessionId) == ComposerDrafts.key(sessionId)
+        if (!open) return false
+        return selectedImageBytes != null || selectedAudioBytes != null || pendingFiles.isNotEmpty() ||
+            !viewModel.pendingImageUri().isNullOrBlank()
+    }
+
+    /** Delete a parked scene JPEG that History discarded and no message still names. */
+    private fun discardParkedScene(entry: ComposerStaged.Entry) {
+        if (entry.isEmpty) return
+        val uri = entry.imageUri ?: return
+        val name = ScenePhoto.sceneFileName(uri) ?: return
+        val app = context?.applicationContext ?: return
+        lifecycleScope.launch(Dispatchers.IO) {
+            if (!viewModel.scenePhotoStillUsed(name)) ScenePhoto.deleteSceneFiles(app, listOf(name))
+        }
     }
 
     private fun updateSystemMessageButtonState() {
