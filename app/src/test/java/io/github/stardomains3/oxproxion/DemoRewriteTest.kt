@@ -128,5 +128,14 @@ class DemoRewriteTest {
         val flattenedParen = "❨Scene note, not spoken aloud:\nstay tense\n❩"
         assertEquals("stay tense", RpPromptEngine.sceneNoteBody(flattenedParen))
         assertEquals("*She waits.*", RpPromptEngine.withoutLeadingSceneNote("$flattenedParen\n*She waits.*"))
+        val mediumFlattened = "❪Scene note, not spoken aloud:\nstay tense\n❫"
+        assertEquals("stay tense", RpPromptEngine.sceneNoteBody(mediumFlattened))
+        assertEquals("*She waits.*", RpPromptEngine.withoutLeadingSceneNote("$mediumFlattened\n*She waits.*"))
+        val mediumAngle = "❬Scene note, not spoken aloud:\nstay tense\n❭"
+        assertEquals("stay tense", RpPromptEngine.sceneNoteBody(mediumAngle))
+        assertEquals("*She waits.*", RpPromptEngine.withoutLeadingSceneNote("$mediumAngle\n*She waits.*"))
+        val lightTortoise = "❲Scene note, not spoken aloud:\nstay tense\n❳"
+        assertEquals("stay tense", RpPromptEngine.sceneNoteBody(lightTortoise))
+        assertEquals("*She waits.*", RpPromptEngine.withoutLeadingSceneNote("$lightTortoise\n*She waits.*"))
     }
 }
