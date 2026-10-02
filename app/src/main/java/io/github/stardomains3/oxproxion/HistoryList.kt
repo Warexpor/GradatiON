@@ -180,6 +180,24 @@ object HistoryList {
         }
     }
 
+    /**
+     * Prefs drafts plus any richer host preview (a staged Photo/Audio/files line). The host
+     * wins so a chat with only a picture still matches a search for that label.
+     */
+    fun draftTextsForSearch(
+        sessions: List<ChatSession>,
+        prefsDrafts: Map<String, String>,
+        hostPreview: (Long) -> String,
+    ): Map<String, String> {
+        val out = LinkedHashMap<String, String>(prefsDrafts.size + sessions.size)
+        prefsDrafts.forEach { (k, v) -> if (v.isNotBlank()) out[k] = v }
+        for (session in sessions) {
+            val preview = hostPreview(session.id)
+            if (preview.isNotBlank()) out[ComposerDrafts.key(session.id)] = preview
+        }
+        return out
+    }
+
     /** [matched] plus chats the database search missed because the words are only in a draft. */
     fun withDraftMatches(
         matched: List<ChatSession>,
