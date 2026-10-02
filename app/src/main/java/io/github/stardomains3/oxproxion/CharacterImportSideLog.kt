@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -20,6 +21,13 @@ internal object CharacterImportSideLog {
     private val json = Json { ignoreUnknownKeys = true }
     private val serializer = ListSerializer(ImportedCharacterNote.serializer())
 
+    /**
+     * Test hook. The next [restorePictures] returns false once, as a failed wallpaper or
+     * portrait write would. Cleared when it fires.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var failPictureRestoreForTest: Boolean = false
+
     fun file(context: Context): File = File(ChatDbVault.directory(context), NAME)
 
     fun matches(note: ImportedCharacterNote, character: RpCharacter?): Boolean {
@@ -30,9 +38,10 @@ internal object CharacterImportSideLog {
     }
 
     /**
-     * Applies a leftover log. True when there was nothing to do, or the notes were committed.
-     * False when a matching row is still waiting. Pictures are written after the preference
-     * commit; a kill there leaves the log so the next launch tries the pictures again.
+     * Applies a leftover log. True when there was nothing to do, or the notes and pictures
+     * were committed. False when a matching row is still waiting. Pictures are written after
+     * the preference commit; a failed write leaves those rows in the log so the next launch
+     * tries the pictures again.
      */
     suspend fun resume(context: Context, db: AppDatabase): Boolean {
         val notes = synchronized(lock) { read(file(context)) } ?: return true
@@ -55,8 +64,14 @@ internal object CharacterImportSideLog {
             Log.e(TAG, "Imported character notes are still waiting")
             return false
         }
+        val waiting = ArrayList<ImportedCharacterNote>()
         for (note in accepted) {
-            restorePictures(context, dao, note)
+            if (!restorePictures(context, dao, note)) waiting += note
+        }
+        if (waiting.isNotEmpty()) {
+            Log.e(TAG, "Imported character pictures are still waiting")
+            write(file(context), waiting)
+            return false
         }
         clear(file(context))
         return true
@@ -79,20 +94,58 @@ internal object CharacterImportSideLog {
         return null
     }
 
-    private suspend fun restorePictures(context: Context, dao: RpDao, note: ImportedCharacterNote) {
+    /**
+     * True when the wallpaper and portrait from [note] are on disk (or the backup did not
+     * carry a usable picture). False when a finished JPEG still could not be written.
+     */
+    private suspend fun restorePictures(context: Context, dao: RpDao, note: ImportedCharacterNote): Boolean {
+        if (failPictureRestoreForTest) {
+            failPictureRestoreForTest = false
+            return false
+        }
         try {
-            RpWallpaperBackup.apply(context, note.id, note.exported.wallpaperBase64)
-            val encoded = note.exported.avatarBase64?.takeIf { it.isNotBlank() } ?: return
-            val photoUri = RpAvatarStorage.saveFromBase64(context, encoded, note.id) ?: return
+            when (val action = RpWallpaperBackup.restore(note.exported.wallpaperBase64)) {
+                RpWallpaperBackup.Restore.Leave -> Unit
+                RpWallpaperBackup.Restore.Clear -> {
+                    val slot = BackgroundPhoto.slotForCharacter(note.id)
+                    if (BackgroundPhoto.hasPhoto(context, slot)) {
+                        BackgroundPhoto.delete(context, slot)
+                    }
+                }
+                is RpWallpaperBackup.Restore.Write -> {
+                    val slot = BackgroundPhoto.slotForCharacter(note.id)
+                    val jpeg = BackgroundPhoto.prepare(action.jpeg) ?: action.jpeg
+                    if (!BackgroundPhoto.writeBytes(context, slot, jpeg)) {
+                        Log.w(TAG, "Character wallpaper still waiting")
+                        return false
+                    }
+                }
+            }
+            val encoded = note.exported.avatarBase64?.takeIf { it.isNotBlank() } ?: return true
+            val photoUri = RpAvatarStorage.saveFromBase64(context, encoded, note.id)
+            if (photoUri == null) {
+                val existing = RpAvatarStorage.avatarFile(context, note.id)
+                if (existing.isFile && existing.length() > 0L) return true
+                // A payload that is not a picture cannot succeed on retry. Leave the notes.
+                val bytes = runCatching { Base64.decode(encoded, Base64.DEFAULT) }.getOrNull()
+                if (bytes == null || bytes.isEmpty() || !ScenePhoto.completeJpeg(bytes)) {
+                    Log.w(TAG, "Character portrait in the backup is not a picture; leaving it")
+                    return true
+                }
+                Log.w(TAG, "Character portrait still waiting")
+                return false
+            }
             dao.getCharacterById(note.id)?.let { character ->
                 if (character.photoUri != photoUri) {
                     dao.updateCharacter(character.copy(photoUri = photoUri))
                 }
             }
+            return true
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Character picture skipped", e)
+            return false
         }
     }
 

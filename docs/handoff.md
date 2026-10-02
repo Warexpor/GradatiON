@@ -1,3 +1,13 @@
+# Handoff (2026-10-02, Stability wave 16)
+
+On `gradation/w16-stability` (PR into `gradation/app-pass`). Persistence fixes after w15 hold stamps:
+- `firstFreeStamp` also skips stamps that already name a `chat_database.recovered-*` file (vault, databases root, or `chat_db_hold`), so a set-aside copy and its passphrase archive do not reuse that stamp.
+- When recovery cannot move the corrupt file and `recoveredFileName` walks past the first stamp, pending quarantine and the passphrase archive follow the stamp in the recovered name.
+- A character import that fails to write the wallpaper or portrait keeps those rows in the side log for the next launch (prefs stay applied).
+- Archiving an unreadable JSON preference blob (including Code hosts) uses a committed edit.
+
+Phone: force a recovery while a recovered name is already parked under `chat_db_hold`, and re-import a character with a wallpaper after interrupting storage.
+
 # Handoff (2026-10-02, Code wave 16)
 
 On `gradation/w16-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):

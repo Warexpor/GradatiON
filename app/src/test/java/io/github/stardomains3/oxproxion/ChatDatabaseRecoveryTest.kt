@@ -582,6 +582,37 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun aRecoveredNameUsesTheNextFreeStamp() {
+        val vault = tmp.newFolder("recovered-stamp-vault")
+        File(vault, "chat_database.recovered-5").writeText("live-recovered")
+
+        assertEquals(6L, AppDatabase.firstFreeStamp(vault, 5L))
+
+        val db = File(tmp.newFolder("recovered-stamp-db"), "chat_database").apply { writeText("corrupt") }
+        val moved = AppDatabase.setAside(db, 5L, vault)!!
+        assertEquals("chat_database.unreadable-6", moved.name)
+        assertEquals("live-recovered", File(vault, "chat_database.recovered-5").readText())
+        assertEquals("corrupt", moved.readText())
+    }
+
+    @Test
+    fun aRecoveredNameInTheHoldFolderUsesTheNextFreeStamp() {
+        val vault = tmp.newFolder("hold-recovered-vault")
+        val databases = tmp.newFolder("hold-recovered-databases")
+        val hold = File(databases, ChatDbVault.HOLD_DIR).apply { mkdirs() }
+        File(hold, "chat_database.recovered-3").writeText("parked")
+
+        assertEquals(4L, AppDatabase.firstFreeStamp(vault, 3L, databases))
+    }
+
+    @Test
+    fun stampOfRecoveredNameReadsTheEmbeddedStamp() {
+        assertEquals(17L, AppDatabase.stampOfRecoveredName("chat_database.recovered-17"))
+        assertNull(AppDatabase.stampOfRecoveredName("chat_database"))
+        assertNull(AppDatabase.stampOfRecoveredName("chat_database.unreadable-17"))
+    }
+
+    @Test
     fun backupRulesExcludePlaintextCopiesAndHostTokens() {
         val rules = xmlText("backup_rules.xml")
         val extraction = xmlText("data_extraction_rules.xml")
