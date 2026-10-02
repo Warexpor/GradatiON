@@ -29,10 +29,10 @@ object RpRewrite {
         return line.take((limit - 1).coerceAtLeast(1)).trimEnd() + "…"
     }
 
-    /** Markdown emphasis and the quotes a dialogue line may wear, including «guillemets», »Swiss«, „low quotes“, 《angle》, ｢halfwidth｣, 〝primes〞, ❝ornamental❞ and ﹁vertical﹂. */
+    /** Markdown emphasis and the quotes a dialogue line may wear, including «guillemets», »Swiss«, „low quotes“, 《angle》, ｢halfwidth｣, 〝primes〞, ❝ornamental❞, ﹁vertical﹂, ＂fullwidth＂, ❮heavy❯ and ｟white paren｠. */
     private fun stripMarks(line: String): String {
         var s = line
-        val marks = charArrayOf('*', '_', '"', '\'', '“', '”', '‘', '’', '«', '»', '「', '」', '『', '』', '‹', '›', '„', '‚', '《', '》', '〈', '〉', '｢', '｣', '〝', '〞', '〟', '❝', '❞', '❛', '❜', '﹁', '﹂', '﹃', '﹄', '〔', '〕', '〖', '〗')
+        val marks = charArrayOf('*', '_', '"', '\'', '“', '”', '‘', '’', '«', '»', '「', '」', '『', '』', '‹', '›', '„', '‚', '《', '》', '〈', '〉', '｢', '｣', '〝', '〞', '〟', '❝', '❞', '❛', '❜', '﹁', '﹂', '﹃', '﹄', '〔', '〕', '〖', '〗', '＂', '＇', '❮', '❯', '｟', '｠')
         while (s.isNotEmpty() && s.first() in marks) s = s.drop(1).trimStart()
         while (s.isNotEmpty() && s.last() in marks) s = s.dropLast(1).trimEnd()
         return s

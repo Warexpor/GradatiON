@@ -361,4 +361,29 @@ class RpLoreTest {
         assertTrue(RpLore.select(tortoise, "Meet me at the docks.").contains("dawn"))
     }
 
+    @Test
+    fun fullwidthHeavyAngleQuotesAndMoreTrailersAreNotPartOfTheKey() {
+        val book = """
+            [keys: ＂locket＂, docks︖, pier꩝]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(book, "The pier is quiet.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+        val heavy = """
+            [keys: ❮locket❯, docks᭞, pier᠅]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(heavy, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(heavy, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(heavy, "The pier is quiet.").contains("dawn"))
+        val white = """
+            [keys: ｟locket｠, docks᰻]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(white, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(white, "Meet me at the docks.").contains("dawn"))
+    }
+
 }
