@@ -23,6 +23,7 @@ import io.github.stardomains3.oxproxion.GlassAlertDialogBuilder
 import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.Motion.withGrokStackAnimations
 import io.github.stardomains3.oxproxion.R
+import io.github.stardomains3.oxproxion.applyGrokionSwitchStyle
 import kotlinx.coroutines.launch
 
 /** Code mode settings: the tab toggle, away notifications, machines, default approval mode, setup notes. */
@@ -50,6 +51,7 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
         hub = CodeHub.get(requireContext())
         view.findViewById<MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener { parentFragmentManager.popBackStack() }
         view.findViewById<SwitchCompat>(R.id.codeShowTabSwitch).apply {
+            applyGrokionSwitchStyle()
             isChecked = hub.store.enabled
             setOnCheckedChangeListener { _, on ->
                 hub.store.enabled = on
@@ -57,8 +59,11 @@ class CodeSettingsFragment : Fragment(R.layout.fragment_code_settings) {
             }
         }
         view.findViewById<SwitchCompat>(R.id.codeNotifyAwaySwitch).apply {
+            applyGrokionSwitchStyle()
             isChecked = hub.store.notifyWhenAway
             setOnCheckedChangeListener { _, on ->
+                // Observer-style writes (permission callback) must not flip the pref a second time.
+                if (hub.store.notifyWhenAway == on) return@setOnCheckedChangeListener
                 if (on) {
                     if (!ensureNotificationPermission()) {
                         // Permission pending or denied — keep pref off until granted.

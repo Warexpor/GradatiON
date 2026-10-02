@@ -76,6 +76,7 @@ class RpPersonaFragment : Fragment() {
         // Turning it off only makes sense once there is one to turn off.
         val hasPersona = baseline.name.isNotBlank() || baseline.description.isNotBlank() || prefs.getRpPersonaPresets().isNotEmpty()
         enabledCard.visibility = if (hasPersona) View.VISIBLE else View.GONE
+        enabledSwitch.applyGrokionSwitchStyle()
         enabledSwitch.isChecked = prefs.isRpPersonaEnabled()
         enabledSwitch.setOnCheckedChangeListener { _, on ->
             val before = idleGreeting()

@@ -322,6 +322,8 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
 
     private fun bindData(view: View, prefs: SharedPreferencesHelper) {
         bindSwitch(view, R.id.biometricsSwitch, prefs.getBiometricEnabled()) { isChecked ->
+            // Snap-back when biometrics are missing writes isChecked=false; skip a second pref write.
+            if (prefs.getBiometricEnabled() == isChecked) return@bindSwitch
             if (isChecked) {
                 val bm = BiometricManager.from(requireContext())
                 when (bm.canAuthenticate(BIOMETRIC_STRONG)) {

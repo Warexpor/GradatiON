@@ -163,4 +163,24 @@ class PrefsCorruptBlobTest {
         assertFalse(helper().isRoleplayEnabled())
         assertFalse(helper().isRpLlmMode())
     }
+
+    @Test
+    fun themePersonaAndVoiceModelSurviveAFreshHelper() {
+        val prefs = helper()
+        prefs.saveThemeMode(SharedPreferencesHelper.THEME_LIGHT)
+        prefs.saveBackgroundStyle("drift")
+        prefs.setRpPersonaEnabled(false)
+        prefs.setVoiceInputModel("whisper-1")
+        val again = helper()
+        assertEquals(SharedPreferencesHelper.THEME_LIGHT, again.getThemeMode())
+        assertEquals("drift", again.getBackgroundStyle())
+        assertFalse(again.isRpPersonaEnabled())
+        assertEquals("whisper-1", again.getVoiceInputModel())
+        again.saveThemeMode(SharedPreferencesHelper.THEME_DARK)
+        again.setRpPersonaEnabled(true)
+        again.setVoiceInputModel("")
+        assertEquals(SharedPreferencesHelper.THEME_DARK, helper().getThemeMode())
+        assertTrue(helper().isRpPersonaEnabled())
+        assertEquals("", helper().getVoiceInputModel())
+    }
 }
