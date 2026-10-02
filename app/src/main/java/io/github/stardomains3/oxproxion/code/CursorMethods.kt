@@ -236,8 +236,9 @@ internal class CursorMethods {
                 put("outcome", "answered")
                 put("answers", buildJsonArray {
                     add(buildJsonObject {
-                        put("questionId", questionId)
-                        put("selectedOptionIds", buildJsonArray { add(JsonPrimitive(optionId)) })
+                        // Digit strings go out as JSON numbers, same as the request id.
+                        put("questionId", jsonRpcIdValue(questionId))
+                        put("selectedOptionIds", buildJsonArray { add(jsonRpcIdValue(optionId)) })
                     })
                 })
             }
@@ -263,7 +264,7 @@ internal class CursorMethods {
                 put("todos", buildJsonArray {
                     entries.forEach { e ->
                         add(buildJsonObject {
-                            e.id?.let { put("id", it) }
+                            e.id?.let { put("id", jsonRpcIdValue(it)) }
                             put("content", e.content)
                             put("status", when (e.status) {
                                 PlanStatus.COMPLETED -> "completed"

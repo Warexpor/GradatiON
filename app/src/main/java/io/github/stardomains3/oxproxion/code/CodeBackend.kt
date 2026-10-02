@@ -27,6 +27,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.longOrNull
 import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -879,7 +881,8 @@ class BridgeBackend(
 
     override suspend fun startSession(request: NewSessionRequest): CodeSessionSummary {
         val result = call({ adapter.newSession(it, request) }) as? JsonObject
-        val sid = (result?.get("sessionId") as? JsonPrimitive)?.contentOrNull
+        // Whole-number doubles (5.0 / "5.0") still match live events as "5".
+        val sid = sessionIdOf(result?.get("sessionId"))
             ?: throw IllegalStateException("The bridge did not return a session")
         val now = System.currentTimeMillis()
         val summary = CodeSessionSummary(
@@ -1547,6 +1550,23 @@ class BridgeBackend(
         synchronized(outboxLock) { outbox.clear() }
         failPending("Closed")
         transport.close()
+    }
+
+    /** Session id: whole-number doubles (`5.0` / `"5.0"`) still match as `"5"`. */
+    private fun sessionIdOf(el: JsonElement?): String? {
+        val p = el as? JsonPrimitive ?: return null
+        p.longOrNull?.let { return it.toString() }
+        p.doubleOrNull?.let { d ->
+            if (d.isFinite() && d == kotlin.math.floor(d) &&
+                d in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+            ) return d.toLong().toString()
+        }
+        val c = p.contentOrNull ?: return null
+        c.toLongOrNull()?.let { return it.toString() }
+        return c.toDoubleOrNull()?.takeIf {
+            it.isFinite() && it == kotlin.math.floor(it) &&
+                it in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+        }?.toLong()?.toString() ?: c.takeIf { it.isNotEmpty() }
     }
 
     companion object {

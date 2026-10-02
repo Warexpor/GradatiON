@@ -2055,6 +2055,87 @@ class CodeProtocolTest {
         assertEquals("7", byId["m1"]?.detail)
     }
 
+
+    @Test fun permissionOptionIdAnswerGoesOutAsANumber() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":9,"method":"session/request_permission","params":{"sessionId":"s1","toolCall":{"toolCallId":"c1","title":"Run","kind":"execute"},"options":[{"optionId":5.0,"name":"Allow","kind":"allow_once"},{"optionId":"6.0","name":"Deny","kind":"reject_once"}]}}""")
+        val approval = out.filterIsInstance<AdapterOutput.Update>().map { it.update }
+            .filterIsInstance<CodeUpdate.Upsert>().map { it.event }
+            .filterIsInstance<CodeEvent.Approval>().single()
+        val answer = Json.parseToJsonElement(acp.answerApproval(approval.requestId, "5")).jsonObject
+        val outcome = answer["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals(5L, outcome["optionId"]!!.jsonPrimitive.long)
+    }
+
+    @Test fun cursorAskAnswerIdsGoOutAsNumbers() {
+        acp.decode("""{"jsonrpc":"2.0","id":9,"method":"cursor/ask_question","params":{"sessionId":"s1","questions":[{"id":1.0,"prompt":"Go?","options":[{"id":2.0,"label":"Yes"},{"id":"no","label":"No"}]}]}}""")
+        val answer = Json.parseToJsonElement(acp.answerApproval("9", "2")).jsonObject
+        val row = answer["result"]!!.jsonObject["outcome"]!!.jsonObject["answers"]!!.jsonArray.single().jsonObject
+        assertEquals(1L, row["questionId"]!!.jsonPrimitive.long)
+        assertEquals(2L, row["selectedOptionIds"]!!.jsonArray.single().jsonPrimitive.long)
+    }
+
+    @Test fun sessionIdWrittenAsDoubleStillMatches() {
+        val frame = """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":5.0,"_meta":{"seq":1},"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"hi"}}}}"""
+        val outs = acp.decode(frame)
+        val update = outs.filterIsInstance<AdapterOutput.Update>().single()
+        assertEquals("5", update.sessionId)
+        assertEquals(1L, acp.lastSeq("5"))
+    }
+
+    @Test fun moreBrowserAndGithubToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bc","title":"Click","kind":"other","name":"BrowserClick","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bt","title":"Type","kind":"other","name":"BrowserType","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bs","title":"Snap","kind":"other","name":"BrowserSnapshot","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"bw","title":"Wait","kind":"other","name":"BrowserWait","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ts","title":"Shot","kind":"other","name":"TakeScreenshot","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ks","title":"Kill","kind":"other","name":"KillShell","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ls","title":"Shells","kind":"other","name":"ListShells","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ci","title":"Issue","kind":"other","name":"CreateIssue","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cb","title":"Branch","kind":"other","name":"CreateBranch","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mp","title":"Merge","kind":"other","name":"MergePullRequest","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ac","title":"Comment","kind":"other","name":"AddIssueComment","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gp","title":"PR","kind":"other","name":"GetPullRequest","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gf","title":"File","kind":"other","name":"GetFileContents","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sc","title":"Search","kind":"other","name":"SearchCode","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EXECUTE, byId["bc"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["bt"]?.kind)
+        assertEquals(ToolKind.READ, byId["bs"]?.kind)
+        assertEquals(ToolKind.THINK, byId["bw"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["ts"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["ks"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["ls"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ci"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["cb"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["mp"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["ac"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["gp"]?.kind)
+        assertEquals(ToolKind.READ, byId["gf"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["sc"]?.kind)
+    }
+
+    @Test fun cursorDownloadAndGithubDetailUseNativeRawInputKeys() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"d1","title":"Download","kind":"other","name":"DownloadFile","status":"completed",
+               "rawInput":{"fileId":"abc123","connection":"user-onedrive"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"u1","title":"Upload","kind":"other","name":"UploadFile","status":"completed",
+               "rawInput":{"draftId":9.0,"connection":"user-Gmail"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"c1","title":"Copy","kind":"other","name":"CopyToBox","status":"completed",
+               "rawInput":{"destination_path":"/workspace/out.kt"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"g1","title":"PR","kind":"other","name":"GetPullRequest","status":"completed",
+               "rawInput":{"owner":"Warexpor","repo":"GradatiON"}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("abc123", byId["d1"]?.detail)
+        assertEquals("9", byId["u1"]?.detail)
+        assertEquals("/workspace/out.kt", byId["c1"]?.detail)
+        assertEquals("Warexpor", byId["g1"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()

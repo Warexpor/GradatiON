@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 22)
+
+On `gradation/w22-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`, `ListSessionsJsonTest`):
+- ACP permission and Cursor ask answers send digit-string `optionId` / `questionId` / selected option ids (and accepted todo ids) as JSON numbers, same as the request id, so a proxy that rewrote `5.0` still gets a numeric Allow.
+- A `sessionId` written as a whole-number double (`5.0` / `"5.0"`) still matches as `"5"` on live updates, listSessions, and newSession.
+- Cursor Agent tool names `BrowserClick`, `BrowserType`, `BrowserSnapshot`, `BrowserWait`, `TakeScreenshot`, `KillShell`, `ListShells`, `CreateIssue`, `CreateBranch`, `MergePullRequest`, `AddIssueComment`, `GetPullRequest`, `GetFileContents`, and `SearchCode` map to execute / read / think / edit / fetch / search cards. Tool detail lines read `fileId`, `draftId`, `folderId`, `destination_path` / `target_path`, `owner`, and `repo` / `repository`.
+
+Phone: on Cursor Agent, a BrowserClick or CreateIssue card should show the shell or edit icon. A DownloadFile card with `fileId` should show that id under the title. An approval whose optionId is `5` should Allow with a JSON number `5`.
+
 # Handoff (2026-10-02, Chat wave 22)
 
 On `gradation/w22-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w21:
