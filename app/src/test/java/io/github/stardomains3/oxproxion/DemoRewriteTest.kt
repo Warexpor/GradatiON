@@ -80,5 +80,11 @@ class DemoRewriteTest {
         val lenticular = "【Scene note, not spoken aloud:\nstay tense\n】"
         assertEquals("stay tense", RpPromptEngine.sceneNoteBody(lenticular))
         assertEquals("*She waits.*", RpPromptEngine.withoutLeadingSceneNote("$lenticular\n*She waits.*"))
+        val brace = "{Scene note, not spoken aloud:\nstay tense\n}"
+        assertEquals("stay tense", RpPromptEngine.sceneNoteBody(brace))
+        assertEquals("*She waits.*", RpPromptEngine.withoutLeadingSceneNote("$brace\n*She waits.*"))
+        val braceWide = "｛Scene note, not spoken aloud:\nstay tense\n｝"
+        assertEquals("stay tense", RpPromptEngine.sceneNoteBody(braceWide))
+        assertEquals("*She waits.*", RpPromptEngine.withoutLeadingSceneNote("$braceWide\n*She waits.*"))
     }
 }
