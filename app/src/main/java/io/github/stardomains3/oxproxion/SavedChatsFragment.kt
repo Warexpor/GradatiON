@@ -253,8 +253,16 @@ class SavedChatsFragment : Fragment() {
             }
             if (mode == ChatMode.ASK) {
                 for (session in filtered) {
-                    val draft = host?.unsentDraftPreview(session.id)
+                    val caption = host?.unsentDraftPreview(session.id)
                         ?: drafts[ComposerDrafts.key(session.id)].orEmpty()
+                    val attach = host?.unsentAttachmentLabel(session.id).orEmpty()
+                    // Search for "Photo" on a captioned draft must show that label on the row
+                    // so the bold span can mark it; idle rows still prefer the caption alone.
+                    val draft = if (query.isNotEmpty() && host != null) {
+                        HistoryList.draftRowText(caption, attach, query)
+                    } else {
+                        caption
+                    }
                     previews[session.id] = HistoryList.rowPreview(
                         messageLine = previews[session.id].orEmpty(),
                         draft = draft,
