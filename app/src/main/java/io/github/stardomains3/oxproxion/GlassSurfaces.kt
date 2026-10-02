@@ -379,8 +379,20 @@ object GlassChrome {
             dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
                 sheet.background = GlassDrawable.sheet(dialog.context, topOnly = true)
                 sheet.backgroundTintList = null
+                clearDuplicateSheetGlass(sheet)
             }
         }
+    }
+
+    /**
+     * Content XML still sets [R.drawable.bg_bottom_sheet] so inflate-before-glass looks right;
+     * after the container is glassed, drop that duplicate so tint/outline are not stacked.
+     */
+    internal fun clearDuplicateSheetGlass(sheet: View) {
+        val content = (sheet as? ViewGroup)?.let { parent ->
+            if (parent.childCount == 1) parent.getChildAt(0) else null
+        } ?: return
+        if (content.background is GlassDrawable) content.background = null
     }
 
     fun decorateToolbars(root: View) {
