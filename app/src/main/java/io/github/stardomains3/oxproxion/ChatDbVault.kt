@@ -25,8 +25,9 @@ import java.nio.file.StandardOpenOption
  * name, or the move fails), it is parked under [HOLD_DIR] inside the databases directory. Move
  * temps for those names are parked there too. The backup rules exclude that folder, and Room
  * opens a parked recovered file by absolute path so the history is not uploaded. An orphan
- * sidecar in the hold folder (no main file) is ignored so Room does not create an empty
- * database beside it when the vault already has the history.
+ * sidecar (no main file) is discarded rather than moved into the vault, so Room does not
+ * create an empty database beside it. Vault leftovers without a main are cleared so a
+ * complete hold set can drain.
  *
  * The live `chat_database` stays in the databases directory. The backup rules exclude it, its
  * journal, and the old plaintext name in case a move out of that directory fails.
@@ -95,13 +96,16 @@ internal object ChatDbVault {
      * Returns false when [storedRecovered] is still at the databases root afterwards, so the
      * caller keeps opening that file. A recovered or set-aside (unreadable) set that cannot enter
      * the vault is parked under [HOLD_DIR] (excluded from Auto Backup) instead of being left at
-     * the root or renamed aside inside the vault. Move temps (`.partial` / `.ready` / `.bak`) and
-     * `.kept-*` leftovers of those names are parked the same way: the backup rules do not list
-     * them. A failure to move a plaintext or encrypt copy is logged and left in place; the backup
-     * rules still name those files.
+     * the root or renamed aside inside the vault. Sidecar-only leftovers (no main file) are parked
+     * under hold and then discarded: moving them into the vault would let Room mint an empty main
+     * beside the orphan. Move temps (`.partial` / `.ready` / `.bak`) and `.kept-*` leftovers of
+     * those names are parked the same way: the backup rules do not list them. A failure to move a
+     * plaintext or encrypt copy is logged and left in place; the backup rules still name those files.
      */
     fun relocateLegacy(databasesDir: File, vault: File, storedRecovered: String?): Boolean {
         vault.mkdirs()
+        // Drop vault orphans before drain so a complete hold set is not blocked by a leftover -wal.
+        discardIncompleteSets(vault)
         // Earlier parks that the vault can take now.
         drainHold(databasesDir, vault)
         moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.pre_sqlcipher"), plaintextBackup(vault))
@@ -115,6 +119,13 @@ internal object ChatDbVault {
             unreadableBaseName(file.name)?.let { unreadable += it }
         }
         for (name in unreadable) {
+            if (!File(databasesDir, name).isFile) {
+                // Sidecar-only: park out of Auto Backup; drainHold discards (no main to open).
+                if (dbSetPresent(databasesDir, name)) {
+                    parkDbSet(databasesDir, holdDirectory(databasesDir), name)
+                }
+                continue
+            }
             if (!relocateDbSet(databasesDir, vault, name)) {
                 parkDbSet(databasesDir, holdDirectory(databasesDir), name)
             }
@@ -125,6 +136,12 @@ internal object ChatDbVault {
         }
         var storedMoved = true
         for (name in recovered) {
+            if (!File(databasesDir, name).isFile) {
+                if (dbSetPresent(databasesDir, name)) {
+                    parkDbSet(databasesDir, holdDirectory(databasesDir), name)
+                }
+                continue
+            }
             val moved = relocateDbSet(databasesDir, vault, name)
             if (!moved) {
                 // Vault already has that name, or the move failed. Park under the excluded folder
@@ -137,6 +154,8 @@ internal object ChatDbVault {
         // A failed cross-directory move can leave .partial / .ready / .bak (or a .kept-* rename)
         // next to the live database. Those names are not in the backup rules.
         parkMoveTemps(databasesDir)
+        // Orphans parked after the first drain (sidecar-only sets) are discarded here.
+        drainHold(databasesDir, vault)
         if (storedRecovered != null && isRecoveredName(storedRecovered) && dbSetPresent(databasesDir, storedRecovered)) {
             storedMoved = false
         }
@@ -145,7 +164,8 @@ internal object ChatDbVault {
 
     /**
      * Moves a recovered set from [HOLD_DIR] into [vault] when the vault is free.
-     * Leftovers stay in the hold folder, which Auto Backup skips.
+     * Leftovers stay in the hold folder, which Auto Backup skips. Orphan sidecars (no main)
+     * are discarded instead of being promoted into the vault.
      */
     private fun drainHold(databasesDir: File, vault: File) {
         val hold = File(databasesDir, HOLD_DIR)
@@ -159,14 +179,46 @@ internal object ChatDbVault {
             }
         }
         for (name in names) {
-            // Vault already holds this history (the move that parked under hold left a stale
-            // vault copy). Drop orphan sidecars that lack a main file so Room does not open
-            // them. A hold set that still has its main stays put for roomDatabaseName.
-            if (File(vault, name).isFile && !File(hold, name).isFile) {
+            val holdMain = File(hold, name).isFile
+            val vaultMain = File(vault, name).isFile
+            if (!holdMain) {
+                // Orphan sidecars only. Never move them into the vault: Room would create an
+                // empty main beside the leftover -wal/-shm. Drop them whether or not the vault
+                // already has a main (wave 19 handled the vault-has-main case only).
                 discardShortNameSet(hold, name)
                 continue
             }
+            if (vaultMain) {
+                // Vault already has this history. Leave the hold main for roomDatabaseName.
+                continue
+            }
+            if (dbSetPresent(vault, name)) {
+                // Vault has only leftovers; clear so the complete hold set can move in.
+                discardShortNameSet(vault, name)
+            }
             relocateDbSet(hold, vault, name)
+        }
+    }
+
+    /**
+     * Drops recovered/unreadable sidecar leftovers that have no main file.
+     * An orphan -wal in the vault used to block a later hold drain, and Room opening that
+     * recovered name would mint an empty main beside it.
+     */
+    private fun discardIncompleteSets(directory: File) {
+        if (!directory.isDirectory) return
+        val names = LinkedHashSet<String>()
+        directory.listFiles()?.forEach { file ->
+            recoveredBaseName(file.name)?.let { names += it }
+            if (UNREADABLE.matches(file.name)) {
+                val base = file.name.removeSuffix("-wal").removeSuffix("-shm").removeSuffix("-journal")
+                names += base
+            }
+        }
+        for (name in names) {
+            if (!File(directory, name).isFile && dbSetPresent(directory, name)) {
+                discardShortNameSet(directory, name)
+            }
         }
     }
 

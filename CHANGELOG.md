@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Orphan `-wal`/`-shm` leftovers (no main file) are discarded instead of being moved into the no-backup vault, so Room cannot mint an empty database beside them. A vault orphan no longer blocks a complete hold set from draining. Code away-notification open tokens commit to disk when issued and cleared, so a kill cannot drop the nonce the shade Intent still carries (or leave it for a replay).
 - Staged Chat photos, audio and files park on the activity ViewModel, so a rotation (or leaving Chat for Code) keeps them with that thread and restores the chip when you come back. Opening History or pausing still soft-parks a live stage without clearing the composer.
 - History search for a multi-word query that spans a caption and "Photo" / "Audio" / files (for example "hello photo") shows both on the row so the bold span can mark the hit. Idle rows and caption-only hits still prefer the caption alone.
 - Continue starts a new paragraph after ornamental ❝…❞❛…❜ and vertical ﹁…﹂﹃…﹄ dialogue, and after Ethiopic ፧፨, Arabic ؛, Nko ߹, Ol Chiki ᱾᱿, Bamum ꛳꛷, vertical ︒ and small ﹗﹖. Opening ❝❛﹁﹃〔〖 hug the next word like other openers.

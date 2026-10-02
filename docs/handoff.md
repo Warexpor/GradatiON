@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Stability wave 20)
+
+On `gradation/w20-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w19 orphan hold sidecars:
+- Drain no longer promotes orphan `-wal`/`-shm` (no main) from `chat_db_hold` into an empty vault. Those leftovers are discarded, matching the vault-has-main case from wave 19.
+- Vault orphan sidecars are cleared so a complete hold set can move in. Sidecar-only recovered/unreadable files at the databases root are parked under hold and discarded in the same pass (Auto Backup has no wildcards for those names).
+- Code away-notification open tokens `commit` when issued and when consumed, so a kill cannot drop the nonce the shade still carries (or leave it for a replayed Intent).
+
+Phone: park only `chat_database.recovered-<stamp>-wal` under `databases/chat_db_hold/` with an empty vault; after relaunch that sidecar should be gone and History should stay the live DB. Park a hold main while the vault has only a `-wal` for that stamp; History should open the drained vault copy. Tap a Code away notification after a kill mid-post (open token should still unlock).
+
 # Handoff (2026-10-02, Chat wave 20)
 
 On `gradation/w20-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w19:

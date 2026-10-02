@@ -672,6 +672,60 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun drainHoldDoesNotPromoteOrphanSidecarsIntoAnEmptyVault() {
+        val databases = tmp.newFolder("orphan-empty-vault-databases")
+        val vault = tmp.newFolder("orphan-empty-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(hold, "chat_database.recovered-30-wal").writeText("orphan-wal")
+        File(hold, "chat_database.recovered-30-shm").writeText("orphan-shm")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertFalse(File(hold, "chat_database.recovered-30-wal").exists())
+        assertFalse(File(hold, "chat_database.recovered-30-shm").exists())
+        // Must not land in the vault: Room would mint an empty main beside them.
+        assertFalse(File(vault, "chat_database.recovered-30-wal").exists())
+        assertFalse(File(vault, "chat_database.recovered-30-shm").exists())
+        assertFalse(File(vault, "chat_database.recovered-30").exists())
+    }
+
+    @Test
+    fun vaultOrphanSidecarsAreClearedSoAHoldMainCanDrain() {
+        val databases = tmp.newFolder("vault-orphan-drain-databases")
+        val vault = tmp.newFolder("vault-orphan-drain-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(vault, "chat_database.recovered-31-wal").writeText("orphan-wal")
+        File(hold, "chat_database.recovered-31").writeText("held-history")
+        File(hold, "chat_database.recovered-31-wal").writeText("held-wal")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertEquals("held-history", File(vault, "chat_database.recovered-31").readText())
+        assertEquals("held-wal", File(vault, "chat_database.recovered-31-wal").readText())
+        assertFalse(File(hold, "chat_database.recovered-31").exists())
+        assertFalse(File(hold, "chat_database.recovered-31-wal").exists())
+    }
+
+    @Test
+    fun incompleteRecoveredSetsAtDatabasesRootDoNotEnterTheVault() {
+        val databases = tmp.newFolder("root-orphan-databases")
+        val vault = tmp.newFolder("root-orphan-vault")
+        File(databases, "chat_database.recovered-32-wal").writeText("orphan-wal")
+        File(databases, "chat_database.unreadable-33-shm").writeText("orphan-shm")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertFalse(File(databases, "chat_database.recovered-32-wal").exists())
+        assertFalse(File(databases, "chat_database.unreadable-33-shm").exists())
+        assertFalse(File(vault, "chat_database.recovered-32-wal").exists())
+        assertFalse(File(vault, "chat_database.unreadable-33-shm").exists())
+        val hold = File(databases, ChatDbVault.HOLD_DIR)
+        // Parked then discarded in the same relocateLegacy pass.
+        assertFalse(File(hold, "chat_database.recovered-32-wal").exists())
+        assertFalse(File(hold, "chat_database.unreadable-33-shm").exists())
+    }
+
+    @Test
     fun anUnreadableSetThatCollidesInTheVaultIsParkedTogether() {
         val databases = tmp.newFolder("unreadable-collide-databases")
         val vault = tmp.newFolder("unreadable-collide-vault")
