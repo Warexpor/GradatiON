@@ -4,8 +4,9 @@ package io.github.stardomains3.oxproxion
 object RpRewrite {
     /**
      * The reply after the latest user turn comes back as another swipe (the old one stays a swipe
-     * back). The greeting, and any earlier reply, is rewritten in place: there is no swipe for it,
-     * and a greeting-only thread has no user turn to regenerate from.
+     * back). The greeting, and any earlier reply, is rewritten in place; that earlier reply keeps
+     * its own versions so Undo is a swipe on the bubble. A greeting-only thread has no user turn
+     * to regenerate from.
      */
     fun streamsAsNewSwipe(position: Int, lastAssistantIndex: Int, lastUserIndex: Int): Boolean =
         lastUserIndex >= 0 && position == lastAssistantIndex && position > lastUserIndex
