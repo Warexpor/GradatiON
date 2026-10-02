@@ -122,6 +122,39 @@ class CodeAwayFormatTest {
     }
 
     @Test
+    fun takenFromPrefsSkipsExceptKeyAndNonAwayIds() {
+        val keep = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "alive")
+        val other = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, "s", "r")
+        val keepId = CodeAwayFormat.NOTIF_ID_BASE + 0x11
+        val otherId = CodeAwayFormat.NOTIF_ID_BASE + 0x22
+        val entries = mapOf(
+            keep to keepId,
+            other to otherId,
+            "junk" to 1, // legacy sticky FGS — not away space
+            "also" to "nope",
+        )
+        assertEquals(setOf(otherId), CodeAwayFormat.takenFromPrefs(entries, exceptKey = keep))
+        assertEquals(setOf(keepId, otherId), CodeAwayFormat.takenFromPrefs(entries))
+    }
+
+    @Test
+    fun coldStartAllocationAvoidsPrefsHeldIds() {
+        // Surviving shade entry for sess-84400 still holds the preferred hash; a colliding
+        // sibling key must probe after process death (empty in-memory taken).
+        val alive = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess-84400")
+        val sibling = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess-200064")
+        assertEquals(
+            CodeAwayFormat.notificationId(alive),
+            CodeAwayFormat.notificationId(sibling),
+        )
+        val aliveId = CodeAwayFormat.notificationId(alive)
+        val prefsTaken = CodeAwayFormat.takenFromPrefs(mapOf(alive to aliveId), exceptKey = sibling)
+        val id = CodeAwayFormat.allocateNotificationId(sibling, prefsTaken)
+        assertNotEquals(aliveId, id)
+        assertTrue(CodeAwayFormat.isAwayNotifId(id))
+    }
+
+    @Test
     fun requestCodesStayDistinctAcrossAlerts() {
         val ids = listOf(
             CodeAwayFormat.NOTIF_ID_BASE,

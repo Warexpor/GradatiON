@@ -28,10 +28,12 @@ import java.nio.file.StandardOpenOption
  * sidecar (no main file) is discarded rather than moved into the vault, so Room does not
  * create an empty database beside it. Vault leftovers without a main are cleared so a
  * complete hold set can drain. Legacy plaintext / encrypting copies move as a set too:
- * a leftover `-wal` beside `chat_database.pre_sqlcipher` was never in the backup rules.
+ * a leftover `-wal` beside `chat_database.pre_sqlcipher` used to stay at the databases root.
+ * The backup rules also name those sidecars so a backup before the next open cannot upload them.
  *
  * The live `chat_database` stays in the databases directory. The backup rules exclude it, its
- * journal, and the old plaintext name in case a move out of that directory fails.
+ * journal, and the old plaintext / encrypting names (and their wal/shm/journal) in case a move
+ * out of that directory fails.
  */
 internal object ChatDbVault {
     private const val TAG = "ChatDbVault"
