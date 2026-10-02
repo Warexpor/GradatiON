@@ -390,8 +390,8 @@ class CodeBridgeBackendTest {
                     val result = when (method) {
                         "initialize" -> """{"protocolVersion":1}"""
                         "bridge/listHarnesses" -> """{"harnesses":[
-                            {"id":5.0,"name":"Numeric","available":true},
-                            {"id":"7.0","name":"Stringified","available":false}
+                            {"id":5.0,"name":"Numeric","available":true,"models":[5.0,"gpt-5","9.0"]},
+                            {"id":"7.0","name":"Stringified","available":false,"models":["claude"]}
                         ]}"""
                         "bridge/listWorkspaces" -> """{"workspaces":[5.0,"/home/warexpor","9.0"]}"""
                         else -> "{}"
@@ -412,6 +412,8 @@ class CodeBridgeBackendTest {
             assertEquals(2, list.size)
             assertEquals("5", list[0].id)
             assertEquals("7", list[1].id)
+            assertEquals(listOf("5", "gpt-5", "9"), list[0].models)
+            assertEquals(listOf("claude"), list[1].models)
             val spaces = backend.listWorkspaces(HarnessKind.OPENCODE)
             assertEquals(listOf("5", "/home/warexpor", "9"), spaces)
         } finally {
