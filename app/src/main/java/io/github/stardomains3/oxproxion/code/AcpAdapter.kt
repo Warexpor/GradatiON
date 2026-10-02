@@ -170,7 +170,7 @@ class AcpAdapter : HarnessAdapter {
 
     private fun acpApproval(requestId: String, optionId: String?): String = buildJsonObject {
         put("jsonrpc", "2.0")
-        put("id", requestId.toLongOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(requestId))
+        put("id", jsonRpcIdValue(requestId))
         put("result", buildJsonObject {
             put("outcome", buildJsonObject {
                 if (optionId.isNullOrEmpty()) put("outcome", "cancelled")
@@ -312,10 +312,46 @@ class AcpAdapter : HarnessAdapter {
         }
     }
 
-    /** JSON-RPC id, including a number a proxy rewrote as a string. */
+    /** JSON-RPC id, including a number a proxy rewrote as a string or as `1.0`. */
     private fun rpcLongId(idEl: JsonElement?): Long? {
         val p = idEl as? JsonPrimitive ?: return null
-        return p.longOrNull ?: p.contentOrNull?.toLongOrNull()
+        return wholeNumberLong(p)
+    }
+
+    /**
+     * Whole-number JSON id / seq. Integers stay long; a double like `9.0` and a
+     * string `"9.0"` still match the pending map and the permission answer.
+     */
+    private fun wholeNumberLong(p: JsonPrimitive): Long? {
+        p.longOrNull?.let { return it }
+        p.doubleOrNull?.let { d ->
+            if (d.isFinite() && d == kotlin.math.floor(d) &&
+                d in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+            ) return d.toLong()
+        }
+        val c = p.contentOrNull ?: return null
+        c.toLongOrNull()?.let { return it }
+        return c.toDoubleOrNull()?.takeIf {
+            it.isFinite() && it == kotlin.math.floor(it) &&
+                it in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+        }?.toLong()
+    }
+
+    /** Stable request id string: numeric ids become `"9"`, not `"9.0"`. */
+    private fun rpcIdString(idEl: JsonElement?): String? {
+        val p = idEl as? JsonPrimitive ?: return null
+        wholeNumberLong(p)?.let { return it.toString() }
+        return p.contentOrNull?.takeIf { it.isNotEmpty() }
+    }
+
+    /** Answer id: whole-number strings go out as JSON numbers, else as strings. */
+    private fun jsonRpcIdValue(requestId: String): JsonPrimitive {
+        requestId.toLongOrNull()?.let { return JsonPrimitive(it) }
+        requestId.toDoubleOrNull()?.takeIf {
+            it.isFinite() && it == kotlin.math.floor(it) &&
+                it in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+        }?.toLong()?.let { return JsonPrimitive(it) }
+        return JsonPrimitive(requestId)
     }
 
     private fun rpcResult(id: JsonElement) = buildJsonObject {
@@ -407,13 +443,16 @@ class AcpAdapter : HarnessAdapter {
         if (n.isEmpty()) return null
         return when (n) {
             "read", "read_file", "readfile", "cat" -> "read"
-            "edit", "write", "write_file", "str_replace", "strreplace", "apply_patch", "patch" -> "edit"
-            "delete", "remove", "rm" -> "delete"
+            "edit", "write", "write_file", "writefile", "str_replace", "strreplace",
+            "apply_patch", "patch" -> "edit"
+            "delete", "remove", "rm", "delete_file", "deletefile", "unlink" -> "delete"
             "move", "rename", "mv" -> "move"
             "search", "grep", "glob", "find", "rg",
             "listdir", "list_dir", "listdirectory", "list_directory",
             "semanticsearch", "semantic_search" -> "search"
-            "execute", "bash", "shell", "terminal", "command", "run", "run_command" -> "execute"
+            "execute", "bash", "shell", "terminal", "command", "run", "run_command",
+            "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
+            "runterminalcommand" -> "execute"
             "think", "thought", "reasoning" -> "think"
             "fetch", "web_fetch", "webfetch", "websearch", "web_search", "http" -> "fetch"
             "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
@@ -583,7 +622,8 @@ class AcpAdapter : HarnessAdapter {
             ?: subject?.get("toolCall") as? JsonObject
         val command = if (subject?.str("type")?.lowercase() == "command") subject.str("command") else null
         // R6: non-primitive JSON-RPC id must not ClassCastException out of decode.
-        val requestId = (idEl as? JsonPrimitive)?.contentOrNull
+        // A whole-number double (`9.0`) becomes "9" so Allow still answers with a number id.
+        val requestId = rpcIdString(idEl)
             ?: return ignored("non-primitive permission id")
         // The agent reuses ids. A question or plan that held this one must not
         // rewrite the permission result the next Allow sends.
@@ -757,7 +797,7 @@ class AcpAdapter : HarnessAdapter {
             firstRaw(raw, "pattern", "query", "url", "regex") != null ||
             firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile") != null
         val hasLine = (u["locations"] as? JsonArray).orEmpty().any { e ->
-            val line = (e as? JsonObject)?.str("line")?.toIntOrNull()
+            val line = lineNumber((e as? JsonObject)?.get("line"))
             line != null && line > 0
         }
         val key = toolKey(sid, callId)
@@ -829,7 +869,7 @@ class AcpAdapter : HarnessAdapter {
         val locations = (u["locations"] as? JsonArray).orEmpty().mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             val path = o.str("path") ?: return@mapNotNull null
-            ToolCallDetail.Location(path, o.str("line")?.toIntOrNull())
+            ToolCallDetail.Location(path, lineNumber(o["line"]))
         }
         val raw = rawInputOf(u)
         return ToolCallDetail.format(
@@ -1123,6 +1163,14 @@ class AcpAdapter : HarnessAdapter {
     }
 
     private fun JsonObject.str(k: String): String? = (this[k] as? JsonPrimitive)?.contentOrNull
+
+    /** Location line: JSON int, whole-number double, or digit string. */
+    private fun lineNumber(el: JsonElement?): Int? {
+        val p = el as? JsonPrimitive ?: return null
+        wholeNumberLong(p)?.let { return it.toInt().takeIf { n -> n.toLong() == it } }
+        return p.contentOrNull?.toIntOrNull()
+    }
+
     private fun ignored(why: String) = listOf(AdapterOutput.Ignored(why))
 
 
