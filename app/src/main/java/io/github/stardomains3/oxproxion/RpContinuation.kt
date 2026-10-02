@@ -32,18 +32,19 @@ object RpContinuation {
      * Saurashtra ꣎꣏, Javanese ꧉꧈꧋꧞꧟, Phags-pa ꡶꡷, Rejang ꥟, Buginese ᨞᨟,
      * Batak ᯼᯽᯾᯿, Runic ᛫᛬᛭, Mandaic ࡞, Tifinagh ⵰, Samaritan ࠹࠾,
      * Sundanese ᳀᳁᳂᳃᳄᳅᳆᳇, Tai Tham ᪨᪩᪪᪫᪬᪭, Kayah Li ꤮꤯,
-     * Hanunoo ᜵᜶, Thai ๚๛, Khmer ៚, Tibetan ༑༒, Coptic ⳺⳻⳼⳽ and Mongolian ᠉ count too.
+     * Hanunoo ᜵᜶, Thai ๚๛, Khmer ៚៖៙, Tibetan ༈༑༒, Coptic ⳺⳻⳼⳽,
+     * Mongolian ᠀᠁᠆᠉, Meetei ꯫, Bamum ꛲꛴꛵꛶, Balinese ᭚᭛ and Javanese ꧌꧍ count too.
      */
-    private const val ENDERS = ".!?…。！？؟۔।॥։၊။׃።;།។՜՞܀܁܂᠃‼⁇⁈⁉．‽჻᙮෴៕ฯ⳹⳾⸮᥄᥅꓿꘎꘏｡﹒፧፨؛߹᱾᱿꛳꛷︒﹗﹖︖︕꩝꩞꩟᭞᭟᠅᰻᰼༎༏༔꫰꫱꣎꣏꧉꡶꡷꥟᨞᨟᯼᯽᯾᯿᛫᛬᛭࡞⵰࠹࠾꧈꧋꧞꧟᳀᳁᳂᳃᳄᳅᳆᳇᪨᪩᪪᪫᪬᪭꤮꤯᜵᜶๚๛៚༑༒⳺⳻⳼⳽᠉"
+    private const val ENDERS = ".!?…。！？؟۔।॥։၊။׃።;།។՜՞܀܁܂᠃‼⁇⁈⁉．‽჻᙮෴៕ฯ⳹⳾⸮᥄᥅꓿꘎꘏｡﹒፧፨؛߹᱾᱿꛳꛷︒﹗﹖︖︕꩝꩞꩟᭞᭟᠅᰻᰼༎༏༔꫰꫱꣎꣏꧉꡶꡷꥟᨞᨟᯼᯽᯾᯿᛫᛬᛭࡞⵰࠹࠾꧈꧋꧞꧟᳀᳁᳂᳃᳄᳅᳆᳇᪨᪩᪪᪫᪬᪭꤮꤯᜵᜶๚๛៚༑༒⳺⳻⳼⳽᠉꯫꛲꛴꛵꛶៖៙᠀᠁᠆༈᭚᭛꧌꧍"
     // Guillemets and a space before a closing one (French « … . ») are not part of the sentence end.
     // Left quotes “ ‘ and open guillemets « ‹ trail too: German „…“ closes on “, and Swiss/German
     // »…« closes on «, which are openers the other way. CJK 《》〈〉 and halfwidth ｣ / 〞
     // trail like 「」. Ornamental ❞❜, vertical ﹂﹄ / tortoise 〔〕〖〗, fullwidth ＂＇,
     // heavy angle ❯, white paren ｠, white tortoise 〙, math angle ⟩, heavy ornament ❱,
     // white square 〛, math double angle ⟫, math white tortoise ⟭, math white square ⟧,
-    // white curly ⦄, flattened paren ❩, medium flattened ❫, medium angle ❭ and light
-    // tortoise ❳ trail too.
-    private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״\u201C\u2018\u00AB\u2039《》〈〉｣〞❞❜﹂﹄〕〗＂＇❯｠〙⟩❱〛⟫⟭⟧⦄❩❫❭❳"
+    // white curly ⦄, flattened paren ❩, medium flattened ❫, medium angle ❭, light
+    // tortoise ❳, medium curly ❵, white paren ⦆ and black tortoise ⦘ trail too.
+    private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״\u201C\u2018\u00AB\u2039《》〈〉｣〞❞❜﹂﹄〕〗＂＇❯｠〙⟩❱〛⟫⟭⟧⦄❩❫❭❳❵⦆⦘"
 
     /**
      * Continue replaces the reply with the joined text. A picture already on that reply stays
@@ -107,9 +108,10 @@ object RpContinuation {
      * [base] followed by [addition], with a separator only where the model left none: a new
      * paragraph after a finished sentence or closed action (including «…», „…“, »…«, 《…》, ｢…｣,
      * 〝…〞, ❝…❞, ﹁…﹂, ＂…＂, ❮…❯, ｟…｠, 〘…〙, ⟨…⟩, ❰…❱, 〚…〛, ⟪…⟫, ⟬…⟭, ⟦…⟧, ⦃…⦄, ❨…❩,
-     * ❪…❫, ❬…❭, ❲…❳, ؟۔, ।॥, ׃, ።፧, ؛, ߹, ᱾, ꛳, ．, ‽, ៕, ⸮, ｡, ︒, ︖, ꩝, ༎, ꫰, ꣎,
-     * ꧉, ꡶, ᯼, ᛫, ࡞, ⵰, ࠾, ᳀, ᪨, ꤯, ᜵, ๚, ៚, ༑, ⳺ and ᠉), a plain space after unfinished
-     * text. A sentence in an unspaced script (including Tibetan and Ethiopic) gets no space.
+     * ❪…❫, ❬…❭, ❲…❳, ❴…❵, ⦅…⦆, ⦗…⦘, ؟۔, ।॥, ׃, ።፧, ؛, ߹, ᱾, ꛳, ．, ‽, ៕, ⸮, ｡, ︒, ︖,
+     * ꩝, ༎, ꫰, ꣎, ꧉, ꡶, ᯼, ᛫, ࡞, ⵰, ࠾, ᳀, ᪨, ꤯, ᜵, ๚, ៚, ༑, ⳺, ᠉, ꯫, ꛲, ៖, ᠀, ༈,
+     * ᭚ and ꧌), a plain space after unfinished text. A sentence in an unspaced script
+     * (including Tibetan and Ethiopic) gets no space.
      *
      * Finished ends are checked before openers: German „Hallo.“ closes on “, and Swiss/German
      * »Hallo.« closes on «, which are also openers the other way, so treating openers first
@@ -117,7 +119,8 @@ object RpContinuation {
      * vertical ﹁…﹂, fullwidth ＂…＂, heavy angle ❮…❯, white paren ｟…｠, white tortoise 〘…〙,
      * math angle ⟨…⟩, heavy ornament ❰…❱, white square 〚…〛, math double angle ⟪…⟫, math
      * white tortoise ⟬…⟭, math white square ⟦…⟧, white curly ⦃…⦄, flattened paren ❨…❩,
-     * medium flattened ❪…❫, medium angle ❬…❭ and light tortoise ❲…❳ trail the same way.
+     * medium flattened ❪…❫, medium angle ❬…❭, light tortoise ❲…❳, medium curly ❴…❵,
+     * white paren ⦅…⦆ and black tortoise ⦗…⦘ trail the same way.
      */
     fun join(base: String, addition: String): String {
         if (addition.isEmpty()) return base
