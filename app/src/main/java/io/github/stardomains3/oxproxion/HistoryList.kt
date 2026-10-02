@@ -218,7 +218,9 @@ object HistoryList {
         youLabel: (String) -> String,
         photoLabel: String,
     ): String {
-        val needle = query.trim()
+        // Same folding as draft rows and the bold span: extra spaces and line breaks
+        // in the query still match the words on the line.
+        val needle = foldSpace(query)
         if (needle.isEmpty()) return ""
         val parsed = preview(role, window, youLabel, photoLabel)
         // A slice of a photo's data URL is one long token. It is not a line of the chat.
@@ -228,9 +230,37 @@ object HistoryList {
             return clipMatch(parsed, needle)
         }
         val readable = lineFor(readableSource(window), needle)
-        if (!isChatLine(readable) || !readable.contains(needle, ignoreCase = true)) return ""
-        val body = clipAround(readable, readable.indexOf(needle, ignoreCase = true), needle.length)
+        if (!isChatLine(readable)) return ""
+        val hit = emphasis(readable, needle) ?: return ""
+        val body = clipAround(readable, hit.start, hit.length)
         return if (role == "user") youLabel(body) else body
+    }
+
+    /** Trim and collapse whitespace, the same way a draft row and the bold span do. */
+    fun normalizeQuery(query: String): String = foldSpace(query)
+
+    /**
+     * LIKE pattern for History search. Runs of spaces become `%` so a query of
+     * "see you" still hits a stored line that has a newline or extra spaces between
+     * those words, matching [draftMatchIds].
+     */
+    fun likeContains(query: String): String {
+        val parts = foldSpace(query).split(' ').filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return "%"
+        val escaped = parts.joinToString("%") { part ->
+            part.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        }
+        return "%$escaped%"
+    }
+
+    /**
+     * The word used to center a search window. The full phrase may span a newline in
+     * storage, so [instr] uses the first word.
+     */
+    fun searchAnchor(query: String): String {
+        val needle = foldSpace(query)
+        val first = needle.substringBefore(' ')
+        return first.ifEmpty { needle }
     }
 
     /** Start and length of [query] in [text], after folding runs of spaces the same way a draft row does. */
@@ -347,7 +377,8 @@ object HistoryList {
         if (needle.isEmpty()) return false
         val labelEnd = historyLabelEnd(text)
         val body = if (labelEnd >= 0) text.substring(labelEnd) else text
-        return body.contains(needle, ignoreCase = true)
+        // Fold the body too: a draft-style query of "see you" still hits "see\nyou".
+        return foldSpace(body).contains(needle, ignoreCase = true)
     }
 
     private fun clipMatch(text: String, needle: String): String {

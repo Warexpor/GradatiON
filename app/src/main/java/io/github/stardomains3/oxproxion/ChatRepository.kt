@@ -69,9 +69,9 @@ class ChatRepository(private val chatDao: ChatDao) {
 
     suspend fun getAllSessionsOnce(): List<ChatSession> = chatDao.getAllSessionsOnce()
     suspend fun searchSessions(query: String, mode: ChatMode = ChatMode.ASK): List<ChatSession> {
-        val needle = query.trim()
+        val needle = HistoryList.normalizeQuery(query)
         if (needle.isEmpty()) return emptyList()
-        val sessionIds = chatDao.searchSessionIds(likeContains(needle), mode.storageValue)
+        val sessionIds = chatDao.searchSessionIds(HistoryList.likeContains(needle), mode.storageValue)
         return sessionIds.mapNotNull { chatDao.getSessionById(it) }
     }
 
@@ -80,11 +80,13 @@ class ChatRepository(private val chatDao: ChatDao) {
      * empty id list stay out of the DAO.
      */
     suspend fun searchWindows(sessionIds: List<Long>, query: String): List<MessageWindow> {
-        val needle = query.trim()
+        val needle = HistoryList.normalizeQuery(query)
         if (sessionIds.isEmpty() || needle.isEmpty()) return emptyList()
-        val pattern = likeContains(needle)
+        val pattern = HistoryList.likeContains(needle)
+        // The phrase may span a newline in storage; center on the first word.
+        val anchor = HistoryList.searchAnchor(needle)
         return sessionIds.distinct().chunked(200).flatMap {
-            chatDao.searchMessageWindows(it, pattern, needle, SEARCH_WINDOW)
+            chatDao.searchMessageWindows(it, pattern, anchor, SEARCH_WINDOW)
         }
     }
 
@@ -92,12 +94,6 @@ class ChatRepository(private val chatDao: ChatDao) {
     suspend fun lastMessagePrefixes(sessionIds: List<Long>): List<ChatMessage> {
         if (sessionIds.isEmpty()) return emptyList()
         return sessionIds.distinct().chunked(200).flatMap { chatDao.lastMessagePrefixes(it) }
-    }
-
-    /** LIKE pattern that matches [query] as text. `%`, `_` and `\` are escaped with `\`. */
-    private fun likeContains(query: String): String {
-        val escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        return "%$escaped%"
     }
 
     private companion object {
