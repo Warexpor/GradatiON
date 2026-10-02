@@ -144,7 +144,8 @@ class RpCharacterLibraryFragment : Fragment() {
         fm.popBackStackImmediate(BACK_STACK_TAG, FragmentManager.POP_BACK_STACK_INCLUSIVE)
         // If Hub sat on Settings, also clear the settings stack so Start chat lands on chat.
         fm.popBackStackImmediate("settings", FragmentManager.POP_BACK_STACK_INCLUSIVE)
-        fm.fragments.filterIsInstance<ChatFragment>().firstOrNull()?.closeHistoryPanel(animated = false)
+        // Leave Code if it was covering chat — Start chat must land on Roleplay, not Code.
+        fm.fragments.filterIsInstance<ChatFragment>().firstOrNull()?.uncoverFromHub()
     }
 
     private fun showCardMenu(anchor: View, character: RpCharacter, onEdit: (RpCharacter) -> Unit, onDelete: (RpCharacter) -> Unit) {

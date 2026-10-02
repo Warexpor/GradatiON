@@ -7285,6 +7285,17 @@ $cleanContent
         }
     }
 
+    /**
+     * Hub Continue / Start chat popped back onto chat. Code is not a ChatMode, so
+     * [ChatViewModel.setChatMode] alone leaves the Code overlay covering Roleplay —
+     * deactivate it here so the flipped mode is actually visible.
+     */
+    fun uncoverFromHub() {
+        closeHistoryPanel(animated = false)
+        closeRpHome()
+        if (::codeMode.isInitialized && codeMode.isActive) leaveCodeMode()
+    }
+
     fun openRpHub() {
         hideKeyboard()
         parentFragmentManager.beginTransaction()
