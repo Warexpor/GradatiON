@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Deleting a chat from History also drops its parked staged photo, so the JPEG is not left until the per-thread cap evicts it. History search finds a chat whose only unsent line is "Photo" / "Audio" / files. The open composer's live text (including a cleared field) is what Discard draft and the row preview use before the next park.
 - Continue starts a new paragraph after German „…“ dialogue (the closing “ no longer looks like an unfinished opener), and after fullwidth ．, interrobang ‽, Georgian ჻, Canadian Aboriginal ᙮ and Sinhala ෴. Low German „‚ hug the next word like other openers.
 - Lore keys wrapped in ‘curly singles’, and keys trailed by ．‽჻᙮෴, Syriac ܀܁܂, Mongolian ᠃ or doubled !!?? marks, still match.
 - The rewrite dialog quote drops German „low quotes“ and curly single quotes around the first line.

@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Chat wave 17)
+
+On `gradation/w17-chat` (PR into `gradation/app-pass`). History draft follow-ups after w16:
+- Deleting a chat calls `forgetUnsentDraft` first, so a parked staged photo is deleted instead of waiting for the per-thread cap.
+- Search merges host draft previews (Photo / Audio / files) into draft matching, so a chat with only a staged attachment is found by that label.
+- Discard draft and the row preview prefer the open composer's live text (and a cleared dirty field) over a store that has not been parked yet.
+
+Phone: stage a photo on chat A, open another chat, delete A from History (the JPEG should go). Stage a photo with no caption, search "Photo". Type in the open chat, open History, Discard draft.
+
 # Handoff (2026-10-02, Code wave 17)
 
 On `gradation/w17-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
@@ -6,6 +15,7 @@ On `gradation/w17-code` (PR into `gradation/app-pass`). Three Code-mode fixes, u
 - A shell command string with a scalar `args` whole-number double (`5.0`) shows as `5` on the tool detail line.
 
 Phone: on Cursor Agent, an AwaitShell or CallMcpTool card should show the think or fetch icon. A tool whose id a proxy rewrote as a double should still update in place.
+
 
 # Handoff (2026-10-02, Stability wave 16)
 

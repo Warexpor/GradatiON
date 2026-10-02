@@ -308,4 +308,20 @@ class HistoryListTest {
             HistoryList.rowPreview("You: sent", "Photo", "", label),
         )
     }
+
+    @Test fun search_finds_a_chat_whose_only_draft_is_a_staged_photo() {
+        val prefs = mapOf("4" to "typed words", "9" to "")
+        val all = listOf(session(4, now, "notes"), session(9, now, "photos"))
+        val host = { id: Long -> if (id == 9L) "Photo" else prefs["$id"].orEmpty() }
+        val drafts = HistoryList.draftTextsForSearch(all, prefs, host)
+        assertEquals("typed words", drafts["4"])
+        assertEquals("Photo", drafts["9"])
+        assertEquals(setOf(9L), HistoryList.draftMatchIds(drafts, "photo"))
+        assertEquals(setOf(4L), HistoryList.draftMatchIds(drafts, "typed"))
+        val matched = listOf(session(4, now, "notes"))
+        assertEquals(
+            listOf(4L, 9L),
+            HistoryList.withDraftMatches(matched, all, drafts, "photo").map { it.id },
+        )
+    }
 }

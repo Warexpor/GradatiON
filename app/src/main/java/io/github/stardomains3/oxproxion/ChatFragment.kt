@@ -1517,12 +1517,19 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     override fun hasUnsentDraft(sessionId: Long): Boolean {
         if (viewModel.isRpMode()) return false
+        val open = askComposer.bound &&
+            ComposerDrafts.key(askComposer.sessionId) == ComposerDrafts.key(sessionId)
+        // The open field is authoritative while the user is still editing it. A cleared
+        // line must not keep Discard draft alive from a store that has not been parked yet.
+        if (open && ::chatEditText.isInitialized && askComposerDirty) {
+            if (chatEditText.text?.isNotBlank() == true) return true
+            return selectedImageBytes != null || selectedAudioBytes != null || pendingFiles.isNotEmpty() ||
+                !viewModel.pendingImageUri().isNullOrBlank()
+        }
         if (ComposerDrafts.text(sharedPreferencesHelper.getAskComposerDrafts(), sessionId).isNotBlank()) {
             return true
         }
         if (!ComposerStaged.get(stagedByChat, sessionId).isEmpty) return true
-        val open = askComposer.bound &&
-            ComposerDrafts.key(askComposer.sessionId) == ComposerDrafts.key(sessionId)
         if (!open) return false
         return selectedImageBytes != null || selectedAudioBytes != null || pendingFiles.isNotEmpty() ||
             !viewModel.pendingImageUri().isNullOrBlank()
@@ -1530,10 +1537,20 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     override fun unsentDraftPreview(sessionId: Long): String {
         if (viewModel.isRpMode()) return ""
-        val text = ComposerDrafts.text(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
-        if (text.isNotBlank()) return text
         val open = askComposer.bound &&
             ComposerDrafts.key(askComposer.sessionId) == ComposerDrafts.key(sessionId)
+        val stored = ComposerDrafts.text(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
+        if (open && ::chatEditText.isInitialized) {
+            val live = chatEditText.text?.toString().orEmpty()
+            when {
+                live.isNotBlank() -> return live
+                // Cleared while editing: skip a store that park has not caught up with yet.
+                askComposerDirty -> Unit
+                stored.isNotBlank() -> return stored
+            }
+        } else if (stored.isNotBlank()) {
+            return stored
+        }
         val hasPhoto: Boolean
         val hasAudio: Boolean
         val fileCount: Int

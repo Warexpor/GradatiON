@@ -205,7 +205,15 @@ class SavedChatsFragment : Fragment() {
         filterJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
             val mode = viewModel.chatMode.value ?: ChatMode.ASK
-            val drafts = if (mode == ChatMode.ASK) prefs.getAskComposerDrafts() else emptyMap()
+            val prefsDrafts = if (mode == ChatMode.ASK) prefs.getAskComposerDrafts() else emptyMap()
+            val host = (parentFragment as? HistoryPanelHost)
+                ?: parentFragmentManager.fragments.filterIsInstance<HistoryPanelHost>().firstOrNull()
+            // Host preview covers staged Photo/Audio/files; prefs alone miss those.
+            val drafts = if (mode == ChatMode.ASK && host != null && query.isNotEmpty()) {
+                HistoryList.draftTextsForSearch(allSessions, prefsDrafts) { host.unsentDraftPreview(it) }
+            } else {
+                prefsDrafts
+            }
             val filtered = if (query.isEmpty()) {
                 allSessions
             } else {
@@ -238,8 +246,6 @@ class SavedChatsFragment : Fragment() {
                 }
             }
             if (mode == ChatMode.ASK) {
-                val host = (parentFragment as? HistoryPanelHost)
-                    ?: parentFragmentManager.fragments.filterIsInstance<HistoryPanelHost>().firstOrNull()
                 for (session in filtered) {
                     val draft = host?.unsentDraftPreview(session.id)
                         ?: drafts[ComposerDrafts.key(session.id)].orEmpty()
@@ -396,6 +402,8 @@ class SavedChatsFragment : Fragment() {
     }
 
     private fun showDeleteConfirmationDialog(session: ChatSession) {
+        val host = (parentFragment as? HistoryPanelHost)
+            ?: parentFragmentManager.fragments.filterIsInstance<HistoryPanelHost>().firstOrNull()
         GrokConfirmDialog.show(
             fragment = this,
             title = getString(R.string.grok_history_delete_title),
@@ -403,6 +411,8 @@ class SavedChatsFragment : Fragment() {
             confirmText = getString(R.string.grok_history_delete),
             onConfirm = {
                 prefs.setSessionPinned(session.id, false)
+                // Drop a parked photo before the row goes, or the JPEG stays until eviction.
+                host?.forgetUnsentDraft(session.id)
                 viewModel.notifySessionDeleted(session.id)
                 savedChatsViewModel.deleteSession(session.id)
             }
