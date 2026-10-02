@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code activate from an away notification, pairing, or last-tab restore parks Ask text and a live Chat stage the same way the Code tab does, so leaving Code no longer wipes a chip that never reached the park map. A view rebuild while Code is showing leaves the chip parked until leave.
+- History still finds Photo / Audio / files for that parked Ask draft after an away-style Code flip.
 - Continue starts a new paragraph after medium flattened ❪…❫, medium angle ❬…❭ and light tortoise ❲…❳ dialogue, and after Hanunoo ᜵᜶, Thai ๚๛, Khmer ៚, Tibetan ༑༒, Coptic ⳺⳻⳼⳽ and Mongolian ᠉. Opening ❪❬❲ hug the next word like other openers.
 - Lore keys wrapped in ❪medium flattened❫ / ❬medium angle❭ / ❲light tortoise❳, and keys trailed by ᜵๚៚༑⳺᠉, still match.
 - The rewrite dialog quote drops ❪medium flattened❫, ❬medium angle❭ and ❲light tortoise❳ quotes around the first line.

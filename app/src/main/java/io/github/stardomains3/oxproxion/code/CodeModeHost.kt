@@ -68,6 +68,13 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
     /** Called after the tab row changes selection, so ChatFragment can move its indicator. */
     var onTabsChanged: (() -> Unit)? = null
 
+    /**
+     * Runs just before Code covers Chat (tab, restore, away notification, or pairing).
+     * ChatFragment parks Ask text and a live stage here so paths that skip [enterCodeMode]
+     * do not leave a chip only on hidden live fields that leaveCodeMode would wipe.
+     */
+    var onBeforeActivate: (() -> Unit)? = null
+
     init {
         tab.contentDescription = fragment.getString(R.string.mode_tab_code_a11y)
         tab.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> placeApprovalDot() }
@@ -219,6 +226,7 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
 
     fun activate(animate: Boolean = true) {
         if (isActive || !store.enabled) return
+        onBeforeActivate?.invoke()
         isActive = true
         refreshApprovalDot()
         store.lastTabWasCode = true
