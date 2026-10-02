@@ -61,4 +61,21 @@ class TurnEndFormatTest {
 
         assertNull(TurnEndFormat.parseUsage(json.parseToJsonElement("""{"stopReason":"end_turn"}""").jsonObject))
     }
+
+    @Test fun parseUsageAcceptsWholeNumberDoublesAsStrings() {
+        val top = json.parseToJsonElement(
+            """{"stopReason":"end_turn","usage":{"inputTokens":"1200.0","output_tokens":"340.0","costUsd":"0.02"}}"""
+        ).jsonObject
+        val parsed = TurnEndFormat.parseUsage(top)!!
+        assertEquals(1200L, parsed.inputTokens)
+        assertEquals(340L, parsed.outputTokens)
+        assertEquals(0.02, parsed.costUsd!!, 1e-9)
+
+        val numeric = json.parseToJsonElement(
+            """{"stopReason":"end_turn","usage":{"inputTokens":1200.0,"outputTokens":340.0}}"""
+        ).jsonObject
+        val fromNum = TurnEndFormat.parseUsage(numeric)!!
+        assertEquals(1200L, fromNum.inputTokens)
+        assertEquals(340L, fromNum.outputTokens)
+    }
 }

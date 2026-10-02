@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -446,43 +446,59 @@ class AcpAdapter : HarnessAdapter {
         if (n.isEmpty()) return null
         return when (n) {
             "read", "read_file", "readfile", "cat",
-            "read_file_v2", "readfilev2" -> "read"
+            "read_file_v2", "readfilev2",
+            "read_project", "readproject" -> "read"
             "edit", "write", "write_file", "writefile", "str_replace", "strreplace",
             "apply_patch", "applypatch", "patch",
             "edit_file", "editfile", "edit_file_v2", "editfilev2",
             "search_replace", "searchreplace", "reapply",
             "multi_edit", "multiedit",
-            "generate_image", "generateimage" -> "edit"
+            "generate_image", "generateimage",
+            "fix_lints", "fixlints",
+            "apply_agent_diff", "applyagentdiff",
+            "create_diagram", "creatediagram",
+            "update_project", "updateproject" -> "edit"
             "delete", "remove", "rm", "delete_file", "deletefile", "unlink" -> "delete"
             "move", "rename", "mv", "move_file", "movefile", "rename_file", "renamefile" -> "move"
             "search", "grep", "glob", "find", "rg", "ls",
             "listdir", "list_dir", "listdirectory", "list_directory",
             "listdir_v2", "list_dir_v2", "listdirv2", "listdirectoryv2",
             "semanticsearch", "semantic_search",
+            "semantic_search_full", "semanticsearchfull",
+            "read_semsearch_files", "readsemsearchfiles",
             "glob_file_search", "globfilesearch", "file_search", "filesearch",
             "grep_search", "grepsearch",
+            "ripgrep_search", "ripgrepsearch",
+            "ripgrep_raw_search", "ripgreprawsearch",
+            "search_symbols", "searchsymbols",
+            "go_to_definition", "gotodefinition",
             "codebase_search", "codebasesearch", "deep_search", "deepsearch",
-            "read_lints", "readlints", "fix_lints", "fixlints",
+            "read_lints", "readlints",
             "get_diagnostics", "getdiagnostics",
             "get_mcp_tools", "getmcptools",
             "get_dynamic_tools", "getdynamictools",
             "list_mcp_resources", "listmcpresources",
-            "list_mcp_tools", "listmcptools" -> "search"
+            "list_mcp_tools", "listmcptools",
+            "knowledge_base", "knowledgebase" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command",
             "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
-            "runterminalcommand" -> "execute"
+            "runterminalcommand",
+            "write_shell_stdin", "writeshellstdin",
+            "computer_use", "computeruse" -> "execute"
             "think", "thought", "reasoning",
             "await", "await_task", "awaittask",
             "await_shell", "awaitshell",
             "todo_write", "todowrite", "write_todos", "writetodos",
+            "todo_read", "todoread",
             "update_todos", "updatetodos",
-            "task", "subagent", "switch_mode", "switchmode",
+            "task", "task_v2", "taskv2", "subagent", "switch_mode", "switchmode",
             "create_plan", "createplan",
             "ask_question", "askquestion" -> "think"
             "fetch", "web_fetch", "webfetch", "websearch", "web_search", "http",
             "fetch_mcp_resource", "fetchmcpresource",
             "read_mcp_resource", "readmcpresource",
             "fetch_rules", "fetchrules",
+            "fetch_pull_request", "fetchpullrequest",
             "call_mcp_tool", "callmcptool",
             "call_dynamic_tool", "calldynamictool" -> "fetch"
             "editnotebook", "edit_notebook", "notebookedit", "notebook_edit" -> "edit"
@@ -826,7 +842,8 @@ class AcpAdapter : HarnessAdapter {
         val raw = rawInputOf(u)
         val specific = commandOf(raw) != null ||
             firstRaw(raw, "pattern", "query", "url", "regex",
-                "glob_pattern", "globPattern", "search_term", "searchTerm") != null ||
+                "glob_pattern", "globPattern", "search_term", "searchTerm",
+                "tool_name", "toolName", "uri", "server") != null ||
             firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath") != null
@@ -911,7 +928,8 @@ class AcpAdapter : HarnessAdapter {
             locations = locations,
             command = commandOf(raw),
             query = firstRaw(raw, "pattern", "query", "url", "regex",
-                "glob_pattern", "globPattern", "search_term", "searchTerm"),
+                "glob_pattern", "globPattern", "search_term", "searchTerm",
+                "tool_name", "toolName", "uri", "server"),
             filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath"),

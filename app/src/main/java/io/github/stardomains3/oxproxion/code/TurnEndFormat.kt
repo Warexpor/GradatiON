@@ -97,6 +97,11 @@ object TurnEndFormat {
             p.longOrNull?.let { return it }
             p.contentOrNull?.toLongOrNull()?.let { return it }
             p.doubleOrNull?.let { return it.toLong() }
+            // Whole-number double written as a string ("1200.0"), same class as listSessions.
+            p.contentOrNull?.toDoubleOrNull()?.takeIf {
+                it.isFinite() && it == kotlin.math.floor(it) &&
+                    it in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+            }?.toLong()?.let { return it }
         }
         return null
     }

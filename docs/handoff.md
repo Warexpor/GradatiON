@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Code wave 19)
+
+On `gradation/w19-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`TurnEndFormatTest`, `CodeProtocolTest`):
+- Turn usage token counts written as a whole-number double string (`"1200.0"`) still parse, so the finished-turn line keeps its in/out counts after a proxy stringifies numbers.
+- Cursor Agent tool names `WriteShellStdin`, `TodoRead`, `SearchSymbols`, `RipgrepSearch`, `RipgrepRawSearch`, `FixLints`, `GoToDefinition`, `FetchPullRequest`, `ApplyAgentDiff`, `TaskV2`, `CreateDiagram`, `ComputerUse`, `KnowledgeBase`, `ReadProject`, `UpdateProject`, `SemanticSearchFull`, and `ReadSemsearchFiles` map to execute / think / search / edit / fetch / read cards (icon and log clipping). `FixLints` is edit (it writes), not search.
+- Tool detail lines read Cursor's MCP rawInput keys `toolName` / `tool_name`, `server`, and `uri`.
+
+Phone: on Cursor Agent, a WriteShellStdin or FixLints card should show the shell or edit icon. A CallMcpTool card should show the tool name under the title. After a proxy stringifies usage tokens as `"1200.0"`, the turn-end line should still show 1.2k in.
+
 # Handoff (2026-10-02, Stability wave 18)
 
 On `gradation/w18-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w16 recovered-name skips:
