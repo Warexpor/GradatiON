@@ -67,6 +67,11 @@ object RpPromptEngine {
     private const val SCENE_NOTE_CLOSE_BRACE = "\n}"
     private const val SCENE_NOTE_OPEN_BRACE_FULLWIDTH = "｛Scene note, not spoken aloud:\n"
     private const val SCENE_NOTE_CLOSE_BRACE_FULLWIDTH = "\n｝"
+    /** Tortoise-shell / white lenticular: some models echo the note that way too (matching OOC). */
+    private const val SCENE_NOTE_OPEN_TORTOISE = "〔Scene note, not spoken aloud:\n"
+    private const val SCENE_NOTE_CLOSE_TORTOISE = "\n〕"
+    private const val SCENE_NOTE_OPEN_WHITE_LENTICULAR = "〖Scene note, not spoken aloud:\n"
+    private const val SCENE_NOTE_CLOSE_WHITE_LENTICULAR = "\n〗"
 
     private val sceneNoteForms = listOf(
         SCENE_NOTE_OPEN to SCENE_NOTE_CLOSE,
@@ -75,6 +80,8 @@ object RpPromptEngine {
         SCENE_NOTE_OPEN_LENTICULAR to SCENE_NOTE_CLOSE_LENTICULAR,
         SCENE_NOTE_OPEN_BRACE to SCENE_NOTE_CLOSE_BRACE,
         SCENE_NOTE_OPEN_BRACE_FULLWIDTH to SCENE_NOTE_CLOSE_BRACE_FULLWIDTH,
+        SCENE_NOTE_OPEN_TORTOISE to SCENE_NOTE_CLOSE_TORTOISE,
+        SCENE_NOTE_OPEN_WHITE_LENTICULAR to SCENE_NOTE_CLOSE_WHITE_LENTICULAR,
     )
 
     fun sceneNote(body: String): String = SCENE_NOTE_OPEN + body.trim() + SCENE_NOTE_CLOSE
@@ -91,7 +98,7 @@ object RpPromptEngine {
     /**
      * A reply that opens by echoing the scene note, with the story after it. The note on its
      * own is left in place, so a reply that is only the echo is not wiped to nothing.
-     * A fullwidth `（…）`, `[…]`, `【…】`, `{…}`, or `｛…｝` echo is stripped the same way.
+     * A fullwidth `（…）`, `[…]`, `【…】`, `{…}`, `｛…｝`, `〔…〕`, or `〖…〗` echo is stripped the same way.
      */
     fun withoutLeadingSceneNote(text: String): String {
         val trimmed = text.trim()

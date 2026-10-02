@@ -58,6 +58,9 @@ class RpReplyCleanerTest {
         assertEquals("*She waits.*", RpReplyCleaner.clean("｛OOC：Rewrite your last reply above.｝\n*She waits.*"))
         assertEquals("*She waits.*", RpReplyCleaner.clean("〔OOC：Rewrite your last reply above.〕\n*She waits.*"))
         assertEquals("*She waits.*", RpReplyCleaner.clean("〖OOC：Rewrite your last reply above.〗\n*She waits.*"))
+        assertEquals("*She waits.*", RpReplyCleaner.clean("〈OOC：Rewrite your last reply above.〉\n*She waits.*"))
+        assertEquals("*She waits.*", RpReplyCleaner.clean("《OOC：Rewrite your last reply above.》\n*She waits.*"))
+        assertEquals("*She waits.*", RpReplyCleaner.clean("｟OOC：Rewrite your last reply above.｠\n*She waits.*"))
         assertEquals(
             "*She waits.*",
             RpReplyCleaner.clean(RpPromptEngine.rewriteDirective("make it (shorter)") + "\n*She waits.*")
@@ -109,6 +112,10 @@ class RpReplyCleanerTest {
         assertEquals("*She waits.*", RpReplyCleaner.clean("$brace\n*She waits.*"))
         val braceWide = "｛Scene note, not spoken aloud:\nstay tense\n｝"
         assertEquals("*She waits.*", RpReplyCleaner.clean("$braceWide\n*She waits.*"))
+        val tortoise = "〔Scene note, not spoken aloud:\nstay tense\n〕"
+        assertEquals("*She waits.*", RpReplyCleaner.clean("$tortoise\n*She waits.*"))
+        val whiteLent = "〖Scene note, not spoken aloud:\nstay tense\n〗"
+        assertEquals("*She waits.*", RpReplyCleaner.clean("$whiteLent\n*She waits.*"))
     }
 
     @Test
