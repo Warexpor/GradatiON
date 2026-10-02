@@ -13,4 +13,7 @@
     <!-- Recovered/unreadable copies that could not enter noBackupFilesDir. -->
     <exclude domain="database" path="chat_db_hold" />
     <exclude domain="sharedpref" path="code_mode_secrets.xml" />
+    <!-- One-shot open nonces and shade ids; a restore must not unlock or collide. -->
+    <exclude domain="sharedpref" path="code_away_open_tokens.xml" />
+    <exclude domain="sharedpref" path="code_away_notif_ids.xml" />
 </full-backup-content>

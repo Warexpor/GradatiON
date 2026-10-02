@@ -347,7 +347,9 @@ class CodeAwayNotifier(
         keyToId[key] = id
         idToKey[id] = key
         if (savedRaw != id) {
-            idPrefs.edit().putInt(key, id).apply()
+            // commit: cancel after a kill must find this id. apply() can still be in flight
+            // when the process dies, leaving the shade entry uncancelable.
+            idPrefs.edit().putInt(key, id).commit()
         }
         return id
     }
@@ -356,7 +358,9 @@ class CodeAwayNotifier(
         posted += key
         keyToId[key] = id
         idToKey[id] = key
-        idPrefs.edit().putInt(key, id).apply()
+        // commit: the shade already shows this id. apply() can still be in flight when the
+        // process is killed, and a cold-start cancel would miss the allocation.
+        idPrefs.edit().putInt(key, id).commit()
         // Bound memory if many sessions notify while away; cancel shade on eviction (A6).
         while (posted.size > 64) {
             val oldest = posted.first()
@@ -384,7 +388,9 @@ class CodeAwayNotifier(
             if (idToKey[id] == key) idToKey.remove(id)
         }
         if (fromPrefs != null || fromMem != null) {
-            idPrefs.edit().remove(key).apply()
+            // commit: a kill after apply() is scheduled could leave a stale id that collides
+            // with the next allocation for another key.
+            idPrefs.edit().remove(key).commit()
         }
         return id
     }

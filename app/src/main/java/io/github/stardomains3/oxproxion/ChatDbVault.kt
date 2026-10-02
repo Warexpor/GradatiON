@@ -27,7 +27,8 @@ import java.nio.file.StandardOpenOption
  * opens a parked recovered file by absolute path so the history is not uploaded. An orphan
  * sidecar (no main file) is discarded rather than moved into the vault, so Room does not
  * create an empty database beside it. Vault leftovers without a main are cleared so a
- * complete hold set can drain.
+ * complete hold set can drain. Legacy plaintext / encrypting copies move as a set too:
+ * a leftover `-wal` beside `chat_database.pre_sqlcipher` was never in the backup rules.
  *
  * The live `chat_database` stays in the databases directory. The backup rules exclude it, its
  * journal, and the old plaintext name in case a move out of that directory fails.
@@ -98,9 +99,11 @@ internal object ChatDbVault {
      * the vault is parked under [HOLD_DIR] (excluded from Auto Backup) instead of being left at
      * the root or renamed aside inside the vault. Sidecar-only leftovers (no main file) are parked
      * under hold and then discarded: moving them into the vault would let Room mint an empty main
-     * beside the orphan. Move temps (`.partial` / `.ready` / `.bak`) and `.kept-*` leftovers of
-     * those names are parked the same way: the backup rules do not list them. A failure to move a
-     * plaintext or encrypt copy is logged and left in place; the backup rules still name those files.
+     * beside the orphan. Legacy `pre_sqlcipher` / `encrypting` copies (and their sidecars) move as
+     * one set into the vault, or park under hold when that name is taken — a lone `-wal` was not
+     * in the backup rules. Move temps (`.partial` / `.ready` / `.bak`) and `.kept-*` leftovers of
+     * those names are parked the same way: the backup rules do not list them. A failure to move
+     * the encrypt marker is logged and left in place; the backup rules still name that file.
      */
     fun relocateLegacy(databasesDir: File, vault: File, storedRecovered: String?): Boolean {
         vault.mkdirs()
@@ -108,9 +111,11 @@ internal object ChatDbVault {
         discardIncompleteSets(vault)
         // Earlier parks that the vault can take now.
         drainHold(databasesDir, vault)
-        moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.pre_sqlcipher"), plaintextBackup(vault))
+        // Move plaintext / encrypting as a set (main + wal/shm/journal). moveBestEffort alone
+        // left sidecars at the databases root, and Auto Backup has no wildcards for those names.
+        relocateLegacyNamed(databasesDir, vault, "${AppDatabase.DB_NAME}.pre_sqlcipher")
+        relocateLegacyNamed(databasesDir, vault, "${AppDatabase.DB_NAME}.encrypting")
         moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.encrypt_ok"), encryptMarker(vault))
-        moveBestEffort(File(databasesDir, "${AppDatabase.DB_NAME}.encrypting"), encrypting(vault))
         // Set-aside (unreadable) copies use the same set move as recovered names: when the vault
         // already has that stamp, park under hold. moveBestEffort used to uniqueKept into the vault,
         // which could split a main file from its wal and still leave a stamp collision for the key.
@@ -177,6 +182,7 @@ internal object ChatDbVault {
                 val base = file.name.removeSuffix("-wal").removeSuffix("-shm").removeSuffix("-journal")
                 names += base
             }
+            legacyPlainBaseName(file.name)?.let { names += it }
         }
         for (name in names) {
             val holdMain = File(hold, name).isFile
@@ -189,7 +195,11 @@ internal object ChatDbVault {
                 continue
             }
             if (vaultMain) {
-                // Vault already has this history. Leave the hold main for roomDatabaseName.
+                if (isLegacyPlainName(name)) {
+                    // Restore only reads the vault copy. Drop the parked duplicate.
+                    discardShortNameSet(hold, name)
+                }
+                // Recovered/unreadable: leave the hold main for roomDatabaseName.
                 continue
             }
             if (dbSetPresent(vault, name)) {
@@ -201,7 +211,7 @@ internal object ChatDbVault {
     }
 
     /**
-     * Drops recovered/unreadable sidecar leftovers that have no main file.
+     * Drops recovered/unreadable/legacy-plaintext sidecar leftovers that have no main file.
      * An orphan -wal in the vault used to block a later hold drain, and Room opening that
      * recovered name would mint an empty main beside it.
      */
@@ -214,6 +224,7 @@ internal object ChatDbVault {
                 val base = file.name.removeSuffix("-wal").removeSuffix("-shm").removeSuffix("-journal")
                 names += base
             }
+            legacyPlainBaseName(file.name)?.let { names += it }
         }
         for (name in names) {
             if (!File(directory, name).isFile && dbSetPresent(directory, name)) {
@@ -302,6 +313,49 @@ internal object ChatDbVault {
     private fun unreadableBaseName(fileName: String): String? {
         if (!UNREADABLE.matches(fileName)) return null
         return fileName.removeSuffix("-wal").removeSuffix("-shm").removeSuffix("-journal")
+    }
+
+    private fun isLegacyPlainName(name: String): Boolean =
+        name == "${AppDatabase.DB_NAME}.pre_sqlcipher" ||
+            name == "${AppDatabase.DB_NAME}.encrypting"
+
+    /** Main or `-wal`/`-shm`/`-journal` of a legacy plaintext / encrypting copy. */
+    private fun legacyPlainBaseName(fileName: String): String? {
+        for (base in listOf(
+            "${AppDatabase.DB_NAME}.pre_sqlcipher",
+            "${AppDatabase.DB_NAME}.encrypting",
+        )) {
+            if (fileName == base) return base
+            for (suffix in listOf("-wal", "-shm", "-journal")) {
+                if (fileName == base + suffix) return base
+            }
+        }
+        return null
+    }
+
+    /**
+     * Moves a legacy plaintext / encrypting copy (and its sidecars) into [vault].
+     * When the vault already has that short name, park under [HOLD_DIR] as one set so a
+     * leftover `-wal` is not left at the databases root for Auto Backup.
+     */
+    private fun relocateLegacyNamed(databasesDir: File, vault: File, name: String) {
+        if (File(vault, name).isFile) {
+            // Vault already has the restore copy. Drop the databases-root set so Auto Backup
+            // cannot upload a leftover -wal; do not uniqueKept into the vault.
+            if (dbSetPresent(databasesDir, name)) {
+                discardShortNameSet(databasesDir, name)
+            }
+            return
+        }
+        if (!File(databasesDir, name).isFile) {
+            if (dbSetPresent(databasesDir, name)) {
+                parkDbSet(databasesDir, holdDirectory(databasesDir), name)
+            }
+            return
+        }
+        if (!relocateDbSet(databasesDir, vault, name)) {
+            parkDbSet(databasesDir, holdDirectory(databasesDir), name)
+        }
     }
 
     /**
