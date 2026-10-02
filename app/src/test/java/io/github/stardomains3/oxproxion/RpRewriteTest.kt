@@ -35,5 +35,7 @@ class RpRewriteTest {
         assertEquals("Come in.", RpRewrite.snippet("«Come in.»"))
         assertEquals("You're late.", RpRewrite.snippet("“You're late.”"))
         assertEquals("来て。", RpRewrite.snippet("「来て。」"))
+        assertEquals("Hallo.", RpRewrite.snippet("„Hallo.“"))
+        assertEquals("You're late.", RpRewrite.snippet("‘You're late.’"))
     }
 }

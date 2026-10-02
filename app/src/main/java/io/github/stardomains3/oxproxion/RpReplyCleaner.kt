@@ -42,7 +42,7 @@ object RpReplyCleaner {
     }
 
     /**
-     * Drop a leading `(OOC: … Rewrite your last reply …)` even when the note wraps, then a
+     * Drop a leading `(OOC: … Rewrite your last reply …)` (ASCII or fullwidth parens) even when the note wraps, then a
      * "here's the rewritten reply" label. An OOC line that is not that note stays: it can be
      * the character talking.
      */
@@ -57,7 +57,12 @@ object RpReplyCleaner {
     }
 
     private fun stripRewriteOoc(text: String): String {
-        if (!text.startsWith("(OOC:", ignoreCase = true)) return text
+        // ASCII or fullwidth paren/colon: some models echo the note that way.
+        if (!text.startsWith("(OOC:", ignoreCase = true) &&
+            !text.startsWith("（OOC:", ignoreCase = true) &&
+            !text.startsWith("(OOC：", ignoreCase = true) &&
+            !text.startsWith("（OOC：", ignoreCase = true)
+        ) return text
         val close = closingParen(text)
         if (close < 0) return text
         val block = text.substring(0, close + 1)
@@ -65,13 +70,13 @@ object RpReplyCleaner {
         return text.substring(close + 1)
     }
 
-    /** Index of the `)` that closes the `(` at the start, or -1 when it never closes. */
+    /** Index of the `)` / `）` that closes the open paren at the start, or -1 when it never closes. */
     private fun closingParen(text: String): Int {
         var depth = 0
         for (i in text.indices) {
             when (text[i]) {
-                '(' -> depth++
-                ')' -> {
+                '(', '（' -> depth++
+                ')', '）' -> {
                     depth--
                     if (depth == 0) return i
                 }
