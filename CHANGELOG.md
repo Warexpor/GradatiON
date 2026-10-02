@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code: a toolCallId written as a whole number like `5.0` still matches later updates keyed as `5`. Cursor Agent tools named AwaitShell, TodoWrite, Task, SwitchMode, MultiEdit, CallMcpTool, GetMcpTools, CallDynamicTool, or Subagent get the think, edit, fetch, or search card. A shell command or args piece written as `5.0` (not only argv list items) shows as `5`.
 - History shows "Draft: Photo" (or Audio / files) when the only thing waiting is a staged attachment, matching Discard draft for a picture with no caption. A rebuilt chat view puts that staged preview chip back. Parking past the per-thread cap deletes the oldest scene JPEGs that fell off.
 - Roleplay Bubbles shrink around a pictured reply the same way a user bubble does. Recycling a text bubble onto a pictured one no longer keeps the 16dp text inset. Classic stays a flat 4dp rim.
 - A torn wallpaper file (a kill mid-write) no longer counts as a picture: the Wallpaper tile stays off, and a character backup leaves the phone's copy alone instead of encoding the torn bytes.

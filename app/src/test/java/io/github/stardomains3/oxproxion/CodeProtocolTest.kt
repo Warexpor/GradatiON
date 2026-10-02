@@ -1751,6 +1751,53 @@ class CodeProtocolTest {
         assertEquals("sleep 5", (list.single() as CodeEvent.ToolCall).detail)
     }
 
+    @Test fun toolCallIdWrittenAsADoubleStillPatches() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":5.0,"title":"Sleep","kind":"execute","status":"pending",
+               "rawInput":{"command":["sleep",1]}}""", seq = 1),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":5,"status":"completed",
+               "rawInput":{"command":["sleep",1]}}""", seq = 2),
+        )
+        val list = foldFresh(frames)
+        val tool = list.filterIsInstance<CodeEvent.ToolCall>().single()
+        assertEquals("5", tool.callId)
+        assertEquals(ToolStatus.COMPLETED, tool.status)
+        assertEquals("sleep 1", tool.detail)
+    }
+
+    @Test fun scalarCommandArgWholeNumberDoublesShowAsIntegers() {
+        val list = fold(listOf(update(
+            """{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Exit","kind":"execute","status":"pending",
+               "rawInput":{"command":"exit","args":5.0}}"""
+        )))
+        assertEquals("exit 5", (list.single() as CodeEvent.ToolCall).detail)
+    }
+
+    @Test fun moreCursorAcpToolNamesSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"as","title":"Wait","kind":"other","name":"AwaitShell","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"tw","title":"Todos","kind":"other","name":"TodoWrite","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"tk","title":"Task","kind":"other","name":"Task","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sm","title":"Mode","kind":"other","name":"SwitchMode","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"me","title":"Multi","kind":"other","name":"MultiEdit","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cm","title":"MCP","kind":"other","name":"CallMcpTool","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gm","title":"Tools","kind":"other","name":"GetMcpTools","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cd","title":"Dynamic","kind":"other","name":"CallDynamicTool","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sa","title":"Sub","kind":"other","name":"Subagent","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.THINK, byId["as"]?.kind)
+        assertEquals(ToolKind.THINK, byId["tw"]?.kind)
+        assertEquals(ToolKind.THINK, byId["tk"]?.kind)
+        assertEquals(ToolKind.THINK, byId["sm"]?.kind)
+        assertEquals(ToolKind.EDIT, byId["me"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["cm"]?.kind)
+        assertEquals(ToolKind.SEARCH, byId["gm"]?.kind)
+        assertEquals(ToolKind.FETCH, byId["cd"]?.kind)
+        assertEquals(ToolKind.THINK, byId["sa"]?.kind)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()
