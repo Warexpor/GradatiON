@@ -1339,6 +1339,13 @@ class ScreenshotTest {
         val bg = a.findViewById<AmbientBackgroundView>(R.id.ambientBackground)
         org.junit.Assert.assertEquals(BackgroundPhoto.slotForCharacter(mira.id), bg.photoSlot)
         snap(root(a), "rp_conversation_bubbles_dark")
+        // Bubbles is flat on both sides: no gradient on the character's or the user's fill.
+        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        val fills = (0 until rv.childCount).mapNotNull {
+            rv.getChildAt(it).findViewById<View>(R.id.messageContainer)?.background as? android.graphics.drawable.GradientDrawable
+        }
+        org.junit.Assert.assertTrue("bubbles on screen", fills.size >= 2)
+        fills.forEach { org.junit.Assert.assertNull("flat fill", it.colors) }
         SharedPreferencesHelper(a).saveRpLayout(mira.id, SharedPreferencesHelper.RP_LAYOUT_CLASSIC)
         BackgroundPhoto.delete(ctx, BackgroundPhoto.slotForCharacter(mira.id))
         a.findViewById<View>(R.id.tabChat).performClick(); settle()

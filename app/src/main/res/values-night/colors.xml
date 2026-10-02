@@ -36,6 +36,8 @@
     <color name="xai_cell">#FF1A1A1A</color>
     <color name="grad_bubble_top">#FF292929</color>
     <color name="grad_bubble_bottom">#FF202020</color>
+    <!-- RP Bubbles layout: one flat fill for both sides, no gradient (user call) -->
+    <color name="rp_bubble_fill">#FF252525</color>
     <color name="grad_chip_top">#FF1E1E1E</color>
     <color name="grad_chip_bottom">#FF161616</color>
     <color name="grad_fade_clear">#00111111</color>

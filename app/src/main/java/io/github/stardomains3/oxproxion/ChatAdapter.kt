@@ -864,6 +864,7 @@ class ChatAdapter(
         private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
         private val collapseToggleButton: TextView = itemView.findViewById(R.id.collapseToggleButton)
         private var actionsMsgKey: String = ""
+        private var flatBubbleApplied: Boolean? = null
 
         private fun applyActionsVisibility(expanded: Boolean, animate: Boolean) {
             val running = buttonContainer.getTag(R.id.tag_visibility_animator) != null
@@ -943,6 +944,12 @@ class ChatAdapter(
         }
 
         fun bind(message: FlexibleMessage) {
+            // RP Bubbles is flat on both sides; everywhere else the user bubble keeps its gradient.
+            val flat = isRpMode && rpLayout == SharedPreferencesHelper.RP_LAYOUT_BUBBLES
+            if (flatBubbleApplied != flat) {
+                flatBubbleApplied = flat
+                messageContainer.setBackgroundResource(if (flat) R.drawable.bg_rp_user_bubble else R.drawable.bg_user_message)
+            }
             messageTextView.textSize = 16f * currentFontScale / 100f
             messageTextView.typeface = currentTypeface
             val rawUserContent = getMessageText(message.content)
