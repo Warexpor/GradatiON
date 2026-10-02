@@ -51,4 +51,8 @@ object ComposerStaged {
         store.forEach { (k, v) -> if (k != id) kept[k] = v }
         return kept
     }
+
+    /** Entries [remember] dropped when the store grew past [ComposerDrafts.MAX_KEPT]. */
+    fun evicted(before: Map<String, Entry>, after: Map<String, Entry>): List<Entry> =
+        before.mapNotNull { (k, v) -> if (k in after) null else v }
 }

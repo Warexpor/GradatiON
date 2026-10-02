@@ -236,6 +236,24 @@ object HistoryList {
         return if (role == "user") youLabel(body) else body
     }
 
+    /**
+     * History line for an unsent attachment with no caption. A photo wins over audio and
+     * files so a staged picture still reads as "Photo", matching a sent photo with no text.
+     */
+    fun attachmentDraft(
+        hasPhoto: Boolean,
+        hasAudio: Boolean,
+        fileCount: Int,
+        photoLabel: String,
+        audioLabel: String,
+        filesLabel: (Int) -> String,
+    ): String {
+        if (hasPhoto) return photoLabel
+        if (hasAudio) return audioLabel
+        if (fileCount > 0) return filesLabel(fileCount)
+        return ""
+    }
+
     /** Trim and collapse whitespace, the same way a draft row and the bold span do. */
     fun normalizeQuery(query: String): String = foldSpace(query)
 

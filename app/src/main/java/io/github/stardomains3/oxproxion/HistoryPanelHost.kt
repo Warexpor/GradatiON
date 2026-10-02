@@ -7,6 +7,12 @@ interface HistoryPanelHost {
     fun forgetUnsentDraft(sessionId: Long)
     /** True when this chat still has unsent text or a parked photo/file. */
     fun hasUnsentDraft(sessionId: Long): Boolean
+    /**
+     * The unsent line History should show under the title. Blank when there is nothing
+     * waiting. A staged photo or file with no caption still returns a short label so the
+     * row reads as a draft the same way Discard draft does.
+     */
+    fun unsentDraftPreview(sessionId: Long): String
     /** Push Settings without flashing Ask under the history panel. */
     fun openSettingsFromHistory()
     /** Grouped drawer destinations (Code, Roleplay home, Models, Prompt library, Presets). */
