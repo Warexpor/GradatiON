@@ -32,7 +32,7 @@ Not affiliated with xAI, Anthropic, OpenAI or OpenRouter.
 |------------|----------------|----------|
 | ![Appearance](screenshots/10-settings_appearance.png) | ![Bubbles layout](screenshots/11-rp_bubbles.png) | ![Controls](screenshots/12-controls_panel.png) |
 
-Screenshots come from the Robolectric tests (`ScreenshotTest`, `CodeModeScreenshotTest`), so
+Screenshots come from the Robolectric tests (`ScreenshotTest`, `RpScreenshotTest`, `CodeModeScreenshotTest`), so
 they always match the code.
 
 ## Install

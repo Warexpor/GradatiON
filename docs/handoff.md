@@ -9,7 +9,7 @@ groups by day and shows drafts; Code mode reconnects without doubling, keeps app
 
 Fixed at merge (review): leaving a chat mid-reply saved the "thinking..." bubble; Regenerate or Edit in Chat
 deleted the photo the other branch still named; leaving an RP greeting nobody answered added a History row.
-`ScreenshotTest.settle()` now steps in 50 ms, since a mode switch lands the leaving chat's save first.
+`ScreenshotHarness.settle()` now steps in 50 ms, since a mode switch lands the leaving chat's save first.
 
 Phone, most important first:
 - Install over a build that has chats: they still open, with pins and facts.

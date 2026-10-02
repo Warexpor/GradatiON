@@ -31,158 +31,15 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
 import java.io.File
 
-class ScreenshotApp : Application()
 
 /**
- * Renders key screens to PNGs under app/build/screenshots for visual review.
+ * Chat, History, Settings, dialogs and backgrounds, rendered to PNGs.
  * Run: ./gradlew :app:testDebugUnitTest --tests '*ScreenshotTest*'
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = ScreenshotApp::class, sdk = [35], qualifiers = DARK)
-class ScreenshotTest {
-
-    private lateinit var db: AppDatabase
-
-    @Before
-    fun setUp() {
-        DemoModel.pace = 0.02f
-        // The static background field renders on a worker thread on the phone; snapshots need it now.
-        AmbientBackgroundView.renderFieldInline = true
-        TestEnv.resetViewModelFactory()
-        val ctx = ApplicationProvider.getApplicationContext<Application>()
-        Settings.Global.putFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
-        db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java).allowMainThreadQueries().build()
-        AppDatabase.setInstanceForTesting(db)
-        // Roleplay is opt-in now; these screens cover it, so switch it on (see ModesDefaultTest).
-        SharedPreferencesHelper(ctx).setRoleplayEnabled(true)
-        // Tests that stop mid-swipe leave the peeked mode saved; always start on Chat.
-        SharedPreferencesHelper(ctx).saveChatMode(ChatMode.ASK)
-        SharedPreferencesHelper(ctx).saveChatMarkStyle(SharedPreferencesHelper.CHAT_MARK_LIQUID)
-    }
-
-    /** CodeHub is a process singleton: a test that ends on the Code tab must not start the next one there. */
-    @org.junit.After
-    fun tearDown() = io.github.stardomains3.oxproxion.code.CodeHub.resetForTesting()
-
-    private fun snap(view: View, name: String) {
-        val bmp = runCatching { renderHardware(view) }.getOrNull() ?: Bitmap.createBitmap(
-            view.width, view.height, Bitmap.Config.ARGB_8888
-        ).also { view.draw(Canvas(it)) }
-        val out = File("build/screenshots").apply { mkdirs() }
-        File(out, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-    }
-
-    /**
-     * Draws through the real hardware pipeline (RenderNode, RenderEffect, AGSL), so glass
-     * renders exactly as on a device instead of via the software fallback.
-     */
-    private fun renderHardware(view: View): Bitmap {
-        val w = view.width
-        val h = view.height
-        val root = RenderNode("snap").apply {
-            setPosition(0, 0, w, h)
-            val c = beginRecording()
-            view.draw(c)
-            endRecording()
-        }
-        val reader = ImageReader.newInstance(
-            w, h, PixelFormat.RGBA_8888, 1,
-            HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or HardwareBuffer.USAGE_GPU_COLOR_OUTPUT
-        )
-        val renderer = HardwareRenderer().apply {
-            setContentRoot(root)
-            setSurface(reader.surface)
-        }
-        try {
-            renderer.createRenderRequest().setWaitForPresent(true).syncAndDraw()
-            val image = reader.acquireNextImage()
-            val plane = image.planes[0]
-            val full = Bitmap.createBitmap(plane.rowStride / plane.pixelStride, h, Bitmap.Config.ARGB_8888)
-            full.copyPixelsFromBuffer(plane.buffer)
-            image.close()
-            return Bitmap.createBitmap(full, 0, 0, w, h)
-        } finally {
-            renderer.destroy()
-            reader.close()
-        }
-    }
-
-    private fun idle() {
-        repeat(8) {
-            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(500))
-        }
-    }
-
-    private fun withChat(block: (MainActivity, ChatFragment) -> Unit) {
-        val ctx = ApplicationProvider.getApplicationContext<Application>()
-        val night = ctx.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
-        SharedPreferencesHelper(ctx).saveThemeMode(
-            if (night) SharedPreferencesHelper.THEME_DARK else SharedPreferencesHelper.THEME_LIGHT
-        )
-        ActivityScenario.launch(MainActivity::class.java).use { sc ->
-            idle()
-            sc.onActivity { a ->
-                idle()
-                // Every screen starts on Chat, whatever mode an earlier test left behind.
-                val vm = ViewModelProvider(a)[ChatViewModel::class.java]
-                if (vm.chatMode.value != ChatMode.ASK) { vm.setChatMode(ChatMode.ASK); idle() }
-                val chat = a.supportFragmentManager.findFragmentByTag("ChatFragment") as ChatFragment
-                block(a, chat)
-            }
-        }
-    }
-
-    private fun root(a: MainActivity) = a.window.decorView
-
-    private fun seedConversation(a: MainActivity) {
-        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
-        val f = ChatViewModel::class.java.getDeclaredField("_chatMessages").apply { isAccessible = true }
-        @Suppress("UNCHECKED_CAST")
-        val live = f.get(vm) as MutableLiveData<List<FlexibleMessage>>
-        live.value = listOf(
-            FlexibleMessage("user", JsonPrimitive("Can you explain how attention works in transformers? Keep it short.")),
-            FlexibleMessage(
-                "assistant",
-                JsonPrimitive(
-                    """
-                    **Attention** lets each token look at every other token and decide what matters.
-
-                    ### The short version
-                    1. Each token becomes a *query*, a *key* and a *value*.
-                    2. Scores are `softmax(QKᵀ / √d)`.
-                    3. The output is a weighted mix of the values.
-
-                    ```python
-                    weights = softmax(q @ k.T / sqrt(d))
-                    out = weights @ v
-                    ```
-
-                    > Multi-head attention runs this several times in parallel.
-                    """.trimIndent()
-                )
-            ),
-            FlexibleMessage("user", JsonPrimitive("Nice. And why divide by √d?")),
-        )
-    }
-
-    private fun seedHistory() = runBlocking {
-        val dao = db.chatDao()
-        listOf(
-            "Transformer **attention**, explained",
-            "Grocery list for the *week*",
-            "Fix `Gradle` build on AGP 9",
-            "Llama 3 vs **Qwen** for coding",
-            "Birthday message for Sam",
-        ).forEachIndexed { i, t ->
-            dao.insertSessionAndMessages(
-                ChatSession(title = t, modelUsed = "openrouter/free", timestamp = System.currentTimeMillis() - i * 26L * 3600_000L),
-                if (i == 0) listOf(ChatMessage(sessionId = 0, role = "assistant", content = "\"Attention maps the query to the keys.\""))
-                else emptyList()
-            )
-        }
-    }
+class ScreenshotTest : ScreenshotHarness() {
 
     // ---- Chat ----
 
@@ -241,30 +98,6 @@ class ScreenshotTest {
         a.supportFragmentManager.popBackStackImmediate(); a.supportFragmentManager.popBackStackImmediate(); idle()
         org.junit.Assert.assertEquals(LiquidMarkView.MarkStyle.LIQUID, mark.markStyle)
         org.junit.Assert.assertEquals(View.VISIBLE, mark.visibility)
-    }
-
-    /** Spread of opaque reds. The liquid frame varies; the flat vector is one gray. */
-    private fun opaqueSpread(bmp: Bitmap): Int {
-        var n = 0
-        var min = 255
-        var max = 0
-        val step = 3
-        var y = 0
-        while (y < bmp.height) {
-            var x = 0
-            while (x < bmp.width) {
-                val c = bmp.getPixel(x, y)
-                if (android.graphics.Color.alpha(c) >= 240) {
-                    val r = android.graphics.Color.red(c)
-                    if (r < min) min = r
-                    if (r > max) max = r
-                    n++
-                }
-                x += step
-            }
-            y += step
-        }
-        return if (n < 20) 0 else max - min
     }
 
     @Test fun chatConversationDark() = withChat { a, _ ->
@@ -380,70 +213,10 @@ class ScreenshotTest {
         seedConversation(a); idle(); snap(root(a), "chat_conversation_api31")
     }
 
-    /** Transcript scrolled so messages pass under the floating glass controls. */
-    private fun scrolledUnderGlass(a: MainActivity, name: String) {
-        seedConversation(a)
-        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
-        val f = ChatViewModel::class.java.getDeclaredField("_chatMessages").apply { isAccessible = true }
-        @Suppress("UNCHECKED_CAST")
-        val live = f.get(vm) as MutableLiveData<List<FlexibleMessage>>
-        live.value = live.value!! + FlexibleMessage(
-            "assistant",
-            JsonPrimitive(
-                """
-                Because dot products grow with dimension. With **d** = 512, raw scores get large, softmax saturates, and gradients all but vanish.
-
-                Scaling by **√d** keeps the variance near 1, so attention stays soft and learnable.
-
-                - Small *d*: barely matters
-                - Large *d*: training stalls without it
-                """.trimIndent()
-            )
-        )
-        idle()
-        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
-        rv.scrollToPosition(0); idle()
-        rv.scrollBy(0, (110 * a.resources.displayMetrics.density).toInt()); idle()
-        snap(root(a), name)
-    }
-
     @Test fun chatGlassDark() = withChat { a, _ -> scrolledUnderGlass(a, "chat_glass_dark") }
+
     @Test @Config(qualifiers = LIGHT)
     fun chatGlassLight() = withChat { a, _ -> scrolledUnderGlass(a, "chat_glass_light") }
-
-    /** Mid-stream frame: the newest words are still fading in at the edge. */
-    private fun streamInto(a: MainActivity, name: String) {
-        seedConversation(a); idle()
-        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
-        val holder = rv.findViewHolderForAdapterPosition(1) as ChatAdapter.AssistantViewHolder
-        // As bindTextOnly does for the live row: action icons wait until the reply lands.
-        holder.itemView.findViewById<View>(R.id.aiActionRow).visibility = View.INVISIBLE
-        val full = """
-            Dividing by **√d** keeps the dot products from growing with the key size.
-
-            Without it, large scores push softmax into regions where one weight is ~1 and the rest ~0, so gradients vanish and training stalls.
-
-            - With scaling, scores stay near unit variance
-            - Softmax stays soft, so every token still gets
-        """.trimIndent()
-        // Drive frames by hand: advance the clock without running the looper, so the fade
-        // ticker (which reposts every frame while the cursor breathes) can't spin the test.
-        var n = 0
-        while (n < full.length) {
-            n = minOf(full.length, n + 7)
-            holder.renderStreamFrame(full.substring(0, n))
-            org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofMillis(22))
-        }
-        val r = root(a)
-        r.measure(
-            View.MeasureSpec.makeMeasureSpec(r.width, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(r.height, View.MeasureSpec.EXACTLY)
-        )
-        r.layout(0, 0, r.width, r.height)
-        snap(r, name)
-        // End the stream so the ticker stops before the activity is torn down.
-        holder.itemView.findViewById<android.widget.TextView>(R.id.messageTextView).text = ""
-    }
 
     @Test fun chatStreamingDark() = withChat { a, _ -> streamInto(a, "chat_streaming_dark") }
 
@@ -564,15 +337,6 @@ class ScreenshotTest {
         snapDialog(a, "history_options_dark")
     }
 
-    /** First row that is a session (the list may lead with section headers). */
-    private fun firstSessionRow(list: androidx.recyclerview.widget.RecyclerView): Int {
-        for (i in 0 until (list.adapter?.itemCount ?: 0)) {
-            val vh = list.findViewHolderForAdapterPosition(i) ?: continue
-            if (vh.itemView.findViewById<View>(R.id.iconEditt) != null) return i
-        }
-        return 0
-    }
-
     @Test fun modelPickerDark() = withChat { a, _ ->
         a.findViewById<View>(R.id.modelNameTextView).performClick(); idle()
         snap(root(a), "model_picker_dark")
@@ -591,202 +355,6 @@ class ScreenshotTest {
         snap(root(a), "settings_light")
     }
 
-    /** The frosted screen a dialog window sits on: cross-window blur plus the light dim. */
-    private fun frostedBackdrop(a: MainActivity): Bitmap {
-        val r = root(a)
-        val scale = 0.25f
-        val small = Bitmap.createBitmap((r.width * scale).toInt(), (r.height * scale).toInt(), Bitmap.Config.ARGB_8888)
-        val sc = Canvas(small)
-        sc.scale(scale, scale)
-        r.draw(sc)
-        GlassMaterial.boxBlur(small, (22 * a.resources.displayMetrics.density * scale / 2f).toInt().coerceAtLeast(1))
-        val bg = Bitmap.createScaledBitmap(small, r.width, r.height, true).copy(Bitmap.Config.ARGB_8888, true)
-        Canvas(bg).drawColor(0x47000000)
-        return bg
-    }
-
-    private fun rpPanelGrid(a: MainActivity): android.widget.GridLayout {
-        val grid = root(a).findViewById<android.widget.GridLayout>(R.id.rpPanelTiles)
-        org.junit.Assert.assertNotNull("the character menu opened", grid)
-        return grid!!
-    }
-
-    private fun dismissRpPanel(a: MainActivity) {
-        var view: View = rpPanelGrid(a)
-        while (view.parent is View) {
-            view = view.parent as View
-            if (view is androidx.coordinatorlayout.widget.CoordinatorLayout) {
-                view.getChildAt(0).performClick()
-                break
-            }
-        }
-        idle()
-    }
-
-    private fun rpPanelShowing(a: MainActivity): Boolean =
-        root(a).findViewById<View>(R.id.rpPanelTiles)?.isShown == true
-
-    /** [sharp]: the dialog dims the screen but does not blur it (the opaque character panel). */
-    private fun snapDialog(a: MainActivity, name: String, sharp: Boolean = false) {
-        val d: Dialog? = ShadowDialog.getLatestDialog()
-        if (d == null) {
-            if (sharp) {
-                val r = root(a)
-                val bg = Bitmap.createBitmap(r.width, r.height, Bitmap.Config.ARGB_8888).also { b ->
-                    Canvas(b).apply { r.draw(this); drawColor(0x80000000.toInt()) }
-                }
-                val out = File("build/screenshots").apply { mkdirs() }
-                File(out, "$name.png").outputStream().use { bg.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            } else {
-                snap(root(a), name)
-            }
-            return
-        }
-        val bg = if (sharp) {
-            val r = root(a)
-            Bitmap.createBitmap(r.width, r.height, Bitmap.Config.ARGB_8888).also { b ->
-                Canvas(b).apply { r.draw(this); drawColor(0x80000000.toInt()) }
-            }
-        } else frostedBackdrop(a)
-        val c = Canvas(bg)
-        val dv = d.window!!.decorView
-        c.save(); c.translate(0f, (bg.height - dv.height).toFloat().coerceAtLeast(0f))
-        dv.draw(c); c.restore()
-        val out = File("build/screenshots").apply { mkdirs() }
-        File(out, "$name.png").outputStream().use { bg.compress(Bitmap.CompressFormat.PNG, 100, it) }
-    }
-
-    private fun snapWithPopup(a: MainActivity, name: String) {
-        val p: PopupWindow? = shadowOf(ApplicationProvider.getApplicationContext<Application>()).latestPopupWindow
-        val bg = Bitmap.createBitmap(root(a).width, root(a).height, Bitmap.Config.ARGB_8888)
-        val c = Canvas(bg)
-        root(a).draw(c)
-        val pv = p?.contentView
-        if (pv != null) {
-            val anchor = a.findViewById<View>(R.id.menuButton)
-            val loc = IntArray(2); anchor.getLocationInWindow(loc)
-            val w = if (pv.width > 0) pv.width else { pv.measure(0, 0); pv.layout(0, 0, pv.measuredWidth, pv.measuredHeight); pv.measuredWidth }
-            c.save(); c.translate(loc[0].toFloat(), (loc[1] - pv.height - 8 * a.resources.displayMetrics.density))
-            pv.draw(c); c.restore()
-        }
-        val out = File("build/screenshots").apply { mkdirs() }
-        File(out, "$name.png").outputStream().use { bg.compress(Bitmap.CompressFormat.PNG, 100, it) }
-    }
-
-    // ---- Secondary screens ----
-
-    private fun pushFragment(a: MainActivity, f: androidx.fragment.app.Fragment) {
-        a.supportFragmentManager.beginTransaction().add(R.id.fragment_container, f).commitNow()
-        idle()
-    }
-
-    /** A small library so the RP screens show real cards; one character has a photo. */
-    private fun seedRp(withActive: Boolean = true) = runBlocking {
-        val ctx = ApplicationProvider.getApplicationContext<Application>()
-        val dao = db.rpDao()
-        val ids = listOf(
-            RpCharacter(name = "Mira Vance", personality = "A sharp-tongued starship mechanic who hides a soft heart behind grease and sarcasm.", greeting = "*wipes her hands* You again?"),
-            RpCharacter(name = "Professor Hale", personality = "Retired historian, endlessly curious, speaks in long digressions about forgotten empires."),
-            RpCharacter(name = "Kestrel", scenario = "A rain-soaked city where you hire a detective who owes you a favor."),
-            RpCharacter(name = "Ondine", personality = "Calm tide spirit. Answers in riddles, remembers every ship that sank."),
-            RpCharacter(name = "Theo", greeting = "Hey! You made it. Grab a seat, the coffee is terrible but free."),
-            RpCharacter(name = "Aurelia"),
-        ).map { dao.insertCharacter(it) }
-        // Grayscale portrait for the first character, saved where RpAvatarStorage keeps avatars.
-        val size = 256
-        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val c = Canvas(bmp)
-        c.drawColor(0xFF3A3A3A.toInt())
-        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        paint.color = 0xFFA6A6A6.toInt()
-        c.drawCircle(size / 2f, size * 0.4f, size * 0.18f, paint)
-        c.drawOval(size * 0.16f, size * 0.7f, size * 0.84f, size * 1.3f, paint)
-        val file = RpAvatarStorage.avatarFile(ctx, ids[0])
-        file.parentFile?.mkdirs()
-        file.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        dao.insertLorebook(RpLorebook(name = "Outer Rim", content = "Ports, pirates and old wars.", isActive = true))
-        val prefs = SharedPreferencesHelper(ctx)
-        prefs.saveRpActiveCharacterId(if (withActive) ids[0] else null)
-        prefs.saveRpPersona("Sam, a courier with a bad sense of direction.")
-        prefs.saveRpPersonaName("Sam")
-        val portrait = RpAvatarStorage.personaFile(ctx, "persona_test.jpg")
-        portrait.parentFile?.mkdirs()
-        file.copyTo(portrait, overwrite = true)
-        prefs.saveRpPersonaPhoto(portrait.name)
-        prefs.saveRpPersonaPresets(listOf(
-            RpPersonaPreset("Sam", "Sam, a courier with a bad sense of direction.", portrait.name),
-            RpPersonaPreset("Captain Rhee", "A retired pilot who still salutes the sunrise.")
-        ))
-    }
-
-    @Test fun rpPersonaSwitchesWithOneTap() = withChat { a, _ ->
-        seedRp()
-        pushFragment(a, RpPersonaFragment.newInstance()); idle()
-        val list = a.findViewById<android.view.ViewGroup>(R.id.rpPersonaList)
-        val rows = (0 until list.childCount).map { list.getChildAt(it) }
-            .filter { it.findViewById<android.view.View?>(R.id.rpPersonaRowName) != null }
-        org.junit.Assert.assertEquals(2, rows.size)
-        val check = { i: Int -> rows[i].findViewById<android.view.View>(R.id.rpPersonaRowCheck).visibility }
-        org.junit.Assert.assertEquals(android.view.View.VISIBLE, check(0))
-        rows[1].performClick(); idle()
-        org.junit.Assert.assertEquals("Captain Rhee", a.findViewById<android.widget.EditText>(R.id.rpPersonaNameInput).text.toString())
-        org.junit.Assert.assertEquals(android.view.View.GONE, check(0))
-        org.junit.Assert.assertEquals(android.view.View.VISIBLE, check(1))
-    }
-
-    /** Room LiveData and Coil decode on real background threads; give them a moment. */
-    /**
-     * A mode switch lands the leaving chat's save first: several hops between the main looper
-     * and Room's thread. Short real-time steps let each hop through; four long ones did not.
-     */
-    private fun settle() {
-        repeat(20) { Thread.sleep(50); idle() }
-    }
-
-    private fun rpScreen(name: String, f: () -> androidx.fragment.app.Fragment) = withChat { a, _ ->
-        seedRp()
-        pushFragment(a, f()); settle(); snap(root(a), name)
-    }
-
-    @Test @Config(qualifiers = LIGHT)
-    fun rpHubLight() = rpScreen("rp_hub_light") { RpHubFragment() }
-
-    @Test fun rpScreensDark() = withChat { a, _ ->
-        seedRp()
-        renderEach(a, settleEach = true, screens = listOf(
-            "rp_hub_dark" to { RpHubFragment() },
-            "rp_characters_dark" to { RpCharacterLibraryFragment.newInstance() },
-            "rp_persona_dark" to { RpPersonaFragment.newInstance() },
-        ))
-    }
-
-    @Test fun rpEmptyScreensDark() = withChat { a, _ ->
-        renderEach(a, settleEach = true, screens = listOf(
-            "rp_hub_empty_dark" to { RpHubFragment() },
-            "rp_characters_empty_dark" to { RpCharacterLibraryFragment.newInstance() },
-            "rp_lorebooks_dark" to { RpLorebookLibraryFragment.newInstance() },
-        ))
-    }
-
-    @Test fun rpCharacterEditExistingDark() = withChat { a, _ ->
-        seedRp()
-        val id = runBlocking { db.rpDao().getAllCharactersOnce().first { it.name == "Mira Vance" }.id }
-        pushFragment(a, RpCharacterEditFragment.newInstance(id)); settle()
-        snap(root(a), "rp_character_edit_existing_dark")
-    }
-
-    @Test fun rpLorebookEditDark() = withChat { a, _ ->
-        pushFragment(a, RpLorebookEditFragment.newInstance(0L)); idle()
-        val hits = ArrayList<android.view.View>()
-        a.findViewById<android.view.ViewGroup>(android.R.id.content)
-            .findViewsWithText(hits, "phrase] blocks", android.view.View.FIND_VIEWS_WITH_TEXT)
-        val help = hits.filterIsInstance<android.widget.TextView>().first()
-        val layout = help.layout
-        org.junit.Assert.assertNotNull(layout)
-        val cut = (0 until layout.lineCount).sumOf { layout.getEllipsisCount(it) }
-        org.junit.Assert.assertEquals("lore format hint is clipped", 0, cut)
-        snap(root(a), "rp_lorebook_edit_dark")
-    }
     /** Screens with nothing to assert: each must inflate and render. One activity for all of them. */
     @Test fun secondaryScreensDark() = withChat { a, _ ->
         renderEach(a, settleEach = false, screens = listOf(
@@ -804,38 +372,6 @@ class ScreenshotTest {
             "prompts_dark" to { PromptLibraryFragment() },
             "inference_dark" to { InferenceParametersFragment() },
         ))
-    }
-
-    /** Pushes each screen over the chat, snaps it and takes it off again, naming any that fails. */
-    private fun renderEach(
-        a: MainActivity,
-        settleEach: Boolean,
-        screens: List<Pair<String, () -> androidx.fragment.app.Fragment>>
-    ) {
-        for ((name, make) in screens) {
-            try {
-                val f = make()
-                pushFragment(a, f)
-                if (settleEach) settle()
-                snap(root(a), name)
-                a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
-            } catch (e: Throwable) {
-                throw AssertionError("screen $name failed to render", e)
-            }
-        }
-    }
-    @Test fun rpSettingsDark() = withChat { a, _ ->
-        pushFragment(a, RpSettingsFragment()); idle()
-        val facts = a.findViewById<android.widget.TextView>(R.id.rpAutoMemorySwitch)
-        val layout = facts.layout
-        org.junit.Assert.assertNotNull("facts switch laid out", layout)
-        val cut = (0 until layout.lineCount).sumOf { layout.getEllipsisCount(it) }
-        org.junit.Assert.assertEquals("facts row must show its whole label", 0, cut)
-        // The promise that Memory stays put is the footnote under the card, never clipped with the label.
-        val found = ArrayList<View>()
-        root(a).findViewsWithText(found, a.getString(R.string.rp_auto_memory_sub), View.FIND_VIEWS_WITH_TEXT)
-        org.junit.Assert.assertTrue(found.any { it.isShown })
-        snap(root(a), "rp_settings_dark")
     }
 
     @Test fun dialogsDark() = withChat { a, chat ->
@@ -857,6 +393,7 @@ class ScreenshotTest {
             }
         }
     }
+
     @Test @Config(qualifiers = LIGHT)
     fun inputDialogLight() = withChat { a, chat ->
         GrokInputDialog.show(chat, "Rename conversation", "Title", "Transformer attention", "Save", onConfirm = {})
@@ -869,31 +406,6 @@ class ScreenshotTest {
             snap(root(a), name)
             a.supportFragmentManager.popBackStackImmediate(); a.supportFragmentManager.popBackStackImmediate(); idle()
         }
-    }
-
-    // ── Voice input ────────────────────────────────────────────────────────────────────
-
-    private fun dictationOf(chat: ChatFragment): VoiceDictation =
-        ChatFragment::class.java.getDeclaredField("dictation").apply { isAccessible = true }.get(chat) as VoiceDictation
-
-    /** Mid-dictation: one settled phrase, one still being recognized, bars full of speech. */
-    private fun dictateInto(a: MainActivity, chat: ChatFragment): VoiceDictation {
-        val d = dictationOf(chat)
-        a.findViewById<android.widget.EditText>(R.id.chatEditText).setText("Quick question.")
-        d.onStateChanged(VoiceInput.State.LISTENING)
-        d.onCommit("how do I center a div")
-        d.onPartial("in flexbox without")
-        val speech = floatArrayOf(0.1f, 0.5f, 0.9f, 0.7f, 0.3f, 0.8f, 1f, 0.6f, 0.2f, 0.05f, 0.4f, 0.75f)
-        repeat(60) { i ->
-            d.onLevel(speech[i % speech.size])
-            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(66))
-        }
-        return d
-    }
-
-    private fun withVoice(block: (MainActivity, ChatFragment) -> Unit) {
-        VoiceInput.deviceAvailableOverride = true
-        try { withChat(block) } finally { VoiceInput.deviceAvailableOverride = null }
     }
 
     @Test fun chatDictatingDark() = withVoice { a, chat ->
@@ -973,405 +485,6 @@ class ScreenshotTest {
         snap(root(a), "chat_text_xl_dark")
     }
 
-    /** Pump the main looper in real time while a background stream (demo thread) runs. */
-    private fun waitFor(timeoutMs: Long, done: () -> Boolean) {
-        val end = System.currentTimeMillis() + timeoutMs
-        while (!done() && System.currentTimeMillis() < end) {
-            Thread.sleep(50)
-            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
-        }
-    }
-
-    /** Long RP chats keep Facts current: after a reply near the API window, the model rewrites the
-     *  chat's Facts. The Memory note the user wrote is never saved over. */
-    @Test fun rpAutoMemoryUpdatesAfterReply() = withChat { a, _ ->
-        seedRp()
-        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
-        val prefs = SharedPreferencesHelper(a)
-        val oldBudget = prefs.getChatMemoryCount()
-        prefs.saveChatMemoryCount(8) // tiny window, so the first exchange is already near its end
-        try {
-            a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-            vm.setModel(DemoModel.ID); idle()
-            val mira = runBlocking { vm.getRpRepository().getAllCharactersOnce() }.first { it.name == "Mira Vance" }
-            vm.startRpChatWithCharacter(mira); settle()
-            val input = a.findViewById<android.widget.EditText>(R.id.chatEditText)
-            val send = a.findViewById<View>(R.id.sendChatButton)
-            // Wait for the reply to this send, not the greeting that's already there.
-            fun sendAndWait(text: String) {
-                val before = vm.chatMessages.value.orEmpty().size
-                input.setText(text); send.performClick()
-                waitFor(20_000) {
-                    vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().let {
-                        it.size >= before + 2 && it.last().role == "assistant"
-                    }
-                }
-            }
-            // Switched off: a reply that would qualify leaves Facts empty.
-            prefs.saveRpAutoMemory(false)
-            prefs.saveRpMemory(mira.id, "kept")
-            sendAndWait("Where are we going?")
-            Thread.sleep(300); idle()
-            org.junit.Assert.assertEquals("switch off leaves Facts alone", "", vm.currentRpFacts())
-            // Switched on: the next reply folds the story into Facts; Memory stays the user's note.
-            prefs.saveRpAutoMemory(true)
-            sendAndWait("And then?")
-            waitFor(10_000) { vm.currentRpFacts().isNotEmpty() }
-            org.junit.Assert.assertEquals(DemoModel.DEMO_MEMORY.trim(), vm.currentRpFacts())
-            org.junit.Assert.assertEquals("Memory is never rewritten", "kept", prefs.getRpMemory(mira.id))
-        } finally {
-            prefs.saveChatMemoryCount(oldBudget)
-            prefs.saveRpAutoMemory(true)
-            prefs.saveRpMemory(null, "")
-            a.findViewById<View>(R.id.tabChat).performClick(); settle()
-        }
-    }
-
-    /** Chats with a few characters, oldest last, so the Roleplay home has rows to show. */
-    private fun seedRpChats() = runBlocking {
-        val dao = db.chatDao()
-        val chars = db.rpDao().getAllCharactersOnce().associateBy { it.name }
-        fun chat(name: String, hoursAgo: Long, vararg lines: Pair<String, String>) {
-            val id = chars.getValue(name).id
-            runBlocking {
-                dao.insertSessionAndMessages(
-                    ChatSession(
-                        title = name, modelUsed = "openrouter/free", mode = ChatMode.RP.storageValue, characterId = id,
-                        timestamp = System.currentTimeMillis() - hoursAgo * 3600_000L
-                    ),
-                    lines.map { (role, text) -> ChatMessage(sessionId = 0, role = role, content = JsonPrimitive(text).toString()) }
-                )
-            }
-        }
-        chat("Mira Vance", 1, "assistant" to "*wipes her hands* You again?", "user" to "The coupling is still leaking.", "assistant" to "*sighs and grabs a wrench* Fine. Show me.")
-        chat("Mira Vance", 30, "assistant" to "*wipes her hands* You again?", "user" to "Long story.")
-        chat("Professor Hale", 5, "assistant" to "Ah, you have come at last. Sit, sit. Have I ever told you about the Vell empire?", "user" to "Not yet.")
-        chat("Kestrel", 26, "assistant" to "It never stops raining in this city. *lights a cigarette*", "user" to "I need a detective.")
-        chat("Ondine", 80, "assistant" to "Ask me again when the tide turns.")
-    }
-
-    /** The Roleplay tab opens on the characters list: mid-story ones first, then everyone else. */
-    @Test fun rpHomeDark() = withChat { a, _ ->
-        seedRp(); seedRpChats()
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        val home = a.findViewById<View>(R.id.rpHome)
-        org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
-        // Composer and chip step aside; the tabs stay.
-        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.composerDock).visibility)
-        val rows = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
-        // Seven characters (the six seeded plus the stock one), one row each: Mira has two chats
-        // but one row, and three have no chat yet.
-        org.junit.Assert.assertEquals(7, rows.adapter!!.itemCount)
-        snap(root(a), "rp_home_dark")
-
-        // Opening a row resumes that chat: the list goes, the composer and the chip come back.
-        rows.findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
-        org.junit.Assert.assertEquals(View.GONE, home.visibility)
-        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.composerDock).visibility)
-        // No History in Roleplay: the top-left button is the way back to the list.
-        org.junit.Assert.assertEquals(a.getString(R.string.rp_home_back), a.findViewById<View>(R.id.openSavedChatsButton).contentDescription)
-        snap(root(a), "rp_thread_dark")
-
-        // The Roleplay tab, tapped again inside a chat, goes back to the list.
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
-        // On the list the top-left button is Settings, not the History panel.
-        val topLeft = a.findViewById<View>(R.id.openSavedChatsButton)
-        org.junit.Assert.assertEquals(a.getString(R.string.settings_title), topLeft.contentDescription)
-        topLeft.performClick(); settle()
-        org.junit.Assert.assertTrue("settings opened",
-            a.supportFragmentManager.fragments.any { it is SettingsFragment && it.isVisible })
-        org.junit.Assert.assertNotEquals("history stays shut", View.VISIBLE, a.findViewById<View>(R.id.historyDrawerContainer).visibility)
-        a.supportFragmentManager.popBackStackImmediate(); settle()
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-        org.junit.Assert.assertEquals(View.GONE, home.visibility)
-        org.junit.Assert.assertEquals(a.getString(R.string.cd_history), topLeft.contentDescription)
-    }
-
-    /** A character you have not talked to yet starts a chat from the list. */
-    @Test fun rpHomeStartsChatWithNewCharacter() = withChat { a, _ ->
-        seedRp(); seedRpChats()
-        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        val rows = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
-        // Chats first, then the rest by name: Aurelia, then Theo.
-        val aurelia = rows.findViewHolderForAdapterPosition(4)!!.itemView
-        org.junit.Assert.assertEquals("Aurelia", aurelia.findViewById<android.widget.TextView>(R.id.rpChatName).text)
-        org.junit.Assert.assertEquals(a.getString(R.string.rp_home_start), aurelia.findViewById<android.widget.TextView>(R.id.rpChatPreview).text)
-        aurelia.performClick(); settle()
-        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.rpHome).visibility)
-        org.junit.Assert.assertEquals("Aurelia", vm.activeRpCharacter.value?.name)
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-    }
-
-    /** In Roleplay the composer's settings button is the character menu; the controls moved under +. */
-    @Test fun rpControlsButtonOpensCharacterPanel() = withChat { a, _ ->
-        seedRp()
-        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
-        // In Chat it stays the controls button.
-        org.junit.Assert.assertEquals(a.getString(R.string.cd_controls), a.findViewById<View>(R.id.controlsButton).contentDescription)
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        val mira = runBlocking { vm.getRpRepository().getAllCharactersOnce() }.first { it.name == "Mira Vance" }
-        vm.startRpChatWithCharacter(mira); settle()
-        val button = a.findViewById<View>(R.id.controlsButton)
-        org.junit.Assert.assertEquals(a.getString(R.string.cd_rp_scene), button.contentDescription)
-        button.performClick(); settle()
-        org.junit.Assert.assertTrue("the character menu opened", rpPanelShowing(a))
-        org.junit.Assert.assertEquals("the old controls card stays shut", View.GONE, a.findViewById<View>(R.id.headerContainer).visibility)
-        snapDialog(a, "rp_character_panel_tiles_dark", sharp = true)
-        val grid = rpPanelGrid(a)
-        for (i in 0 until grid.childCount) {
-            val tile = grid.getChildAt(i)
-            org.junit.Assert.assertTrue("tile $i has a size", tile.width > 0)
-            org.junit.Assert.assertEquals("tile $i is square", tile.width, tile.height)
-        }
-        dismissRpPanel(a)
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-        org.junit.Assert.assertEquals(a.getString(R.string.cd_controls), button.contentDescription)
-    }
-
-    /** Every tile opens its page, and back lands on the sheet exactly where it was. */
-    @Test fun rpPanelPagesDark() = withChat { a, _ ->
-        seedRp()
-        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        val mira = runBlocking { vm.getRpRepository().getAllCharactersOnce() }.first { it.name == "Mira Vance" }
-        vm.startRpChatWithCharacter(mira); settle()
-        a.findViewById<View>(R.id.controlsButton).performClick(); settle()
-        fun sheetTop(): Int {
-            var v: View = rpPanelGrid(a)
-            while ((v.parent as? View) !is androidx.coordinatorlayout.widget.CoordinatorLayout) v = v.parent as View
-            return IntArray(2).also { v.getLocationInWindow(it) }[1]
-        }
-        val top = sheetTop()
-        val names = listOf(
-            R.string.rp_panel_memory to "memory", R.string.rp_panel_voice to "voice",
-            R.string.rp_panel_layout to "layout", R.string.rp_panel_wallpaper to "wallpaper",
-            R.string.rp_panel_style to "style", R.string.rp_panel_lore to "lore",
-            R.string.rp_panel_persona to "persona", R.string.rp_panel_edit to "edit",
-        )
-        for ((label, name) in names) {
-            val grid = rpPanelGrid(a)
-            (0 until grid.childCount).map { grid.getChildAt(it) }
-                .first { it.contentDescription.toString().startsWith(a.getString(label)) }
-                .performClick(); settle()
-            snap(root(a), "rp_page_${name}_dark")
-            if (name == "persona") {
-                // A photo comes from the gallery app or the photo picker, in a card under the portrait.
-                a.findViewById<View>(R.id.rpPersonaAvatarFrame).performClick(); settle()
-                val found = ArrayList<View>()
-                root(a).findViewsWithText(found, a.getString(R.string.avatar_source_photos), View.FIND_VIEWS_WITH_TEXT)
-                org.junit.Assert.assertTrue("the source card opened", found.isNotEmpty())
-                snap(root(a), "rp_avatar_source_dark")
-                a.onBackPressedDispatcher.onBackPressed(); settle()
-            }
-            a.supportFragmentManager.popBackStack(); settle()
-            org.junit.Assert.assertTrue("panel still up after $name", rpPanelShowing(a))
-            org.junit.Assert.assertEquals("sheet moved after $name", top, sheetTop())
-        }
-        dismissRpPanel(a)
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-    }
-
-    /** Roleplay opens where it was left: on the list, or inside the chat. */
-    @Test fun rpResumesWhereItWasLeft() = withChat { a, _ ->
-        seedRp(); seedRpChats()
-        val home = a.findViewById<View>(R.id.rpHome)
-        // Left on the list: the list again.
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        org.junit.Assert.assertEquals("left on the list", View.VISIBLE, home.visibility)
-        // Left inside a chat: that chat again, not the list.
-        a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
-            .findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
-        org.junit.Assert.assertEquals(View.GONE, home.visibility)
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        org.junit.Assert.assertEquals("left in a chat", View.GONE, home.visibility)
-        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.composerDock).visibility)
-        // Back to the list, leave, return: the list.
-        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); settle()
-        org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-    }
-
-    /** A chat's ⋮ on the list: new chat, edit the character, delete (set apart, in the dim red). */
-    @Test fun rpHomeMenuDark() = withChat { a, _ ->
-        seedRp(); seedRpChats()
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        val rows = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
-        rows.findViewHolderForAdapterPosition(0)!!.itemView.findViewById<View>(R.id.rpChatMore).performClick(); idle()
-        var card: View = a.findViewById<View>(R.id.messageMenuLabel)
-        while (card !is GlassLinearLayout) card = card.parent as View
-        val labels = (0 until card.childCount).mapNotNull {
-            card.getChildAt(it).findViewById<android.widget.TextView>(R.id.messageMenuLabel)?.text?.toString()
-        }
-        org.junit.Assert.assertEquals(listOf("New chat", "Edit character", "Delete chat"), labels)
-        snap(root(a), "rp_home_menu_dark")
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-    }
-
-    /** The panel's History tile lists this character's chats, newest first, with a fresh one last. */
-    @Test fun rpPanelHistoryDark() = withChat { a, _ ->
-        seedRp(); seedRpChats()
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
-            .findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
-        a.findViewById<View>(R.id.controlsButton).performClick(); settle()
-        val grid = rpPanelGrid(a)
-        val history = (0 until grid.childCount).map { grid.getChildAt(it) }
-            .first { it.contentDescription == a.getString(R.string.rp_panel_history) }
-        history.performClick(); settle()
-        val page = a.supportFragmentManager.fragments.filterIsInstance<RpChatHistoryFragment>().single().requireView()
-        val list = page.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHistoryList)
-        // Rows are built from Room queries on its own thread; a busy run needs more than one settle.
-        waitFor(5000) {
-            (0 until (list.adapter?.itemCount ?: 0)).count {
-                list.findViewHolderForAdapterPosition(it)?.itemView?.findViewById<View>(R.id.rpHistoryPreview) != null
-            } >= 2
-        }
-        val previews = mutableListOf<String>()
-        val current = mutableListOf<Boolean>()
-        for (i in 0 until list.adapter!!.itemCount) {
-            val row = list.findViewHolderForAdapterPosition(i)?.itemView ?: continue
-            row.findViewById<android.widget.TextView>(R.id.rpHistoryPreview)?.let {
-                previews += it.text.toString()
-                current += row.findViewById<View>(R.id.rpHistoryCurrent).visibility == View.VISIBLE
-            }
-        }
-        org.junit.Assert.assertEquals(listOf("sighs and grabs a wrench Fine. Show me.", "You: Long story."), previews)
-        org.junit.Assert.assertEquals("the open chat is marked", listOf(true, false), current)
-        snap(root(a), "rp_panel_history_dark")
-        // Picking the older chat opens it and closes the page.
-        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
-        val opened = vm.getCurrentSessionId()
-        (0 until list.adapter!!.itemCount).mapNotNull { list.findViewHolderForAdapterPosition(it)?.itemView }
-            .last { it.findViewById<View>(R.id.rpHistoryPreview) != null }.performClick(); settle()
-        org.junit.Assert.assertTrue(a.supportFragmentManager.fragments.none { it is RpChatHistoryFragment })
-        org.junit.Assert.assertNotEquals(opened, vm.getCurrentSessionId())
-        // Picking a chat lands in it: the sheet closes instead of staying over the new chat.
-        org.junit.Assert.assertFalse("panel closes after picking a chat", rpPanelShowing(a))
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-    }
-
-    @Test fun rpHomeEmptyDark() = withChat { a, _ ->
-        // No characters at all, the stock one included.
-        runBlocking { db.rpDao().getAllCharactersOnce().forEach { db.rpDao().deleteCharacter(it.id) } }
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.rpHomeEmpty).visibility)
-        snap(root(a), "rp_home_empty_dark")
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-    }
-
-    @Test @Config(qualifiers = LIGHT)
-    fun rpHomeLight() = withChat { a, _ ->
-        seedRp(); seedRpChats()
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        snap(root(a), "rp_home_light")
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-    }
-
-    /** RP with the demo model: a character reply, then Continue on an empty composer takes the next beat. */
-    @Test fun rpConversationContinueDark() = withChat { a, _ ->
-        seedRp()
-        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        // RP keeps its own model; pick the demo once we're there.
-        vm.setModel(DemoModel.ID); idle()
-        val mira = runBlocking { vm.getRpRepository().getAllCharactersOnce() }.first { it.name == "Mira Vance" }
-        vm.startRpChatWithCharacter(mira); settle()
-        val input = a.findViewById<android.widget.EditText>(R.id.chatEditText)
-        val send = a.findViewById<com.google.android.material.button.MaterialButton>(R.id.sendChatButton)
-        input.setText("I shake the rain off and sit down across from her.")
-        send.performClick()
-        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().lastOrNull()?.role == "assistant" }
-        idle()
-        org.junit.Assert.assertEquals(DemoModel.ID, vm.activeChatModel.value)
-        org.junit.Assert.assertTrue("continue offered after a reply: rp=${vm.isRpMode()} send=${vm.canSendRpMessage()} " +
-            "await=${vm.isAwaitingResponse.value} roles=${vm.chatMessages.value.orEmpty().map { it.role }}", vm.canContinueRpStory())
-        org.junit.Assert.assertEquals("empty composer offers Continue",
-            a.getString(R.string.rp_continue), send.contentDescription)
-        val beforeMsgs = vm.chatMessages.value.orEmpty()
-        val before = beforeMsgs.size
-        val beforeText = vm.getMessageText(beforeMsgs.last().content)
-        send.performClick()
-        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.getMessageText(vm.chatMessages.value.orEmpty().last().content).length > beforeText.length }
-        idle()
-        val msgs = vm.chatMessages.value.orEmpty()
-        // Continue is a hidden turn: no bubble for the prompt, and no new reply bubble either.
-        // The words land at the end of the last reply.
-        org.junit.Assert.assertEquals(before, msgs.size)
-        org.junit.Assert.assertEquals("assistant", msgs.last().role)
-        val afterText = vm.getMessageText(msgs.last().content)
-        org.junit.Assert.assertTrue("kept what was there: $afterText", afterText.startsWith(beforeText))
-        org.junit.Assert.assertTrue(afterText.length > beforeText.length)
-        org.junit.Assert.assertTrue(msgs.none { vm.getMessageText(it.content) == a.getString(R.string.rp_continue_prompt) })
-        org.junit.Assert.assertNull("nothing left to extend once the turn is over", vm.continuationText)
-        snap(root(a), "rp_conversation_dark")
-        // A second version of that reply, then a new turn: the reply keeps both, a swipe away.
-        val replyAt = msgs.lastIndex
-        vm.swipeRpNext()
-        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.rpSwipeNav.value?.total == 2 }
-        val second = vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content)
-        input.setText("I slide the map across the table.")
-        send.performClick()
-        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().size == replyAt + 3 }
-        settle()
-        org.junit.Assert.assertEquals(2, vm.getRpVersionNav(replyAt)?.totalVariants)
-        val transcript = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
-        transcript.scrollToPosition(replyAt); idle()
-        val versions = transcript.findViewHolderForAdapterPosition(replyAt)!!.itemView.findViewById<View>(R.id.forkNavigator)
-        org.junit.Assert.assertEquals("the earlier reply shows its versions", View.VISIBLE, versions.visibility)
-        vm.swipeEarlierRpReply(replyAt, -1); idle()
-        org.junit.Assert.assertEquals("swapped in place", afterText, vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content))
-        org.junit.Assert.assertEquals("what came after stays", replyAt + 3, vm.chatMessages.value.orEmpty().size)
-        vm.swipeEarlierRpReply(replyAt, 1); idle()
-        org.junit.Assert.assertEquals(second, vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content))
-        SharedPreferencesHelper(a).saveRpMemory(mira.id, "Owes Sam a favor from the Kessel run. Hates the innkeeper.")
-        // Top of a chat with messages: no stray rule under the tabs (the old scroll-progress bar).
-        org.junit.Assert.assertEquals(0f, a.findViewById<View>(R.id.progressBar).alpha)
-        // Per-character wallpaper, voice and bubbles, as the panel shows them.
-        val ctx = ApplicationProvider.getApplicationContext<Application>()
-        val wp = BackgroundPhoto.file(ctx, BackgroundPhoto.slotForCharacter(mira.id))
-        wp.parentFile?.mkdirs()
-        wp.outputStream().use { out ->
-            Bitmap.createBitmap(400, 700, Bitmap.Config.ARGB_8888).apply {
-                val c = Canvas(this)
-                val paint = android.graphics.Paint()
-                paint.shader = android.graphics.LinearGradient(0f, 0f, 400f, 700f, 0xFF505050.toInt(), 0xFF1A1A1A.toInt(), android.graphics.Shader.TileMode.CLAMP)
-                c.drawRect(0f, 0f, 400f, 700f, paint)
-            }.compress(Bitmap.CompressFormat.JPEG, 90, out)
-        }
-        SharedPreferencesHelper(a).saveRpLayout(mira.id, SharedPreferencesHelper.RP_LAYOUT_BUBBLES)
-        SharedPreferencesHelper(a).saveRpVoice(mira.id, SharedPreferencesHelper.RpVoice(null, 0.8f, 1f))
-        // The panel opens from the character's speaker line; the composer pill is Ask's model picker.
-        org.junit.Assert.assertEquals(View.GONE, a.findViewById<View>(R.id.modelNameTextView).visibility)
-        (a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView).adapter as ChatAdapter).onSpeakerClick!!.invoke(); settle()
-        snapDialog(a, "rp_character_panel_dark", sharp = true)
-        dismissRpPanel(a)
-        // Re-apply RP chrome (the panel reads prefs; the chat reads them on mode change).
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
-        val bg = a.findViewById<AmbientBackgroundView>(R.id.ambientBackground)
-        org.junit.Assert.assertEquals(BackgroundPhoto.slotForCharacter(mira.id), bg.photoSlot)
-        snap(root(a), "rp_conversation_bubbles_dark")
-        // Bubbles is flat on both sides: no gradient on the character's or the user's fill.
-        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
-        val fills = (0 until rv.childCount).mapNotNull {
-            rv.getChildAt(it).findViewById<View>(R.id.messageContainer)?.background as? android.graphics.drawable.GradientDrawable
-        }
-        org.junit.Assert.assertTrue("bubbles on screen", fills.size >= 2)
-        fills.forEach { org.junit.Assert.assertNull("flat fill", it.colors) }
-        SharedPreferencesHelper(a).saveRpLayout(mira.id, SharedPreferencesHelper.RP_LAYOUT_CLASSIC)
-        BackgroundPhoto.delete(ctx, BackgroundPhoto.slotForCharacter(mira.id))
-        a.findViewById<View>(R.id.tabChat).performClick(); settle()
-    }
-
     @Test fun demoModelStreamsWithoutKey() = withChat { a, _ ->
         val vm = ViewModelProvider(a)[ChatViewModel::class.java]
         org.junit.Assert.assertTrue("demo is in the model list",
@@ -1401,12 +514,6 @@ class ScreenshotTest {
         SharedPreferencesHelper(a).setVoiceInputModel("openai/whisper-1")
         openSettingsRow(a, R.id.settingsRowVoice)
         snap(root(a), "settings_voice_cloud_dark")
-    }
-
-    private fun openSettingsRow(a: MainActivity, rowId: Int) {
-        a.findViewById<View>(R.id.settingsButton).performClick(); idle()
-        val sf = a.supportFragmentManager.fragments.filterIsInstance<SettingsFragment>().first()
-        sf.requireView().findViewById<View>(rowId).performClick(); idle()
     }
 
     // ---- Grok-form chrome: mode tabs, anchored popover, pull-to-dismiss ----
@@ -1473,15 +580,6 @@ class ScreenshotTest {
         org.junit.Assert.assertEquals(View.GONE, panel.visibility)
     }
 
-    private fun swipe(v: View, fromX: Float, toX: Float, y: Float) {
-        val t0 = android.os.SystemClock.uptimeMillis()
-        fun ev(action: Int, x: Float, dt: Long) = android.view.MotionEvent.obtain(t0, t0 + dt, action, x, y, 0)
-        v.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_DOWN, fromX, 0))
-        for (k in 1..8) v.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_MOVE, fromX + (toX - fromX) * k / 8f, 20L * k))
-        v.dispatchTouchEvent(ev(android.view.MotionEvent.ACTION_UP, toX, 200))
-        idle()
-    }
-
     /** Regression: wide swipes page History | Chat | Roleplay, and swipe the history closed. */
     @Test fun wideSwipesNavigateDark() = withChat { a, _ ->
         val root = a.findViewById<View>(R.id.fragment_container).let { it as? SwipeNavLayout ?: (it.parent as View) }
@@ -1529,85 +627,7 @@ class ScreenshotTest {
         SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
     }
 
-    /** Glass toggles on and off, one held down (thumb swells into a lens). */
-    private fun toggles(a: MainActivity, name: String) {
-        openSettingsRow(a, R.id.settingsRowAdvanced)
-        val detail = a.supportFragmentManager.fragments.filterIsInstance<SettingsDetailFragment>().first().requireView()
-        val switches = mutableListOf<androidx.appcompat.widget.SwitchCompat>()
-        fun collect(v: View) {
-            if (v is androidx.appcompat.widget.SwitchCompat && v.isShown) switches += v
-            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) collect(v.getChildAt(i))
-        }
-        collect(detail)
-        generateSequence(switches.firstOrNull()?.parent) { it.parent }.filterIsInstance<android.widget.ScrollView>().firstOrNull()
-            ?.let { sv -> sv.scrollTo(0, (switches.first().top + 0).coerceAtLeast(0)); sv.fullScroll(View.FOCUS_DOWN) }
-        switches.forEachIndexed { i, s -> s.isChecked = i % 2 == 0 }
-        switches.getOrNull(2)?.isPressed = true
-        idle()
-        snap(root(a), name)
-    }
-
     @Test fun settingsTogglesDark() = withChat { a, _ -> toggles(a, "settings_toggles_dark") }
-
-    /** Every background style (and Adaptive in both modes), each full-screen over the canvas. */
-    private fun ambientGrid(a: MainActivity, name: String) {
-        seedBackgroundPhoto(a)
-        val cells = listOf(
-            "photo" to (AmbientBackgroundView.Style.PHOTO to ChatMode.ASK),
-            "drift" to (AmbientBackgroundView.Style.DRIFT to ChatMode.ASK),
-            "flow" to (AmbientBackgroundView.Style.FLOW to ChatMode.ASK),
-            "adaptive_rp" to (AmbientBackgroundView.Style.ADAPTIVE to ChatMode.RP),
-        )
-        val host = a.findViewById<android.view.ViewGroup>(android.R.id.content)
-        for ((label, cell) in cells) {
-            val frame = android.widget.FrameLayout(a).apply {
-                setBackgroundColor(androidx.core.content.ContextCompat.getColor(a, R.color.xai_canvas))
-            }
-            val v = AmbientBackgroundView(a).apply {
-                styleOverride = cell.first
-                mode = cell.second
-                animated = false
-            }
-            frame.addView(v, android.view.ViewGroup.LayoutParams(-1, -1))
-            host.addView(frame, android.view.ViewGroup.LayoutParams(-1, -1))
-            idle()
-            if (cell.first == AmbientBackgroundView.Style.PHOTO) awaitPhoto()
-            if (cell.first == AmbientBackgroundView.Style.ADAPTIVE) {
-                org.junit.Assert.assertEquals(AmbientBackgroundView.Style.FLOW, v.resolvedStyle)
-            }
-            snap(frame, "${name}_$label")
-            host.removeView(frame)
-        }
-    }
-
-    /** A synthetic "photo": soft light blobs over a dark-to-light sweep, saved where Photo reads it. */
-    private fun seedBackgroundPhoto(a: MainActivity) {
-        val w = 540; val h = 1200
-        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val c = Canvas(bmp)
-        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        p.shader = android.graphics.LinearGradient(0f, 0f, w.toFloat(), h.toFloat(),
-            android.graphics.Color.rgb(40, 70, 120), android.graphics.Color.rgb(230, 180, 120),
-            android.graphics.Shader.TileMode.CLAMP)
-        c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
-        p.shader = null
-        p.color = android.graphics.Color.argb(200, 250, 250, 250)
-        c.drawCircle(w * 0.3f, h * 0.3f, 140f, p)
-        c.drawCircle(w * 0.75f, h * 0.65f, 190f, p)
-        val f = BackgroundPhoto.file(a)
-        f.parentFile?.mkdirs()
-        f.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-        a.getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, android.content.Context.MODE_PRIVATE)
-            .edit().putLong(BackgroundPhoto.KEY_VERSION, 1L).commit()
-    }
-
-    /** Photo decodes on a worker thread and posts back to main. */
-    private fun awaitPhoto() {
-        repeat(20) {
-            Thread.sleep(50)
-            shadowOf(android.os.Looper.getMainLooper()).idle()
-        }
-    }
 
     @Test fun chatWithBackgroundDark() = withChat { a, _ ->
         SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.DRIFT.key)
@@ -1633,36 +653,6 @@ class ScreenshotTest {
         org.junit.Assert.assertTrue(a.findViewById<View>(R.id.backgroundPhotoOptions).isShown)
         snap(root(a), "settings_appearance_photo_dark")
         SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
-    }
-
-    // ---- Wide swipes: the page follows the finger ----
-
-    private fun motion(v: View, action: Int, down: Long, t: Long, x: Float, y: Float) {
-        val e = android.view.MotionEvent.obtain(down, t, action, x, y, 0)
-        v.dispatchTouchEvent(e)
-        e.recycle()
-    }
-
-    /** Drag across [root] from its middle by [dx] in small steps; lifts only if [release]. */
-    private fun drag(root: View, dx: Float, release: Boolean, stepMs: Long = 16L, y: Float = root.height * 0.45f) {
-        val x0 = root.width * 0.5f
-        val down = android.os.SystemClock.uptimeMillis()
-        var t = down
-        motion(root, android.view.MotionEvent.ACTION_DOWN, down, t, x0, y)
-        val steps = 12
-        for (i in 1..steps) {
-            t += stepMs
-            motion(root, android.view.MotionEvent.ACTION_MOVE, down, t, x0 + dx * i / steps, y)
-        }
-        if (release) {
-            t += stepMs
-            motion(root, android.view.MotionEvent.ACTION_UP, down, t, x0 + dx, y)
-        }
-    }
-
-    private fun pagerShots(a: MainActivity): List<android.widget.ImageView> {
-        val content = a.findViewById<android.view.ViewGroup>(R.id.rootLayout)
-        return (0 until content.childCount).map { content.getChildAt(it) }.filterIsInstance<android.widget.ImageView>()
     }
 
     @Test fun swipeMidDragDark() = withChat { a, chat ->
@@ -1904,8 +894,10 @@ class ScreenshotTest {
     }
 
     @Test fun ambientBackgroundsDark() = withChat { a, _ -> ambientGrid(a, "ambient_backgrounds_dark") }
+
     @Test @Config(qualifiers = LIGHT)
     fun ambientBackgroundsLight() = withChat { a, _ -> ambientGrid(a, "ambient_backgrounds_light") }
+
     /** API 31-32 path: static pre-rendered fields and the grain tile. */
     @Test @Config(sdk = [31])
     fun ambientBackgroundsApi31() = withChat { a, _ -> ambientGrid(a, "ambient_backgrounds_api31") }
@@ -1921,18 +913,4 @@ class ScreenshotTest {
         org.junit.Assert.assertTrue((0 until decor.childCount).none { decor.getChildAt(it).javaClass.simpleName == "RevealOverlay" })
         androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(before)
     }
-
-    private fun snapDialogCentered(a: MainActivity, name: String) {
-        val d: Dialog = ShadowDialog.getLatestDialog() ?: return snap(root(a), name)
-        val bg = frostedBackdrop(a)
-        val c = Canvas(bg)
-        val dv = d.window!!.decorView
-        c.save(); c.translate(((bg.width - dv.width) / 2f), ((bg.height - dv.height) / 2f))
-        dv.draw(c); c.restore()
-        val out = File("build/screenshots").apply { mkdirs() }
-        File(out, "$name.png").outputStream().use { bg.compress(Bitmap.CompressFormat.PNG, 100, it) }
-    }
 }
-
-private const val DARK = "w411dp-h891dp-night-xxhdpi"
-private const val LIGHT = "w411dp-h891dp-notnight-xxhdpi"

@@ -32,7 +32,7 @@ export ANDROID_HOME=/opt/android-sdk        # or wherever your SDK lives
 ./gradlew assembleDev                        # minified, dev-signed, .dev app id
 ./gradlew testDebugUnitTest                  # logic tests only, skips the screenshot classes (~20 s)
 ./gradlew testDebugUnitTest -Pfull           # everything, screenshots included (~4 min)
-./gradlew testDebugUnitTest --tests '*ScreenshotTest.rpConversationContinueDark'
+./gradlew testDebugUnitTest --tests '*RpScreenshotTest.rpConversationContinueDark'
 ```
 
 - Fresh cloud container with no SDK: run `scripts/cloud-setup.sh` (SDK, Gradle 9.5.0, Maven mirror). The
@@ -56,7 +56,7 @@ need a version bump plus a migration, never a destructive fallback.
 
 ## Test gotchas
 
-- `CodeHub.get` keeps one hub per Application. `ScreenshotTest` still calls `CodeHub.resetForTesting()`
+- `CodeHub.get` keeps one hub per Application. `ScreenshotHarness` still calls `CodeHub.resetForTesting()`
   in `@After` (and can `installForTesting`) so a later test does not see the previous hub.
   Chat and saved-chat ViewModels are created with `AppViewModelFactory`, not the framework factory
   that caches the first Application.
@@ -69,7 +69,7 @@ need a version bump plus a migration, never a destructive fallback.
   read stale prefs. Screenshot tests call `TestEnv.resetViewModelFactory()` in `@Before`.
 - Robolectric reports a speech recognizer as available. Use `VoiceInput.deviceAvailableOverride`.
 - The demo stream runs on a real thread. Pump the looper in real time with `waitFor`.
-  `ScreenshotTest` sets `DemoModel.pace` near 0 so it doesn't wait on the fake typing.
+  `ScreenshotHarness` sets `DemoModel.pace` near 0 so it doesn't wait on the fake typing.
 - Light-theme screenshots are kept to one per screen family (chat, glass, settings, RP hub,
   dialogs, backgrounds, Code home). Add new ones in dark; showcase images are dark only.
 - A live `RecyclerView` follows the bottom edge. To check an off-screen row, bind it through the
