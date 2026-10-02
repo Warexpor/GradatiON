@@ -145,7 +145,9 @@ class CodeAwayNotifier(
         }
         val token = UUID.randomUUID().toString()
         openTokens[sessionId] = token
-        tokenPrefs.edit().putString(sessionId, token).apply()
+        // commit: the PendingIntent already carries this nonce. apply() can still be in flight
+        // when the process is killed, and a cold-start tap would reject the shade entry.
+        tokenPrefs.edit().putString(sessionId, token).commit()
         return token
     }
 
@@ -164,7 +166,8 @@ class CodeAwayNotifier(
 
     private fun clearOpenToken(sessionId: String) {
         openTokens.remove(sessionId)
-        tokenPrefs.edit().remove(sessionId).apply()
+        // commit: a kill after apply() is scheduled could leave the nonce for a replayed Intent.
+        tokenPrefs.edit().remove(sessionId).commit()
     }
 
     /**
