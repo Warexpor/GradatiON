@@ -101,9 +101,19 @@ class ChatImportSideLogTest {
         assertFalse(ChatImportSideLog.matches(gone, null, 0))
         val present = ChatSession(title = "Gone", modelUsed = "m", timestamp = 3L)
         assertTrue(ChatImportSideLog.matches(gone, present, 1))
-        assertFalse(ChatImportSideLog.matches(gone, present.copy(title = "Other"), 1))
+        // Rename while notes wait: stamp + count still fingerprint the row.
+        assertTrue(ChatImportSideLog.matches(gone, present.copy(title = "Other"), 1))
         assertFalse(ChatImportSideLog.matches(gone, present, 2))
+        assertFalse(ChatImportSideLog.matches(gone, present.copy(timestamp = 9L), 1))
         assertTrue(ChatImportSideLog.matches(gone.copy(title = null, timestamp = null, messageCount = null), present, 9))
+        // Older log with only a title still rejects a recycled id's different name.
+        assertFalse(
+            ChatImportSideLog.matches(
+                gone.copy(title = "Gone", timestamp = null, messageCount = null),
+                present.copy(title = "Other"),
+                1,
+            )
+        )
 
         ChatImportSideLog.write(log, listOf(gone))
         assertTrue(ChatImportSideLog.resume(app) { false })

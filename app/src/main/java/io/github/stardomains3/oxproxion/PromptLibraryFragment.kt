@@ -53,7 +53,7 @@ class PromptLibraryFragment : Fragment() {
                             val promptsList = sharedPreferencesHelper.getCustomPrompts()
                             val json = Json.encodeToString(promptsList)
                             val cache = File(app.cacheDir, "prompts-${System.nanoTime()}.json")
-                            BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri) }) { stream ->
+                            BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri, "wt") }) { stream ->
                                 stream.write(json.toByteArray(Charsets.UTF_8))
                             }
                         }

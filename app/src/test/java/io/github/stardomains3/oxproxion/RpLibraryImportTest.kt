@@ -222,6 +222,66 @@ class RpLibraryImportTest {
     }
 
     @Test
+    fun anUndecodeableWallpaperIsLeftRatherThanRetriedForever() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        // SOI + EOI only: completeJpeg accepts it; restore must Leave, not Write/retry.
+        val fakeJpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte())
+        val encoded = android.util.Base64.encodeToString(fakeJpeg, android.util.Base64.NO_WRAP)
+        val exported = RpCharacterExport(
+            name = "Ada",
+            exportKey = "ada",
+            memory = "shy",
+            wallpaperBase64 = encoded,
+        )
+        val imported = repo.importCharacters(listOf(exported)) { rows ->
+            val row = rows.single()
+            CharacterImportSideLog.write(
+                log,
+                listOf(ImportedCharacterNote(row.id, exported.name, row.exportKey, exported)),
+            )
+        }
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("shy", prefs.getRpMemory(imported.single().id))
+        assertNull(CharacterImportSideLog.read(log))
+        assertFalse(BackgroundPhoto.hasPhoto(app, BackgroundPhoto.slotForCharacter(imported.single().id)))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun aTornWallpaperInTheBackupIsLeftAlone() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val bmp = Bitmap.createBitmap(12, 8, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(Color.DKGRAY)
+        val jpeg = ByteArrayOutputStream().also {
+            bmp.compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        bmp.recycle()
+        assertTrue(jpeg.size >= 64)
+        assertTrue(ScenePhoto.completeJpeg(jpeg))
+        val torn = jpeg.copyOf(jpeg.size - 2) // drop EOI
+        assertFalse(ScenePhoto.completeJpeg(torn))
+        val encoded = android.util.Base64.encodeToString(torn, android.util.Base64.NO_WRAP)
+        val kept = 21L
+        val slot = BackgroundPhoto.slotForCharacter(kept)
+        assertTrue(BackgroundPhoto.writeBytes(app, slot, jpeg))
+        // Truncated backup must not clear or replace the phone's copy, and must not Write.
+        assertEquals(RpWallpaperBackup.Restore.Leave, RpWallpaperBackup.restore(encoded))
+        RpWallpaperBackup.apply(app, kept, encoded)
+        assertTrue(BackgroundPhoto.hasPhoto(app, slot))
+        assertTrue(jpeg.contentEquals(BackgroundPhoto.file(app, slot).readBytes()))
+        assertEquals(RpWallpaperBackup.Restore.Leave, RpWallpaperBackup.restore(
+            android.util.Base64.encodeToString(
+                byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte()),
+                android.util.Base64.NO_WRAP,
+            )
+        ))
+    }
+
+    @Test
     fun anUndecodeablePortraitIsLeftRatherThanRetriedForever() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val prefs = SharedPreferencesHelper(app)
