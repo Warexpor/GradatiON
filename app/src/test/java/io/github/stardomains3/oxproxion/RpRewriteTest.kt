@@ -53,5 +53,8 @@ class RpRewriteTest {
         assertEquals("Hallo.", RpRewrite.snippet("〚Hallo.〛"))
         assertEquals("Hallo.", RpRewrite.snippet("⟪Hallo.⟫"))
         assertEquals("Hallo.", RpRewrite.snippet("⟬Hallo.⟭"))
+        assertEquals("Hallo.", RpRewrite.snippet("⟦Hallo.⟧"))
+        assertEquals("Hallo.", RpRewrite.snippet("⦃Hallo.⦄"))
+        assertEquals("Hallo.", RpRewrite.snippet("❨Hallo.❩"))
     }
 }
