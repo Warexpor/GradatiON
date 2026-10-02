@@ -97,4 +97,25 @@ class CodeAwayNotifierTest {
         n.onUpdate("s", "host", "S", CodeUpdate.Upsert(approval()), sessionWasRunning = true)
         assertEquals(0, nm.activeNotifications.size)
     }
+
+    @Test
+    fun clearTurnDoneDedupDropsPrefsSoColdStartCanRepost() {
+        val n = notifier()
+        val session = "sess-turn-clear"
+        n.onUpdate(session, "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, session)
+        val idPrefs = ctx.getSharedPreferences("code_away_notif_ids", 0)
+        assertTrue(idPrefs.contains(key))
+        assertEquals(1, nm.activeNotifications.size)
+        // New user turn: allow a later TurnDone. Must drop prefs so process-death seed
+        // cannot re-suppress the next finished turn.
+        n.clearTurnDoneDedup(session)
+        assertFalse(idPrefs.contains(key))
+        // Simulate process death: new notifier seeds from prefs (empty for this key).
+        nm.cancelAll()
+        val cold = notifier()
+        cold.onUpdate(session, "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(1, nm.activeNotifications.size)
+        assertTrue(CodeAwayFormat.isAwayNotifId(nm.activeNotifications[0].id))
+    }
 }
