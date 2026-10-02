@@ -336,4 +336,29 @@ class RpLoreTest {
         assertTrue(RpLore.select(primes, "Meet me at the docks.").contains("dawn"))
     }
 
+    @Test
+    fun ornamentalVerticalQuotesAndMoreTrailersAreNotPartOfTheKey() {
+        val book = """
+            [keys: ❝locket❞, docks፧, pier߹]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(book, "The pier is quiet.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+        val vertical = """
+            [keys: ﹁locket﹂, docks︒, pier꛳]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(vertical, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(vertical, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(vertical, "The pier is quiet.").contains("dawn"))
+        val tortoise = """
+            [keys: 〔locket〕, docks﹗]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(tortoise, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(tortoise, "Meet me at the docks.").contains("dawn"))
+    }
+
 }
