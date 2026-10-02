@@ -1416,7 +1416,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         )
         askStageSessionId = sessionId
         val beforePromote = viewModel.stagedAttachments()
-        val afterPromote = ComposerStaged.rekey(beforePromote, from = null, to = sessionId, entry = currentStagedEntry())
+        // Empty live under Code must not rekey-away a chip already parked under null.
+        val afterPromote = ComposerStaged.promote(beforePromote, from = null, to = sessionId, live = currentStagedEntry())
         viewModel.setStagedAttachments(afterPromote)
         for (gone in ComposerStaged.evicted(beforePromote, afterPromote)) {
             discardParkedScene(gone)
@@ -1526,6 +1527,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     override fun forgetUnsentDraft(sessionId: Long) {
         val open = !viewModel.isRpMode() && askComposer.bound &&
             ComposerDrafts.key(askComposer.sessionId) == ComposerDrafts.key(sessionId)
+        // Grab before drop: under Code the open live stage is empty and only the park map
+        // still names the JPEG — clearStagedAttachment would miss it.
+        val parked = ComposerStaged.get(viewModel.stagedAttachments(), sessionId)
         if (open && ::chatEditText.isInitialized) {
             suppressDraftDirty = true
             chatEditText.setText("")
@@ -1535,10 +1539,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             clearStagedAttachment(discardSceneFile = true)
             pendingFiles.clear()
             if (::attachmentButton.isInitialized) updateAttachmentButton()
-        } else {
-            // A parked photo for a chat that is not on screen would otherwise stay on disk.
-            discardParkedScene(ComposerStaged.get(viewModel.stagedAttachments(), sessionId))
         }
+        discardParkedScene(parked)
         sharedPreferencesHelper.saveAskComposerDrafts(
             ComposerDrafts.drop(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
         )
