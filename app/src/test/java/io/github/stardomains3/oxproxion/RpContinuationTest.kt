@@ -434,6 +434,35 @@ class RpContinuationTest {
         assertEquals("Hello꧍\n\nShe waits.", RpContinuation.join("Hello꧍", "She waits."))
     }
 
+
+    @Test fun zImageZBindingAndCurledAngleQuotesStillCountAsFinished() {
+        assertEquals("⦇Hallo.⦈\n\nShe waits.", RpContinuation.join("⦇Hallo.⦈", "She waits."))
+        assertEquals("⦇Hallo", RpContinuation.join("⦇", "Hallo"))
+        assertEquals("⦉Hallo.⦊\n\nShe waits.", RpContinuation.join("⦉Hallo.⦊", "She waits."))
+        assertEquals("⦉Hallo", RpContinuation.join("⦉", "Hallo"))
+        assertEquals("⧼Hallo.⧽\n\nShe waits.", RpContinuation.join("⧼Hallo.⧽", "She waits."))
+        assertEquals("⧼Hallo", RpContinuation.join("⧼", "Hallo"))
+    }
+
+    @Test fun sylotiTibetanMongolianBalineseAndStenographicEndsStartANewParagraph() {
+        assertEquals("Hello꠨\n\nShe waits.", RpContinuation.join("Hello꠨", "She waits."))
+        assertEquals("Hello꠩\n\nShe waits.", RpContinuation.join("Hello꠩", "She waits."))
+        assertEquals("Hello꠪\n\nShe waits.", RpContinuation.join("Hello꠪", "She waits."))
+        assertEquals("Hello꠫\n\nShe waits.", RpContinuation.join("Hello꠫", "She waits."))
+        assertEquals("Hello༉\n\nShe waits.", RpContinuation.join("Hello༉", "She waits."))
+        assertEquals("Hello༊\n\nShe waits.", RpContinuation.join("Hello༊", "She waits."))
+        assertEquals("Hello༐\n\nShe waits.", RpContinuation.join("Hello༐", "She waits."))
+        assertEquals("Hello༴\n\nShe waits.", RpContinuation.join("Hello༴", "She waits."))
+        assertEquals("Hello᠂\n\nShe waits.", RpContinuation.join("Hello᠂", "She waits."))
+        assertEquals("Hello᠄\n\nShe waits.", RpContinuation.join("Hello᠄", "She waits."))
+        assertEquals("Hello᠇\n\nShe waits.", RpContinuation.join("Hello᠇", "She waits."))
+        assertEquals("Hello᭜\n\nShe waits.", RpContinuation.join("Hello᭜", "She waits."))
+        assertEquals("Hello᭝\n\nShe waits.", RpContinuation.join("Hello᭝", "She waits."))
+        assertEquals("Hello᭠\n\nShe waits.", RpContinuation.join("Hello᭠", "She waits."))
+        assertEquals("Hello⸼\n\nShe waits.", RpContinuation.join("Hello⸼", "She waits."))
+        assertEquals("Hello⸽\n\nShe waits.", RpContinuation.join("Hello⸽", "She waits."))
+    }
+
     @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)
