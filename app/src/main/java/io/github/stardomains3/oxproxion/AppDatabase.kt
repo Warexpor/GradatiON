@@ -150,7 +150,12 @@ abstract class AppDatabase : RoomDatabase() {
             // Appending ".unreadable-" to the file Room just opened would miss it.
             val aside = ChatDbVault.unreadable(vault, pendingStamp)
             val legacy = databasesDir?.let { File(it, "${DB_NAME}.unreadable-$pendingStamp") }
-            val asideExists = aside.exists() || legacy?.exists() == true
+            // A vault move that failed parks the set-aside file under chat_db_hold.
+            val holdAside = databasesDir?.let {
+                File(File(it, ChatDbVault.HOLD_DIR), "${DB_NAME}.unreadable-$pendingStamp")
+            }
+            val asideExists =
+                aside.exists() || legacy?.exists() == true || holdAside?.exists() == true
             if (!shouldQuarantineInterruptedRecovery(
                     databaseEmpty = !hasUserRows(db),
                     asideExists = asideExists,
@@ -238,19 +243,26 @@ abstract class AppDatabase : RoomDatabase() {
                     Log.e(TAG, "Restored plaintext chat database still could not be opened", e)
                 }
             }
-            val stamp = firstFreeStamp(vault, System.currentTimeMillis())
+            val databasesDir = context.getDatabasePath(DB_NAME).parentFile
+            // Skip stamps already used in the vault, at the databases root, under chat_db_hold,
+            // or as a passphrase archive. Reusing one would overwrite an earlier recovery's key
+            // or make Room open a parked recovered file instead of the fresh empty one.
+            var stamp = firstFreeStamp(vault, System.currentTimeMillis(), databasesDir)
+            while (prefs.hasArchivedChatDbPassphrase(stamp) && stamp < Long.MAX_VALUE) {
+                stamp = firstFreeStamp(vault, stamp + 1, databasesDir)
+            }
             // Copy the wrapped passphrase before anything deletes it. The set-aside file is
             // unreadable without this blob, and recovery used to throw the only copy away.
             val archived = prefs.archiveChatDbPassphrase(stamp)
             val moved = try {
-                setAside(dbFile, stamp, vault)
+                setAside(dbFile, stamp, vault, databasesDir)
             } catch (e: Exception) {
                 // The corrupt file is still in place. Opening it again next launch would crash-loop,
                 // so the app switches to a new file and leaves this one where it is.
                 Log.e(TAG, "Could not move the chat database aside; opening a new file", e)
                 // The file Room failed to open may already live in the vault. The name to avoid
-                // is the one in the databases directory, which backup would upload.
-                val databasesDir = context.getDatabasePath(DB_NAME).parentFile
+                // is the one in the databases directory (or its hold folder), which backup would
+                // upload from the root, or which Room prefers when opening a recovered name.
                 val fallback = recoveredFileName(vault, stamp, databasesDir)
                 prefs.saveChatDbFileName(fallback)
                 prefs.markRecoveryPending(stamp)
@@ -315,13 +327,23 @@ abstract class AppDatabase : RoomDatabase() {
         @androidx.annotation.VisibleForTesting
         internal fun recoveredFileName(directory: File, stamp: Long, alsoAvoid: File? = null): String {
             var s = stamp
-            while (
-                File(directory, "$DB_NAME.recovered-$s").exists() ||
-                (alsoAvoid != null && ChatDbVault.dbSetPresent(alsoAvoid, "$DB_NAME.recovered-$s"))
+            while (recoveredNameTaken(directory, s) ||
+                (alsoAvoid != null && recoveredNameTakenInDatabases(alsoAvoid, s))
             ) {
+                if (s == Long.MAX_VALUE) break
                 s++
             }
             return "$DB_NAME.recovered-$s"
+        }
+
+        private fun recoveredNameTaken(directory: File, stamp: Long): Boolean =
+            ChatDbVault.dbSetPresent(directory, "$DB_NAME.recovered-$stamp")
+
+        /** Root of [databasesDir] or its [ChatDbVault.HOLD_DIR] park. */
+        private fun recoveredNameTakenInDatabases(databasesDir: File, stamp: Long): Boolean {
+            val name = "$DB_NAME.recovered-$stamp"
+            if (ChatDbVault.dbSetPresent(databasesDir, name)) return true
+            return ChatDbVault.dbSetPresent(File(databasesDir, ChatDbVault.HOLD_DIR), name)
         }
 
         private fun stampOf(moved: File?): Long? =
@@ -412,11 +434,16 @@ abstract class AppDatabase : RoomDatabase() {
          * Returns the moved main file, or null when there was nothing to move.
          */
         @androidx.annotation.VisibleForTesting
-        internal fun setAside(dbFile: File, stamp: Long, vault: File = dbFile.parentFile ?: dbFile): File? {
+        internal fun setAside(
+            dbFile: File,
+            stamp: Long,
+            vault: File = dbFile.parentFile ?: dbFile,
+            alsoAvoid: File? = null,
+        ): File? {
             val suffixes = listOf("", "-wal", "-shm", "-journal")
             val present = suffixes.filter { File(dbFile.path + it).exists() }
             if (present.isEmpty()) return null
-            val chosen = firstFreeStamp(vault, stamp)
+            val chosen = firstFreeStamp(vault, stamp, alsoAvoid)
             val target = File(vault, "$DB_NAME.unreadable-$chosen")
             val moved = ArrayList<Pair<File, File>>(present.size)
             try {
@@ -454,18 +481,33 @@ abstract class AppDatabase : RoomDatabase() {
         @androidx.annotation.VisibleForTesting
         internal var movesBeforeFailure: Int? = null
 
-        /** First stamp at or after [stamp] whose aside files are all free. */
+        /**
+         * First stamp at or after [stamp] whose aside files are free in [vault].
+         * [alsoAvoid] is the databases directory: stamps already used there or under
+         * [ChatDbVault.HOLD_DIR] are skipped so a later recovery cannot collide with a parked copy.
+         */
         @androidx.annotation.VisibleForTesting
-        internal fun firstFreeStamp(vault: File, stamp: Long): Long {
+        internal fun firstFreeStamp(vault: File, stamp: Long, alsoAvoid: File? = null): Long {
             var s = stamp
-            while (listOf("", "-wal", "-shm", "-journal").any {
-                    File(vault, "$DB_NAME.unreadable-$s$it").exists()
-                }
+            while (unreadableStampTaken(vault, s) ||
+                (alsoAvoid != null && unreadableStampTakenInDatabases(alsoAvoid, s))
             ) {
+                if (s == Long.MAX_VALUE) return stamp
                 s++
             }
             return s
         }
+
+        private fun unreadableStampTaken(directory: File, stamp: Long): Boolean {
+            if (!directory.exists()) return false
+            return listOf("", "-wal", "-shm", "-journal").any {
+                File(directory, "$DB_NAME.unreadable-$stamp$it").exists()
+            }
+        }
+
+        private fun unreadableStampTakenInDatabases(databasesDir: File, stamp: Long): Boolean =
+            unreadableStampTaken(databasesDir, stamp) ||
+                unreadableStampTaken(File(databasesDir, ChatDbVault.HOLD_DIR), stamp)
 
         private fun moveReplacing(from: File, to: File) = ChatDbVault.moveReplacing(from, to)
 
