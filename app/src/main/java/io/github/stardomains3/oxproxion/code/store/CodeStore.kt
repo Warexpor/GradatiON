@@ -127,7 +127,8 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
      * succeeds so a crash mid-migration leaves prefs intact for the next launch.
      */
     fun markSessionsMigrated() {
-        prefs.edit {
+        // commit: Room already has the rows. Losing this edit on a kill would import them again.
+        prefs.edit(commit = true) {
             remove(KEY_SESSIONS)
             putBoolean(KEY_SESSIONS_MIGRATED, true)
         }
@@ -151,13 +152,13 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
                 return
             }
             HostsRead.None -> {
-                prefs.edit { putBoolean(KEY_TOKENS_MIGRATED, true) }
+                prefs.edit(commit = true) { putBoolean(KEY_TOKENS_MIGRATED, true) }
                 return
             }
             is HostsRead.Ok -> {
                 val withTokens = read.hosts.filter { it.token.isNotBlank() }
                 if (withTokens.isEmpty()) {
-                    prefs.edit { putBoolean(KEY_TOKENS_MIGRATED, true) }
+                    prefs.edit(commit = true) { putBoolean(KEY_TOKENS_MIGRATED, true) }
                     return
                 }
                 for (host in withTokens) {
@@ -167,7 +168,7 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
                     }
                 }
                 writeHostsRaw(read.hosts.map { it.copy(token = "") })
-                prefs.edit { putBoolean(KEY_TOKENS_MIGRATED, true) }
+                prefs.edit(commit = true) { putBoolean(KEY_TOKENS_MIGRATED, true) }
             }
         }
     }

@@ -70,9 +70,14 @@ class CodeHostSecrets @VisibleForTesting constructor(
         }
         return try {
             val sealed = CodeAesGcm.seal(keySource.getOrCreate(), token.toByteArray(Charsets.UTF_8))
-            prefs.edit {
-                putString(encKey(hostId), Base64.encodeToString(sealed.ciphertext, Base64.NO_WRAP))
-                putString(ivKey(hostId), Base64.encodeToString(sealed.iv, Base64.NO_WRAP))
+            // commit: hosts JSON is scrubbed right after a successful put. apply() can still be
+            // in flight when that write hits disk, and a kill would leave the token nowhere.
+            val editor = prefs.edit()
+            editor.putString(encKey(hostId), Base64.encodeToString(sealed.ciphertext, Base64.NO_WRAP))
+            editor.putString(ivKey(hostId), Base64.encodeToString(sealed.iv, Base64.NO_WRAP))
+            if (!editor.commit()) {
+                Log.e(TAG, "Could not commit token for host $hostId")
+                return false
             }
             if (getToken(hostId) != token) {
                 Log.e(TAG, "Round-trip verification failed for host $hostId")
@@ -104,7 +109,7 @@ class CodeHostSecrets @VisibleForTesting constructor(
     }
 
     fun removeToken(hostId: String) {
-        prefs.edit {
+        prefs.edit(commit = true) {
             remove(encKey(hostId))
             remove(ivKey(hostId))
         }
@@ -115,7 +120,7 @@ class CodeHostSecrets @VisibleForTesting constructor(
         val keep = hostIds.map { encKey(it) }.toSet() + hostIds.map { ivKey(it) }.toSet()
         val stale = prefs.all.keys.filter { it !in keep }
         if (stale.isEmpty()) return
-        prefs.edit { stale.forEach { remove(it) } }
+        prefs.edit(commit = true) { stale.forEach { remove(it) } }
     }
 
     companion object {

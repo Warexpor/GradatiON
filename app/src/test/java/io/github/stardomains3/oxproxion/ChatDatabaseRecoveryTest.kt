@@ -613,6 +613,65 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun anOrphanHoldSidecarDoesNotHideTheVaultRecoveredFile() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val databases = app.getDatabasePath(AppDatabase.DB_NAME).parentFile!!
+        databases.mkdirs()
+        val vault = ChatDbVault.directory(app)
+        val hold = ChatDbVault.holdDirectory(databases)
+        val stored = "chat_database.recovered-21"
+        val vaultMain = File(vault, stored).apply { writeText("vault-history") }
+        val orphanWal = File(hold, "$stored-wal").apply { writeText("orphan-wal") }
+        try {
+            // Orphan wal alone used to make Room open the hold path and mint an empty main.
+            val roomName = ChatDbVault.roomDatabaseName(app, stored)
+            assertEquals(vaultMain.canonicalPath, File(roomName).canonicalPath)
+            assertEquals("vault-history", File(roomName).readText())
+        } finally {
+            vaultMain.delete()
+            orphanWal.delete()
+            File(hold, stored).delete()
+        }
+    }
+
+    @Test
+    fun drainHoldDropsOrphanSidecarsWhenTheVaultAlreadyHasTheMain() {
+        val databases = tmp.newFolder("orphan-drain-databases")
+        val vault = tmp.newFolder("orphan-drain-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(vault, "chat_database.recovered-22").writeText("vault-history")
+        File(hold, "chat_database.recovered-22-wal").writeText("orphan-wal")
+        File(hold, "chat_database.recovered-22-shm").writeText("orphan-shm")
+
+        ChatDbVault.relocateLegacy(databases, vault, "chat_database.recovered-22")
+
+        assertEquals("vault-history", File(vault, "chat_database.recovered-22").readText())
+        assertFalse(File(hold, "chat_database.recovered-22-wal").exists())
+        assertFalse(File(hold, "chat_database.recovered-22-shm").exists())
+    }
+
+    @Test
+    fun aHoldMainStillBeatsAStaleVaultCopy() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val databases = app.getDatabasePath(AppDatabase.DB_NAME).parentFile!!
+        databases.mkdirs()
+        val vault = ChatDbVault.directory(app)
+        val hold = ChatDbVault.holdDirectory(databases)
+        val stored = "chat_database.recovered-23"
+        val vaultMain = File(vault, stored).apply { writeText("stale-vault") }
+        val holdMain = File(hold, stored).apply { writeText("parked-history") }
+        try {
+            val roomName = ChatDbVault.roomDatabaseName(app, stored)
+            assertEquals(holdMain.canonicalPath, File(roomName).canonicalPath)
+            assertEquals("parked-history", File(roomName).readText())
+        } finally {
+            vaultMain.delete()
+            holdMain.delete()
+            File(hold, "$stored-wal").delete()
+        }
+    }
+
+    @Test
     fun anUnreadableSetThatCollidesInTheVaultIsParkedTogether() {
         val databases = tmp.newFolder("unreadable-collide-databases")
         val vault = tmp.newFolder("unreadable-collide-vault")

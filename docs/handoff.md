@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Stability wave 19)
+
+On `gradation/w19-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w18 hold parking:
+- Room opens a hold-parked recovered database only when the main file is there. An orphan `-wal`/`-shm` in `chat_db_hold` no longer hides the vault copy (Room would have created an empty main beside it). Drain removes those orphans when the vault already has the main; a hold set that still has its main still beats a stale vault copy.
+- Code host pairing tokens commit before hosts JSON is scrubbed, and the prefs→Room session migration flag commits after Room import, so a kill cannot drop the only token or re-import sessions.
+
+Phone: force a recovery that leaves only a `-wal` under `databases/chat_db_hold/` while the vault has `chat_database.recovered-<stamp>`; History should open the vault copy. Save a Code host with a pairing token, kill mid-save (token should still unlock after relaunch).
+
 # Handoff (2026-10-02, Chat wave 19)
 
 On `gradation/w19-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w18:
