@@ -33,7 +33,8 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
     /** Code tab on the main screen. Off until Settings > Modes turns it on. */
     var enabled: Boolean
         get() = prefs.getBoolean(KEY_ENABLED, false)
-        set(v) = prefs.edit { putBoolean(KEY_ENABLED, v) }
+        // commit: ChatFragment / Settings react to this; apply() can still be in flight on a kill.
+        set(v) = prefs.edit(commit = true) { putBoolean(KEY_ENABLED, v) }
 
     /**
      * Calls [onChange] whenever [enabled] flips. SharedPreferences keeps listeners weakly, so
@@ -49,7 +50,8 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
     /** Whether the Code tab was the last one open, so the app comes back to it. */
     var lastTabWasCode: Boolean
         get() = prefs.getBoolean(KEY_LAST_TAB, false)
-        set(v) = prefs.edit { putBoolean(KEY_LAST_TAB, v) }
+        // commit: cold start restores the Code tab from this; do not lose it to apply().
+        set(v) = prefs.edit(commit = true) { putBoolean(KEY_LAST_TAB, v) }
 
     var activeHostId: String?
         get() = prefs.getString(KEY_ACTIVE_HOST, null)
@@ -64,7 +66,8 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
         // New sessions run full auto until the user picks something else.
         get() = prefs.getString(KEY_PERMISSION, null)?.let(PermissionMode::fromId)
             ?: PermissionMode.FULL_AUTO
-        set(v) = prefs.edit { putString(KEY_PERMISSION, v.id) }
+        // commit: Settings > Code default approval; a kill after the picker must keep the choice.
+        set(v) = prefs.edit(commit = true) { putString(KEY_PERMISSION, v.id) }
 
     /**
      * Opt-in local notifications when approval needed / turn finished while the app is away
@@ -72,7 +75,8 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
      */
     var notifyWhenAway: Boolean
         get() = prefs.getBoolean(KEY_NOTIFY_AWAY, false)
-        set(v) = prefs.edit { putBoolean(KEY_NOTIFY_AWAY, v) }
+        // commit: away alerts are gated on this; apply() can still be in flight when the process dies.
+        set(v) = prefs.edit(commit = true) { putBoolean(KEY_NOTIFY_AWAY, v) }
 
     /**
      * Session ids whose title the user edited on the phone.

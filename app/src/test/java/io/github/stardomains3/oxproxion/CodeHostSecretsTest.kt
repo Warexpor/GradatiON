@@ -63,6 +63,27 @@ class CodeHostSecretsTest {
     }
 
     @Test
+    fun codeModePrefsSurviveAFreshStore() {
+        val s = store()
+        s.enabled = true
+        s.lastTabWasCode = true
+        s.notifyWhenAway = true
+        s.defaultPermissionMode = io.github.stardomains3.oxproxion.code.PermissionMode.ASK
+        val again = store()
+        assertTrue(again.enabled)
+        assertTrue(again.lastTabWasCode)
+        assertTrue(again.notifyWhenAway)
+        assertEquals(io.github.stardomains3.oxproxion.code.PermissionMode.ASK, again.defaultPermissionMode)
+        again.enabled = false
+        again.lastTabWasCode = false
+        again.notifyWhenAway = false
+        val cold = store()
+        assertFalse(cold.enabled)
+        assertFalse(cold.lastTabWasCode)
+        assertFalse(cold.notifyWhenAway)
+    }
+
+    @Test
     fun aesGcmRoundTripWithInjectedKey() {
         val sealed = CodeAesGcm.seal(softKey, "pairing-secret".toByteArray(Charsets.UTF_8))
         assertTrue(sealed.iv.isNotEmpty())
