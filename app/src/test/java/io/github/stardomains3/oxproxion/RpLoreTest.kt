@@ -318,4 +318,22 @@ class RpLoreTest {
         assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
     }
 
+    @Test
+    fun halfwidthPrimesAndMoreTrailersAreNotPartOfTheKey() {
+        val book = """
+            [keys: ｢locket｣, docks⸮, pier꓿]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(book, "The pier is quiet.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+        val primes = """
+            [keys: 〝locket〞, docks｡]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(primes, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(primes, "Meet me at the docks.").contains("dawn"))
+    }
+
 }
