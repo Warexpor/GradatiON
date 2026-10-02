@@ -8,6 +8,10 @@ import kotlinx.coroutines.flow.update
  * One-shot queue for a pairing result from a QR scan or `gradation://pair` deep link.
  * [CodeModeHost] observes this (no ChatFragment changes) to enable Code, switch tab, and
  * open [CodeHostDialog] prefilled.
+ *
+ * Pending and error are mutually exclusive: a later success must not leave a prior scan
+ * error queued (and a failed rescan must not keep an older pairing), or the host would
+ * toast the stale failure while also opening the pair form.
  */
 object CodePairPending {
 
@@ -15,6 +19,7 @@ object CodePairPending {
     val pending: StateFlow<CodePairing.Result?> = _pending
 
     fun offer(pairing: CodePairing.Result) {
+        _error.value = null
         _pending.value = pairing
     }
 
@@ -35,6 +40,7 @@ object CodePairPending {
     val error: StateFlow<String?> = _error
 
     fun offerError(message: String) {
+        _pending.value = null
         _error.value = message
     }
 
@@ -50,5 +56,6 @@ object CodePairPending {
 
     fun clear() {
         _pending.value = null
+        _error.value = null
     }
 }

@@ -396,10 +396,8 @@ class RpHubFragment : Fragment() {
         val fm = parentFragmentManager
         fm.popBackStackImmediate(BACK_STACK_TAG, FragmentManager.POP_BACK_STACK_INCLUSIVE)
         fm.popBackStackImmediate("settings", FragmentManager.POP_BACK_STACK_INCLUSIVE)
-        fm.fragments.filterIsInstance<ChatFragment>().firstOrNull()?.let {
-            it.closeHistoryPanel(animated = false)
-            it.closeRpHome()
-        }
+        // Leave Code if it was covering chat — setChatMode alone does not.
+        fm.fragments.filterIsInstance<ChatFragment>().firstOrNull()?.uncoverFromHub()
     }
 
     private fun push(target: Fragment) {
