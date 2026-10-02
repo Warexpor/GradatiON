@@ -326,6 +326,34 @@ class RpContinuationTest {
         assertEquals("Hello᨟\n\nShe waits.", RpContinuation.join("Hello᨟", "She waits."))
     }
 
+
+    @Test fun whiteSquareMathDoubleAndMathTortoiseQuotesStillCountAsFinished() {
+        assertEquals("〚Hallo.〛\n\nShe waits.", RpContinuation.join("〚Hallo.〛", "She waits."))
+        assertEquals("〚Hallo", RpContinuation.join("〚", "Hallo"))
+        assertEquals("⟪Hallo.⟫\n\nShe waits.", RpContinuation.join("⟪Hallo.⟫", "She waits."))
+        assertEquals("⟪Hallo", RpContinuation.join("⟪", "Hallo"))
+        assertEquals("⟬Hallo.⟭\n\nShe waits.", RpContinuation.join("⟬Hallo.⟭", "She waits."))
+        assertEquals("⟬Hallo", RpContinuation.join("⟬", "Hallo"))
+    }
+
+    @Test fun batakRunicMandaicAndMoreEndsStartANewParagraph() {
+        assertEquals("Hello᯼\n\nShe waits.", RpContinuation.join("Hello᯼", "She waits."))
+        assertEquals("Hello᯽\n\nShe waits.", RpContinuation.join("Hello᯽", "She waits."))
+        assertEquals("Hello᯾\n\nShe waits.", RpContinuation.join("Hello᯾", "She waits."))
+        assertEquals("Hello᯿\n\nShe waits.", RpContinuation.join("Hello᯿", "She waits."))
+        assertEquals("Hello᛫\n\nShe waits.", RpContinuation.join("Hello᛫", "She waits."))
+        assertEquals("Hello᛬\n\nShe waits.", RpContinuation.join("Hello᛬", "She waits."))
+        assertEquals("Hello᛭\n\nShe waits.", RpContinuation.join("Hello᛭", "She waits."))
+        assertEquals("Hello࡞\n\nShe waits.", RpContinuation.join("Hello࡞", "She waits."))
+        assertEquals("Hello⵰\n\nShe waits.", RpContinuation.join("Hello⵰", "She waits."))
+        assertEquals("Hello࠹\n\nShe waits.", RpContinuation.join("Hello࠹", "She waits."))
+        assertEquals("Hello࠾\n\nShe waits.", RpContinuation.join("Hello࠾", "She waits."))
+        assertEquals("Halo꧈\n\nDia menunggu.", RpContinuation.join("Halo꧈", "Dia menunggu."))
+        assertEquals("Halo꧋\n\nDia menunggu.", RpContinuation.join("Halo꧋", "Dia menunggu."))
+        assertEquals("Halo꧞\n\nDia menunggu.", RpContinuation.join("Halo꧞", "Dia menunggu."))
+        assertEquals("Halo꧟\n\nDia menunggu.", RpContinuation.join("Halo꧟", "Dia menunggu."))
+    }
+
     @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)
