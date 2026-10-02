@@ -136,4 +136,16 @@ class ComposerStagedTest {
         val moved = ComposerStaged.parkLive(parked, 4L, photo("file://fresh.jpg"))
         assertEquals("file://fresh.jpg", ComposerStaged.get(moved, 4L).imageUri)
     }
+
+    @Test fun promote_keeps_parked_when_live_empty() {
+        // Unsaved chat staged a photo, Code parked it under null, then first save promotes.
+        // Empty live must move the map entry onto the new id — not rekey empty (evict JPEG).
+        val parked = ComposerStaged.remember(emptyMap(), null, photo("file://new.jpg"))
+        val promoted = ComposerStaged.promote(parked, from = null, to = 8L, live = ComposerStaged.Entry())
+        assertTrue(ComposerStaged.get(promoted, null).isEmpty)
+        assertEquals("file://new.jpg", ComposerStaged.get(promoted, 8L).imageUri)
+        val liveWins = ComposerStaged.promote(parked, from = null, to = 8L, live = photo("file://fresh.jpg"))
+        assertEquals("file://fresh.jpg", ComposerStaged.get(liveWins, 8L).imageUri)
+        assertTrue(ComposerStaged.promote(emptyMap(), from = null, to = 8L, live = ComposerStaged.Entry()).isEmpty())
+    }
 }
