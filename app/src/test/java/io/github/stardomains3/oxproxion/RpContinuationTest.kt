@@ -205,7 +205,23 @@ class RpContinuationTest {
         assertEquals("ሰላምእሷ", RpContinuation.join("ሰላም", "እሷ"))
     }
 
-        @Test fun theContinueDirectionAsksForAnExactSeam() {
+    @Test fun germanLowQuotesStillCountAsFinished() {
+        assertEquals("„Hallo.“\n\nSie wartet.", RpContinuation.join("„Hallo.“", "Sie wartet."))
+        // Trailing space the model already sent is kept (same as "She smiles. Then").
+        assertEquals("„Hallo.“ Sie wartet.", RpContinuation.join("„Hallo.“ ", "Sie wartet."))
+        assertEquals("„Hallo", RpContinuation.join("„", "Hallo"))
+        assertEquals("She said “hello", RpContinuation.join("She said “", "hello"))
+    }
+
+    @Test fun fullwidthPeriodInterrobangAndMoreEndsStartANewParagraph() {
+        assertEquals("彼女は微笑む．\n\nそして振り向く。", RpContinuation.join("彼女は微笑む．", "そして振り向く。"))
+        assertEquals("Really‽\n\nShe waits.", RpContinuation.join("Really‽", "She waits."))
+        assertEquals("გამარჯობა჻\n\nის ელოდება.", RpContinuation.join("გამარჯობა჻", "ის ელოდება."))
+        assertEquals("Сайн᙮\n\nТэр хүлээнэ.", RpContinuation.join("Сайн᙮", "Тэр хүлээнэ."))
+        assertEquals("සාදරයෙන්෴\n\nඇය බලා සිටී.", RpContinuation.join("සාදරයෙන්෴", "ඇය බලා සිටී."))
+    }
+
+    @Test fun theContinueDirectionAsksForAnExactSeam() {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)
         assert("mid-sentence" in d)

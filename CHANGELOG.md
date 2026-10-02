@@ -36,6 +36,10 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Continue starts a new paragraph after German „…“ dialogue (the closing “ no longer looks like an unfinished opener), and after fullwidth ．, interrobang ‽, Georgian ჻, Canadian Aboriginal ᙮ and Sinhala ෴. Low German „‚ hug the next word like other openers.
+- Lore keys wrapped in ‘curly singles’, and keys trailed by ．‽჻᙮෴, Syriac ܀܁܂, Mongolian ᠃ or doubled !!?? marks, still match.
+- The rewrite dialog quote drops German „low quotes“ and curly single quotes around the first line.
+- A rewrite echo wrapped in fullwidth （OOC：…） parentheses is stripped the same way as the ASCII note.
 - Code: a toolCallId written as a whole number like `5.0` still matches later updates keyed as `5`. Cursor Agent tools named AwaitShell, TodoWrite, Task, SwitchMode, MultiEdit, CallMcpTool, GetMcpTools, CallDynamicTool, or Subagent get the think, edit, fetch, or search card. A shell command or args piece written as `5.0` (not only argv list items) shows as `5`.
 - History shows "Draft: Photo" (or Audio / files) when the only thing waiting is a staged attachment, matching Discard draft for a picture with no caption. A rebuilt chat view puts that staged preview chip back. Parking past the per-thread cap deletes the oldest scene JPEGs that fell off.
 - Roleplay Bubbles shrink around a pictured reply the same way a user bubble does. Recycling a text bubble onto a pictured one no longer keeps the 16dp text inset. Classic stays a flat 4dp rim.

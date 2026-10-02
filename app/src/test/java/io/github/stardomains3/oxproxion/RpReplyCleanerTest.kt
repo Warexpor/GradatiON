@@ -51,6 +51,7 @@ class RpReplyCleanerTest {
     fun stripsARewritePreamble() {
         assertEquals("*She waits.*", RpReplyCleaner.clean("Here's the rewritten reply:\n*She waits.*"))
         assertEquals("*She waits.*", RpReplyCleaner.clean("(OOC: Rewrite your last reply above.)\n*She waits.*"))
+        assertEquals("*She waits.*", RpReplyCleaner.clean("（OOC：Rewrite your last reply above.）\n*She waits.*"))
         assertEquals(
             "*She waits.*",
             RpReplyCleaner.clean(RpPromptEngine.rewriteDirective("make it (shorter)") + "\n*She waits.*")
