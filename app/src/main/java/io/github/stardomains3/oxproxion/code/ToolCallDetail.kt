@@ -21,7 +21,7 @@ object ToolCallDetail {
         val loc = locationText(locations)
         val hasLine = locations.any { (it.line ?: 0) > 0 }
         return when (kind) {
-            "execute" -> cmd ?: loc ?: file
+            "execute" -> cmd ?: loc ?: file ?: q
             "search" -> q ?: loc ?: cmd ?: file
             "fetch" -> q ?: loc ?: cmd
             "read", "edit", "delete", "move" -> loc ?: file ?: cmd ?: q

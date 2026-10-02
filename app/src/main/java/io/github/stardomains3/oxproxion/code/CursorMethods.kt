@@ -105,7 +105,8 @@ internal class CursorMethods {
         }
         requests[requestId] = CursorRequest(
             CursorRequestKind.ASK,
-            only.str("id") ?: "q",
+            // Whole-number doubles (5.0 / "5.0") must match the answer's questionId as "5".
+            rpcId(only["id"]) ?: "q",
             sessionId,
         )
         val title = params.str("title")?.trim()?.ifEmpty { null }
@@ -115,7 +116,7 @@ internal class CursorMethods {
             key = "approval:$requestId",
             at = now,
             requestId = requestId,
-            callId = params.str("toolCallId"),
+            callId = rpcId(params["toolCallId"]),
             title = title,
             detail = only.str("prompt")?.trim()?.takeIf { it.isNotEmpty() && it != title },
             kind = ToolKind.OTHER,
@@ -141,7 +142,7 @@ internal class CursorMethods {
             key = "approval:$requestId",
             at = now,
             requestId = requestId,
-            callId = params.str("toolCallId"),
+            callId = rpcId(params["toolCallId"]),
             title = title,
             detail = detail,
             kind = ToolKind.THINK,
@@ -161,7 +162,7 @@ internal class CursorMethods {
         if (question.bool("allowMultiple") == true) return null
         val opts = (question["options"] as? JsonArray).orEmpty().mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
-            val id = o.str("id")?.trim()?.ifEmpty { null } ?: return@mapNotNull null
+            val id = rpcId(o["id"])?.trim()?.ifEmpty { null } ?: return@mapNotNull null
             val label = o.str("label")?.trim()?.ifEmpty { null } ?: id
             ApprovalOption(id, label, ApprovalOption.Kind.ALLOW_ONCE)
         }
@@ -217,7 +218,7 @@ internal class CursorMethods {
         return arr.mapNotNull { item ->
             val o = item as? JsonObject ?: return@mapNotNull null
             val content = o.str("content")?.trim()?.ifEmpty { null } ?: return@mapNotNull null
-            PlanEntry(content, planStatus(o.str("status")), o.str("id")?.trim()?.ifEmpty { null })
+            PlanEntry(content, planStatus(o.str("status")), rpcId(o["id"])?.trim()?.ifEmpty { null })
         }
     }
 
@@ -282,7 +283,10 @@ internal class CursorMethods {
         put("result", result)
     }.toString()
 
-    /** Numeric ids become `"9"` (not `"9.0"`); string ids stay as sent. */
+    /**
+     * Numeric ids become `"9"` (not `"9.0"`); string ids stay as sent.
+     * Same coercion for ask/plan `toolCallId`, question/option ids, and todo ids.
+     */
     private fun rpcId(idEl: JsonElement?): String? {
         val p = idEl as? JsonPrimitive ?: return null
         wholeNumberLong(p)?.let { return it.toString() }

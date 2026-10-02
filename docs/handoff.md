@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Code wave 20)
+
+On `gradation/w20-code` (PR into `gradation/app-pass`). Three Code-mode fixes, unit-tested (`CodeProtocolTest`):
+- Cursor ask/plan `toolCallId`, question/option ids, and todo ids written as a whole-number double (`5.0` / `"5.0"`) still match as `"5"`, so the approval links the tool card and merge replaces the todo row.
+- Cursor Agent tool names `ListMachines`, `CopyToBox`, `CopyFromBox`, `UploadFile`, `DownloadFile`, `BackgroundComposerFollowup`, `CloudAgent`, `CreateAgent`, `SendToAgent`, `CheckSubagent`, `GetMcpServerStatus`, `SearchPlugins`, `RecordScreen`, `Mcp`, and `DraftExternalMessage` map to search / move / fetch / think / execute / edit cards (icon and log clipping).
+- Tool detail lines read Cursor's native rawInput keys `directory_path`, `working_directory` / `cwd`, `task_description` / `description` / `prompt`, `pr_url`, and `shell_id` (a whole-number double shows as `5`).
+
+Phone: on Cursor Agent, a ListMachines or CopyToBox card should show the search or move icon. A ListDir card with `directory_path` should show that path under the title. An ask_question whose toolCallId a proxy rewrote as `5.0` should still link the tool card.
 # Handoff (2026-10-02, Stability wave 20)
 
 On `gradation/w20-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w19 orphan hold sidecars:
