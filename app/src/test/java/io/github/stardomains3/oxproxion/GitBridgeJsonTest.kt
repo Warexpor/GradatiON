@@ -81,4 +81,19 @@ class GitBridgeJsonTest {
         assertEquals("C", GitBridgeJson.statusLetter("C075"))
         assertEquals("!", GitBridgeJson.statusLetter("!!"))
     }
+
+    @Test fun aheadBehindWrittenAsDoublesStillParse() {
+        val el = json.parseToJsonElement(
+            """{"branch":"main","ahead":2.0,"behind":1.0,"files":[]}"""
+        )
+        val s = GitBridgeJson.parseStatus(el)
+        assertEquals(2, s.ahead)
+        assertEquals(1, s.behind)
+        val elStr = json.parseToJsonElement(
+            """{"branch":"main","ahead":"3.0","behind":"0.0","files":[]}"""
+        )
+        val s2 = GitBridgeJson.parseStatus(elStr)
+        assertEquals(3, s2.ahead)
+        assertEquals(0, s2.behind)
+    }
 }

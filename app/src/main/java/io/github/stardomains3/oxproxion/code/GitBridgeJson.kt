@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 
@@ -56,6 +57,25 @@ object GitBridgeJson {
 
     private fun intField(o: JsonObject, key: String): Int {
         val p = o[key] as? JsonPrimitive ?: return 0
-        return p.intOrNull ?: p.longOrNull?.toInt() ?: p.contentOrNull?.toIntOrNull() ?: 0
+        wholeNumberLong(p)?.let { n ->
+            return n.toInt().takeIf { it.toLong() == n } ?: 0
+        }
+        return p.intOrNull ?: p.contentOrNull?.toIntOrNull() ?: 0
+    }
+
+    /** Integers stay long; a double like `2.0` and a string `"2.0"` still count. */
+    private fun wholeNumberLong(p: JsonPrimitive): Long? {
+        p.longOrNull?.let { return it }
+        p.doubleOrNull?.let { d ->
+            if (d.isFinite() && d == kotlin.math.floor(d) &&
+                d in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+            ) return d.toLong()
+        }
+        val c = p.contentOrNull ?: return null
+        c.toLongOrNull()?.let { return it }
+        return c.toDoubleOrNull()?.takeIf {
+            it.isFinite() && it == kotlin.math.floor(it) &&
+                it in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()
+        }?.toLong()
     }
 }
