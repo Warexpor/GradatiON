@@ -15,10 +15,10 @@ object RpContinuation {
      * are left out on purpose: a reply that opens with `"` is starting new dialogue.
      * Guillemets and Arabic/Indic closers hug the same way as Latin ones.
      */
-    private const val CLOSERS = ",.;:!?)]}%\u2026\u2019\u201D\u00BB\u203A。！？」』؟۔।॥։၊။．》〉｣〞❞❜﹂﹄〕〗❯｠"
+    private const val CLOSERS = ",.;:!?)]}%\u2026\u2019\u201D\u00BB\u203A。！？」』؟۔।॥։၊။．》〉｣〞❞❜﹂﹄〕〗❯｠〙⟩❱"
 
     /** Characters that hug the text after them: a reply that stops on one has more to say right after it. Spanish ¿¡ start the next beat the same way. */
-    private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C\u00AB\u2039「『¿¡„‚\u00BB\u203A《〈｢〝〟❝❛﹁﹃〔〖❮｟"
+    private const val OPENERS = "-\u2013\u2014([{/\u2018\u201C\u00AB\u2039「『¿¡„‚\u00BB\u203A《〈｢〝〟❝❛﹁﹃〔〖❮｟〘⟨❰"
 
     /**
      * Sentence enders, and the markup/quotes that may trail one (`*She smiles.*`, `"Come in."`,
@@ -28,15 +28,16 @@ object RpContinuation {
      * Georgian ჻, Canadian Aboriginal ᙮, Sinhala ෴, Khmer ៕, Thai ฯ, Coptic ⳹⳾,
      * reversed ⸮, Limbu ᥄᥅, Lisu ꓿, Vai ꘎꘏, halfwidth ｡, small ﹒﹗﹖,
      * Arabic ؛, Nko ߹, Ol Chiki ᱾᱿, Bamum ꛳꛷, vertical ︒, vertical ︖︕,
-     * Cham ꩝꩞꩟, Balinese ᭞᭟ and Lepcha ᰻᰼ count too.
+     * Cham ꩝꩞꩟, Balinese ᭞᭟, Lepcha ᰻᰼, Tibetan ༎༏༔, Meetei ꫰꫱,
+     * Saurashtra ꣎꣏, Javanese ꧉, Phags-pa ꡶꡷, Rejang ꥟ and Buginese ᨞᨟ count too.
      */
-    private const val ENDERS = ".!?…。！？؟۔।॥։၊။׃።;།។՜՞܀܁܂᠃‼⁇⁈⁉．‽჻᙮෴៕ฯ⳹⳾⸮᥄᥅꓿꘎꘏｡﹒፧፨؛߹᱾᱿꛳꛷︒﹗﹖︖︕꩝꩞꩟᭞᭟᠅᰻᰼"
+    private const val ENDERS = ".!?…。！？؟۔।॥։၊။׃።;།។՜՞܀܁܂᠃‼⁇⁈⁉．‽჻᙮෴៕ฯ⳹⳾⸮᥄᥅꓿꘎꘏｡﹒፧፨؛߹᱾᱿꛳꛷︒﹗﹖︖︕꩝꩞꩟᭞᭟᠅᰻᰼༎༏༔꫰꫱꣎꣏꧉꡶꡷꥟᨞᨟"
     // Guillemets and a space before a closing one (French « … . ») are not part of the sentence end.
     // Left quotes “ ‘ and open guillemets « ‹ trail too: German „…“ closes on “, and Swiss/German
     // »…« closes on «, which are openers the other way. CJK 《》〈〉 and halfwidth ｣ / 〞
     // trail like 「」. Ornamental ❞❜, vertical ﹂﹄ / tortoise 〔〕〖〗, fullwidth ＂＇,
-    // heavy angle ❯ and white paren ｠ trail too.
-    private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״\u201C\u2018\u00AB\u2039《》〈〉｣〞❞❜﹂﹄〕〗＂＇❯｠"
+    // heavy angle ❯, white paren ｠, white tortoise 〙, math angle ⟩ and heavy ornament ❱ trail too.
+    private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״\u201C\u2018\u00AB\u2039《》〈〉｣〞❞❜﹂﹄〕〗＂＇❯｠〙⟩❱"
 
     /**
      * Continue replaces the reply with the joined text. A picture already on that reply stays
@@ -99,14 +100,15 @@ object RpContinuation {
     /**
      * [base] followed by [addition], with a separator only where the model left none: a new
      * paragraph after a finished sentence or closed action (including «…», „…“, »…«, 《…》, ｢…｣,
-     * 〝…〞, ❝…❞, ﹁…﹂, ＂…＂, ❮…❯, ｟…｠, ؟۔, ।॥, ׃, ።፧, ؛, ߹, ᱾, ꛳, ．, ‽, ៕, ⸮,
-     * ｡, ︒, ︖ and ꩝), a plain space after unfinished text. A sentence in an unspaced
-     * script (including Tibetan and Ethiopic) gets no space.
+     * 〝…〞, ❝…❞, ﹁…﹂, ＂…＂, ❮…❯, ｟…｠, 〘…〙, ⟨…⟩, ❰…❱, ؟۔, ।॥, ׃, ።፧, ؛, ߹, ᱾, ꛳, ．,
+     * ‽, ៕, ⸮, ｡, ︒, ︖, ꩝, ༎, ꫰, ꣎, ꧉ and ꡶), a plain space after unfinished text. A
+     * sentence in an unspaced script (including Tibetan and Ethiopic) gets no space.
      *
      * Finished ends are checked before openers: German „Hallo.“ closes on “, and Swiss/German
      * »Hallo.« closes on «, which are also openers the other way, so treating openers first
      * left a finished line glued to the next beat. Halfwidth ｢…｣, 〝…〞, ornamental ❝…❞,
-     * vertical ﹁…﹂, fullwidth ＂…＂, heavy angle ❮…❯ and white paren ｟…｠ trail the same way.
+     * vertical ﹁…﹂, fullwidth ＂…＂, heavy angle ❮…❯, white paren ｟…｠, white tortoise 〘…〙,
+     * math angle ⟨…⟩ and heavy ornament ❰…❱ trail the same way.
      */
     fun join(base: String, addition: String): String {
         if (addition.isEmpty()) return base
