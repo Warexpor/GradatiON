@@ -58,7 +58,7 @@ class SystemMessageLibraryFragment : Fragment() {
                             }
                             val json = Json.encodeToString(allMessages)
                             val cache = File(app.cacheDir, "system-messages-${System.nanoTime()}.json")
-                            BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri) }) { stream ->
+                            BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri, "wt") }) { stream ->
                                 stream.write(json.toByteArray(Charsets.UTF_8))
                             }
                         }
