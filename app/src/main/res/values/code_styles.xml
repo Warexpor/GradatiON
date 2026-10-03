@@ -23,6 +23,15 @@
         <item name="android:textColor">@color/xai_mute</item>
     </style>
 
+    <!-- Mono caption in Code chrome (paths, status, counts). A style, not a textAppearance, and
+         both font attributes: the theme sets AppCompat's fontFamily, which outranks the platform one. -->
+    <style name="Widget.Gradation.Code.MonoLine" parent="">
+        <item name="android:fontFamily">@font/atkinsonhyperlegiblemono_regular</item>
+        <item name="fontFamily">@font/atkinsonhyperlegiblemono_regular</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/xai_mute</item>
+    </style>
+
     <!-- Composer pills (agent, folder, approvals): same capsule as the chat model pill -->
     <style name="Widget.Gradation.Code.Pill" parent="">
         <item name="android:layout_width">wrap_content</item>
@@ -57,5 +66,26 @@
         <item name="android:fontFamily">@font/app_sans</item>
         <item name="android:paddingTop">6dp</item>
         <item name="android:paddingBottom">6dp</item>
+    </style>
+
+    <!-- Hairline between onboarding steps, starting under the text rather than the number -->
+    <style name="Widget.Gradation.Code.StepRule" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:layout_marginStart">40dp</item>
+        <item name="android:background">@color/xai_hairline</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+
+    <!-- One agent in the onboarding strip: its mark in a lit disc, for show only -->
+    <style name="Widget.Gradation.Code.AgentMark" parent="">
+        <item name="android:layout_width">40dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:layout_marginEnd">4dp</item>
+        <item name="android:background">@drawable/bg_code_disc</item>
+        <item name="android:padding">10dp</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="tint">@color/xai_ink</item>
     </style>
 </resources>

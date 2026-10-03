@@ -19,4 +19,7 @@
     <color name="code_prompt_bg">#FFF3F3F3</color>
     <color name="code_diff_add_fg">#FF1A7F37</color>
     <color name="code_diff_del_fg">#FFCF222E</color>
+    <!-- Home and session chrome: agent mark tiles and discs, idle and lit -->
+    <color name="code_tile_fill">#0A000000</color>
+    <color name="code_tile_lit">#1C000000</color>
 </resources>

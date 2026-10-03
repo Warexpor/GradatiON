@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Agent picker tile (two to a line): mark, name, and whether the machine can run it.
+     Keeps PickerPopover's row ids so the popover binds it like any row. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    android:layout_weight="1"
+    android:background="@drawable/bg_code_harness_tile"
+    android:minHeight="104dp"
+    android:orientation="vertical"
+    android:paddingStart="12dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="12dp">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp">
+
+        <FrameLayout
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_code_disc">
+
+            <ImageView
+                android:id="@+id/popoverRowIcon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                app:tint="@color/xai_ink" />
+
+            <TextView
+                android:id="@+id/popoverRowMonogram"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:textColor="@color/xai_ink"
+                android:textSize="15sp"
+                android:textFontWeight="700"
+                android:fontFamily="@font/app_sans"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/popoverRowAvatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:importantForAccessibility="no"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <ImageView
+            android:id="@+id/popoverRowCheck"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="top|end"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_check_round"
+            android:visibility="gone"
+            app:tint="@color/xai_ink" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/popoverRowTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:ellipsize="end"
+        android:fontFamily="@font/app_sans"
+        android:singleLine="true"
+        android:textColor="@color/xai_ink"
+        android:textSize="15sp"
+        android:textFontWeight="600" />
+
+    <TextView
+        android:id="@+id/popoverRowSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:singleLine="true"
+        style="@style/Widget.Gradation.Code.MonoLine" />
+</LinearLayout>

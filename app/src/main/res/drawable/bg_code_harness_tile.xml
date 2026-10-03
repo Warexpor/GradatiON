@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Agent picker tile: a key on the remote. The chosen agent sits on the brighter pill tone -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:enterFadeDuration="80"
+    android:exitFadeDuration="200">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/popover_row_pressed" />
+            <stroke android:width="1dp" android:color="@color/xai_hairline" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/popover_row_selected" />
+            <stroke android:width="1dp" android:color="@color/xai_hairline" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/code_tile_fill" />
+            <stroke android:width="1dp" android:color="@color/xai_hairline" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+</selector>

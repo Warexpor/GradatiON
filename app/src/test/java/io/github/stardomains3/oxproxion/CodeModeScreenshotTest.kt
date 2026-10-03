@@ -66,11 +66,27 @@ class CodeModeScreenshotTest {
 
     @Test fun codeOnboardDark() = withCode(demo = false) { a, _ -> snap(root(a), "code_onboard_dark") }
 
-    @Test fun codeHomeEmptyDark() = withCode(seedSessions = false) { a, _ -> snap(root(a), "code_home_empty_dark") }
+    @Test fun codeHomeEmptyDark() = withCode(seedSessions = false) { a, _ ->
+        // The list diffs on a real thread: wait in real time for the forgotten rows to go.
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeHomeList)
+        val until = System.currentTimeMillis() + 5_000
+        while (list.findViewById<View>(R.id.codeHeroMark) == null && System.currentTimeMillis() < until) {
+            Thread.sleep(20)
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
+        }
+        assertTrue("the empty state shows once the list has no sessions", list.findViewById<View>(R.id.codeHeroMark) != null)
+        snap(root(a), "code_home_empty_dark")
+    }
 
     @Test fun codeHomeDark() = withCode { a, _ ->
         startDemo("Add a follow-system option to the theme setting")
         idle(4)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeHomeList)
+        val lit = (0 until list.childCount).map { list.getChildAt(it) }.filter {
+            it.findViewById<View>(R.id.codeSessionLed)?.visibility == View.VISIBLE
+        }
+        assertEquals("only the busy session's key is lit", 1, lit.size)
+        assertTrue(lit.single().findViewById<View>(R.id.codeSessionGlyph).isActivated)
         snap(root(a), "code_home_dark")
     }
 
@@ -87,7 +103,32 @@ class CodeModeScreenshotTest {
         idle(12)
         assertTrue("demo should be waiting on an approval",
             CodeHub.getLoaded(ctx).sessions.value[id]!!.events.any { it is CodeEvent.Approval && it.chosen == null })
+        assertEquals("the header light is on while the agent waits", View.VISIBLE,
+            root(a).findViewById<View>(R.id.codeSessionHeaderLed).visibility)
         snap(root(a), "code_session_approval_dark")
+    }
+
+    /**
+     * Before its history lands, a session shows the agent's mark in its orbits over the loading
+     * line. The demo attaches at once, so the screen is fed a not-yet-attached copy directly.
+     */
+    @Test fun codeSessionLoadingDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = hub.sessions.value.keys.first { it.startsWith("demo-seed") }
+        push(a, CodeSessionFragment.newInstance(id))
+        val f = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }
+        val loading = hub.sessions.value[id]!!.copy(events = emptyList(), attached = false, attaching = true)
+        val stateView = f.requireView().findViewById<android.widget.TextView>(R.id.codeSessionState)
+        CodeSessionFragment::class.java.getDeclaredMethod("render", io.github.stardomains3.oxproxion.code.CodeSessionState::class.java)
+            .apply { isAccessible = true }.invoke(f, loading)
+        CodeSessionFragment::class.java.getDeclaredMethod(
+            "bindStateView", android.widget.TextView::class.java, io.github.stardomains3.oxproxion.code.CodeSessionState::class.java
+        ).apply { isAccessible = true }.invoke(f, stateView, loading)
+        idle(1)
+        assertEquals(View.VISIBLE, stateView.visibility)
+        assertEquals(ctx.getString(R.string.code_session_loading), stateView.text.toString())
+        assertTrue("the loading line carries the agent's mark", stateView.compoundDrawablesRelative[1] != null)
+        snap(root(a), "code_session_loading_dark")
     }
 
     @Test fun codeSessionDoneDark() = withCode { a, _ ->
@@ -331,9 +372,22 @@ class CodeModeScreenshotTest {
         }
     }
 
+    /** The agent picker is a grid of tiles, two to a line, with the chosen agent checked. */
     @Test fun codeHarnessPickerDark() = withCode { a, _ ->
         a.findViewById<View>(R.id.codeComposerAgent).performClick()
         idle(3)
+        val rows = a.findViewById<android.view.ViewGroup>(R.id.popoverRows)
+        val tiles = (0 until rows.childCount).flatMap { i ->
+            val line = rows.getChildAt(i) as android.view.ViewGroup
+            assertEquals("line $i holds two tiles", 2, line.childCount)
+            (0 until line.childCount).map { line.getChildAt(it) }
+        }.filter { it.findViewById<View>(R.id.popoverRowTitle) != null }
+        val names = tiles.map { it.findViewById<android.widget.TextView>(R.id.popoverRowTitle).text.toString() }
+        assertEquals(listOf("Claude Code", "Codex CLI", "OpenCode", "Grok Build", "Cursor Agent", "Pi"), names)
+        val checked = tiles.filter { it.findViewById<View>(R.id.popoverRowCheck).isShown }
+        assertEquals(listOf("Claude Code"), checked.map { it.findViewById<android.widget.TextView>(R.id.popoverRowTitle).text.toString() })
+        val min = 44 * ctx.resources.displayMetrics.density
+        tiles.forEach { assertTrue("tile is at least 44dp", it.height >= min && it.width >= min) }
         snap(root(a), "code_harness_picker_dark")
     }
 
