@@ -85,7 +85,7 @@ object RpChatSummaries {
             .orEmpty()
         val who = c.name.ifBlank { "GradatiON" }
         val named = RpPromptEngine.expandMacros(raw, who, userName.ifBlank { "you" })
-        return named.replace(Regex("[*_#>`~]"), "").take(140)
+        return foldMarkdown(named).take(140)
     }
 
     /**
@@ -95,15 +95,49 @@ object RpChatSummaries {
     fun loreTileOn(loreEnabled: Boolean, pinnedBookExists: Boolean, activeBookExists: Boolean): Boolean =
         loreEnabled && (pinnedBookExists || activeBookExists)
 
-    /** A stored message as one line of plain text: markdown marks and line breaks folded away. */
+    /**
+     * A stored message as one line of plain text: markdown marks and line breaks folded away.
+     * An underscore inside a word stays, so `snake_case` is still that word.
+     */
     fun previewOf(storedContent: String): String {
-        val text = try {
-            MessageContent.text(json.parseToJsonElement(storedContent))
-        } catch (_: Exception) {
-            storedContent
-        }
-        return text.replace(Regex("[*_#>`~]"), "").replace(Regex("\\s+"), " ").trim()
+        val element = parsed(storedContent)
+        val text = if (element != null) MessageContent.text(element) else storedContent
+        return foldMarkdown(text)
     }
+
+    /**
+     * The line under a character-list or character-History row.
+     * A photo with no caption is [photoLabel], not an empty line that reads as no messages.
+     * "You:" applies to words the user wrote, not to that photo label.
+     */
+    fun rowLine(role: String?, storedContent: String, youLabel: (String) -> String, photoLabel: String): String {
+        val text = previewOf(storedContent)
+        if (text.isNotBlank()) return if (role == "user") youLabel(text) else text
+        val element = parsed(storedContent) ?: return ""
+        return if (photoLabel.isNotBlank() && MessageContent.hasImage(element)) photoLabel else ""
+    }
+
+    private fun parsed(storedContent: String) =
+        try {
+            json.parseToJsonElement(storedContent)
+        } catch (_: Exception) {
+            null
+        }
+
+    /**
+     * Markdown marks come off. An underscore between letters or digits stays: stripping every
+     * `_` turned `snake_case` into `snakecase` on the character list.
+     */
+    private fun foldMarkdown(text: String): String =
+        WHITESPACE.replace(
+            MD_EDGE_UNDERSCORE.replace(MD_STARS.replace(text, ""), "").replace(MD_MARKS, ""),
+            " ",
+        ).trim()
+
+    private val MD_STARS = Regex("\\*+")
+    private val MD_MARKS = Regex("[#>`~]")
+    private val MD_EDGE_UNDERSCORE = Regex("(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])")
+    private val WHITESPACE = Regex("\\s+")
 
     private const val LLM_KEY = -1L
     private const val ORPHAN_KEY = -1000L

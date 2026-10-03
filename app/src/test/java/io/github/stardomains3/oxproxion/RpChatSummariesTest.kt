@@ -31,6 +31,31 @@ class RpChatSummariesTest {
     }
 
     @Test
+    fun taglineKeepsUnderscoresAndDropsALeadingMarkdownSpace() {
+        val c = RpCharacter(
+            name = "Mira",
+            personality = "* She waits at config_name.\nThe second line stays off the row.",
+        )
+        assertEquals("She waits at config_name.", RpChatSummaries.tagline(c, "Alex"))
+    }
+
+    @Test
+    fun previewKeepsSnakeCaseAndAPhotoWithNoCaption() {
+        assertEquals(
+            "use snake_case and note",
+            RpChatSummaries.previewOf("\"use snake_case and _note_\"")
+        )
+        val photo = """[{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,AAAA"}}]"""
+        assertEquals("", RpChatSummaries.previewOf(photo))
+        assertEquals("Photo", RpChatSummaries.rowLine("user", photo, { "You: $it" }, "Photo"))
+        assertEquals("Photo", RpChatSummaries.rowLine("assistant", photo, { "You: $it" }, "Photo"))
+        val captioned = """[{"type":"text","text":"*the* snake_case docks"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,AAAA"}}]"""
+        assertEquals("You: the snake_case docks", RpChatSummaries.rowLine("user", captioned, { "You: $it" }, "Photo"))
+        assertEquals("the snake_case docks", RpChatSummaries.rowLine("assistant", captioned, { "You: $it" }, "Photo"))
+        assertEquals("", RpChatSummaries.rowLine("user", "\"\"", { "You: $it" }, "Photo"))
+    }
+
+    @Test
     fun loreTileFollowsTheBookThatWouldBeUsed() {
         assertFalse(RpChatSummaries.loreTileOn(loreEnabled = false, pinnedBookExists = true, activeBookExists = true))
         assertFalse(RpChatSummaries.loreTileOn(loreEnabled = true, pinnedBookExists = false, activeBookExists = false))

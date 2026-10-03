@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- The Roleplay character list and a character's History keep underscores inside a word, so a line with `snake_case` still shows it. A photo with no caption reads as Photo instead of "No messages yet"; a caption still shows, and "You:" stays on that caption. The library card uses the same first line as the list, and a markdown mark no longer leaves a space in front of it.
+- Example dialogs keep the User line when the block starts on a blank line. A `---` between blocks still splits when the break is a Windows line ending or the dashes have spaces around them. `User：` and `Char：` with a fullwidth colon still count.
+- A lore key wrapped in parentheses, fullwidth parentheses, or black lenticular brackets still matches the word inside. A fullwidth semicolon or bar between keys still separates them, the same way a fullwidth comma already did.
 - History preview keeps a `#`, `~` or `>` that is part of the words. `C#`, `~/Downloads` and `a > b` used to lose those marks, so the row no longer showed the text a search had matched. A heading, a blockquote and strikethrough still come off.
 - Attaching several text files counts each one against the total already staged, and a file past 1 MB stops being read. Picking them together used to measure that total before any file was added, so the 3 MB cap never saw the rest, and a larger file was loaded in full and then refused.
 - History groups a chat by calendar day, not by a 24-hour step. After a daylight-saving fallback the first hour of yesterday stayed in This week and showed a weekday; after a spring-forward the last hour of the day before yesterday showed as Yesterday. The six-day week uses the same calendar edges.

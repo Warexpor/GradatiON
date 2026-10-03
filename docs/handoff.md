@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, RP wave 31)
+
+On `cursor/rp-wave-31-bab7` (PR into `gradation/app-pass`). Roleplay follow-ups after #135. Not a redo of bracketed scene notes in auto memory, Vesna edits across a stock refresh, or the active character id commit. Not #123 (torn photoUri, Continue lore focus, persona Save commits). Not a redo of #139 (history preview marks, staged-file cap).
+
+- Character list and character History previews keep an underscore inside a word. A photo with no caption is Photo, not "No messages yet". "You:" stays on a caption. The library card uses the same first line, and a markdown mark does not leave a leading space.
+- Example dialogs keep the User side when the block has a leading blank line. `---` still splits blocks on a Windows break or with spaces around the dashes. A fullwidth colon after User or Char still labels the side.
+- Lore keys in `()`, `（）`, or `【】` match the word inside. `；` and `｜` separate keys.
+
+Phone: on the character list, a last line that is only a photo should say Photo, and a line with snake_case should still contain the underscore. Save example dialogs that start with a blank line (the User side should still be there). A lore key written as `(locket)` or `docks；pier` should still fire.
+
 # Handoff (2026-10-03, Chat wave 31)
 
 On `cursor/chat-wave-31-77b7` (PR into `gradation/app-pass`). Chat follow-ups. Not a redo of #138 (calendar day buckets, Remove all clearing a parked file list) or #126 (first save keeps the rekeyed JPEG).

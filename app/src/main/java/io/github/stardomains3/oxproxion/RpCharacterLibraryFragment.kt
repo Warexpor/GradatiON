@@ -221,7 +221,7 @@ class RpCharacterLibraryFragment : Fragment() {
                 name.text = character.name
                 activeBadge.visibility = if (isActive) View.VISIBLE else View.GONE
                 card.setBackgroundResource(if (isActive) R.drawable.rp_bg_card_active else R.drawable.rp_bg_card)
-                subtitle.text = tagline(character, you).ifBlank { ctx.getString(R.string.rp_ui_no_description) }
+                subtitle.text = RpChatSummaries.tagline(character, you).ifBlank { ctx.getString(R.string.rp_ui_no_description) }
                 RpAvatars.bind(avatar, monogram, character)
                 card.contentDescription = ctx.getString(R.string.rp_ui_character_card_a11y, character.name)
                 more.contentDescription = ctx.getString(R.string.rp_ui_more_options, character.name)
@@ -235,11 +235,6 @@ class RpCharacterLibraryFragment : Fragment() {
                 more.setOnClickListener { onMenu(it, character) }
             }
 
-            private fun tagline(c: RpCharacter, you: String): String {
-                val source = listOf(c.personality, c.scenario, c.greeting).firstOrNull { it.isNotBlank() }.orEmpty()
-                val named = RpPromptEngine.expandMacros(source, c.name.ifBlank { "GradatiON" }, you)
-                return named.replace(Regex("[*_#>`]"), "").replace(Regex("\\s+"), " ").trim().take(140)
-            }
         }
     }
 
