@@ -28,9 +28,16 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
 
         locationPermissionLauncher = registerForActivityResult(
             ActivityResultContracts.RequestPermission()
-        ) { isGranted: Boolean ->
+        ) { fineGranted: Boolean ->
             // Granting shows on the row itself; only a refusal needs saying.
-            if (!isGranted) GlassNotice.show(requireContext(), getString(R.string.toast_location_permission))
+            // Approximate is coarse-only, and the callback reports fine as denied.
+            val coarseGranted = ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!ToolItem.locationGrantHeld(fineGranted, coarseGranted)) {
+                GlassNotice.show(requireContext(), getString(R.string.toast_location_permission))
+            }
             refreshUI()
         }
 
@@ -92,7 +99,16 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
         // Check Permissions
         val notificationManager = requireContext().getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val hasNotificationPolicy = notificationManager.isNotificationPolicyAccessGranted
-        val hasLocationPermission = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasLocationPermission = ToolItem.locationGrantHeld(
+            fineGranted = ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.ACCESS_FINE_LOCATION,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+            coarseGranted = ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+        )
         val hasSafPermission = sharedPreferencesHelper.hasWorkspaceGrant()
 
         val inflater = layoutInflater

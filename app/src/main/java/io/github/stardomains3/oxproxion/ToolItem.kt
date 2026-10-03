@@ -69,6 +69,14 @@ data class ToolItem(
             !needsPermission || permissionGranted || toolOn
 
         /**
+         * Approximate location on Android 12+ grants only coarse. The tool accepts that, so the
+         * switch has to as well: checking fine alone left the row off and toasted after the user
+         * had already allowed location.
+         */
+        fun locationGrantHeld(fineGranted: Boolean, coarseGranted: Boolean): Boolean =
+            fineGranted || coarseGranted
+
+        /**
          * The enabled bit to store, or null when this toggle has to snap back.
          * Turning a permission-gated tool on with no grant is the snap-back.
          */

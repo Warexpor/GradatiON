@@ -24,10 +24,34 @@ internal fun settingsVoiceRowEngine(providerKey: String?): VoiceEngine =
  */
 internal fun settingsLanRowValue(endpoint: String?): String? {
     val raw = endpoint?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    val uri = runCatching { java.net.URI(raw) }.getOrNull() ?: return raw
-    val host = uri.host?.trim()?.takeIf { it.isNotEmpty() } ?: return raw
-    val shown = if (':' in host) "[${host.removePrefix("[").removeSuffix("]")}]" else host
-    return if (uri.port != -1) "$shown:${uri.port}" else shown
+    // URI.getHost() is null for `my_nas` and for a password that contains `@`. Falling back to
+    // the raw string printed that password on the row.
+    val parsed = LanEndpointValidator.endpointHostPort(raw) ?: hostPortAfterUserinfo(raw)
+    if (parsed == null) return if ('@' in raw) null else raw
+    return formatLanHostPort(parsed.host, parsed.port)
+}
+
+/** Last `@` ends userinfo, including when the URL is too messy for [java.net.URI]. */
+private fun hostPortAfterUserinfo(raw: String): LanEndpointValidator.HostPort? {
+    val authority = raw.substringAfter("://", raw)
+        .substringBefore('/')
+        .substringBefore('?')
+        .substringBefore('#')
+    if (authority.isEmpty() || '@' !in authority) return null
+    val hostport = authority.substringAfterLast('@')
+    if (hostport.isEmpty() || hostport == authority) return null
+    val colon = hostport.lastIndexOf(':')
+    if (colon > 0 && hostport.substring(colon + 1).all { it.isDigit() }) {
+        val port = hostport.substring(colon + 1).toIntOrNull() ?: return null
+        return LanEndpointValidator.HostPort(hostport.substring(0, colon), port)
+    }
+    return LanEndpointValidator.HostPort(hostport, -1)
+}
+
+private fun formatLanHostPort(host: String, port: Int): String {
+    val bare = host.removePrefix("[").removeSuffix("]")
+    val shown = if (':' in bare) "[$bare]" else bare
+    return if (port in 1..65535) "$shown:$port" else shown
 }
 
 internal enum class InferenceKind(val min: Double, val max: Double) {

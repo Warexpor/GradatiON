@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Settings > Models: a local server hostname with an underscore (`my_nas.local`), or a password that contains `@`, saves. Java's URL parser reports those as having no host, so Save used to refuse them, and the Models row printed the raw address including the password. The port has to be from 1 to 65535. A `?query` or `#fragment` on the address no longer swallows the path the app appends (`/v1/models` and the rest); the query stays, and the fragment is dropped.
+- Settings > Tools: Get location stays available when the user allows approximate location. That grant is coarse only, and the switch used to require fine, then say location was denied. The folder URI and the local server address and server type commit with the tap.
 - The Roleplay hub hero uses the same first line as the character list. It was folding the whole card field, so `{{char}}` stayed as a placeholder and a later paragraph showed under the name.
 - A pairing link whose bridge address is written with its own query keeps that query's key case and percent-encoding. `Session` and `hello%20world` used to be stored as `session` and a space, so the saved address was not the one in the QR. A fully encoded address is still decoded once.
 - Roleplay example dialogs keep both sides when the label has a space before the colon (`User : hi`) or the character speaks first. A `User:` line inside the reply stays on the character side.
