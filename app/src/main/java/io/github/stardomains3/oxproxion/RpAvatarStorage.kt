@@ -51,12 +51,21 @@ object RpAvatarStorage {
         }
     }
 
+    /**
+     * True when [characterId] has a finished portrait. Recovers a side file first; a torn
+     * write at the real name is not a picture (same rule as wallpaper).
+     */
+    fun hasAvatar(context: Context, characterId: Long): Boolean {
+        val file = avatarFile(context, characterId)
+        ScenePhoto.recover(file)
+        return ScenePhoto.completeJpeg(file)
+    }
+
     fun encodeAvatarBase64(context: Context, characterId: Long): String? {
         val file = avatarFile(context, characterId)
         ScenePhoto.recover(file)
         // A half-written portrait is not a picture; leave the next phone's copy alone
         // (wallpaper encode already does this).
-        if (!file.isFile || file.length() == 0L) return null
         if (!ScenePhoto.completeJpeg(file)) return null
         return try {
             Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
@@ -66,7 +75,11 @@ object RpAvatarStorage {
     }
 
     fun deleteAvatar(context: Context, characterId: Long) {
-        avatarFile(context, characterId).delete()
+        val file = avatarFile(context, characterId)
+        file.delete()
+        // Side files from a killed replace would bring the portrait back on the next open.
+        File(file.parentFile, "${file.name}.bak").delete()
+        File(file.parentFile, "${file.name}.partial").delete()
     }
 
     /** A persona portrait by file name. Names are never reused, so saved personas can share one safely. */
@@ -87,9 +100,20 @@ object RpAvatarStorage {
         }
     }
 
-    /** Deletes persona portraits nothing points at any more. */
+    /** True when [name] is a finished persona portrait (recovers a side file first). */
+    fun hasPersonaPhoto(context: Context, name: String): Boolean {
+        val file = personaFile(context, name)
+        ScenePhoto.recover(file)
+        return ScenePhoto.completeJpeg(file)
+    }
+
+    /** Deletes persona portraits nothing points at any more, including their side files. */
     fun prunePersonas(context: Context, keep: Set<String>) {
-        File(context.filesDir, PERSONA_DIR).listFiles()?.forEach { if (it.name !in keep) it.delete() }
+        val dir = File(context.filesDir, PERSONA_DIR)
+        dir.listFiles()?.forEach { file ->
+            val base = file.name.removeSuffix(".bak").removeSuffix(".partial")
+            if (base !in keep) file.delete()
+        }
     }
 
     private fun writeJpeg(bitmap: Bitmap, characterId: Long, context: Context): String? {

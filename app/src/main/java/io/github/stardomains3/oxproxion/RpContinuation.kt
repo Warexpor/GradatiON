@@ -49,6 +49,13 @@ object RpContinuation {
     private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״\u201C\u2018\u00AB\u2039《》〈〉｣〞❞❜﹂﹄〕〗＂＇❯｠〙⟩❱〛⟫⟭⟧⦄❩❫❭❳❵⦆⦘⦈⦊⧽"
 
     /**
+     * After a Continue ends: drop the newest reply's swipe versions only when the bubble
+     * actually grew. A failed Continue that put [base] back keeps those versions.
+     */
+    fun continueDroppedAlts(base: String, finalText: String): Boolean =
+        finalText.isNotEmpty() && finalText != base
+
+    /**
      * Continue replaces the reply with the joined text. A picture already on that reply stays
      * unless the new piece brought one of its own. A data URL is not a file we can show.
      * The JPEG stored in the message stays too, so the next save still has the picture.

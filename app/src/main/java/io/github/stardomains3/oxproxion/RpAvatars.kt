@@ -19,8 +19,9 @@ object RpAvatars {
     /** Photo model for [character], or null when it has none. */
     fun photoModel(view: View, character: RpCharacter): Any? {
         character.photoUri?.takeIf { it.isNotBlank() }?.let { return it }
-        val file = RpAvatarStorage.avatarFile(view.context, character.id)
-        return if (file.exists()) file else null
+        return if (RpAvatarStorage.hasAvatar(view.context, character.id)) {
+            RpAvatarStorage.avatarFile(view.context, character.id)
+        } else null
     }
 
     fun bind(image: ImageView, monogram: TextView, character: RpCharacter) {
@@ -54,7 +55,7 @@ object RpAvatars {
 
     private fun cacheKey(view: View, character: RpCharacter): String {
         val file = RpAvatarStorage.avatarFile(view.context, character.id)
-        val stamp = if (file.exists()) file.lastModified() else character.updatedAt
+        val stamp = if (RpAvatarStorage.hasAvatar(view.context, character.id)) file.lastModified() else character.updatedAt
         return "rp-avatar-${character.id}-$stamp"
     }
 }

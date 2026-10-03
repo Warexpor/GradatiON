@@ -6,6 +6,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RpContinuationTest {
@@ -467,5 +468,16 @@ class RpContinuationTest {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)
         assert("mid-sentence" in d)
+    }
+
+    @Test
+    fun continueKeepsAltsWhenTheBubbleDidNotGrow() {
+        assertFalse(RpContinuation.continueDroppedAlts("She waits.", "She waits."))
+        assertFalse(RpContinuation.continueDroppedAlts("She waits.", ""))
+    }
+
+    @Test
+    fun continueDropsAltsWhenTheBubbleGrew() {
+        assertTrue(RpContinuation.continueDroppedAlts("She waits.", "She waits.\n\nHe nods."))
     }
 }
