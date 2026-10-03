@@ -18,10 +18,10 @@ object RpAvatars {
 
     /** Photo model for [character], or null when it has none. */
     fun photoModel(view: View, character: RpCharacter): Any? {
-        character.photoUri?.takeIf { it.isNotBlank() }?.let { return it }
-        return if (RpAvatarStorage.hasAvatar(view.context, character.id)) {
-            RpAvatarStorage.avatarFile(view.context, character.id)
-        } else null
+        // photoUri is the avatar file; a torn write must not skip the completeness check.
+        if (!RpAvatarStorage.hasAvatar(view.context, character.id)) return null
+        return character.photoUri?.takeIf { it.isNotBlank() }
+            ?: RpAvatarStorage.avatarFile(view.context, character.id)
     }
 
     fun bind(image: ImageView, monogram: TextView, character: RpCharacter) {

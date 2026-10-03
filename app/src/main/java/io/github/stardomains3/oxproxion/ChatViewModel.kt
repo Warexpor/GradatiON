@@ -4716,6 +4716,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 return false
             }
         }
+        // Continue extends the last reply in place. Pin that reply (and the turn before it) in
+        // lore focus so keys near the start of a long bubble still match when recent is tight.
+        val continueFocus = if (!continueBeat) {
+            emptyList()
+        } else {
+            val msgs = _chatMessages.value.orEmpty()
+            val lastAi = msgs.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+            val reply = if (lastAi >= 0) getMessageText(msgs[lastAi].content) else ""
+            val preceding = if (lastAi > 0) {
+                msgs.subList(0, lastAi).lastOrNull {
+                    (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it)
+                }?.let { getMessageText(it.content) }.orEmpty()
+            } else {
+                ""
+            }
+            RpRewrite.loreFocus(reply, preceding)
+        }
         // Block Ask↔RP before the async prompt build (awaiting flips later inside sendUserMessage).
         if (_isAwaitingResponse.value == true) {
             _toastUiEvent.postValue(Event(app.getString(R.string.rp_wait_for_reply)))
@@ -4741,7 +4758,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val systemPrompt = rpDelegate.buildSystemPrompt(
                     character = rpDelegate.getActiveCharacter(),
                     extraInstruction = extraInstruction,
-                    loreScan = rpLoreScan(parsed.userText, parsed.reminder.orEmpty()),
+                    loreScan = rpLoreScan(
+                        parsed.userText,
+                        parsed.reminder.orEmpty(),
+                        focus = continueFocus,
+                    ),
                     definitionCap = rpDefinitionCap(),
                     facts = currentRpFacts()
                 )

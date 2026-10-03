@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import android.content.Context
+import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -239,4 +240,33 @@ class AvatarAndPersonaTest {
         assertFalse(File(dir, "$drop.partial").exists())
         assertFalse(File(dir, torn).exists())
     }
+
+    /** photoUri names the avatar file; a torn JPEG must not skip the completeness check. */
+    @Test fun tornPhotoUriIsNotShownAsAPortrait() {
+        val id = 80L
+        val file = RpAvatarStorage.avatarFile(ctx, id)
+        file.parentFile?.mkdirs()
+        file.writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x00))
+        val character = RpCharacter(
+            id = id,
+            name = "Mira",
+            photoUri = Uri.fromFile(file).toString(),
+        )
+        assertFalse(RpAvatarStorage.hasAvatar(ctx, id))
+        assertNull(RpAvatars.photoModel(android.view.View(ctx), character))
+    }
+
+    /** Persona Save commits name/about/photo so a kill after the tap cannot drop them. */
+    @Test fun personaSaveKeepsNameAboutAndPhoto() {
+        val prefs = SharedPreferencesHelper(ctx)
+        prefs.saveRpPersona("A tall stranger")
+        prefs.saveRpPersonaName("Lilith")
+        prefs.saveRpPersonaPhoto("persona_lilith.jpg")
+        assertEquals("A tall stranger", prefs.getRpPersona())
+        assertEquals("Lilith", prefs.getRpPersonaName())
+        assertEquals("persona_lilith.jpg", prefs.getRpPersonaPhoto())
+        prefs.saveRpPersonaPhoto(null)
+        assertNull(prefs.getRpPersonaPhoto())
+    }
+
 }

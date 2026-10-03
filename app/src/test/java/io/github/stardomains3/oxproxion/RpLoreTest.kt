@@ -544,4 +544,28 @@ class RpLoreTest {
         assertTrue(RpLore.select(curled, "The pier is quiet.").contains("dawn"))
     }
 
+
+    @Test
+    fun continueFocusKeepsKeysNearTheStartOfALongReply() {
+        // Recent alone keeps the end of a long bubble; Continue focus keeps the start so early keys still match.
+        val early = "She still has the locket. " + "x".repeat(3_000)
+        val scan = RpLore.sceneScan(
+            pinned = emptyList(),
+            recent = listOf(early),
+            maxChars = 2_000,
+            focus = RpRewrite.loreFocus(early),
+        )
+        val book = """
+            [keys: locket]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, scan).contains("dawn"))
+        val withoutFocus = RpLore.sceneScan(
+            pinned = emptyList(),
+            recent = listOf(early),
+            maxChars = 2_000,
+        )
+        assertFalse(RpLore.select(book, withoutFocus).contains("dawn"))
+    }
+
 }

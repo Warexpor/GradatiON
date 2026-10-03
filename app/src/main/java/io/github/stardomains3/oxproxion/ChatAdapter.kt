@@ -1235,9 +1235,11 @@ class ChatAdapter(
             }
             rpSpeakerHeader.visibility = View.VISIBLE
             rpSpeakerNameView.text = name
+            // Prefer a finished local file (or its URI). A torn photoUri must not win over monogram.
             val model: Any? = when {
-                !rpSpeakerAvatarUri.isNullOrBlank() -> rpSpeakerAvatarUri
-                rpSpeakerAvatarFile?.let { ScenePhoto.completeJpeg(it) } == true -> rpSpeakerAvatarFile
+                rpSpeakerAvatarFile?.let { ScenePhoto.completeJpeg(it) } == true ->
+                    rpSpeakerAvatarUri?.takeIf { it.isNotBlank() } ?: rpSpeakerAvatarFile
+                rpSpeakerAvatarFile == null && !rpSpeakerAvatarUri.isNullOrBlank() -> rpSpeakerAvatarUri
                 else -> null
             }
             if (model != null) {
