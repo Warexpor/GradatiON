@@ -226,26 +226,27 @@
             android:layout_gravity="bottom"
             android:orientation="vertical">
 
-            <!-- Offline banner: glass capsule over the transcript -->
+            <!-- Offline banner: the same glass capsule as the approval pin, so the stack over the
+                 composer shares its edges, and the light starts where the composer's words do.
+                 Start-aligned, because centred lines left a long message adrift from its light. -->
             <io.github.stardomains3.oxproxion.GlassTextView
                 android:id="@+id/codeSessionBanner"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:layout_marginBottom="8dp"
-                android:drawablePadding="8dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginBottom="6dp"
+                android:drawablePadding="10dp"
                 android:ellipsize="end"
-                android:gravity="center"
+                android:gravity="center_vertical|start"
                 android:clickable="true"
                 android:focusable="true"
                 android:maxLines="5"
                 android:minHeight="44dp"
-                android:paddingStart="16dp"
-                android:paddingTop="8dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="8dp"
+                android:paddingStart="18dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="18dp"
+                android:paddingBottom="10dp"
                 android:textColor="@color/xai_ink"
                 android:textSize="13sp"
                 android:visibility="gone"

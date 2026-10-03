@@ -220,6 +220,36 @@ class CodeModeScreenshotTest {
         snap(root(a), "code_session_edge_rows_end_dark")
     }
 
+    /**
+     * The offline banner is the approval pin's capsule: the composer's edges, its light starting
+     * where the composer's words do, and a long message start-aligned beside the light. Set up the
+     * way the screen sets it when the machine drops (the demo machine never goes offline).
+     */
+    @Test fun codeSessionOfflineBannerDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+        hub.answer(id, approval.requestId, approval.options.first { it.id == "allow" })
+        idle(16)
+        val v = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }.requireView()
+        val banner = v.findViewById<android.widget.TextView>(R.id.codeSessionBanner)
+        banner.visibility = View.VISIBLE
+        banner.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_code_led_off, 0, 0, 0)
+        banner.text = ctx.getString(R.string.code_session_offline_banner, "studio-mac") + "\n" +
+            ctx.getString(R.string.code_session_reconnect)
+        idle(2)
+        val composer = v.findViewById<View>(R.id.codeSessionComposer)
+        val input = v.findViewById<View>(R.id.codeComposerInput)
+        fun x(view: View) = IntArray(2).also { view.getLocationInWindow(it) }[0]
+        assertEquals("the banner shares the composer's edges", x(composer), x(banner))
+        assertEquals(composer.width, banner.width)
+        assertEquals("its light starts where the composer's words do", x(input) + input.paddingStart, x(banner) + banner.paddingStart)
+        assertEquals(android.view.Gravity.START, banner.gravity and android.view.Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK)
+        snap(root(a), "code_session_offline_banner_dark")
+    }
+
     /** Mid-turn: a command streams into its pane while the Working footer closes the rail. */
     @Test fun codeSessionRunningDark() = withCode { a, _ ->
         val hub = CodeHub.getLoaded(ctx)
