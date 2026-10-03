@@ -20,7 +20,7 @@ class ChatMemoryDialogFragment : DialogFragment() {
 
         val counts = COUNTS
         val options = Array(counts.size) { label(requireContext(), counts[it]) }
-        val checkedItem = counts.indexOf(currentCount).let { if (it >= 0) it else DEFAULT_INDEX }
+        val checkedItem = chatMemoryCheckedIndex(currentCount, counts)
 
         val ink = ContextCompat.getColor(requireContext(), R.color.xai_ink)
         val adapter = object : ArrayAdapter<String>(
@@ -53,7 +53,6 @@ class ChatMemoryDialogFragment : DialogFragment() {
     companion object {
         /** What the picker offers, in order; [Int.MAX_VALUE] is "all". */
         private val COUNTS = intArrayOf(2, 4, 6, 8, 10, 12, 16, 20, Int.MAX_VALUE)
-        private const val DEFAULT_INDEX = 3
 
         /** "8 messages" or "All messages", for the picker and the settings row. */
         fun label(context: Context, count: Int): String =

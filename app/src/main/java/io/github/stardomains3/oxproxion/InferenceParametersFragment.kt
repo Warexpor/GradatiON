@@ -31,10 +31,7 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferenceTempEnabled(),
             currentValue = prefs.getInferenceTempValue().toString(),
             onSwitchChanged = { prefs.saveInferenceTempEnabled(it) },
-            onValueChanged = { text ->
-                // Only save if valid number, else fallback
-                if (text.toDoubleOrNull() != null) prefs.saveInferenceTempValue(text)
-            }
+            onValueChanged = { text -> prefs.saveInferenceTempValue(text) }
         )
 
         // Top P
@@ -46,9 +43,7 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferenceTopPEnabled(),
             currentValue = prefs.getInferenceTopPValue().toString(),
             onSwitchChanged = { prefs.saveInferenceTopPEnabled(it) },
-            onValueChanged = { text ->
-                if (text.toDoubleOrNull() != null) prefs.saveInferenceTopPValue(text)
-            }
+            onValueChanged = { text -> prefs.saveInferenceTopPValue(text) }
         )
 
         // Top K
@@ -60,9 +55,7 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferenceTopKEnabled(),
             currentValue = prefs.getInferenceTopKValue().toString(),
             onSwitchChanged = { prefs.saveInferenceTopKEnabled(it) },
-            onValueChanged = { text ->
-                if (text.toIntOrNull() != null) prefs.saveInferenceTopKValue(text.toInt())
-            }
+            onValueChanged = { text -> acceptedTopK(text)?.let { prefs.saveInferenceTopKValue(it) } }
         )
 
         // Min P
@@ -74,9 +67,7 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferenceMinPEnabled(),
             currentValue = prefs.getInferenceMinPValue().toString(),
             onSwitchChanged = { prefs.saveInferenceMinPEnabled(it) },
-            onValueChanged = { text ->
-                if (text.toDoubleOrNull() != null) prefs.saveInferenceMinPValue(text)
-            }
+            onValueChanged = { text -> prefs.saveInferenceMinPValue(text) }
         )
 
         // Repetition Penalty
@@ -88,9 +79,7 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferenceRepetitionPenaltyEnabled(),
             currentValue = prefs.getInferenceRepetitionPenaltyValue().toString(),
             onSwitchChanged = { prefs.saveInferenceRepetitionPenaltyEnabled(it) },
-            onValueChanged = { text ->
-                if (text.toDoubleOrNull() != null) prefs.saveInferenceRepetitionPenaltyValue(text)
-            }
+            onValueChanged = { text -> prefs.saveInferenceRepetitionPenaltyValue(text) }
         )
 
         // Presence Penalty
@@ -102,9 +91,7 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferencePresencePenaltyEnabled(),
             currentValue = prefs.getInferencePresencePenaltyValue().toString(),
             onSwitchChanged = { prefs.saveInferencePresencePenaltyEnabled(it) },
-            onValueChanged = { text ->
-                if (text.toDoubleOrNull() != null) prefs.saveInferencePresencePenaltyValue(text)
-            }
+            onValueChanged = { text -> prefs.saveInferencePresencePenaltyValue(text) }
         )
 
         // Apply custom switch styling

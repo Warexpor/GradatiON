@@ -175,18 +175,21 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
     /** Enabled sampling values. Disabled knobs stay unset so the provider default is used. */
     private fun ChatRequest.withSampling(): ChatRequest {
         val prefs = sharedPreferencesHelper
-        fun number(enabled: Boolean, raw: String) = if (enabled) raw.toDoubleOrNull() else null
+        fun number(enabled: Boolean, kind: InferenceKind, raw: String) =
+            if (enabled) acceptedInferenceDecimal(kind, raw)?.let(::inferenceDecimalOrNull) else null
         return copy(
-            temperature = number(prefs.getInferenceTempEnabled(), prefs.getInferenceTempValue()),
-            topP = number(prefs.getInferenceTopPEnabled(), prefs.getInferenceTopPValue()),
-            topK = if (prefs.getInferenceTopKEnabled()) prefs.getInferenceTopKValue() else null,
-            minP = number(prefs.getInferenceMinPEnabled(), prefs.getInferenceMinPValue()),
+            temperature = number(prefs.getInferenceTempEnabled(), InferenceKind.TEMPERATURE, prefs.getInferenceTempValue()),
+            topP = number(prefs.getInferenceTopPEnabled(), InferenceKind.TOP_P, prefs.getInferenceTopPValue()),
+            topK = if (prefs.getInferenceTopKEnabled()) acceptedTopK(prefs.getInferenceTopKValue().toString()) else null,
+            minP = number(prefs.getInferenceMinPEnabled(), InferenceKind.MIN_P, prefs.getInferenceMinPValue()),
             repetitionPenalty = number(
                 prefs.getInferenceRepetitionPenaltyEnabled(),
+                InferenceKind.REPETITION,
                 prefs.getInferenceRepetitionPenaltyValue(),
             ),
             presencePenalty = number(
                 prefs.getInferencePresencePenaltyEnabled(),
+                InferenceKind.PRESENCE,
                 prefs.getInferencePresencePenaltyValue(),
             ),
         )

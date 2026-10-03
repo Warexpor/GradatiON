@@ -44,7 +44,7 @@ class MaxTokensDialogFragment : DialogFragment() {
         buttonSave.setOnClickListener {
             val maxTokensStr = editTextMaxTokens.text.toString().trim()
             val maxTokensInt = maxTokensStr.toIntOrNull()
-            if (maxTokensStr.isNotBlank() && maxTokensInt != null && maxTokensInt in 1..999999) {
+            if (maxTokensStr.isNotBlank() && maxTokensInt != null && maxTokensInt in SETTINGS_MAX_TOKENS_MIN..SETTINGS_MAX_TOKENS_MAX) {
                 sharedPreferencesHelper.saveMaxTokens(maxTokensStr)
                 dismiss()
             } else {
