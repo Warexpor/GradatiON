@@ -1644,6 +1644,9 @@ class SharedPreferencesHelper(context: Context) {
     fun saveRpLorebookId(characterId: Long, lorebookId: Long?) = mainPrefs.edit(commit = true) {
         if (lorebookId == null || lorebookId < 0) remove("rp_lorebook_$characterId")
         else putLong("rp_lorebook_$characterId", lorebookId)
+        // The user picked a book (or "use whichever is active"). A name still waiting from
+        // a backup would replace this on the next launch, once that book exists.
+        remove(pendingLorebookKey(characterId))
     }
 
     /**

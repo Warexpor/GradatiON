@@ -26,7 +26,11 @@ data class RpCharacterExport(
     val instruction: String = "",
     /** Stable key used to rematch chats after re-import. */
     val exportKey: String = "",
-    /** Embedded JPEG as Base64; preferred over [photoUri] for portable backups. */
+    /**
+     * Embedded JPEG as Base64; preferred over [photoUri] for portable backups.
+     * Null means this backup does not carry a portrait (leave the one on the phone).
+     * Empty means the portrait was removed.
+     */
     val avatarBase64: String? = null,
     /** Legacy local file:// path — ignored on import when [avatarBase64] is set. */
     val photoUri: String? = null,

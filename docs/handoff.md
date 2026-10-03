@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Import wave 30)
+
+On `gradation/w30-import` (PR into `gradation/app-pass`). Import/export follow-ups after #125. Not a redo of the last character copy, inactive lore backups (nothing in the file marked active), or cold-start pin linking. Not a redo of #122 (notes after a later save, wallpaper prepare, torn portrait export):
+- A lorebook file that names one book twice keeps the last copy's active flag. An earlier active copy no longer leaves the book on, and it no longer turns off a different book that was already active.
+- Picking a lore pin, including "use whichever is active", clears the name a character backup was waiting to attach. The next launch no longer replaces that choice when the book shows up.
+- A character with no portrait exports an empty picture, and import removes the old file and `photoUri`. A torn portrait still exports nothing (null), so the other phone keeps its picture. Older backups that omit the field still leave the local portrait.
+
+Phone: import a lore file that lists the same book twice, active then off, onto a phone that already has a different book active (the duplicate should end off, and the other book should stay active). Pin a character to a book while a backup is still waiting on a different name, then import that book (the pin you chose should stay). Remove a portrait, export, import over the same character (the picture should be gone). A half-written portrait file should still not replace the picture on the other phone.
+
 # Handoff (2026-10-03, Stability wave 30)
 
 On `gradation/w30-stability` (PR into `gradation/app-pass`). Persistence follow-ups after the passphrase bind and the pre-ATTACH wal park (#130). Not a redo of that pass or of #118 (sidecar temps and leftover encrypting after `encrypt_ok`):

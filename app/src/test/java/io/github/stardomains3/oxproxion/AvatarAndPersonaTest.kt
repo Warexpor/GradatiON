@@ -182,7 +182,8 @@ class AvatarAndPersonaTest {
         assertFalse(File(file.parentFile, "${file.name}.bak").exists())
         assertFalse(File(file.parentFile, "${file.name}.partial").exists())
         assertFalse(RpAvatarStorage.hasAvatar(ctx, id))
-        assertNull(RpAvatarStorage.encodeAvatarBase64(ctx, id))
+        // No file exports as empty, so a backup can clear the portrait. Null is a torn file.
+        assertEquals("", RpAvatarStorage.encodeAvatarBase64(ctx, id))
     }
 
     /** A torn file at the portrait name is not exported or shown as a picture. */
