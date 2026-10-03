@@ -652,6 +652,8 @@ class AcpAdapter : HarnessAdapter {
             "browser_mouse_up", "browsermouseup",
             "browser_mouse_wheel", "browsermousewheel",
             "browser_cdp", "browsercdp",
+            "browser_profile_start", "browserprofilestart",
+            "browser_profile_stop", "browserprofilestop",
             "kill_shell", "killshell" -> "execute"
             "think", "thought", "reasoning",
             "await", "await_task", "awaittask",
@@ -1188,8 +1190,13 @@ class AcpAdapter : HarnessAdapter {
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId",
-                "button") != null ||
+                "button",
+                // Typed text, a filled value, or selected options. Later than element so a
+                // click still shows the control name when that description is present.
+                "text", "value", "values") != null ||
             pointerText(raw) != null ||
+            // A ref alone still fills an empty row. It must not beat a scroll or a drag.
+            firstRaw(raw, "ref") != null ||
             firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
@@ -1383,7 +1390,8 @@ class AcpAdapter : HarnessAdapter {
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId",
-                "button") ?: pointerText(raw),
+                "button",
+                "text", "value", "values") ?: pointerText(raw) ?: firstRaw(raw, "ref"),
             filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
@@ -1402,7 +1410,9 @@ class AcpAdapter : HarnessAdapter {
 
     /**
      * Pointer tools. A click or move is `x, y` (both required, so a lone `x` does not
-     * replace a command). A drag is `start → end`. A wheel is `deltaX, deltaY`.
+     * replace a command). A coordinate drag is `start → end`. An element drag
+     * (`browser_drag`) is the same arrow between refs or labels. A scroll with
+     * `direction` is `down 500`. A wheel is `deltaX, deltaY`.
      * Whole-number doubles still show as `10, 20`, not `10.0, 20.0`.
      * A click still wins when both `x`/`y` and a delta are present.
      */
@@ -1416,10 +1426,30 @@ class AcpAdapter : HarnessAdapter {
         if (sx != null && sy != null && ex != null && ey != null) {
             return "$sx, $sy → $ex, $ey"
         }
+        elementDragText(raw)?.let { return it }
+        scrollText(raw)?.let { return it }
         val dx = coordPiece(raw["deltaX"] ?: raw["delta_x"])
         val dy = coordPiece(raw["deltaY"] ?: raw["delta_y"])
         if (dx != null || dy != null) return "${dx ?: "0"}, ${dy ?: "0"}"
         return null
+    }
+
+    /** `browser_drag` names the ends. Both are required, so one ref does not replace a command. */
+    private fun elementDragText(raw: JsonObject): String? {
+        val start = coordPiece(raw["startElement"] ?: raw["start_element"])
+            ?: coordPiece(raw["startRef"] ?: raw["start_ref"])
+        val end = coordPiece(raw["endElement"] ?: raw["end_element"])
+            ?: coordPiece(raw["endRef"] ?: raw["end_ref"])
+        if (start == null || end == null) return null
+        return "$start → $end"
+    }
+
+    /** `browser_scroll`. Anything other than up/down/left/right is not a direction. */
+    private fun scrollText(raw: JsonObject): String? {
+        val dir = coordPiece(raw["direction"])?.lowercase() ?: return null
+        if (dir != "up" && dir != "down" && dir != "left" && dir != "right") return null
+        val amount = coordPiece(raw["amount"])
+        return if (amount != null) "$dir $amount" else dir
     }
 
     private fun xyText(raw: JsonObject?): String? {

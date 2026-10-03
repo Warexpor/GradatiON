@@ -2795,6 +2795,65 @@ class CodeProtocolTest {
         assertEquals(ToolKind.EXECUTE, byId["up"]?.kind)
     }
 
+    @Test fun codexAndOpenCodeModesSetThePill() {
+        fun mode(id: String, seq: Long): PermissionMode {
+            val out = acp.decode(update(
+                """{"sessionUpdate":"current_mode_update","currentModeId":"$id"}""",
+                seq,
+            ))
+            val info = (out.single() as AdapterOutput.Update).update as CodeUpdate.SessionInfo
+            return info.permissionMode!!
+        }
+        assertEquals(PermissionMode.ASK, mode("read-only", 1))
+        assertEquals(PermissionMode.AUTO_EDIT, mode("auto", 2))
+        assertEquals(PermissionMode.FULL_AUTO, mode("full-access", 3))
+        assertEquals(PermissionMode.FULL_AUTO, mode("full_access", 4))
+        assertEquals(PermissionMode.AUTO_EDIT, mode("build", 5))
+        // This app's own id must not be swallowed by Codex's `auto`.
+        assertEquals(PermissionMode.AUTO_EDIT, mode("auto-edit", 6))
+    }
+
+    @Test fun multiSelectQuestionIsSkipped() {
+        val snake = acp.decode("""{"jsonrpc":"2.0","id":16,"method":"cursor/ask_question","params":{"sessionId":"s1","questions":[{"id":"q1","prompt":"Which?","allow_multiple":true,"options":[{"id":"a","label":"A"},{"id":"b","label":"B"}]}]}}""")
+        assertTrue(snake.any { it is AdapterOutput.Update && (it.update as? CodeUpdate.Upsert)?.event is CodeEvent.Notice })
+        assertTrue(snake.filterIsInstance<AdapterOutput.Update>().none {
+            (it.update as? CodeUpdate.Upsert)?.event is CodeEvent.Approval
+        })
+        val skipped = Json.parseToJsonElement(snake.filterIsInstance<AdapterOutput.Reply>().single().frame).jsonObject
+        assertEquals("skipped", skipped["result"]!!.jsonObject["outcome"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
+        assertTrue(snake.none { it is AdapterOutput.Reply && it.frame.contains("Method not found") })
+        val camel = acp.decode("""{"jsonrpc":"2.0","id":17,"method":"_cursor/ask_question","params":{"sessionId":"s1","questions":[{"id":"q2","prompt":"Which?","allowMultiple":true,"options":[{"id":"a","label":"A"}]}]}}""")
+        val camelOutcome = Json.parseToJsonElement(camel.filterIsInstance<AdapterOutput.Reply>().single().frame)
+            .jsonObject["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("skipped", camelOutcome["outcome"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun browserPayloadUsesTheExecuteCardAndTheActionLine() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ps","title":"Profile","kind":"other","name":"BrowserProfileStart","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"pt","title":"Stop","kind":"other","name":"browser_profile_stop","status":"completed"}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ty","title":"Type","kind":"other","name":"BrowserType","status":"completed","rawInput":{"ref":"e5","text":"hello"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"fl","title":"Fill","kind":"other","name":"BrowserFill","status":"completed","rawInput":{"value":5.0}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"so","title":"Select","kind":"other","name":"BrowserSelectOption","status":"completed","rawInput":{"values":["USA","Canada"]}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sc","title":"Scroll","kind":"other","name":"BrowserScroll","status":"completed","rawInput":{"direction":"down","amount":500.0,"ref":"e9"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dr","title":"Drag","kind":"other","name":"BrowserDrag","status":"completed","rawInput":{"startRef":"e1","endRef":"e2"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ck","title":"Click","kind":"other","name":"BrowserClick","status":"completed","rawInput":{"element":"Submit","ref":"e3"}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EXECUTE, byId["ps"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["pt"]?.kind)
+        assertEquals(ToolKind.EXECUTE, byId["ty"]?.kind)
+        assertEquals("hello", byId["ty"]?.detail)
+        assertEquals("5", byId["fl"]?.detail)
+        assertEquals("USA, Canada", byId["so"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["sc"]?.kind)
+        assertEquals("down 500", byId["sc"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["dr"]?.kind)
+        assertEquals("e1 → e2", byId["dr"]?.detail)
+        assertEquals("Submit", byId["ck"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()

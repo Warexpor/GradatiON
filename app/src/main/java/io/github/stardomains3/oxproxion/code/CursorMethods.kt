@@ -163,9 +163,13 @@ internal class CursorMethods {
         )
     }
 
-    /** One question the card can show. Multiple select, or more than one question, cannot. */
+    /**
+     * One question the card can show. Multiple select, or more than one question, cannot.
+     * Cursor sends `allow_multiple`; a camelCase copy is the same flag. Missing it used
+     * to offer one option and answer as if the agent had asked for a single choice.
+     */
     private fun choiceOptions(question: JsonObject): List<ApprovalOption>? {
-        if (question.bool("allowMultiple") == true) return null
+        if (question.bool("allowMultiple") == true || question.bool("allow_multiple") == true) return null
         val opts = (question["options"] as? JsonArray).orEmpty().mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
             val id = rpcId(o["id"])?.trim()?.ifEmpty { null } ?: return@mapNotNull null
