@@ -6374,6 +6374,13 @@ $cleanContent
             .setMessage(filesList)
             .setPositiveButton(R.string.action_remove_all) { _, _ ->
                 pendingFiles.clear()
+                // The park map still named these files after History or Code. An empty
+                // live stage skips the next park, so they came back on the row and the chip.
+                val id = if (askComposer.bound) askComposer.sessionId else viewModel.getCurrentSessionId()
+                val before = viewModel.stagedAttachments()
+                val after = ComposerStaged.dropFiles(before, id, currentStagedEntry())
+                viewModel.setStagedAttachments(after)
+                for (gone in ComposerStaged.evicted(before, after)) discardParkedScene(gone)
                 updateAttachmentButton()
             }
             .setNegativeButton(R.string.action_close, null)

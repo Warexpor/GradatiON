@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- History groups a chat by calendar day, not by a 24-hour step. After a daylight-saving fallback the first hour of yesterday stayed in This week and showed a weekday; after a spring-forward the last hour of the day before yesterday showed as Yesterday. The six-day week uses the same calendar edges.
+- Removing every attached file also drops that list from the parked composer. History and Code had already stored it, and an empty live stage skipped the next park, so the files came back on the row and in the composer.
 - Opening an Ask chat from History while the Roleplay character list is showing no longer forgets that list. Coming back to Roleplay shows it again. A history open that does not land (a reply is still streaming, or the chat is already gone) no longer hides the list the next time Roleplay opens.
 - A pairing link whose bridge address has its own query (`wss://…?a=1&b=2`) keeps that query when the `&` was not percent-encoded. It used to be cut at the first `&`, so the address was wrong even though the token still read.
 - A failed pair test no longer treats a port or a timeout that merely contains 401 or 403 (port 4010, "4012 ms") as a rejected token. HTTP 401 and 403 still do.

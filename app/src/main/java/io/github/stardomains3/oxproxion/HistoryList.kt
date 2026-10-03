@@ -36,7 +36,6 @@ object HistoryList {
         val earlier: String,
     )
 
-    private const val DAY_MS = 24L * 60 * 60 * 1000
     /** One preview line. Longer unsent text is cut, with the match kept in view. */
     private const val DRAFT_LINE = 160
     /**
@@ -68,8 +67,8 @@ object HistoryList {
         val start = startOfDay(now, zone)
         return when {
             timestamp >= start -> Section.TODAY
-            timestamp >= start - DAY_MS -> Section.YESTERDAY
-            timestamp >= start - WEEK_DAYS * DAY_MS -> Section.WEEK
+            timestamp >= shiftDays(start, -1, zone) -> Section.YESTERDAY
+            timestamp >= shiftDays(start, -WEEK_DAYS, zone) -> Section.WEEK
             else -> Section.EARLIER
         }
     }
@@ -81,8 +80,10 @@ object HistoryList {
         zone: TimeZone = TimeZone.getDefault(),
     ): TimestampKind {
         val start = startOfDay(now, zone)
-        if (timestamp >= start - DAY_MS) return TimestampKind.TIME
-        if (timestamp >= start - WEEK_DAYS * DAY_MS) return TimestampKind.WEEKDAY
+        // Calendar days, not 24h steps. A DST fallback makes yesterday 25 hours, so the
+        // first hour used to land in This week and show a weekday instead of the time.
+        if (timestamp >= shiftDays(start, -1, zone)) return TimestampKind.TIME
+        if (timestamp >= shiftDays(start, -WEEK_DAYS, zone)) return TimestampKind.WEEKDAY
         val nowCal = Calendar.getInstance(zone).apply { timeInMillis = now }
         val thenCal = Calendar.getInstance(zone).apply { timeInMillis = timestamp }
         return if (nowCal.get(Calendar.YEAR) == thenCal.get(Calendar.YEAR)) {
@@ -520,6 +521,14 @@ object HistoryList {
         if (start > 0) snippet = "…$snippet"
         if (end < text.length) snippet = "$snippet…"
         return snippet
+    }
+
+    /** Midnight, [days] calendar days from [millis] in [zone]. Not 24-hour steps. */
+    private fun shiftDays(millis: Long, days: Int, zone: TimeZone): Long {
+        val calendar = Calendar.getInstance(zone)
+        calendar.timeInMillis = millis
+        calendar.add(Calendar.DATE, days)
+        return calendar.timeInMillis
     }
 
     private fun Labels.of(section: Section): String = when (section) {
