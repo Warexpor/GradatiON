@@ -138,16 +138,22 @@ enum class PermissionMode(val id: String) {
         /**
          * ACP `currentModeId` / `modeId`, or null when it is not a mode this phone shows.
          * Unknown ids stay null so a foreign mode does not snap the pill back to Ask.
-         * Accepts this app's ids and the ones Claude Code / Codex ACP publish.
+         * Accepts this app's ids and the ones Claude Code, Codex, OpenCode, and Cursor publish.
+         * Codex presets are `read-only` (an edit still asks), `auto` (workspace edits go
+         * through; leaving the workspace still asks), and `full-access` (nothing asks).
+         * OpenCode's default agent id is `build`.
          */
         fun fromAcpModeId(id: String?): PermissionMode? {
             val key = id?.trim()?.lowercase()?.replace('_', '-') ?: return null
             return when (key) {
-                "ask", "default" -> ASK
-                "auto-edit", "acceptedits" -> AUTO_EDIT
+                "ask", "default", "read-only" -> ASK
+                // `auto` is Codex's workspace preset, not this app's `auto-edit` id.
+                // `build` is OpenCode's default agent: edits go through, sensitive calls still ask.
+                "auto-edit", "acceptedits", "auto", "build" -> AUTO_EDIT
                 "plan" -> PLAN
                 // Cursor Agent's `agent` mode is full tool access, the same pill as full auto.
-                "full-auto", "bypasspermissions", "dontask", "agent" -> FULL_AUTO
+                // Codex `full-access` is AskForApproval::Never with the sandbox off.
+                "full-auto", "full-access", "bypasspermissions", "dontask", "agent" -> FULL_AUTO
                 else -> entries.find { it.id == key }
             }
         }

@@ -15,7 +15,8 @@ import kotlinx.serialization.json.longOrNull
  * Whole-number doubles (`42.0`) and digit strings still become longs so resume and sort stay honest.
  * A `sessionId`, `model`, `cwd`, `harness`, or `branch` written the same way still matches as `"5"`, not `"5.0"`.
  * `permissionMode` / `mode` uses the same aliases as a live `current_mode_update`
- * (`acceptEdits`, `bypassPermissions`, `agent`, `full_auto`), not only the exact pill ids.
+ * (`acceptEdits`, `bypassPermissions`, `agent`, `full_auto`, Codex `auto` /
+ * `full-access` / `read-only`, OpenCode `build`), not only the exact pill ids.
  */
 object ListSessionsJson {
 

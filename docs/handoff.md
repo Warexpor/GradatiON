@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Code wave 31)
+
+On `cursor/code-mode-wave31-814a` (PR into `gradation/app-pass`). Code-mode follow-ups after cancelled todos, `_cursor/` methods, and mouse execute cards (#131). Not a redo of that pass, of harness-id folding, of listSessions permissionMode aliases, or of BrowserMouseClickXy / BrowserCdp cards. Not #139 (history preview marks, staged-file cap), #140 (tool switches without a grant, local CGNAT and IPv6), #141 (character-list chrome, pairing `#` and field names), #142 (list underscores, example dialogs, wrapped lore keys), or #143 (recovered database at the root, side pictures, emoji slices).
+
+- Codex ACP mode ids `read-only`, `auto`, and `full-access` (and `full_access`) set the approval pill. A live `current_mode_update` used to be ignored, and a listed session stayed on Ask. `auto` is workspace edits (Auto-edit), not Full auto; `read-only` still asks before an edit. OpenCode's default agent id `build` is Auto-edit. `auto-edit` is unchanged.
+- `cursor/ask_question` with `allow_multiple` (or `allowMultiple`) is skipped, the same as several questions. It used to show one option and answer as a single choice.
+- `BrowserProfileStart` and `BrowserProfileStop` use the execute card. A type, fill, or select that omits the element description shows `text`, `value`, or `values` (a whole-number double shows as `5`). A scroll with `direction` and `amount` shows `down 500` even when a `ref` is also set. `BrowserDrag` with `startRef` / `endRef` shows `e1 → e2`. A click that names the control still shows that name.
+
+Phone: a Codex session in `auto` or `full-access` should not say Ask. A question that allows several answers should say it was skipped, not offer one button. On Cursor Agent, a profile start should show the execute icon; a scroll should show `down 500`; a drag between two refs should show `e1 → e2`.
+
 # Handoff (2026-10-03, Hub/Pair wave 31)
 
 On `cursor/hub-list-and-pairing-a23e` (PR into `gradation/app-pass`). Hub/mode and pairing follow-ups after #137. Not a redo of the Roleplay list surviving an Ask history open, unencoded `&` in a bridge address, or 401/403 as status codes. Not a redo of Continue/Start staying on the thread, Roleplay-off returning to Chat when idle, or sheet glass after the first layout (#129). Not a redo of history-preview marks or the staged-file cap (#139), of captionless Photo and underscores on the character list (#142), of the recovered-database open, side pictures, and emoji slices (#143), or of an enabled tool staying on and local IPv6/CGNAT (#140).
