@@ -321,6 +321,94 @@ class CodePairingTest {
     }
 
     @Test
+    fun parse_noteOnTokenBeforeALaterHashDoesNotJoinTheToken() {
+        val raw = "gradation://pair?token=$goodToken#note&url=wss://h/v1?a=1#section&fp=$pinHex"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(goodToken, r.pairing.token)
+        assertEquals("wss://h/v1?a=1#section", r.pairing.url)
+        assertEquals(pinB64, r.pairing.fingerprint)
+    }
+
+    @Test
+    fun parse_noteOnFingerprintBeforeALaterHashDoesNotRejectThePin() {
+        val raw = "gradation://pair?fp=$pinHex#note&url=wss://h/v1?a=1#section&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(pinB64, r.pairing.fingerprint)
+        assertEquals("wss://h/v1?a=1#section", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
+    fun parse_encodedHashInTheTokenStaysWhenANoteFollows() {
+        val raw = "gradation://pair?token=ab%23cd#note&url=wss://h/v1#section&fp=$pinHex"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("ab#cd", r.pairing.token)
+        assertEquals("wss://h/v1#section", r.pairing.url)
+        assertEquals(pinB64, r.pairing.fingerprint)
+    }
+
+    @Test
+    fun parse_hashInsideABridgeAuthStaysInTheAddress() {
+        val raw = "gradation://pair?url=wss://h/v1?room=1&auth=session#keep&b=2&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://h/v1?room=1&auth=session#keep&b=2", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
+    fun parse_firstAddressAliasWinsOverALaterUrlName() {
+        val raw = "gradation://pair?address=wss://h/v1&url=wss://other.example/v1&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://h/v1", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
+    fun parse_firstWsAliasWinsOverALaterAddress() {
+        val raw = "gradation://pair?ws=wss://h/v1&address=wss://other.example/v1&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://h/v1", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
+    fun parse_emptyUrlDoesNotHideALaterAddress() {
+        val raw = "gradation://pair?url=&address=wss://h/v1&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://h/v1", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
+    fun parse_formEncodedSpacedFingerprintStillPins() {
+        val spaced = pinHex.chunked(2).joinToString(" ")
+        val encoded = java.net.URLEncoder.encode(spaced, "UTF-8")
+        val raw = "gradation://pair?url=$goodUrl&token=$goodToken&fp=$encoded"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertTrue(encoded.contains('+'))
+        assertEquals(pinB64, r.pairing.fingerprint)
+        assertEquals(goodUrl, r.pairing.url)
+    }
+
+    @Test
+    fun parse_formEncodedFingerprintNoteBeforeALaterHashStillPins() {
+        val plus = pinHex.chunked(2).joinToString("+")
+        val raw = "gradation://pair?fp=$plus#note&url=wss://h/v1?a=1#section&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(pinB64, r.pairing.fingerprint)
+        assertEquals("wss://h/v1?a=1#section", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
+    fun parse_prefixedPinPlusSurvivesANote() {
+        val raw = "gradation://pair?fp=$pinB64#note&url=wss://h/v1#section&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(pinB64, r.pairing.fingerprint)
+        assertEquals("wss://h/v1#section", r.pairing.url)
+    }
+
+    @Test
     fun parse_hexWithColons() {
         val colons =
             "12:AD:50:59:23:03:1E:7D:75:A8:97:2D:CA:3A:9E:0C:ED:E9:FE:50:86:FB:7C:08:8F:42:E0:B5:6A:98:93:A9"
