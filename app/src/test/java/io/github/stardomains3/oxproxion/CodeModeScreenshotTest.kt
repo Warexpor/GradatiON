@@ -106,6 +106,8 @@ class CodeModeScreenshotTest {
         assertEquals("the header light is on while the agent waits", View.VISIBLE,
             root(a).findViewById<View>(R.id.codeSessionHeaderLed).visibility)
         assertTranscriptOnGlassSheet(a)
+        assertEquals("an edit names its file above the path", View.VISIBLE,
+            bindRow(a) { it is CodeEvent.Approval }.findViewById<View>(R.id.codeApprovalWhat).visibility)
         snap(root(a), "code_session_approval_dark")
     }
 
@@ -210,6 +212,8 @@ class CodeModeScreenshotTest {
         val ask = bindRow(a) { it is CodeEvent.Approval }
         ask.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        assertEquals("a command already in the pane is not repeated above it", View.GONE,
+            ask.findViewById<View>(R.id.codeApprovalWhat).visibility)
         val box = ask.findViewById<android.widget.LinearLayout>(R.id.codeApprovalButtons)
         assertEquals("long answers stack", android.widget.LinearLayout.VERTICAL, box.orientation)
         assertOnTranscriptGrid(list)
