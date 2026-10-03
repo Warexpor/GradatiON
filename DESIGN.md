@@ -153,6 +153,22 @@ and never auto-send, and there's no hold-to-talk. While listening:
 - The session menu switches between Normal view (folded) and Thinking view (every thought and
   output open).
 
+**Code home and session chrome.** A remote for agents, not a settings form.
+- Status lights: lit (connected, or the session waits on you), hollow (connecting, or working),
+  dark (offline or unreachable). Shape carries the state, never hue. On a mark's corner the light
+  has a canvas-colored ring that cuts it out of the mark.
+- The machine console is tint-only glass: the machine's disc with its light, the name, and a
+  mono line with the status and the address. Session rows are tint-only glass cards: the agent's
+  mark in a recessed key that lights while busy, the status chip on the title line, agent and
+  folder in mono with the age at the end, and the agent's last line on a thin rule.
+- The agent picker is `PickerPopover` with tiles two to a line (`item_code_harness_tile`).
+- Empty, onboarding and loading states put the agent's mark in a lit disc inside two hairline
+  orbits (`bg_code_rings`).
+- The session header keeps round glass back and options buttons; between them a tint-only
+  capsule holds the agent's mark, its light, the title and the where line.
+- Mono captions use `Widget.Gradation.Code.MonoLine` as a style, not a textAppearance, because
+  the theme's font family outranks a textAppearance's.
+
 **Roleplay home.** The Roleplay tab opens on a chats list (`RpChatsHome`): one row per character with the newest chat's last line, time and chat count. The top-left button is a gear that opens app Settings (inside a chat it is the back chevron); the top-right button opens the character library. New chats start from a row's menu. A row's ⋮ offers New chat, Edit character and Delete chat. Tapping the Roleplay tab again inside a chat returns to it; the composer and chip step aside while it shows.
 
 **Message menu.** The ⋮ on a reply opens `MessageMenu`, a compact context card: label left, icon right, hairlines between rows, destructive rows set apart in the dim red. It is not `PickerPopover`, which stays the composer's picker.
