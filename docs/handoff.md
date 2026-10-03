@@ -1,3 +1,15 @@
+# Handoff (2026-10-03, Code session spacing, third pass)
+
+On `cursor/code-session-spacing-3-bd39` (PR into `gradation/app-pass`), from `e3fd1a1bff7bf746fc96f6649e25e03de8984ac8` (second spacing pass #184). Code session chat only, no color token changed. Not a redo of #182 or #184.
+
+- Command approval: the subject line hides when the pane starts with it (a command's title is its own first words), and the pane follows the question 12dp down. An edit still names its file.
+- Plan step: 3dp between a wrapped step's own lines. StaticLayout leaves it off the last line, so single-line steps measure the same.
+- Right to left: the app ships no RTL strings, so an RTL locale shows English labels that aligned by their own text. The plan label, the approval's question, subject and folded line, the offline banner and the approval pin are `textAlignment="viewStart"`. Agent and prompt text keep their own direction.
+- Checked and left alone: the retry and waiting states, the slash card, and 1.3x font (answers stack, rows keep 44dp, glyphs stay on line one).
+- New shot: `code_session_rtl_dark` (Arabic locale, checks on live rows; a bound row is detached and never resolves RTL).
+
+Phone: an Arabic or Hebrew locale (PLAN and its count apart, the question by its shield). A Codex command approval (the command once, in the pane).
+
 # Handoff (2026-10-03, Code session spacing, second pass)
 
 On `cursor/code-session-spacing-2-bd39` (PR into `gradation/app-pass`), rebased onto `ce713b4f0810a057ea49fdf43b942ca628727d22` (Settings #183, which follows Code spacing #182). Code session chat only, no color token changed. Not a redo of #182 (grid, plan padding, approval buttons, inline-code air, centred loading, tool-title cap, stopped-turn ring).
