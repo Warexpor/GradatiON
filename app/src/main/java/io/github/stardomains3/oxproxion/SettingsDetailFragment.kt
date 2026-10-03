@@ -244,11 +244,12 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         view.findViewById<View>(R.id.lanButton).setOnClickListener {
             SaveLANDialogFragment().show(childFragmentManager, SaveLANDialogFragment.TAG)
         }
+        // The check always asks OpenRouter with the saved key. activeChatApiKey is the last send's
+        // key, the local server's after a local model, so it could say a saved key was missing.
         view.findViewById<View>(R.id.creditsButton).setOnClickListener {
-            if (viewModel.activeChatApiKey.isBlank()) {
+            if (prefs.getApiKeyFromPrefs("openrouter_api_key").isBlank()) {
                 GlassNotice.show(requireContext(), getString(R.string.toast_api_key_missing))
             } else {
-                parentFragmentManager.popBackStack()
                 viewModel.checkRemainingCredits()
             }
         }
