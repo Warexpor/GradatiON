@@ -1,18 +1,45 @@
 package io.github.stardomains3.oxproxion
 
+import java.util.Locale
+
 object RpImportRules {
     /**
      * The last copy of this character in the file is the one that was saved.
      * An earlier greeting used to count as a change after that copy had put the old
      * greeting back, so a rewritten opening was replaced.
+     * A file with no export key still updates the character of that name. Skipping those
+     * rows left a rewritten opening up after the card greeting had changed.
+     * [namedKeysNewestFirst] is the library, newest first, the same order import uses.
+     * Empty means only keys are known, so a keyless row is not this character.
      */
     fun greetingChanged(
         currentGreeting: String,
         exportKey: String,
         incoming: List<RpCharacterExport>,
+        characterName: String = "",
+        namedKeysNewestFirst: List<Pair<String, String>> = emptyList(),
     ): Boolean {
-        if (exportKey.isBlank()) return false
-        val winning = incoming.lastOrNull { it.exportKey == exportKey } ?: return false
+        val keysInFile = incoming.mapNotNull { it.exportKey.takeIf { key -> key.isNotBlank() } }.toSet()
+        if (exportKey.isNotBlank()) {
+            // A blank name is not imported. The last real row with this key is the greeting
+            // that lands, not a later blank row that repeats the key.
+            val winning = incoming.lastOrNull { it.exportKey == exportKey && it.name.trim().isNotEmpty() }
+            if (winning != null) {
+                return RpGreetingSync.greetingTextChanged(currentGreeting, winning.greeting)
+            }
+            // The key is only on a skipped row. A keyless copy of the name must not take
+            // this character, matching import.
+            if (exportKey in keysInFile) return false
+        }
+        val name = characterName.trim()
+        if (name.isEmpty() || namedKeysNewestFirst.isEmpty()) return false
+        val winning = incoming.lastOrNull { it.exportKey.isBlank() && it.name.trim() == name }
+            ?: return false
+        val target = namedKeysNewestFirst.firstOrNull { (existingName, key) ->
+            existingName.trim() == name && key !in keysInFile
+        } ?: return false
+        // Two locals share the name. Import updates the newest, not this older card.
+        if (target.second != exportKey) return false
         return RpGreetingSync.greetingTextChanged(currentGreeting, winning.greeting)
     }
 
@@ -74,16 +101,25 @@ object RpImportRules {
     ): Int {
         val existing = existingNames.map { it.trim() }.filter { it.isNotEmpty() }
         return distinctLoreNames(incoming).count { name ->
-            existing.any { it.equals(name, ignoreCase = true) }
+            existing.any { sameLoreName(it, name) }
         }
     }
+
+    /**
+     * One book. Folding with the phone's language treated a capital I as a different
+     * letter on Turkish, so History and history were two books and the pin did not attach.
+     * Export already folds with the root locale.
+     */
+    fun loreNameKey(name: String): String = name.trim().lowercase(Locale.ROOT)
+
+    fun sameLoreName(a: String, b: String): Boolean = loreNameKey(a) == loreNameKey(b)
 
     private fun distinctLoreNames(incoming: List<RpLorebookExport>): List<String> {
         val seen = ArrayList<String>()
         for (ex in incoming) {
             val name = ex.name.trim()
             if (name.isEmpty()) continue
-            if (seen.none { it.equals(name, ignoreCase = true) }) seen += name
+            if (seen.none { sameLoreName(it, name) }) seen += name
         }
         return seen
     }

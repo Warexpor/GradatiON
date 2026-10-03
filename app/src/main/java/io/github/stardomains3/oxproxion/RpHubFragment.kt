@@ -42,33 +42,38 @@ class RpHubFragment : Fragment() {
                     val chars = repo.getAllCharactersOnce()
                     val loreNameById = repo.getAllLorebooksOnce().associate { it.id to it.name }
                     val sidePrefs = SharedPreferencesHelper(app)
-                    val exports = chars.map { c ->
-                        val voice = sidePrefs.getRpVoice(c.id)
-                        val loreName = sidePrefs.getRpLorebookId(c.id)?.let { loreNameById[it] }
-                            ?: sidePrefs.getPendingRpLorebookName(c.id)
-                            ?: ""
-                        RpCharacterExport(
-                            name = c.name.trim(),
-                            personality = c.personality,
-                            style = c.style,
-                            greeting = c.greeting,
-                            scenario = c.scenario,
-                            examplesJson = c.examplesJson,
-                            prompt = c.prompt,
-                            instruction = c.instruction,
-                            exportKey = c.exportKey,
-                            avatarBase64 = RpAvatarStorage.encodeAvatarBase64(app, c.id),
-                            photoUri = null,
-                            memory = sidePrefs.getRpMemory(c.id),
-                            layout = sidePrefs.getRpLayout(c.id),
-                            voiceName = voice.name,
-                            voicePitch = voice.pitch,
-                            voiceRate = voice.rate,
-                            lorebookName = loreName,
-                            wallpaperBase64 = RpWallpaperBackup.encode(
-                                BackgroundPhoto.file(app, BackgroundPhoto.slotForCharacter(c.id))
-                            ),
-                        )
+                    // Several portraits and wallpapers at their own caps used to make a file
+                    // an import will not read. Shrink until the library fits.
+                    val exports = RpCharacterBackupFit.withinImportCap { portraitCap, wallpaperCap ->
+                        chars.map { c ->
+                            val voice = sidePrefs.getRpVoice(c.id)
+                            val loreName = sidePrefs.getRpLorebookId(c.id)?.let { loreNameById[it] }
+                                ?: sidePrefs.getPendingRpLorebookName(c.id)
+                                ?: ""
+                            RpCharacterExport(
+                                name = c.name.trim(),
+                                personality = c.personality,
+                                style = c.style,
+                                greeting = c.greeting,
+                                scenario = c.scenario,
+                                examplesJson = c.examplesJson,
+                                prompt = c.prompt,
+                                instruction = c.instruction,
+                                exportKey = c.exportKey,
+                                avatarBase64 = RpAvatarStorage.encodeAvatarBase64(app, c.id, portraitCap),
+                                photoUri = null,
+                                memory = sidePrefs.getRpMemory(c.id),
+                                layout = sidePrefs.getRpLayout(c.id),
+                                voiceName = voice.name,
+                                voicePitch = voice.pitch,
+                                voiceRate = voice.rate,
+                                lorebookName = loreName,
+                                wallpaperBase64 = RpWallpaperBackup.encode(
+                                    BackgroundPhoto.file(app, BackgroundPhoto.slotForCharacter(c.id)),
+                                    wallpaperCap,
+                                ),
+                            )
+                        }
                     }
                     val cache = File(app.cacheDir, "rp-chars-${System.nanoTime()}.json")
                     BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri, "wt") }) { stream ->
@@ -426,10 +431,13 @@ class RpHubFragment : Fragment() {
             val activeBefore = prefs.getRpActiveCharacterId()?.let { repo.getCharacterById(it) }
             val delegate = RpChatDelegate(repo, prefs)
             val expandedBefore = activeBefore?.let { delegate.greetingMessage(it) }
+            val library = if (activeBefore != null) repo.getAllCharactersOnce() else emptyList()
             val greetingChanged = activeBefore != null && RpImportRules.greetingChanged(
                 activeBefore.greeting,
                 activeBefore.exportKey,
                 backup.characters,
+                characterName = activeBefore.name,
+                namedKeysNewestFirst = library.map { it.name to it.exportKey },
             )
             val app = requireContext().applicationContext
             val carried = CharacterImportSideLog.read(CharacterImportSideLog.file(app)).orEmpty()
