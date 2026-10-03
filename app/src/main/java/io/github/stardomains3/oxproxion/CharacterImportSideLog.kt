@@ -206,20 +206,27 @@ internal object CharacterImportSideLog {
                 Log.w(TAG, "Character portrait in the backup is not a picture; leaving it")
                 return true
             }
-            val photoUri = RpAvatarStorage.saveFromBase64(context, encoded, note.id)
-            if (photoUri == null) {
-                val existing = RpAvatarStorage.avatarFile(context, note.id)
-                // A torn leftover with length > 0 is not a finished portrait.
-                if (existing.isFile && ScenePhoto.completeJpeg(existing)) return true
-                Log.w(TAG, "Character portrait still waiting")
-                return false
-            }
-            dao.getCharacterById(note.id)?.let { character ->
-                if (character.photoUri != photoUri) {
-                    dao.updateCharacter(character.copy(photoUri = photoUri))
+            // A finished file already on disk is not success. saveFromBase64 used to return
+            // null for a bad picture and for a write that did not replace that file, and the
+            // old file made the import give up on the new one.
+            when (val saved = RpAvatarStorage.saveFromBase64Result(context, encoded, note.id)) {
+                is RpAvatarStorage.SaveResult.Saved -> {
+                    dao.getCharacterById(note.id)?.let { character ->
+                        if (character.photoUri != saved.uri) {
+                            dao.updateCharacter(character.copy(photoUri = saved.uri))
+                        }
+                    }
+                    return true
+                }
+                RpAvatarStorage.SaveResult.NotAPicture -> {
+                    Log.w(TAG, "Character portrait in the backup is not a picture; leaving it")
+                    return true
+                }
+                RpAvatarStorage.SaveResult.Failed -> {
+                    Log.w(TAG, "Character portrait still waiting")
+                    return false
                 }
             }
-            return true
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {

@@ -827,4 +827,123 @@ class RpLibraryImportTest {
         file.delete()
         assertTrue(prefs.mainPrefs.edit().clear().commit())
     }
+
+    @Test
+    fun aWaitingLorePinReplacesTheBookAlreadyPinned() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val id = 31L
+        val city = repo.saveLorebook(RpLorebook(name = "City", content = "c"))
+        prefs.saveRpLorebookId(id, city)
+        RpCharacterPrefsBackup.apply(
+            prefs,
+            id,
+            RpCharacterExport(name = "Mira", lorebookName = "Forest"),
+            emptyList(),
+        )
+        assertNull(prefs.getRpLorebookId(id))
+        assertEquals("Forest", prefs.getPendingRpLorebookName(id))
+        val exportedName = prefs.getRpLorebookId(id)?.let { pinned ->
+            repo.getAllLorebooksOnce().associate { it.id to it.name }[pinned]
+        } ?: prefs.getPendingRpLorebookName(id) ?: ""
+        assertEquals("Forest", exportedName)
+
+        val forest = repo.saveLorebook(RpLorebook(name = "Forest", content = "f"))
+        RpCharacterPrefsBackup.bindPending(prefs, repo.getAllLorebooksOnce())
+        assertEquals(forest, prefs.getRpLorebookId(id))
+        assertNull(prefs.getPendingRpLorebookName(id))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun aFailedPortraitWriteOverAnExistingOneIsRetried() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        val oldJpeg = solidJpeg(Color.MAGENTA)
+        val newJpeg = solidJpeg(Color.CYAN)
+        assertTrue(oldJpeg.size >= 64 && newJpeg.size >= 64)
+        assertFalse(oldJpeg.contentEquals(newJpeg))
+        val id = repo.saveCharacter(RpCharacter(name = "Ada", exportKey = "ada"))
+        val file = RpAvatarStorage.avatarFile(app, id)
+        file.writeBytes(oldJpeg)
+        val uri = file.toURI().toString()
+        repo.saveCharacter(repo.getCharacterById(id)!!.copy(photoUri = uri))
+        val encoded = android.util.Base64.encodeToString(newJpeg, android.util.Base64.NO_WRAP)
+        val incoming = RpCharacterExport(name = "Ada", exportKey = "ada", avatarBase64 = encoded)
+        repo.importCharacters(listOf(incoming)) { rows ->
+            val row = rows.single()
+            CharacterImportSideLog.write(
+                log,
+                listOf(ImportedCharacterNote(row.id, incoming.name, row.exportKey, incoming)),
+            )
+        }
+        ScenePhoto.failNextRenameForTest()
+        assertFalse(CharacterImportSideLog.resume(app, db))
+        assertTrue(oldJpeg.contentEquals(file.readBytes()))
+        assertEquals(uri, repo.getCharacterById(id)!!.photoUri)
+        assertNotNull(CharacterImportSideLog.read(log))
+
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertNull(CharacterImportSideLog.read(log))
+        assertTrue(RpAvatarStorage.hasAvatar(app, id))
+        assertFalse(oldJpeg.contentEquals(file.readBytes()))
+        assertNotNull(repo.getCharacterById(id)!!.photoUri)
+        file.delete()
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun aSecondCopyOfALorebookTakesTheImportedTextAndActiveFlag() = runBlocking {
+        val older = repo.saveLorebook(RpLorebook(name = "World", content = "old", isActive = true))
+        val newer = repo.saveLorebook(RpLorebook(name = "World", content = "new", isActive = false))
+        val notes = repo.saveLorebook(RpLorebook(name = "Notes", content = "n", isActive = true))
+        repo.importLorebooks(
+            listOf(RpLorebookExport(name = " world ", content = "imported", isActive = false))
+        )
+        assertEquals("imported", repo.getLorebookById(older)!!.content)
+        assertEquals("imported", repo.getLorebookById(newer)!!.content)
+        assertEquals("world", repo.getLorebookById(older)!!.name)
+        assertTrue(repo.getAllLorebooksOnce().filter { it.name.equals("world", ignoreCase = true) }.none { it.isActive })
+        assertEquals("n", repo.getLorebookById(notes)!!.content)
+        assertTrue(repo.getLorebookById(notes)!!.isActive)
+    }
+
+    @Test
+    fun loreExportKeepsTheNewestTextAndAnActiveCopy() {
+        val older = RpLorebook(
+            id = 1,
+            name = "World",
+            content = "old",
+            isActive = true,
+            updatedAt = 1,
+        )
+        val newer = RpLorebook(
+            id = 2,
+            name = " world ",
+            content = "new",
+            isActive = false,
+            updatedAt = 2,
+        )
+        val notes = RpLorebook(id = 3, name = "Notes", content = "n", isActive = false, updatedAt = 3)
+        val exported = RpLoreBackup.exports(listOf(older, newer, notes))
+        assertEquals(listOf("world", "Notes"), exported.map { it.name })
+        val world = exported.single { it.name.equals("world", ignoreCase = true) }
+        assertEquals("new", world.content)
+        assertTrue(world.isActive)
+        assertFalse(exported.single { it.name == "Notes" }.isActive)
+    }
+
+    private fun solidJpeg(color: Int): ByteArray {
+        val bmp = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(color)
+        val jpeg = ByteArrayOutputStream().also {
+            bmp.compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        bmp.recycle()
+        return jpeg
+    }
 }

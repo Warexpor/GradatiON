@@ -8,6 +8,7 @@ import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.util.Locale
 
 @Serializable
 data class RpCharacterBackup(
@@ -68,6 +69,30 @@ data class RpLorebookExport(
     val content: String = "",
     val isActive: Boolean = false
 )
+
+/**
+ * One export row per lorebook name. The library can hold two rows with the same name; listing
+ * both newest-first made import keep the older text, because the last copy in the file wins.
+ * The book stays on when any of those rows was on.
+ */
+internal object RpLoreBackup {
+    fun exports(books: List<RpLorebook>): List<RpLorebookExport> {
+        val groups = LinkedHashMap<String, MutableList<RpLorebook>>()
+        for (book in books) {
+            val key = book.name.trim().lowercase(Locale.ROOT)
+            if (key.isEmpty()) continue
+            groups.getOrPut(key) { mutableListOf() }.add(book)
+        }
+        return groups.values.map { group ->
+            val newest = group.maxBy { it.updatedAt }
+            RpLorebookExport(
+                name = newest.name.trim(),
+                content = newest.content,
+                isActive = group.any { it.isActive },
+            )
+        }
+    }
+}
 
 /** Writes one character or lorebook at a time so the backup is not also held as one string. */
 internal object RpBackupWriter {
@@ -170,7 +195,11 @@ internal object RpCharacterPrefsBackup {
                     lorebookId = match.id
                     clearPending = true
                 } else {
+                    // The backup's book is not here yet. Leaving the previous pin in place
+                    // kept chats on that book, and the next export wrote its name, so the
+                    // waiting pin never left this phone.
                     pending = wanted
+                    clearLorebook = true
                 }
             }
         }

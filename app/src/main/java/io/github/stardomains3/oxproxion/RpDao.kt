@@ -97,8 +97,9 @@ interface RpDao {
 
     /**
      * Every lorebook in one transaction. A second entry with the same name updates the one just
-     * inserted. The last copy of a name wins, including when that copy is not active; an empty
-     * library with none marked active activates the first when [activateFirstIfNone] is set.
+     * inserted. The last copy of a name wins, including when that copy is not active. Every local
+     * row with that name is updated, so a pin on an older duplicate is not left on the old text.
+     * An empty library with none marked active activates the first when [activateFirstIfNone] is set.
      */
     @Transaction
     suspend fun importLorebooks(incoming: List<RpLorebookExport>, activateFirstIfNone: Boolean): Int {
@@ -122,19 +123,32 @@ interface RpDao {
         val anyActive = collapsed.any { it.isActive }
         collapsed.forEach { ex ->
             val name = ex.name
-            val existing = getAllLorebooksOnce()
-                .firstOrNull { it.name.trim().equals(name, ignoreCase = true) }
-            val row = (existing ?: RpLorebook(name = name)).copy(
-                name = name,
-                content = ex.content,
-                isActive = if (anyActive) existing?.isActive == true else false,
-                updatedAt = System.currentTimeMillis()
-            )
-            val id = if (row.id == 0L) {
-                insertLorebook(row)
+            val now = System.currentTimeMillis()
+            // Newest row first. A second local book with the same name used to keep its old
+            // text, and stay on after a backup that turned this book off.
+            val matches = getAllLorebooksOnce()
+                .filter { it.name.trim().equals(name, ignoreCase = true) }
+            val id = if (matches.isEmpty()) {
+                insertLorebook(
+                    RpLorebook(
+                        name = name,
+                        content = ex.content,
+                        isActive = false,
+                        updatedAt = now,
+                    )
+                )
             } else {
-                updateLorebook(row)
-                row.id
+                for (existing in matches) {
+                    updateLorebook(
+                        existing.copy(
+                            name = name,
+                            content = ex.content,
+                            isActive = if (anyActive) existing.isActive else false,
+                            updatedAt = now,
+                        )
+                    )
+                }
+                matches.first().id
             }
             if (firstId == null) firstId = id
             if (ex.isActive) {
