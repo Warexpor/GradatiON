@@ -54,19 +54,23 @@ internal object ChatImportSideLog {
      * True when [session] is the chat this entry was written for.
      * A missing chat is not. Timestamp and message count fingerprint the row so a recycled
      * id cannot inherit; a rename while notes are still waiting must not drop them (title
-     * alone used to). A log from before those fields matches any chat that is still there.
-     * Title is only checked when stamp and count are both absent (older logs).
+     * alone used to). A later save refreshes timestamp (and can add messages), so stamp or
+     * count drift alone must not drop notes when the title still names that chat. A log from
+     * before those fields matches any chat that is still there. Title is only required when
+     * stamp and count are both absent (older logs), or when both disagree (re-saved chat).
      */
     fun matches(entry: ImportedChatMeta, session: ChatSession?, messageCount: Int): Boolean {
         if (session == null) return false
-        if (entry.timestamp != null && entry.timestamp != session.timestamp) return false
-        if (entry.messageCount != null && entry.messageCount != messageCount) return false
-        if (entry.timestamp == null && entry.messageCount == null &&
-            entry.title != null && entry.title != session.title
-        ) {
-            return false
+        if (entry.timestamp == null && entry.messageCount == null) {
+            return entry.title == null || entry.title == session.title
         }
-        return true
+        val stampOk = entry.timestamp == null || entry.timestamp == session.timestamp
+        val countOk = entry.messageCount == null || entry.messageCount == messageCount
+        // Rename while notes wait: stamp + count still fingerprint the row.
+        if (stampOk && countOk) return true
+        // Re-save / continue: timestamp refreshes and the count can grow; the title still matches.
+        if (entry.title != null && entry.title == session.title) return true
+        return false
     }
 
     fun write(dest: File, entries: List<ImportedChatMeta>) {

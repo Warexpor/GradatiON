@@ -235,8 +235,10 @@ internal object RpWallpaperBackup {
             is Restore.Write -> {
                 // A backup can carry a camera JPEG. Store the same upright, capped picture a
                 // pick would, so the chat does not decode the full file on every open.
-                val jpeg = BackgroundPhoto.prepare(action.jpeg) ?: action.jpeg
-                BackgroundPhoto.writeBytes(context, slot, jpeg)
+                // prepare fails for undecodeable bytes; do not fall back to the raw stub
+                // (CharacterImportSideLog already leaves those).
+                val jpeg = BackgroundPhoto.prepare(action.jpeg)
+                if (jpeg != null) BackgroundPhoto.writeBytes(context, slot, jpeg)
             }
         }
     }
@@ -262,7 +264,13 @@ internal object RpWallpaperBackup {
         // Write and then retry forever when writeBytes refused the incomplete JPEG.
         if (!ScenePhoto.completeJpeg(bytes) || bytes.size < 64) return Restore.Leave
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        // Robolectric's decoder throws IIOException on a padded SOI/EOI stub instead of
+        // reporting empty bounds. That is still not a wallpaper.
+        try {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        } catch (_: Throwable) {
+            return Restore.Leave
+        }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return Restore.Leave
         return Restore.Write(bytes)
     }
