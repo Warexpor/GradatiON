@@ -3071,6 +3071,68 @@ class CodeProtocolTest {
         assertEquals("skip_interview", twoOutcome["outcome"]!!.jsonPrimitive.content)
     }
 
+    @Test fun clickButtonDoesNotHideThePointOrTheTarget() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mc","title":"Click","kind":"other","name":"BrowserMouseClickXy","status":"in_progress","rawInput":{"x":10.0,"y":"20.0","button":"left"}}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"mc","status":"completed","rawInput":{"button":"left"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mr","title":"Right","kind":"other","name":"browser_mouse_click_xy","status":"completed","rawInput":{"x":4,"y":8,"button":"right"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ck","title":"Click","kind":"other","name":"BrowserClick","status":"completed","rawInput":{"target":"e12","button":"right"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"el","title":"Click","kind":"other","name":"browser_click","status":"completed","rawInput":{"element":"Submit","target":"e3","button":"right"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dn","title":"Down","kind":"other","name":"BrowserMouseDown","status":"completed","rawInput":{"button":"right"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sh","title":"Bash","kind":"execute","status":"completed","rawInput":{"command":"npm test","button":"left"}}"""),
+        )
+        val byId = foldFresh(frames).filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("10, 20", byId["mc"]?.detail)
+        assertEquals(ToolStatus.COMPLETED, byId["mc"]?.status)
+        assertEquals("4, 8", byId["mr"]?.detail)
+        assertEquals("e12", byId["ck"]?.detail)
+        assertEquals("Submit", byId["el"]?.detail)
+        assertEquals("right", byId["dn"]?.detail)
+        assertEquals("npm test", byId["sh"]?.detail)
+    }
+
+    @Test fun screenshotFileAndTabActionStayOnTheCard() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sh","title":"Shot","kind":"other","name":"BrowserTakeScreenshot","status":"in_progress","rawInput":{"filename":"page.png","fullPage":true}}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"sh","status":"completed","rawInput":{"target":"e4"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"el","title":"Shot","kind":"other","name":"browser_take_screenshot","status":"completed","rawInput":{"element":"Submit","filename":"shot.png","target":"e3"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sn","title":"Snap","kind":"other","name":"browser_snapshot","status":"completed","rawInput":{"filename":"snap.md","target":"e9"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"pdf","title":"Pdf","kind":"other","name":"BrowserPdfSave","status":"completed","rawInput":{"filename":"page.pdf"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"tb","title":"Tabs","kind":"other","name":"BrowserTabs","status":"in_progress","rawInput":{"action":"select","index":2.0}}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"tb","status":"completed","rawInput":{"index":2}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cl","title":"Tabs","kind":"other","name":"browser_tabs","status":"completed","rawInput":{"action":"close","index":1}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"nw","title":"Tabs","kind":"other","name":"browser_tabs","status":"completed","rawInput":{"action":"new","url":"https://example.com","index":3}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ls","title":"Tabs","kind":"other","name":"BrowserTabs","status":"completed","rawInput":{"action":"list"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cm","title":"Console","kind":"other","name":"browser_console_messages","status":"completed","rawInput":{"level":"error","filename":"console.txt"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cf","title":"Console","kind":"other","name":"BrowserConsoleMessages","status":"completed","rawInput":{"filename":"console.txt"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"nr","title":"Network","kind":"other","name":"browser_network_requests","status":"completed","rawInput":{"static":false,"filter":"/api/.*user"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ns","title":"Network","kind":"other","name":"BrowserNetworkRequests","status":"completed","rawInput":{"static":true}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"nf","title":"Network","kind":"other","name":"browser_network_requests","status":"completed","rawInput":{"filename":"net.txt"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"one","title":"Request","kind":"other","name":"browser_network_request","status":"completed","rawInput":{"index":2,"filename":"body.txt"}}"""),
+        )
+        val byId = foldFresh(frames).filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EXECUTE, byId["sh"]?.kind)
+        assertEquals("page.png", byId["sh"]?.detail)
+        assertEquals(ToolStatus.COMPLETED, byId["sh"]?.status)
+        assertEquals("Submit", byId["el"]?.detail)
+        assertEquals(ToolKind.READ, byId["sn"]?.kind)
+        assertEquals("snap.md", byId["sn"]?.detail)
+        assertEquals("page.pdf", byId["pdf"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["tb"]?.kind)
+        assertEquals("select 2", byId["tb"]?.detail)
+        assertEquals(ToolStatus.COMPLETED, byId["tb"]?.status)
+        assertEquals("close 1", byId["cl"]?.detail)
+        assertEquals("https://example.com", byId["nw"]?.detail)
+        assertEquals("list", byId["ls"]?.detail)
+        assertEquals(ToolKind.READ, byId["cm"]?.kind)
+        assertEquals("error", byId["cm"]?.detail)
+        assertEquals("console.txt", byId["cf"]?.detail)
+        assertEquals("/api/.*user", byId["nr"]?.detail)
+        assertEquals("static", byId["ns"]?.detail)
+        assertEquals("net.txt", byId["nf"]?.detail)
+        assertEquals("2", byId["one"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()

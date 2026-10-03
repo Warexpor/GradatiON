@@ -89,6 +89,7 @@ class AcpAdapter : HarnessAdapter {
      * A `tool_call_update` often omits `kind` and repeats only the working folder.
      */
     private val toolKinds = ConcurrentHashMap<String, String>()
+    private val toolNames = ConcurrentHashMap<String, String>()
     private val toolDetailSet = ConcurrentHashMap.newKeySet<String>()
     private val cursor = CursorMethods()
     private val repeatedUnderscore = Regex("_+")
@@ -837,7 +838,7 @@ class AcpAdapter : HarnessAdapter {
         val canon = namedKind(u.str("kind"), u.str("name"))
         val kind = toolKind(canon)
         val result = ArrayList<AdapterOutput>()
-        val detail = detailOf(u)
+        val detail = detailOf(u, rememberName(sid, callId, u))
         rememberKind(sid, callId, canon)
         if (!detail.isNullOrBlank()) toolDetailSet.add(toolKey(sid, callId))
         result += AdapterOutput.Update(sid, CodeUpdate.Upsert(CodeEvent.ToolCall(
@@ -976,6 +977,7 @@ class AcpAdapter : HarnessAdapter {
         openThought.remove(sessionId)
         val prefix = "$sessionId\u0000"
         toolKinds.keys.removeAll { it.startsWith(prefix) }
+        toolNames.keys.removeAll { it.startsWith(prefix) }
         toolDetailSet.removeAll { it.startsWith(prefix) }
         cursor.clearSession(sessionId)
     }
@@ -1204,7 +1206,6 @@ class AcpAdapter : HarnessAdapter {
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId",
-                "button",
                 // Typed text, a filled value, or selected options. Later than element so a
                 // click still shows the control name when that description is present.
                 "text", "value", "values") != null ||
@@ -1240,9 +1241,13 @@ class AcpAdapter : HarnessAdapter {
         }
         // A folder-only update must not replace `npm test`. The first path still fills an empty row.
         if (!specific && !hasLine && (hadDetail || !hasPath)) return null
-        val detail = detailOf(u) ?: return null
+        val name = rememberName(sid, callId, u)
+        val detail = detailOf(u, name) ?: return null
         // A status frame that only repeats the element ref used to replace `down 500` or `hello`.
-        if (hadDetail && !hasLine && refOnly(raw, detail)) return null
+        // The same for a mouse button or a tab index: those used to replace `10, 20` or `select 2`.
+        if (hadDetail && !hasLine && (refOnly(raw, detail) || buttonOnly(raw, detail) || tabIndexOnly(u, raw, detail, name))) {
+            return null
+        }
         if (detail.isNotBlank()) toolDetailSet.add(key)
         return detail
     }
@@ -1277,12 +1282,21 @@ class AcpAdapter : HarnessAdapter {
             raw,
             "element", "attribute", "selector",
             "text", "value", "values",
-            "key", "keys", "button",
+            "key", "keys",
             // The script, or text that should disappear. `text` still wins when both are set.
             "function", "code",
             "textGone", "text_gone",
         ) ?: formFieldsText(raw) ?: dialogText(raw) ?: resizeText(raw) ?: pointerText(raw)
-            ?: uploadText(raw)
+            ?: uploadText(raw) ?: buttonText(raw)
+    }
+
+    /**
+     * Mouse-down / mouse-up. A click that also names a point or a target keeps that
+     * line; `button: "left"` used to replace `10, 20` and `e12`.
+     */
+    private fun buttonText(raw: JsonObject): String? {
+        if (elementRef(raw) != null || xyText(raw) != null) return null
+        return firstRaw(raw, "button")
     }
 
     /**
@@ -1330,6 +1344,65 @@ class AcpAdapter : HarnessAdapter {
         val raw = rawInputOf(u) ?: return null
         if (browserAction(raw) != null) return null
         return firstRaw(raw, "filename", "file")
+    }
+
+    /**
+     * Lines the generic key list gets wrong.
+     * `browser_tabs` was the index (`2`) because that key is listed before `action`.
+     * A screenshot, snapshot, or PDF saved to a file had no line at all (`filename`
+     * is not a path key). Console messages omitted `level`. A network list omitted `filter`.
+     */
+    private fun browserCardLine(u: JsonObject, rememberedName: String? = null): String? {
+        val n = browserToolName(u, rememberedName) ?: return null
+        val raw = rawInputOf(u) ?: return null
+        return when (n) {
+            "browser_tabs", "browsertabs" -> tabsLine(raw)
+            "browser_console_messages", "browserconsolemessages" -> consoleLine(raw)
+            "browser_network_requests", "browsernetworkrequests" -> networkListLine(raw)
+            "browser_take_screenshot", "browsertakescreenshot",
+            "browser_snapshot", "browsersnapshot",
+            "browser_pdf_save", "browserpdfsave",
+            "browser_pdf", "browserpdf" -> firstRaw(raw, "filename")
+            else -> null
+        }
+    }
+
+    private fun isBrowserTabs(u: JsonObject, rememberedName: String? = null): Boolean {
+        val n = browserToolName(u, rememberedName) ?: return false
+        return n == "browser_tabs" || n == "browsertabs"
+    }
+
+    /** Programmatic tool name. A later frame often omits it; [rememberedName] is the first one. */
+    private fun browserToolName(u: JsonObject, rememberedName: String?): String? =
+        u.str("name")?.let(::normalizeKind)?.takeIf { it.isNotEmpty() }
+            ?: rememberedName?.takeIf { it.isNotEmpty() }
+
+    /**
+     * `browser_tabs`. `new` keeps the URL. `select` / `close` keep the verb in front
+     * of the index, so the row is not just `2`.
+     */
+    private fun tabsLine(raw: JsonObject): String? {
+        val action = coordPiece(raw["action"])?.lowercase() ?: return null
+        if (action != "list" && action != "new" && action != "close" && action != "select") return null
+        if (action == "new") return firstRaw(raw, "url") ?: action
+        if (action == "list") return action
+        val index = coordPiece(raw["index"])
+        return if (index != null) "$action $index" else action
+    }
+
+    /** `browser_console_messages`. The level, or the file the messages were saved to. */
+    private fun consoleLine(raw: JsonObject): String? =
+        firstRaw(raw, "level") ?: firstRaw(raw, "filename")
+
+    /**
+     * `browser_network_requests`. The URL filter, or the file, or `static` when
+     * images and scripts are included. `static: false` is the default and is not a line.
+     */
+    private fun networkListLine(raw: JsonObject): String? {
+        firstRaw(raw, "filter")?.let { return it }
+        firstRaw(raw, "filename")?.let { return it }
+        val static = raw["static"] as? JsonPrimitive
+        return if (static?.booleanOrNull == true) "static" else null
     }
 
     /**
@@ -1385,7 +1458,37 @@ class AcpAdapter : HarnessAdapter {
         return detail == ref
     }
 
+    /**
+     * A later frame that only repeats `button`. [buttonText] still returns it, so this
+     * is not [refOnly], and it used to replace the coordinates the click already showed.
+     */
+    private fun buttonOnly(raw: JsonObject?, detail: String): Boolean {
+        if (raw == null || commandOf(raw) != null) return false
+        if (elementRef(raw) != null || xyText(raw) != null) return false
+        val button = firstRaw(raw, "button") ?: return false
+        return detail == button
+    }
+
+    /**
+     * `browser_tabs` finishing with only `index`. The action (`select 2`) was already
+     * on the card; the index alone used to replace it.
+     */
+    private fun tabIndexOnly(u: JsonObject, raw: JsonObject?, detail: String, rememberedName: String?): Boolean {
+        if (raw == null || !isBrowserTabs(u, rememberedName) || commandOf(raw) != null) return false
+        if (firstRaw(raw, "action", "url") != null) return false
+        val index = coordPiece(raw["index"]) ?: return false
+        return detail == index
+    }
+
     private fun toolKey(sid: String, callId: String) = "$sid\u0000$callId"
+
+    /** The tool's programmatic name, including on a later frame that omits it. */
+    private fun rememberName(sid: String, callId: String, u: JsonObject): String? {
+        val key = toolKey(sid, callId)
+        val named = u.str("name")?.let(::normalizeKind)?.takeIf { it.isNotEmpty() }
+        if (named != null) toolNames[key] = named
+        return named ?: toolNames[key]
+    }
 
     /** Later updates often omit kind. The first frame's kind still decides which end of a long log to keep. */
     private fun rememberKind(sid: String, callId: String, kind: String?): String? {
@@ -1437,7 +1540,7 @@ class AcpAdapter : HarnessAdapter {
         return el.content.trim().ifEmpty { null }
     }
 
-    private fun detailOf(u: JsonObject): String? {
+    private fun detailOf(u: JsonObject, rememberedName: String? = null): String? {
         val locations = (u["locations"] as? JsonArray).orEmpty().mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
             // Same whole-number coercion as git status / browse paths.
@@ -1548,11 +1651,16 @@ class AcpAdapter : HarnessAdapter {
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId",
-                "button",
                 "text", "value", "values")).let { line ->
-                // A wait's seconds, or a snippet loaded from a file, beat a bare element ref.
-                val extra = waitSeconds(u) ?: runCodeFile(u)
-                if (extra != null && (line == null || line == elementRef(raw))) extra else line
+                // A wait's seconds, a snippet loaded from a file, or a browser line that
+                // the generic keys hide (a tab index, a bare ref) beat that weaker line.
+                val extra = waitSeconds(u) ?: runCodeFile(u) ?: browserCardLine(u, rememberedName)
+                val index = raw?.let { coordPiece(it["index"]) }
+                if (extra != null && (line == null || line == elementRef(raw) || (index != null && line == index))) {
+                    extra
+                } else {
+                    line
+                }
             },
             filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
