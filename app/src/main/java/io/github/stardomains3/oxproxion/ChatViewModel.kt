@@ -360,6 +360,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }.map { it.id }.toSet()
             ChatImportSideLog.resume(app) { it.id in ok }
             CharacterImportSideLog.resume(app, db)
+            // A kill after the lore rows committed and before the pin link ran, or a book
+            // that arrived later under a trimmed or shortened name. Nothing else calls this
+            // until the next lore import.
+            RpCharacterPrefsBackup.bindPending(
+                SharedPreferencesHelper(app),
+                db.rpDao().getAllLorebooksOnce(),
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

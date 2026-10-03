@@ -629,4 +629,100 @@ class RpLibraryImportTest {
         assertEquals("Mira", backup.characters.single().name)
         assertEquals("calm", backup.characters.single().personality)
     }
+
+    @Test
+    fun aRepeatedExportKeyDoesNotReapplyTheFirstNotesNextLaunch() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        val first = RpCharacterExport(name = "A", exportKey = "k", memory = "one", personality = "1")
+        val second = RpCharacterExport(name = "A2", exportKey = "k", memory = "two", personality = "2")
+        val imported = repo.importCharacters(listOf(first, second)) { rows ->
+            CharacterImportSideLog.write(
+                log,
+                rows.mapIndexed { index, row ->
+                    val exported = listOf(first, second)[index]
+                    ImportedCharacterNote(row.id, exported.name, row.exportKey, exported)
+                },
+            )
+        }
+        assertEquals(imported[0].id, imported[1].id)
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("two", prefs.getRpMemory(imported[0].id))
+        assertNull(CharacterImportSideLog.read(log))
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("two", prefs.getRpMemory(imported[0].id))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun aLoreBackupWithNothingActiveTurnsTheLocalBookOff() = runBlocking {
+        repo.saveLorebook(RpLorebook(name = "Notes", content = "old", isActive = true))
+        repo.importLorebooks(
+            listOf(
+                RpLorebookExport(name = "Notes", content = "n2", isActive = false),
+                RpLorebookExport(name = "World", content = "w", isActive = false),
+            )
+        )
+        val books = repo.getAllLorebooksOnce()
+        assertEquals(2, books.size)
+        assertTrue(books.none { it.isActive })
+        assertEquals("n2", books.single { it.name == "Notes" }.content)
+    }
+
+    @Test
+    fun loreImportMergesANameThatOnlyDiffersBySpaces() = runBlocking {
+        repo.saveLorebook(RpLorebook(name = "World", content = "old"))
+        repo.importLorebooks(listOf(RpLorebookExport(name = " world ", content = "new")))
+        val books = repo.getAllLorebooksOnce()
+        assertEquals(1, books.size)
+        assertEquals("world", books.single().name)
+        assertEquals("new", books.single().content)
+    }
+
+    @Test
+    fun aBlankLoreNameIsNotImported() = runBlocking {
+        repo.importLorebooks(
+            listOf(
+                RpLorebookExport(name = "   ", content = "nope"),
+                RpLorebookExport(name = "Notes", content = "n"),
+            )
+        )
+        val books = repo.getAllLorebooksOnce()
+        assertEquals(listOf("Notes"), books.map { it.name })
+    }
+
+    @Test
+    fun aLongOrPaddedLorePinStillAttaches() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val id = 12L
+        val longName = "L".repeat(250)
+        RpCharacterPrefsBackup.apply(
+            prefs,
+            id,
+            RpCharacterExport(name = "Mira", lorebookName = longName),
+            emptyList(),
+        )
+        assertEquals(longName.take(200), prefs.getPendingRpLorebookName(id))
+        val bookId = repo.saveLorebook(RpLorebook(name = longName, content = "w"))
+        RpCharacterPrefsBackup.bindPending(prefs, repo.getAllLorebooksOnce())
+        assertEquals(bookId, prefs.getRpLorebookId(id))
+        assertNull(prefs.getPendingRpLorebookName(id))
+
+        val fresh = 13L
+        val paddedId = repo.saveLorebook(RpLorebook(name = "World", content = "w"))
+        RpCharacterPrefsBackup.apply(
+            prefs,
+            fresh,
+            RpCharacterExport(name = "Mira", lorebookName = " World "),
+            repo.getAllLorebooksOnce(),
+        )
+        assertEquals(paddedId, prefs.getRpLorebookId(fresh))
+        assertNull(prefs.getPendingRpLorebookName(fresh))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
 }

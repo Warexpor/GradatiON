@@ -103,13 +103,20 @@ interface RpDao {
     @Transaction
     suspend fun importLorebooks(incoming: List<RpLorebookExport>, activateFirstIfNone: Boolean): Int {
         var firstId: Long? = null
+        // A backup that marks nothing active means those books are off. Keeping a local
+        // active flag used to leave the phone's book active after a restore that turned it off.
+        // An empty library still activates the first book below, when asked.
+        val anyActive = incoming.any { it.isActive && it.name.trim().isNotEmpty() }
         incoming.forEachIndexed { index, ex ->
             RpImportGuard.beforeRow(index)
+            val name = ex.name.trim()
+            if (name.isEmpty()) return@forEachIndexed
             val existing = getAllLorebooksOnce()
-                .firstOrNull { it.name.equals(ex.name, ignoreCase = true) }
-            val row = (existing ?: RpLorebook(name = ex.name)).copy(
-                name = ex.name,
+                .firstOrNull { it.name.trim().equals(name, ignoreCase = true) }
+            val row = (existing ?: RpLorebook(name = name)).copy(
+                name = name,
                 content = ex.content,
+                isActive = if (anyActive) existing?.isActive == true else false,
                 updatedAt = System.currentTimeMillis()
             )
             val id = if (row.id == 0L) {
