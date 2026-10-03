@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Settings wave 29)
+
+On `gradation/w29-settings` (PR into `gradation/app-pass`). Settings follow-ups after #121. Not a redo of pref-tap commits, the Power tools switch, exact text-size rings, Voice chips while off, or reasoning effort vs the token budget. Not a redo of #123 (persona Save commits).
+- Settings home shows the stored Voice engine. `VoiceInput.resolve` still hides or redirects the mic when the phone has no recognizer; the row no longer calls that Off or Cloud.
+- Inference temperature / top-p / min-p / repetition / presence accept a comma decimal and refuse non-finite or out-of-range numbers (presence may be negative, down to -2). Top K stays a positive whole number (`40,0` counts, 0 does not). Those writes commit.
+- Timeout reads and saves are clamped to 1–45 minutes. Max tokens that are blank, 0, or not a number read as 12000. The chat-memory dialog checks a row only on an exact preset.
+
+Phone: on a phone with no speech recognizer, set Voice to Phone and open Settings (the row should say Phone, not Off). Set temperature to 0,8 (comma) and send (the request should carry 0.8). Type 9 as temperature (it should not replace 0.8). Set timeout, force-stop, relaunch (the minutes should stick, and a leftover 0 should behave as 1).
+
 # Handoff (2026-10-03, Notifications/Away wave 29)
 
 On `gradation/w29-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after turn-done shade hold and the speaking flag (#120). Not a redo of that pass:
@@ -6,6 +15,7 @@ On `gradation/w29-notif` (PR into `gradation/app-pass`). Notif/away follow-ups a
 - In-chat Speak stops shade TTS and flips the answer shade back to Speak (or drops it in the foreground). Leaving Stop up with the speaking flag already clear made the next shade tap start speech again.
 
 Phone: Notify when away on, finish a turn, send another prompt, kill the app before the clear finishes if you can leave both the dedup row and the old hold file (the next finished turn should still show, one entry). Swipe the only approval away, then replay that notification's open (session should not open). Leave a second approval up and swipe the first (the other still opens). Background Chat, Speak from the shade, open the chat and tap Speak on the message (shade should say Speak, not start a second reading when you tap Stop).
+
 # Handoff (2026-10-03, Chat wave 29)
 
 On `gradation/w29-chat` (PR into `gradation/app-pass`). Chat/History follow-up after w27 promote (#110) and w28 caption promote (#116). Not a redo of those: the parked caption and caption+Photo search stay as they are.
@@ -13,6 +23,7 @@ On `gradation/w29-chat` (PR into `gradation/app-pass`). Chat/History follow-up a
 - A same-key replace (new photo, or audio parked over a photo) still evicts the previous uri. Re-parking the same uri does not. If another chat still holds that uri, the file stays.
 
 Phone: stage a photo on a new Chat, open Code, let the first save mint an id, leave Code (chip returns; the scene file is still there). History search Photo still finds that row. Stage a second photo on a saved chat (or park audio over the photo) and the previous JPEG is gone. A photo that simply falls off the oldest parked slots is still deleted.
+
 # Handoff (2026-10-03, Import wave 29)
 
 On `gradation/w29-import` (PR into `gradation/app-pass`). Import/export follow-ups after #122. Not a redo of note matching after a later save, wallpaper prepare, or torn portrait export:
@@ -48,6 +59,7 @@ On `gradation/w28-hub` (PR into `gradation/app-pass`). Hub/Pair/Glass follow-ups
 - Bottom-sheet `GlassDrawable` topOnly outlines are empty below API 30 (skip fake rounded-bottom elevation); `clearDuplicateSheetGlass` also drops glass one wrapper deep; History and model-options sheets call `glassDialog` before `show`.
 
 Phone: on Code, History → Roleplay → Hub Continue from Ask (Roleplay tab/underline should not flash Chat). Fail a pair QR while a deep link succeeds (or the reverse under load): only the host form or only the error toast, never both. Bottom sheets on API 29: no rounded-bottom shadow; History ⋮ sheet opens without a double-tint flash.
+
 # Handoff (2026-10-02, Import wave 28)
 
 On `gradation/w28-import` (PR into `gradation/app-pass`). Import/export IO follow-ups after #114:
@@ -56,6 +68,7 @@ On `gradation/w28-import` (PR into `gradation/app-pass`). Import/export IO follo
 - Character portrait export (`encodeAvatarBase64`) recovers then skips a torn JPEG, matching wallpaper encode.
 
 Phone: import chats with pins/facts, kill before notes land, open and send in one imported chat (or leave so it autosaves), relaunch (pins/facts should still apply). Export a character whose portrait write was killed mid-way (backup should omit the portrait, not embed the stub).
+
 # Handoff (2026-10-03, Settings wave 28)
 
 On `gradation/w28-settings` (PR into `gradation/app-pass`). Settings follow-ups after Voice/switch honesty (#104) and Code/theme/persona commits (#108):
@@ -65,6 +78,7 @@ On `gradation/w28-settings` (PR into `gradation/app-pass`). Settings follow-ups 
 - Advanced reasoning effort buttons stay off when the master switch is off or a positive token budget is set (that budget already replaces effort on the wire). Those writes commit.
 
 Phone: step chat text to 120% with +/-, open Appearance (no tile ringed), tap L (becomes 115% and stays). Turn Voice off, tap Grok, leave and come back (Grok still the chip; mic stays off until the master switch). Set a reasoning token budget (effort presets grey out) and turn advanced reasoning off (they stay grey).
+
 # Handoff (2026-10-02, Notifications/Away wave 28)
 
 On `gradation/w28-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after turn-done prefs clear (#113) and Speak/swipe (#105):
@@ -73,6 +87,7 @@ On `gradation/w28-notif` (PR into `gradation/app-pass`). Notif/away follow-ups a
 - Answer-ready Speak persists a `speaking` flag with shade meta so a cold Stop after process death does not restart TTS; Dismiss/Copy/`stopTts`/Chat resume (shade dropped, no live service) clear it.
 
 Phone: Notify when away on → finish a turn → send another prompt → open the session (or forget it) without tapping the shade (turn-finished entry should clear). Kill the app after that second prompt and open/forget again (the old turn-finished entry should still clear, not stack). Background Chat, Speak from the answer shade, force-stop mid-utterance, tap Stop on the surviving shade (speech must not restart; Speak returns). Open Chat instead of tapping Stop (later Speak must not act as Stop).
+
 # Handoff (2026-10-03, Stability wave 28)
 
 On `gradation/w28-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w27 move temps / encrypt_ok discard (#111). Not a redo of that pass:
@@ -81,6 +96,7 @@ On `gradation/w28-stability` (PR into `gradation/app-pass`). Persistence follow-
 - A new plaintext-to-SQLCipher export deletes leftover `encrypting` / `pre_sqlcipher` wal/shm/journal before ATTACH. Deleting only the main left a crashed export's `-wal` to be replayed into the new ciphertext or paired with the replacement snapshot. Failure paths still keep the plaintext snapshot and drop only the in-progress ciphertext sidecars.
 
 Phone: leave `chat_database.pre_sqlcipher-wal.partial` or `chat_database.pre_sqlcipher.kept-1` beside the live DB and force a cloud backup before relaunch (rules should skip them). Leave vault `encrypt_ok` + `encrypting` (+ `-wal` or `.kept-1`) (after relaunch the leftovers and the marker should be gone). A plaintext name that cannot be deleted should still show `encrypt_ok` on the next launch.
+
 # Handoff (2026-10-02, Chat wave 28)
 
 On `gradation/w28-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w27 discard/promote (#110):

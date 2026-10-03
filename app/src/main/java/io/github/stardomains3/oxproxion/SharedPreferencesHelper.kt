@@ -366,39 +366,75 @@ class SharedPreferencesHelper(context: Context) {
 
     // Temperature (Default: 1.0)
     fun getInferenceTempEnabled(): Boolean = mainPrefs.getBoolean(KEY_INFERENCE_TEMP_ENABLED, false)
-    fun saveInferenceTempEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_INFERENCE_TEMP_ENABLED, enabled) }
-    fun getInferenceTempValue(): String = mainPrefs.getString(KEY_INFERENCE_TEMP_VALUE, "1.0") ?: "1.0"
-    fun saveInferenceTempValue(value: String) = mainPrefs.edit { putString(KEY_INFERENCE_TEMP_VALUE, value) }
+    fun saveInferenceTempEnabled(enabled: Boolean) {
+        mainPrefs.edit(commit = true) { putBoolean(KEY_INFERENCE_TEMP_ENABLED, enabled) }
+    }
+    fun getInferenceTempValue(): String =
+        acceptedInferenceDecimal(InferenceKind.TEMPERATURE, mainPrefs.getString(KEY_INFERENCE_TEMP_VALUE, null).orEmpty()) ?: "1.0"
+    fun saveInferenceTempValue(value: String) {
+        val canonical = acceptedInferenceDecimal(InferenceKind.TEMPERATURE, value) ?: return
+        mainPrefs.edit(commit = true) { putString(KEY_INFERENCE_TEMP_VALUE, canonical) }
+    }
 
     // Top P (Default: 1.0)
     fun getInferenceTopPEnabled(): Boolean = mainPrefs.getBoolean(KEY_INFERENCE_TOP_P_ENABLED, false)
-    fun saveInferenceTopPEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_INFERENCE_TOP_P_ENABLED, enabled) }
-    fun getInferenceTopPValue(): String = mainPrefs.getString(KEY_INFERENCE_TOP_P_VALUE, "1.0") ?: "1.0"
-    fun saveInferenceTopPValue(value: String) = mainPrefs.edit { putString(KEY_INFERENCE_TOP_P_VALUE, value) }
+    fun saveInferenceTopPEnabled(enabled: Boolean) {
+        mainPrefs.edit(commit = true) { putBoolean(KEY_INFERENCE_TOP_P_ENABLED, enabled) }
+    }
+    fun getInferenceTopPValue(): String =
+        acceptedInferenceDecimal(InferenceKind.TOP_P, mainPrefs.getString(KEY_INFERENCE_TOP_P_VALUE, null).orEmpty()) ?: "1.0"
+    fun saveInferenceTopPValue(value: String) {
+        val canonical = acceptedInferenceDecimal(InferenceKind.TOP_P, value) ?: return
+        mainPrefs.edit(commit = true) { putString(KEY_INFERENCE_TOP_P_VALUE, canonical) }
+    }
 
-    // Top K (Default: 40) - This one was already correct
+    // Top K (Default: 40)
     fun getInferenceTopKEnabled(): Boolean = mainPrefs.getBoolean(KEY_INFERENCE_TOP_K_ENABLED, false)
-    fun saveInferenceTopKEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_INFERENCE_TOP_K_ENABLED, enabled) }
-    fun getInferenceTopKValue(): Int = mainPrefs.getInt(KEY_INFERENCE_TOP_K_VALUE, 40)
-    fun saveInferenceTopKValue(value: Int) = mainPrefs.edit { putInt(KEY_INFERENCE_TOP_K_VALUE, value) }
+    fun saveInferenceTopKEnabled(enabled: Boolean) {
+        mainPrefs.edit(commit = true) { putBoolean(KEY_INFERENCE_TOP_K_ENABLED, enabled) }
+    }
+    fun getInferenceTopKValue(): Int =
+        acceptedTopK(mainPrefs.getInt(KEY_INFERENCE_TOP_K_VALUE, 40).toString()) ?: 40
+    fun saveInferenceTopKValue(value: Int) {
+        if (acceptedTopK(value.toString()) == null) return
+        mainPrefs.edit(commit = true) { putInt(KEY_INFERENCE_TOP_K_VALUE, value) }
+    }
 
     // Min P (Default: 0.0)
     fun getInferenceMinPEnabled(): Boolean = mainPrefs.getBoolean(KEY_INFERENCE_MIN_P_ENABLED, false)
-    fun saveInferenceMinPEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_INFERENCE_MIN_P_ENABLED, enabled) }
-    fun getInferenceMinPValue(): String = mainPrefs.getString(KEY_INFERENCE_MIN_P_VALUE, "0.0") ?: "0.0"
-    fun saveInferenceMinPValue(value: String) = mainPrefs.edit { putString(KEY_INFERENCE_MIN_P_VALUE, value) }
+    fun saveInferenceMinPEnabled(enabled: Boolean) {
+        mainPrefs.edit(commit = true) { putBoolean(KEY_INFERENCE_MIN_P_ENABLED, enabled) }
+    }
+    fun getInferenceMinPValue(): String =
+        acceptedInferenceDecimal(InferenceKind.MIN_P, mainPrefs.getString(KEY_INFERENCE_MIN_P_VALUE, null).orEmpty()) ?: "0.0"
+    fun saveInferenceMinPValue(value: String) {
+        val canonical = acceptedInferenceDecimal(InferenceKind.MIN_P, value) ?: return
+        mainPrefs.edit(commit = true) { putString(KEY_INFERENCE_MIN_P_VALUE, canonical) }
+    }
 
     // Repetition Penalty (Default: 1.0)
     fun getInferenceRepetitionPenaltyEnabled(): Boolean = mainPrefs.getBoolean(KEY_INFERENCE_REPETITION_PENALTY_ENABLED, false)
-    fun saveInferenceRepetitionPenaltyEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_INFERENCE_REPETITION_PENALTY_ENABLED, enabled) }
-    fun getInferenceRepetitionPenaltyValue(): String = mainPrefs.getString(KEY_INFERENCE_REPETITION_PENALTY_VALUE, "1.0") ?: "1.0"
-    fun saveInferenceRepetitionPenaltyValue(value: String) = mainPrefs.edit { putString(KEY_INFERENCE_REPETITION_PENALTY_VALUE, value) }
+    fun saveInferenceRepetitionPenaltyEnabled(enabled: Boolean) {
+        mainPrefs.edit(commit = true) { putBoolean(KEY_INFERENCE_REPETITION_PENALTY_ENABLED, enabled) }
+    }
+    fun getInferenceRepetitionPenaltyValue(): String =
+        acceptedInferenceDecimal(InferenceKind.REPETITION, mainPrefs.getString(KEY_INFERENCE_REPETITION_PENALTY_VALUE, null).orEmpty()) ?: "1.0"
+    fun saveInferenceRepetitionPenaltyValue(value: String) {
+        val canonical = acceptedInferenceDecimal(InferenceKind.REPETITION, value) ?: return
+        mainPrefs.edit(commit = true) { putString(KEY_INFERENCE_REPETITION_PENALTY_VALUE, canonical) }
+    }
 
-    // Presence Penalty (Default: 0.0)
+    // Presence Penalty (Default: 0.0). Negative is allowed (down to -2).
     fun getInferencePresencePenaltyEnabled(): Boolean = mainPrefs.getBoolean(KEY_INFERENCE_PRESENCE_PENALTY_ENABLED, false)
-    fun saveInferencePresencePenaltyEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_INFERENCE_PRESENCE_PENALTY_ENABLED, enabled) }
-    fun getInferencePresencePenaltyValue(): String = mainPrefs.getString(KEY_INFERENCE_PRESENCE_PENALTY_VALUE, "0.0") ?: "0.0"
-    fun saveInferencePresencePenaltyValue(value: String) = mainPrefs.edit { putString(KEY_INFERENCE_PRESENCE_PENALTY_VALUE, value) }
+    fun saveInferencePresencePenaltyEnabled(enabled: Boolean) {
+        mainPrefs.edit(commit = true) { putBoolean(KEY_INFERENCE_PRESENCE_PENALTY_ENABLED, enabled) }
+    }
+    fun getInferencePresencePenaltyValue(): String =
+        acceptedInferenceDecimal(InferenceKind.PRESENCE, mainPrefs.getString(KEY_INFERENCE_PRESENCE_PENALTY_VALUE, null).orEmpty()) ?: "0.0"
+    fun saveInferencePresencePenaltyValue(value: String) {
+        val canonical = acceptedInferenceDecimal(InferenceKind.PRESENCE, value) ?: return
+        mainPrefs.edit(commit = true) { putString(KEY_INFERENCE_PRESENCE_PENALTY_VALUE, canonical) }
+    }
 
     fun saveOpenRouterTransformsEnabled(enabled: Boolean) {
         mainPrefs.edit { putBoolean(KEY_OPENROUTER_TRANSFORMS_ENABLED, enabled) }
@@ -612,7 +648,8 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit(commit = true) { putString(KEY_VOICE_INPUT_LAST_ENGINE, provider) }
     }
     fun saveChatMemoryCount(count: Int) {
-        mainPrefs.edit { putInt(KEY_CHAT_MEMORY_COUNT, count) }
+        // commit: Advanced > Chat memory; the next send trims history to this.
+        mainPrefs.edit(commit = true) { putInt(KEY_CHAT_MEMORY_COUNT, count) }
     }
     fun getChatMemoryCount(): Int {
         return mainPrefs.getInt(KEY_CHAT_MEMORY_COUNT, Int.MAX_VALUE) // Default to All messages
@@ -659,7 +696,7 @@ class SharedPreferencesHelper(context: Context) {
     fun saveSortOrder(sortOrder: SortOrder) {
         mainPrefs.edit { putString(KEY_SORT_ORDER, sortOrder.name) }
     }
-    fun getTimeoutMinutes(): Int = mainPrefs.getInt(KEY_TIMEOUT_MINUTES, 5)
+    fun getTimeoutMinutes(): Int = normalizedTimeoutMinutes(mainPrefs.getInt(KEY_TIMEOUT_MINUTES, 5))
     fun saveToolsPreference(isEnabled: Boolean) {
         mainPrefs.edit {
             putBoolean(KEY_TOOLS_ENABLED, isEnabled)
@@ -708,7 +745,8 @@ class SharedPreferencesHelper(context: Context) {
         }
     }
     fun saveTimeoutMinutes(minutes: Int) {
-        mainPrefs.edit { putInt(KEY_TIMEOUT_MINUTES, minutes) }
+        // commit: Advanced > Timeout; the HTTP clients rebuild from this after the save.
+        mainPrefs.edit(commit = true) { putInt(KEY_TIMEOUT_MINUTES, normalizedTimeoutMinutes(minutes)) }
     }
     fun getScrollProgressEnabled(): Boolean = mainPrefs.getBoolean(KEY_SCROLL_PROGRESS_ENABLED, false)  // Off: a full-width rule under the tabs reads as a glitch
     fun saveScrollProgressEnabled(enabled: Boolean) {
@@ -1336,13 +1374,11 @@ class SharedPreferencesHelper(context: Context) {
     }
     fun saveMaxTokens(value: String) {
         mainPrefs.edit(commit = true) {
-            putString(KEY_MAX_TOKENS, value)
+            putString(KEY_MAX_TOKENS, normalizedMaxTokens(value))
         }
     }
 
-    fun getMaxTokens(): String {
-        return mainPrefs.getString(KEY_MAX_TOKENS, "12000").toString()
-    }
+    fun getMaxTokens(): String = normalizedMaxTokens(mainPrefs.getString(KEY_MAX_TOKENS, null))
     fun getCustomModels(): MutableList<LlmModel> {
         val jsonString = mainPrefs.getString(KEY_CUSTOM_MODELS, null)
         return if (jsonString != null) {

@@ -17,8 +17,8 @@ class TimeoutDialogFragment : DialogFragment() {
 
     companion object {
         const val TAG = "TimeoutDialogFragment"
-        private const val MIN_MINUTES = 1
-        private const val MAX_MINUTES = 45   // you said at least 33, 45 gives a comfortable ceiling
+        private const val MIN_MINUTES = SETTINGS_TIMEOUT_MIN_MINUTES
+        private const val MAX_MINUTES = SETTINGS_TIMEOUT_MAX_MINUTES
     }
 
     override fun onCreateView(
