@@ -36,6 +36,10 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Hub Continue / Start chat stay on the Roleplay thread: closing the character list is not undone when async setChatMode(RP) lands, including when Roleplay was last left on that list. Start chat while already in Roleplay does not leave the list suppressed for the next return from Ask.
+- Turning Roleplay off during a reply still flips back to Chat once the reply finishes (the tab hid immediately, but the mode flip only ran while a reply was not in flight).
+- Bottom-sheet glass survives the first layout. BottomSheetBehavior replaces the container background with its MaterialShapeDrawable on that pass, after the content glass was already cleared, so the sheet drew with no glass.
+
 - Settings home names the Voice engine that is saved. A phone with no recognizer used to show Off (or Cloud, once a model was set) while Voice was still on and the Phone chip was selected.
 - Inference fields accept a comma decimal (0,8) and store the dot form. Non-finite values, and numbers outside the sampler's range, are not saved, so the request keeps the previous value instead of dropping the knob or sending NaN. Presence penalty can be negative.
 - Advanced timeout and max tokens stay inside the range those dialogs allow (1–45 minutes, 1–999999 tokens). A stored 0 no longer makes every request time out, and a blank or non-numeric token cap reads as 12000. Chat memory only checks a row when the stored count is that preset, so a count that is not in the list is not silently replaced by 8.

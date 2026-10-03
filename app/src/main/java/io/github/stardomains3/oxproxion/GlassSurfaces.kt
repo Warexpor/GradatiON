@@ -382,12 +382,35 @@ object GlassChrome {
         val window = dialog.window ?: return
         GlassDialogs.frost(window)
         if (dialog is BottomSheetDialog) {
-            dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)?.let { sheet ->
-                sheet.background = GlassDrawable.sheet(dialog.context, topOnly = true)
-                sheet.backgroundTintList = null
-                clearDuplicateSheetGlass(sheet)
-            }
+            val sheet = dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet) ?: return
+            applyBottomSheetGlass(sheet)
+            // BottomSheetBehavior.onLayoutChild replaces the background with its
+            // MaterialShapeDrawable the first time it lays out (viewRef == null),
+            // after we already dropped the content glass. Re-apply once that layout
+            // has installed the shape, before the sheet draws.
+            sheet.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+                override fun onLayoutChange(
+                    v: View,
+                    left: Int,
+                    top: Int,
+                    right: Int,
+                    bottom: Int,
+                    oldLeft: Int,
+                    oldTop: Int,
+                    oldRight: Int,
+                    oldBottom: Int,
+                ) {
+                    v.removeOnLayoutChangeListener(this)
+                    applyBottomSheetGlass(v)
+                }
+            })
         }
+    }
+
+    private fun applyBottomSheetGlass(sheet: View) {
+        sheet.background = GlassDrawable.sheet(sheet.context, topOnly = true)
+        sheet.backgroundTintList = null
+        clearDuplicateSheetGlass(sheet)
     }
 
     /**
