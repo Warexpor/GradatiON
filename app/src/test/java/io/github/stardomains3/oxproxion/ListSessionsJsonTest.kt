@@ -152,6 +152,30 @@ class ListSessionsJsonTest {
         assertEquals(PermissionMode.FULL_AUTO, modes["fu"])
         assertEquals(PermissionMode.AUTO_EDIT, modes["bd"])
         assertEquals(PermissionMode.AUTO_EDIT, modes["ae"])
+        assertTrue(ListSessionsJson.parse(el, "h").all { it.permissionModeSpecified })
+    }
+
+    @Test fun explicitAskIsSpecifiedAndABlankModeFallsThrough() {
+        val el = json.parseToJsonElement(
+            """{"sessions":[
+                {"sessionId":"ask","permissionMode":"ask"},
+                {"sessionId":"ro","mode":"read-only"},
+                {"sessionId":"blank","permissionMode":"  ","mode":"plan"},
+                {"sessionId":"omit"},
+                {"sessionId":"yolo","permissionMode":"yolo"}
+            ]}"""
+        )
+        val byId = ListSessionsJson.parse(el, "h").associateBy { it.id }
+        assertEquals(PermissionMode.ASK, byId["ask"]?.permissionMode)
+        assertTrue(byId["ask"]!!.permissionModeSpecified)
+        assertEquals(PermissionMode.ASK, byId["ro"]?.permissionMode)
+        assertTrue(byId["ro"]!!.permissionModeSpecified)
+        assertEquals(PermissionMode.PLAN, byId["blank"]?.permissionMode)
+        assertTrue(byId["blank"]!!.permissionModeSpecified)
+        assertEquals(PermissionMode.ASK, byId["omit"]?.permissionMode)
+        assertTrue(!byId["omit"]!!.permissionModeSpecified)
+        assertEquals(PermissionMode.ASK, byId["yolo"]?.permissionMode)
+        assertTrue(!byId["yolo"]!!.permissionModeSpecified)
     }
 
     @Test fun missingLastSeqStaysNullAndEmptyResultIsEmpty() {

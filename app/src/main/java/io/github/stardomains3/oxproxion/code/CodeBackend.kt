@@ -651,10 +651,11 @@ class BridgeBackend(
         session.lastSeq?.let { rememberLastSeq(session.id, it) }
         val after = peekLastSeq(session.id) ?: session.lastSeq
         return try {
-            rawCall(
+            val loaded = rawCall(
                 { adapter.loadSession(it, session.id, session.workspace, after) },
                 DEFAULT_TIMEOUT_MS
             )
+            publishSessionMode(session.id, loaded)
             loadFailed.remove(session.id)
             // The bridge has finished this history. A hole it did not refill is consumed
             // so a skipped sequence number does not reload the session forever.
@@ -890,7 +891,10 @@ class BridgeBackend(
         val summary = CodeSessionSummary(
             id = sid, hostId = host.id, harness = request.harness, workspace = request.workspace,
             title = request.prompt.lineSequence().first().take(60), createdAt = now, updatedAt = now,
-            permissionMode = request.permissionMode, model = request.model
+            // The agent may have started in a different mode than the one asked for in _meta.
+            // An unknown id leaves the request in place.
+            permissionMode = AcpSessionMode.fromResult(result) ?: request.permissionMode,
+            model = request.model
         )
         attached[sid] = summary
         scope.launch {
@@ -907,6 +911,12 @@ class BridgeBackend(
             }
         }
         return summary
+    }
+
+    /** `session/load` (and a reconnect load) carry the mode the harness is actually in. */
+    private suspend fun publishSessionMode(sessionId: String, result: JsonElement?) {
+        val mode = AcpSessionMode.fromResult(result) ?: return
+        _updates.emit(SessionUpdate(sessionId, CodeUpdate.SessionInfo(permissionMode = mode)))
     }
 
     private fun errorNotice(message: String?) = CodeUpdate.Upsert(
@@ -928,7 +938,8 @@ class BridgeBackend(
             return
         }
         val after = peekLastSeq(session.id) ?: session.lastSeq
-        rawCall({ adapter.loadSession(it, session.id, session.workspace, after) }, DEFAULT_TIMEOUT_MS)
+        val loaded = rawCall({ adapter.loadSession(it, session.id, session.workspace, after) }, DEFAULT_TIMEOUT_MS)
+        publishSessionMode(session.id, loaded)
         (adapter as? AcpAdapter)?.sealResumeCursor(session.id)
     }
 
