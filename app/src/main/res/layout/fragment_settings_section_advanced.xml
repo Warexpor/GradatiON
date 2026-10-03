@@ -694,46 +694,5 @@
                 android:layout_height="wrap_content"
                 android:checked="false" />
         </LinearLayout>
-
-        <View
-            android:visibility="gone"
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginStart="16dp"
-            android:background="@color/xai_hairline" />
-
-        <!-- Web search left the chat chrome, so its auto-off switch has nothing to act on. -->
-        <LinearLayout
-            android:visibility="gone"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:minHeight="56dp"
-            android:orientation="horizontal"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp">
-
-            <Space
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:layout_marginEnd="16dp" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/settings_auto_disable_web"
-                android:textColor="@color/xai_ink"
-                android:textSize="16sp" 
-                android:maxLines="2"
-                android:ellipsize="end" />
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/autoDisableWebSearchSwitch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true"
-                app:useMaterialThemeColors="true" />
-        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

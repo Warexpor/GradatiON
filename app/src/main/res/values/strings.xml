@@ -282,7 +282,6 @@
     <string name="settings_animate_border">Animate border</string>
     <string name="settings_citations">Citations</string>
     <string name="settings_openrouter_transform">OpenRouter transform</string>
-    <string name="settings_auto_disable_web">Auto-disable web search</string>
     <string name="settings_biometrics">Biometrics</string>
     <string name="settings_notifications">Notifications</string>
     <string name="settings_copy_instead_dismiss">Copy instead of dismiss</string>

@@ -654,12 +654,8 @@ class SharedPreferencesHelper(context: Context) {
     fun getChatMemoryCount(): Int {
         return mainPrefs.getInt(KEY_CHAT_MEMORY_COUNT, Int.MAX_VALUE) // Default to All messages
     }
-    fun saveDisableWebSearchAfterSend(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_DISABLE_WEB_SEARCH_AFTER_SEND, enabled) }
-    }
-
+    /** Turns web search back off after a send. No Settings row: a preset is the only thing that turns it on. */
     fun getDisableWebSearchAfterSend(): Boolean {
-        // Default to TRUE to preserve current behavior for existing users
         return mainPrefs.getBoolean(KEY_DISABLE_WEB_SEARCH_AFTER_SEND, true)
     }
     fun getReasoningExclude(): Boolean = mainPrefs.getBoolean("reasoning_exclude", true)  // Default to true (exclude)

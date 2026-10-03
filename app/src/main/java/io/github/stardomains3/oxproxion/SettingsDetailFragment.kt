@@ -328,9 +328,6 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         bindSwitch(view, R.id.openRouterTransformsSwitch, prefs.getOpenRouterTransformsEnabled()) {
             prefs.saveOpenRouterTransformsEnabled(it)
         }
-        bindSwitch(view, R.id.autoDisableWebSearchSwitch, prefs.getDisableWebSearchAfterSend()) {
-            prefs.saveDisableWebSearchAfterSend(it)
-        }
     }
 
     private fun bindData(view: View, prefs: SharedPreferencesHelper) {
