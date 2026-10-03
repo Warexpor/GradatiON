@@ -409,6 +409,43 @@ class CodePairingTest {
     }
 
     @Test
+    fun parse_noteOnAnEncodedAddressDoesNotJoinTheAddress() {
+        val bridge = "wss://h/v1?a=1"
+        val encoded = java.net.URLEncoder.encode(bridge, "UTF-8")
+        val raw = "gradation://pair?url=$encoded#note&token=$goodToken&fp=$pinHex"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(bridge, r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+        assertEquals(pinB64, r.pairing.fingerprint)
+        assertFalse(r.pairing.url.contains('#'))
+    }
+
+    @Test
+    fun parse_encodedAddressKeepsAPercentEncodedHashWhenANoteFollows() {
+        val bridge = "wss://h/v1#section"
+        val encoded = java.net.URLEncoder.encode(bridge, "UTF-8")
+        val raw = "gradation://pair?url=$encoded#note&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertTrue(encoded.contains("%23"))
+        assertEquals(bridge, r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+        assertFalse(r.pairing.url.endsWith("#note"))
+    }
+
+    @Test
+    fun parse_wrappedFingerprintStillPins() {
+        val wrapped = pinHex.chunked(16).joinToString("\n")
+        val raw = "gradation://pair?url=$goodUrl&token=$goodToken&fp=$wrapped"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(pinB64, r.pairing.fingerprint)
+        assertEquals(goodUrl, r.pairing.url)
+        val encodedBreak = pinHex.chunked(16).joinToString("%0A")
+        val encoded = CodePairing.parse("gradation://pair?url=$goodUrl&token=$goodToken&fp=$encodedBreak")
+            as CodePairing.ParseResult.Ok
+        assertEquals(pinB64, encoded.pairing.fingerprint)
+    }
+
+    @Test
     fun parse_hexWithColons() {
         val colons =
             "12:AD:50:59:23:03:1E:7D:75:A8:97:2D:CA:3A:9E:0C:ED:E9:FE:50:86:FB:7C:08:8F:42:E0:B5:6A:98:93:A9"

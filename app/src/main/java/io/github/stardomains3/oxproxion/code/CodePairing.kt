@@ -66,8 +66,11 @@ object CodePairing {
      * A query key that happens to be named `token` / `auth` / `ws` / `fp` stays in the
      * address when a real pairing field follows it. The first bridge address wins when
      * a later parameter repeats it under another alias (`address` then `url`). A
-     * fingerprint may contain spaces, including spaces a form encoder wrote as `+`.
-     * Missing url/token → error. Present but unparseable `fp` → [Reason.BAD_FINGERPRINT].
+     * fingerprint may contain spaces, including spaces a form encoder wrote as `+`,
+     * and a line break where the pin was wrapped. A `#note` on a percent-encoded
+     * address is dropped even when a later field keeps the query; a `%23` in that
+     * address stays a hash. Missing url/token → error. Present but unparseable
+     * `fp` → [Reason.BAD_FINGERPRINT].
      * Valid `fp` with cleartext `ws://` → [Reason.PIN_REQUIRES_WSS] (pin needs `wss://`).
      * Absent `fp` is allowed (legacy cleartext LAN / no-pin path).
      */
@@ -227,6 +230,10 @@ object CodePairing {
      * encoded and the key keeps its case. A percent-encoded query value (`wss%3A%2F%2F…`)
      * is decoded once, as a form value: `+` is a space there. The token decoder keeps
      * `+` as a plus, and using it here saved `hello+world` for an address that had a space.
+     * A raw `#note` on that encoded value is not part of the address. Decoding first
+     * used to keep the note (`…%2Fv1#note&token=` saved `…/v1#note`) because the `&`
+     * after the note made it look like more of the query. A `%23` in the encoded
+     * address is still a hash. A raw `wss://` address still keeps its own fragment.
      */
     private fun bridgeUrl(part: QueryPart): String {
         val rawValue = part.raw.substringAfter('=', missingDelimiterValue = "")
@@ -234,7 +241,9 @@ object CodePairing {
         if (trimmed.startsWith("ws://", ignoreCase = true) || trimmed.startsWith("wss://", ignoreCase = true)) {
             return trimmed
         }
-        return decodeForm(trimmed)
+        val hash = trimmed.indexOf('#')
+        val encoded = if (hash < 0) trimmed else trimmed.substring(0, hash).trim()
+        return decodeForm(encoded)
     }
 
     /**
