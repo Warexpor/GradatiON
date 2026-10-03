@@ -553,6 +553,30 @@ class ScreenshotTest : ScreenshotHarness() {
         snap(root(a), "settings_licenses_dark")
     }
 
+    /** The active system message is checked; it used to be the only row drawn in muted gray. */
+    @Test fun settingsSystemMessagesDark() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowAdvanced)
+        a.findViewById<View>(R.id.systemMessagesButton).performClick(); idle()
+        val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.system_message_recycler_view)
+        fun checked() = (0 until list.childCount).map { list.getChildAt(it) }
+            .filter { it.findViewById<View>(R.id.active_check).visibility == View.VISIBLE }
+            .map { it.findViewById<android.widget.TextView>(R.id.system_message_title).text.toString() }
+        val default = SharedPreferencesHelper(a).getSelectedSystemMessage().title
+        org.junit.Assert.assertEquals(listOf(default), checked())
+        val ink = a.getColor(R.color.xai_ink)
+        for (i in 0 until list.childCount) {
+            org.junit.Assert.assertEquals("titles stay ink", ink,
+                list.getChildAt(i).findViewById<android.widget.TextView>(R.id.system_message_title).currentTextColor)
+        }
+        snap(root(a), "settings_system_messages_dark")
+        val other = (0 until list.childCount).map { list.getChildAt(it) }
+            .first { it.findViewById<android.widget.TextView>(R.id.system_message_title).text.toString() != default }
+        val otherTitle = other.findViewById<android.widget.TextView>(R.id.system_message_title)
+        otherTitle.performClick()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(60))
+        org.junit.Assert.assertEquals("the check moves before the screen closes", listOf(otherTitle.text.toString()), checked())
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",

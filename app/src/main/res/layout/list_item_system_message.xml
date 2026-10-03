@@ -26,7 +26,7 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentStart="true"
                 android:layout_centerVertical="true"
-                android:layout_toStartOf="@+id/expand_icon"
+                android:layout_toStartOf="@+id/active_check"
                 tools:text="Title"
                 android:textColor="@color/xai_ink"
                 android:textSize="16sp"
@@ -35,6 +35,21 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:foreground="?attr/selectableItemBackgroundBorderless" />
+
+            <!-- The message new chats use: the model picker's check, not a color -->
+            <ImageView
+                android:id="@+id/active_check"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="6dp"
+                android:layout_toStartOf="@+id/expand_icon"
+                android:contentDescription="@string/system_message_active"
+                android:src="@drawable/ic_check"
+                android:visibility="gone"
+                app:tint="@color/xai_ink"
+                tools:visibility="visible" />
 
             <ImageView
                 android:id="@+id/expand_icon"
