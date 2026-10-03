@@ -34,6 +34,7 @@
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/edit_text_lan_url_layout"
             style="@style/Xai.TextInputLayout"
+            app:errorIconDrawable="@null"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/save_lan_endpoint_hint"
@@ -176,6 +177,7 @@
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/edit_text_lan_api_key_layout"
             style="@style/Xai.TextInputLayout"
+            app:errorIconDrawable="@null"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/save_lan_enter_if_required"
