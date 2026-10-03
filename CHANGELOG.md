@@ -36,6 +36,10 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Character portrait `photoUri` no longer bypasses the torn-JPEG check: picker, panel, edit, speaker header and `RpAvatars.photoModel` treat an incomplete file as missing (same rule as #117's file-path path).
+- Continue keeps the reply being extended (and the turn before it) in lore focus, so keys near the start of a long bubble still match when the recent window is tight.
+- Persona Save commits name, about and photo (enabled already did), so a kill right after Save cannot drop them.
+
 - Hub Continue / Start chat pin the Roleplay tab after uncovering Code: setChatMode(RP) is async, so deactivate's onTabsChanged could briefly select Chat before Roleplay lands.
 - Pair activate: offer / offerError / clear / consume share one lock so interleaved QR and deep-link results cannot leave both pending and error set. consumeError drops a failure that a pairing already superseded.
 - Bottom-sheet glass: topOnly outlines stay empty below API 30 (no fake rounded-bottom elevation); clearDuplicateSheetGlass also drops a nested content GlassDrawable; History and model-options sheets glass before show so the first frame is not double-stacked.

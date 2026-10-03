@@ -149,9 +149,12 @@ class RpCharacterEditFragment : Fragment() {
                     when {
                         clearAvatar -> showAvatar(null)
                         pendingAvatarUri != null -> showAvatar(pendingAvatarUri)
-                        !char.photoUri.isNullOrBlank() -> showAvatar(char.photoUri)
+                        // photoUri is the avatar file; only show it when that JPEG is finished.
                         RpAvatarStorage.hasAvatar(requireContext(), char.id) ->
-                            showAvatar(RpAvatarStorage.avatarFile(requireContext(), char.id))
+                            showAvatar(
+                                char.photoUri?.takeIf { it.isNotBlank() }
+                                    ?: RpAvatarStorage.avatarFile(requireContext(), char.id)
+                            )
                     }
                     // The baseline is what is stored, so a restored edit still counts as one.
                     baseline = CharacterEditSnapshot(
