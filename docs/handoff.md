@@ -1,3 +1,17 @@
+# Handoff (2026-10-03, Code session spacing, second pass)
+
+On `cursor/code-session-spacing-2-bd39` (PR into `gradation/app-pass`), rebased onto `ce713b4f0810a057ea49fdf43b942ca628727d22` (Settings #183, which follows Code spacing #182). Code session chat only, no color token changed. Not a redo of #182 (grid, plan padding, approval buttons, inline-code air, centred loading, tool-title cap, stopped-turn ring).
+
+- Output pane: the side pads sit on the scroll view, which clips to them and fades the overflow, so a long line stops 12dp inside the rim. Full output's words sit 8dp under the pane at the top of the same 44dp target.
+- Tool line: a ConstraintLayout packed chain (bead, title, argument, cross). A failure's cross follows the words; the argument gives way first.
+- Turn end: the ring centres in a 20dp frame (half-dp margins rounded the summary 1px off the column).
+- Offline and connecting banner: the approval pin's capsule (composer edges, 18dp pads, start-aligned beside its light).
+- Prompt with images: `code_user_images_suffix` is quoted so its leading space survives (it read "after· 2 images"). The agent's inline images clip to 12dp.
+- Slash typeahead: Code's own `item_code_slash_row` (no empty icon column, name in mono, words under the composer's). The shared `item_popover_row` is unchanged.
+- New shots: `code_session_edge_rows_dark` and `_end_dark` (rows the demo never sends, from `rareRows()`), `code_session_offline_banner_dark`, `code_session_images_dark`, `code_session_slash_dark`.
+
+Phone: drop the bridge machine mid-session (the banner should sit on the composer's edges, light beside the first lines). Type `/` in a session (names under the slash). A failing command (cross right after the command, not at the far edge).
+
 # Handoff (2026-10-03, Code session spacing)
 
 On `cursor/code-session-spacing-bd39` (PR into `gradation/app-pass`), from `5827aceb876fcc9efe5a7c5dcd2f6cb9ac6e3b46` (one glass sheet #181). Spacing only: the sheet, floating composer, rail, beads and home stay as shipped in #179 to #181. No color token changed. Not a redo of #181 or anything before it.
