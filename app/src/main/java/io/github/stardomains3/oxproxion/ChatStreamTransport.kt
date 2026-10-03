@@ -532,13 +532,8 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
             if (sharedPreferencesHelper.getNotiPreference()) {
                 val apiIdentifier = activeChatModel.value ?: "Unknown Model"
                 val displayName = getModelDisplayName(apiIdentifier)
-                val truncatedResponse = if (finalContent.length > 3900) {
-                    finalContent.take(3900) + "..."
-                } else {
-                    finalContent
-                }
                 val line = AnswerShadeText.lineForShade(
-                    truncatedResponse,
+                    finalContent,
                     handedToTools = false,
                     isError = false,
                 )
@@ -777,14 +772,9 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     val displayName = getModelDisplayName(apiIdentifier)
                     val notiBody = streamFinalContent
                         ?: accumulatedResponse.ifBlank { application.getString(R.string.error_no_response) }
-                    val truncatedResponse = if (notiBody.length > 3900) {
-                        notiBody.take(3900) + "..."
-                    } else {
-                        notiBody
-                    }
                     // Tool handoff: the follow-up already saved the finished answer.
                     val line = AnswerShadeText.lineForShade(
-                        truncatedResponse,
+                        notiBody,
                         handedToTools = handedToTools,
                         isError = false,
                     )

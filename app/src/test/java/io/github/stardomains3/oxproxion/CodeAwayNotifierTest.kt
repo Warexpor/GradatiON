@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import android.app.Application
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import androidx.core.app.NotificationCompat
@@ -503,6 +504,30 @@ class CodeAwayNotifierTest {
         assertEquals(1, nm.activeNotifications.size)
         assertEquals(liveId, nm.activeNotifications.single().id)
         assertTrue(n.consumeOpenToken("live", token))
+    }
+
+    @Test
+    fun secondFinishedTurnAlertsWhileTheFirstShadeIsUp() {
+        val n = notifier()
+        n.onUpdate("s", "host", "Session", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        val first = nm.activeNotifications.single()
+        assertEquals(0, first.notification.flags and Notification.FLAG_ONLY_ALERT_ONCE)
+        n.onUpdate(
+            "s",
+            "host",
+            "Session",
+            CodeUpdate.Upsert(CodeEvent.UserPrompt("u", 2L, "next")),
+            sessionWasRunning = true,
+        )
+        assertEquals("the shade stays up after the next prompt", 1, nm.activeNotifications.size)
+        n.onUpdate("s", "host", "Session", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        val second = nm.activeNotifications.single()
+        assertEquals(first.id, second.id)
+        assertEquals(
+            "a later finished turn must buzz, not update in silence",
+            0,
+            second.notification.flags and Notification.FLAG_ONLY_ALERT_ONCE,
+        )
     }
 
     @Test
