@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Code transcript: a file change as an editor pane. A tab-like header (file name, folder, counts),
-     the first lines of the diff on the recessed code fill, tap for the full viewer. The rail runs
-     behind the opaque card, so the header glyph lands on the rail column. -->
+     the first lines of the diff on the recessed code fill, tap for the full viewer. The rail stops
+     at the glass card; the header glyph lands on the rail column. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="12dp"
-    android:paddingEnd="14dp"
+    android:paddingStart="6dp"
+    android:paddingEnd="6dp"
     android:paddingTop="4dp"
     android:paddingBottom="6dp">
 
@@ -59,7 +59,7 @@
                 android:layout_marginStart="8dp"
                 android:ellipsize="start"
                 android:singleLine="true"
-                android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+                style="@style/Widget.Gradation.Code.MonoLine"
                 android:textColor="@color/xai_mute"
                 android:textSize="12sp" />
 
@@ -71,26 +71,16 @@
                 android:ellipsize="end"
                 android:maxWidth="96dp"
                 android:maxLines="1"
-                android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+                style="@style/Widget.Gradation.Code.MonoLine"
                 android:textColor="@color/xai_ink"
                 android:textSize="13sp" />
         </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/xai_hairline" />
 
         <io.github.stardomains3.oxproxion.code.DiffView
             android:id="@+id/codeDiffLines"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@color/code_block_bg" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/xai_hairline" />
 
         <TextView
             android:id="@+id/codeDiffMore"
