@@ -1423,12 +1423,17 @@ class SharedPreferencesHelper(context: Context) {
 
     /** The demo character went into the roleplay library once ([DemoCharacter]). */
     fun isDemoCharacterSeeded(): Boolean = mainPrefs.getBoolean(KEY_DEMO_CHARACTER_SEEDED, false)
-    fun markDemoCharacterSeeded() = mainPrefs.edit { putBoolean(KEY_DEMO_CHARACTER_SEEDED, true) }
+    fun markDemoCharacterSeeded() {
+        // commit: a lost flag lets a deleted Vesna come back on the next launch.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_DEMO_CHARACTER_SEEDED, true) }
+    }
 
     /** Packaged Vesna avatar revision already written ([DemoCharacter.STOCK_AVATAR_REVISION]). */
     fun demoCharacterAvatarRevision(): Int = mainPrefs.getInt(KEY_DEMO_CHARACTER_AVATAR_REV, 0)
-    fun setDemoCharacterAvatarRevision(revision: Int) =
-        mainPrefs.edit { putInt(KEY_DEMO_CHARACTER_AVATAR_REV, revision) }
+    fun setDemoCharacterAvatarRevision(revision: Int) {
+        // commit: a lost revision rewrites the portrait the user already replaced.
+        mainPrefs.edit(commit = true) { putInt(KEY_DEMO_CHARACTER_AVATAR_REV, revision) }
+    }
 
     /** The built-in demo model is always in the list (first), for new and existing installs. */
     private fun ensureDemoModel() {
@@ -1588,7 +1593,8 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun saveRpActiveCharacterId(id: Long?) {
-        mainPrefs.edit {
+        // commit: which character opens next. apply() can still be in memory when the process dies.
+        mainPrefs.edit(commit = true) {
             if (id == null) remove(KEY_RP_ACTIVE_CHARACTER_ID)
             else putLong(KEY_RP_ACTIVE_CHARACTER_ID, id)
         }

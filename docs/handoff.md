@@ -23,6 +23,14 @@ On `gradation/w30-settings` (PR into `gradation/app-pass`). Settings follow-ups 
 - Settings > Models: the local server address is the base the app appends `/v1` to. A trailing slash or a pasted `/v1` is stripped on save and on read, so an older `http://10.0.0.23:11434/v1/` still requests `/v1/chat/completions` once.
 
 Phone: with an old file-tool name still stored, open Settings > Advanced > Tools and turn List files off (it should stay off, and the model should not get that tool). Turn Create file on without picking a folder. Set the local server to `http://10.0.0.23:11434/v1/` and load models (the request should be `http://10.0.0.23:11434/v1/models`, not `/v1/v1`).
+# Handoff (2026-10-03, RP wave 30)
+
+On `gradation/w30-rp` (PR into `gradation/app-pass`). Roleplay follow-ups after #123. Not a redo of torn photoUri, Continue lore focus, or persona Save commits, and not #117 (Continue swipe alts, portrait side files, regen lore focus):
+- Auto memory treats a scene-note or rewrite echo in any bracket the reply cleaner already strips as machinery, not only the ASCII wrapper. The story after that echo stays. A character's own `(OOC: …)` line stays.
+- A Vesna row with no seed flag repairs the flag, so deleting her does not bring her back on the next launch. Stock refresh updates fields that still match the previous seed and leaves a renamed card, a rewritten greeting, a changed scenario, and the portrait uri.
+- The active character id commits. The demo seed flag and stock-avatar revision commit.
+
+Phone: send a reply that is only `（Scene note…）` or a fullwidth rewrite echo, then let auto memory run (facts should not contain the note). Edit Vesna's greeting on a card that still has the old personality (the greeting should stay; only fields that still match the previous seed refresh). Delete Vesna and relaunch (she stays gone). Open a character and force-stop (that character should still be the one that opens).
 
 # Handoff (2026-10-03, Import wave 30)
 
