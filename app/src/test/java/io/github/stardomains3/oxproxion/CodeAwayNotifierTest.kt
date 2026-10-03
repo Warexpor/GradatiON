@@ -39,6 +39,7 @@ class CodeAwayNotifierTest {
         ctx.getSharedPreferences(CodeStore.PREFS_NAME, 0).edit().clear().commit()
         ctx.getSharedPreferences("code_away_open_tokens", 0).edit().clear().commit()
         ctx.getSharedPreferences("code_away_notif_ids", 0).edit().clear().commit()
+        ctx.getSharedPreferences("code_away_shade_hold", 0).edit().clear().commit()
         store = CodeStore(ctx)
         store.notifyWhenAway = true
         nm = ctx.getSystemService(NotificationManager::class.java)
@@ -118,4 +119,56 @@ class CodeAwayNotifierTest {
         assertEquals(1, nm.activeNotifications.size)
         assertTrue(CodeAwayFormat.isAwayNotifId(nm.activeNotifications[0].id))
     }
+
+    @Test
+    fun cancelSessionAfterClearTurnDoneDedupClearsShade() {
+        val n = notifier()
+        val session = "sess-cancel-after-clear"
+        n.onUpdate(session, "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, session)
+        val idPrefs = ctx.getSharedPreferences("code_away_notif_ids", 0)
+        assertEquals(1, nm.activeNotifications.size)
+        assertTrue(idPrefs.contains(key))
+        // New user turn: clearTurnDoneDedup drops posted + prefs, keeps in-memory id.
+        n.clearTurnDoneDedup(session)
+        assertFalse(idPrefs.contains(key))
+        assertEquals("shade stays until cancel/open/next TurnDone", 1, nm.activeNotifications.size)
+        // Forget / open-in-app must still find the allocation via keyToId.
+        n.cancelSession(session)
+        assertEquals(0, nm.activeNotifications.size)
+    }
+
+    @Test
+    fun coldCancelAfterClearTurnDoneDedupClearsSurvivingShade() {
+        val n = notifier()
+        val session = "sess-cold-cancel"
+        n.onUpdate(session, "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        val id = nm.activeNotifications.single().id
+        n.clearTurnDoneDedup(session)
+        val hold = ctx.getSharedPreferences("code_away_shade_hold", 0)
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, session)
+        assertEquals(id, hold.getInt(key, Int.MIN_VALUE))
+        // Process death: memory maps gone, dedup prefs empty, shade still up.
+        val cold = notifier()
+        cold.cancelSession(session)
+        assertEquals(0, nm.activeNotifications.size)
+        assertFalse(hold.contains(key))
+    }
+
+    @Test
+    fun coldTurnDoneAfterClearReusesHeldShadeId() {
+        val n = notifier()
+        val session = "sess-cold-reuse"
+        n.onUpdate(session, "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        val id = nm.activeNotifications.single().id
+        n.clearTurnDoneDedup(session)
+        val cold = notifier()
+        cold.onUpdate(session, "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(1, nm.activeNotifications.size)
+        assertEquals(id, nm.activeNotifications.single().id)
+        assertFalse(ctx.getSharedPreferences("code_away_shade_hold", 0).contains(
+            CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, session),
+        ))
+    }
+
 }

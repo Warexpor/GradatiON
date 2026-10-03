@@ -5,6 +5,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -13,6 +14,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
@@ -92,4 +94,59 @@ class ForegroundServiceNotifTest {
         val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
         assertEquals(null, prefs.getString("title", null))
     }
+
+    @Test
+    fun updateNotificationStatusClearsSpeakingFlag() {
+        val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
+        prefs.edit().putBoolean("speaking", true).commit()
+        ForegroundService.updateNotificationStatus(ctx, "Demo Model", "Your answer is ready.")
+        assertFalse(prefs.getBoolean("speaking", true))
+        assertEquals("Demo Model", prefs.getString("title", null))
+    }
+
+    @Test
+    fun coldToggleWithSpeakingPrefStopsRatherThanRestart() {
+        // Process died mid-Speak: shade still says Stop, prefs still say speaking.
+        val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
+        prefs.edit()
+            .putString("title", "Demo Model")
+            .putString("text", "Your answer is ready.")
+            .putBoolean("speaking", true)
+            .commit()
+        nm.notify(
+            2,
+            NotificationCompat.Builder(ctx, "ForegroundServiceChannel")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Demo Model")
+                .setContentText("Your answer is ready.")
+                .build(),
+        )
+        val intent = Intent(ctx, ForegroundService::class.java).setAction("TOGGLE_TTS_CHANNEL_2")
+        Robolectric.buildService(ForegroundService::class.java, intent)
+            .create()
+            .startCommand(0, 1)
+            .destroy()
+        assertFalse(
+            "cold Stop must clear speaking so a second tap Speaks",
+            prefs.getBoolean("speaking", true),
+        )
+        assertTrue(nm.activeNotifications.any { it.id == 2 })
+    }
+
+    @Test
+    fun dismissWithoutInstanceClearsSpeakingAndShade() {
+        val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
+        prefs.edit().putBoolean("speaking", true).commit()
+        nm.notify(
+            2,
+            NotificationCompat.Builder(ctx, "ForegroundServiceChannel")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Demo Model")
+                .build(),
+        )
+        ForegroundService.dismissNotificationIfNotSpeaking(ctx)
+        assertFalse(prefs.getBoolean("speaking", true))
+        assertTrue(nm.activeNotifications.none { it.id == 2 })
+    }
+
 }
