@@ -2696,6 +2696,29 @@ class CodeProtocolTest {
         assertEquals("completed", byId["sr"]?.detail)
     }
 
+    @Test fun cursorBrowserClickXyAndCdpSetTheCardKind() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mc","title":"Click","kind":"other","name":"BrowserMouseClickXy","status":"completed",
+               "rawInput":{"x":10.0,"y":"20.0"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cd","title":"Cdp","kind":"other","name":"BrowserCdp","status":"completed",
+               "rawInput":{"method":"Runtime.evaluate"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"tb","title":"Tab","kind":"other","name":"BrowserTabSelect","status":"completed",
+               "rawInput":{"tabId":5.0}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rv","title":"Reviewers","kind":"other","name":"RequestPullRequestReviewers","status":"completed",
+               "rawInput":{"reviewers":["octocat","hubot"],"team_reviewers":["justice-league"]}}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EXECUTE, byId["mc"]?.kind)
+        assertEquals("10, 20", byId["mc"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["cd"]?.kind)
+        assertEquals("Runtime.evaluate", byId["cd"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["tb"]?.kind)
+        assertEquals("5", byId["tb"]?.detail)
+        assertEquals(ToolKind.EDIT, byId["rv"]?.kind)
+        assertEquals("octocat, hubot", byId["rv"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()

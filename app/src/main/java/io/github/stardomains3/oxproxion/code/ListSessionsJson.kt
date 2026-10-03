@@ -14,6 +14,8 @@ import kotlinx.serialization.json.longOrNull
  * Null / non-object [result] yields an empty list (same as a missing `sessions` array).
  * Whole-number doubles (`42.0`) and digit strings still become longs so resume and sort stay honest.
  * A `sessionId`, `model`, `cwd`, `harness`, or `branch` written the same way still matches as `"5"`, not `"5.0"`.
+ * `permissionMode` / `mode` uses the same aliases as a live `current_mode_update`
+ * (`acceptEdits`, `bypassPermissions`, `agent`, `full_auto`), not only the exact pill ids.
  */
 object ListSessionsJson {
 
@@ -39,7 +41,10 @@ object ListSessionsJson {
                 title = s("title") ?: "Session",
                 createdAt = longField(o, "createdAt") ?: 0L,
                 updatedAt = longField(o, "updatedAt") ?: 0L,
-                permissionMode = PermissionMode.fromId(s("permissionMode") ?: s("mode")),
+                // Same aliases as current_mode_update. Unknown / omitted stays Ask,
+                // so a bridge that leaves mode off the row still looks omitted to merge.
+                permissionMode = PermissionMode.fromAcpModeId(s("permissionMode") ?: s("mode"))
+                    ?: PermissionMode.ASK,
                 // Same whole-number coercion as listHarnesses models.
                 model = idString("model"),
                 preview = s("preview") ?: "",
