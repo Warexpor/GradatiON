@@ -14,19 +14,68 @@ object LanEndpointValidator {
     fun validate(rawUrl: String): Int? {
         val url = rawUrl.trim()
         if (url.isBlank()) return R.string.lan_error_url_blank
-        val uri = try {
-            URI(url)
-        } catch (_: Exception) {
-            return R.string.lan_error_url_invalid
-        }
+        val uri = runCatching { URI(url) }.getOrNull()
+        // `user:p@ss@[fd00::1]` and `user:a b@10.0.0.23` throw. The first `@` makes Java
+        // treat the brackets (or the space) as part of the host, so Save used to say the
+        // URL was invalid and never read the address after the last `@`. OkHttp can call it.
+        if (uri == null) return validateUnparsed(url)
         val scheme = uri.scheme?.lowercase()
         if (scheme != "http" && scheme != "https") {
             return R.string.lan_error_url_scheme
         }
         val endpoint = endpointHostPort(uri) ?: return R.string.lan_error_url_host
+        return endpointProblem(scheme, endpoint)
+    }
+
+    /**
+     * Authority after `://` when [URI] threw. Only a host we could hand to the HTTP client
+     * counts: no spaces, and an IPv6 address has to be in brackets (an unbracketed `fd00::1`
+     * is not a URL OkHttp can open).
+     */
+    private fun validateUnparsed(url: String): Int? {
+        val scheme = schemeBeforeAuthority(url) ?: return R.string.lan_error_url_invalid
+        if (scheme != "http" && scheme != "https") return R.string.lan_error_url_scheme
+        val endpoint = endpointFromRawAuthority(url) ?: return R.string.lan_error_url_host
+        if (!recoverableHost(endpoint.host)) return R.string.lan_error_url_invalid
+        return endpointProblem(scheme, endpoint)
+    }
+
+    private fun schemeBeforeAuthority(url: String): String? {
+        val split = url.indexOf("://")
+        if (split <= 0) return null
+        val scheme = url.substring(0, split)
+        if (scheme.isEmpty() || scheme.any { !it.isLetter() }) return null
+        return scheme.lowercase()
+    }
+
+    private fun endpointFromRawAuthority(url: String): HostPort? {
+        val rest = url.substringAfter("://", "")
+        if (rest.isEmpty()) return null
+        val authority = rest.substringBefore('/').substringBefore('?').substringBefore('#')
+        if (authority.isEmpty()) return null
+        return hostPortFromAuthority(authority)
+    }
+
+    private fun recoverableHost(host: String): Boolean {
+        if (host.isEmpty() || host.any { it.isWhitespace() || it == '@' || it == '/' }) return false
+        val bracketed = host.startsWith("[") && host.endsWith("]") && host.length > 2
+        val bare = if (bracketed) host.substring(1, host.length - 1) else host
+        if (bare.isEmpty() || bare.any { it.isWhitespace() }) return false
+        // A colon outside brackets is an unbracketed IPv6 address, which the client rejects.
+        if (':' in bare && !bracketed) return false
+        return true
+    }
+
+    private fun endpointProblem(scheme: String, endpoint: HostPort): Int? {
         // 0 and anything above 65535 are not a port a request can open. Java's URI keeps them.
         if (endpoint.port != -1 && endpoint.port !in 1..65535) return R.string.lan_error_url_port
-        if (scheme == "http" && !isPrivateOrLocalHost(endpoint.host)) {
+        // `fd00::1` without brackets is not a URL the HTTP client can open. A bracketed literal
+        // arrives as `[fd00::1]` from the parser, or from the authority fallback.
+        val host = endpoint.host
+        if (':' in host && !(host.startsWith("[") && host.endsWith("]") && host.length > 2)) {
+            return R.string.lan_error_url_invalid
+        }
+        if (scheme == "http" && !isPrivateOrLocalHost(host)) {
             return R.string.lan_error_url_http_public
         }
         return null

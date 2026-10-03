@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Settings wave 33)
+
+On `cursor/settings-wave-33-1cff` (PR into `gradation/app-pass`). Settings follow-ups after #149, rebased onto #156 (which includes #155 and #157). Not a redo of a hostname with `_` or a password containing `@` on a host Java could still parse, the Models row hiding that password, port 0 and above 65535, a query or fragment swallowing `/v1`, or approximate location counting as granted (#149). Not a redo of an enabled tool turning off without the grant, cleartext to CGNAT 100.64/10 and IPv6 link-local or unique-local, or the Models row hiding userinfo when the host parsed (#140). Not a redo of card example exchanges split on `<START>`, `{{bot}}` as the character name, or `{{random_user_N}}` in an example (#156). Not a redo of a divider-only hub line, an emoji cut in half, a form-encoded pairing space, or a trailing `#note` after a bridge fragment (#155). Not a redo of the config-option mode pill or Playwright browser lines (#157).
+
+- Settings > Models: `http://user:p@ss@[fd00::1]:11434` and `http://user:a b@10.0.0.23:11434` save. Java's parser throws on an IPv6 literal after a password that contains `@`, and on a space in the password, so Save said the URL was invalid. The row still shows host and port. An unbracketed `fd00::1` is still refused. Public literals are still refused.
+- Settings > Tools: Get location requests precise and approximate together. A precise-only request is ignored on Android 12+, so the dialog never showed. With approximate location, the tool uses the network provider and keeps a coarse fix. GPS throws without precise location, and a 10 m wait never finishes on approximate.
+
+Phone: save `http://user:p@ss@[fd00::1]:11434` (Save should accept it; the Models row should say `[fd00::1]:11434`, not the password). Turn Get location on and choose Approximate (the switch should stay on). Ask the model where you are (it should return a coarse fix, not say location was denied).
+
 # Handoff (2026-10-03, RP wave 33)
 
 On `cursor/rp-wave-33-af37` (PR into `gradation/app-pass`). Roleplay card parsing, lore keys, example dialogs, and prompts. Rebased onto `75503c7` (Hub #155, which includes Code #157). Not a redo of #148 (example sides with a space before the colon, the character speaking first, `Keys`/`KEYS` headers, Windows line endings, list marks `#` `~` `>`) or #142 (list underscores, the User side after a leading blank line, lore keys in `()` `（）` `【】`). Not a redo of #155 or #157. Not a redo of #139–#154.

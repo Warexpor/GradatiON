@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Settings > Models: a local server password that contains `@`, or a space, saves when the host is an IPv6 address (`http://user:p@ss@[fd00::1]:11434`). Java's URL parser throws on the brackets after that `@`, so Save used to say the URL was invalid. The Models row still shows the host and port. An unbracketed IPv6 address is still refused, and so is cleartext to a public address.
+- Settings > Tools: Get location asks for precise and approximate location in one request. Asking only for precise is ignored on Android 12 and newer, so the dialog never appeared. Approximate location reads the network provider and keeps that fix. It used to ask GPS, which throws without precise location, and then wait for a 10 m reading that approximate location cannot produce.
 - Roleplay example dialogs pasted from a card keep every exchange. A `<START>` line between them used to be saved as part of the first reply, so the later lines never became their own example. `{{user}}`, `{{char}}`, `{{bot}}`, and the older `<USER>` / `<BOT>` tags are read as the two sides.
 - `{{bot}}` is the character's name in the prompt, the greeting, and a lore key, the same as `{{char}}` and `<BOT>`. It used to be left as the raw token, so a key written that way never matched.
 - An example line's `{{random_user_N}}` is someone else in that sample, not the person in this chat. When your name was Alex or Jordan, `{{random_user_1}}` used to come out as you.
