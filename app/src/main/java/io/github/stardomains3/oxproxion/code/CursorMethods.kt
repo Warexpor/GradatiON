@@ -25,6 +25,10 @@ import java.util.concurrent.ConcurrentHashMap
  * live only under `phases` still fills that card.
  * `cursor/task` and `cursor/generate_image` are notifications. A request-shaped copy
  * is acknowledged so the agent is not told the method is missing.
+ * Grok Build asks with `x.ai/ask_user_question` (older builds prefix `_x.ai/`).
+ * One question is the same card. The reply is the option's label, keyed by the
+ * question text. Several questions, or `multiSelect`, are skipped so the turn
+ * can continue.
  *
  * One JSON-RPC id is one live request. Agents restart that counter, so a later ACP
  * permission can reuse an id this class already answered. [release] drops the Cursor
@@ -51,6 +55,7 @@ internal class CursorMethods {
         return when (req.kind) {
             CursorRequestKind.ASK -> askResult(requestId, req.questionId, optionId)
             CursorRequestKind.PLAN -> planResult(requestId, optionId)
+            CursorRequestKind.GROK_ASK -> grokAskResult(requestId, req.questionId, optionId)
         }
     }
 
@@ -72,6 +77,7 @@ internal class CursorMethods {
     ): List<AdapterOutput> = when (method) {
         "cursor/update_todos" -> updateTodos(sessionId, idEl, params, seq, now)
         "cursor/ask_question" -> askQuestion(sessionId, idEl, params, seq, now)
+        "x.ai/ask_user_question", "_x.ai/ask_user_question" -> askGrok(sessionId, idEl, params, seq, now)
         "cursor/create_plan" -> createPlan(sessionId, idEl, params, seq, now)
         "cursor/task" -> ackTask(idEl, params)
         "cursor/generate_image" -> ackImage(idEl, params)
@@ -129,6 +135,80 @@ internal class CursorMethods {
             options = options,
         )
         return listOf(AdapterOutput.Update(sessionId, CodeUpdate.Upsert(approval), seq))
+    }
+
+    /**
+     * Grok's question has `question` and `label`, not Cursor's `prompt` and option `id`.
+     * The result is a flat `outcome`, not Cursor's nested one. `multiSelect` cannot be
+     * one button, so it is skipped the same way as several questions.
+     */
+    private fun askGrok(
+        sessionId: String,
+        idEl: JsonElement?,
+        params: JsonObject,
+        seq: Long?,
+        now: Long,
+    ): List<AdapterOutput> {
+        val requestId = rpcId(idEl) ?: return listOf(AdapterOutput.Ignored("grok ask without id"))
+        val questions = (params["questions"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+        val only = questions.singleOrNull()
+        val options = only?.let { grokOptions(it) }
+        if (only == null || options == null || grokMulti(only)) {
+            return skipGrok(sessionId, requestId, seq, now)
+        }
+        val question = only.str("question")?.trim()?.ifEmpty { null }
+            ?: only.str("prompt")?.trim()?.ifEmpty { null }
+            ?: return skipGrok(sessionId, requestId, seq, now)
+        requests[requestId] = CursorRequest(CursorRequestKind.GROK_ASK, question, sessionId)
+        val title = params.str("title")?.trim()?.ifEmpty { null } ?: question
+        val approval = CodeEvent.Approval(
+            key = "approval:$requestId",
+            at = now,
+            requestId = requestId,
+            callId = rpcId(params["toolCallId"]),
+            title = title,
+            detail = question.takeIf { it != title },
+            kind = ToolKind.OTHER,
+            options = options,
+        )
+        return listOf(AdapterOutput.Update(sessionId, CodeUpdate.Upsert(approval), seq))
+    }
+
+    /** `multiSelect` is Grok's flag. Cursor's names are accepted on the same question. */
+    private fun grokMulti(question: JsonObject): Boolean =
+        question.bool("multiSelect") == true || question.bool("multi_select") == true ||
+            question.bool("allowMultiple") == true || question.bool("allow_multiple") == true
+
+    /** The card id is the label, because that is what Grok stores as the answer. */
+    private fun grokOptions(question: JsonObject): List<ApprovalOption>? {
+        val opts = (question["options"] as? JsonArray).orEmpty().mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val label = o.str("label")?.trim()?.ifEmpty { null }
+                ?: rpcId(o["id"])?.trim()?.ifEmpty { null }
+                ?: return@mapNotNull null
+            ApprovalOption(label, label, ApprovalOption.Kind.ALLOW_ONCE)
+        }
+        return opts.takeIf { it.isNotEmpty() }
+    }
+
+    private fun skipGrok(sessionId: String, requestId: String, seq: Long?, now: Long): List<AdapterOutput> {
+        requests.remove(requestId)
+        val reply = AdapterOutput.Reply(grokSkip(requestId))
+        if (sessionId.isBlank()) return listOf(reply)
+        val notice = AdapterOutput.Update(
+            sessionId,
+            CodeUpdate.Upsert(
+                CodeEvent.Notice(
+                    "cursor-ask:$requestId",
+                    now,
+                    "This agent asked a question this screen can't answer. It was skipped.",
+                    NoticeLevel.INFO,
+                    textRes = R.string.code_notice_question_skipped,
+                )
+            ),
+            seq,
+        )
+        return listOf(notice, reply)
     }
 
     private fun createPlan(
@@ -300,6 +380,29 @@ internal class CursorMethods {
         return rpc(requestId, buildJsonObject { put("outcome", outcome) })
     }
 
+    /**
+     * Grok deserialises `outcome` on the result itself. A chosen label is stored
+     * under the question text. Dismiss is `cancelled`. A question this screen
+     * cannot ask is `skip_interview`, which lets the turn continue.
+     */
+    private fun grokAskResult(requestId: String, question: String, optionId: String?): String {
+        val result = if (optionId.isNullOrEmpty()) {
+            buildJsonObject { put("outcome", "cancelled") }
+        } else {
+            buildJsonObject {
+                put("outcome", "accepted")
+                put("answers", buildJsonObject { put(question, optionId) })
+                put("annotations", buildJsonObject { })
+            }
+        }
+        return rpc(requestId, result)
+    }
+
+    private fun grokSkip(requestId: String) = rpc(
+        requestId,
+        buildJsonObject { put("outcome", "skip_interview") },
+    )
+
     private fun askSkipped(requestId: String) = rpc(
         requestId,
         buildJsonObject { put("outcome", buildJsonObject { put("outcome", "skipped") }) },
@@ -379,7 +482,7 @@ internal class CursorMethods {
 
     private fun JsonObject.bool(k: String): Boolean? = (this[k] as? JsonPrimitive)?.booleanOrNull
 
-    private enum class CursorRequestKind { ASK, PLAN }
+    private enum class CursorRequestKind { ASK, PLAN, GROK_ASK }
 
     private class CursorRequest(
         val kind: CursorRequestKind,
