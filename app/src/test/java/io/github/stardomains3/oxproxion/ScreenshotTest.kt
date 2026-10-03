@@ -382,6 +382,9 @@ class ScreenshotTest : ScreenshotHarness() {
             "dialog_api_dark" to { SaveApiDialogFragment().show(a.supportFragmentManager, "api") },
             "dialog_lan_dark" to { SaveLANDialogFragment().show(a.supportFragmentManager, "lan") },
             "dialog_timeout_dark" to { TimeoutDialogFragment().show(a.supportFragmentManager, "t") },
+            "dialog_chat_memory_dark" to { ChatMemoryDialogFragment().show(a.supportFragmentManager, "m") },
+            "dialog_brave_dark" to { SaveBraveApiDialogFragment().show(a.supportFragmentManager, "b") },
+            "dialog_max_tokens_dark" to { MaxTokensDialogFragment().show(a.supportFragmentManager, "x") },
         )
         for ((name, open) in dialogs) {
             try {
@@ -394,14 +397,98 @@ class ScreenshotTest : ScreenshotHarness() {
         }
     }
 
+    /** Settings' own-layout dialogs wrapped their content: the key dialog split Cancel, the timeout one hit the edges. */
+    @Test fun settingsDialogsKeepSideInsets() = withChat { a, _ ->
+        val d = a.resources.displayMetrics.density
+        val expected = minOf(a.resources.displayMetrics.widthPixels - (48 * d).toInt(), (420 * d).toInt())
+        val dialogs: List<Pair<String, () -> androidx.fragment.app.DialogFragment>> = listOf(
+            "api" to { SaveApiDialogFragment() },
+            "brave" to { SaveBraveApiDialogFragment() },
+            "lan" to { SaveLANDialogFragment() },
+            "max_tokens" to { MaxTokensDialogFragment() },
+            "timeout" to { TimeoutDialogFragment() },
+        )
+        for ((name, make) in dialogs) {
+            val f = make()
+            f.show(a.supportFragmentManager, name); idle()
+            org.junit.Assert.assertEquals("$name card width", expected, f.requireDialog().window!!.attributes.width)
+            if (name == "api") {
+                val cancel = f.requireView().findViewById<android.widget.TextView>(R.id.button_cancelapi)
+                org.junit.Assert.assertEquals("Cancel stays on one line", 1, cancel.lineCount)
+            }
+            f.dismiss(); idle()
+        }
+    }
+
     @Test @Config(qualifiers = LIGHT)
     fun inputDialogLight() = withChat { a, chat ->
         GrokInputDialog.show(chat, "Rename conversation", "Title", "Transformer attention", "Save", onConfirm = {})
         idle(); snapDialogCentered(a, "dialog_input_light")
     }
 
+    /** Help's in-app links open the app's own screens, and its inline glyphs are drawn in ink. */
+    @Test fun helpLinksAndIconsDark() = withChat { a, _ ->
+        pushFragment(a, HelpFragment())
+        val text = a.findViewById<android.widget.TextView>(R.id.helpContentTextView).text as android.text.Spanned
+        val leftover = text.getSpans(0, text.length, android.text.style.URLSpan::class.java)
+            .map { it.url }.filter { it.startsWith("action://") || it.startsWith("oxproxion://") }
+        org.junit.Assert.assertEquals("in-app links left as plain URLs", emptyList<String>(), leftover)
+        for (label in listOf("Re-select folder", "View in app")) {
+            val at = text.indexOf(label)
+            org.junit.Assert.assertTrue("$label is in help", at >= 0)
+            org.junit.Assert.assertTrue("$label is tappable",
+                text.getSpans(at, at + label.length, android.text.style.ClickableSpan::class.java).isNotEmpty())
+        }
+        val ink = a.getColor(R.color.xai_ink) and 0xFFFFFF
+        val icons = text.getSpans(0, text.length, android.text.style.ImageSpan::class.java)
+        org.junit.Assert.assertTrue("help has inline glyphs", icons.size >= 8)
+        for (span in icons) {
+            val bmp = android.graphics.Bitmap.createBitmap(span.drawable.bounds.width(), span.drawable.bounds.height(),
+                android.graphics.Bitmap.Config.ARGB_8888)
+            span.drawable.draw(android.graphics.Canvas(bmp))
+            val px = IntArray(bmp.width * bmp.height).also { bmp.getPixels(it, 0, bmp.width, 0, 0, bmp.width, bmp.height) }
+            val solid = px.maxByOrNull { it ushr 24 }!!
+            org.junit.Assert.assertEquals("glyph drawn in ink", ink, solid and 0xFFFFFF)
+        }
+        val tv = a.findViewById<android.widget.TextView>(R.id.helpContentTextView)
+        val line = tv.layout.getLineForOffset(text.indexOf("Composer"))
+        (tv.parent as android.widget.ScrollView).scrollTo(0, tv.layout.getLineTop(line)); idle()
+        snap(root(a), "help_composer_dark")
+    }
+
+    /** Export used to read History's list before anything loaded it, so it always said there was nothing to save. */
+    @Test fun settingsExportOpensSaveDialog() = withChat { a, _ ->
+        seedHistory()
+        openSettingsRow(a, R.id.settingsRowData)
+        a.findViewById<View>(R.id.exportHistoryButton).performClick()
+        settle()
+        // Launch also asks for permissions, so look through everything that was started.
+        val started = generateSequence { shadowOf(a).nextStartedActivityForResult?.intent }.toList()
+        val save = started.firstOrNull { it.action == android.content.Intent.ACTION_CREATE_DOCUMENT }
+        org.junit.Assert.assertNotNull("export opened no save dialog, only ${started.map { it.action }}", save)
+        org.junit.Assert.assertEquals("gradation-chats.json", save!!.getStringExtra(android.content.Intent.EXTRA_TITLE))
+    }
+
+    /** The master switch is a toolbar action view; it used to sit flush against the screen edge. */
+    @Test fun settingsAdvancedReasoningDark() = withChat { a, _ ->
+        pushFragment(a, AdvancedReasoningFragment())
+        val toolbar = a.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+        val toggle = toolbar.menu.findItem(R.id.menu_advanced_toggle).actionView!!
+        val include = a.findViewById<View>(R.id.includeSwitch)
+        fun trackEnd(v: View) = IntArray(2).also { v.getLocationInWindow(it) }[0] + v.width - v.paddingEnd
+        val d = a.resources.displayMetrics.density
+        org.junit.Assert.assertEquals("toggle lines up with the switch under it", trackEnd(include).toFloat(), trackEnd(toggle).toFloat(), 2 * d)
+        org.junit.Assert.assertEquals(a.getString(R.string.settings_advanced_reasoning), toolbar.title)
+        org.junit.Assert.assertFalse("no glass capsule under the switch", toggle.background is GlassDrawable)
+        snap(root(a), "settings_advanced_reasoning_dark")
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
-        for ((row, name) in listOf(R.id.settingsRowModels to "settings_models_dark", R.id.settingsRowData to "settings_data_dark")) {
+        for ((row, name) in listOf(
+            R.id.settingsRowModels to "settings_models_dark",
+            R.id.settingsRowAdvanced to "settings_advanced_dark",
+            R.id.settingsRowData to "settings_data_dark",
+        )) {
             openSettingsRow(a, row)
             snap(root(a), name)
             a.supportFragmentManager.popBackStackImmediate(); a.supportFragmentManager.popBackStackImmediate(); idle()
