@@ -270,4 +270,14 @@ class AvatarAndPersonaTest {
         assertNull(prefs.getRpPersonaPhoto())
     }
 
+
+    /** Opening a character commits the id, so a kill cannot reopen the previous one. */
+    @Test fun activeCharacterIdIsKept() {
+        val prefs = SharedPreferencesHelper(ctx)
+        prefs.saveRpActiveCharacterId(42L)
+        assertEquals(42L, SharedPreferencesHelper(ctx).getRpActiveCharacterId())
+        prefs.saveRpActiveCharacterId(null)
+        assertNull(SharedPreferencesHelper(ctx).getRpActiveCharacterId())
+    }
+
 }
