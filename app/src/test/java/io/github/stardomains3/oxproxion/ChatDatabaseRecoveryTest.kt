@@ -346,6 +346,96 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun exportCopiesUserVersionOntoTheAttachedDatabase() {
+        assertNull(AppDatabase.sqlCipherExportUserVersionSql(0))
+        assertNull(AppDatabase.sqlCipherExportUserVersionSql(-1))
+        assertEquals("PRAGMA encrypted.user_version = 4", AppDatabase.sqlCipherExportUserVersionSql(4))
+        assertEquals("PRAGMA encrypted.user_version = 1", AppDatabase.sqlCipherExportUserVersionSql(1))
+    }
+
+    @Test
+    fun confirmedDiscardDropsStuckExportRenames() {
+        val db = tmp.newFile("chat_database")
+        File(tmp.root, "chat_database.encrypting-wal.stuck-1").writeText("wal-bytes")
+        File(tmp.root, "chat_database.pre_sqlcipher.stuck-2").writeText("plain-bytes")
+        File(tmp.root, "chat_database-wal.stuck-1").writeText("live-wal")
+        File(tmp.root, "chat_database.recovered-3.stuck-1").writeText("keep")
+        assertTrue(ChatDbVault.isDisposablePlainStuckName("chat_database.encrypting-wal.stuck-1"))
+        assertTrue(ChatDbVault.isDisposablePlainStuckName("chat_database-shm.stuck-4"))
+        assertFalse(ChatDbVault.isDisposablePlainStuckName("chat_database.recovered-3.stuck-1"))
+        assertFalse(ChatDbVault.isDisposablePlainStuckName("chat_database.unreadable-2-wal.stuck-1"))
+        AppDatabase.confirmPlaintextBackupDisposable(db)
+        AppDatabase.discardPlaintextBackupIfConfirmed(db)
+        assertFalse(File(tmp.root, "chat_database.encrypting-wal.stuck-1").exists())
+        assertFalse(File(tmp.root, "chat_database.pre_sqlcipher.stuck-2").exists())
+        assertFalse(File(tmp.root, "chat_database-wal.stuck-1").exists())
+        assertEquals("keep", File(tmp.root, "chat_database.recovered-3.stuck-1").readText())
+        assertFalse(File(tmp.root, "chat_database.encrypt_ok").exists())
+    }
+
+    @Test
+    fun aStuckExportDirectoryKeepsTheEncryptMarker() {
+        val db = tmp.newFile("chat_database")
+        val stuck = File(tmp.root, "chat_database.pre_sqlcipher-wal.stuck-1").apply { mkdirs() }
+        File(stuck, "child").writeText("x")
+        AppDatabase.confirmPlaintextBackupDisposable(db)
+        AppDatabase.discardPlaintextBackupIfConfirmed(db)
+        assertTrue(stuck.exists())
+        assertTrue(File(tmp.root, "chat_database.encrypt_ok").exists())
+    }
+
+    @Test
+    fun stuckExportRenameAtRootIsDiscardedWhenVaultHasEncryptMarker() {
+        val databases = tmp.newFolder("stuck-root-databases")
+        val vault = tmp.newFolder("stuck-root-vault")
+        File(vault, "chat_database.encrypt_ok").writeText("ok")
+        File(databases, "chat_database.encrypting-wal.stuck-1").writeText("wal")
+        File(vault, "chat_database.pre_sqlcipher.stuck-1").writeText("plain")
+        File(databases, "chat_database.recovered-1.stuck-1").writeText("keep")
+        ChatDbVault.relocateLegacy(databases, vault, null)
+        assertFalse(File(databases, "chat_database.encrypting-wal.stuck-1").exists())
+        assertFalse(File(vault, "chat_database.pre_sqlcipher.stuck-1").exists())
+        assertEquals("keep", File(databases, "chat_database.recovered-1.stuck-1").readText())
+        assertEquals("ok", File(vault, "chat_database.encrypt_ok").readText())
+    }
+
+    @Test
+    fun encryptInstallParksAStuckLiveWalInTheVault() {
+        val databases = tmp.newFolder("sidecar-databases")
+        val vault = tmp.newFolder("sidecar-vault")
+        val db = File(databases, "chat_database").apply { writeText("encrypted") }
+        File(databases, "chat_database-shm").writeText("shm")
+        val wal = File(databases, "chat_database-wal").apply { mkdirs() }
+        File(wal, "child").writeText("plain")
+        assertTrue(AppDatabase.releaseLivePlaintextSidecars(db, vault))
+        assertFalse(File(databases, "chat_database-shm").exists())
+        assertFalse(wal.exists())
+        val parked = vault.listFiles()?.filter { it.name.startsWith("chat_database-wal.stuck-") }.orEmpty()
+        assertEquals(1, parked.size)
+        assertTrue(parked[0].isDirectory)
+        assertEquals("plain", File(parked[0], "child").readText())
+        assertEquals("encrypted", db.readText())
+        assertTrue(databases.listFiles()?.none { it.name.endsWith(".stuck-1") || it.name.contains(".stuck-") } != false)
+    }
+
+    @Test
+    fun encryptInstallLeavesTheLiveWalWhenItCannotMove() {
+        val databases = tmp.newFolder("sidecar-blocked-databases")
+        val vault = tmp.newFolder("sidecar-blocked-vault")
+        val db = File(databases, "chat_database").apply { writeText("encrypted") }
+        File(databases, "chat_database-wal").writeText("plain")
+        AppDatabase.blockExportLeftoverNameForTest = "chat_database-wal"
+        try {
+            assertFalse(AppDatabase.releaseLivePlaintextSidecars(db, vault))
+        } finally {
+            AppDatabase.blockExportLeftoverNameForTest = null
+        }
+        assertEquals("plain", File(databases, "chat_database-wal").readText())
+        assertEquals("encrypted", db.readText())
+        assertTrue(vault.listFiles()?.none { it.name.contains("stuck") } != false)
+    }
+
+    @Test
     fun exportAttachBindsThePassphraseRoomWillKeyWith() {
         val key = byteArrayOf(0, 1, 39, 0xFF.toByte())
         val (sql, args) = AppDatabase.sqlCipherExportAttach("/vault/chat_database.encrypting", key)

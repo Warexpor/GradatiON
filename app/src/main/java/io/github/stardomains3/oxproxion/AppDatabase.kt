@@ -571,7 +571,11 @@ abstract class AppDatabase : RoomDatabase() {
                 // file and recovery set the history aside. Bind the same bytes Room will use.
                 val (attachSql, attachArgs) = sqlCipherExportAttach(encryptedTemp.absolutePath, passphrase)
                 plaintext.rawExecSQL(attachSql, *attachArgs)
+                val userVersion = readSqliteUserVersion(plaintext)
                 plaintext.rawExecSQL("SELECT sqlcipher_export('encrypted');")
+                // sqlcipher_export does not copy PRAGMA user_version. Left at 0, Room runs
+                // onCreate and skips migrations, so an older plaintext file never gains columns.
+                sqlCipherExportUserVersionSql(userVersion)?.let { plaintext.rawExecSQL(it) }
                 plaintext.rawExecSQL("DETACH DATABASE encrypted;")
                 plaintext.close()
                 plaintext = null
@@ -585,9 +589,19 @@ abstract class AppDatabase : RoomDatabase() {
                     deleteEncryptingLeftover(vault)
                     throw IllegalStateException("Could not install encrypted chat DB")
                 }
-                // Sidecars belong to the plaintext file. The backup itself stays until the encrypted
-                // database has actually opened (see open); a crash here can still restore it.
-                deleteSidecars(dbFile)
+                // Sidecars belong to the plaintext file. A wal left on this name is replayed into
+                // the ciphertext. The snapshot itself stays until the encrypted database has opened.
+                if (!releaseLivePlaintextSidecars(dbFile, vault)) {
+                    val holding = File(vault, "$DB_NAME.encrypting.rollback")
+                    if (moveIntoPlace(dbFile, holding)) {
+                        if (!moveIntoPlace(backup, dbFile)) {
+                            moveIntoPlace(holding, dbFile)
+                        } else if (!holding.delete()) {
+                            Log.w(TAG, "Could not remove rolled-back ciphertext ${holding.path}")
+                        }
+                    }
+                    throw IllegalStateException("Could not detach plaintext sidecars from the encrypted chat DB")
+                }
                 Log.i(TAG, "Migrated plaintext chat_database to SQLCipher")
                 return true
             } catch (e: Exception) {
@@ -723,6 +737,10 @@ abstract class AppDatabase : RoomDatabase() {
                     Log.w(TAG, "Could not remove disposable kept renames in ${dir.path}")
                     return
                 }
+                if (!ChatDbVault.discardDisposableStuckRenames(dir)) {
+                    Log.w(TAG, "Could not remove disposable stuck renames in ${dir.path}")
+                    return
+                }
             }
             if (!marker.delete()) Log.w(TAG, "Could not remove encrypt marker ${marker.path}")
         }
@@ -749,11 +767,54 @@ abstract class AppDatabase : RoomDatabase() {
             "ATTACH DATABASE ? AS encrypted KEY ?" to arrayOf(tempPath, passphrase)
 
         /**
+         * `PRAGMA` that copies [userVersion] onto the attached export.
+         * Null when there is nothing to copy (a brand-new file is already version 0).
+         * [sqlcipher_export] leaves the target at 0; Room would then skip migrations.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal fun sqlCipherExportUserVersionSql(userVersion: Int): String? {
+            if (userVersion <= 0) return null
+            return "PRAGMA encrypted.user_version = $userVersion"
+        }
+
+        private fun readSqliteUserVersion(db: SQLiteDatabase): Int = db.version
+
+        /**
          * When set, [removeExportFile] refuses this file name so a test can keep the snapshot.
          * Null in production.
          */
         @androidx.annotation.VisibleForTesting
         internal var blockExportLeftoverNameForTest: String? = null
+
+        /**
+         * After the encrypted main is installed, plaintext `-wal`/`-shm`/`-journal` still use the
+         * live name and SQLite would replay them. Delete each one, or move a stuck one into
+         * [vault] (backup skips that directory) under `name.stuck-N`. False when a sidecar is
+         * still on the live name — the caller puts the plaintext snapshot back.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal fun releaseLivePlaintextSidecars(dbFile: File, vault: File): Boolean {
+            vault.mkdirs()
+            for (suffix in listOf("-shm", "-wal", "-journal")) {
+                if (!removeOrVaultSidecar(File(dbFile.path + suffix), vault)) return false
+            }
+            return !sidecarExists(dbFile)
+        }
+
+        private fun removeOrVaultSidecar(sidecar: File, vault: File): Boolean {
+            if (!sidecar.exists()) return true
+            if (sidecar.name == blockExportLeftoverNameForTest) return false
+            if (sidecar.delete() || !sidecar.exists()) return true
+            val parked = parkedExportFile(File(vault, sidecar.name))
+            if (sidecar.renameTo(parked) && !sidecar.exists()) return true
+            return try {
+                moveReplacing(sidecar, parked)
+                !sidecar.exists()
+            } catch (e: Exception) {
+                Log.e(TAG, "Could not move ${sidecar.path} off the live database", e)
+                false
+            }
+        }
 
         /** Drops the in-progress ciphertext and its sidecars. The plaintext snapshot stays. */
         private fun deleteEncryptingLeftover(vault: File) {

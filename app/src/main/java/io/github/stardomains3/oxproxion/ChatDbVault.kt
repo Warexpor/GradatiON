@@ -44,6 +44,9 @@ import java.nio.file.StandardOpenOption
  * means the plaintext snapshot was confirmed disposable. `.kept-*` renames of those disposable
  * names (including a second collision, `name.kept-1.kept-2`) are discarded too. Recovered and
  * unreadable `.kept-*` parks stay.
+ * A wal that could not be deleted is renamed `name.stuck-N` (in this vault, or a live sidecar
+ * parked here). Those renames are discarded once the encrypt marker is present. Recovered
+ * `.stuck-*` names stay.
  */
 internal object ChatDbVault {
     private const val TAG = "ChatDbVault"
@@ -182,12 +185,16 @@ internal object ChatDbVault {
         if (encryptMarker(vault).isFile) {
             discardDisposableKeptRenames(databasesDir)
             discardDisposableKeptRenames(vault)
+            discardDisposableStuckRenames(databasesDir)
+            discardDisposableStuckRenames(vault)
         }
         parkMoveTemps(databasesDir)
         discardHoldMoveTemps(databasesDir)
         if (encryptMarker(vault).isFile) {
             discardDisposableKeptRenames(holdDirectory(databasesDir))
             discardDisposableKeptRenames(databasesDir)
+            discardDisposableStuckRenames(holdDirectory(databasesDir))
+            discardDisposableStuckRenames(databasesDir)
         }
         // Orphans parked after the first drain (sidecar-only sets) are discarded here.
         drainHold(databasesDir, vault)
@@ -482,6 +489,32 @@ internal object ChatDbVault {
     )
 
     internal fun isDisposablePlainKeptName(name: String): Boolean = DISPOSABLE_KEPT.matches(name)
+
+    /**
+     * `name.stuck-N` from a plaintext / encrypting file (or its sidecar), or from a live
+     * `-wal`/`-shm`/`-journal` parked off the database Room opens. Recovered names do not match.
+     */
+    private val DISPOSABLE_STUCK = Regex(
+        "^" + Regex.escape(AppDatabase.DB_NAME) +
+            "(\\.(pre_sqlcipher|encrypting)(-wal|-shm|-journal)?|(-wal|-shm|-journal))\\.stuck-[0-9]+$"
+    )
+
+    internal fun isDisposablePlainStuckName(name: String): Boolean = DISPOSABLE_STUCK.matches(name)
+
+    /**
+     * Drops [isDisposablePlainStuckName] files. A non-empty directory with that name cannot be
+     * deleted and counts as failure so the encrypt marker stays for a retry.
+     * Returns false if any matching name remains.
+     */
+    internal fun discardDisposableStuckRenames(directory: File): Boolean {
+        if (!directory.isDirectory) return true
+        var ok = true
+        directory.listFiles()?.forEach { file ->
+            if (!isDisposablePlainStuckName(file.name)) return@forEach
+            if (!file.delete() && file.exists()) ok = false
+        }
+        return ok && directory.listFiles()?.none { isDisposablePlainStuckName(it.name) } != false
+    }
 
     /**
      * Drops [isDisposablePlainKeptName] files. A non-empty directory with that name cannot be
