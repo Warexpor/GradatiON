@@ -773,6 +773,22 @@ class ScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals("switches with no spoken name", emptyList<String>(), unnamed)
     }
 
+    /** At 1.3x text the four engine chips left "Engine" a letter wide; the label sits above them now. */
+    @Test fun settingsVoiceLargeTextDark() {
+        org.robolectric.RuntimeEnvironment.setFontScale(1.3f)
+        try {
+            withChat { a, _ ->
+                openSettingsRow(a, R.id.settingsRowVoice)
+                val label = a.findViewById<android.widget.TextView>(R.id.voiceEngineLabel)
+                org.junit.Assert.assertEquals("Engine stays on one line", 1, label.lineCount)
+                val chips = a.findViewById<View>(R.id.voiceEngineToggle)
+                val card = chips.parent as View
+                org.junit.Assert.assertTrue("chips fit inside the row", chips.right <= card.width - card.paddingEnd)
+                snap(root(a), "settings_voice_large_text_dark")
+            }
+        } finally { org.robolectric.RuntimeEnvironment.setFontScale(1f) }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
