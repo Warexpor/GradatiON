@@ -129,6 +129,35 @@ class DbPrefQuarantineTest {
     }
 
     @Test
+    fun aKilledReplaceDoesNotComeBackOnTheReusedId() {
+        val files = tmp.newFolder("files")
+        val vault = tmp.newFolder("vault")
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0xFF.toByte(), 0xD9.toByte())
+        File(files, "rp_avatars").mkdirs()
+        File(files, "backgrounds").mkdirs()
+        // The live names were already moved, or never finished. Only the side files remain.
+        File(files, "rp_avatars/char_3.jpg.bak").writeBytes(jpeg)
+        File(files, "backgrounds/char_3.jpg.partial").writeBytes(jpeg)
+        File(files, "backgrounds/photo.jpg.bak").writeBytes(jpeg)
+
+        assertTrue(DbPrefQuarantine.quarantine(prefs(), files, vault, 6L))
+
+        val avatar = File(files, "rp_avatars/char_3.jpg")
+        val wall = File(files, "backgrounds/char_3.jpg")
+        assertFalse(File(files, "rp_avatars/char_3.jpg.bak").exists())
+        assertFalse(File(files, "backgrounds/char_3.jpg.partial").exists())
+        assertTrue(jpeg.contentEquals(File(vault, "aside-6/rp_avatars/char_3.jpg.bak").readBytes()))
+        assertTrue(jpeg.contentEquals(File(vault, "aside-6/backgrounds/char_3.jpg.partial").readBytes()))
+        // The app background's side file is not a character picture.
+        assertTrue(jpeg.contentEquals(File(files, "backgrounds/photo.jpg.bak").readBytes()))
+        // recover would have installed the side file onto the live name.
+        assertFalse(ScenePhoto.recover(avatar))
+        assertFalse(avatar.exists())
+        assertFalse(ScenePhoto.recover(wall))
+        assertFalse(wall.exists())
+    }
+
+    @Test
     fun aPictureAlreadyArchivedIsNotOverwritten() {
         val files = tmp.newFolder("files")
         val vault = tmp.newFolder("vault")
