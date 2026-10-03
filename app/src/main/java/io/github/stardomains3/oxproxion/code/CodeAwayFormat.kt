@@ -10,8 +10,28 @@ object CodeAwayFormat {
 
     /** Stable dedup key: approval by requestId; turn-done by session. */
     fun dedupKey(kind: Kind, sessionId: String, requestId: String? = null): String = when (kind) {
-        Kind.APPROVAL -> "approval:$sessionId:${requestId.orEmpty()}"
+        Kind.APPROVAL -> approvalDedupKey(sessionId, requestId.orEmpty())
         Kind.TURN_DONE -> "turn:$sessionId"
+    }
+
+    /**
+     * `approval:$session:$request` is one string split on ':'. A session id and a
+     * request id can both contain ':', so `ab` waiting on `cd:r2` is the same key as
+     * `ab:cd` waiting on `r2`. Those alerts then share one shade and one open token.
+     * A length prefix keeps them apart. Ids with no ':' stay on the old key, so a
+     * shade already posted still matches.
+     */
+    private fun approvalDedupKey(sessionId: String, requestId: String): String {
+        if (':' !in sessionId && ':' !in requestId) {
+            return "approval:$sessionId:$requestId"
+        }
+        return "approval/${sessionId.length}/$sessionId/$requestId"
+    }
+
+    /** True for a live or length-prefixed approval key, including a `hold:` row. */
+    fun isApprovalKey(dedupKey: String): Boolean {
+        val logical = logicalDedupKey(dedupKey)
+        return logical.startsWith("approval:") || logical.startsWith("approval/")
     }
 
     /**
@@ -156,16 +176,39 @@ object CodeAwayFormat {
     }
 
     /**
-     * Session that owns [dedupKey], preferring the longest id.
-     * Session ids may contain ':'; a shorter id must not steal `approval:ab:cd:req`.
+     * Session that owns [dedupKey].
+     * A turn key and a length-prefixed approval name the session exactly.
+     * The older `approval:$session:$request` form is ambiguous: the longest known id wins,
+     * so a shorter id does not steal `approval:ab:cd:req`.
      */
-    fun sessionIdForDedupKey(dedupKey: String, sessionIds: Collection<String>): String? =
-        sessionIds.filter { sid ->
+    fun sessionIdForDedupKey(dedupKey: String, sessionIds: Collection<String>): String? {
+        val logical = logicalDedupKey(dedupKey)
+        unambiguousSession(logical)?.let { return it }
+        return sessionIds.filter { sid ->
             sid.isNotEmpty() && (
-                dedupKey == dedupKey(Kind.TURN_DONE, sid) ||
-                    dedupKey.startsWith("approval:$sid:")
+                logical == "turn:$sid" ||
+                    logical.startsWith("approval:$sid:")
                 )
         }.maxByOrNull { it.length }
+    }
+
+    /**
+     * Turn-done is `turn:` plus the session. A length-prefixed approval is
+     * `approval/<len>/<session>/<request>`. The colon form is not parsed here.
+     */
+    private fun unambiguousSession(dedupKey: String): String? {
+        if (dedupKey.startsWith("turn:")) {
+            return dedupKey.removePrefix("turn:").takeIf { it.isNotEmpty() }
+        }
+        if (!dedupKey.startsWith("approval/")) return null
+        val rest = dedupKey.removePrefix("approval/")
+        val slash = rest.indexOf('/')
+        if (slash <= 0) return null
+        val len = rest.substring(0, slash).toIntOrNull() ?: return null
+        val after = rest.substring(slash + 1)
+        if (len <= 0 || after.length <= len || after[len] != '/') return null
+        return after.substring(0, len).takeIf { it.isNotEmpty() }
+    }
 
     /**
      * True when [dedupKey] is [sessionId]'s alert, not a longer id that shares its

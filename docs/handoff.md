@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Notifications/Away wave 33)
+
+On `cursor/notif-wave-33-a28d` (PR into `gradation/app-pass`). Notif/away follow-ups after a cleared shade posting again, cap order, and Speak utterance ids (#150). Not a redo of that pass, of the last-shade token, the 64-cap count, or in-chat Stop (#146). Not a redo of #160, #161, #159, #158, #156, #155, or #157. Not a redo of #139–#154.
+
+- An approval whose request id contains ':' is not the same shade as a longer session id that shares that text. `ab` waiting on `cd:r2` used to replace `ab:cd` waiting on `r2`, and answering one cleared the other's open token.
+- A shade the system drops without a swipe loses its open token when a later alert is handled, not only after a kill. The alert that was just posted again keeps the token already on that shade. Another shade for the same session still keeps it.
+- Answer shade Speak puts Speak back when the reply strips to nothing. The engine never starts, so the shade used to stay on Stop.
+
+Phone: Notify when away on, with sessions `ab` and `ab:cd` both waiting, and the shorter one's request id containing a colon (both shades should stay; Allow on the shorter one should leave the longer one openable). Clear one session's shade without swiping it, then finish a different session (the cleared tap should not open; the one still up should). Background Chat, and Speak a reply that is only blank lines (the shade should stay on Speak).
+
 # Handoff (2026-10-03, Stability wave 33)
 
 On `cursor/stability-wave-33-e76c` (PR into `gradation/app-pass`). Persistence follow-ups after a 0-byte recovered database is skipped, a same-stamp portrait replace keeps the new picture, and a long message slice keeps only the characters that step asked for (#154). Not a redo of that pass, or of the recovered file at the databases root, portrait and wallpaper side files moving with history, or emoji slices (#143). Not a redo of history tokens, file indents, or the staged photo from the tap (#161). Not a redo of a rolled-back character import, the last greeting in a file, or scaling an oversized portrait or wallpaper into the backup (#159). Not a redo of #158, #156, #155, or #157. Not a redo of #139–#154.
