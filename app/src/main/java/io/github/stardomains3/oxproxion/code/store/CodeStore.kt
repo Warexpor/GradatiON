@@ -60,7 +60,8 @@ class CodeStore @androidx.annotation.VisibleForTesting constructor(
     /** Transcript verbosity: false = Normal (folded), true = Thinking (thoughts and output open). */
     var showThinking: Boolean
         get() = prefs.getBoolean(KEY_SHOW_THINKING, false)
-        set(v) = prefs.edit { putBoolean(KEY_SHOW_THINKING, v) }
+        // commit: session Thinking toggle; a kill after the menu tap must keep the choice.
+        set(v) = prefs.edit(commit = true) { putBoolean(KEY_SHOW_THINKING, v) }
 
     var defaultPermissionMode: PermissionMode
         // New sessions run full auto until the user picks something else.

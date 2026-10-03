@@ -280,14 +280,28 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
 
         fun powerToolsOn() = (viewModel.isExtendedDockEnabled.value ?: false) ||
             (viewModel.isExtendedTopBarEnabled.value ?: false)
+        // One switch covers dock and top bar. setValue notifies before toggle returns, so the
+        // first half's observer must not write isChecked or the listener re-enters and undoes it.
+        var userDrivingPowerTools = false
         val powerTools = bindSwitch(view, R.id.powerToolsBarSwitch, powerToolsOn()) { isChecked ->
-            val dockEnabled = viewModel.isExtendedDockEnabled.value ?: false
-            val topBarEnabled = viewModel.isExtendedTopBarEnabled.value ?: false
-            if (dockEnabled != isChecked) viewModel.toggleExtendedDock()
-            if (topBarEnabled != isChecked) viewModel.toggleExtendedTopBar()
+            if (userDrivingPowerTools) return@bindSwitch
+            userDrivingPowerTools = true
+            try {
+                val dockEnabled = viewModel.isExtendedDockEnabled.value ?: false
+                val topBarEnabled = viewModel.isExtendedTopBarEnabled.value ?: false
+                if (dockEnabled != isChecked) viewModel.toggleExtendedDock()
+                if (topBarEnabled != isChecked) viewModel.toggleExtendedTopBar()
+            } finally {
+                userDrivingPowerTools = false
+            }
         }
-        viewModel.isExtendedDockEnabled.observe(viewLifecycleOwner) { powerTools.isChecked = powerToolsOn() }
-        viewModel.isExtendedTopBarEnabled.observe(viewLifecycleOwner) { powerTools.isChecked = powerToolsOn() }
+        fun syncPowerTools() {
+            if (powerToolsObserverWritesSwitch(userDrivingPowerTools, powerTools.isChecked, powerToolsOn())) {
+                powerTools.isChecked = powerToolsOn()
+            }
+        }
+        viewModel.isExtendedDockEnabled.observe(viewLifecycleOwner) { syncPowerTools() }
+        viewModel.isExtendedTopBarEnabled.observe(viewLifecycleOwner) { syncPowerTools() }
 
         // These follow the view model. Listeners only toggle when the switch disagrees with LiveData,
         // so an observer writing isChecked does not flip the preference a second time.
@@ -585,7 +599,9 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             }
         ) { c, _ -> prefs.saveFontSizeCh(c.value) }
         val current = prefs.getFontSizeCh()
-        select(choices.minByOrNull { kotlin.math.abs(it.value - current) }!!.value)
+        // In-chat +/- steps by 5 (50–300). Ringing the nearest of 90/100/115/130 marked that
+        // tile selected, and the picker then ignored the tap, so the real scale could not snap back.
+        chatTextSizeTileToSelect(current, choices.map { it.value })?.let(select)
     }
 
     /** Settings > Voice: on/off, which engine turns speech into text, and the model/key for Cloud/Grok/Local. */
@@ -657,8 +673,10 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             render()
         }
         toggle.addOnButtonCheckedListener { _, _, isChecked ->
-            if (!isChecked || !enabled.isChecked) return@addOnButtonCheckedListener
-            prefs.setVoiceInputProvider(pickedEngine().key)
+            if (!isChecked) return@addOnButtonCheckedListener
+            val engine = pickedEngine().key
+            if (enabled.isChecked) prefs.setVoiceInputProvider(engine)
+            else prefs.rememberVoiceInputEngine(engine)
             render()
         }
         view.findViewById<View>(R.id.voiceGrokKeyRow).setOnClickListener {
@@ -729,3 +747,21 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             }
     }
 }
+
+/**
+ * Power tools is one switch over the dock and the top bar. While the tap is still writing
+ * both halves, LiveData must not push isChecked: that write re-enters the listener and
+ * flips the half that just turned off back on.
+ */
+internal fun powerToolsObserverWritesSwitch(
+    userDriving: Boolean,
+    switchChecked: Boolean,
+    combinedOn: Boolean,
+): Boolean = !userDriving && switchChecked != combinedOn
+
+/**
+ * Appearance chat-text tiles are the four presets. A size from the in-chat stepper is not one of
+ * them, and must not light a tile: that ring swallowed the tap which would have stored the preset.
+ */
+internal fun chatTextSizeTileToSelect(stored: Int, presets: List<Int>): Int? =
+    presets.firstOrNull { it == stored }

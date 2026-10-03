@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Settings wave 28)
+
+On `gradation/w28-settings` (PR into `gradation/app-pass`). Settings follow-ups after Voice/switch honesty (#104) and Code/theme/persona commits (#108):
+- Settings toggles that still used `apply()` (haptics, data, trust-self-signed, app icon, photo options, Advanced LiveData mirrors, streaming, Style, Thoughts, chat mode, Code Thinking, chat text size, LAN cert pins) commit before return. Settings home skips a no-op `isChecked` write. Power tools is one switch; LiveData is ignored while that tap is still writing both halves.
+- Appearance chat-text tiles ring a preset only when the stored scale is exactly 90/100/115/130. An in-chat +/- step no longer highlights the nearest tile and swallows the tap that would snap back.
+- Picking a Voice engine while the master switch is off remembers that chip without turning Voice on.
+- Advanced reasoning effort buttons stay off when the master switch is off or a positive token budget is set (that budget already replaces effort on the wire). Those writes commit.
+
+Phone: step chat text to 120% with +/-, open Appearance (no tile ringed), tap L (becomes 115% and stays). Turn Voice off, tap Grok, leave and come back (Grok still the chip; mic stays off until the master switch). Set a reasoning token budget (effort presets grey out) and turn advanced reasoning off (they stay grey).
 # Handoff (2026-10-02, Notifications/Away wave 28)
 
 On `gradation/w28-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after turn-done prefs clear (#113) and Speak/swipe (#105):

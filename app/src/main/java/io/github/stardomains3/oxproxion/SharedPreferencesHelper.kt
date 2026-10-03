@@ -430,14 +430,20 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.getBoolean(KEY_OPEN_ROUTER_REASONING_MIGRATED, false)
     fun saveOpenRouterReasoningMigrated() =
         mainPrefs.edit { putBoolean(KEY_OPEN_ROUTER_REASONING_MIGRATED, true) }
-    fun saveBiometricEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_BIOMETRIC_ENABLED, enabled) }
+    fun saveBiometricEnabled(enabled: Boolean) {
+        // commit: Data > Biometrics; a kill after the tap must keep lock-on.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_BIOMETRIC_ENABLED, enabled) }
+    }
     fun getBiometricEnabled(): Boolean = mainPrefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
 
     fun getTrustSelfSignedLan(): Boolean = mainPrefs.getBoolean(KEY_TRUST_SELF_SIGNED_LAN, false)
-    fun saveTrustSelfSignedLan(enabled: Boolean) = mainPrefs.edit {
-        putBoolean(KEY_TRUST_SELF_SIGNED_LAN, enabled)
-        // Off forgets what was trusted, so switching it back on pins whatever the server shows then.
-        if (!enabled) clearLanCertPinsIn(this)
+    fun saveTrustSelfSignedLan(enabled: Boolean) {
+        // commit: Models > Trust self-signed; off also clears pins — do not lose either to apply().
+        mainPrefs.edit(commit = true) {
+            putBoolean(KEY_TRUST_SELF_SIGNED_LAN, enabled)
+            // Off forgets what was trusted, so switching it back on pins whatever the server shows then.
+            if (!enabled) clearLanCertPinsIn(this)
+        }
     }
 
     /** Pinned LAN certificates, keyed by host:port; see [LanCertPins]. */
@@ -446,11 +452,15 @@ class SharedPreferencesHelper(context: Context) {
             mainPrefs.getString(KEY_LAN_CERT_PIN_PREFIX + hostPort, null)
 
         override fun savePin(hostPort: String, pin: String) {
-            mainPrefs.edit { putString(KEY_LAN_CERT_PIN_PREFIX + hostPort, pin) }
+            // commit: first-use pin. apply() still in flight lets the next cert win after a kill.
+            mainPrefs.edit(commit = true) { putString(KEY_LAN_CERT_PIN_PREFIX + hostPort, pin) }
         }
     }
 
-    fun clearLanCertPins() = mainPrefs.edit { clearLanCertPinsIn(this) }
+    fun clearLanCertPins() {
+        // commit: forgetting pins must stick; a later handshake must not keep trusting the old leaf.
+        mainPrefs.edit(commit = true) { clearLanCertPinsIn(this) }
+    }
 
     private fun clearLanCertPinsIn(editor: SharedPreferences.Editor) {
         mainPrefs.all.keys.filter { it.startsWith(KEY_LAN_CERT_PIN_PREFIX) }.forEach { editor.remove(it) }
@@ -521,13 +531,22 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun getAllowDestructiveTools(): Boolean = mainPrefs.getBoolean(KEY_ALLOW_DESTRUCTIVE_TOOLS, false)
-    fun saveAllowDestructiveTools(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_ALLOW_DESTRUCTIVE_TOOLS, enabled) }
+    fun saveAllowDestructiveTools(enabled: Boolean) {
+        // commit: Data > Allow destructive tools; kill after the tap must keep the gate.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_ALLOW_DESTRUCTIVE_TOOLS, enabled) }
+    }
 
     fun getHapticButtons(): Boolean = mainPrefs.getBoolean(KEY_HAPTIC_BUTTONS, true)
-    fun saveHapticButtons(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_HAPTIC_BUTTONS, enabled) }
+    fun saveHapticButtons(enabled: Boolean) {
+        // commit: Haptics > Buttons; Haptics.tap reads this on every press.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_HAPTIC_BUTTONS, enabled) }
+    }
 
     fun getHapticResponding(): Boolean = mainPrefs.getBoolean(KEY_HAPTIC_RESPONDING, true)
-    fun saveHapticResponding(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_HAPTIC_RESPONDING, enabled) }
+    fun saveHapticResponding(enabled: Boolean) {
+        // commit: Haptics > Responding; stream/send feedback follows this.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_HAPTIC_RESPONDING, enabled) }
+    }
 
     fun getPinnedSessionIds(): Set<Long> =
         mainPrefs.getStringSet(KEY_PINNED_SESSION_IDS, emptySet())
@@ -547,19 +566,15 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun getAdvancedReasoningEnabled(): Boolean = mainPrefs.getBoolean("advanced_reasoning_enabled", false)
-    fun saveAdvancedReasoningEnabled(enabled: Boolean) = mainPrefs.edit {
-        putBoolean(
-            "advanced_reasoning_enabled",
-            enabled
-        )
+    fun saveAdvancedReasoningEnabled(enabled: Boolean) {
+        // commit: Advanced reasoning master switch; a kill after the tap must keep it.
+        mainPrefs.edit(commit = true) { putBoolean("advanced_reasoning_enabled", enabled) }
     }
 
     fun getReasoningEffort(): String = mainPrefs.getString("reasoning_effort", "medium") ?: "medium"
-    fun saveReasoningEffort(effort: String) = mainPrefs.edit {
-        putString(
-            "reasoning_effort",
-            effort
-        )
+    fun saveReasoningEffort(effort: String) {
+        // commit: effort preset; a kill after the tap must not fall back to medium.
+        mainPrefs.edit(commit = true) { putString("reasoning_effort", effort) }
     }
     fun getVoiceInputModel(): String = mainPrefs.getString(KEY_VOICE_INPUT_MODEL, "") ?: ""
     fun setVoiceInputModel(model: String) {
@@ -587,6 +602,15 @@ class SharedPreferencesHelper(context: Context) {
             if (provider != VoiceEngine.OFF.key) putString(KEY_VOICE_INPUT_LAST_ENGINE, provider)
         }
     }
+
+    /**
+     * Engine chip chosen while Voice is off. Writes only the remembered engine:
+     * [setVoiceInputProvider] would turn the mic back on.
+     */
+    fun rememberVoiceInputEngine(provider: String) {
+        if (provider.isBlank() || provider == VoiceEngine.OFF.key) return
+        mainPrefs.edit(commit = true) { putString(KEY_VOICE_INPUT_LAST_ENGINE, provider) }
+    }
     fun saveChatMemoryCount(count: Int) {
         mainPrefs.edit { putInt(KEY_CHAT_MEMORY_COUNT, count) }
     }
@@ -602,19 +626,15 @@ class SharedPreferencesHelper(context: Context) {
         return mainPrefs.getBoolean(KEY_DISABLE_WEB_SEARCH_AFTER_SEND, true)
     }
     fun getReasoningExclude(): Boolean = mainPrefs.getBoolean("reasoning_exclude", true)  // Default to true (exclude)
-    fun saveReasoningExclude(exclude: Boolean) = mainPrefs.edit {
-        putBoolean(
-            "reasoning_exclude",
-            exclude
-        )
+    fun saveReasoningExclude(exclude: Boolean) {
+        // commit: include-thoughts toggle; a kill after the tap must keep exclude/include.
+        mainPrefs.edit(commit = true) { putBoolean("reasoning_exclude", exclude) }
     }
 
     fun getReasoningMaxTokens(): Int? = mainPrefs.getInt("reasoning_max_tokens", -1).takeIf { it != -1 }
-    fun saveReasoningMaxTokens(tokens: Int?) = mainPrefs.edit {
-        putInt(
-            "reasoning_max_tokens",
-            tokens ?: -1
-        )
+    fun saveReasoningMaxTokens(tokens: Int?) {
+        // commit: a positive budget replaces effort on the wire; losing it would send effort again.
+        mainPrefs.edit(commit = true) { putInt("reasoning_max_tokens", tokens ?: -1) }
     }
     private fun migrateDefaultSystemMessage() {
         val oldJson = mainPrefs.getString(KEY_DEFAULT_SYSTEM_MESSAGE, null)
@@ -632,7 +652,10 @@ class SharedPreferencesHelper(context: Context) {
     }
     fun getVolumeScrollEnabled(): Boolean = mainPrefs.getBoolean(KEY_VOLUME_SCROLL, false)
 
-    fun saveVolumeScrollEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_VOLUME_SCROLL, enabled) }
+    fun saveVolumeScrollEnabled(enabled: Boolean) {
+        // commit: Advanced > Volume scroll; LiveData mirrors this after the tap.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_VOLUME_SCROLL, enabled) }
+    }
     fun saveSortOrder(sortOrder: SortOrder) {
         mainPrefs.edit { putString(KEY_SORT_ORDER, sortOrder.name) }
     }
@@ -688,8 +711,9 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit { putInt(KEY_TIMEOUT_MINUTES, minutes) }
     }
     fun getScrollProgressEnabled(): Boolean = mainPrefs.getBoolean(KEY_SCROLL_PROGRESS_ENABLED, false)  // Off: a full-width rule under the tabs reads as a glitch
-    fun saveScrollProgressEnabled(enabled: Boolean) = mainPrefs.edit {
-        putBoolean(KEY_SCROLL_PROGRESS_ENABLED, enabled)
+    fun saveScrollProgressEnabled(enabled: Boolean) {
+        // commit: Advanced > Scroll progress; LiveData mirrors this after the tap.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_SCROLL_PROGRESS_ENABLED, enabled) }
     }
     fun getSortOrder(): SortOrder {
         val sortOrderName = mainPrefs.getString(KEY_SORT_ORDER, SortOrder.ALPHABETICAL.name)
@@ -880,7 +904,8 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun saveExpandableInput(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_EXPANDABLE_INPUT, enabled) }
+        // commit: Advanced > Expandable input; LiveData mirrors this after the tap.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_EXPANDABLE_INPUT, enabled) }
     }
 
     fun getExpandableInput(): Boolean {
@@ -916,9 +941,8 @@ class SharedPreferencesHelper(context: Context) {
         return mainPrefs.getBoolean(KEY_CONVERSATION_MODE_ENABLED, false)
     }
     fun saveStreamingPreference(isEnabled: Boolean) {
-        mainPrefs.edit {
-            putBoolean(KEY_STREAMING_ENABLED, isEnabled)
-        }
+        // commit: streaming toggle; a kill mid-chat after the flip must keep the choice.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_STREAMING_ENABLED, isEnabled) }
     }
 
     fun getStreamingPreference(): Boolean {
@@ -1001,7 +1025,8 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun saveChatMarkStyle(style: String) {
-        mainPrefs.edit { putString(KEY_CHAT_MARK, style) }
+        // commit: Appearance > App icon; empty-chat mark follows this on the next create.
+        mainPrefs.edit(commit = true) { putString(KEY_CHAT_MARK, style) }
     }
     fun hasMigratedMaverick(): Boolean {
         return mainPrefs.getBoolean("migrated_maverick_to_openrouter", false)
@@ -1013,7 +1038,8 @@ class SharedPreferencesHelper(context: Context) {
         }
     }
     fun saveExtendedTopBarEnabled(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_EXTENDED_TOP_BAR, enabled) }
+        // commit: Advanced > Power tools (top bar half); LiveData mirrors this after the tap.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_EXTENDED_TOP_BAR, enabled) }
     }
     fun getExtendedTopBarEnabled(): Boolean {
         return mainPrefs.getBoolean(KEY_EXTENDED_TOP_BAR, false)
@@ -1031,7 +1057,8 @@ class SharedPreferencesHelper(context: Context) {
         return AppFonts.normalizeSelectable(stored)
     }
     fun saveFontSizeCh(size: Int) {
-        mainPrefs.edit { putInt(KEY_FONT_SIZEC, size) }
+        // commit: Appearance > Chat text (and the in-chat scale). A kill must not snap back to 100%.
+        mainPrefs.edit(commit = true) { putInt(KEY_FONT_SIZEC, size) }
     }
 
     fun getFontSizeCh(): Int {
@@ -1042,29 +1069,27 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun saveNotiPreference(isEnabled: Boolean) {
-        mainPrefs.edit {
-            putBoolean(KEY_NOTI_ENABLED, isEnabled)
-        }
+        // commit: Data > Notifications (answer-ready); a kill after the tap must keep the gate.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_NOTI_ENABLED, isEnabled) }
     }
     fun getExtPreference(): Boolean {
         return mainPrefs.getBoolean(KEY_EXT_ENABLED, false)
     }
 
     fun saveExtPreference(isEnabled: Boolean) {
-        mainPrefs.edit {
-            putBoolean(KEY_EXT_ENABLED, isEnabled)
-        }
+        // commit: Advanced > Power tools (dock half); LiveData mirrors this after the tap.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_EXT_ENABLED, isEnabled) }
     }
     fun saveExtPreference2(isEnabled: Boolean) {
-        mainPrefs.edit {
-            putBoolean(KEY_EXT_ENABLED2, isEnabled)
-        }
+        // commit: Advanced > Presets on chat; LiveData mirrors this after the tap.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_EXT_ENABLED2, isEnabled) }
     }
     fun getExtPreference2(): Boolean {
         return mainPrefs.getBoolean(KEY_EXT_ENABLED2, false)
     }
     fun saveKeepScreenOnPreference(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_KEEP_SCREEN_ON, enabled) }
+        // commit: Data > Keep screen on; MainActivity applies flags from this on resume.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_KEEP_SCREEN_ON, enabled) }
     }
 
     fun getKeepScreenOnPreference(): Boolean {
@@ -1306,9 +1331,8 @@ class SharedPreferencesHelper(context: Context) {
         return mainPrefs.getBoolean(KEY_SCROLLERS_ENABLED, false)
     }
     fun saveScrollersPreference(isEnabled: Boolean) {
-        mainPrefs.edit {
-            putBoolean(KEY_SCROLLERS_ENABLED, isEnabled)
-        }
+        // commit: Advanced > Scroll buttons; LiveData mirrors this after the tap.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_SCROLLERS_ENABLED, isEnabled) }
     }
     fun saveMaxTokens(value: String) {
         mainPrefs.edit(commit = true) {
@@ -1510,7 +1534,10 @@ class SharedPreferencesHelper(context: Context) {
     // --- GradatiON RP ---
 
     fun getChatMode(): ChatMode = ChatMode.fromStorage(mainPrefs.getString(KEY_CHAT_MODE, ChatMode.ASK.storageValue))
-    fun saveChatMode(mode: ChatMode) = mainPrefs.edit { putString(KEY_CHAT_MODE, mode.storageValue) }
+    fun saveChatMode(mode: ChatMode) {
+        // commit: cold start restores Ask/Roleplay from this; do not lose a tab flip to apply().
+        mainPrefs.edit(commit = true) { putString(KEY_CHAT_MODE, mode.storageValue) }
+    }
 
     fun getRpActiveCharacterId(): Long? {
         val id = mainPrefs.getLong(KEY_RP_ACTIVE_CHARACTER_ID, -1L)
@@ -1644,7 +1671,10 @@ class SharedPreferencesHelper(context: Context) {
 
     /** Let the model keep each character's Memory up to date as long chats outgrow the API window. */
     fun isRpAutoMemory(): Boolean = mainPrefs.getBoolean("rp_auto_memory", true)
-    fun saveRpAutoMemory(on: Boolean) = mainPrefs.edit { putBoolean("rp_auto_memory", on) }
+    fun saveRpAutoMemory(on: Boolean) {
+        // commit: Style > Auto memory; a kill after the tap must keep the choice.
+        mainPrefs.edit(commit = true) { putBoolean("rp_auto_memory", on) }
+    }
 
     /** The name characters call you. Before it was its own field it came from a matching preset. */
     fun getRpPersonaName(): String {
@@ -1655,17 +1685,29 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun isRpLoreEnabled(): Boolean = mainPrefs.getBoolean(KEY_RP_LORE_ENABLED, true)
-    fun saveRpLoreEnabled(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_LORE_ENABLED, enabled) }
+    fun saveRpLoreEnabled(enabled: Boolean) {
+        // commit: Style > Lore; prompts read this on the next send.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_RP_LORE_ENABLED, enabled) }
+    }
 
     fun isRpThirdPerson(): Boolean = mainPrefs.getBoolean(KEY_RP_THIRD_PERSON, false)
-    fun saveRpThirdPerson(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_THIRD_PERSON, enabled) }
+    fun saveRpThirdPerson(enabled: Boolean) {
+        // commit: Style > Third person; prompts read this on the next send.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_RP_THIRD_PERSON, enabled) }
+    }
 
     fun isRpShowThoughts(): Boolean = mainPrefs.getBoolean(KEY_RP_SHOW_THOUGHTS, false)
-    fun saveRpShowThoughts(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_RP_SHOW_THOUGHTS, enabled) }
+    fun saveRpShowThoughts(enabled: Boolean) {
+        // commit: Style > Show thoughts; bubbles follow this immediately.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_RP_SHOW_THOUGHTS, enabled) }
+    }
 
     /** Chat shows the model's thinking as a folded block above each reply (the Thoughts tile). */
     fun isShowThinkingBlocks(): Boolean = mainPrefs.getBoolean(KEY_SHOW_THINKING_BLOCKS, true)
-    fun saveShowThinkingBlocks(enabled: Boolean) = mainPrefs.edit { putBoolean(KEY_SHOW_THINKING_BLOCKS, enabled) }
+    fun saveShowThinkingBlocks(enabled: Boolean) {
+        // commit: Thoughts tile; adapter reads this after the tap / process death.
+        mainPrefs.edit(commit = true) { putBoolean(KEY_SHOW_THINKING_BLOCKS, enabled) }
+    }
 
     /**
      * The chat lost its web search toggle; switch search off once so nobody is left paying for

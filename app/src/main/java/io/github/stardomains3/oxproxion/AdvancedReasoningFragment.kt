@@ -77,15 +77,14 @@ class AdvancedReasoningFragment : Fragment(R.layout.fragment_advanced_reasoning)
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val value = s?.toString()?.toIntOrNull()
                 sharedPreferencesHelper.saveReasoningMaxTokens(value)
-                effortGroup.isEnabled = value == null
+                applyEffortEnabled(
+                    reasoningEffortControlsEnabled(sharedPreferencesHelper.getAdvancedReasoningEnabled(), value)
+                )
             }
             override fun afterTextChanged(s: Editable?) {}
         })
 
         includeSwitch.applyGrokionSwitchStyle()
-
-        val maxTokens = sharedPreferencesHelper.getReasoningMaxTokens()
-        effortGroup.isEnabled = maxTokens == null || maxTokens <= 0
     }
 
     private fun loadSettings() {
@@ -104,14 +103,27 @@ class AdvancedReasoningFragment : Fragment(R.layout.fragment_advanced_reasoning)
     }
 
     private fun updateControlsEnabled(enabled: Boolean) {
-        effortGroup.isEnabled = enabled
-        for (i in 0 until effortGroup.childCount) {
-            val button = effortGroup.getChildAt(i) as MaterialButton
-            button.isEnabled = enabled
-            button.isClickable = enabled
-        }
         includeSwitch.isEnabled = enabled
         includeSwitch.isClickable = enabled
         maxTokensEdit.isEnabled = enabled
+        applyEffortEnabled(
+            reasoningEffortControlsEnabled(enabled, sharedPreferencesHelper.getReasoningMaxTokens())
+        )
+    }
+
+    private fun applyEffortEnabled(on: Boolean) {
+        effortGroup.isEnabled = on
+        for (i in 0 until effortGroup.childCount) {
+            val button = effortGroup.getChildAt(i) as MaterialButton
+            button.isEnabled = on
+            button.isClickable = on
+        }
     }
 }
+
+/**
+ * Effort presets are dropped once a positive token budget is set (the request sends max_tokens
+ * instead). The master switch off disables them too. Zero or a blank field is not a budget.
+ */
+internal fun reasoningEffortControlsEnabled(advancedOn: Boolean, maxTokens: Int?): Boolean =
+    advancedOn && (maxTokens == null || maxTokens <= 0)
