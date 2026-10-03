@@ -286,6 +286,7 @@ class CodeAwayFormatTest {
             key to id,
         )
         assertEquals(setOf(key), CodeAwayFormat.postedKeysFromPrefs(entries))
+        assertEquals(setOf(key), CodeAwayFormat.visibleKeysFromPrefs(entries))
         // The parked id is still taken for a different key, not for this one.
         assertEquals(emptySet<Int>(), CodeAwayFormat.takenFromPrefs(entries, exceptKey = key))
         val other = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "other")

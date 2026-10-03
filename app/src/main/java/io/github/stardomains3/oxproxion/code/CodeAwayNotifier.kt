@@ -43,10 +43,14 @@ import java.util.concurrent.ConcurrentHashMap
  * Shade swipe-dismiss ([onUserDismissed]) drops dedup and the prefs allocation so a still-pending
  * approval can re-alert (including after a later process death that would otherwise re-seed).
  * When that was the session's last shade entry, the one-shot open token goes too, so a
- * replayed content Intent cannot open the session after the user cleared the alert.
- * Evicting the oldest shade (the 64-entry cap) does the same: programmatic cancel does
- * not fire the DeleteIntent. A shorter session id must not own a longer one's approval
- * (`ab` vs `ab:cd`); longest known id wins, same as swipe-dismiss.
+ * replayed content Intent cannot open the session. Programmatic cancel does not fire the
+ * DeleteIntent, so Allow, Deny, an in-app answer, a cancelled turn, and eviction past the
+ * 64-entry cap clear that token themselves. A shorter session id must not own a longer
+ * one's approval (`ab` vs `ab:cd`); longest known id wins.
+ *
+ * The cap counts shades that are still up. [clearTurnDoneDedup] drops the dedup key so the
+ * next finish can alert, but leaves the notification. Counting only [posted] let a run of
+ * new prompts stack past 64.
  */
 class CodeAwayNotifier(
     context: Context,
@@ -61,6 +65,12 @@ class CodeAwayNotifier(
 
     /** Dedup keys currently showing (or suppressed after post). */
     private val posted = LinkedHashSet<String>()
+
+    /**
+     * Shades still on screen, oldest first. [posted] drops a turn-done key on the next
+     * user prompt; the notification stays until cancel or the next finish updates it.
+     */
+    private val visible = LinkedHashSet<String>()
 
     /** True once [posted] has been seeded from [idPrefs] after process death. */
     @Volatile
@@ -254,12 +264,8 @@ class CodeAwayNotifier(
      */
     fun onUserDismissed(dedupKey: String) {
         if (dedupKey.isBlank()) return
-        val sessionId = CodeAwayFormat.sessionIdForDedupKey(dedupKey, knownSessionIds())
+        // cancelKey clears the open token when this was the session's last shade.
         cancelKey(dedupKey)
-        // Last shade entry for this session: the content Intent's nonce must die with it.
-        if (sessionId != null && !sessionHasAllocation(sessionId)) {
-            clearOpenToken(sessionId)
-        }
     }
 
     private fun knownSessionIds(): Set<String> {
@@ -462,6 +468,12 @@ class CodeAwayNotifier(
             val legacyHeld = shadeHold.all.keys
             val seeded = CodeAwayFormat.postedKeysFromPrefs(idPrefs.all).filter { it !in legacyHeld }
             posted.addAll(seeded)
+            // Hold rows are not a dedup seed, but the shade is still up. A fresh process
+            // must count them or the next post stacks past the cap.
+            if (visible.isEmpty()) {
+                visible.addAll(CodeAwayFormat.visibleKeysFromPrefs(idPrefs.all))
+                visible.addAll(CodeAwayFormat.visibleKeysFromPrefs(shadeHold.all))
+            }
             postedSeeded = true
         }
     }
@@ -509,28 +521,40 @@ class CodeAwayNotifier(
         if (shadeHold.contains(key)) {
             shadeHold.edit().remove(key).commit()
         }
+        rememberVisible(key)
         // Bound memory if many sessions notify while away; cancel shade on eviction (A6).
-        while (posted.size > 64) {
-            val oldest = posted.first()
-            // Cancel does not deliver the DeleteIntent, so the one-shot token would
-            // otherwise still open a session whose shade we just dropped.
-            val owner = CodeAwayFormat.sessionIdForDedupKey(oldest, knownSessionIds())
-            posted.remove(oldest)
-            val evictIds = releaseAllocation(oldest)
-            if (evictIds.isEmpty()) nm?.cancel(CodeAwayFormat.notificationId(oldest))
-            else evictIds.forEach { nm?.cancel(it) }
-            if (owner != null && !sessionHasAllocation(owner)) clearOpenToken(owner)
+        // visible, not posted: a dedup-cleared turn shade is still on screen.
+        while (visible.size > 64) {
+            forgetShade(visible.first())
         }
     }
 
-    private fun cancelKey(key: String) {
+    /** Newest post goes to the end so eviction drops the shade that has been up longest. */
+    private fun rememberVisible(key: String) {
+        visible.remove(key)
+        visible.add(key)
+    }
+
+    private fun cancelKey(key: String) = forgetShade(key)
+
+    /**
+     * Drop one shade and, when it was the session's last, the one-shot open token.
+     * Allow, Deny, and a cancelled turn cancel in code. That does not run the
+     * DeleteIntent, so the token would otherwise keep opening the session.
+     */
+    private fun forgetShade(key: String) {
+        val sessionId = CodeAwayFormat.sessionIdForDedupKey(key, knownSessionIds())
         posted.remove(key)
+        visible.remove(key)
         val ids = releaseAllocation(key)
         if (ids.isEmpty()) {
             // Last-resort for pre-allocation leftovers.
             nm?.cancel(CodeAwayFormat.notificationId(key))
         } else {
             ids.forEach { nm?.cancel(it) }
+        }
+        if (sessionId != null && !sessionHasAllocation(sessionId)) {
+            clearOpenToken(sessionId)
         }
     }
 

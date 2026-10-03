@@ -258,6 +258,99 @@ class CodeAwayNotifierTest {
         assertTrue(n.consumeOpenToken("s1", n.issueOpenToken("s1")))
     }
 
+    @Test
+    fun cancelApprovalClearsOpenTokenWhenNothingRemains() {
+        val n = notifier()
+        val session = "sess-allow"
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval()), sessionWasRunning = true)
+        val token = n.issueOpenToken(session)
+        n.cancelApproval(session, "r1")
+        assertEquals(0, nm.activeNotifications.size)
+        assertFalse(n.consumeOpenToken(session, token))
+    }
+
+    @Test
+    fun cancelApprovalKeepsTokenWhileAnotherApprovalRemains() {
+        val n = notifier()
+        val session = "sess-two-approvals"
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval("r1")), sessionWasRunning = true)
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval("r2")), sessionWasRunning = true)
+        val token = n.issueOpenToken(session)
+        n.cancelApproval(session, "r1")
+        assertEquals(1, nm.activeNotifications.size)
+        assertTrue(n.consumeOpenToken(session, token))
+    }
+
+    @Test
+    fun cancelledTurnClearsTokenWhenApprovalWasTheOnlyShade() {
+        val n = notifier()
+        val session = "sess-cancelled"
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval()), sessionWasRunning = true)
+        val token = n.issueOpenToken(session)
+        n.onUpdate(session, "host", "S", CodeUpdate.TurnDone("cancelled"), sessionWasRunning = true)
+        assertEquals(0, nm.activeNotifications.size)
+        assertFalse(n.consumeOpenToken(session, token))
+    }
+
+    @Test
+    fun finishedTurnKeepsTokenOnTheReplacementShade() {
+        val n = notifier()
+        val session = "sess-finish"
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval()), sessionWasRunning = true)
+        n.onUpdate(session, "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(1, nm.activeNotifications.size)
+        val token = Shadows.shadowOf(nm.activeNotifications.single().notification.contentIntent)
+            .savedIntent
+            .getStringExtra(CodeAwayNotifier.EXTRA_OPEN_TOKEN)
+        assertTrue(n.consumeOpenToken(session, token))
+    }
+
+    @Test
+    fun cancelShorterApprovalDoesNotClearLongerToken() {
+        val n = notifier()
+        n.onUpdate("ab", "host", "A", CodeUpdate.Upsert(approval("r1")), sessionWasRunning = true)
+        n.onUpdate("ab:cd", "host", "B", CodeUpdate.Upsert(approval("r2")), sessionWasRunning = true)
+        val tokenAb = n.issueOpenToken("ab")
+        val tokenCd = n.issueOpenToken("ab:cd")
+        n.cancelApproval("ab", "r1")
+        assertFalse(n.consumeOpenToken("ab", tokenAb))
+        assertTrue(n.consumeOpenToken("ab:cd", tokenCd))
+        assertEquals(setOf("ab:cd"), showingSessions())
+    }
+
+    @Test
+    fun dedupClearedShadesStillCountTowardCap() {
+        val n = notifier()
+        n.onUpdate("s0", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        val token0 = n.issueOpenToken("s0")
+        for (i in 1 until 64) {
+            n.onUpdate("s$i", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        }
+        assertEquals(64, nm.activeNotifications.size)
+        for (i in 0 until 64) n.clearTurnDoneDedup("s$i")
+        assertEquals("next prompt leaves the shade up", 64, nm.activeNotifications.size)
+        n.onUpdate("s64", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(64, nm.activeNotifications.size)
+        assertFalse("oldest parked shade is evicted", "s0" in showingSessions())
+        assertTrue("s64" in showingSessions())
+        assertFalse(n.consumeOpenToken("s0", token0))
+        assertTrue(n.consumeOpenToken("s1", n.issueOpenToken("s1")))
+    }
+
+    @Test
+    fun coldStartCountsParkedShadesTowardCap() {
+        val n = notifier()
+        for (i in 0 until 64) {
+            n.onUpdate("c$i", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+            n.clearTurnDoneDedup("c$i")
+        }
+        assertEquals(64, nm.activeNotifications.size)
+        val cold = notifier()
+        cold.onUpdate("c64", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(64, nm.activeNotifications.size)
+        assertTrue("c64" in showingSessions())
+    }
+
     private fun showingSessions(): Set<String> =
         nm.activeNotifications.mapNotNull { sbn ->
             Shadows.shadowOf(sbn.notification.contentIntent).savedIntent

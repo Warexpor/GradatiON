@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Notifications/Away wave 31)
+
+On `cursor/notif-shade-stop-0738` (PR into `gradation/app-pass`). Notif/away follow-ups after longest-id matching, the 64-cap token clear, and the speak line (#134). Not a redo of that pass or of the one-commit shade hold, dismissed open tokens, and in-chat Stop (#127). Not a redo of #144, #145, #141, #140, #143, #142, or #139.
+
+- Allow, Deny, an in-app answer, or a cancelled turn clears the one-shot open token when that was the session's last shade. Programmatic cancel does not run the swipe handler, so the token used to keep opening the session. A second alert keeps it. `ab` does not clear `ab:cd`.
+- The 64-entry cap counts a shade that is still up after the next prompt clears turn-done dedup. Counting only the dedup set let new prompts stack past 64. The oldest shade is cancelled and its token goes with it. A cold start counts parked shade ids too.
+- In-chat Stop after the speak service has died flips the answer shade back to Speak (or drops it when Chat is in front). Copy or Dismiss, then the utterance ending, does not post the shade again. An interrupted reading (engine stop, not done) returns the shade to Speak.
+
+Phone: Notify when away on, approve the only alert from the shade (or stop the turn), then replay that notification's open (it should not open). Leave a second approval up and Allow the first (the other still opens). Finish 64 turns, send a new prompt in each so the shades stay, then finish one more session (still 64 shades, the oldest gone). Background Chat, Speak from the shade, force-stop the speak service if you can leave the shade saying Stop, open Chat and tap Speak on the message (shade should say Speak). Copy the shade while it is speaking (it should stay gone).
+
 # Handoff (2026-10-03, Import wave 31)
 
 On `cursor/import-portrait-lore-pins-9abf` (PR into `gradation/app-pass`). Import/export follow-ups after #133. Not a redo of the last inactive lore copy, clearing a waiting pin when one is chosen, or exporting a missing portrait as empty. Not a redo of #125 (last character copy, inactive lore backups, cold-start pin linking). Not a redo of #145, #141, #140, #143, #142, or #139.
