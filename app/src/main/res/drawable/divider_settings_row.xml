@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hairline between rows in a settings card, inset from the start like the card rows' own -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:start="16dp">
+        <shape android:shape="rectangle">
+            <size android:height="1dp" />
+            <solid android:color="@color/xai_hairline" />
+        </shape>
+    </item>
+</layer-list>

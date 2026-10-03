@@ -6,7 +6,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 
 class SystemMessageAdapter(
@@ -27,14 +26,10 @@ class SystemMessageAdapter(
         holder.title.text = systemMessage.title
         holder.prompt.text = systemMessage.prompt
 
-        val context = holder.itemView.context
-        if (systemMessage.title == selectedMessage.title && systemMessage.prompt == selectedMessage.prompt) {
-            holder.title.setTextColor(ContextCompat.getColor(context, R.color.ora))
-            //  holder.prompt.setTextColor(ContextCompat.getColor(context, R.color.ora))
-        } else {
-            // holder.title.setTextColor(ContextCompat.getColor(context, R.color.white))
-            // holder.prompt.setTextColor(ContextCompat.getColor(context, R.color.white))
-        }
+        // A check like the model picker's, not a title color: muted ink reads as disabled.
+        holder.activeCheck.visibility =
+            if (systemMessage.title == selectedMessage.title && systemMessage.prompt == selectedMessage.prompt) View.VISIBLE
+            else View.GONE
 
         // Bind expand/collapse state
         holder.prompt.visibility = if (systemMessage.isExpanded) View.VISIBLE else View.GONE
@@ -96,5 +91,6 @@ class SystemMessageAdapter(
         val prompt: TextView = view.findViewById(R.id.system_message_prompt)
         val menuButton: ImageView = view.findViewById(R.id.menu_button)
         val expandIcon: ImageView = view.findViewById(R.id.expand_icon)
+        val activeCheck: ImageView = view.findViewById(R.id.active_check)
     }
 }

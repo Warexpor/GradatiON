@@ -71,73 +71,97 @@
             android:textSize="13sp"
             android:visibility="gone" />
 
-        <LinearLayout
+        <!-- One server kind: a radio group, so the choice can't be cleared by tapping it again -->
+        <RadioGroup
+            android:id="@+id/lan_provider_group"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:background="@drawable/bg_settings_card"
-            android:padding="12dp"
+            android:paddingStart="8dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="4dp"
             android:layout_marginBottom="16dp">
 
-            <CheckBox
+            <com.google.android.material.radiobutton.MaterialRadioButton
                 android:id="@+id/checkbox_ollama"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:paddingStart="8dp"
                 android:text="@string/save_lan_ollama"
                 android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox"
-                android:layout_marginBottom="8dp" />
+                android:textSize="16sp"
+                app:buttonTint="@color/button_tint" />
 
-            <CheckBox
+            <com.google.android.material.radiobutton.MaterialRadioButton
                 android:id="@+id/checkbox_lm_studio"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:paddingStart="8dp"
                 android:text="@string/save_lan_lm_studio"
                 android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox"
-                android:layout_marginBottom="8dp" />
+                android:textSize="16sp"
+                app:buttonTint="@color/button_tint" />
 
-            <CheckBox
+            <com.google.android.material.radiobutton.MaterialRadioButton
                 android:id="@+id/checkbox_llama_cpp"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:paddingStart="8dp"
                 android:text="@string/save_lan_llama_cpp"
                 android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox"
-                android:layout_marginBottom="8dp" />
+                android:textSize="16sp"
+                app:buttonTint="@color/button_tint" />
 
-            <!-- NEW: MLX LM Checkbox -->
-            <CheckBox
+            <com.google.android.material.radiobutton.MaterialRadioButton
                 android:id="@+id/checkbox_mlx_lm"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:paddingStart="8dp"
                 android:text="@string/save_lan_mlx_lm"
                 android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox" />
-            <CheckBox
+                android:textSize="16sp"
+                app:buttonTint="@color/button_tint" />
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
                 android:id="@+id/checkbox_hermes_agent"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:paddingStart="8dp"
                 android:text="@string/save_lan_hermes_agent"
                 android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox" />
-            <CheckBox
+                android:textSize="16sp"
+                app:buttonTint="@color/button_tint" />
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
                 android:id="@+id/checkbox_olmx"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:paddingStart="8dp"
                 android:text="@string/save_lan_omlx"
                 android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox" />
-            <CheckBox
+                android:textSize="16sp"
+                app:buttonTint="@color/button_tint" />
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
                 android:id="@+id/checkbox_nativ"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:paddingStart="8dp"
                 android:text="@string/save_lan_nativ"
                 android:textColor="@color/xai_ink"
-                style="@style/Widget.App.CheckBox" />
+                android:textSize="16sp"
+                app:buttonTint="@color/button_tint" />
 
-
-        </LinearLayout>
+        </RadioGroup>
 
         <!-- NEW: LAN API Key Section -->
         <TextView
