@@ -177,6 +177,142 @@ class CodeModeScreenshotTest {
         }
     }
 
+    /**
+     * Rows the demo never sends, on the same grid: a failed command whose cross follows its words,
+     * a warning and an error notice, a plan with a wrapped and a struck step, and a command
+     * approval whose long answers stack.
+     */
+    @Test fun codeSessionEdgeRowsDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        hub.cancel(id)
+        idle(4)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val adapter = list.adapter as io.github.stardomains3.oxproxion.code.CodeTranscriptAdapter
+        val f = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }
+        CodeSessionFragment::class.java.getDeclaredField("follow").apply { isAccessible = true }.setBoolean(f, false)
+        val rows = rareRows()
+        adapter.submitList(rows.map { io.github.stardomains3.oxproxion.code.TranscriptRow.Event(it) })
+        idle(2)
+        list.scrollToPosition(0)
+        idle(2)
+        val d = ctx.resources.displayMetrics.density
+        val failed = bindRow(a) { it is CodeEvent.ToolCall }
+        val detail = failed.findViewById<View>(R.id.codeToolDetail)
+        val cross = failed.findViewById<View>(R.id.codeToolStatus)
+        assertEquals(View.VISIBLE, cross.visibility)
+        failed.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        failed.layout(0, 0, failed.measuredWidth, failed.measuredHeight)
+        assertEquals("the cross follows the command", (8 * d).toInt().toFloat(), (cross.left - detail.right).toFloat(), 1f)
+        val ask = bindRow(a) { it is CodeEvent.Approval }
+        ask.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val box = ask.findViewById<android.widget.LinearLayout>(R.id.codeApprovalButtons)
+        assertEquals("long answers stack", android.widget.LinearLayout.VERTICAL, box.orientation)
+        assertOnTranscriptGrid(list)
+        snap(root(a), "code_session_edge_rows_dark")
+        list.scrollToPosition(rows.size - 1)
+        idle(2)
+        assertOnTranscriptGrid(list)
+        snap(root(a), "code_session_edge_rows_end_dark")
+    }
+
+    /**
+     * The offline banner is the approval pin's capsule: the composer's edges, its light starting
+     * where the composer's words do, and a long message start-aligned beside the light. Set up the
+     * way the screen sets it when the machine drops (the demo machine never goes offline).
+     */
+    @Test fun codeSessionOfflineBannerDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+        hub.answer(id, approval.requestId, approval.options.first { it.id == "allow" })
+        idle(16)
+        val v = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }.requireView()
+        val banner = v.findViewById<android.widget.TextView>(R.id.codeSessionBanner)
+        banner.visibility = View.VISIBLE
+        banner.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_code_led_off, 0, 0, 0)
+        banner.text = ctx.getString(R.string.code_session_offline_banner, "studio-mac") + "\n" +
+            ctx.getString(R.string.code_session_reconnect)
+        idle(2)
+        val composer = v.findViewById<View>(R.id.codeSessionComposer)
+        val input = v.findViewById<View>(R.id.codeComposerInput)
+        fun x(view: View) = IntArray(2).also { view.getLocationInWindow(it) }[0]
+        assertEquals("the banner shares the composer's edges", x(composer), x(banner))
+        assertEquals(composer.width, banner.width)
+        assertEquals("its light starts where the composer's words do", x(input) + input.paddingStart, x(banner) + banner.paddingStart)
+        assertEquals(android.view.Gravity.START, banner.gravity and android.view.Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK)
+        snap(root(a), "code_session_offline_banner_dark")
+    }
+
+    /** A prompt sent with images says so after a spaced dot; the agent's images sit rounded like the panes. */
+    @Test fun codeSessionImagesDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        hub.cancel(id)
+        idle(4)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val adapter = list.adapter as io.github.stardomains3.oxproxion.code.CodeTranscriptAdapter
+        val f = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }
+        CodeSessionFragment::class.java.getDeclaredField("follow").apply { isAccessible = true }.setBoolean(f, false)
+        fun png(w: Int, h: Int, shade: Int): String {
+            val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.rgb(shade, shade, shade)) }
+            val out = java.io.ByteArrayOutputStream(); b.compress(Bitmap.CompressFormat.PNG, 100, out)
+            return android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+        }
+        val imgs = listOf(
+            io.github.stardomains3.oxproxion.code.AgentInlineImage("image/png", png(600, 400, 90), "k1"),
+            io.github.stardomains3.oxproxion.code.AgentInlineImage("image/png", png(300, 500, 140), "k2"))
+        val ev = listOf(
+            CodeEvent.UserPrompt("u", 1, "Show me the settings screen before and after", attachmentCount = 2),
+            CodeEvent.AgentText("t", 2, "Here is the screen before and after the change.", images = imgs),
+            CodeEvent.TurnEnd("e", 3, "end_turn", "Done"),
+        )
+        adapter.submitList(ev.map { io.github.stardomains3.oxproxion.code.TranscriptRow.Event(it) })
+        val until = System.currentTimeMillis() + 3000
+        while (System.currentTimeMillis() < until) { Thread.sleep(50); shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50)) }
+        list.scrollToPosition(0)
+        idle(2)
+        val prompt = list.getChildAt(0).findViewById<android.widget.TextView>(R.id.codeUserText).text.toString()
+        assertTrue(prompt, prompt.endsWith("after · 2 images"))
+        val row = list.getChildAt(1).findViewById<android.view.ViewGroup>(R.id.codeAgentImages)
+        assertEquals(2, row.childCount)
+        for (i in 0 until row.childCount) assertTrue("image $i is rounded", row.getChildAt(i).clipToOutline)
+        snap(root(a), "code_session_images_dark")
+    }
+
+    /** Slash typeahead: no empty icon column, so each command starts under the composer's words. */
+    @Test fun codeSessionSlashCommandsDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+        hub.answer(id, approval.requestId, approval.options.first { it.id == "allow" })
+        idle(16)
+        val input = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }.requireView()
+            .findViewById<android.widget.EditText>(R.id.codeComposerInput)
+        input.setText("/")
+        idle(3)
+        val rows = a.findViewById<android.view.ViewGroup>(R.id.popoverRows)
+        fun x(v: View) = IntArray(2).also { v.getLocationInWindow(it) }[0]
+        val words = x(input) + input.compoundPaddingLeft
+        assertTrue(rows.childCount >= 2)
+        for (i in 0 until rows.childCount) {
+            val title = rows.getChildAt(i).findViewById<android.widget.TextView>(R.id.popoverRowTitle)
+            assertTrue(title.text.startsWith("/"))
+            assertEquals("${title.text} starts under the composer's words", words.toFloat(), x(title).toFloat(), 1f)
+        }
+        snap(root(a), "code_session_slash_dark")
+    }
+
     /** Mid-turn: a command streams into its pane while the Working footer closes the rail. */
     @Test fun codeSessionRunningDark() = withCode { a, _ ->
         val hub = CodeHub.getLoaded(ctx)
@@ -230,6 +366,10 @@ class CodeModeScreenshotTest {
         val prompt = run.findViewById<android.widget.TextView>(R.id.codeToolPrompt)
         assertEquals(View.VISIBLE, prompt.visibility)
         assertEquals("$ ./gradlew :app:testDebugUnitTest", prompt.text.toString())
+        val pane = run.findViewById<android.widget.HorizontalScrollView>(R.id.codeToolOutputScroll)
+        val pad = (12 * ctx.resources.displayMetrics.density).toInt()
+        assertTrue("long output lines stop inside the pane's pads and fade there",
+            pane.clipToPadding && pane.paddingStart >= pad && pane.paddingEnd >= pad && pane.isHorizontalFadingEdgeEnabled)
         adapter.verbose = true
         val search = bindRow(a) { it is CodeEvent.ToolCall && it.kind == io.github.stardomains3.oxproxion.code.ToolKind.SEARCH }
         assertEquals(View.VISIBLE, search.findViewById<View>(R.id.codeToolOutputScroll).visibility)
@@ -675,6 +815,33 @@ class CodeModeScreenshotTest {
         idle()
         assertEquals(View.VISIBLE, code.visibility)
         assertTrue(a.findViewById<View>(R.id.tabCode).isSelected)
+    }
+
+
+    /** Rows the demo never sends: a failed command, notices, a long plan, a command approval with long labels. */
+    private fun rareRows(): List<CodeEvent> {
+        val run = io.github.stardomains3.oxproxion.code.ToolKind.EXECUTE
+        fun step(t: String, s: io.github.stardomains3.oxproxion.code.PlanStatus) = io.github.stardomains3.oxproxion.code.PlanEntry(t, s)
+        fun opt(id: String, label: String, k: io.github.stardomains3.oxproxion.code.ApprovalOption.Kind) =
+            io.github.stardomains3.oxproxion.code.ApprovalOption(id, label, k)
+        return listOf(
+            CodeEvent.UserPrompt("u", 1, "Run lint and fix whatever it finds in the settings module"),
+            CodeEvent.ToolCall("t:1", 2, "1", run, "Run lint", "./gradlew :app:lintDebug",
+                io.github.stardomains3.oxproxion.code.ToolStatus.FAILED,
+                "> Task :app:lintDebug FAILED\nLint found 2 errors, 5 warnings\nSettingsFragment.kt:52: Error: Missing contentDescription"),
+            CodeEvent.Notice("n:1", 3, "Rate limited by the provider. Retrying in 20 s.", io.github.stardomains3.oxproxion.code.NoticeLevel.WARNING),
+            CodeEvent.Plan("p", 4, listOf(
+                step("Fix the missing content description on the dark mode switch", io.github.stardomains3.oxproxion.code.PlanStatus.IN_PROGRESS),
+                step("Silence the obsolete SDK warning", io.github.stardomains3.oxproxion.code.PlanStatus.CANCELLED),
+                step("Run lint again", io.github.stardomains3.oxproxion.code.PlanStatus.PENDING))),
+            CodeEvent.Approval("a", 5, "r1", "2", "./gradlew :app:lintDebug --continue",
+                "./gradlew :app:lintDebug --continue && git add -A && git commit -m \"fix lint\"", run, listOf(
+                    opt("n", "No, and tell Codex what to do differently", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.REJECT_ONCE),
+                    opt("s", "Yes, and don't ask again for this command", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ALWAYS),
+                    opt("y", "Yes", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ONCE))),
+            CodeEvent.Notice("n:2", 6, "The agent exited unexpectedly (code 137).", io.github.stardomains3.oxproxion.code.NoticeLevel.ERROR),
+            CodeEvent.TurnEnd("e", 7, "end_turn", null, io.github.stardomains3.oxproxion.code.TurnUsage(18200, 2400, 0.042)),
+        )
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────

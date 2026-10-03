@@ -243,8 +243,8 @@
         <item quantity="other">%1$d images</item>
     </plurals>
     <plurals name="code_user_images_suffix">
-        <item quantity="one"> · %1$d image</item>
-        <item quantity="other"> · %1$d images</item>
+        <item quantity="one">" · %1$d image"</item>
+        <item quantity="other">" · %1$d images"</item>
     </plurals>
     <string name="code_attach_limit">You can attach up to %1$d images</string>
     <string name="code_attach_too_large">Image is too large</string>

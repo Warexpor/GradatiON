@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A slash command in the composer's typeahead. PickerPopover's row without the icon column (a
+     command has no icon, and the empty 34dp frame pushed every name in), so the name starts under
+     the composer's own words; the name in mono like every command in Code. Keeps the popoverRow*
+     ids so the popover binds it like any row. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="6dp"
+    android:layout_marginEnd="6dp"
+    android:background="@drawable/bg_popover_row"
+    android:gravity="center_vertical"
+    android:minHeight="52dp"
+    android:orientation="horizontal"
+    android:paddingStart="12dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/popoverRowIcon"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:id="@+id/popoverRowMonogram"
+            android:layout_width="0dp"
+            android:layout_height="0dp" />
+
+        <ImageView
+            android:id="@+id/popoverRowAvatar"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:importantForAccessibility="no" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/popoverRowTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            style="@style/Widget.Gradation.Code.MonoLine"
+            android:textColor="@color/xai_ink"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/popoverRowSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/xai_mute"
+            android:textSize="13.5sp"
+            android:fontFamily="@font/app_sans" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/popoverRowCheck"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginStart="10dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_check_round"
+        app:tint="@color/xai_ink"
+        android:visibility="gone" />
+</LinearLayout>
