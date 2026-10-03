@@ -504,7 +504,8 @@ class CodeAwayNotifier(
             .setDeleteIntent(dismissPending(dedupKey, notifId))
             .setAutoCancel(true)
             .setOngoing(false)
-            .setOnlyAlertOnce(true)
+            // A later finished turn updates this shade while it is still up. onlyAlertOnce
+            // would swallow that alert, so the phone never buzzes for the new turn.
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
     }

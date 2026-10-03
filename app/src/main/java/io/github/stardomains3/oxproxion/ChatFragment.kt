@@ -3713,7 +3713,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     }
     // 🚀 synthesizeToWavFile (MINIMAL CHANGE - still queues with utteranceId)
     private fun synthesizeToWavFile(text: String, position: Int) {
-        val safeText = text.take(3900)
+        val safeText = AnswerShadeText.clipForSpeak(text)
         val context = requireContext()
 
         if (safeText.length < text.length) {
@@ -3779,11 +3779,20 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             currentSpeakingPosition = position
             chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
             updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
-            val safeText = text.take(3900)
+            val safeText = AnswerShadeText.clipForSpeak(text)
             if (safeText.length < text.length) {
                 GlassNotice.show(context, context.getString(R.string.toast_tts_text_truncated))
             }
-            tts.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, TTS_SPEAK_ID)
+            val spoken = try {
+                tts.speak(safeText, TextToSpeech.QUEUE_FLUSH, null, TTS_SPEAK_ID)
+            } catch (_: Exception) {
+                TextToSpeech.ERROR
+            }
+            if (spoken != TextToSpeech.SUCCESS) {
+                // The engine never calls back, so the stop icon used to stay up.
+                onSpeechFinished()
+                GlassNotice.show(context, context.getString(R.string.toast_tts_engine_error))
+            }
         }
     }
     private fun updateIconDirectlyOrNotify(position: Int, @DrawableRes iconRes: Int) {

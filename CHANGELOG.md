@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code away: a later finished turn alerts again while that session's shade is still up. The update used the same notification and `onlyAlertOnce`, so the phone never buzzed for the new turn.
+- Answer shade: Speak puts Speak back when the engine refuses the utterance. A refusal never calls back, so the shade used to stay on Stop. The same refusal on a message puts the speak icon back. A long reply is cut for Speak without ending on half an emoji.
 - A finished side file is the recovered database when that name is already gone, not only when the name is an empty file. Deleting the empty file and dying before the side file took its place used to drop the history, or open a new database beside the side file.
 - A finished wal, shm, or journal side file is kept beside a recovered database that already has bytes. It used to be deleted, so messages that had not been checkpointed were gone. A sidecar with no main file is still left out.
 - A lore key has to be its own words. `old man` used to match `old manor`, and `the dock` used to match `the docks`, because a phrase was a raw substring. `Mira` still matches `Mira's`. A key also matches when only the case differs outside ASCII (`Мира` and `мира`). It used to miss, because case folding stopped at ASCII.

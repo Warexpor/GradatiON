@@ -369,6 +369,13 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
     /** Utterance id the shade is reading. A late end for an older id must not redraw it. */
     internal var shadeUtteranceId: String? = null
 
+    /**
+     * Tests only. Stands in for [TextToSpeech.speak] so a refusal (no callback) can be
+     * checked without a speech engine. Null in the app.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var speakCallForTest: ((String, String) -> Int)? = null
+
     /** Bumps on every Speak. A fixed id let a late end for the previous reading match this one. */
     private var shadeUtteranceSerial = 0
 
@@ -545,8 +552,24 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         }
         val utteranceId = nextShadeUtteranceId()
         shadeUtteranceId = utteranceId
-        tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         isTtsActive = true
+        val spoken = try {
+            speakCallForTest?.invoke(cleanText, utteranceId)
+                ?: tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        } catch (_: Exception) {
+            TextToSpeech.ERROR
+        }
+        // A refusal never calls back, so Stop would stick. A finish that already ran
+        // on this thread cleared the id; do not put Stop back over that.
+        if (spoken != TextToSpeech.SUCCESS || shadeUtteranceId != utteranceId) {
+            if (shadeUtteranceId == utteranceId) {
+                pendingSpeak = false
+                isTtsActive = false
+                shadeUtteranceId = null
+                refreshAnswerChrome(silent = true)
+            }
+            return
+        }
         refreshAnswerChrome(silent = true)
     }
 
