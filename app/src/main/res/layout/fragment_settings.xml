@@ -70,6 +70,7 @@
                         android:paddingBottom="8dp">
 
                         <TextView
+                            android:labelFor="@id/settingsRoleplaySwitch"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="@string/settings_mode_roleplay"
@@ -116,6 +117,7 @@
                         android:paddingBottom="8dp">
 
                         <TextView
+                            android:labelFor="@id/settingsCodeSwitch"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="@string/settings_mode_code"

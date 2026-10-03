@@ -197,6 +197,7 @@
             android:paddingEnd="6dp">
 
             <TextView
+                android:labelFor="@id/backgroundPhotoBlur"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -220,6 +221,7 @@
             android:paddingEnd="6dp">
 
             <TextView
+                android:labelFor="@id/backgroundPhotoDim"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -243,6 +245,7 @@
             android:paddingEnd="6dp">
 
             <TextView
+                android:labelFor="@id/backgroundPhotoTint"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -266,6 +269,7 @@
             android:paddingEnd="6dp">
 
             <TextView
+                android:labelFor="@id/backgroundPhotoLiquid"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -289,6 +293,7 @@
             android:paddingEnd="6dp">
 
             <TextView
+                android:labelFor="@id/backgroundPhotoColor"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"

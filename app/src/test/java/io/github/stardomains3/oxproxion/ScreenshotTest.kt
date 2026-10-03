@@ -734,6 +734,45 @@ class ScreenshotTest : ScreenshotHarness() {
         }
     }
 
+    /** A switch with no name of its own is read as just "switch, off"; each one is labelled by its row. */
+    @Test fun settingsSwitchesAreNamed() = withChat { a, _ ->
+        val unnamed = mutableListOf<String>()
+        fun scan(root: View) {
+            if (root is androidx.appcompat.widget.SwitchCompat && root.isShown) {
+                // TalkBack names a switch from the view whose labelFor points at it.
+                fun labelOf(v: View): String? = when {
+                    v is android.widget.TextView && v.labelFor == root.id && v.text.isNotBlank() -> v.text.toString()
+                    v is android.view.ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { labelOf(v.getChildAt(it)) }
+                    else -> null
+                }
+                val name = root.contentDescription?.toString().orEmpty().ifBlank { root.text?.toString().orEmpty() }
+                    .ifBlank { labelOf(root.parent as View).orEmpty() }
+                if (name.isBlank()) unnamed += a.resources.getResourceEntryName(root.id)
+            }
+            if (root is android.view.ViewGroup) for (i in 0 until root.childCount) scan(root.getChildAt(i))
+        }
+        a.findViewById<View>(R.id.settingsButton).performClick(); idle()
+        scan(a.supportFragmentManager.fragments.filterIsInstance<SettingsFragment>().first().requireView())
+        for (row in listOf(R.id.settingsRowAppearance, R.id.settingsRowVoice, R.id.settingsRowHaptics,
+                R.id.settingsRowModels, R.id.settingsRowAdvanced, R.id.settingsRowData)) {
+            a.supportFragmentManager.fragments.filterIsInstance<SettingsFragment>().first()
+                .requireView().findViewById<View>(row).performClick(); idle()
+            val page = a.supportFragmentManager.fragments.filterIsInstance<SettingsDetailFragment>().last().requireView()
+            // Photo's options only show with a photo picked; their switches still need names.
+            page.findViewById<View>(R.id.backgroundPhotoOptions)?.visibility = View.VISIBLE
+            idle()
+            scan(page)
+            a.supportFragmentManager.popBackStackImmediate(); idle()
+        }
+        for (make in listOf({ ToolsFragment() }, { InferenceParametersFragment() }, { AdvancedReasoningFragment() })) {
+            val f = make()
+            pushFragment(a, f)
+            scan(f.requireView())
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+        org.junit.Assert.assertEquals("switches with no spoken name", emptyList<String>(), unnamed)
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
