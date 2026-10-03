@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code away: an approval whose request id contains ':' is not the same shade as a longer session id that shares that text. `ab` waiting on `cd:r2` used to replace `ab:cd` waiting on `r2`, and answering one cleared the other's open token.
+- Code away: a shade the system drops without a swipe loses its open token when a later alert is handled, not only after the process dies. The alert that was just posted again keeps the token already on that shade. A second shade for the same session still keeps it.
+- Answer shade: Speak puts Speak back when the reply strips to nothing. The engine never starts, and it never calls back, so the shade used to stay on Stop.
 - A 0-byte recovered database no longer takes the hold name from the copy that still has the history. Parking that empty file used to rename the hold copy to a name Room does not open, so the next launch read a stale file or an empty one. An empty file in the no-backup folder no longer blocks the hold copy from moving in.
 - Deleting a portrait or a wallpaper removes the side file before the live file. A kill between those used to leave the side file, and the next open put the picture back.
 - A sliced message stops when the next step would not fit in the character index. That addition used to wrap, and the read appended the tail again.

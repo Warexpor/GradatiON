@@ -214,7 +214,12 @@ class CodeAwayNotifierTest {
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, session, "r1")
         val token = n.issueOpenToken(session)
         assertEquals(2, nm.activeNotifications.size)
-        nm.cancelAll()
+        // Swipe removes only that shade. cancelAll would also drop the one that should stay.
+        val id = nm.activeNotifications.first { sbn ->
+            Shadows.shadowOf(sbn.notification.deleteIntent).savedIntent
+                .getStringExtra(CodeAwayNotifier.EXTRA_DEDUP_KEY) == key
+        }.id
+        nm.cancel(id)
         n.onUserDismissed(key)
         assertTrue(n.consumeOpenToken(session, token))
     }
@@ -414,6 +419,50 @@ class CodeAwayNotifierTest {
         assertFalse("oldest parked shade is the one that goes", "s0" in showingSessions())
         assertTrue("s63" in showingSessions())
         assertTrue("s64" in showingSessions())
+    }
+
+    @Test
+    fun approvalRequestContainingColonDoesNotReplaceTheLongerSession() {
+        val n = notifier()
+        n.onUpdate("ab", "host", "A", CodeUpdate.Upsert(approval("cd:r2")), sessionWasRunning = true)
+        n.onUpdate("ab:cd", "host", "B", CodeUpdate.Upsert(approval("r2")), sessionWasRunning = true)
+        assertEquals(2, nm.activeNotifications.size)
+        val tokenAb = n.issueOpenToken("ab")
+        val tokenCd = n.issueOpenToken("ab:cd")
+        n.cancelApproval("ab", "cd:r2")
+        assertEquals(setOf("ab:cd"), showingSessions())
+        assertFalse(n.consumeOpenToken("ab", tokenAb))
+        assertTrue(n.consumeOpenToken("ab:cd", tokenCd))
+    }
+
+    @Test
+    fun shadeClearedWithoutASwipeLosesItsTokenWhenAnotherSessionAlerts() {
+        val n = notifier()
+        n.onUpdate("dead", "host", "D", CodeUpdate.Upsert(approval("r-dead")), sessionWasRunning = true)
+        n.onUpdate("live", "host", "L", CodeUpdate.Upsert(approval("r-live")), sessionWasRunning = true)
+        val deadToken = n.issueOpenToken("dead")
+        val liveToken = n.issueOpenToken("live")
+        val deadId = nm.activeNotifications.first { sbn ->
+            Shadows.shadowOf(sbn.notification.contentIntent).savedIntent
+                .getStringExtra(CodeAwayNotifier.EXTRA_SESSION_ID) == "dead"
+        }.id
+        nm.cancel(deadId)
+        n.onUpdate("other", "host", "O", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertFalse(n.consumeOpenToken("dead", deadToken))
+        assertTrue(n.consumeOpenToken("live", liveToken))
+        assertTrue("live" in showingSessions())
+    }
+
+    @Test
+    fun oneDeadShadeKeepsTheTokenWhileItsSiblingIsUp() {
+        val n = notifier()
+        val session = "sess-sibling"
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval("r1")), sessionWasRunning = true)
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval("r2")), sessionWasRunning = true)
+        val token = n.issueOpenToken(session)
+        nm.cancel(nm.activeNotifications.first().id)
+        n.onUpdate("other", "host", "O", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertTrue(n.consumeOpenToken(session, token))
     }
 
     @Test
