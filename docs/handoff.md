@@ -1,3 +1,18 @@
+# Handoff (2026-10-03, Code session spacing)
+
+On `cursor/code-session-spacing-bd39` (PR into `gradation/app-pass`), from `5827aceb876fcc9efe5a7c5dcd2f6cb9ac6e3b46` (one glass sheet #181). Spacing only: the sheet, floating composer, rail, beads and home stay as shipped in #179 to #181. No color token changed. Not a redo of #181 or anything before it.
+
+- One grid in `code_dimens.xml`. The rail moved from 16dp to 26dp from the sheet's edge (`code_rail_x`), so a card inset 6dp has a 10dp pad before its glyph instead of 1dp. Bare rows pad 16dp, and every line of words starts on the 46dp content column. `CodeTranscriptRail` reads the dimen. `assertOnTranscriptGrid` in `CodeModeScreenshotTest` checks glyphs and words on screen.
+- Plan: steps are `item_code_plan_step` (the glyph rides the first line's baseline, so a wrapped step keeps its mark by line one), rows 12dp apart, the same air above the label and below the last step.
+- Approval: 18dp pads, the title and its subject as one block, then a 14dp step to the path pane and 16dp to the answers. Answers sit in `CodeChoiceRow` on the content column: side by side with 10dp gaps and sharing the spare width, or stacked full width when they don't fit (no sideways scroll). The answer pills are 64dp minimum and 14sp. Once folded, the row is 44dp with 1dp pads like a tool row.
+- Inline code in agent prose: `CodeInlineAir` widens the spaces beside the pill by its 3.5dp overhang through word spacing. Code only; Chat's renderer is unchanged.
+- Tool line: the title stops at 220dp so the argument and a failure's cross stay on the line. The output pane ends on the cards' 6dp inset.
+- Loading, waiting and retry states centre between the header and the composer, not on the screen. The approval pin's words start 18dp in, under the composer's hint.
+- A turn's end settles any tool still pending or running to cancelled (`CodeSessionFolder`), so a ring never spins on a finished transcript. A stale cancel after a new prompt leaves the new turn alone.
+- New shots: `code_session_running_dark`, `code_session_approval_pin_dark`, `code_session_stopped_dark`.
+
+Phone: open an approval in a Codex or OpenCode session (long answer labels should stack, not scroll). Scroll a transcript with inline code mid-stream (no jump when a code span closes). Stop a turn while it waits on an approval (the bead should stop spinning). RTL: the rail and the 10dp card pads should mirror.
+
 # Handoff (2026-10-03, Code chrome look)
 
 On `cursor/code-chrome-redesign-7311` (PR into `gradation/app-pass`), from `d952a6bd4874acf7a932addd3502a5cb29397f9c` (Code session look #179). Look only: the harness picker, session list, empty and connecting states, and the session header. The transcript, tool cards, diffs, terminal output and in-session composer (#179) are untouched, and so are #179's `code_rail`, `code_node_*` and `code_prompt_bg`. No shared theme token changed; new Code-only tokens are `code_tile_fill` and `code_tile_lit`. Not a redo of #179 or anything before it.

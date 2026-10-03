@@ -1,24 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code transcript: the agent is waiting on you. Collapses to one bead on the rail once answered. -->
+<!-- Code transcript: the agent is waiting on you. Collapses to one bead on the rail once answered.
+     The row's top and bottom pads are set on bind: a card's air while open, a tool row's once folded. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="6dp"
-    android:paddingEnd="6dp"
+    android:paddingStart="@dimen/code_card_inset"
+    android:paddingEnd="@dimen/code_card_inset"
     android:paddingTop="6dp"
-    android:paddingBottom="8dp">
+    android:paddingBottom="6dp">
 
-    <!-- Glass card the rail stops at; the shield lands on the rail column -->
+    <!-- Glass card the rail stops at; the shield lands on the rail column. A lifted card, so a step
+         more air than the others. The question and what it is about read as one block; the detail
+         and the answers each get a clear step below. -->
     <LinearLayout
         android:id="@+id/codeApprovalCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_code_approval"
         android:orientation="vertical"
-        android:paddingTop="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="16dp">
+        android:paddingStart="@dimen/code_card_glyph_pad"
+        android:paddingTop="18dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="18dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -51,8 +55,8 @@
             android:id="@+id/codeApprovalWhat"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="30dp"
-            android:layout_marginTop="6dp"
+            android:layout_marginStart="@dimen/code_text_indent"
+            android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="4"
             android:textColor="@color/xai_body"
@@ -62,43 +66,37 @@
             android:id="@+id/codeApprovalDetail"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="30dp"
-            android:layout_marginTop="10dp"
+            android:layout_marginStart="@dimen/code_text_indent"
+            android:layout_marginTop="14dp"
             android:background="@drawable/bg_code_pane"
             android:maxLines="6"
             android:ellipsize="end"
-            android:padding="12dp"
+            android:lineSpacingMultiplier="1.2"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp"
             style="@style/Widget.Gradation.Code.MonoLine"
             android:textColor="@color/xai_body" />
 
-        <!-- HSV so Deny / Always allow / Allow never hard-clip on narrow widths. Wider than the
-             content column on purpose: the choices need the room more than the alignment. -->
-        <HorizontalScrollView
+        <!-- On the content column like the words above; side by side, or stacked when they do not fit -->
+        <io.github.stardomains3.oxproxion.code.CodeChoiceRow
+            android:id="@+id/codeApprovalButtons"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
-            android:layout_marginTop="14dp"
-            android:clipToPadding="true"
-            android:fillViewport="true"
-            android:overScrollMode="never"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/codeApprovalButtons"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="end"
-                android:gravity="end"
-                android:orientation="horizontal" />
-        </HorizontalScrollView>
+            android:layout_marginStart="@dimen/code_text_indent"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/codeApprovalDone"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
+        android:layout_height="44dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
+        android:paddingStart="@dimen/code_card_glyph_pad"
+        android:paddingEnd="8dp"
         android:visibility="gone">
 
         <FrameLayout

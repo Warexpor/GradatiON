@@ -505,6 +505,16 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         if (sheet.height == 0 || dock.height == 0) return
         val pad = (sheet.bottom - dock.top).coerceAtLeast(0) + (16 * resources.displayMetrics.density).toInt()
         if (pad != list.paddingBottom) list.setPadding(list.paddingLeft, list.paddingTop, list.paddingRight, pad)
+        // The empty-transcript art and line centre between the header and the composer, not on the
+        // whole screen. A centred FrameLayout child moves by topMargin - bottomMargin, so half of
+        // each covered edge lands it in the middle of what is left.
+        val state = requireView().findViewById<View>(R.id.codeSessionState)
+        val above = sheet.top / 2
+        val below = ((state.parent as View).height - dock.top).coerceAtLeast(0) / 2
+        val lp = state.layoutParams as ViewGroup.MarginLayoutParams
+        if (lp.topMargin != above || lp.bottomMargin != below) {
+            state.updateLayoutParams<ViewGroup.MarginLayoutParams> { topMargin = above; bottomMargin = below }
+        }
     }
 
     private fun showOptions(anchor: View) {

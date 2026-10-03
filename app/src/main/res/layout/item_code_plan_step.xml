@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One plan step: the status glyph centred in the 20dp glyph frame on the rail, the words on the
+     content column. The glyph rides the first line's baseline, so a step that wraps keeps its
+     mark beside its first line instead of between the lines. 6dp above and below sets the steps
+     12dp apart. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:baselineAligned="true"
+    android:orientation="horizontal"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp">
+
+    <!-- Baseline 13dp from its top puts the glyph's middle on the lowercase letters' middle -->
+    <ImageView
+        android:id="@+id/codePlanStepGlyph"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginStart="1dp"
+        android:baseline="13dp"
+        android:importantForAccessibility="no" />
+
+    <TextView
+        android:id="@+id/codePlanStepText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="11dp"
+        android:textSize="15sp" />
+</LinearLayout>
