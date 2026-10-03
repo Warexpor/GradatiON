@@ -89,22 +89,27 @@ internal object ChatDbVault {
      * absolute path: those directories are outside the default Room folder.
      * The root file wins when it is still there: a failed park leaves the current history at
      * the root beside an older hold copy, and opening the hold file would hide it.
+     * A 0-byte name is not that history. Room leaves one when an open dies before the header
+     * is written, and treating it as the database hid the copy that still has bytes.
      */
     fun roomDatabaseName(context: Context, stored: String): String {
         if (!isRecoveredName(stored)) return AppDatabase.DB_NAME
         val databasesDir = context.getDatabasePath(AppDatabase.DB_NAME).parentFile
         if (databasesDir != null) {
-            if (File(databasesDir, stored).isFile) return stored
+            if (hasBytes(File(databasesDir, stored))) return stored
             val hold = File(databasesDir, HOLD_DIR)
             // Hold beats a stale vault copy that blocked the move.
             // Require the main file: an orphan -wal/-shm in hold must not hide the vault copy
-            // (Room would create an empty main beside that sidecar).
-            if (hold.isDirectory && File(hold, stored).isFile) {
+            // (Room would create an empty main beside that sidecar). An empty main is the same.
+            if (hold.isDirectory && hasBytes(File(hold, stored))) {
                 return File(hold, stored).absolutePath
             }
         }
         return File(directory(context), stored).absolutePath
     }
+
+    /** A main file Room can open. A directory or a 0-byte placeholder is not one. */
+    private fun hasBytes(file: File) = file.isFile && file.length() > 0L
 
     fun dbSetPresent(directory: File, name: String): Boolean =
         SIDECARS.any { File(directory, name + it).exists() }

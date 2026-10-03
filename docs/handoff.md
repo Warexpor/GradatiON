@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Stability wave 32)
+
+On `cursor/stability-wave-32-5e40` (PR into `gradation/app-pass`). Persistence follow-ups after the recovered file at the databases root, portrait and wallpaper side files, and emoji slices (#143). Not a redo of that pass, of `user_version`, the live wal park, or `.stuck-N` (#132). Not a redo of #153 (history sentences, file fences, staged photos), #152 (lore pin on the chosen copy, wallpaper retry, trimmed names), #151 (browser action lines, session approval pill), #150 (cleared away shades, cap order, Speak utterance ids), #149 (homelab hostnames, LAN paths, approximate location), #147 (hub hero line, pairing query text), or #148 (example sides, lore headers, character-list marks).
+
+- Room skips a 0-byte recovered database at the databases root and under hold. That name is left when an open dies before the header is written, and it used to hide the copy that still has bytes. A recovered file that still has bytes at the root is still the one that opens.
+- A finished `.partial` replaces a portrait or wallpaper when the clock did not tick, so the stamps match. The old picture used to stay. Import notes are written to a new file before that file takes the side-file name, so a kill there no longer wipes the notes already on disk. Those notes are still read when the stamp matches the installed file.
+- A sliced message keeps only the characters that step asked for. A longer slice used to be appended whole, and the next step repeated the overlap.
+
+Phone: a portrait or wallpaper replace killed after the side file was written, when that file and the old picture show the same time (the new picture should be the one that shows). A long message should still open in full. Not a phone check for which file opens when the recovered name at the root is empty.
+
 # Handoff (2026-10-03, Chat wave 32)
 
 On `cursor/chat-wave-32-f2c6` (PR into `gradation/app-pass`). Chat follow-ups. Not a redo of #138 (calendar day buckets, Remove all clearing a parked file list) or #139 (history preview keeping `#` `~` `>`, staged text files one by one and the 1 MB cap). Not a redo of #152 (lore pin on the chosen copy, wallpaper retry, trimmed character names), #151 (browser action lines, session approval pill), #150 (cleared away shades, cap order, Speak utterance ids), #149 (homelab hostnames, LAN paths, approximate location), #147 (hub hero line, pairing query text), or #148 (example sides, lore headers, character-list marks).

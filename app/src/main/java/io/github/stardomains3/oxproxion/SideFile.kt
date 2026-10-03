@@ -16,17 +16,47 @@ import java.nio.file.StandardOpenOption
 internal object SideFile {
     private const val TAG = "SideFile"
 
+    /**
+     * Test hook. After the new bytes are durable and before they replace an existing side
+     * file, throw and leave that side file as a killed process would. Cleared when it fires.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var failAfterIncomingForTest: Boolean = false
+
     fun write(dest: File, bytes: ByteArray) {
         val dir = dest.parentFile ?: throw IOException("no directory")
         dir.mkdirs()
         val partial = sibling(dest, ".partial")
-        FileOutputStream(partial).use { out ->
-            out.write(bytes)
-            out.fd.sync()
+        // The bytes go to a new file. Opening [partial] for write truncates it first, and a
+        // kill there used to drop the finished side file that the next read was still using.
+        val incoming = sibling(dest, ".partial.incoming")
+        try {
+            incoming.delete()
+            FileOutputStream(incoming).use { out ->
+                out.write(bytes)
+                out.fd.sync()
+            }
+            syncDirectory(dir)
+            if (failAfterIncomingForTest) {
+                failAfterIncomingForTest = false
+                incoming.delete()
+                throw IOException("simulated side-file write failure")
+            }
+            // A clock that did not tick would make this look older than the file it replaces.
+            val floor = maxOf(
+                dest.lastModified(),
+                sibling(dest, ".bak").lastModified(),
+                partial.lastModified(),
+            )
+            if (incoming.lastModified() <= floor) incoming.setLastModified(floor + 1)
+            if (!incoming.renameTo(partial)) {
+                throw IOException("Could not replace ${partial.path}")
+            }
+        } catch (e: Exception) {
+            incoming.delete()
+            if (e is IOException) throw e
+            throw IOException("Could not write ${partial.path}", e)
         }
-        // A clock that did not tick would make this look older than the file it replaces.
-        val floor = maxOf(dest.lastModified(), sibling(dest, ".bak").lastModified())
-        if (partial.lastModified() <= floor) partial.setLastModified(floor + 1)
         syncDirectory(dir)
         val bak = sibling(dest, ".bak")
         if (dest.exists() && !dest.renameTo(bak)) {
@@ -53,9 +83,11 @@ internal object SideFile {
             .sortedWith(
                 compareByDescending<File> { it.lastModified() }
                     .thenBy {
+                        // Same timestamp: the side file is the replacement that did not get a
+                        // newer stamp. Preferring the installed file used to hide it.
                         when (it) {
-                            dest -> 0
-                            partial -> 1
+                            partial -> 0
+                            dest -> 1
                             else -> 2
                         }
                     }
@@ -65,6 +97,7 @@ internal object SideFile {
     fun clear(dest: File) {
         dest.delete()
         sibling(dest, ".partial").delete()
+        sibling(dest, ".partial.incoming").delete()
         sibling(dest, ".bak").delete()
     }
 

@@ -1000,6 +1000,37 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun anEmptyRecoveredFileDoesNotHideTheCopyThatHasBytes() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val databases = app.getDatabasePath(AppDatabase.DB_NAME).parentFile!!
+        databases.mkdirs()
+        val hold = ChatDbVault.holdDirectory(databases)
+        val vault = ChatDbVault.directory(app)
+        val stored = "chat_database.recovered-25"
+        val root = File(databases, stored).apply { writeBytes(ByteArray(0)) }
+        val parked = File(hold, stored).apply { writeText("parked-history") }
+        try {
+            val roomName = ChatDbVault.roomDatabaseName(app, stored)
+            assertEquals(parked.canonicalPath, File(roomName).canonicalPath)
+            assertEquals("parked-history", File(roomName).readText())
+        } finally {
+            root.delete()
+            parked.delete()
+        }
+
+        val emptyHold = File(hold, "chat_database.recovered-26").apply { writeBytes(ByteArray(0)) }
+        val vaultMain = File(vault, "chat_database.recovered-26").apply { writeText("vault-history") }
+        try {
+            val roomName = ChatDbVault.roomDatabaseName(app, "chat_database.recovered-26")
+            assertEquals(vaultMain.canonicalPath, File(roomName).canonicalPath)
+            assertEquals("vault-history", File(roomName).readText())
+        } finally {
+            emptyHold.delete()
+            vaultMain.delete()
+        }
+    }
+
+    @Test
     fun aHoldMainStillBeatsAStaleVaultCopy() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val databases = app.getDatabasePath(AppDatabase.DB_NAME).parentFile!!
