@@ -534,6 +534,15 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             return
         }
         val cleanText = stripMarkdownWithCommonMark(lastResponse)
+        if (cleanText.isBlank()) {
+            // Whitespace, or markdown with no words, never starts the engine and never calls back.
+            // Leaving Stop up made the next tap look like Stop while nothing was speaking.
+            pendingSpeak = false
+            isTtsActive = false
+            shadeUtteranceId = null
+            refreshAnswerChrome(silent = true)
+            return
+        }
         val utteranceId = nextShadeUtteranceId()
         shadeUtteranceId = utteranceId
         tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)

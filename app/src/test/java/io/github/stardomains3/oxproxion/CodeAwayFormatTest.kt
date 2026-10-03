@@ -332,7 +332,25 @@ class CodeAwayFormatTest {
                 setOf("ab", sid),
             ),
         )
-        assertNull(CodeAwayFormat.sessionIdForDedupKey(key, emptySet()))
+        // Length-prefixed keys name the session without a candidate list.
+        assertEquals(sid, CodeAwayFormat.sessionIdForDedupKey(key, emptySet()))
+        // The older colon form still needs a known id, and the longest one wins.
+        val legacy = "approval:ab:cd:req"
+        assertEquals(sid, CodeAwayFormat.sessionIdForDedupKey(legacy, setOf("ab", sid)))
+        assertNull(CodeAwayFormat.sessionIdForDedupKey(legacy, emptySet()))
+    }
+
+    @Test
+    fun colonInARequestIdIsNotTheSameShadeAsALongerSession() {
+        val shorter = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, "ab", "cd:r2")
+        val longer = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, "ab:cd", "r2")
+        assertNotEquals(shorter, longer)
+        val known = setOf("ab", "ab:cd")
+        assertTrue(CodeAwayFormat.keyBelongsToSession(shorter, "ab", known))
+        assertFalse(CodeAwayFormat.keyBelongsToSession(shorter, "ab:cd", known))
+        assertTrue(CodeAwayFormat.keyBelongsToSession(longer, "ab:cd", known))
+        assertFalse(CodeAwayFormat.keyBelongsToSession(longer, "ab", known))
+        assertEquals("approval:s1:r1", CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, "s1", "r1"))
     }
 
     @Test

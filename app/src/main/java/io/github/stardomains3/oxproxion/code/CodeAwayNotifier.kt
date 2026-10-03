@@ -132,28 +132,35 @@ class CodeAwayNotifier(
         sessionWasRunning: Boolean = true,
     ) {
         ensurePostedSeeded()
-        when (update) {
-            is CodeUpdate.ApprovalAnswered -> cancelApproval(sessionId, update.requestId)
-            is CodeUpdate.Upsert -> {
-                // A3: a new user turn must allow a later TurnDone to re-alert.
-                if (update.event is CodeEvent.UserPrompt) {
-                    clearTurnDoneDedup(sessionId)
-                    return
+        try {
+            when (update) {
+                is CodeUpdate.ApprovalAnswered -> cancelApproval(sessionId, update.requestId)
+                is CodeUpdate.Upsert -> {
+                    // A3: a new user turn must allow a later TurnDone to re-alert.
+                    if (update.event is CodeEvent.UserPrompt) {
+                        clearTurnDoneDedup(sessionId)
+                        return
+                    }
+                    val approval = update.event as? CodeEvent.Approval ?: return
+                    if (!approval.pending) {
+                        cancelApproval(sessionId, approval.requestId)
+                        return
+                    }
+                    maybePostApproval(sessionId, hostId, sessionTitle, approval)
                 }
-                val approval = update.event as? CodeEvent.Approval ?: return
-                if (!approval.pending) {
-                    cancelApproval(sessionId, approval.requestId)
-                    return
+                is CodeUpdate.TurnDone -> {
+                    // The turn is over, so an approval it still had out can't be answered any more.
+                    cancelApprovals(sessionId)
+                    if (!CodeAwayFormat.shouldNotifyTurnDone(sessionWasRunning, update.stopReason)) return
+                    maybePostTurnDone(sessionId, hostId, sessionTitle)
                 }
-                maybePostApproval(sessionId, hostId, sessionTitle, approval)
+                else -> Unit
             }
-            is CodeUpdate.TurnDone -> {
-                // The turn is over, so an approval it still had out can't be answered any more.
-                cancelApprovals(sessionId)
-                if (!CodeAwayFormat.shouldNotifyTurnDone(sessionWasRunning, update.stopReason)) return
-                maybePostTurnDone(sessionId, hostId, sessionTitle)
-            }
-            else -> Unit
+        } finally {
+            // A shade removed without a swipe does not run the DeleteIntent. Drop its
+            // token once any later update is handled, not only after a kill. A repost
+            // in this same update has already put the shade back, so that token stays.
+            dropOpenTokensForShadesThatAreGone()
         }
     }
 
@@ -172,7 +179,7 @@ class CodeAwayNotifier(
     private fun cancelApprovals(sessionId: String) {
         val known = knownSessionIds()
         allocatedKeys { key ->
-            key.startsWith("approval:") &&
+            CodeAwayFormat.isApprovalKey(key) &&
                 CodeAwayFormat.keyBelongsToSession(key, sessionId, known)
         }.forEach { cancelKey(it) }
     }
@@ -289,6 +296,13 @@ class CodeAwayNotifier(
         val known = knownSessionIds()
         return allocatedKeys { CodeAwayFormat.keyBelongsToSession(it, sessionId, known) }
             .any { shadeStillUp(it) }
+    }
+
+    /** Sessions whose shades are all gone must not keep a one-shot open token. */
+    private fun dropOpenTokensForShadesThatAreGone() {
+        for (sid in knownSessionIds().toList()) {
+            if (!sessionHasAllocation(sid)) clearOpenToken(sid)
+        }
     }
 
     /** Ids recorded for [key] (memory, live row, hold row, legacy file). */
