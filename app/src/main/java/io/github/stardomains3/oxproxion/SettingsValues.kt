@@ -17,6 +17,19 @@ internal const val SETTINGS_MAX_TOKENS_DEFAULT = "12000"
 internal fun settingsVoiceRowEngine(providerKey: String?): VoiceEngine =
     VoiceEngine.fromKey(providerKey)
 
+/**
+ * Host (and port) for the Models local-server row. [java.net.URI.authority] includes
+ * userinfo, so `http://user:secret@10.0.0.23:11434` used to print the password on the row.
+ * IPv6 is bracketed so the port stays readable.
+ */
+internal fun settingsLanRowValue(endpoint: String?): String? {
+    val raw = endpoint?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val uri = runCatching { java.net.URI(raw) }.getOrNull() ?: return raw
+    val host = uri.host?.trim()?.takeIf { it.isNotEmpty() } ?: return raw
+    val shown = if (':' in host) "[${host.removePrefix("[").removeSuffix("]")}]" else host
+    return if (uri.port != -1) "$shown:${uri.port}" else shown
+}
+
 internal enum class InferenceKind(val min: Double, val max: Double) {
     /** 0–2 is what OpenRouter accepts; a little headroom covers local servers. */
     TEMPERATURE(0.0, 5.0),

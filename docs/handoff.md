@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Settings wave 31)
+
+On `cursor/settings-wave-31-6abb` (PR into `gradation/app-pass`). Settings follow-ups after #136. Not a redo of the pre-rename List/Read names, Create file staying off the folder grant, or the local-server slash and `/v1` strip. Not a redo of #128 (voice row, inference comma/non-finite values, timeout, max tokens, chat-memory presets). Not a redo of #139 (history-preview marks, staged-file cap), #142 (roleplay list lines, example sides, wrapped lore keys), or #143 (recovered database at the root, side pictures, emoji slices).
+
+- Settings > Tools: a folder, location, or sound tool that is already on keeps a usable switch when the grant or runtime permission is missing, so it can be turned off. The model no longer keeps a tool the row cannot reach. Turning one on still needs the permission. Create file is still not a folder-grant tool.
+- Settings > Models: cleartext HTTP accepts CGNAT 100.64/10, IPv6 link-local, and IPv6 unique-local (and `::ffff:` of a private IPv4). A public literal is still refused. The local-server row shows host and port; a pasted `user:password@` is not printed on the row.
+
+Phone: turn List files on, then revoke the folder grant (or pick none) and open Tools again (the switch should still turn off, and the model should not get List files). Set the local server to `http://100.64.0.1:11434` or `http://[fd00::1]:11434` (Save should accept it). Paste `http://user:secret@10.0.0.23:11434` and look at the Models row (it should say `10.0.0.23:11434`, not the password).
+
 # Handoff (2026-10-03, Stability wave 31)
 
 On `cursor/stability-wave-31-4ec6` (PR into `gradation/app-pass`). Persistence follow-ups after user_version, the live wal park, and `.stuck-N` discard (#132). Not a redo of that pass or of the passphrase bind and the pre-ATTACH wal park (#130). Not a redo of #139 (history preview marks, staged-file cap) or #142 (list lines, example sides, wrapped lore keys):

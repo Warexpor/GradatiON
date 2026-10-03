@@ -152,8 +152,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         when (section) {
             SECTION_MODELS -> {
                 val endpoint = prefs.getLanEndpoint()?.takeIf { it.isNotBlank() }
-                val host = endpoint?.let { runCatching { java.net.URI(it).authority }.getOrNull() ?: it }
-                show(R.id.lanButton, R.id.lanValue, host ?: notSet)
+                show(R.id.lanButton, R.id.lanValue, settingsLanRowValue(endpoint) ?: notSet)
                 show(R.id.apiKeyButton, R.id.apiKeyValue,
                     if (prefs.getApiKeyFromPrefs("openrouter_api_key").isNotBlank()) saved else notSet)
                 show(R.id.braveApiKeyButton, R.id.braveApiKeyValue,
