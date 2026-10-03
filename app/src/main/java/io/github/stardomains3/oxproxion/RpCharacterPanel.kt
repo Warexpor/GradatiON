@@ -74,7 +74,7 @@ object RpCharacterPanel {
         sheet.findViewById<TextView>(R.id.rpPanelMonogram).text = title.trim().take(1).uppercase().ifEmpty { "?" }
         character?.let { c ->
             val file = RpAvatarStorage.avatarFile(ctx, c.id)
-            if (file.exists()) {
+            if (RpAvatarStorage.hasAvatar(ctx, c.id)) {
                 val avatarView = sheet.findViewById<ImageView>(R.id.rpPanelAvatar)
                 val edgePx = (56 * d).toInt().coerceAtLeast(1)
                 fragment.viewLifecycleOwner.lifecycleScope.launch {

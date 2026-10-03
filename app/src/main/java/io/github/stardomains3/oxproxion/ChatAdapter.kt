@@ -1237,7 +1237,7 @@ class ChatAdapter(
             rpSpeakerNameView.text = name
             val model: Any? = when {
                 !rpSpeakerAvatarUri.isNullOrBlank() -> rpSpeakerAvatarUri
-                rpSpeakerAvatarFile?.exists() == true -> rpSpeakerAvatarFile
+                rpSpeakerAvatarFile?.let { ScenePhoto.completeJpeg(it) } == true -> rpSpeakerAvatarFile
                 else -> null
             }
             if (model != null) {

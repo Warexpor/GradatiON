@@ -7026,11 +7026,13 @@ $cleanContent
             val activeId = viewModel.activeRpCharacter.value?.id
             val ctx = requireContext()
             val rows = chars.map { c ->
-                val file = RpAvatarStorage.avatarFile(ctx, c.id)
+                val file = RpAvatarStorage.avatarFile(ctx, c.id).takeIf {
+                    RpAvatarStorage.hasAvatar(ctx, c.id)
+                }
                 PickerPopover.Row(
                     title = c.name,
                     subtitle = c.personality.ifBlank { c.scenario }.lineSequence().firstOrNull()?.take(80),
-                    avatar = file.takeIf { it.exists() },
+                    avatar = file,
                     monogram = c.name.trim().take(1).uppercase().ifEmpty { "?" },
                     selected = c.id == activeId,
                     onClick = { if (c.id != activeId) startRpWith(c) }
@@ -7117,7 +7119,7 @@ $cleanContent
             })
             // The card is the portrait alone; the name would crowd it, and off shows the empty silhouette.
             val personaPhoto = sharedPreferencesHelper.getRpPersonaPhoto()?.takeIf { personaOn }
-                ?.let { RpAvatarStorage.personaFile(requireContext(), it) }?.takeIf { it.isFile }
+                ?.takeIf { RpAvatarStorage.hasPersonaPhoto(requireContext(), it) }?.let { RpAvatarStorage.personaFile(requireContext(), it) }
             add(RpCharacterPanel.Tile(R.string.rp_panel_persona, RpTileArt.Kind.PERSONA, image = personaPhoto, letter = personaName.trim().ifBlank { null }) { pushRp(RpPersonaFragment.newInstance()) })
             if (cast != null) {
                 val slot = BackgroundPhoto.slotForCharacter(cast.id)
@@ -7428,7 +7430,9 @@ $cleanContent
         if (rp && activeChar != null && !llm) {
             chatAdapter.rpSpeakerName = activeChar.name
             chatAdapter.rpSpeakerAvatarUri = activeChar.photoUri
+            // A torn write at the portrait name is not a picture (same rule as the picker).
             chatAdapter.rpSpeakerAvatarFile = RpAvatarStorage.avatarFile(requireContext(), activeChar.id)
+                .takeIf { RpAvatarStorage.hasAvatar(requireContext(), activeChar.id) }
             chatAdapter.refreshRpSpeakerAvatars()
         } else if (rp && llm) {
             chatAdapter.rpSpeakerName = getString(R.string.rp_llm_speaker)
