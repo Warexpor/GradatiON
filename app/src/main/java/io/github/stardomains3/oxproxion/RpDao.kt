@@ -68,15 +68,34 @@ interface RpDao {
         // The stamp from before this batch. A second copy of the same key sees the row
         // this transaction already updated; the rollback check has to use the original.
         val previousById = HashMap<Long, Long>()
+        // A backup from before export keys, or a file that lists the same name twice with no
+        // key, is one character. Matching only by key gave every import a new row.
+        val keysInFile = incoming.mapNotNull { it.exportKey.takeIf { key -> key.isNotBlank() } }.toSet()
+        val pendingBlank = HashMap<String, Long>()
         val rows = incoming.mapIndexedNotNull { index, ex ->
             RpImportGuard.beforeRow(index)
             // The editor trims and refuses a blank name. A padded name stored as typed, and
             // a blank one became a character the library could not save over.
             val name = ex.name.trim()
             if (name.isEmpty()) return@mapIndexedNotNull null
-            val existing = ex.exportKey.takeIf { it.isNotBlank() }?.let { getCharacterByExportKey(it) }
+            val byKey = ex.exportKey.takeIf { it.isNotBlank() }?.let { getCharacterByExportKey(it) }
+            // A keyless row must not take over a keyed row in the same file. The keyed copy is
+            // its own character; only another keyless copy of this name continues this one.
+            val existing = byKey ?: if (ex.exportKey.isBlank()) {
+                pendingBlank[name]?.let { getCharacterById(it) } ?: run {
+                    val named = getAllCharactersOnce().filter {
+                        it.name.trim() == name && it.exportKey !in keysInFile
+                    }
+                    // Two locals with this name: keep the newest (the library's first row) and do
+                    // not add a third. A single match is that character.
+                    named.firstOrNull()
+                }
+            } else {
+                null
+            }
             val isNew = existing == null
-            val exportKey = existing?.exportKey ?: ex.exportKey.ifBlank { UUID.randomUUID().toString() }
+            val exportKey = existing?.exportKey?.takeIf { it.isNotBlank() }
+                ?: ex.exportKey.ifBlank { UUID.randomUUID().toString() }
             val previousUpdatedAt = if (existing == null) {
                 0L
             } else {
@@ -105,6 +124,7 @@ interface RpDao {
                 updateCharacter(row)
                 row.id
             }
+            if (ex.exportKey.isBlank()) pendingBlank[name] = id
             ImportedCharacter(
                 id,
                 exportKey,
@@ -188,7 +208,9 @@ interface RpDao {
                 }
             }
         }
-        return incoming.size
+        // The file can list a book twice, or under a blank name. The notice is how many
+        // books were written, not how many rows the file had.
+        return collapsed.size
     }
 }
 

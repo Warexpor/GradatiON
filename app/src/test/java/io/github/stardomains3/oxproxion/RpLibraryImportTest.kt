@@ -432,7 +432,7 @@ class RpLibraryImportTest {
             )
         )
 
-        assertEquals(3, count)
+        assertEquals(2, count)
         val books = repo.getAllLorebooksOnce()
         assertEquals(2, books.size)
         val world = books.single { it.name.equals("world", ignoreCase = true) }
@@ -1200,6 +1200,98 @@ class RpLibraryImportTest {
         file.delete()
     }
 
+    @Test
+    fun aPictureStillOverTheCapAfterTheFirstScaleIsCarried() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val raw = noisyJpeg(180, 140)
+        val prepared = BackgroundPhoto.prepare(raw)
+        assertNotNull(prepared)
+        val cap = prepared!!.size / 2
+        assertTrue(cap >= 64)
+        val file = File(app.cacheDir, "still-over-wallpaper.jpg")
+        file.writeBytes(raw)
+        assertTrue(file.length() > cap)
+        val encoded = RpWallpaperBackup.encode(file, cap)
+        assertFalse(encoded.isNullOrBlank())
+        val out = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)
+        assertTrue(out.size <= cap)
+        assertTrue(ScenePhoto.completeJpeg(out))
+        file.delete()
+
+        val torn = File(app.cacheDir, "torn-still-over.jpg")
+        torn.writeBytes(raw.copyOf(raw.size - 2))
+        assertNull(RpWallpaperBackup.encode(torn, cap))
+        torn.delete()
+
+        val id = 92L
+        val portrait = RpAvatarStorage.avatarFile(app, id)
+        portrait.writeBytes(raw)
+        val encodedPortrait = RpAvatarStorage.encodeAvatarBase64(app, id, cap)
+        assertFalse(encodedPortrait.isNullOrBlank())
+        val portraitOut = android.util.Base64.decode(encodedPortrait, android.util.Base64.DEFAULT)
+        assertTrue(portraitOut.size <= cap)
+        assertTrue(ScenePhoto.completeJpeg(portraitOut))
+        portrait.delete()
+    }
+
+    @Test
+    fun aKeylessNameImportsOntoTheOneCharacterWithThatName() = runBlocking {
+        val id = repo.saveCharacter(RpCharacter(name = "Ada", exportKey = "ada", personality = "old"))
+        val imported = repo.importCharacters(
+            listOf(
+                RpCharacterExport(name = " Ada ", personality = "mid"),
+                RpCharacterExport(name = "Ada", personality = "new"),
+                RpCharacterExport(name = " \n ", personality = "nope"),
+            ),
+        )
+        assertEquals(listOf(id, id), imported.map { it.id })
+        assertEquals(1, RpImportRules.importedCharacterCount(imported))
+        val saved = repo.getAllCharactersOnce()
+        assertEquals(1, saved.size)
+        assertEquals("new", saved.single().personality)
+        assertEquals("Ada", saved.single().name)
+        assertEquals("ada", saved.single().exportKey)
+    }
+
+    @Test
+    fun aKeylessNameDoesNotAttachToAKeyedCopyOrAddAThird() = runBlocking {
+        val older = repo.saveCharacter(RpCharacter(name = "Ada", exportKey = "old", personality = "older"))
+        val newer = repo.saveCharacter(RpCharacter(name = "Ada", exportKey = "new", personality = "newer"))
+        db.rpDao().updateCharacter(repo.getCharacterById(older)!!.copy(updatedAt = 1L))
+        db.rpDao().updateCharacter(repo.getCharacterById(newer)!!.copy(updatedAt = 50L))
+        repo.importCharacters(listOf(RpCharacterExport(name = "Ada", personality = "imported")))
+        assertEquals(2, repo.getAllCharactersOnce().size)
+        assertEquals("imported", repo.getCharacterById(newer)!!.personality)
+        assertEquals("new", repo.getCharacterById(newer)!!.exportKey)
+        assertEquals("older", repo.getCharacterById(older)!!.personality)
+
+        repo.importCharacters(
+            listOf(
+                RpCharacterExport(name = "Bea", personality = "blank"),
+                RpCharacterExport(name = "Bea", exportKey = "bea", personality = "keyed"),
+            ),
+        )
+        val beas = repo.getAllCharactersOnce().filter { it.name == "Bea" }
+        assertEquals(2, beas.size)
+        assertEquals("keyed", beas.single { it.exportKey == "bea" }.personality)
+        assertTrue(beas.any { it.exportKey != "bea" && it.personality == "blank" })
+    }
+
+    @Test
+    fun aBlankOnlyLoreFileImportsNothing() = runBlocking {
+        val count = repo.importLorebooks(
+            listOf(
+                RpLorebookExport(name = "   ", content = "nope"),
+                RpLorebookExport(name = "World", content = "first"),
+                RpLorebookExport(name = " world ", content = "second", isActive = true),
+            ),
+        )
+        assertEquals(1, count)
+        assertEquals(listOf("world"), repo.getAllLorebooksOnce().map { it.name })
+        assertEquals(0, repo.importLorebooks(listOf(RpLorebookExport(name = "  "))))
+        assertEquals(1, repo.getAllLorebooksOnce().size)
+    }
+
     /** A JPEG comment after the start marker, so the file is large but still a picture. */
     private fun padJpeg(jpeg: ByteArray, extra: Int): ByteArray {
         val len = extra + 2
@@ -1209,6 +1301,19 @@ class RpLibraryImportTest {
         segment[2] = (len shr 8).toByte()
         segment[3] = (len and 0xFF).toByte()
         return jpeg.copyOfRange(0, 2) + segment + jpeg.copyOfRange(2, jpeg.size)
+    }
+
+    private fun noisyJpeg(width: Int, height: Int): ByteArray {
+        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val pixels = IntArray(width * height) { i ->
+            Color.rgb((i * 17) and 0xFF, (i * 31) and 0xFF, (i * 53) and 0xFF)
+        }
+        bmp.setPixels(pixels, 0, width, 0, 0, width, height)
+        val jpeg = ByteArrayOutputStream().also {
+            bmp.compress(Bitmap.CompressFormat.JPEG, 95, it)
+        }.toByteArray()
+        bmp.recycle()
+        return jpeg
     }
 
     private fun solidJpeg(color: Int): ByteArray {

@@ -89,7 +89,8 @@ object RpAvatarStorage {
      * Null when the file is torn or cannot be read: the other phone keeps its copy
      * (same split as wallpaper encode). A file over [maxBytes] is scaled to the usual
      * portrait instead of being embedded whole, which used to push the backup past
-     * what an import will read.
+     * what an import will read. If that portrait is still over the cap, it is shrunk
+     * again until it fits.
      */
     fun encodeAvatarBase64(context: Context, characterId: Long): String? =
         encodeAvatarBase64(context, characterId, EXPORT_MAX_BYTES)
@@ -115,8 +116,16 @@ object RpAvatarStorage {
                 }
                 if (!ok) return null
                 val jpeg = out.toByteArray()
-                if (!ScenePhoto.completeJpeg(jpeg) || jpeg.size > maxBytes) return null
-                jpeg
+                if (!ScenePhoto.completeJpeg(jpeg)) return null
+                // The usual 512px portrait can still be over the cap. Shrink until it fits.
+                // A torn file never reaches this; it was returned above.
+                if (jpeg.size <= maxBytes) {
+                    jpeg
+                } else {
+                    ScenePhoto.encode(raw, MAX_EDGE, maxBytes)?.takeIf {
+                        it.size <= maxBytes && ScenePhoto.completeJpeg(it)
+                    } ?: return null
+                }
             }
             Base64.encodeToString(bytes, Base64.NO_WRAP)
         } catch (_: Exception) {
