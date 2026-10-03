@@ -298,4 +298,61 @@ class PrefsCorruptBlobTest {
         again.saveReasoningMaxTokens(null)
         assertNull(helper().getReasoningMaxTokens())
     }
+
+    @Test
+    fun inferenceCommaDecimalsRoundTripAndOutOfRangeDoesNot() {
+        val prefs = helper()
+        prefs.saveInferenceTempValue("0,8")
+        assertEquals("0.8", helper().getInferenceTempValue())
+        prefs.saveInferenceTempValue("9")
+        prefs.saveInferenceTempValue("NaN")
+        prefs.saveInferenceTempValue("Infinity")
+        prefs.saveInferenceTempValue("-1")
+        assertEquals("0.8", helper().getInferenceTempValue())
+        prefs.saveInferenceTopPValue("1,0")
+        assertEquals("1.0", helper().getInferenceTopPValue())
+        prefs.saveInferenceTopPValue("1,5")
+        assertEquals("1.0", helper().getInferenceTopPValue())
+        prefs.saveInferenceMinPValue("0,05")
+        assertEquals("0.05", helper().getInferenceMinPValue())
+        prefs.saveInferenceRepetitionPenaltyValue("1,2")
+        assertEquals("1.2", helper().getInferenceRepetitionPenaltyValue())
+        prefs.saveInferencePresencePenaltyValue("-0,5")
+        assertEquals("-0.5", helper().getInferencePresencePenaltyValue())
+        prefs.saveInferencePresencePenaltyValue("-3")
+        assertEquals("-0.5", helper().getInferencePresencePenaltyValue())
+        acceptedTopK("40,0")?.let { prefs.saveInferenceTopKValue(it) }
+        assertEquals(40, helper().getInferenceTopKValue())
+        prefs.saveInferenceTopKValue(0)
+        assertEquals(40, helper().getInferenceTopKValue())
+        assertNull(acceptedInferenceDecimal(InferenceKind.TEMPERATURE, "NaN"))
+        assertEquals("0.8", acceptedInferenceDecimal(InferenceKind.TEMPERATURE, "0,8"))
+    }
+
+    @Test
+    fun timeoutAndMaxTokensStayInsideTheDialogRange() {
+        val prefs = helper()
+        prefs.mainPrefs.edit().putInt("timeout_minutes", 0).putString("max_tokens", "0").commit()
+        assertEquals(1, helper().getTimeoutMinutes())
+        assertEquals("12000", helper().getMaxTokens())
+        prefs.mainPrefs.edit().putInt("timeout_minutes", 90).putString("max_tokens", "null").commit()
+        assertEquals(45, prefs.getTimeoutMinutes())
+        assertEquals("12000", prefs.getMaxTokens())
+        prefs.saveTimeoutMinutes(12)
+        prefs.saveMaxTokens("8000")
+        val again = helper()
+        assertEquals(12, again.getTimeoutMinutes())
+        assertEquals("8000", again.getMaxTokens())
+        again.saveTimeoutMinutes(0)
+        assertEquals(1, helper().getTimeoutMinutes())
+    }
+
+    @Test
+    fun chatMemoryChecksOnlyAnExactPreset() {
+        val counts = intArrayOf(2, 4, 6, 8, 10, 12, 16, 20, Int.MAX_VALUE)
+        assertEquals(3, chatMemoryCheckedIndex(8, counts))
+        assertEquals(counts.lastIndex, chatMemoryCheckedIndex(Int.MAX_VALUE, counts))
+        assertEquals(-1, chatMemoryCheckedIndex(14, counts))
+        assertEquals(-1, chatMemoryCheckedIndex(7, counts))
+    }
 }

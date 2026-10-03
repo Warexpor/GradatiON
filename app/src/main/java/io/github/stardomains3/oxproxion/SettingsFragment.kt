@@ -74,7 +74,8 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
             SharedPreferencesHelper.THEME_DARK -> R.string.settings_theme_dark
             else -> R.string.settings_theme_system
         }
-        val engine = VoiceInput.resolve(ctx, prefs)?.let { getString(it.labelRes) } ?: getString(R.string.settings_value_off)
+        val picked = settingsVoiceRowEngine(prefs.getVoiceInputProvider())
+        val engine = if (picked == VoiceEngine.OFF) getString(R.string.settings_value_off) else getString(picked.labelRes)
         bindRowValue(view, R.id.settingsRowAppearance, R.id.settingsRowAppearanceValue, getString(theme))
         bindRowValue(view, R.id.settingsRowVoice, R.id.settingsRowVoiceValue, engine)
     }

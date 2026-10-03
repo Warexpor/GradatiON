@@ -48,6 +48,20 @@ class VoiceInputTest {
         assertEquals("grok-voice-transcribe-2.0", VoiceEngine.GROK_STT_MODEL)
     }
 
+    @Test fun settingsRowNamesTheStoredEngineWhenThePhoneCannotRecognize() {
+        prefs.setVoiceInputProvider(VoiceEngine.DEVICE.key)
+        prefs.setVoiceInputModel("")
+        assertNull(VoiceInput.resolve(ctx, prefs))
+        assertEquals(VoiceEngine.DEVICE, settingsVoiceRowEngine(prefs.getVoiceInputProvider()))
+        prefs.setVoiceInputModel("openai/whisper-1")
+        assertEquals(VoiceEngine.CLOUD, VoiceInput.resolve(ctx, prefs))
+        assertEquals(VoiceEngine.DEVICE, settingsVoiceRowEngine(prefs.getVoiceInputProvider()))
+        prefs.setVoiceInputProvider(VoiceEngine.OFF.key)
+        assertEquals(VoiceEngine.OFF, settingsVoiceRowEngine(prefs.getVoiceInputProvider()))
+        prefs.setVoiceInputProvider(VoiceEngine.DEVICE.key)
+        prefs.setVoiceInputModel("")
+    }
+
     @Test fun offWins() {
         prefs.setVoiceInputModel("openai/whisper-1")
         prefs.setVoiceInputProvider(VoiceEngine.OFF.key)
