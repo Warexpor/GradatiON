@@ -346,6 +346,7 @@
     <string name="notice_export_chats_failed">Error exporting chats</string>
     <string name="notice_import_failed_format">Import failed. Check file format.</string>
     <string name="notice_no_biometrics">No biometrics available</string>
+    <string name="notice_notifications_denied">Notifications are off for GradatiON, so the answer-ready alert can\'t show. Turn them on in system settings, then try again.</string>
     <string name="notice_no_chats_export">No chats to export</string>
     <string name="notice_export_prompts_failed">Error exporting prompts</string>
     <string name="notice_no_prompts_export">No prompts to export</string>

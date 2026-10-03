@@ -642,6 +642,25 @@ class ScreenshotTest : ScreenshotHarness() {
         snap(popup.listView!!.rootView, "settings_preset_dropdown_dark")
     }
 
+    /** Turning Notifications on used to only save the pref, so a refused permission left it silent. */
+    @Test fun settingsNotificationsAskForPermission() = withChat { a, _ ->
+        org.junit.Assume.assumeTrue(android.os.Build.VERSION.SDK_INT >= 33)
+        val prefs = SharedPreferencesHelper(a)
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        prefs.saveNotiPreference(false)
+        openSettingsRow(a, R.id.settingsRowData)
+        val sw = a.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.notificationsSwitch)
+        sw.performClick(); idle()
+        org.junit.Assert.assertTrue("asked for the permission",
+            shadowOf(a).lastRequestedPermission?.requestedPermissions?.contains(android.Manifest.permission.POST_NOTIFICATIONS) == true)
+        org.junit.Assert.assertFalse("not saved before the answer", prefs.getNotiPreference())
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        sw.isChecked = false; idle()
+        sw.performClick(); idle()
+        org.junit.Assert.assertTrue("granted: saved", prefs.getNotiPreference())
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",

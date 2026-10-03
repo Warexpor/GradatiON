@@ -48,6 +48,14 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         }
     }
 
+    /** Answer-ready alerts need POST_NOTIFICATIONS on 33+; asked when the switch goes on, as Code does. */
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val ctx = context ?: return@registerForActivityResult
+        SharedPreferencesHelper(ctx).saveNotiPreference(granted)
+        view?.findViewById<SwitchCompat>(R.id.notificationsSwitch)?.isChecked = granted
+        if (!granted) GlassNotice.show(ctx, ctx.getString(R.string.notice_notifications_denied))
+    }
+
     private val exportChatsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { uri ->
@@ -348,7 +356,10 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                 prefs.saveBiometricEnabled(false)
             }
         }
-        bindSwitch(view, R.id.notificationsSwitch, prefs.getNotiPreference()) { prefs.saveNotiPreference(it) }
+        bindSwitch(view, R.id.notificationsSwitch, prefs.getNotiPreference()) { on ->
+            if (on && !answerAlertsCanShow()) return@bindSwitch
+            prefs.saveNotiPreference(on)
+        }
         bindSwitch(view, R.id.keepScreenOnSwitch, prefs.getKeepScreenOnPreference()) { isChecked ->
             prefs.saveKeepScreenOnPreference(isChecked)
             val window = requireActivity().window
@@ -367,6 +378,27 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         view.findViewById<View>(R.id.exportHistoryButton).setOnClickListener { exportChats() }
         view.findViewById<View>(R.id.helpButton).setOnClickListener { open(HelpFragment()) }
         view.findViewById<View>(R.id.licensesButton).setOnClickListener { open(LicenseListFragment()) }
+    }
+
+    /**
+     * Whether an answer-ready alert can reach the shade. Asks for the permission when it is
+     * missing (the result sets the switch); flips the switch back when the app is blocked.
+     */
+    private fun answerAlertsCanShow(): Boolean {
+        val ctx = requireContext()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            return false
+        }
+        if (!androidx.core.app.NotificationManagerCompat.from(ctx).areNotificationsEnabled()) {
+            view?.findViewById<SwitchCompat>(R.id.notificationsSwitch)?.isChecked = false
+            GlassNotice.show(ctx, getString(R.string.notice_notifications_denied))
+            return false
+        }
+        return true
     }
 
     /**
