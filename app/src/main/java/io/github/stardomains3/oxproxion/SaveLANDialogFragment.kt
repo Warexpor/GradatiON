@@ -30,6 +30,11 @@ class SaveLANDialogFragment : DialogFragment() {
         return inflater.inflate(R.layout.dialog_save_lan, container, false)
     }
 
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.let { GlassDialogs.sizeCard(it) }
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 

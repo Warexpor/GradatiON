@@ -55,6 +55,19 @@ object GlassDialogs {
         if (animate) window.setWindowAnimations(R.style.Animation_Gradation_Dialog)
     }
 
+    /**
+     * Width for a DialogFragment that draws its own card on a transparent window. Such a window
+     * has no background insets, so it wraps its content: a short form came out too narrow for
+     * its buttons and a long one ran to the screen edges. This gives it the 24dp side insets an
+     * alert dialog has, capped for tablets and landscape. Call from onStart, after show() sized it.
+     */
+    fun sizeCard(window: Window) {
+        val metrics = window.context.resources.displayMetrics
+        val inset = (24 * metrics.density).toInt()
+        val width = minOf(metrics.widthPixels - 2 * inset, (CARD_MAX_WIDTH_DP * metrics.density).toInt())
+        window.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
+    }
+
     /** False when there's nothing to snapshot or the device can't blur in-app either. */
     private fun frostCards(window: Window): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
@@ -127,4 +140,5 @@ object GlassDialogs {
     /** A quarter-size snapshot is plenty under a blur, and cheap to take on open. */
     private const val FROST_SCALE = 0.25f
     private const val FROST_RADIUS_DP = 22f
+    private const val CARD_MAX_WIDTH_DP = 420
 }
