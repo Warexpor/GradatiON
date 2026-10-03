@@ -83,9 +83,12 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         fun dismissNotificationIfNotSpeaking(context: Context? = null) {
             if (instance != null) {
                 instance?.dismissIfNotSpeaking()
-            } else {
-                context?.getSystemService(NotificationManager::class.java)
+            } else if (context != null) {
+                context.getSystemService(NotificationManager::class.java)
                     ?.cancel(ANSWER_NOTIFICATION_ID)
+                // Opening Chat after a kill drops the shade. A leftover Stop flag would make
+                // the next cold toggle Stop instead of Speak.
+                clearAnswerSpeaking(context)
             }
             // Always drop leftover sticky "Running" chrome; do not stopService (may be TTS)
             context?.getSystemService(NotificationManager::class.java)
@@ -151,14 +154,34 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         private const val ANSWER_META_PREFS = "ForegroundServiceAnswer"
         private const val KEY_ANSWER_TITLE = "title"
         private const val KEY_ANSWER_TEXT = "text"
+        private const val KEY_ANSWER_SPEAKING = "speaking"
 
         /** Survives a cold Speak tap when the answer was posted without a live service instance. */
-        private fun rememberAnswerMeta(context: Context, title: String, contentText: String) {
+        private fun rememberAnswerMeta(
+            context: Context,
+            title: String,
+            contentText: String,
+            speaking: Boolean,
+        ) {
             // commit: Speak often starts this service after a kill; apply() can still be in flight.
+            // speaking must survive too: shade can still say Stop after process death, and a cold
+            // TOGGLE must Stop rather than start speech again.
             context.getSharedPreferences(ANSWER_META_PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_ANSWER_TITLE, title)
                 .putString(KEY_ANSWER_TEXT, contentText)
+                .putBoolean(KEY_ANSWER_SPEAKING, speaking)
+                .commit()
+        }
+
+        private fun answerSpeakingPref(context: Context): Boolean =
+            context.getSharedPreferences(ANSWER_META_PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_ANSWER_SPEAKING, false)
+
+        private fun clearAnswerSpeaking(context: Context) {
+            context.getSharedPreferences(ANSWER_META_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_ANSWER_SPEAKING, false)
                 .commit()
         }
 
@@ -169,7 +192,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             ttsActive: Boolean,
             silent: Boolean
         ) {
-            rememberAnswerMeta(context, title, contentText)
+            rememberAnswerMeta(context, title, contentText, speaking = ttsActive)
             val nm = context.getSystemService(NotificationManager::class.java) ?: return
             nm.notify(
                 ANSWER_NOTIFICATION_ID,
@@ -308,6 +331,8 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         tts?.stop()
         isTtsActive = false
         pendingSpeak = false
+        // Foreground cancels the shade without a refresh; background refresh also writes false.
+        clearAnswerSpeaking(this)
         restoreLastUpdateFromPrefs()
         if (isAppInForeground()) {
             getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
@@ -325,13 +350,16 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         pendingSpeak = false
         isRunningForeground = false
         instance = null
+        // Leave KEY_ANSWER_SPEAKING alone: a kill mid-utterance must keep speaking=true so a
+        // cold Stop tap does not restart TTS. Dismiss/Copy/stopTts/refresh clear it explicitly.
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         intent?.action?.let { action ->
             when (action) {
                 TOGGLE_TTS_ACTION -> {
-                    if (isTtsActive) {
+                    // Shade may still say Stop after a kill (notif survives; in-memory isTtsActive does not).
+                    if (isTtsActive || answerSpeakingPref(this)) {
                         stopTts(true)
                         if (isAppInForeground()) {
                             getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
@@ -343,6 +371,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
                 }
                 DISMISS_ACTION -> {
                     pendingSpeak = false
+                    clearAnswerSpeaking(this)
                     getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
                     tts?.stop()
                     isTtsActive = false
@@ -351,6 +380,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
                 }
                 COPY_ACTION -> {
                     pendingSpeak = false
+                    clearAnswerSpeaking(this)
                     copyLastResponseToClipboard()
                     getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
                     stopSelf()
@@ -384,6 +414,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
 
     private fun dismissIfNotSpeaking() {
         if (!isTtsActive && isNotificationActive(ANSWER_NOTIFICATION_ID)) {
+            clearAnswerSpeaking(this)
             getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
         }
     }
@@ -392,6 +423,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         pendingSpeak = false
         tts?.stop()
         isTtsActive = false
+        clearAnswerSpeaking(this)
         restoreLastUpdateFromPrefs()
         if (updateNotif && lastUpdateTitle != null && lastUpdateText != null && isNotificationActive(ANSWER_NOTIFICATION_ID)) {
             isTtsUpdate = true

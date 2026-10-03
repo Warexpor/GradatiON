@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Notifications/Away wave 28)
+
+On `gradation/w28-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after turn-done prefs clear (#113) and Speak/swipe (#105):
+- `cancelSession` also cancels keys that remain only in the in-memory allocation map after `clearTurnDoneDedup` (posted + prefs dropped; shade may still be up until forget / open-in-app / next TurnDone).
+- That clear also parks the shade id in `code_away_shade_hold` (not a dedup seed). After process death, forget / open-in-app still cancels the surviving entry, and the next finished turn reuses that id instead of stacking a second shade.
+- Answer-ready Speak persists a `speaking` flag with shade meta so a cold Stop after process death does not restart TTS; Dismiss/Copy/`stopTts`/Chat resume (shade dropped, no live service) clear it.
+
+Phone: Notify when away on → finish a turn → send another prompt → open the session (or forget it) without tapping the shade (turn-finished entry should clear). Kill the app after that second prompt and open/forget again (the old turn-finished entry should still clear, not stack). Background Chat, Speak from the answer shade, force-stop mid-utterance, tap Stop on the surviving shade (speech must not restart; Speak returns). Open Chat instead of tapping Stop (later Speak must not act as Stop).
 # Handoff (2026-10-03, Stability wave 28)
 
 On `gradation/w28-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w27 move temps / encrypt_ok discard (#111). Not a redo of that pass:
