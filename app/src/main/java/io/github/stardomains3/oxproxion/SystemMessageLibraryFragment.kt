@@ -148,6 +148,7 @@ class SystemMessageLibraryFragment : Fragment() {
         if (searchItem != null) {
             searchView = searchItem.actionView as SearchView
             searchView.queryHint = getString(R.string.search_system_messages_hint)
+        searchView.styleLibrarySearch()
             searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
                 override fun onQueryTextSubmit(query: String?): Boolean {
                     return true

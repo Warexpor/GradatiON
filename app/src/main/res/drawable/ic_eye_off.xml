@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hide a shown key: the eye struck through -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M2.5,12 C4.8,7.8 8.2,5.5 12,5.5 C15.8,5.5 19.2,7.8 21.5,12 C19.2,16.2 15.8,18.5 12,18.5 C8.2,18.5 4.8,16.2 2.5,12 Z M9,12 A3 3 0 1 0 15,12 A3 3 0 1 0 9,12 Z M4,4 L20,20"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>

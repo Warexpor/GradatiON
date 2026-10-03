@@ -22,6 +22,8 @@
         android:hint="@string/save_brave_api_hint"
         app:hintTextColor="@color/xai_mute"
         app:endIconMode="password_toggle"
+        app:endIconDrawable="@drawable/ic_password_eye"
+        app:endIconTint="@color/xai_mute"
         android:id="@+id/edit_text_lay_brave_api">
 
         <com.google.android.material.textfield.TextInputEditText

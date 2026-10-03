@@ -825,6 +825,104 @@ class ScreenshotTest : ScreenshotHarness() {
                 snap(root(a), "settings_appearance_narrow_dark")
     }
 
+    /** Opening search swapped in AppCompat's gray back arrow, Material underline and thin clear glyph. */
+    @Test fun settingsLibrarySearchDark() = withChat { a, _ ->
+        SharedPreferencesHelper(a).saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
+        for ((name, make) in listOf<Pair<String, () -> androidx.fragment.app.Fragment>>(
+            "settings_prompts_search_dark" to { PromptLibraryFragment() },
+            "settings_system_messages_search_dark" to { SystemMessageLibraryFragment() },
+        )) {
+            val f = make()
+            pushFragment(a, f)
+            val bar = f.requireView().findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+            val item = bar.menu.findItem(R.id.action_search)
+            item.expandActionView(); idle()
+            val sv = item.actionView as androidx.appcompat.widget.SearchView
+            sv.setQuery("s", false); idle()
+            org.junit.Assert.assertNull("$name: no Material underline", sv.findViewById<View>(androidx.appcompat.R.id.search_plate).background)
+            val clear = sv.findViewById<android.widget.ImageView>(androidx.appcompat.R.id.search_close_btn)
+            fun pixels(d: android.graphics.drawable.Drawable): IntArray {
+                val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+                d.setBounds(0, 0, 48, 48); d.draw(android.graphics.Canvas(bmp))
+                return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
+            }
+            fun inked(d: android.graphics.drawable.Drawable) =
+                d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
+            org.junit.Assert.assertArrayEquals("$name: the app's chevron collapses search",
+                pixels(inked(a.getDrawable(R.drawable.is_backarrow)!!)), pixels(inked(bar.collapseIcon!!)))
+            val ours = a.getDrawable(R.drawable.ic_close_x)!!.mutate().apply { setTint(a.getColor(R.color.xai_mute)) }
+            org.junit.Assert.assertArrayEquals("$name: the app's clear glyph", pixels(ours),
+                pixels(clear.drawable.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_mute)) }))
+            snap(root(a), name)
+            item.collapseActionView(); idle()
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+    }
+
+    /** Dropdowns showed Material's filled triangle and the lists a down arrow; both are the line chevron now. */
+    @Test fun settingsDisclosureChevronsDark() = withChat { a, _ ->
+        fun pixels(d: android.graphics.drawable.Drawable): IntArray {
+            val c = d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
+            val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+            c.setBounds(0, 0, 48, 48); c.draw(android.graphics.Canvas(bmp))
+            return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
+        }
+        val chevron = pixels(a.getDrawable(R.drawable.ic_expand_more)!!)
+        val prefs = SharedPreferencesHelper(a)
+        prefs.saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
+        prefs.savePresets(listOf(Preset("p1", "Morning brief", "openai/gpt-5", SystemMessage("Default", ""),
+            streaming = true, reasoning = false, conversationMode = false)))
+        val editor = PresetEditFragment.newInstance(null)
+        pushFragment(a, editor)
+        for (id in listOf(R.id.autoCompleteModel, R.id.autoCompleteSystemMessage)) {
+            var p = editor.requireView().findViewById<View>(id).parent
+            while (p !is com.google.android.material.textfield.TextInputLayout) p = (p as View).parent
+            org.junit.Assert.assertArrayEquals("dropdown chevron", chevron, pixels(p.endIconDrawable!!))
+        }
+        snap(root(a), "settings_preset_editor_chevrons_dark")
+        a.supportFragmentManager.beginTransaction().remove(editor).commitNow(); idle()
+        for ((make, list, icon) in listOf(
+            Triple<() -> androidx.fragment.app.Fragment, Int, Int>({ PromptLibraryFragment() }, R.id.prompt_recycler_view, R.id.expand_icon),
+            Triple({ SystemMessageLibraryFragment() }, R.id.system_message_recycler_view, R.id.expand_icon),
+            Triple({ PresetsListFragment() }, R.id.recyclerViewPresets, R.id.iconExpand),
+        )) {
+            val f = make()
+            pushFragment(a, f)
+            val row = f.requireView().findViewById<androidx.recyclerview.widget.RecyclerView>(list).getChildAt(0)
+            org.junit.Assert.assertArrayEquals("list expand chevron", chevron,
+                pixels(row.findViewById<android.widget.ImageView>(icon).drawable))
+            if (list == R.id.system_message_recycler_view) snap(root(a), "settings_list_chevrons_dark")
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+    }
+
+    /** Key fields showed Material's filled eye; the toggle uses the line eye, struck through once shown. */
+    @Test fun settingsKeyFieldsUseTheLineEyeDark() = withChat { a, _ ->
+        fun pixels(d: android.graphics.drawable.Drawable): IntArray {
+            val c = d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
+            val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+            c.setBounds(0, 0, 48, 48); c.draw(android.graphics.Canvas(bmp))
+            return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
+        }
+        val eye = pixels(a.getDrawable(R.drawable.ic_eye)!!)
+        val eyeOff = pixels(a.getDrawable(R.drawable.ic_eye_off)!!)
+        for ((name, field, make) in listOf<Triple<String, Int, () -> androidx.fragment.app.DialogFragment>>(
+            Triple("api", R.id.edit_text_lay) { SaveApiDialogFragment() },
+            Triple("brave", R.id.edit_text_lay_brave_api) { SaveBraveApiDialogFragment() },
+            Triple("lan", R.id.edit_text_lan_api_key_layout) { SaveLANDialogFragment() },
+        )) {
+            val f = make()
+            f.show(a.supportFragmentManager, name); idle()
+            val toggle = f.requireView().findViewById<View>(field)
+                .findViewById<View>(com.google.android.material.R.id.text_input_end_icon) as android.widget.ImageView
+            org.junit.Assert.assertArrayEquals("$name: hidden key shows the eye", eye, pixels(toggle.drawable.current))
+            toggle.performClick(); idle()
+            org.junit.Assert.assertArrayEquals("$name: shown key shows the struck eye", eyeOff, pixels(toggle.drawable.current))
+            if (name == "api") snapDialogCentered(a, "settings_key_dialog_eye_dark")
+            f.dismiss(); idle()
+        }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
