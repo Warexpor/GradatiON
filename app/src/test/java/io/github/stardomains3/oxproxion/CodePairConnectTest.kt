@@ -69,6 +69,23 @@ class CodePairConnectTest {
     }
 
     @Test
+    fun portOrTimeoutContaining401_isUnreachable() {
+        assertEquals(
+            Outcome.UNREACHABLE,
+            CodePairConnect.classifyError("Failed to connect to /10.0.0.1:4010"),
+        )
+        assertEquals(
+            Outcome.UNREACHABLE,
+            CodePairConnect.classifyError("Failed to connect to /10.0.0.1:4030"),
+        )
+        assertEquals(Outcome.UNREACHABLE, CodePairConnect.classifyError("timeout after 4012ms"))
+        assertEquals(
+            Outcome.WRONG_TOKEN,
+            CodePairConnect.outcome(ConnectionState.FAILED, "status 403"),
+        )
+    }
+
+    @Test
     fun networkish_unreachable() {
         assertEquals(Outcome.UNREACHABLE, CodePairConnect.classifyError("Failed to connect to /10.0.0.1:7878"))
         assertEquals(Outcome.UNREACHABLE, CodePairConnect.classifyError("Software caused connection abort"))
