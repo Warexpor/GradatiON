@@ -1,7 +1,11 @@
 package io.github.stardomains3.oxproxion
 
+import android.Manifest
 import android.content.Context
 import androidx.annotation.StringRes
+
+/** Which location provider a tool read may ask. GPS is fine-only. */
+enum class LocationFixSource { GPS, NETWORK }
 
 data class ToolItem(
     val name: String,               // e.g. "make_file"
@@ -75,6 +79,44 @@ data class ToolItem(
          */
         fun locationGrantHeld(fineGranted: Boolean, coarseGranted: Boolean): Boolean =
             fineGranted || coarseGranted
+
+        /**
+         * Android 12+ (this app's minSdk) ignores a runtime request that asks for fine location
+         * alone, so the dialog never offers Approximate. Both permissions go in one request.
+         * Fine is listed first; that is the order the platform sample uses.
+         */
+        fun locationPermissionsToRequest(): Array<String> = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        )
+
+        /**
+         * GPS requires fine location. Approximate is coarse only, and requesting GPS then throws
+         * [SecurityException], which the tool reported as permission denied after the grant.
+         * Network is the provider that grant can actually read.
+         */
+        fun locationFixSource(
+            fineGranted: Boolean,
+            coarseGranted: Boolean,
+            gpsEnabled: Boolean,
+            networkEnabled: Boolean,
+        ): LocationFixSource? {
+            if (!locationGrantHeld(fineGranted, coarseGranted)) return null
+            if (fineGranted && gpsEnabled) return LocationFixSource.GPS
+            if (networkEnabled) return LocationFixSource.NETWORK
+            return null
+        }
+
+        /**
+         * A precise fix is 10 m or better. Approximate location never gets that close, so waiting
+         * for it timed out and the tool never returned the coarse reading it was allowed to use.
+         */
+        fun locationFixIsEnough(fineGranted: Boolean, hasAccuracy: Boolean, accuracyMeters: Float): Boolean {
+            if (!fineGranted) return true
+            return hasAccuracy && accuracyMeters <= PRECISE_ACCURACY_METERS
+        }
+
+        private const val PRECISE_ACCURACY_METERS = 10f
 
         /**
          * The enabled bit to store, or null when this toggle has to snap back.

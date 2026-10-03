@@ -1338,10 +1338,10 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                         val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                         val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-                        if (!hasFine && !hasCoarse) {
+                        if (!ToolItem.locationGrantHeld(hasFine, hasCoarse)) {
                             "Permission denied: Location permission has not been granted to the app. Please ask the user to grant location permission in app settings."
                         } else {
-                            fetchCurrentLocation()
+                            fetchCurrentLocation(hasFine, hasCoarse)
                         }
                     } catch (e: Exception) {
                         "Error checking location permissions: ${e.message}"
@@ -1419,7 +1419,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
         }
     }
 
-    private suspend fun fetchCurrentLocation(): String {
+    private suspend fun fetchCurrentLocation(fineGranted: Boolean, coarseGranted: Boolean): String {
         return withContext(Dispatchers.Main) {
             suspendCancellableCoroutine { continuation ->
                 val context = application.applicationContext
@@ -1427,23 +1427,33 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
                 val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
                 val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-
-                if (!isGpsEnabled && !isNetworkEnabled) {
-                    continuation.resume("Location is disabled on the device. Please enable it in settings.")
+                val source = ToolItem.locationFixSource(
+                    fineGranted,
+                    coarseGranted,
+                    isGpsEnabled,
+                    isNetworkEnabled,
+                )
+                if (source == null) {
+                    val why = if (!isGpsEnabled && !isNetworkEnabled) {
+                        "Location is disabled on the device. Please enable it in settings."
+                    } else {
+                        // Coarse cannot read GPS. Asking it anyway threw and said permission was denied.
+                        "Approximate location needs network location, which is turned off."
+                    }
+                    continuation.resume(why)
                     return@suspendCancellableCoroutine
                 }
 
                 val handler = Handler(Looper.getMainLooper())
                 val timeoutMillis = 30000L
-                val desiredAccuracyMeters = 10f
 
                 val locationListener = object : LocationListener {
                     override fun onLocationChanged(location: Location) {
-                        if (location.hasAccuracy() && location.accuracy <= desiredAccuracyMeters) {
+                        if (ToolItem.locationFixIsEnough(fineGranted, location.hasAccuracy(), location.accuracy)) {
                             cleanup()
                             continuation.resume(buildLocationResult(location))
                         }
-                        // If accuracy > 10m, we just keep listening (like old app)
+                        // A fine fix coarser than 10 m keeps listening. Approximate accepts the first reading.
                     }
 
                     override fun onProviderDisabled(provider: String) {
@@ -1486,12 +1496,12 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 handler.postDelayed(timeoutRunnable, timeoutMillis)
 
                 try {
-                    if (isGpsEnabled) {
-                        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener)
-                    } else if (isNetworkEnabled) {
-                        // If GPS is off entirely, just use Network immediately
-                        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000L, 0f, locationListener)
+                    val provider = if (source == LocationFixSource.GPS) {
+                        LocationManager.GPS_PROVIDER
+                    } else {
+                        LocationManager.NETWORK_PROVIDER
                     }
+                    locationManager.requestLocationUpdates(provider, 1000L, 0f, locationListener)
                 } catch (e: SecurityException) {
                     handler.removeCallbacksAndMessages(null)
                     continuation.resume("Location permission denied during request.")

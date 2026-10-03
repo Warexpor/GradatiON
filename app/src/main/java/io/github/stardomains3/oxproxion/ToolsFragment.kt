@@ -17,7 +17,7 @@ import androidx.appcompat.widget.SwitchCompat
 
 class ToolsFragment : Fragment(R.layout.fragment_tools) {
 
-    private lateinit var locationPermissionLauncher: ActivityResultLauncher<String>
+    private lateinit var locationPermissionLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var notificationPolicyLauncher: ActivityResultLauncher<Intent>
     private lateinit var folderPickerLauncher: ActivityResultLauncher<Uri?>
 
@@ -27,14 +27,12 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
         super.onCreate(savedInstanceState)
 
         locationPermissionLauncher = registerForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { fineGranted: Boolean ->
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { granted ->
             // Granting shows on the row itself; only a refusal needs saying.
-            // Approximate is coarse-only, and the callback reports fine as denied.
-            val coarseGranted = ContextCompat.checkSelfPermission(
-                requireContext(),
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            // Approximate is coarse-only, so fine is false and coarse is true.
+            val fineGranted = granted[Manifest.permission.ACCESS_FINE_LOCATION] == true
+            val coarseGranted = granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true
             if (!ToolItem.locationGrantHeld(fineGranted, coarseGranted)) {
                 GlassNotice.show(requireContext(), getString(R.string.toast_location_permission))
             }
@@ -159,7 +157,7 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
                         WorkspacePaths.ensureWorkspaceExists()
                         folderPickerLauncher.launch(null)
                     } else if (item.name == "get_location") {
-                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                        locationPermissionLauncher.launch(ToolItem.locationPermissionsToRequest())
                     } else if (permissionIntent != null) {
                         notificationPolicyLauncher.launch(permissionIntent)
                     }
