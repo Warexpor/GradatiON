@@ -64,7 +64,8 @@ object CodeAwayFormat {
     fun takenFromPrefs(entries: Map<String, *>, exceptKey: String? = null): Set<Int> {
         val out = LinkedHashSet<Int>()
         for ((k, v) in entries) {
-            if (exceptKey != null && k == exceptKey) continue
+            // hold:turn:s is the same logical key as turn:s (parked shade id).
+            if (exceptKey != null && logicalDedupKey(k) == exceptKey) continue
             val id = when (v) {
                 is Int -> v
                 is Number -> v.toInt()
@@ -85,6 +86,9 @@ object CodeAwayFormat {
     fun postedKeysFromPrefs(entries: Map<String, *>): Set<String> {
         val out = LinkedHashSet<String>()
         for ((k, v) in entries) {
+            // Parked shade ids are not a dedup seed. clearTurnDoneDedup writes them
+            // in the same prefs commit that drops the live row.
+            if (k.startsWith(HOLD_PREFIX)) continue
             val id = when (v) {
                 is Int -> v
                 is Number -> v.toInt()
@@ -94,6 +98,28 @@ object CodeAwayFormat {
         }
         return out
     }
+
+    /**
+     * Prefs key for a shade id parked by clearTurnDoneDedup. Lives in the same
+     * file as the live allocation so the drop and the park are one commit.
+     */
+    fun holdPrefKey(dedupKey: String): String = HOLD_PREFIX + dedupKey
+
+    /** Strip [HOLD_PREFIX] once. Live dedup keys are unchanged. */
+    fun logicalDedupKey(prefKey: String): String =
+        if (prefKey.startsWith(HOLD_PREFIX)) prefKey.removePrefix(HOLD_PREFIX) else prefKey
+
+    /**
+     * Session that owns [dedupKey], preferring the longest id.
+     * Session ids may contain ':'; a shorter id must not steal `approval:ab:cd:req`.
+     */
+    fun sessionIdForDedupKey(dedupKey: String, sessionIds: Collection<String>): String? =
+        sessionIds.filter { sid ->
+            sid.isNotEmpty() && (
+                dedupKey == dedupKey(Kind.TURN_DONE, sid) ||
+                    dedupKey.startsWith("approval:$sid:")
+                )
+        }.maxByOrNull { it.length }
 
     /**
      * Activity PendingIntent request code. One per posted notification.
@@ -160,6 +186,9 @@ object CodeAwayFormat {
 
     const val NOTIF_ID_BASE = 0x5A00_0000
     const val NOTIF_ID_MASK = 0x00FF_FFFF
+
+    /** Prefix for a parked shade id in the notif-id prefs. Not a dedup seed. */
+    const val HOLD_PREFIX = "hold:"
 
     /** High bits clear of [NOTIF_ID_BASE] (0x5A…) so Allow, Deny, dismiss, and the tap target never share a code. */
     private const val ACTION_ALLOW_TAG = 0x0100_0000

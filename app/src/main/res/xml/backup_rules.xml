@@ -94,4 +94,5 @@
     <!-- One-shot open nonces and shade ids; a restore must not unlock or collide. -->
     <exclude domain="sharedpref" path="code_away_open_tokens.xml" />
     <exclude domain="sharedpref" path="code_away_notif_ids.xml" />
+    <exclude domain="sharedpref" path="code_away_shade_hold.xml" />
 </full-backup-content>
