@@ -288,6 +288,31 @@ class CodeModeScreenshotTest {
         snap(root(a), "code_session_images_dark")
     }
 
+    /** Slash typeahead: no empty icon column, so each command starts under the composer's words. */
+    @Test fun codeSessionSlashCommandsDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+        hub.answer(id, approval.requestId, approval.options.first { it.id == "allow" })
+        idle(16)
+        val input = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }.requireView()
+            .findViewById<android.widget.EditText>(R.id.codeComposerInput)
+        input.setText("/")
+        idle(3)
+        val rows = a.findViewById<android.view.ViewGroup>(R.id.popoverRows)
+        fun x(v: View) = IntArray(2).also { v.getLocationInWindow(it) }[0]
+        val words = x(input) + input.compoundPaddingLeft
+        assertTrue(rows.childCount >= 2)
+        for (i in 0 until rows.childCount) {
+            val title = rows.getChildAt(i).findViewById<android.widget.TextView>(R.id.popoverRowTitle)
+            assertTrue(title.text.startsWith("/"))
+            assertEquals("${title.text} starts under the composer's words", words.toFloat(), x(title).toFloat(), 1f)
+        }
+        snap(root(a), "code_session_slash_dark")
+    }
+
     /** Mid-turn: a command streams into its pane while the Working footer closes the rail. */
     @Test fun codeSessionRunningDark() = withCode { a, _ ->
         val hub = CodeHub.getLoaded(ctx)

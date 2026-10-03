@@ -283,7 +283,7 @@ class CodeComposer(
             return
         }
         popover?.dismiss(animated = false)
-        slashPopover = PickerPopover(popoverHost, input, backdropRef, edge = root).apply {
+        slashPopover = PickerPopover(popoverHost, input, backdropRef, edge = root, rowLayout = R.layout.item_code_slash_row).apply {
             onDismiss = { slashPopover = null }
             show(
                 title = null,
