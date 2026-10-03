@@ -251,6 +251,9 @@ class AvatarAndPersonaTest {
         File(dir, keep).writeBytes(jpeg)
         File(dir, "$keep.bak").writeBytes(jpeg)
         File(dir, "$keep.partial.incoming").writeBytes(jpeg)
+        // Older than the live file, so opening the portrait does not install it and drop the bak.
+        File(dir, keep).setLastModified(5_000)
+        File(dir, "$keep.partial.incoming").setLastModified(1_000)
         File(dir, drop).writeBytes(jpeg)
         File(dir, "$drop.bak").writeBytes(jpeg)
         File(dir, "$drop.partial").writeBytes(jpeg)
