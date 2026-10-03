@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion
 
 import io.github.stardomains3.oxproxion.code.AcpAdapter
+import io.github.stardomains3.oxproxion.code.AcpSessionMode
 import io.github.stardomains3.oxproxion.code.InboundSession
 import io.github.stardomains3.oxproxion.code.AcpHandshake
 import io.github.stardomains3.oxproxion.code.AgentInlineImage
@@ -2852,6 +2853,44 @@ class CodeProtocolTest {
         assertEquals(ToolKind.EXECUTE, byId["dr"]?.kind)
         assertEquals("e1 → e2", byId["dr"]?.detail)
         assertEquals("Submit", byId["ck"]?.detail)
+    }
+
+    @Test fun refOnlyUpdateKeepsTheActionAndAGitRefStillWins() {
+        val frames = listOf(
+            update(
+                """{"sessionUpdate":"tool_call","toolCallId":"sc","title":"Scroll","kind":"other","name":"BrowserScroll","status":"in_progress","rawInput":{"direction":"down","amount":500.0,"ref":"e9"}}""",
+                seq = 1,
+            ),
+            update(
+                """{"sessionUpdate":"tool_call_update","toolCallId":"sc","status":"completed","rawInput":{"ref":"e9"}}""",
+                seq = 2,
+            ),
+            update(
+                """{"sessionUpdate":"tool_call","toolCallId":"gc","title":"Commit","kind":"other","name":"GetCommit","status":"completed","rawInput":{"ref":"main","owner":"Warexpor"}}""",
+                seq = 3,
+            ),
+        )
+        val byId = foldFresh(frames).filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("down 500", byId["sc"]?.detail)
+        assertEquals(ToolStatus.COMPLETED, byId["sc"]?.status)
+        assertEquals("main", byId["gc"]?.detail)
+    }
+
+    @Test fun sessionResultUsesTheModeTheAgentReports() {
+        val modes = Json.parseToJsonElement(
+            """{"sessionId":"s1","modes":{"currentModeId":"read-only","availableModes":[{"id":"read-only"}]}}"""
+        )
+        assertEquals(PermissionMode.ASK, AcpSessionMode.fromResult(modes))
+        val echoed = Json.parseToJsonElement("""{"sessionId":"s1","permissionMode":"full-access"}""")
+        assertEquals(PermissionMode.FULL_AUTO, AcpSessionMode.fromResult(echoed))
+        // An unknown mode on the session must not fall through to the mode the phone asked for.
+        val unknown = Json.parseToJsonElement(
+            """{"sessionId":"s1","modes":{"currentModeId":"yolo"},"permissionMode":"full-auto"}"""
+        )
+        assertNull(AcpSessionMode.fromResult(unknown))
+        assertNull(AcpSessionMode.fromResult(Json.parseToJsonElement("""{"sessionId":"s1"}""")))
+        val plan = Json.parseToJsonElement("""{"sessionId":"s1","modes":{"modeId":"plan"}}""")
+        assertEquals(PermissionMode.PLAN, AcpSessionMode.fromResult(plan))
     }
 
     private fun foldFresh(frames: List<String>): List<CodeEvent> {

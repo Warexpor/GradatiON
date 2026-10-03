@@ -19,6 +19,7 @@ class CodeHubMergeTest {
         title: String = "Title",
         preview: String = "prev",
         permissionMode: PermissionMode = PermissionMode.ASK,
+        permissionModeSpecified: Boolean = false,
     ) = CodeSessionSummary(
         id = id,
         hostId = "h1",
@@ -28,6 +29,7 @@ class CodeHubMergeTest {
         createdAt = 1L,
         updatedAt = 2L,
         permissionMode = permissionMode,
+        permissionModeSpecified = permissionModeSpecified,
         model = model,
         preview = preview,
         lastSeq = lastSeq,
@@ -62,6 +64,16 @@ class CodeHubMergeTest {
         val remote = summary(permissionMode = PermissionMode.ASK)
         assertEquals(
             PermissionMode.AUTO_EDIT,
+            mergeListSessionsSummary(remote, local).permissionMode,
+        )
+    }
+
+    @Test
+    fun explicitAskReplacesALocalFullAutoPill() {
+        val local = summary(permissionMode = PermissionMode.FULL_AUTO)
+        val remote = summary(permissionMode = PermissionMode.ASK, permissionModeSpecified = true)
+        assertEquals(
+            PermissionMode.ASK,
             mergeListSessionsSummary(remote, local).permissionMode,
         )
     }

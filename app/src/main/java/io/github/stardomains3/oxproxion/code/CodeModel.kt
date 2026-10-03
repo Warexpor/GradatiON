@@ -188,7 +188,14 @@ data class CodeSessionSummary(
     val preview: String = "",
     val branch: String? = null,
     /** Highest bridge `_meta.seq` seen; used for `session/load` resume after process death. */
-    val lastSeq: Long? = null
+    val lastSeq: Long? = null,
+    /**
+     * True when a session-list row named a mode this phone understands, including Ask
+     * (`ask`, `default`, Codex `read-only`). False when the row left the mode out or named
+     * one this phone does not show. Merge keeps a local non-Ask pill only in that second case;
+     * an explicit Ask used to look the same as an omitted one and a refresh put Full auto back.
+     */
+    val permissionModeSpecified: Boolean = false,
 )
 
 /**

@@ -1223,8 +1223,40 @@ class AcpAdapter : HarnessAdapter {
         // A folder-only update must not replace `npm test`. The first path still fills an empty row.
         if (!specific && !hasLine && (hadDetail || !hasPath)) return null
         val detail = detailOf(u) ?: return null
+        // A status frame that only repeats the element ref used to replace `down 500` or `hello`.
+        if (hadDetail && !hasLine && refOnly(raw, detail)) return null
         if (detail.isNotBlank()) toolDetailSet.add(key)
         return detail
+    }
+
+    /**
+     * A bare element `ref` sits earlier in the key list than the control name, the typed
+     * text, and a scroll, so those used to lose to `e9`. When the generic line is that
+     * ref (or there is no generic line), the browser action wins. A git `ref` still
+     * wins over a later owner when there is no browser action.
+     */
+    private fun preferBrowserOverRef(raw: JsonObject?, generic: String?): String? {
+        val browser = browserAction(raw)
+        val ref = firstRaw(raw, "ref")
+        return if (browser != null && (generic == null || generic == ref)) browser else generic ?: browser
+    }
+
+    /** Control name, typed text, or a pointer gesture. These beat a bare element ref. */
+    private fun browserAction(raw: JsonObject?): String? {
+        if (raw == null) return null
+        return firstRaw(
+            raw,
+            "element", "attribute", "selector",
+            "text", "value", "values",
+            "key", "keys", "button",
+        ) ?: pointerText(raw)
+    }
+
+    /** True when [detail] is only the element ref, so it must not replace a real action line. */
+    private fun refOnly(raw: JsonObject?, detail: String): Boolean {
+        if (raw == null || browserAction(raw) != null || commandOf(raw) != null) return false
+        val ref = firstRaw(raw, "ref") ?: return false
+        return detail == ref
     }
 
     private fun toolKey(sid: String, callId: String) = "$sid\u0000$callId"
@@ -1291,7 +1323,7 @@ class AcpAdapter : HarnessAdapter {
             kind = namedKind(u.str("kind"), u.str("name")),
             locations = locations,
             command = commandOf(raw),
-            query = firstRaw(raw, "pattern", "query", "url", "regex",
+            query = preferBrowserOverRef(raw, firstRaw(raw, "pattern", "query", "url", "regex",
                 "glob_pattern", "globPattern", "search_term", "searchTerm",
                 "tool_name", "toolName", "uri", "server",
                 "prompt", "description", "task_description", "taskDescription",
@@ -1391,7 +1423,7 @@ class AcpAdapter : HarnessAdapter {
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId",
                 "button",
-                "text", "value", "values") ?: pointerText(raw) ?: firstRaw(raw, "ref"),
+                "text", "value", "values")),
             filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
