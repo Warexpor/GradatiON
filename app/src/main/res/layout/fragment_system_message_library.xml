@@ -22,15 +22,35 @@
         app:navigationIconTint="@color/xai_ink"
         app:menu="@menu/system_message_library_menu" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/system_message_recycler_view"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="@color/xai_canvas"
-        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-        tools:listitem="@layout/list_item_system_message"
-        android:scrollbars="vertical" />
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/system_message_recycler_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/xai_canvas"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:listitem="@layout/list_item_system_message"
+            android:scrollbars="vertical" />
+
+        <!-- Default is always listed, so an empty list only happens when a search matches nothing -->
+        <TextView
+            android:id="@+id/systemMessagesEmptyView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginStart="32dp"
+            android:layout_marginEnd="32dp"
+            android:gravity="center"
+            android:lineSpacingMultiplier="1.3"
+            android:text="@string/system_messages_no_match"
+            android:textColor="@color/xai_mute"
+            android:textSize="15sp"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/fab_add_system_message"

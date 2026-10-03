@@ -364,6 +364,32 @@ abstract class ScreenshotHarness {
 
     // ---- Secondary screens ----
 
+    /** A glyph's shape: drawn in ink at 48px, the pixels at least half opaque. */
+    private fun glyphMask(ctx: android.content.Context, d: android.graphics.drawable.Drawable): BooleanArray {
+        val c = d.constantState!!.newDrawable().mutate().apply { setTint(ctx.getColor(R.color.xai_ink)) }
+        val bmp = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
+        c.setBounds(0, 0, 48, 48); c.draw(Canvas(bmp))
+        val px = IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
+        return BooleanArray(px.size) { (px[it] ushr 24) >= 0x80 }
+    }
+
+    /**
+     * Same glyph give or take a few edge pixels. Anti-aliasing on a stroke's edge can shift by a
+     * pixel depending on what ran earlier in the JVM; a different glyph differs by far more.
+     */
+    protected fun assertSameGlyph(
+        message: String,
+        ctx: android.content.Context,
+        expected: android.graphics.drawable.Drawable,
+        actual: android.graphics.drawable.Drawable,
+    ) {
+        val e = glyphMask(ctx, expected)
+        val g = glyphMask(ctx, actual)
+        val differ = e.indices.count { e[it] != g[it] }
+        val drawn = maxOf(e.count { it }, g.count { it })
+        org.junit.Assert.assertTrue("$message: $differ of $drawn pixels differ", drawn > 0 && differ <= maxOf(4, drawn / 25))
+    }
+
     protected fun pushFragment(a: MainActivity, f: androidx.fragment.app.Fragment) {
         a.supportFragmentManager.beginTransaction().add(R.id.fragment_container, f).commitNow()
         idle()
