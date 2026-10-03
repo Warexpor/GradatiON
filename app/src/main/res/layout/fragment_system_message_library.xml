@@ -18,6 +18,7 @@
         app:titleTextColor="@color/xai_ink"
         android:background="@color/xai_canvas"
         app:navigationIcon="@drawable/is_backarrow"
+        app:collapseIcon="@drawable/is_backarrow"
         app:navigationIconTint="@color/xai_ink"
         app:menu="@menu/system_message_library_menu" />
 

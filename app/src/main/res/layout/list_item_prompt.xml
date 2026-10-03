@@ -60,7 +60,7 @@
                 android:contentDescription="@string/cd_toggle_expand"
                 android:padding="8dp"
                 android:rotation="0"
-                android:src="@drawable/ic_arrow_downward"
+                android:src="@drawable/ic_expand_more"
                 app:tint="@color/xai_mute"
                 android:clickable="true"
                 android:focusable="true" />
