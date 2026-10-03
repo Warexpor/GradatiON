@@ -324,7 +324,9 @@ object HistoryList {
         val readable = lineFor(readableSource(window), needle)
         if (!isChatLine(readable)) return ""
         val hit = emphasis(readable, needle) ?: return ""
-        val body = clipAround(readable, hit.start, hit.length)
+        // A word-order span is the whole gap. clipAround kept every word of it,
+        // and the one-line row ellipsized the later word off the end.
+        val body = clipHit(readable, hit, LINE)
         return if (role == "user") youLabel(body) else body
     }
 
@@ -499,7 +501,13 @@ object HistoryList {
 
     private fun clipMatch(text: String, needle: String): String {
         val hit = emphasis(text, needle) ?: return text
-        return clipAround(text, hit.start, hit.length)
+        // The "You:" / "Draft:" lead is not part of the gap. Clipping the whole
+        // string used to drop it once the hit sat past the first line.
+        val labelEnd = historyLabelEnd(text)
+        if (labelEnd < 0 || hit.start < labelEnd) return clipHit(text, hit, LINE)
+        val body = text.substring(labelEnd)
+        val clipped = clipHit(body, Emphasis((hit.start - labelEnd).coerceAtLeast(0), hit.length), LINE)
+        return text.substring(0, labelEnd) + clipped
     }
 
     /**
@@ -507,12 +515,19 @@ object HistoryList {
      * [DRAFT_LINE] (the gap between the first and last word) keeps both ends so the
      * bold span still has the words, without drawing the whole caption.
      */
-    private fun clipDraftHit(text: String, hit: Emphasis): String {
-        if (hit.length <= DRAFT_LINE) return clipAround(text, hit.start, hit.length)
+    private fun clipDraftHit(text: String, hit: Emphasis): String = clipHit(text, hit, DRAFT_LINE)
+
+    /**
+     * One row. A short hit uses the search window. A hit longer than [budget]
+     * (the gap between the first and last word) keeps both ends so the bold
+     * span still has the words, without drawing the whole line.
+     */
+    private fun clipHit(text: String, hit: Emphasis, budget: Int): String {
+        if (hit.length <= budget) return clipAround(text, hit.start, hit.length)
         val spanEnd = (hit.start + hit.length).coerceAtMost(text.length)
         val span = text.substring(hit.start, spanEnd)
-        val head = DRAFT_LINE / 2
-        val tail = (DRAFT_LINE - head - 1).coerceAtLeast(1)
+        val head = budget / 2
+        val tail = (budget - head - 1).coerceAtLeast(1)
         var body = span.take(head).trimEnd() + "…" + span.takeLast(tail).trimStart()
         if (hit.start > 0) body = "…$body"
         if (spanEnd < text.length) body = "$body…"
@@ -622,30 +637,48 @@ object HistoryList {
     /**
      * Markdown marks come off for the preview. A mark inside a word stays: stripping
      * every `_` hid `snake_case` and `déjà_vu` (a letter is not only ASCII), and
-     * stripping every `#`, `~` and `>` hid `C#`, `~/Downloads` and `a > b`.
-     * Heading hashes, a blockquote `>`, paired `~~`, stars and backticks still come off.
+     * stripping every `#`, `~`, `>` and `*` hid `C#`, `~/Downloads`, `a > b` and `2 * 3`.
+     * Heading hashes, a blockquote `>`, a list star, paired `~~`, emphasis stars and
+     * a paired backtick span still come off. A backtick that does not close stays.
      */
     private fun fold(text: String): String =
         WHITESPACE.replace(
-            MD_EDGE_UNDERSCORE.replace(
-                MD_STARS.replace(
-                    MD_STRIKE.replace(
-                        MD_QUOTE.replace(MD_HEADING.replace(text, ""), ""),
-                        "",
+            stripBackticks(
+                MD_EDGE_UNDERSCORE.replace(
+                    stripStars(
+                        MD_STRIKE.replace(
+                            MD_QUOTE.replace(MD_HEADING.replace(text, ""), ""),
+                            "",
+                        ),
                     ),
                     "",
                 ),
-                "",
-            ).replace(MD_BACKTICK, ""),
+            ),
             " ",
         ).trim()
 
+    /** Emphasis and a leading list star. A star in `2 * 3` or `a*b` is the word. */
+    private fun stripStars(text: String): String {
+        var cur = MD_LIST_STAR.replace(text, "")
+        repeat(4) {
+            val next = MD_STAR_EMPH.replace(cur) { it.groupValues[1] }
+            if (next == cur) return cur
+            cur = next
+        }
+        return cur
+    }
+
+    /** A closed code span. One backtick with nothing to close it is not a mark. */
+    private fun stripBackticks(text: String): String =
+        MD_BACKTICK_SPAN.replace(text) { it.groupValues[2] }
+
     private val DATA_URL = Regex("data:[^\"\\s]*;base64,[A-Za-z0-9+/=]+")
-    private val MD_STARS = Regex("\\*+")
     private val MD_HEADING = Regex("(?m)^#{1,6}[ \\t]+")
     private val MD_QUOTE = Regex("(?m)^>+[ \\t]*")
     private val MD_STRIKE = Regex("~~")
-    private val MD_BACKTICK = Regex("`+")
+    private val MD_LIST_STAR = Regex("(?m)^\\*[ \\t]+")
+    private val MD_STAR_EMPH = Regex("\\*{1,3}(?!\\s)([^*]+)(?<!\\s)\\*{1,3}")
+    private val MD_BACKTICK_SPAN = Regex("(`+)([^`]+)\\1")
     private val MD_EDGE_UNDERSCORE = Regex("(?<![\\p{L}\\p{N}])_|_(?![\\p{L}\\p{N}])")
     private val WHITESPACE = Regex("\\s+")
 

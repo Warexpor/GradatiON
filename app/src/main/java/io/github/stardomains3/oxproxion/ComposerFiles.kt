@@ -55,7 +55,7 @@ object ComposerFiles {
      * One file, as it is pasted into the prompt. A body that contains a fence of three
      * backticks used to close the wrapper, so the rest of the file was sent as the message.
      * The fence is one longer than any run in the body. A line break in the name stays
-     * on the header line.
+     * on the header line, including a Unicode separator that is not CR or LF.
      */
     fun section(number: Int, fileName: String, content: String): String {
         val name = fileName.replace(NEWLINE, " ").ifBlank { "file" }
@@ -83,5 +83,6 @@ object ComposerFiles {
         return maxOf(3, longest + 1)
     }
 
-    private val NEWLINE = Regex("[\r\n]+")
+    /** Any Unicode linebreak. CR/LF used to be the only ones folded into the header. */
+    private val NEWLINE = Regex("\\R")
 }

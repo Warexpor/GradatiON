@@ -79,6 +79,11 @@ class ComposerFilesTest {
         assertEquals("File 2 (a b.md):", section.lineSequence().first())
         assertTrue(section.contains("````text\n$body\n````"))
         assertFalse(section.contains("\n```text\n"))
+        // U+2028 is a line break that is not CR or LF. It used to split the header.
+        val unicode = ComposerFiles.section(3, "a\u2028b\u2029c.md", "hello")
+        assertEquals("File 3 (a b c.md):", unicode.lineSequence().first())
+        assertFalse(unicode.substringBefore("\n").contains('\u2028'))
+        assertFalse(unicode.substringBefore("\n").contains('\u2029'))
     }
 
     @Test fun a_file_keeps_the_indent_on_its_first_line() {

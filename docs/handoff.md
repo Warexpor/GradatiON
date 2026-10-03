@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Chat wave 34)
+
+On `cursor/chat-wave-34-ec05` (PR into `gradation/app-pass`). Chat follow-ups after history tokens, file indents, and the staged photo from the tap (#161). Rebased onto Roleplay #164 (which includes Settings #163). Not a redo of #164 (a character-list underscore between letters that are not ASCII, an example sample speaker when the card is Jordan and you are Alex, a START or END_OF_DIALOG line that ends the example, and `Bot:` as the character side). Not a redo of #163 (a trailing-dot local server, a refused link-local zone id, or a refused IPv4-mapped address with a leading zero). Not a redo of history sentences, file fences, or the JPEG a send still shows (#153). Not a redo of history keeping `#` `~` `>`, or staged text files one by one and the 1 MB cap (#139).
+
+- History preview keeps a star or a backtick that is part of the words (`2 * 3`, `a*b`, a lone `` ` ``). Those used to be stripped with the emphasis marks, so the row no longer showed the token a search had matched. Emphasis, a list star, and a closed code span still come off.
+- History search keeps both words when they sit far apart in a sent message. The row is one line, and the gap used to ellipsize the later word.
+- A text file whose name contains a Unicode line break keeps that name on one header line. A line separator that is not CR or LF used to split the header.
+
+Phone: send a chat whose last line is `2 * 3` (History should show the star). Search two words that are far apart in a long message (both should be on the row). Attach a file whose name contains a line separator (the model should see one header line).
+
 # Handoff (2026-10-03, RP wave 34)
 
 On `cursor/rp-wave-34-9771` (PR into `gradation/app-pass`). Roleplay list lines, example stand-ins, and card example markers. Rebased onto `ccf85cce` (Settings #163). Not a redo of #163 (a trailing dot on an IPv4 local server saves, and a link-local zone id or an IPv4-mapped address with a leading zero is refused). Not a redo of #156 (card `<START>` exchanges, `{{bot}}`, `{{random_user_N}}` in an example), #148 (example sides with a space before the colon, the character speaking first, `Keys`/`KEYS` headers, Windows line endings, list marks `#` `~` `>`), or #142 (list underscores, the User side after a leading blank line, lore keys in `()` `（）` `【】`).
