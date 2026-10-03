@@ -1,3 +1,14 @@
+# Handoff (2026-10-03, Code session spacing, fourth pass)
+
+On `cursor/code-session-spacing-4-bd39` (PR into `gradation/app-pass`), from `7e62705c794b9c1b6ca5a5b517ad23dba3264ce9` (third spacing pass #186). Code composer only, no color token changed. Not a redo of #182, #184 or #186.
+
+- Attached images in the composer start on the input's 10dp pad (they started 6dp left of the words), get the words' 6dp top air (they sat 8dp from the capsule's top, under its corner), and sit 10dp apart so a remove disc clears the next thumbnail.
+- The dictation wave starts under the words (10dp start margin, was 6dp).
+- Checked and left alone: markdown replies (headings, lists, a fenced code card), the retry and waiting states, the approval pin and the composer's bottom row. A fenced code card in prose ends 8dp short of an output pane's edge. Prose keeps its 14dp end pad, and the card is drawn by the shared ChatTextView, so aligning it would mean widening prose or touching Chat.
+- New shot: `code_session_composer_attachments_dark`. `codeDictatingDark` checks the wave's start.
+
+Phone: attach two images in a session (thumbnails start under the hint's first letter, clear of the corner). Dictate (the wave starts under the words).
+
 # Handoff (2026-10-03, Code session spacing, third pass)
 
 On `cursor/code-session-spacing-3-bd39` (PR into `gradation/app-pass`), from `e3fd1a1bff7bf746fc96f6649e25e03de8984ac8` (second spacing pass #184). Code session chat only, no color token changed. Not a redo of #182 or #184.
