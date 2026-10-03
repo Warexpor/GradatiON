@@ -505,15 +505,15 @@ class ScreenshotTest : ScreenshotHarness() {
         val chatView = chat.requireView()
         a.findViewById<android.widget.EditText>(R.id.chatEditText).setText("half-written question")
         val prefs = SharedPreferencesHelper(a)
-        data class Library(val row: Int, val add: Int, val list: Int, val saveInEditor: () -> Unit)
+        data class Library(val row: Int, val add: Int, val list: Int, val shot: String, val saveInEditor: () -> Unit)
         val libraries = listOf(
-            Library(R.id.promptsButton, R.id.fab_add_prompt, R.id.prompt_recycler_view) {
+            Library(R.id.promptsButton, R.id.fab_add_prompt, R.id.prompt_recycler_view, "settings_prompts_after_add_dark") {
                 prefs.saveCustomPrompts(prefs.getCustomPrompts() + Prompt("Standup", "Summarize yesterday."))
             },
-            Library(R.id.systemMessagesButton, R.id.fab_add_system_message, R.id.system_message_recycler_view) {
+            Library(R.id.systemMessagesButton, R.id.fab_add_system_message, R.id.system_message_recycler_view, "settings_system_messages_after_add_dark") {
                 prefs.saveCustomSystemMessages(prefs.getCustomSystemMessages() + SystemMessage("Terse", "Answer in one line."))
             },
-            Library(R.id.presetsButton, R.id.fabAddPreset, R.id.recyclerViewPresets) {
+            Library(R.id.presetsButton, R.id.fabAddPreset, R.id.recyclerViewPresets, "settings_presets_after_add_dark") {
                 prefs.savePresets(prefs.getPresets() + Preset("p1", "Morning brief", "openai/gpt-5", SystemMessage("Default", ""),
                     streaming = true, reasoning = false, conversationMode = false))
             },
@@ -528,6 +528,7 @@ class ScreenshotTest : ScreenshotHarness() {
             val fm = a.supportFragmentManager
             fm.popBackStackImmediate(); idle()
             org.junit.Assert.assertEquals("the library shows what the editor saved", before + 1, list.adapter!!.itemCount)
+            snap(root(a), lib.shot)
             while (fm.backStackEntryCount > 0) { fm.popBackStackImmediate(); idle() }
             org.junit.Assert.assertSame("Chat kept its view", chatView, chat.view)
             org.junit.Assert.assertEquals("half-written question",
