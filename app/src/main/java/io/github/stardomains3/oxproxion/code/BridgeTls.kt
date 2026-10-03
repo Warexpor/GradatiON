@@ -26,8 +26,10 @@ object BridgeTls {
 
     /**
      * Normalize a pairing `fp=` value to OkHttp pin form `sha256/<base64>`.
-     * Accepts hex (optional colons/spaces), URL-safe or standard base64 of the digest,
-     * or an already-prefixed `sha256/...` pin. Blank / unparseable → null.
+     * Accepts hex (optional colons, spaces, or `+` where a form encoder wrote a space),
+     * URL-safe or standard base64 of the digest, or an already-prefixed `sha256/...` pin.
+     * Blank / unparseable → null. A `+` inside base64 is still a plus: it is only a
+     * separator on the hex path, where base64 is the wrong length.
      */
     fun normalizePin(fingerprint: String): String? {
         val raw = fingerprint.trim()
@@ -39,7 +41,9 @@ object BridgeTls {
         }
         if (body.isEmpty()) return null
 
-        val hexCandidate = body.replace(":", "").replace(" ", "")
+        // URLEncoder writes the spaces in "12 AD …" as '+'. Removing those only for the
+        // hex check leaves a base64 '+' in place for the digest path below.
+        val hexCandidate = body.replace(":", "").replace(" ", "").replace("+", "")
         val digest: ByteArray = when {
             hexCandidate.length == 64 && HEX.matches(hexCandidate) ->
                 hexCandidate.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
