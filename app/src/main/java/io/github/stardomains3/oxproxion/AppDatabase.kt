@@ -546,8 +546,9 @@ abstract class AppDatabase : RoomDatabase() {
             // the plaintext history in a directory Auto Backup uploads.
             val encryptedTemp = ChatDbVault.encrypting(vault)
             val backup = ChatDbVault.plaintextBackup(vault)
-            encryptedTemp.delete()
-            backup.delete()
+            // A crashed export can leave -wal/-shm beside these names. Deleting only the main
+            // lets ATTACH replay that wal into the new ciphertext, or pairs it with the snapshot.
+            clearPlaintextExportLeftovers(vault)
 
             val hexKey = passphrase.joinToString("") { b -> "%02x".format(b) }
             // A database path with a quote would break out of the ATTACH string.
@@ -572,12 +573,12 @@ abstract class AppDatabase : RoomDatabase() {
                 plaintext = null
 
                 if (!moveIntoPlace(dbFile, backup)) {
-                    encryptedTemp.delete()
+                    deleteEncryptingLeftover(vault)
                     throw IllegalStateException("Could not backup plaintext chat DB before encryption")
                 }
                 if (!moveIntoPlace(encryptedTemp, dbFile)) {
                     moveIntoPlace(backup, dbFile)
-                    encryptedTemp.delete()
+                    deleteEncryptingLeftover(vault)
                     throw IllegalStateException("Could not install encrypted chat DB")
                 }
                 // Sidecars belong to the plaintext file. The backup itself stays until the encrypted
@@ -590,7 +591,7 @@ abstract class AppDatabase : RoomDatabase() {
                     plaintext?.close()
                 } catch (_: Exception) {
                 }
-                encryptedTemp.delete()
+                deleteEncryptingLeftover(vault)
                 if (backup.exists() && !dbFile.exists()) {
                     moveIntoPlace(backup, dbFile)
                 }
@@ -676,9 +677,15 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * Removes the plaintext snapshot only after [confirmPlaintextBackupDisposable].
-         * Deleting it on every successful open used to erase the chats when the process died
-         * mid-encrypt and the next launch created an empty database.
+         * Removes the plaintext snapshot (and any leftover `encrypting` set, including orphan
+         * sidecars and `.kept-*` renames) only after [confirmPlaintextBackupDisposable].
+         * Deleting the snapshot on every successful open used to erase the chats when the process
+         * died mid-encrypt and the next launch created an empty database.
+         * The same pass clears those disposable names in the vault, at the databases root, and
+         * under [ChatDbVault.HOLD_DIR] before the marker is removed. Otherwise the next open
+         * would see no marker and drain a hold copy back into the vault.
+         * The marker stays when a delete fails, so the next open retries instead of forgetting
+         * that the leftover was disposable.
          */
         @androidx.annotation.VisibleForTesting
         internal fun discardPlaintextBackupIfConfirmed(
@@ -687,12 +694,61 @@ abstract class AppDatabase : RoomDatabase() {
         ) {
             val marker = ChatDbVault.encryptMarker(vault)
             if (!marker.exists()) return
-            val backup = ChatDbVault.plaintextBackup(vault)
-            if (backup.exists()) {
-                deleteSidecars(backup)
-                if (!backup.delete()) Log.w(TAG, "Could not remove plaintext backup ${backup.path}")
+            val dirs = ArrayList<File>(3)
+            dirs.add(vault)
+            val databasesDir = dbFile.parentFile
+            if (databasesDir != null && databasesDir.absolutePath != vault.absolutePath) {
+                dirs.add(databasesDir)
+            }
+            if (databasesDir != null) {
+                val hold = File(databasesDir, ChatDbVault.HOLD_DIR)
+                if (hold.isDirectory && dirs.none { it.absolutePath == hold.absolutePath }) {
+                    dirs.add(hold)
+                }
+            }
+            for (dir in dirs) {
+                if (!removeDisposableDbSet(ChatDbVault.plaintextBackup(dir))) {
+                    Log.w(TAG, "Could not remove plaintext backup ${ChatDbVault.plaintextBackup(dir).path}")
+                    return
+                }
+                if (!removeDisposableDbSet(ChatDbVault.encrypting(dir))) {
+                    Log.w(TAG, "Could not remove encrypting leftover ${ChatDbVault.encrypting(dir).path}")
+                    return
+                }
+                if (!ChatDbVault.discardDisposableKeptRenames(dir)) {
+                    Log.w(TAG, "Could not remove disposable kept renames in ${dir.path}")
+                    return
+                }
             }
             if (!marker.delete()) Log.w(TAG, "Could not remove encrypt marker ${marker.path}")
+        }
+
+        /**
+         * Drops in-progress `encrypting` and `pre_sqlcipher` mains and their wal/shm/journal
+         * before a new export. Called only once the live file is still plaintext SQLite, which
+         * is the same moment the old main-only delete ran.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal fun clearPlaintextExportLeftovers(vault: File) {
+            deleteEncryptingLeftover(vault)
+            val backup = ChatDbVault.plaintextBackup(vault)
+            deleteSidecars(backup)
+            backup.delete()
+        }
+
+        /** Drops the in-progress ciphertext and its sidecars. The plaintext snapshot stays. */
+        private fun deleteEncryptingLeftover(vault: File) {
+            val encryptedTemp = ChatDbVault.encrypting(vault)
+            deleteSidecars(encryptedTemp)
+            encryptedTemp.delete()
+        }
+
+        /** Deletes [main] and its wal/shm/journal. False when any piece is still there. */
+        private fun removeDisposableDbSet(main: File): Boolean {
+            deleteSidecars(main)
+            if (main.exists() && !main.delete()) return false
+            if (main.exists()) return false
+            return !listOf("-wal", "-shm", "-journal").any { File(main.path + it).exists() }
         }
 
         /** True only when the file header is standard unencrypted SQLite. */
