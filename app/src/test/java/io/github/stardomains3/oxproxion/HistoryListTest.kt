@@ -188,6 +188,25 @@ class HistoryListTest {
         assertEquals("", HistoryList.preview("assistant", "\"data:image/jpeg;base64,AAAA\"", you, "Photo"))
         assertEquals("You: déjà_vu", HistoryList.preview("user", "\"déjà_vu\"", you, "Photo"))
         assertEquals("You: café", HistoryList.preview("user", "\"_café_\"", you, "Photo"))
+        // A hash is one token in the base64 alphabet. It is not a photo slice.
+        val hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        assertEquals("You: $hash", HistoryList.preview("user", "\"$hash\"", you, "Photo"))
+        assertEquals("", HistoryList.preview("assistant", "\"data:image/jpeg;base64,$hash\"", you, "Photo"))
+        assertTrue(HistoryList.searchLine("user", "\"$hash\"", hash.take(8), you, "Photo").contains(hash.take(8)))
+        val words = "The pier was quiet and the lanterns were lit. "
+        val cut = """{"type":"kept_turn","body":"""" + words.repeat(30)
+        val reply = HistoryList.preview("assistant", cut, you, "Photo")
+        assertTrue(reply.startsWith("The pier was quiet"))
+        assertFalse(reply.contains("kept_turn"))
+        assertEquals(
+            "lanterns on the pier",
+            HistoryList.preview(
+                "assistant",
+                """{"type":"kept_turn","body":"lanterns on the pier","kept":"content://app/owned/scene_photos/11111111-1111-1111-1111-111111111111.jpg"}""",
+                you,
+                "Photo",
+            ),
+        )
         // The hit starts inside the first line. It used to gain a leading ellipsis.
         val early = "short intro lantern " + "tail ".repeat(40)
         val line = HistoryList.searchLine("user", "\"$early\"", "lantern", you, "Photo")

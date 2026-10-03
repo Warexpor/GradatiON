@@ -80,4 +80,16 @@ class ComposerFilesTest {
         assertTrue(section.contains("````text\n$body\n````"))
         assertFalse(section.contains("\n```text\n"))
     }
+
+    @Test fun a_file_keeps_the_indent_on_its_first_line() {
+        val snippet = "\n    def foo():\n        return 1\n"
+        val section = ComposerFiles.section(1, "a.py", snippet)
+        assertTrue(section.contains("```text\n    def foo():\n        return 1\n```"))
+        val tabbed = ComposerFiles.section(2, "b.py", "\tkeep\n\t\tthis")
+        assertTrue(tabbed.contains("```text\n\tkeep\n\t\tthis\n```"))
+        assertEquals(
+            "File 3 (blank.txt): (empty file)",
+            ComposerFiles.section(3, "blank.txt", "\n\n"),
+        )
+    }
 }

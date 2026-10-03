@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Chat wave 33)
+
+On `cursor/chat-wave-33-56da` (PR into `gradation/app-pass`). Chat follow-ups, rebased onto Import #159, Settings #158, Roleplay #156, Hub #155, and Code #157. Not a redo of #153 (history sentences, file fences, staged photos) or #139 (history preview keeping `#` `~` `>`, staged text files one by one and the 1 MB cap). Not a redo of #159 (a rolled-back character import does not apply its notes, the last copy in a file owns the greeting, an oversized portrait or wallpaper is scaled into the backup), #158 (IPv6 local server with `@` or a space in the password, Get location asking for precise and approximate together), #156 (card `<START>` exchanges, `{{bot}}`, `{{random_user_N}}` in an example), #155 (hub divider line, emoji cut, form-encoded pairing space, trailing `#note`), or #157 (config-option mode pill, Playwright browser lines). Not a redo of #152, #151, #150, #149, #147, or #148.
+
+- History preview keeps a line that is only a hash or another long token. It used to be treated as a slice of a photo, so the row went blank. A data URL is still not a line, and neither is a bare slice of the photo bytes. A picture reply stored with the words in `body` still shows those words when the history read is cut inside that string.
+- A text file keeps the indent on its first line. Trimming the whole file used to send a snippet or a patch as a different file. A file that is only whitespace is still empty. A code fence inside the file is still wrapped in a longer fence.
+- Sending a staged photo keeps the file from the tap, and does not start the turn if another chat opened while the photo was encoded. The line stays on the chat that was on screen.
+
+Phone: send a chat whose last line is a SHA-256 (History should show the hash, not a blank row). Attach a Python snippet whose first line is indented (the model should still see that indent). Stage a photo and open another chat while it is encoding (the picture should stay on the first chat).
+
 # Handoff (2026-10-03, Import wave 33)
 
 On `cursor/import-backup-pictures-b045` (PR into `gradation/app-pass`). Import/export follow-ups after #152. Not a redo of a lore pin staying on the chosen copy, a failed wallpaper clear retrying next launch, or trimmed names and a blank name not being imported. Not a redo of #144 (a waiting lore pin replacing the old pin, a failed portrait write being retried, duplicate lore names exporting the newest text and import updating every local row). Not a redo of #158, #156, #155, or #157. Not a redo of #139–#154.

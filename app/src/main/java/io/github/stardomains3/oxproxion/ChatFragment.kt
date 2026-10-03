@@ -2876,13 +2876,23 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         hideMenu()
                         pendingFiles.clear()
                         updateAttachmentButton()
+                        val sendEpoch = viewModel.openChatEpoch()
                         lifecycleScope.launch {
                             var accepted = false
                             try {
                                 val base64 = withContext(Dispatchers.Default) {
                                     Base64.encodeToString(stagedImage, Base64.NO_WRAP)
                                 }
-                                accepted = viewModel.sendUserMessage(imageContent(base64), substitutedSystemPrompt)
+                                // The encode left the main thread. The file on the message is the
+                                // one staged at the tap, not a picture picked since, and the turn
+                                // does not start if another chat finished opening in that gap.
+                                accepted = viewModel.sendUserMessage(
+                                    imageContent(base64),
+                                    substitutedSystemPrompt,
+                                    capturedImageUri = stagedUri,
+                                    useCapturedImageUri = true,
+                                    capturedEpoch = sendEpoch,
+                                )
                             } finally {
                                 photoSendInFlight = false
                             }
