@@ -548,11 +548,13 @@ abstract class AppDatabase : RoomDatabase() {
             val backup = ChatDbVault.plaintextBackup(vault)
             // A crashed export can leave -wal/-shm beside these names. Deleting only the main
             // lets ATTACH replay that wal into the new ciphertext, or pairs it with the snapshot.
-            clearPlaintextExportLeftovers(vault)
+            // If a leftover cannot be moved off that name, do not ATTACH and do not delete the
+            // plaintext snapshot: throwing here would run recovery and could replace the live file.
+            if (!clearPlaintextExportLeftovers(vault)) {
+                Log.e(TAG, "Leftover SQLCipher export files could not be removed; leaving the plaintext database")
+                return false
+            }
 
-            val hexKey = passphrase.joinToString("") { b -> "%02x".format(b) }
-            // A database path with a quote would break out of the ATTACH string.
-            val quotedTemp = encryptedTemp.absolutePath.replace("'", "''")
             var plaintext: SQLiteDatabase? = null
             try {
                 plaintext = SQLiteDatabase.openDatabase(
@@ -564,9 +566,11 @@ abstract class AppDatabase : RoomDatabase() {
                     null
                 )
                 plaintext.rawExecSQL("PRAGMA wal_checkpoint(FULL);")
-                plaintext.rawExecSQL(
-                    "ATTACH DATABASE '$quotedTemp' AS encrypted KEY \"x'$hexKey'\";"
-                )
+                // Room keys with sqlite3_key(passphrase). That is a PBKDF2 passphrase, not a raw
+                // key. ATTACH KEY "x'hex'" writes a raw key, so the next open could not read the
+                // file and recovery set the history aside. Bind the same bytes Room will use.
+                val (attachSql, attachArgs) = sqlCipherExportAttach(encryptedTemp.absolutePath, passphrase)
+                plaintext.rawExecSQL(attachSql, *attachArgs)
                 plaintext.rawExecSQL("SELECT sqlcipher_export('encrypted');")
                 plaintext.rawExecSQL("DETACH DATABASE encrypted;")
                 plaintext.close()
@@ -725,22 +729,76 @@ abstract class AppDatabase : RoomDatabase() {
 
         /**
          * Drops in-progress `encrypting` and `pre_sqlcipher` mains and their wal/shm/journal
-         * before a new export. Called only once the live file is still plaintext SQLite, which
-         * is the same moment the old main-only delete ran.
+         * before a new export. Ciphertext names go first. A name that cannot be deleted (a
+         * non-empty directory) is renamed off the path SQLite would open. If that still fails,
+         * the plaintext snapshot is left in place and this returns false so ATTACH does not run.
+         * Called only once the live file is still plaintext SQLite.
          */
         @androidx.annotation.VisibleForTesting
-        internal fun clearPlaintextExportLeftovers(vault: File) {
-            deleteEncryptingLeftover(vault)
-            val backup = ChatDbVault.plaintextBackup(vault)
-            deleteSidecars(backup)
-            backup.delete()
+        internal fun clearPlaintextExportLeftovers(vault: File): Boolean {
+            if (!removeExportName(ChatDbVault.encrypting(vault))) return false
+            return removeExportName(ChatDbVault.plaintextBackup(vault))
         }
+
+        /**
+         * ATTACH for [sqlcipher_export]. The key argument is the same byte array Room passes to
+         * `sqlite3_key` (a passphrase). It must not be the raw-key blob literal `x'hex'`.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal fun sqlCipherExportAttach(tempPath: String, passphrase: ByteArray): Pair<String, Array<Any>> =
+            "ATTACH DATABASE ? AS encrypted KEY ?" to arrayOf(tempPath, passphrase)
+
+        /**
+         * When set, [removeExportFile] refuses this file name so a test can keep the snapshot.
+         * Null in production.
+         */
+        @androidx.annotation.VisibleForTesting
+        internal var blockExportLeftoverNameForTest: String? = null
 
         /** Drops the in-progress ciphertext and its sidecars. The plaintext snapshot stays. */
         private fun deleteEncryptingLeftover(vault: File) {
-            val encryptedTemp = ChatDbVault.encrypting(vault)
-            deleteSidecars(encryptedTemp)
-            encryptedTemp.delete()
+            removeExportName(ChatDbVault.encrypting(vault))
+        }
+
+        /** True when [main] and its wal/shm/journal are gone (deleted or renamed aside). */
+        private fun removeExportName(main: File): Boolean {
+            for (suffix in listOf("-shm", "-wal", "-journal", "")) {
+                if (!removeExportFile(File(main.path + suffix))) return false
+            }
+            return !main.exists() && !sidecarExists(main)
+        }
+
+        /**
+         * Removes one export leftover. A directory is emptied first: `File.delete` leaves a
+         * non-empty directory, and ATTACH would still see that name. A file that cannot be
+         * deleted is renamed to `name.stuck-N` in the same directory (the vault, which backup
+         * skips) so it is no longer the wal SQLite would replay.
+         */
+        private fun removeExportFile(file: File): Boolean {
+            if (!file.exists()) return true
+            if (file.name == blockExportLeftoverNameForTest) return false
+            if (file.isDirectory) {
+                val children = file.listFiles()
+                if (children != null) {
+                    for (child in children) {
+                        if (!removeExportFile(child)) return false
+                    }
+                }
+            }
+            if (file.delete() || !file.exists()) return true
+            val parked = parkedExportFile(file)
+            return file.renameTo(parked) && !file.exists()
+        }
+
+        private fun parkedExportFile(file: File): File {
+            val parent = file.parentFile
+            var n = 1
+            var alt = File(parent, file.name + ".stuck-$n")
+            while (alt.exists() && n < Int.MAX_VALUE) {
+                n++
+                alt = File(parent, file.name + ".stuck-$n")
+            }
+            return alt
         }
 
         /** Deletes [main] and its wal/shm/journal. False when any piece is still there. */

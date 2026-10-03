@@ -303,7 +303,7 @@ class ChatDatabaseRecoveryTest {
         File(vault, "chat_database.pre_sqlcipher-wal").writeText("old-wal")
         File(vault, "chat_database.pre_sqlcipher-journal").writeText("old-journal")
         File(vault, "chat_database.recovered-1").writeText("keep")
-        AppDatabase.clearPlaintextExportLeftovers(vault)
+        assertTrue(AppDatabase.clearPlaintextExportLeftovers(vault))
         assertEquals("live", File(vault, "chat_database").readText())
         assertEquals("keep", File(vault, "chat_database.recovered-1").readText())
         assertFalse(File(vault, "chat_database.encrypting").exists())
@@ -312,6 +312,48 @@ class ChatDatabaseRecoveryTest {
         assertFalse(File(vault, "chat_database.pre_sqlcipher").exists())
         assertFalse(File(vault, "chat_database.pre_sqlcipher-wal").exists())
         assertFalse(File(vault, "chat_database.pre_sqlcipher-journal").exists())
+    }
+
+    @Test
+    fun exportStartRemovesAStuckEncryptingWalBeforeTouchingTheSnapshot() {
+        val vault = tmp.newFolder("export-stuck-vault")
+        File(vault, "chat_database").writeText("live")
+        File(vault, "chat_database.pre_sqlcipher").writeText("snap")
+        val wal = File(vault, "chat_database.encrypting-wal").apply { mkdirs() }
+        File(wal, "child").writeText("stale")
+        assertTrue(AppDatabase.clearPlaintextExportLeftovers(vault))
+        assertFalse(wal.exists())
+        assertFalse(File(vault, "chat_database.encrypting-wal").exists())
+        assertFalse(File(vault, "chat_database.pre_sqlcipher").exists())
+        assertEquals("live", File(vault, "chat_database").readText())
+    }
+
+    @Test
+    fun exportStartKeepsTheSnapshotWhenTheEncryptingWalCannotMove() {
+        val vault = tmp.newFolder("export-blocked-vault")
+        File(vault, "chat_database").writeText("live")
+        File(vault, "chat_database.pre_sqlcipher").writeText("snap")
+        File(vault, "chat_database.encrypting-wal").writeText("stale")
+        AppDatabase.blockExportLeftoverNameForTest = "chat_database.encrypting-wal"
+        try {
+            assertFalse(AppDatabase.clearPlaintextExportLeftovers(vault))
+        } finally {
+            AppDatabase.blockExportLeftoverNameForTest = null
+        }
+        assertEquals("snap", File(vault, "chat_database.pre_sqlcipher").readText())
+        assertEquals("stale", File(vault, "chat_database.encrypting-wal").readText())
+        assertEquals("live", File(vault, "chat_database").readText())
+    }
+
+    @Test
+    fun exportAttachBindsThePassphraseRoomWillKeyWith() {
+        val key = byteArrayOf(0, 1, 39, 0xFF.toByte())
+        val (sql, args) = AppDatabase.sqlCipherExportAttach("/vault/chat_database.encrypting", key)
+        assertEquals("ATTACH DATABASE ? AS encrypted KEY ?", sql)
+        assertFalse(sql.contains("x'"))
+        assertEquals("/vault/chat_database.encrypting", args[0])
+        assertTrue(args[1] is ByteArray)
+        assertArrayEquals(key, args[1] as ByteArray)
     }
 
     @Test
@@ -1126,6 +1168,7 @@ class ChatDatabaseRecoveryTest {
             "code_away_open_tokens.xml",
             "code_away_notif_ids.xml",
             "code_away_shade_hold.xml",
+            "ForegroundServiceAnswer.xml",
         )
         for (name in names) {
             assertTrue(name, rules.contains("path=\"$name\""))
