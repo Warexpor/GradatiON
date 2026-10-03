@@ -224,8 +224,9 @@ class BotModelPickerFragment : Fragment() {
             setOnClickListener { dialog.dismiss(); showDeleteConfirmationDialog(model) }
         }
         sheet.findViewById<View>(R.id.modelOptionsLocked).isVisible = locked
-        dialog.show()
+        // Glass before show: first frame must not stack content bg_bottom_sheet under the container.
         GlassChrome.glassDialog(dialog)
+        dialog.show()
     }
 
     private fun openModelPage(model: LlmModel) {

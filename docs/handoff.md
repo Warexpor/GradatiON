@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Hub/Pair/Glass wave 28)
+
+On `gradation/w28-hub` (PR into `gradation/app-pass`). Hub/Pair/Glass follow-ups after #106/#112, unit-tested (`CodePairPendingTest`, `GlassDrawableOutlineTest`):
+- Hub Continue / Start chat pin the Roleplay tab for the Code deactivate callback (not a sticky flag) so an async setChatMode(RP) cannot select Chat or spring the underline mid-flip.
+- `CodePairPending` offer / offerError / clear / consume / consumeError share one lock so interleaved QR and deep-link results cannot leave both pending and error set.
+- Bottom-sheet `GlassDrawable` topOnly outlines are empty below API 30 (skip fake rounded-bottom elevation); `clearDuplicateSheetGlass` also drops glass one wrapper deep; History and model-options sheets call `glassDialog` before `show`.
+
+Phone: on Code, History → Roleplay → Hub Continue from Ask (Roleplay tab/underline should not flash Chat). Fail a pair QR while a deep link succeeds (or the reverse under load): only the host form or only the error toast, never both. Bottom sheets on API 29: no rounded-bottom shadow; History ⋮ sheet opens without a double-tint flash.
 # Handoff (2026-10-02, Import wave 28)
 
 On `gradation/w28-import` (PR into `gradation/app-pass`). Import/export IO follow-ups after #114:
