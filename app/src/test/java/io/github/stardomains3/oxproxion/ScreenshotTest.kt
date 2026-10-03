@@ -1109,6 +1109,27 @@ class ScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertTrue(open.contains(a.getString(R.string.notif_action_open)))
     }
 
+    /** The library row menu drew the Grok APK's filled pencil and bin beside the line icons. */
+    @Test fun settingsLibraryRowMenuUsesLineGlyphsDark() = withChat { a, _ ->
+        fun pixels(d: android.graphics.drawable.Drawable): IntArray {
+            val c = d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
+            val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+            c.setBounds(0, 0, 48, 48); c.draw(android.graphics.Canvas(bmp))
+            return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
+        }
+        SharedPreferencesHelper(a).saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
+        val f = PromptLibraryFragment()
+        pushFragment(a, f)
+        f.requireView().findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.prompt_recycler_view)
+            .getChildAt(0).findViewById<View>(R.id.menu_button).performClick(); idle()
+        val menu = shadowOf(ApplicationProvider.getApplicationContext<Application>()).latestPopupWindow.contentView
+        for ((row, glyph) in listOf(R.id.menu_edit to R.drawable.ic_msg_edit, R.id.menu_delete to R.drawable.ic_msg_delete)) {
+            val start = menu.findViewById<android.widget.TextView>(row).compoundDrawablesRelative[0]!!
+            org.junit.Assert.assertArrayEquals(pixels(a.getDrawable(glyph)!!), pixels(start))
+        }
+        snap(menu, "settings_library_row_menu_dark")
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",

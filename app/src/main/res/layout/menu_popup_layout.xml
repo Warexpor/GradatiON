@@ -20,7 +20,7 @@
         android:text="@string/rp_menu_edit"
         android:textColor="@color/xai_ink"
         android:textSize="16sp"
-        app:drawableStartCompat="@drawable/ic_edit"
+        app:drawableStartCompat="@drawable/ic_msg_edit"
         app:drawableTint="@color/xai_ink" />
 
     <View
@@ -42,7 +42,7 @@
         android:text="@string/rp_menu_delete"
         android:textColor="@color/delete_action"
         android:textSize="16sp"
-        app:drawableStartCompat="@drawable/ic_trash"
+        app:drawableStartCompat="@drawable/ic_msg_delete"
         app:drawableTint="@color/delete_action" />
 
 </LinearLayout>
