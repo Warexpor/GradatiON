@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Hub/Pair wave 33)
+
+On `cursor/hub-wave33-fc72` (PR into `gradation/app-pass`). Hub shell and pairing follow-ups after the hub hero line and pairing query text (#147), rebased onto Code #157. Not a redo of that pass. Not a redo of character-list buttons following whether the list is the screen, a pairing link keeping `#` and query keys named token/auth/ws/fp, or a fingerprint with spaces (#141). Not a redo of example sides, lore headers, or list marks (#148). Not a redo of the config-option mode pill or Playwright browser lines (#157). Not a redo of #139–#154.
+
+- The hub hero and the character list skip a first line that is only a divider. `---`, `===`, `- - -`, and `###` used to be the description, so the sentence under them never showed. `C#` on its own line still shows. A 140-character cut no longer ends on the first half of an emoji.
+- A fully encoded pairing address is decoded as a form value, so a space that `URLEncoder` wrote as `+` is a space. The token decoder still keeps `+` as a plus, and that path used to save `hello+world`. A raw bridge query is still copied as written (`Session`, `%20`, `%2B`).
+- A trailing `#note` is dropped even when the bridge address already contains `#`. The note used to stick to the token, or to the fingerprint so the pin was rejected. `#section` followed by the token is still part of the address.
+
+Phone: open Hub on a character whose first line is `---` and the next is `She keeps the locket` (the hero and a fresh list row should say that sentence, not the dashes). A first line of 139 letters plus a gem emoji should not end on a broken character. Pair a link whose address was form-encoded with a space (`name=hello world` inside `url=`). Pair `gradation://pair?url=wss://h/v1?a=1#section&token=…&fp=…#note` (the saved host should keep `#section`, the token should not end in `#note`, and the pin should still be accepted).
+
 # Handoff (2026-10-03, Code wave 33)
 
 On `cursor/code-mode-wave33-f060` (PR into `gradation/app-pass`). Code-mode follow-ups after the browser line preferring typed text, the control, or a scroll over an element ref, a listed Ask staying Ask, and `session/new` / `session/load` reading `modes` (#151). Not a redo of that pass. Not a redo of Codex `read-only` / `auto` / `full-access`, OpenCode `build`, a skipped multi-select question, or browser profile start/stop on the execute card (#145).
