@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Hub/Pair wave 30)
+
+On `gradation/w30-hub` (PR into `gradation/app-pass`). Hub/mode and pairing follow-ups after #129. Not a redo of Continue/Start staying on the Roleplay thread, Start-while-Roleplay suppress, Roleplay-off-during-reply returning to Chat, or sheet glass reapplying after the first layout. Not #119 (Roleplay tab pin, pair pending lock, topOnly outlines). Not a redo of Code #131, Stability #132, Import #133, or Notifications #134.
+- History `loadChat` only signals a thread open when a Roleplay row is actually applied. An Ask open used to close the character list before leaving Roleplay could remember it, so the next Roleplay visit skipped the list. A load that bails (reply in flight, missing row) no longer leaves that suppress stuck.
+- Pairing parse keeps an unencoded `&` inside the bridge address until the next known key (`token` / `fp` / aliases), so `wss://host/v1?a=1&b=2` is the address and not a truncated URL plus a stray parameter.
+- Pair connect treats 401 and 403 as their own status numbers. A socket error that only contains those digits (port 4010, "4012 ms") stays unreachable.
+
+Phone: on the Roleplay character list, open History and an Ask chat, then switch back to Roleplay (the list should be there). Open History while a reply is still streaming so the open does not land, then open Roleplay (the list should still resume). Pair with a QR whose address is `wss://host/v1?a=1&b=2` (the saved host should keep `b=2`). Fail a connect to port 4010 (the message should be unreachable, not a bad token).
+
 # Handoff (2026-10-03, Notifications/Away wave 30)
 
 On `gradation/w30-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after the one-commit shade hold, dismissed open tokens, and in-chat Stop (#127). Not a redo of that pass or of #120:

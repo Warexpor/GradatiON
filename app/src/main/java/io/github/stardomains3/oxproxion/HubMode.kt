@@ -34,6 +34,25 @@ internal object HubUncover {
      * list close is enough — leaving suppress set would stick.
      */
     fun suppressForThreadOpen(alreadyInRoleplay: Boolean): Boolean = !alreadyInRoleplay
+
+    /**
+     * History [ChatViewModel.loadChat] must not pretend a thread opened unless a Roleplay
+     * row is actually about to be shown. An Ask open has to leave the character list up so
+     * leaving Roleplay can remember it. A load that bails (reply still in flight, missing
+     * row) must not suppress the next Ask → Roleplay switch.
+     */
+    fun shouldSignalThreadOpen(loadApplied: Boolean, loadedRoleplay: Boolean): Boolean =
+        loadApplied && loadedRoleplay
+
+    /**
+     * Leaving Roleplay. Remember the list only on the way out. A later Ask re-emit must
+     * not overwrite that memory with the list already closed.
+     */
+    fun afterLeaveRoleplay(wasInRoleplay: Boolean, home: Home): Home = if (wasInRoleplay) {
+        home.copy(resumeAtHome = home.open, open = false, suppressed = false)
+    } else {
+        home.copy(open = false, suppressed = false)
+    }
 }
 
 /**

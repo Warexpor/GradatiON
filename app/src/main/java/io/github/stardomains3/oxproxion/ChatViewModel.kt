@@ -1322,7 +1322,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadChat(sessionId: Long) {
-        _rpThreadOpenedEvent.value = Event(Unit)
+        // Do not signal a thread open here. The signal used to fire even when the load
+        // bailed (reply in flight, missing row) or the row was Ask, which closed the
+        // Roleplay list before leave-mode could remember it.
         beginSessionTransition {
             loadChatInternal(sessionId)
         }
@@ -1370,6 +1372,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     sharedPreferencesHelper.saveRpDraftSessionId(previousMode, previousSessionId)
                 }
                 sharedPreferencesHelper.saveRpDraftSessionId(loadedMode, sessionId)
+                // Before the mode write, so a Roleplay landing cannot reopen the list
+                // this open just closed. Ask (and a load that never got here) does not signal.
+                if (HubUncover.shouldSignalThreadOpen(
+                        loadApplied = true,
+                        loadedRoleplay = loadedMode == ChatMode.RP,
+                    )
+                ) {
+                    _rpThreadOpenedEvent.value = Event(Unit)
+                }
                 if (loadedMode == ChatMode.RP) {
                     _chatMode.value = ChatMode.RP
                     sharedPreferencesHelper.saveChatMode(ChatMode.RP)

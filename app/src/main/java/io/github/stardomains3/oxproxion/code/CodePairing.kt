@@ -58,7 +58,9 @@ object CodePairing {
      * Parse a pairing QR / deep-link string.
      *
      * Query aliases: `url`|`address`|`ws`; `token`|`t`|`auth`; `fp`|`fingerprint`|`pin`.
-     * Missing url/token → error. Present but unparseable `fp` → [Reason.BAD_FINGERPRINT].
+     * A bridge address may contain its own query (`wss://host/v1?a=1&b=2`) even when that
+     * `&` was not percent-encoded; unknown segments stay inside the address until the next
+     * known key. Missing url/token → error. Present but unparseable `fp` → [Reason.BAD_FINGERPRINT].
      * Valid `fp` with cleartext `ws://` → [Reason.PIN_REQUIRES_WSS] (pin needs `wss://`).
      * Absent `fp` is allowed (legacy cleartext LAN / no-pin path).
      */
@@ -97,15 +99,27 @@ object CodePairing {
     private fun parseUri(raw: String): URI? =
         runCatching { URI(raw) }.getOrNull()
 
+    private val urlKeys = setOf("url", "address", "ws")
+    private val knownKeys = urlKeys + setOf("token", "t", "auth", "fp", "fingerprint", "pin")
+
     private fun queryMap(rawQuery: String?): Map<String, String> {
         if (rawQuery.isNullOrBlank()) return emptyMap()
         val out = LinkedHashMap<String, String>()
+        var urlKey: String? = null
         for (part in rawQuery.split('&')) {
             if (part.isEmpty()) continue
             val eq = part.indexOf('=')
             val key = decode(if (eq < 0) part else part.substring(0, eq)).lowercase()
             val value = if (eq < 0) "" else decode(part.substring(eq + 1))
-            if (key.isNotEmpty() && key !in out) out[key] = value
+            if (key.isNotEmpty() && key in knownKeys) {
+                if (key !in out) out[key] = value
+                // Only the address value may swallow later raw '&' segments.
+                urlKey = if (key in urlKeys) key else null
+            } else if (urlKey != null && key.isNotEmpty()) {
+                val current = out[urlKey].orEmpty()
+                val piece = if (eq < 0) key else "$key=$value"
+                out[urlKey] = "$current&$piece"
+            }
         }
         return out
     }
