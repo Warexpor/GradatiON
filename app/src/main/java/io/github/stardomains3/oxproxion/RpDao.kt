@@ -65,6 +65,9 @@ interface RpDao {
         incoming: List<RpCharacterExport>,
         beforeCommit: suspend (List<ImportedCharacter>) -> Unit = {},
     ): List<ImportedCharacter> {
+        // The stamp from before this batch. A second copy of the same key sees the row
+        // this transaction already updated; the rollback check has to use the original.
+        val previousById = HashMap<Long, Long>()
         val rows = incoming.mapIndexedNotNull { index, ex ->
             RpImportGuard.beforeRow(index)
             // The editor trims and refuses a blank name. A padded name stored as typed, and
@@ -74,6 +77,15 @@ interface RpDao {
             val existing = ex.exportKey.takeIf { it.isNotBlank() }?.let { getCharacterByExportKey(it) }
             val isNew = existing == null
             val exportKey = existing?.exportKey ?: ex.exportKey.ifBlank { UUID.randomUUID().toString() }
+            val previousUpdatedAt = if (existing == null) {
+                0L
+            } else {
+                previousById.getOrPut(existing.id) { existing.updatedAt }
+            }
+            val now = System.currentTimeMillis()
+            // Always different from the stamp already on the row, so a commit and a
+            // rollback are not the same millisecond.
+            val writtenUpdatedAt = if (now > previousUpdatedAt) now else previousUpdatedAt + 1
             val row = (existing ?: RpCharacter(name = name, exportKey = exportKey)).copy(
                 name = name,
                 personality = ex.personality,
@@ -85,7 +97,7 @@ interface RpDao {
                 instruction = ex.instruction,
                 photoUri = existing?.photoUri,
                 exportKey = exportKey,
-                updatedAt = System.currentTimeMillis()
+                updatedAt = writtenUpdatedAt
             )
             val id = if (row.id == 0L) {
                 insertCharacter(row)
@@ -93,7 +105,14 @@ interface RpDao {
                 updateCharacter(row)
                 row.id
             }
-            ImportedCharacter(id, exportKey, isNew, ex.avatarBase64)
+            ImportedCharacter(
+                id,
+                exportKey,
+                isNew,
+                ex.avatarBase64,
+                writtenUpdatedAt,
+                previousUpdatedAt,
+            )
         }
         beforeCommit(rows)
         return rows
@@ -178,7 +197,11 @@ data class ImportedCharacter(
     val id: Long,
     val exportKey: String,
     val isNew: Boolean,
-    val avatarBase64: String?
+    val avatarBase64: String?,
+    /** [RpCharacter.updatedAt] written in this import. 0 on a note from before the stamp. */
+    val writtenUpdatedAt: Long = 0,
+    /** The row's [RpCharacter.updatedAt] before this import. A rollback leaves that stamp. */
+    val previousUpdatedAt: Long = 0,
 )
 
 /**

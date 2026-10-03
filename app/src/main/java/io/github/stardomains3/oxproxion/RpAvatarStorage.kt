@@ -13,6 +13,11 @@ object RpAvatarStorage {
     private const val PERSONA_DIR = "rp_persona_avatars"
     private const val MAX_EDGE = 512
 
+    /** Larger than this and the backup carries a scaled JPEG instead of the raw file. */
+    internal const val EXPORT_MAX_BYTES = 1_000_000
+
+    private const val MAX_READ = 32 * 1024 * 1024
+
     fun avatarFile(context: Context, characterId: Long): File {
         val dir = File(context.filesDir, DIR)
         if (!dir.exists()) dir.mkdirs()
@@ -82,16 +87,38 @@ object RpAvatarStorage {
     /**
      * Portrait as Base64. Empty when there is no file, so a backup can clear one.
      * Null when the file is torn or cannot be read: the other phone keeps its copy
-     * (same split as wallpaper encode).
+     * (same split as wallpaper encode). A file over [maxBytes] is scaled to the usual
+     * portrait instead of being embedded whole, which used to push the backup past
+     * what an import will read.
      */
-    fun encodeAvatarBase64(context: Context, characterId: Long): String? {
+    fun encodeAvatarBase64(context: Context, characterId: Long): String? =
+        encodeAvatarBase64(context, characterId, EXPORT_MAX_BYTES)
+
+    internal fun encodeAvatarBase64(context: Context, characterId: Long, maxBytes: Int): String? {
         val file = avatarFile(context, characterId)
         ScenePhoto.recover(file)
         if (!file.isFile || file.length() == 0L) return ""
         // A half-written portrait is not a picture; leave the next phone's copy alone.
         if (!ScenePhoto.completeJpeg(file)) return null
+        if (maxBytes <= 0 || file.length() > MAX_READ) return null
         return try {
-            Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+            val raw = file.readBytes()
+            val bytes = if (raw.size <= maxBytes) {
+                raw
+            } else {
+                val bitmap = decodeSampled(raw) ?: return null
+                val out = ByteArrayOutputStream()
+                val ok = try {
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                } finally {
+                    if (!bitmap.isRecycled) bitmap.recycle()
+                }
+                if (!ok) return null
+                val jpeg = out.toByteArray()
+                if (!ScenePhoto.completeJpeg(jpeg) || jpeg.size > maxBytes) return null
+                jpeg
+            }
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
         } catch (_: Exception) {
             null
         }
