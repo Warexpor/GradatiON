@@ -141,9 +141,14 @@ and never auto-send, and there's no hold-to-talk. While listening:
 - Roleplay adds a speaker line (avatar and name) and swipe navigation between alternate replies.
 
 **Code transcript.**
-- Each tool call is one line: a kind glyph, the verb in semibold, and a mono argument, with a
-  spinner while running and a mark only on failure. The output hangs underneath on tap.
-- Diffs are cards with colored lines and counts.
+- One grid: glyphs on a rail column (centred 22dp in), content from 42dp. Each turn hangs on a
+  thin rail (`CodeTranscriptRail`) from the prompt block (a `›` and the words) to an end ring
+  with the summary in mono. Steps are glyph beads on it; prose gets a dot; opaque cards let it
+  pass behind.
+- Each tool call is one line: a kind glyph in a bead, the verb in semibold, and a mono argument,
+  with a ring orbiting the bead while running and a mark only on failure. The output hangs
+  underneath on tap, in a terminal pane that starts with `$ command` for commands.
+- Diffs are editor panes: file name, folder, counts, then colored lines on the recessed code fill.
 - Approvals are glass cards with capsule choices.
 - The session menu switches between Normal view (folded) and Thinking view (every thought and
   output open).

@@ -1,25 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code transcript: the user's prompt, right-aligned bubble like chat -->
+<!-- Code transcript: the user's prompt as a shell-style block. The › sits on the rail column, the
+     words on the content column, and the turn's rail hangs from the block's bottom edge. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="56dp"
+    android:paddingStart="12dp"
     android:paddingEnd="14dp"
-    android:paddingTop="10dp"
+    android:paddingTop="14dp"
     android:paddingBottom="6dp">
 
-    <TextView
-        android:id="@+id/codeUserText"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="end"
-        android:background="@drawable/bg_user_message"
-        android:paddingStart="14dp"
+        android:background="@drawable/bg_code_prompt"
+        android:orientation="horizontal"
+        android:paddingTop="11dp"
         android:paddingEnd="14dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="10dp"
-        android:textColor="@color/xai_ink"
-        android:textSize="16sp"
-        android:lineSpacingMultiplier="1.3"
-        android:textIsSelectable="true" />
+        android:paddingBottom="11dp">
+
+        <!-- Baseline-aligned with the first line of the prompt, at any font scale -->
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="14dp"
+            android:baseline="12dp"
+            android:importantForAccessibility="no"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_chevron_right"
+            app:tint="@color/xai_mute" />
+
+        <TextView
+            android:id="@+id/codeUserText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:textColor="@color/xai_ink"
+            android:textSize="16sp"
+            android:lineSpacingMultiplier="1.3"
+            android:textIsSelectable="true" />
+    </LinearLayout>
 </FrameLayout>

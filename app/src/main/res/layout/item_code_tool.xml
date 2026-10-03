@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code transcript: one tool call as a single line; tap for output -->
+<!-- Code transcript: one tool call as a single line on the rail; tap for output -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:paddingStart="12dp"
-    android:paddingEnd="12dp"
-    android:paddingTop="2dp"
-    android:paddingBottom="2dp">
+    android:paddingEnd="14dp"
+    android:paddingTop="1dp"
+    android:paddingBottom="1dp">
 
-    <!-- Claude Code style: one quiet line. Kind glyph, verb, mono argument; a spinner while it
-         runs, a cross only on failure. Output hangs under it on tap. -->
+    <!-- Claude Code style: one quiet line. Kind glyph in a bead on the rail (a ring orbits it while
+         the tool runs), verb, mono argument, and a cross only on failure. Output hangs under it. -->
     <LinearLayout
         android:id="@+id/codeToolRow"
         android:layout_width="match_parent"
@@ -22,15 +22,33 @@
         android:focusable="true"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="6dp"
         android:paddingEnd="6dp">
 
-        <ImageView
-            android:id="@+id/codeToolIcon"
-            android:layout_width="14dp"
-            android:layout_height="14dp"
-            android:importantForAccessibility="no"
-            app:tint="@color/xai_mute" />
+        <FrameLayout
+            android:id="@+id/codeRailNode"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:background="@drawable/bg_code_node">
+
+            <ImageView
+                android:id="@+id/codeToolIcon"
+                android:layout_width="11dp"
+                android:layout_height="11dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                app:tint="@color/xai_mute" />
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/codeToolSpinner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                app:indicatorColor="@color/xai_ink"
+                app:indicatorSize="20dp"
+                app:trackThickness="1.5dp"
+                app:trackColor="@android:color/transparent" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/codeToolTitle"
@@ -54,51 +72,54 @@
             android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
             android:textColor="@color/xai_mute" />
 
-        <FrameLayout
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:layout_marginStart="8dp">
-
-            <com.google.android.material.progressindicator.CircularProgressIndicator
-                android:id="@+id/codeToolSpinner"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                app:indicatorColor="@color/xai_mute"
-                app:indicatorSize="12dp"
-                app:trackThickness="1.5dp"
-                app:trackColor="@android:color/transparent" />
-
-            <ImageView
-                android:id="@+id/codeToolStatus"
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:layout_gravity="center"
-                android:importantForAccessibility="no"
-                app:tint="@color/xai_mute" />
-        </FrameLayout>
+        <ImageView
+            android:id="@+id/codeToolStatus"
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_marginStart="8dp"
+            android:importantForAccessibility="no"
+            app:tint="@color/xai_mute" />
     </LinearLayout>
 
+    <!-- The terminal pane: a $ prompt line for commands, then the output -->
     <HorizontalScrollView
         android:id="@+id/codeToolOutputScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="30dp"
         android:layout_marginTop="2dp"
-        android:background="@drawable/bg_code_block"
+        android:background="@drawable/bg_code_pane"
         android:scrollbars="none"
         android:visibility="gone">
 
-        <TextView
-            android:id="@+id/codeToolOutput"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:padding="12dp"
-            android:lineSpacingMultiplier="1.25"
-            android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
-            android:textColor="@color/xai_body"
-            android:textIsSelectable="true" />
+            android:orientation="vertical"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="12dp">
+
+            <TextView
+                android:id="@+id/codeToolPrompt"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:singleLine="true"
+                android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+                android:textColor="@color/xai_ink"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/codeToolOutput"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:lineSpacingMultiplier="1.25"
+                android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+                android:textColor="@color/xai_body"
+                android:textIsSelectable="true" />
+        </LinearLayout>
     </HorizontalScrollView>
 
     <!-- Opens CodeToolOutputFragment; mirrors the diff card "more lines" affordance -->
@@ -107,7 +128,7 @@
         android:layout_width="match_parent"
         android:layout_height="44dp"
         android:layout_marginStart="30dp"
-        android:layout_marginBottom="4dp"
+        android:layout_marginBottom="2dp"
         android:background="@drawable/bg_press_svg"
         android:clickable="true"
         android:focusable="true"

@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code transcript: a file change. Path + counts, first lines of the diff, tap for the full viewer -->
+<!-- Code transcript: a file change as an editor pane. A tab-like header (file name, folder, counts),
+     the first lines of the diff on the recessed code fill, tap for the full viewer. The rail runs
+     behind the opaque card, so the header glyph lands on the rail column. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="14dp"
+    android:paddingStart="12dp"
     android:paddingEnd="14dp"
     android:paddingTop="4dp"
     android:paddingBottom="6dp">
@@ -15,27 +17,42 @@
         android:layout_height="wrap_content"
         android:background="@drawable/bg_code_card"
         android:clickable="true"
+        android:clipToOutline="true"
         android:focusable="true"
         android:foreground="@drawable/bg_press_svg"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:padding="1dp">
 
+        <!-- The 1dp card inset keeps the code fill inside the rim, so the glyph frame is 18dp -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="44dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp">
+            android:paddingEnd="13dp">
 
             <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
+                android:layout_width="18dp"
+                android:layout_height="14dp"
                 android:importantForAccessibility="no"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_code_file"
                 app:tint="@color/xai_mute" />
 
             <TextView
                 android:id="@+id/codeDiffPath"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="11dp"
+                android:ellipsize="middle"
+                android:maxWidth="200dp"
+                android:singleLine="true"
+                android:textColor="@color/xai_ink"
+                android:textSize="14sp"
+                android:textFontWeight="600" />
+
+            <TextView
+                android:id="@+id/codeDiffDir"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -43,8 +60,8 @@
                 android:ellipsize="start"
                 android:singleLine="true"
                 android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
-                android:textColor="@color/xai_ink"
-                android:textSize="13sp" />
+                android:textColor="@color/xai_mute"
+                android:textSize="12sp" />
 
             <TextView
                 android:id="@+id/codeDiffCounts"
@@ -67,7 +84,13 @@
         <io.github.stardomains3.oxproxion.code.DiffView
             android:id="@+id/codeDiffLines"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:background="@color/code_block_bg" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/xai_hairline" />
 
         <TextView
             android:id="@+id/codeDiffMore"

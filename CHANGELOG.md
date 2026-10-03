@@ -26,6 +26,7 @@
 - Chat: streaming, fades, the copy check and the glass switch all honour the system "animations off" setting; message copies confirm with the check animation and a haptic; the haptics preference applies to every tap (new `Haptics.tap`).
 
 ### Changed
+- Code: a running session reads as a coding surface instead of a list of chat bubbles. Each turn hangs on one thin rail down the left gutter, from your prompt to the turn's end. Your prompt is a block with a `›`, every step (thinking, reads, searches, commands, answered approvals) is a glyph bead on the rail, and a ring orbits the bead while that tool runs. The agent's prose gets a dot on the rail. Command output opens in a terminal pane that starts with its `$ command` line. A file change is an editor pane: the file name, then its folder, then the counts, over the code. The plan shows how many steps are done, and the turn ends in a ring with its summary in mono.
 - The demo model's rewrite follows the last ask in the note, so "don't shorten it, make it longer" comes out longer, and a note of more than one line is read in full.
 - Roleplay characters list: the top-left button is a gear that opens Settings (inside a chat it stays the back chevron).
 - Character panel: square tiles with flat drawn art that fills each card; no edge line; the header's Switch button and the New chat tile are gone (New chat lives on the History page).

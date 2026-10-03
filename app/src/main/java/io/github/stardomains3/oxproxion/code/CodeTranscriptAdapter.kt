@@ -1,6 +1,7 @@
 package io.github.stardomains3.oxproxion.code
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.LruCache
@@ -23,6 +24,7 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
+import androidx.core.widget.ImageViewCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -150,6 +152,32 @@ class CodeTranscriptAdapter(
 
     init {
         setHasStableIds(true)
+    }
+
+    private val rail = CodeTranscriptRail(context, ::railAt)
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        recyclerView.addItemDecoration(rail)
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        recyclerView.removeItemDecoration(rail)
+    }
+
+    /** How row [position] meets the turn's rail; out of range breaks it. */
+    fun railAt(position: Int): Rail {
+        if (position < 0 || position >= itemCount) return Rail.NONE
+        return when (val r = getItem(position)) {
+            TranscriptRow.Working -> Rail.WORKING
+            is TranscriptRow.Event -> when (val e = r.event) {
+                is CodeEvent.UserPrompt -> Rail.START
+                is CodeEvent.AgentText -> Rail.TEXT
+                is CodeEvent.Thought, is CodeEvent.ToolCall -> Rail.NODE
+                is CodeEvent.Approval -> if (e.chosen != null || e.expired) Rail.NODE else Rail.PASS
+                is CodeEvent.FileDiff, is CodeEvent.Plan, is CodeEvent.Notice -> Rail.PASS
+                is CodeEvent.TurnEnd -> Rail.END
+            }
+        }
     }
 
     override fun getItemId(position: Int): Long = getItem(position).key.hashCode().toLong()
@@ -522,6 +550,8 @@ class CodeTranscriptAdapter(
         val status = v.findViewById<ImageView>(R.id.codeToolStatus)
         val running = e.status == ToolStatus.RUNNING || e.status == ToolStatus.PENDING
         spinner.isVisible = running
+        ImageViewCompat.setImageTintList(v.findViewById(R.id.codeToolIcon),
+            ColorStateList.valueOf(v.context.getColor(if (running) R.color.xai_ink else R.color.xai_mute)))
         // Quiet when it worked; only a failure earns a mark.
         status.isVisible = e.status == ToolStatus.FAILED
         status.setImageResource(R.drawable.ic_code_cross)
@@ -541,6 +571,10 @@ class CodeTranscriptAdapter(
             }
             v.findViewById<TextView>(R.id.codeToolOutput).text =
                 ToolOutputText.cardPreview(raw, OUTPUT_LINES, head = head)
+            val prompt = v.findViewById<TextView>(R.id.codeToolPrompt)
+            val command = e.detail?.takeIf { e.kind == ToolKind.EXECUTE && it.isNotBlank() }
+            prompt.isVisible = command != null
+            if (command != null) prompt.text = shellPrompt(v.context, command)
             val hidden = (raw.lines().size - OUTPUT_LINES).coerceAtLeast(0)
             full.text = if (hidden > 0) {
                 v.context.getString(R.string.code_session_more_lines, hidden)
@@ -582,7 +616,14 @@ class CodeTranscriptAdapter(
 
     private fun bindDiff(v: View, e: CodeEvent.FileDiff) {
         val ctx = v.context
-        v.findViewById<TextView>(R.id.codeDiffPath).text = e.path
+        // Name first like an editor tab, the folder after it in mono and trimmed from the left.
+        val path = e.path.trimEnd('/')
+        val cut = path.lastIndexOf('/')
+        v.findViewById<TextView>(R.id.codeDiffPath).text = if (cut >= 0) path.substring(cut + 1) else path
+        v.findViewById<TextView>(R.id.codeDiffDir).apply {
+            text = if (cut > 0) path.substring(0, cut) else ""
+            isVisible = cut > 0
+        }
         v.findViewById<TextView>(R.id.codeDiffCounts).text =
             if (e.isNewFile) ctx.getString(R.string.code_session_new_file) else coloredDiffCounts(ctx, e.added, e.removed)
         val dv = v.findViewById<DiffView>(R.id.codeDiffLines)
@@ -686,6 +727,9 @@ class CodeTranscriptAdapter(
         box.removeAllViews()
         val ctx = v.context
         val d = ctx.resources.displayMetrics.density
+        val finished = e.entries.count { it.status == PlanStatus.COMPLETED }
+        v.findViewById<TextView>(R.id.codePlanProgress).text =
+            ctx.getString(R.string.code_session_plan_progress, finished, e.entries.size)
         for (entry in e.entries) {
             val row = TextView(ctx).apply {
                 text = entry.content
@@ -707,11 +751,20 @@ class CodeTranscriptAdapter(
                     PlanStatus.IN_PROGRESS -> R.drawable.ic_code_plan_progress
                     PlanStatus.PENDING, PlanStatus.CANCELLED -> R.drawable.ic_code_plan_pending
                 }, 0, 0, 0)
-                compoundDrawablePadding = (12 * d).toInt()
+                // Glyph on the rail column, words on the content column.
+                compoundDrawablePadding = (11 * d).toInt()
                 setPadding(0, (6 * d).toInt(), 0, (6 * d).toInt())
             }
             box.addView(row)
         }
+    }
+
+    /** "$ command" for the top of a terminal pane, the $ dimmed so the command leads. */
+    private fun shellPrompt(ctx: Context, command: String): CharSequence {
+        val out = SpannableStringBuilder(ctx.getString(R.string.code_tool_prompt, command))
+        val mark = out.indexOf(command).takeIf { it > 0 } ?: return out
+        out.setSpan(android.text.style.ForegroundColorSpan(ctx.getColor(R.color.xai_mute)), 0, mark, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        return out
     }
 
     /** Stop reason in the app language, then any token/cost counts the bridge reported. */
