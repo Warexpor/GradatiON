@@ -1686,15 +1686,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         )
     }
 
-    /** Delete a parked scene JPEG that History discarded and no message still names. */
+    /** Delete a parked scene JPEG that nothing on screen and nothing saved still names. */
     private fun discardParkedScene(entry: ComposerStaged.Entry) {
         if (entry.isEmpty) return
         val uri = entry.imageUri ?: return
         val name = ScenePhoto.sceneFileName(uri) ?: return
-        val app = context?.applicationContext ?: return
-        lifecycleScope.launch(Dispatchers.IO) {
-            if (!viewModel.scenePhotoStillUsed(name)) ScenePhoto.deleteSceneFiles(app, listOf(name))
-        }
+        viewModel.discardSceneFileIfUnused(name)
     }
 
     private fun updateSystemMessageButtonState() {
@@ -2738,20 +2735,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     return@setOnClickListener
                 }
                 if (pendingFiles.isNotEmpty()) {
-                    val fileSections = pendingFiles.mapIndexed { index, file ->  // Explicit -> String
-                        val cleanContent = file.content.trim()
-                        if (cleanContent.isNotBlank()) {
-                            // Raw string for if branch: No escaping needed, newline after filename
-                            """File ${index + 1} (${file.fileName}):
-
-```text
-$cleanContent
-```"""
-                        } else {
-                            // Raw string for else branch: Matches type, no escaping
-                            """File ${index + 1} (${file.fileName}): (empty file)"""
-                        }
-                    }.joinToString("\n\n")  // Now safely String
+                    // A body that contains ``` must not close the fence early.
+                    val fileSections = pendingFiles.mapIndexed { index, file ->
+                        ComposerFiles.section(index + 1, file.fileName, file.content)
+                    }.joinToString("\n\n")
 
                     // Reassign prompt: Type-safe since fileSections is String
                     prompt = if (prompt.isNotBlank()) {
@@ -2861,6 +2848,22 @@ $cleanContent
                     if (stagedImage != null) {
                         if (photoSendInFlight) return@setOnClickListener
                         photoSendInFlight = true
+                        // Park before the field is cleared. Rotation cancels the encode, and a
+                        // pause of the empty composer must not forget the caption or the files.
+                        val held = ComposerStaged.holdBeforePhotoSend(
+                            drafts = sharedPreferencesHelper.getAskComposerDrafts(),
+                            staged = viewModel.stagedAttachments(),
+                            sessionId = draftSession,
+                            text = unsentField,
+                            entry = currentStagedEntry(),
+                        )
+                        sharedPreferencesHelper.saveAskComposerDrafts(held.drafts)
+                        mirrorAskModeDraft(unsentField)
+                        val beforeStage = viewModel.stagedAttachments()
+                        if (held.staged !== beforeStage) {
+                            viewModel.setStagedAttachments(held.staged)
+                            for (gone in ComposerStaged.evicted(beforeStage, held.staged)) discardParkedScene(gone)
+                        }
                         // Hide the chip now. Leave the file URI until the message copies it:
                         // clearing it first sent the picture with nowhere for the bubble to load it.
                         attachmentPreviewContainer.visibility = View.GONE
@@ -2874,21 +2877,21 @@ $cleanContent
                         pendingFiles.clear()
                         updateAttachmentButton()
                         lifecycleScope.launch {
-                            val accepted = try {
+                            var accepted = false
+                            try {
                                 val base64 = withContext(Dispatchers.Default) {
                                     Base64.encodeToString(stagedImage, Base64.NO_WRAP)
                                 }
-                                viewModel.sendUserMessage(imageContent(base64), substitutedSystemPrompt)
+                                accepted = viewModel.sendUserMessage(imageContent(base64), substitutedSystemPrompt)
                             } finally {
                                 photoSendInFlight = false
                             }
-                            if (!isAdded) return@launch
                             if (accepted) {
                                 viewModel.finishComposerEdit()
                                 forgetAskDraft(draftSession)
                                 forgetStagedAttachment(draftSession)
-                                clearStagedAttachment()
-                            } else {
+                                if (isAdded) clearStagedAttachment()
+                            } else if (isAdded) {
                                 restoreUnsentAsk(draftSession, unsentField, stagedImage, stagedImageMime, stagedUri, stagedFiles)
                             }
                         }
@@ -3674,14 +3677,7 @@ $cleanContent
                     val previousUri = base.imageUri
                     parkLateAskAttachment(ComposerStaged.withAudio(base, bytes, audioFormat))
                     val goneName = previousUri?.let { ScenePhoto.sceneFileName(it) }
-                    val app = context?.applicationContext
-                    if (goneName != null && app != null) {
-                        launch(Dispatchers.IO) {
-                            if (!viewModel.scenePhotoStillUsed(goneName)) {
-                                ScenePhoto.deleteSceneFiles(app, listOf(goneName))
-                            }
-                        }
-                    }
+                    if (goneName != null) viewModel.discardSceneFileIfUnused(goneName)
                     return@launch
                 }
 
@@ -4167,10 +4163,7 @@ $cleanContent
         viewModel.setPendingUserImageUri(null)
         discardUri?.let { uri ->
             val name = ScenePhoto.sceneFileName(uri) ?: return@let
-            val app = context?.applicationContext ?: return@let
-            lifecycleScope.launch(Dispatchers.IO) {
-                if (!viewModel.scenePhotoStillUsed(name)) ScenePhoto.deleteSceneFiles(app, listOf(name))
-            }
+            viewModel.discardSceneFileIfUnused(name)
         }
         currentTempImageFile?.delete()
         currentTempImageFile = null

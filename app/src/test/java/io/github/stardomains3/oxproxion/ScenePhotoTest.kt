@@ -154,6 +154,24 @@ class ScenePhotoTest {
             ScenePhoto.scenePhotosSafeToDelete(dropped, heldForEdit = setOf(name), pendingName = "not-a-file"),
         )
         assertTrue(ScenePhoto.scenePhotosSafeToDelete(emptyList(), emptySet(), null).isEmpty())
+        // On the open transcript, pending already cleared, and not saved yet.
+        assertTrue(
+            ScenePhoto.scenePhotosSafeToDelete(
+                listOf(name),
+                heldForEdit = emptySet(),
+                pendingName = null,
+                shownNames = setOf(name),
+            ).isEmpty(),
+        )
+        assertEquals(
+            listOf(name),
+            ScenePhoto.scenePhotosSafeToDelete(
+                listOf(name),
+                heldForEdit = emptySet(),
+                pendingName = null,
+                shownNames = setOf(other),
+            ),
+        )
     }
 
     @Test fun deleteSceneFilesRemovesOnlyThatName() {

@@ -50,4 +50,34 @@ object ComposerFiles {
 
     private fun finish(out: ByteArrayOutputStream, total: Int, overflow: Boolean): CappedRead =
         CappedRead(out.toByteArray().toString(Charsets.UTF_8), total, overflow)
+
+    /**
+     * One file, as it is pasted into the prompt. A body that contains a fence of three
+     * backticks used to close the wrapper, so the rest of the file was sent as the message.
+     * The fence is one longer than any run in the body. A line break in the name stays
+     * on the header line.
+     */
+    fun section(number: Int, fileName: String, content: String): String {
+        val name = fileName.replace(NEWLINE, " ").ifBlank { "file" }
+        val body = content.trim()
+        if (body.isEmpty()) return "File $number ($name): (empty file)"
+        val fence = "`".repeat(fenceLength(body))
+        return "File $number ($name):\n\n${fence}text\n$body\n$fence"
+    }
+
+    private fun fenceLength(body: String): Int {
+        var longest = 0
+        var run = 0
+        for (c in body) {
+            if (c == '`') {
+                run++
+                if (run > longest) longest = run
+            } else {
+                run = 0
+            }
+        }
+        return maxOf(3, longest + 1)
+    }
+
+    private val NEWLINE = Regex("[\r\n]+")
 }

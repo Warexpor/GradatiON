@@ -1492,9 +1492,33 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun discardHeldScenePhoto(uri: String?) {
         val name = ScenePhoto.sceneFileName(uri) ?: return
         synchronized(scenePhotosHeld) { scenePhotosHeld.remove(name) }
-        if (name == ScenePhoto.sceneFileName(pendingUserImageUri)) return
+        discardSceneFileIfUnused(name)
+    }
+
+    /**
+     * True when a bubble, the composer, or an edit hold still names [name]. The database
+     * is not enough: a new chat is not written until the reply lands.
+     */
+    fun scenePhotoShown(name: String): Boolean {
+        if (!ScenePhoto.isSceneFileName(name)) return false
+        val shown = _chatMessages.value.orEmpty().mapNotNullTo(HashSet()) {
+            ScenePhoto.sceneFileName(it.imageUri)
+        }
+        val held = synchronized(scenePhotosHeld) { scenePhotosHeld.toSet() }
+        return ScenePhoto.scenePhotosSafeToDelete(
+            listOf(name),
+            held,
+            ScenePhoto.sceneFileName(pendingUserImageUri),
+            shown,
+        ).isEmpty()
+    }
+
+    /** Drop [name] when no open message, staged photo, or saved row still uses it. */
+    fun discardSceneFileIfUnused(name: String) {
+        if (!ScenePhoto.isSceneFileName(name)) return
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
+            if (scenePhotoShown(name)) return@launch
             if (!repository.scenePhotoStillUsed(name)) ScenePhoto.deleteSceneFiles(app, listOf(name))
         }
     }

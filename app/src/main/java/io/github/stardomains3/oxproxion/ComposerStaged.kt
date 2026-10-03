@@ -145,6 +145,25 @@ object ComposerStaged {
     fun withFile(base: Entry, file: FilePart): Entry =
         base.copy(files = base.files + file)
 
+    data class SendHold(val drafts: Map<String, String>, val staged: Map<String, Entry>)
+
+    /**
+     * A photo send clears the composer before the bytes are encoded. Park the caption
+     * and the chip first. Rotation cancels that work, and a pause of the empty field
+     * must not wipe what was just parked. An empty [entry] leaves the map alone.
+     */
+    fun holdBeforePhotoSend(
+        drafts: Map<String, String>,
+        staged: Map<String, Entry>,
+        sessionId: Long?,
+        text: String,
+        entry: Entry,
+    ): SendHold {
+        val nextDrafts = ComposerDrafts.remember(drafts, sessionId, text)
+        val nextStaged = if (entry.isEmpty) staged else remember(staged, sessionId, entry)
+        return SendHold(nextDrafts, nextStaged)
+    }
+
     /**
      * The composer removed its files. [live] may still hold a photo or a clip; the file
      * list is dropped either way. Remembering an empty live used to skip the write, so
