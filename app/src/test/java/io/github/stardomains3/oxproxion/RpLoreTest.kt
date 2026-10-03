@@ -569,6 +569,16 @@ class RpLoreTest {
     }
 
     @Test
+    fun aCapitalizedOrWindowsHeaderStillSplits() {
+        val book = "[Keys: locket]\r\nThe locket opens at dawn.\r\n\r\n[KEYS: docks]\r\nThe docks flood at high tide."
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She holds the locket.").contains("flood"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("flood"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("flood"))
+    }
+
+    @Test
     fun parenthesesAndFullwidthSeparatorsStillMatch() {
         val book = """
             [keys: (locket), (grey haven), docks；pier｜lantern]

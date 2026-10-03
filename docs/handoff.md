@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, RP wave 32)
+
+On `cursor/rp-wave-32-e558` (PR into `gradation/app-pass`). Roleplay follow-ups after #142. Not a redo of list lines keeping underscores, example dialogs keeping the User side on a leading blank line, or lore keys in `()` `（）` `【】`. Not a redo of bracketed scene notes in auto memory, Vesna edits across a stock refresh, or the active character id commit (#135).
+
+- Example dialogs keep both sides when the label has a space before the colon, or when Char is written first. A later `User:` line inside the reply stays on the character side.
+- A lore header still splits when it is written `Keys` or `KEYS`, and when the book uses Windows line endings. Those blocks used to be always on.
+- Character list, character History, and the library card keep `#`, `~` and `>` inside the words. A first line that is only markdown marks no longer hides the tagline under it.
+
+Phone: save example dialogs written as `User : hi` / `Char : hello`, and a block that starts with `Char:`. A lore book whose header is `[Keys: locket]` should stay out of the prompt until the chat says locket. On the character list, a last line of `C#` or `~/Downloads` should still show those characters, and a personality that starts with `***` should show the next line.
+
 # Handoff (2026-10-03, Notifications/Away wave 31)
 
 On `cursor/notif-shade-stop-0738` (PR into `gradation/app-pass`). Notif/away follow-ups after longest-id matching, the 64-cap token clear, and the speak line (#134). Not a redo of that pass or of the one-commit shade hold, dismissed open tokens, and in-chat Stop (#127). Not a redo of #144, #145, #141, #140, #143, #142, or #139.
