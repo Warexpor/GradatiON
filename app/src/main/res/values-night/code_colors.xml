@@ -12,6 +12,11 @@
     <color name="code_status_off">#FF575757</color>
     <color name="code_badge_bg">#24FFFFFF</color>
     <color name="code_badge_fg">#FFECECEC</color>
+    <!-- Session transcript: the rail a turn hangs on, its step beads, the prompt block -->
+    <color name="code_rail">#33FFFFFF</color>
+    <color name="code_node_bg">#12FFFFFF</color>
+    <color name="code_node_stroke">#2EFFFFFF</color>
+    <color name="code_prompt_bg">#FF1D1D1D</color>
     <color name="code_diff_add_fg">#FF3FB950</color>
     <color name="code_diff_del_fg">#FFF85149</color>
 </resources>

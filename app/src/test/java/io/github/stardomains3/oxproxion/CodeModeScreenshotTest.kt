@@ -102,6 +102,42 @@ class CodeModeScreenshotTest {
         snap(root(a), "code_session_done_dark")
     }
 
+    /**
+     * The top of a finished turn: prompt block, beads on the rail, plan, and the rail kinds that
+     * thread it from the prompt to the turn's end. A command's pane leads with its $ prompt.
+     */
+    @Test fun codeSessionTraceDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+        hub.answer(id, approval.requestId, approval.options.first { it.id == "allow" })
+        idle(16)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val adapter = list.adapter as io.github.stardomains3.oxproxion.code.CodeTranscriptAdapter
+        val rows = adapter.currentList.map { (it as? io.github.stardomains3.oxproxion.code.TranscriptRow.Event)?.event }
+        fun railOf(match: (CodeEvent?) -> Boolean) = adapter.railAt(rows.indexOfFirst(match))
+        assertEquals(io.github.stardomains3.oxproxion.code.Rail.START, railOf { it is CodeEvent.UserPrompt })
+        assertEquals(io.github.stardomains3.oxproxion.code.Rail.NODE, railOf { it is CodeEvent.ToolCall })
+        assertEquals("an answered approval folds to a bead",
+            io.github.stardomains3.oxproxion.code.Rail.NODE, railOf { it is CodeEvent.Approval })
+        assertEquals(io.github.stardomains3.oxproxion.code.Rail.END, railOf { it is CodeEvent.TurnEnd })
+        assertEquals(io.github.stardomains3.oxproxion.code.Rail.NONE, adapter.railAt(rows.size))
+        val run = bindRow(a) { it is CodeEvent.ToolCall && it.kind == io.github.stardomains3.oxproxion.code.ToolKind.EXECUTE }
+        val prompt = run.findViewById<android.widget.TextView>(R.id.codeToolPrompt)
+        assertEquals(View.VISIBLE, prompt.visibility)
+        assertEquals("$ ./gradlew :app:testDebugUnitTest", prompt.text.toString())
+        adapter.verbose = true
+        val search = bindRow(a) { it is CodeEvent.ToolCall && it.kind == io.github.stardomains3.oxproxion.code.ToolKind.SEARCH }
+        assertEquals(View.VISIBLE, search.findViewById<View>(R.id.codeToolOutputScroll).visibility)
+        assertEquals("only commands get a prompt line", View.GONE, search.findViewById<View>(R.id.codeToolPrompt).visibility)
+        adapter.verbose = false
+        list.scrollToPosition(0)
+        idle(2)
+        snap(root(a), "code_session_trace_dark")
+    }
+
     /** Thinking verbosity: every thought and tool output opens; Normal folds them back. */
     @Test fun codeSessionThinkingDark() = withCode { a, _ ->
         val hub = CodeHub.getLoaded(ctx)

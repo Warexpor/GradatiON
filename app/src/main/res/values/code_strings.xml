@@ -137,6 +137,10 @@
     <string name="code_session_show_full_diff">Show full diff</string>
     <string name="code_session_more_lines">%1$d more lines</string>
     <string name="code_session_plan">Plan</string>
+    <!-- Plan card: finished steps out of all steps -->
+    <string name="code_session_plan_progress">%1$d/%2$d</string>
+    <!-- Shell prompt over a command's output in the transcript; the $ is the terminal's, not a currency -->
+    <string name="code_tool_prompt" translatable="false">$ %1$s</string>
     <string name="code_session_new_file">new file</string>
     <string name="code_session_offline_banner">%1$s is offline. The agent keeps working there; you\'ll catch up when it\'s back.</string>
     <string name="code_session_empty">Waiting for the agent…</string>
