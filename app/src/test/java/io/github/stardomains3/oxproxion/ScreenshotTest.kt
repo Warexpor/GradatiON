@@ -528,6 +528,12 @@ class ScreenshotTest : ScreenshotHarness() {
             val fm = a.supportFragmentManager
             fm.popBackStackImmediate(); idle()
             org.junit.Assert.assertEquals("the library shows what the editor saved", before + 1, list.adapter!!.itemCount)
+            if (lib.list == R.id.prompt_recycler_view) {
+                // Edit sits last, as in System messages and Presets.
+                val row = list.getChildAt(0)
+                val x = listOf(R.id.copy_button, R.id.expand_icon, R.id.menu_button).map { row.findViewById<View>(it).left }
+                org.junit.Assert.assertEquals("copy, expand, edit", x.sorted(), x)
+            }
             snap(root(a), lib.shot)
             while (fm.backStackEntryCount > 0) { fm.popBackStackImmediate(); idle() }
             org.junit.Assert.assertSame("Chat kept its view", chatView, chat.view)
