@@ -9,7 +9,6 @@ import android.widget.ArrayAdapter
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.DialogFragment
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class ChatMemoryDialogFragment : DialogFragment() {
@@ -39,11 +38,8 @@ class ChatMemoryDialogFragment : DialogFragment() {
             .setTitle(R.string.settings_chat_memory)
             .setSingleChoiceItems(adapter, checkedItem) { dialog, which ->
                 val count = counts[which]
+                // The Advanced page re-reads its row values when a dialog it opened closes.
                 prefs.saveChatMemoryCount(count)
-
-                val button = requireActivity().findViewById<MaterialButton>(R.id.chatMemoryButton)
-                button?.text = label(requireContext(), count)
-
                 dialog.dismiss()
             }
             .setNegativeButton(R.string.action_cancel, null)

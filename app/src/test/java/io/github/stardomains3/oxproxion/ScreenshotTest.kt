@@ -553,6 +553,139 @@ class ScreenshotTest : ScreenshotHarness() {
         snap(root(a), "settings_licenses_dark")
     }
 
+    /** The active system message is checked; it used to be the only row drawn in muted gray. */
+    @Test fun settingsSystemMessagesDark() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowAdvanced)
+        a.findViewById<View>(R.id.systemMessagesButton).performClick(); idle()
+        val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.system_message_recycler_view)
+        fun checked() = (0 until list.childCount).map { list.getChildAt(it) }
+            .filter { it.findViewById<View>(R.id.active_check).visibility == View.VISIBLE }
+            .map { it.findViewById<android.widget.TextView>(R.id.system_message_title).text.toString() }
+        val default = SharedPreferencesHelper(a).getSelectedSystemMessage().title
+        org.junit.Assert.assertEquals(listOf(default), checked())
+        val ink = a.getColor(R.color.xai_ink)
+        for (i in 0 until list.childCount) {
+            org.junit.Assert.assertEquals("titles stay ink", ink,
+                list.getChildAt(i).findViewById<android.widget.TextView>(R.id.system_message_title).currentTextColor)
+        }
+        snap(root(a), "settings_system_messages_dark")
+        val other = (0 until list.childCount).map { list.getChildAt(it) }
+            .first { it.findViewById<android.widget.TextView>(R.id.system_message_title).text.toString() != default }
+        val otherTitle = other.findViewById<android.widget.TextView>(R.id.system_message_title)
+        otherTitle.performClick()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(60))
+        org.junit.Assert.assertEquals("the check moves before the screen closes", listOf(otherTitle.text.toString()), checked())
+    }
+
+    /** Tools rows were flat canvas blocks with gaps; they sit in one settings card and show the press wash. */
+    @Test fun settingsToolsDark() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowAdvanced)
+        // Chat's Controls panel has its own toolsButton, so look in the Advanced page.
+        a.supportFragmentManager.fragments.filterIsInstance<SettingsDetailFragment>().last()
+            .requireView().findViewById<View>(R.id.toolsButton).performClick(); idle()
+        val container = a.findViewById<android.widget.LinearLayout>(R.id.tools_container)
+        org.junit.Assert.assertTrue("rows sit on the settings card", container.background is GlassDrawable)
+        org.junit.Assert.assertTrue("tools listed", container.childCount > 5)
+        val row = container.getChildAt(0)
+        org.junit.Assert.assertTrue("row shows the press wash", row.background is android.graphics.drawable.StateListDrawable)
+        snap(root(a), "settings_tools_dark")
+    }
+
+    /** Chat memory's only tap target was the value on the right; the label and icon did nothing. */
+    @Test fun settingsChatMemoryRowDark() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowAdvanced)
+        val page = a.supportFragmentManager.fragments.filterIsInstance<SettingsDetailFragment>().last().requireView()
+        val button = page.findViewById<View>(R.id.chatMemoryButton)
+        org.junit.Assert.assertEquals("the whole row is the button", (button.parent as View).width, button.width)
+        button.performClick(); idle()
+        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        val list = dialog.listView
+        list.performItemClick(list.adapter.getView(3, null, list), 3, list.adapter.getItemId(3)); idle()
+        val value = page.findViewById<android.widget.TextView>(R.id.chatMemoryValue)
+        org.junit.Assert.assertEquals(ChatMemoryDialogFragment.label(a, 8), value.text.toString())
+        org.junit.Assert.assertEquals(
+            a.getString(R.string.cd_settings_row_value, a.getString(R.string.settings_chat_memory), value.text),
+            button.contentDescription
+        )
+        snap(root(a), "settings_chat_memory_dark")
+    }
+
+    /** Server kinds were checkboxes made exclusive by hand; tapping the checked one left none picked. */
+    @Test fun settingsLanServerKindIsOneChoiceDark() = withChat { a, _ ->
+        val f = SaveLANDialogFragment()
+        f.show(a.supportFragmentManager, "lan"); idle()
+        val v = f.requireView()
+        val group = v.findViewById<android.widget.RadioGroup>(R.id.lan_provider_group)
+        val ollama = v.findViewById<android.widget.RadioButton>(R.id.checkbox_ollama)
+        val lmStudio = v.findViewById<android.widget.RadioButton>(R.id.checkbox_lm_studio)
+        ollama.performClick(); idle()
+        ollama.performClick(); idle()
+        org.junit.Assert.assertEquals("tapping the chosen kind keeps it", R.id.checkbox_ollama, group.checkedRadioButtonId)
+        lmStudio.performClick(); idle()
+        org.junit.Assert.assertEquals(R.id.checkbox_lm_studio, group.checkedRadioButtonId)
+        org.junit.Assert.assertFalse(ollama.isChecked)
+        snapDialogCentered(a, "settings_lan_dialog_dark")
+        f.dismiss(); idle()
+    }
+
+    /** The preset editor's dropdowns opened on a flat dark sheet; every other menu is glass. */
+    @Test fun settingsPresetDropdownDark() = withChat { a, _ ->
+        pushFragment(a, PresetEditFragment.newInstance(null))
+        for (id in listOf(R.id.autoCompleteModel, R.id.autoCompleteSystemMessage)) {
+            val field = a.findViewById<android.widget.AutoCompleteTextView>(id)
+            org.junit.Assert.assertTrue("glass dropdown", field.dropDownBackground is GlassDrawable)
+        }
+        val field = a.findViewById<android.widget.AutoCompleteTextView>(R.id.autoCompleteSystemMessage)
+        field.showDropDown(); idle()
+        val popup = android.widget.AutoCompleteTextView::class.java.getDeclaredField("mPopup")
+            .apply { isAccessible = true }.get(field) as android.widget.ListPopupWindow
+        snap(popup.listView!!.rootView, "settings_preset_dropdown_dark")
+    }
+
+    /** Turning Notifications on used to only save the pref, so a refused permission left it silent. */
+    @Test fun settingsNotificationsAskForPermission() = withChat { a, _ ->
+        org.junit.Assume.assumeTrue(android.os.Build.VERSION.SDK_INT >= 33)
+        val prefs = SharedPreferencesHelper(a)
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        prefs.saveNotiPreference(false)
+        openSettingsRow(a, R.id.settingsRowData)
+        val sw = a.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.notificationsSwitch)
+        sw.performClick(); idle()
+        org.junit.Assert.assertTrue("asked for the permission",
+            shadowOf(a).lastRequestedPermission?.requestedPermissions?.contains(android.Manifest.permission.POST_NOTIFICATIONS) == true)
+        org.junit.Assert.assertFalse("not saved before the answer", prefs.getNotiPreference())
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        sw.isChecked = false; idle()
+        sw.performClick(); idle()
+        org.junit.Assert.assertTrue("granted: saved", prefs.getNotiPreference())
+    }
+
+    /** Both toolbar capsules are 40dp, so equal centre distances mean equal margins to the edges. */
+    @Test fun settingsLibraryToolbarsAreSymmetric() = withChat { a, _ ->
+        val d = a.resources.displayMetrics.density
+        val screens: List<Pair<String, () -> androidx.fragment.app.Fragment>> = listOf(
+            "prompts" to { PromptLibraryFragment() },
+            "system messages" to { SystemMessageLibraryFragment() },
+            "add prompt" to { AddEditPromptFragment() },
+            "add system message" to { AddEditSystemMessageFragment() },
+            "preset editor" to { PresetEditFragment.newInstance(null) },
+        )
+        for ((name, make) in screens) {
+            val f = make()
+            pushFragment(a, f)
+            val bar = f.requireView().findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+            val kids = (0 until bar.childCount).map { bar.getChildAt(it) }
+            val nav = kids.first { it is android.widget.ImageButton }
+            val menu = kids.first { it is androidx.appcompat.widget.ActionMenuView } as android.view.ViewGroup
+            val last = (0 until menu.childCount).map { menu.getChildAt(it) }.last { it.visibility == View.VISIBLE }
+            val start = nav.left + nav.width / 2f
+            val end = bar.width - (menu.left + last.left + last.width / 2f)
+            org.junit.Assert.assertEquals("$name: end capsule as far from the edge as Back", start, end, 1.5f * d)
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
