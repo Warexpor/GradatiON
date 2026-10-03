@@ -577,6 +577,20 @@ class ScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals("the check moves before the screen closes", listOf(otherTitle.text.toString()), checked())
     }
 
+    /** Tools rows were flat canvas blocks with gaps; they sit in one settings card and show the press wash. */
+    @Test fun settingsToolsDark() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowAdvanced)
+        // Chat's Controls panel has its own toolsButton, so look in the Advanced page.
+        a.supportFragmentManager.fragments.filterIsInstance<SettingsDetailFragment>().last()
+            .requireView().findViewById<View>(R.id.toolsButton).performClick(); idle()
+        val container = a.findViewById<android.widget.LinearLayout>(R.id.tools_container)
+        org.junit.Assert.assertTrue("rows sit on the settings card", container.background is GlassDrawable)
+        org.junit.Assert.assertTrue("tools listed", container.childCount > 5)
+        val row = container.getChildAt(0)
+        org.junit.Assert.assertTrue("row shows the press wash", row.background is android.graphics.drawable.StateListDrawable)
+        snap(root(a), "settings_tools_dark")
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
