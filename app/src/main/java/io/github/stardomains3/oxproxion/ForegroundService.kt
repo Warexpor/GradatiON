@@ -52,6 +52,10 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
 
         private var instance: ForegroundService? = null
 
+        /** Survives [onDestroy] so in-chat Stop can still fix a shade whose service is gone. */
+        @Volatile
+        private var appContext: Context? = null
+
         fun stopService() {
             instance?.stop()
         }
@@ -99,7 +103,37 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             // In-chat Speak stops shade TTS. stopTts(false) must not leave the shade
             // saying Stop: the speaking flag is already clear, so the next shade tap
             // would start speech again.
-            instance?.stopTts(false)
+            val live = instance
+            if (live != null) {
+                live.stopTts(false)
+                return
+            }
+            // The speak service can die while the shade still says Stop. Clearing only
+            // the flag would make the next shade tap start speech again.
+            val ctx = appContext ?: return
+            stopShadeAfterServiceGone(ctx)
+        }
+
+        /**
+         * In-chat Stop with no live service. Background keeps the shade and puts Speak
+         * back. Foreground, or a shade with no saved title, drops it.
+         */
+        private fun stopShadeAfterServiceGone(context: Context) {
+            clearAnswerSpeaking(context)
+            val nm = context.getSystemService(NotificationManager::class.java) ?: return
+            if (nm.activeNotifications.none { it.id == ANSWER_NOTIFICATION_ID }) return
+            val prefs = context.getSharedPreferences(ANSWER_META_PREFS, Context.MODE_PRIVATE)
+            val title = prefs.getString(KEY_ANSWER_TITLE, null)
+            val text = prefs.getString(KEY_ANSWER_TEXT, null)
+            if (isAppInForeground(context) || title == null || text == null) {
+                nm.cancel(ANSWER_NOTIFICATION_ID)
+                return
+            }
+            ensureAnswerChannel(context)
+            nm.notify(
+                ANSWER_NOTIFICATION_ID,
+                buildAnswerNotification(context, title, text, ttsActive = false, silent = true),
+            )
         }
 
         @Volatile
@@ -292,6 +326,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        appContext = applicationContext
         initTTS()
     }
 
@@ -305,15 +340,16 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
                 override fun onDone(utteranceId: String?) {
-                    if (utteranceId == "fg_tts") {
-                        handleTtsFinished()
-                    }
+                    onShadeUtteranceFinished(utteranceId)
                 }
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
-                    if (utteranceId == "fg_tts") {
-                        handleTtsFinished()
-                    }
+                    onShadeUtteranceFinished(utteranceId)
+                }
+                override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    // Audio focus loss calls onStop, not onDone. Leaving Stop up made the
+                    // next tap look like Stop while nothing was speaking.
+                    onShadeUtteranceFinished(utteranceId)
                 }
             })
             if (pendingSpeak) {
@@ -330,22 +366,41 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun handleTtsFinished() {
-        tts?.stop()
-        isTtsActive = false
-        pendingSpeak = false
-        // Foreground cancels the shade without a refresh; background refresh also writes false.
-        clearAnswerSpeaking(this)
-        restoreLastUpdateFromPrefs()
-        if (isAppInForeground()) {
-            getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
-        } else {
-            refreshAnswerChrome(silent = true)
+    /** Utterance id the shade is reading. A late end for an older id must not redraw it. */
+    internal var shadeUtteranceId: String? = null
+
+    private var endingUtterance = false
+
+    /**
+     * Speech ended, failed, or was interrupted. A shade the user already copied or
+     * dismissed stays gone: [tts.stop] can deliver this after that cancel.
+     */
+    internal fun onShadeUtteranceFinished(utteranceId: String?) {
+        if (utteranceId == null || utteranceId != shadeUtteranceId) return
+        if (endingUtterance) return
+        endingUtterance = true
+        try {
+            shadeUtteranceId = null
+            isTtsActive = false
+            pendingSpeak = false
+            clearAnswerSpeaking(this)
+            if (!isNotificationActive(ANSWER_NOTIFICATION_ID)) return
+            tts?.stop()
+            restoreLastUpdateFromPrefs()
+            if (isAppInForeground()) {
+                getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
+            } else {
+                refreshAnswerChrome(silent = true)
+            }
+        } finally {
+            endingUtterance = false
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        // Ignore the stop callback. A kill mid-utterance must keep the speaking flag.
+        shadeUtteranceId = null
         tts?.stop()
         tts?.shutdown()
         isTtsActive = false
@@ -374,6 +429,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
                 }
                 DISMISS_ACTION -> {
                     pendingSpeak = false
+                    shadeUtteranceId = null
                     clearAnswerSpeaking(this)
                     getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
                     tts?.stop()
@@ -383,9 +439,13 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
                 }
                 COPY_ACTION -> {
                     pendingSpeak = false
+                    shadeUtteranceId = null
+                    isTtsActive = false
                     clearAnswerSpeaking(this)
                     copyLastResponseToClipboard()
+                    // Cancel before stop so a synchronous utterance end cannot post the shade again.
                     getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
+                    tts?.stop()
                     stopSelf()
                     return START_NOT_STICKY
                 }
@@ -408,6 +468,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             lastUpdateText = contentText
             if (isTtsActive || pendingSpeak) {
                 pendingSpeak = false
+                shadeUtteranceId = null
                 tts?.stop()
                 isTtsActive = false
             }
@@ -424,6 +485,8 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
 
     private fun stopTts(updateNotif: Boolean) {
         pendingSpeak = false
+        // Drop the id first so stop()'s onStop cannot redraw the shade we are updating.
+        shadeUtteranceId = null
         tts?.stop()
         isTtsActive = false
         clearAnswerSpeaking(this)
@@ -466,7 +529,9 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             return
         }
         val cleanText = stripMarkdownWithCommonMark(lastResponse)
-        tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "fg_tts")
+        val utteranceId = "fg_tts"
+        shadeUtteranceId = utteranceId
+        tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         isTtsActive = true
         refreshAnswerChrome(silent = true)
     }

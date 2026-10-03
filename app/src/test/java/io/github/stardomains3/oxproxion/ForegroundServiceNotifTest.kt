@@ -181,6 +181,120 @@ class ForegroundServiceNotifTest {
     }
 
     @Test
+    fun inAppStopAfterServiceGoneFlipsShadeBackToSpeak() {
+        val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
+        prefs.edit()
+            .putString("title", "Demo Model")
+            .putString("text", "Your answer is ready.")
+            .commit()
+        val intent = Intent(ctx, ForegroundService::class.java).setAction("TOGGLE_TTS_CHANNEL_2")
+        val controller = Robolectric.buildService(ForegroundService::class.java, intent)
+            .create()
+            .startCommand(0, 1)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertTrue(prefs.getBoolean("speaking", false))
+        controller.destroy()
+        assertTrue(
+            "service death leaves the Stop flag for a cold shade tap",
+            prefs.getBoolean("speaking", false),
+        )
+        ForegroundService.stopTtsSpeaking()
+        assertFalse(prefs.getBoolean("speaking", true))
+        val after = nm.activeNotifications.first { it.id == 2 }.notification
+        assertEquals(
+            ctx.getString(R.string.notif_action_speak),
+            after.actions[0].title.toString(),
+        )
+    }
+
+    @Test
+    fun inAppStopAfterServiceGoneDropsShadeInForeground() {
+        val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
+        prefs.edit()
+            .putString("title", "Demo Model")
+            .putString("text", "Your answer is ready.")
+            .commit()
+        val intent = Intent(ctx, ForegroundService::class.java).setAction("TOGGLE_TTS_CHANNEL_2")
+        val controller = Robolectric.buildService(ForegroundService::class.java, intent)
+            .create()
+            .startCommand(0, 1)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        controller.destroy()
+        val am = ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE) as ActivityManager
+        val info = ActivityManager.RunningAppProcessInfo().apply {
+            processName = ctx.packageName
+            importance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+            pid = android.os.Process.myPid()
+        }
+        Shadows.shadowOf(am).setProcesses(listOf(info))
+        ForegroundService.stopTtsSpeaking()
+        assertFalse(prefs.getBoolean("speaking", true))
+        assertTrue(nm.activeNotifications.none { it.id == 2 })
+    }
+
+    @Test
+    fun copyThenUtteranceEndDoesNotRepostShade() {
+        val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
+        prefs.edit()
+            .putString("title", "Demo Model")
+            .putString("text", "Your answer is ready.")
+            .commit()
+        nm.notify(
+            2,
+            NotificationCompat.Builder(ctx, "ForegroundServiceChannel")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Demo Model")
+                .setContentText("Your answer is ready.")
+                .build(),
+        )
+        val copy = Intent(ctx, ForegroundService::class.java).setAction("COPY_CHANNEL_2")
+        val controller = Robolectric.buildService(ForegroundService::class.java, copy)
+            .create()
+            .startCommand(0, 1)
+        val service = controller.get()
+        assertTrue(nm.activeNotifications.none { it.id == 2 })
+        // The utterance callback can still be in flight after Copy cancelled the shade.
+        service.shadeUtteranceId = "fg_tts"
+        service.onShadeUtteranceFinished("fg_tts")
+        assertTrue(nm.activeNotifications.none { it.id == 2 })
+        assertFalse(prefs.getBoolean("speaking", false))
+        controller.destroy()
+    }
+
+    @Test
+    fun interruptedShadeSpeechReturnsToSpeak() {
+        val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
+        prefs.edit()
+            .putString("title", "Demo Model")
+            .putString("text", "Your answer is ready.")
+            .putBoolean("speaking", true)
+            .commit()
+        nm.notify(
+            2,
+            NotificationCompat.Builder(ctx, "ForegroundServiceChannel")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Demo Model")
+                .setContentText("Your answer is ready.")
+                .addAction(0, ctx.getString(R.string.notif_action_stop), null)
+                .build(),
+        )
+        val intent = Intent(ctx, ForegroundService::class.java)
+        val controller = Robolectric.buildService(ForegroundService::class.java, intent)
+            .create()
+            .startCommand(0, 1)
+        val service = controller.get()
+        service.shadeUtteranceId = "fg_tts"
+        service.onShadeUtteranceFinished("fg_tts")
+        assertFalse(prefs.getBoolean("speaking", true))
+        val after = nm.activeNotifications.first { it.id == 2 }.notification
+        assertEquals(
+            ctx.getString(R.string.notif_action_speak),
+            after.actions[0].title.toString(),
+        )
+        controller.destroy()
+    }
+
+    @Test
     fun lastAiResponseIsOnDiskBeforeReturn() {
         val helper = SharedPreferencesHelper(ctx)
         helper.mainPrefs.edit().clear().commit()
