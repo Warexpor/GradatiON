@@ -44,6 +44,9 @@ import java.util.concurrent.ConcurrentHashMap
  * approval can re-alert (including after a later process death that would otherwise re-seed).
  * When that was the session's last shade entry, the one-shot open token goes too, so a
  * replayed content Intent cannot open the session after the user cleared the alert.
+ * Evicting the oldest shade (the 64-entry cap) does the same: programmatic cancel does
+ * not fire the DeleteIntent. A shorter session id must not own a longer one's approval
+ * (`ab` vs `ab:cd`); longest known id wins, same as swipe-dismiss.
  */
 class CodeAwayNotifier(
     context: Context,
@@ -138,20 +141,22 @@ class CodeAwayNotifier(
 
     fun cancelSession(sessionId: String) {
         ensurePostedSeeded()
-        val turnKey = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId)
-        val prefix = "approval:$sessionId:"
-        fun matches(key: String) = key == turnKey || key.startsWith(prefix)
         // posted + prefs cover the usual paths; keyToId covers the gap after clearTurnDoneDedup
         // (drops posted + prefs, keeps in-memory id so the next TurnDone can update the same shade).
-        allocatedKeys { matches(it) }.forEach { cancelKey(it) }
+        // Prefix match would also cancel `ab:cd` when forgetting `ab`.
+        val known = knownSessionIds()
+        allocatedKeys { CodeAwayFormat.keyBelongsToSession(it, sessionId, known) }
+            .forEach { cancelKey(it) }
         clearOpenToken(sessionId)
     }
 
     /** Drops every approval alert of [sessionId] from the shade, keeping its turn-finished one. */
     private fun cancelApprovals(sessionId: String) {
-        val prefix = "approval:$sessionId:"
-        fun matches(key: String) = key.startsWith(prefix)
-        allocatedKeys { matches(it) }.forEach { cancelKey(it) }
+        val known = knownSessionIds()
+        allocatedKeys { key ->
+            key.startsWith("approval:") &&
+                CodeAwayFormat.keyBelongsToSession(key, sessionId, known)
+        }.forEach { cancelKey(it) }
     }
 
     /**
@@ -265,9 +270,9 @@ class CodeAwayNotifier(
     }
 
     private fun sessionHasAllocation(sessionId: String): Boolean {
-        val turnKey = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId)
-        val prefix = "approval:$sessionId:"
-        return allocatedKeys { key -> key == turnKey || key.startsWith(prefix) }.isNotEmpty()
+        val known = knownSessionIds()
+        return allocatedKeys { CodeAwayFormat.keyBelongsToSession(it, sessionId, known) }
+            .isNotEmpty()
     }
 
     private fun maybePostApproval(
@@ -507,10 +512,14 @@ class CodeAwayNotifier(
         // Bound memory if many sessions notify while away; cancel shade on eviction (A6).
         while (posted.size > 64) {
             val oldest = posted.first()
+            // Cancel does not deliver the DeleteIntent, so the one-shot token would
+            // otherwise still open a session whose shade we just dropped.
+            val owner = CodeAwayFormat.sessionIdForDedupKey(oldest, knownSessionIds())
             posted.remove(oldest)
             val evictIds = releaseAllocation(oldest)
             if (evictIds.isEmpty()) nm?.cancel(CodeAwayFormat.notificationId(oldest))
             else evictIds.forEach { nm?.cancel(it) }
+            if (owner != null && !sessionHasAllocation(owner)) clearOpenToken(owner)
         }
     }
 

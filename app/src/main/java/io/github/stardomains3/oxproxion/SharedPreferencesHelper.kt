@@ -1002,7 +1002,11 @@ class SharedPreferencesHelper(context: Context) {
         return mainPrefs.getBoolean(KEY_WEB_SEARCH_ENABLED, false)
     }
     fun saveLastAiResponseForChannel(channelId: Int, responseText: String) {
-        mainPrefs.edit { putString("${KEY_LAST_AI_RESPONSE_CHANNEL}${channelId}", responseText) }
+        // commit: the answer shade's Speak/Copy reads this after a kill. apply() can
+        // still be in flight, so a cold Speak reads the previous reply or nothing.
+        mainPrefs.edit(commit = true) {
+            putString("${KEY_LAST_AI_RESPONSE_CHANNEL}${channelId}", responseText)
+        }
     }
 
     fun getLastAiResponseForChannel(channelId: Int): String? {

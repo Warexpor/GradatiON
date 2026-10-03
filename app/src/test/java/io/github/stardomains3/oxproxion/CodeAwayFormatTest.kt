@@ -235,6 +235,25 @@ class CodeAwayFormatTest {
         assertEquals(once, CodeAwayFormat.pickDeny(listOf(always, once)))
         assertEquals(always, CodeAwayFormat.pickDeny(listOf(always)))
         assertNull(CodeAwayFormat.pickDeny(emptyList()))
+        val stop = ApprovalOption("stop", "Reject and stop", ApprovalOption.Kind.REJECT_ONCE)
+        assertNull(CodeAwayFormat.pickDeny(listOf(once, stop)))
+    }
+
+    @Test
+    fun shorterSessionDoesNotOwnLongerApprovalKey() {
+        val shorter = "ab"
+        val longer = "ab:cd"
+        val longerKey = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, longer, "req")
+        val shorterKey = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, shorter, "req")
+        val known = setOf(shorter, longer)
+        assertFalse(CodeAwayFormat.keyBelongsToSession(longerKey, shorter, known))
+        assertTrue(CodeAwayFormat.keyBelongsToSession(longerKey, longer, known))
+        assertTrue(CodeAwayFormat.keyBelongsToSession(shorterKey, shorter, known))
+        assertFalse(CodeAwayFormat.keyBelongsToSession(shorterKey, longer, known))
+        val turn = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, shorter)
+        assertTrue(CodeAwayFormat.keyBelongsToSession(turn, shorter, known))
+        assertFalse(CodeAwayFormat.keyBelongsToSession(turn, longer, known))
+        assertFalse(CodeAwayFormat.keyBelongsToSession(longerKey, "", known))
     }
 
     @Test

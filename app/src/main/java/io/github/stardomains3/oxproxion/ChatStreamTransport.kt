@@ -413,8 +413,9 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
             "No details"
         }
         val message = parseOpenRouterError(errorBody)
-        if (sharedPreferencesHelper.getNotiPreference()) {
-            sharedPreferencesHelper.saveLastAiResponseForChannel(2, message)
+        // No shade for an error. Leave the speak line the previous shade still shows.
+        AnswerShadeText.lineForShade(message, handedToTools = false, isError = true)?.let {
+            sharedPreferencesHelper.saveLastAiResponseForChannel(2, it)
         }
         throw Exception(message)
     }
@@ -536,8 +537,15 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                 } else {
                     finalContent
                 }
-                sharedPreferencesHelper.saveLastAiResponseForChannel(2, truncatedResponse)
-                ForegroundService.updateNotificationStatus(application, displayName, application.getString(R.string.notification_answer_ready))
+                val line = AnswerShadeText.lineForShade(
+                    truncatedResponse,
+                    handedToTools = false,
+                    isError = false,
+                )
+                if (line != null) {
+                    sharedPreferencesHelper.saveLastAiResponseForChannel(2, line)
+                    ForegroundService.updateNotificationStatus(application, displayName, application.getString(R.string.notification_answer_ready))
+                }
             }
         }
     }
@@ -561,11 +569,9 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
         updateMessages { list ->
             putAssistantMessage(list, thinkingMessage, errorMessage)
         }
-        if (sharedPreferencesHelper.getNotiPreference()) {
-            val apiIdentifier = activeChatModel.value ?: "Unknown Model"
-            val displayName = getModelDisplayName(apiIdentifier)
-            sharedPreferencesHelper.saveLastAiResponseForChannel(2, detailedMsg)//#ttsnoti
-            // answer-only: skip error system notifications
+        // answer-only: skip error system notifications, and do not replace the speak line
+        AnswerShadeText.lineForShade(detailedMsg, handedToTools = false, isError = true)?.let {
+            sharedPreferencesHelper.saveLastAiResponseForChannel(2, it)
         }
     }
 
@@ -726,8 +732,9 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     ""
                 }
                 val hadToolCalls = toolCallBuffer.isNotEmpty()
+                val handedToTools = hadToolCalls && !toolCallsHandledForTurn
                 var streamFinalContent: String? = null
-                if (hadToolCalls && !toolCallsHandledForTurn) {
+                if (handedToTools) {
                     val assistantMessage = ScenePhoto.withGeneratedPicture(
                         FlexibleMessage(
                             role = "assistant",
@@ -775,17 +782,24 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
                     } else {
                         notiBody
                     }
-                    sharedPreferencesHelper.saveLastAiResponseForChannel(2, truncatedResponse)
-                    ForegroundService.updateNotificationStatus(application, displayName, application.getString(R.string.notification_answer_ready))
+                    // Tool handoff: the follow-up already saved the finished answer.
+                    val line = AnswerShadeText.lineForShade(
+                        truncatedResponse,
+                        handedToTools = handedToTools,
+                        isError = false,
+                    )
+                    if (line != null) {
+                        sharedPreferencesHelper.saveLastAiResponseForChannel(2, line)
+                        ForegroundService.updateNotificationStatus(application, displayName, application.getString(R.string.notification_answer_ready))
+                    }
                 }
             }
         } catch (e: Throwable) {
             withContext(Dispatchers.Main) {
                 handleError(e, thinkingMessage)
-                if (sharedPreferencesHelper.getNotiPreference()) {
-                    val apiIdentifier = activeChatModel.value ?: "Unknown Model"
-                    val displayName = getModelDisplayName(apiIdentifier)
-                    sharedPreferencesHelper.saveLastAiResponseForChannel(2, "Error!")
+                // A failed stream does not post a shade. "Error!" must not become what Speak reads.
+                AnswerShadeText.lineForShade("Error!", handedToTools = false, isError = true)?.let {
+                    sharedPreferencesHelper.saveLastAiResponseForChannel(2, it)
                 }
             }
         }

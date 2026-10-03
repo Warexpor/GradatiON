@@ -219,4 +219,49 @@ class CodeAwayNotifierTest {
         assertTrue(n.consumeOpenToken(session, token))
     }
 
+    @Test
+    fun shorterSessionTurnDoesNotDropLongerApproval() {
+        val n = notifier()
+        n.onUpdate("ab", "host", "A", CodeUpdate.Upsert(approval("r1")), sessionWasRunning = true)
+        n.onUpdate("ab:cd", "host", "B", CodeUpdate.Upsert(approval("r2")), sessionWasRunning = true)
+        assertEquals(setOf("ab", "ab:cd"), showingSessions())
+        n.onUpdate("ab", "host", "A", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertTrue("longer approval must stay", "ab:cd" in showingSessions())
+        assertTrue("shorter turn still alerts", "ab" in showingSessions())
+        n.cancelSession("ab")
+        assertEquals(setOf("ab:cd"), showingSessions())
+    }
+
+    @Test
+    fun swipeShorterSessionClearsItsTokenWhenLongerRemains() {
+        val n = notifier()
+        n.onUpdate("ab", "host", "A", CodeUpdate.Upsert(approval("r1")), sessionWasRunning = true)
+        n.onUpdate("ab:cd", "host", "B", CodeUpdate.Upsert(approval("r2")), sessionWasRunning = true)
+        val tokenAb = n.issueOpenToken("ab")
+        val tokenCd = n.issueOpenToken("ab:cd")
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, "ab", "r1")
+        n.onUserDismissed(key)
+        assertFalse(n.consumeOpenToken("ab", tokenAb))
+        assertTrue(n.consumeOpenToken("ab:cd", tokenCd))
+    }
+
+    @Test
+    fun evictingOldestShadeClearsItsOpenToken() {
+        val n = notifier()
+        n.onUpdate("s0", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        val token0 = n.issueOpenToken("s0")
+        for (i in 1..64) {
+            n.onUpdate("s$i", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        }
+        assertEquals(64, nm.activeNotifications.size)
+        assertFalse(n.consumeOpenToken("s0", token0))
+        assertTrue(n.consumeOpenToken("s1", n.issueOpenToken("s1")))
+    }
+
+    private fun showingSessions(): Set<String> =
+        nm.activeNotifications.mapNotNull { sbn ->
+            Shadows.shadowOf(sbn.notification.contentIntent).savedIntent
+                .getStringExtra(CodeAwayNotifier.EXTRA_SESSION_ID)
+        }.toSet()
+
 }
