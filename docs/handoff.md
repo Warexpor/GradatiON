@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Stability wave 33)
+
+On `cursor/stability-wave-33-e76c` (PR into `gradation/app-pass`). Persistence follow-ups after a 0-byte recovered database is skipped, a same-stamp portrait replace keeps the new picture, and a long message slice keeps only the characters that step asked for (#154). Not a redo of that pass, or of the recovered file at the databases root, portrait and wallpaper side files moving with history, or emoji slices (#143). Not a redo of history tokens, file indents, or the staged photo from the tap (#161). Not a redo of a rolled-back character import, the last greeting in a file, or scaling an oversized portrait or wallpaper into the backup (#159). Not a redo of #158, #156, #155, or #157. Not a redo of #139–#154.
+
+- Parking a 0-byte recovered database no longer renames the hold copy that still has bytes. That rename used a name Room does not open, so the launch read a stale vault copy or an empty file. An empty file already in the no-backup folder no longer blocks that hold copy from moving in. A recovered file that still has bytes at the databases root is still the one that opens.
+- Deleting a portrait or a wallpaper removes `.bak` and `.partial` before the live file. A kill after the live name was removed used to leave the side file, and the next open put the picture back.
+- A sliced message stops when the next character index would not fit in an `Int`. The step used to wrap to a negative index, SQLite then read from the end, and the tail was appended again.
+
+Phone: delete a character portrait or wallpaper (it should stay gone). Not a phone check for an empty recovered name, or for a message long enough to wrap the slice index.
+
 # Handoff (2026-10-03, Chat wave 33)
 
 On `cursor/chat-wave-33-56da` (PR into `gradation/app-pass`). Chat follow-ups, rebased onto Import #159, Settings #158, Roleplay #156, Hub #155, and Code #157. Not a redo of #153 (history sentences, file fences, staged photos) or #139 (history preview keeping `#` `~` `>`, staged text files one by one and the 1 MB cap). Not a redo of #159 (a rolled-back character import does not apply its notes, the last copy in a file owns the greeting, an oversized portrait or wallpaper is scaled into the backup), #158 (IPv6 local server with `@` or a space in the password, Get location asking for precise and approximate together), #156 (card `<START>` exchanges, `{{bot}}`, `{{random_user_N}}` in an example), #155 (hub divider line, emoji cut, form-encoded pairing space, trailing `#note`), or #157 (config-option mode pill, Playwright browser lines). Not a redo of #152, #151, #150, #149, #147, or #148.

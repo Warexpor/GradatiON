@@ -125,11 +125,9 @@ object RpAvatarStorage {
     }
 
     fun deleteAvatar(context: Context, characterId: Long) {
-        val file = avatarFile(context, characterId)
-        file.delete()
-        // Side files from a killed replace would bring the portrait back on the next open.
-        File(file.parentFile, "${file.name}.bak").delete()
-        File(file.parentFile, "${file.name}.partial").delete()
+        // Side files go first. A kill after the live name was removed used to leave
+        // `.bak` or `.partial`, and the next open put that portrait back.
+        ScenePhoto.deleteWithSides(avatarFile(context, characterId))
     }
 
     /** A persona portrait by file name. Names are never reused, so saved personas can share one safely. */

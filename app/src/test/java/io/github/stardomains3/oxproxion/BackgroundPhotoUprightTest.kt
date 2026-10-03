@@ -78,6 +78,33 @@ class BackgroundPhotoUprightTest {
         }
     }
 
+    @Test fun a_killed_wallpaper_delete_drops_the_side_file_first() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val slot = BackgroundPhoto.slotForCharacter(43L)
+        BackgroundPhoto.delete(ctx, slot)
+        val file = BackgroundPhoto.file(ctx, slot)
+        file.parentFile?.mkdirs()
+        val live = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x01, 0xFF.toByte(), 0xD9.toByte())
+        val side = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x02, 0xFF.toByte(), 0xD9.toByte())
+        file.writeBytes(live)
+        val bak = File(file.parentFile, "${file.name}.bak")
+        bak.writeBytes(side)
+        bak.setLastModified(file.lastModified() + 5_000)
+        val version = BackgroundPhoto.version(ctx, slot)
+        ScenePhoto.stopAfterSidesForTest = true
+        try {
+            BackgroundPhoto.delete(ctx, slot)
+            assertFalse(bak.exists())
+            assertTrue(live.contentEquals(file.readBytes()))
+            assertTrue(BackgroundPhoto.hasPhoto(ctx, slot))
+            assertTrue(live.contentEquals(file.readBytes()))
+            assertEquals(version, BackgroundPhoto.version(ctx, slot))
+        } finally {
+            ScenePhoto.stopAfterSidesForTest = false
+            BackgroundPhoto.delete(ctx, slot)
+        }
+    }
+
     @Test fun a_torn_wallpaper_file_is_not_a_photo() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         val slot = BackgroundPhoto.slotForCharacter(42L)
