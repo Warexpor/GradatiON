@@ -230,6 +230,10 @@ class CodeModeScreenshotTest {
         val prompt = run.findViewById<android.widget.TextView>(R.id.codeToolPrompt)
         assertEquals(View.VISIBLE, prompt.visibility)
         assertEquals("$ ./gradlew :app:testDebugUnitTest", prompt.text.toString())
+        val pane = run.findViewById<android.widget.HorizontalScrollView>(R.id.codeToolOutputScroll)
+        val pad = (12 * ctx.resources.displayMetrics.density).toInt()
+        assertTrue("long output lines stop inside the pane's pads and fade there",
+            pane.clipToPadding && pane.paddingStart >= pad && pane.paddingEnd >= pad && pane.isHorizontalFadingEdgeEnabled)
         adapter.verbose = true
         val search = bindRow(a) { it is CodeEvent.ToolCall && it.kind == io.github.stardomains3.oxproxion.code.ToolKind.SEARCH }
         assertEquals(View.VISIBLE, search.findViewById<View>(R.id.codeToolOutputScroll).visibility)
