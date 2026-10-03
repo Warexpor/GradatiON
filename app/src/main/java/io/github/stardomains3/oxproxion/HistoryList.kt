@@ -128,7 +128,12 @@ object HistoryList {
             parsed != null -> fold(MessageContent.text(parsed))
             raw.startsWith("\"") -> fold(jsonStringPrefix(raw))
             else -> fold(textFieldPrefix(raw))
-        }.let { withoutDataPayload(it) }
+        }.let {
+            // A bare slice of photo bytes is not a stored message. This reader accepts
+            // it as text, and it used to fill the row. A quote, object, or array is
+            // the message, so a hash on its own line stays.
+            withoutDataPayload(it, storedMessage = raw.startsWith("\"") || raw.startsWith("{") || raw.startsWith("["))
+        }
         val body = when {
             text.isNotBlank() -> text
             hasImage(raw) -> photoLabel
@@ -552,16 +557,17 @@ object HistoryList {
      * a SHA-256 has no spaces and sits in the base64 alphabet, and it used to be
      * treated as a slice of the photo, so the row went blank.
      */
-    private fun withoutDataPayload(text: String): String {
+    private fun withoutDataPayload(text: String, storedMessage: Boolean): String {
         if (text.isEmpty()) return ""
         val stripped = WHITESPACE.replace(DATA_URL.replace(text, " "), " ").trim()
-        if (stripped.isEmpty() || isDataPayload(stripped)) return ""
+        if (stripped.isEmpty() || isDataPayload(stripped, storedMessage)) return ""
         return stripped
     }
 
-    private fun isDataPayload(text: String): Boolean {
+    private fun isDataPayload(text: String, storedMessage: Boolean): Boolean {
         if (text.any { it.isWhitespace() }) return false
-        return text.startsWith("data:") && text.contains("base64", ignoreCase = true)
+        if (text.startsWith("data:") && text.contains("base64", ignoreCase = true)) return true
+        return !storedMessage && isBase64Run(text)
     }
 
     /**

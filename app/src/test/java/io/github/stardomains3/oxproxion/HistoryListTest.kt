@@ -227,6 +227,7 @@ class HistoryListTest {
         assertTrue(line.contains("lantern"))
         assertTrue(line.endsWith("…"))
         assertEquals("", HistoryList.searchLine("user", "\"hello\"", "   ", you, "Photo"))
+        assertEquals("", HistoryList.preview("user", "A".repeat(80), you, "Photo"))
         assertEquals(
             "",
             HistoryList.searchLine("user", "A".repeat(80), "AAAA", you, "Photo"),
