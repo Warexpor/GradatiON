@@ -160,12 +160,13 @@ internal object RpCharacterPrefsBackup {
                 clearPending = true
             }
             else -> {
-                val match = lorebooks.firstOrNull { it.name.equals(exported.lorebookName, ignoreCase = true) }
+                val wanted = pinName(exported.lorebookName)
+                val match = lorebooks.firstOrNull { pinName(it.name).equals(wanted, ignoreCase = true) }
                 if (match != null) {
                     lorebookId = match.id
                     clearPending = true
                 } else {
-                    pending = exported.lorebookName.take(200)
+                    pending = wanted
                 }
             }
         }
@@ -189,18 +190,27 @@ internal object RpCharacterPrefsBackup {
         }
     }
 
+    /**
+     * Pin names are compared trimmed and capped. A backup used to store the first 200
+     * characters and then look for the full book name, so a long title never attached.
+     * Spaces around the name missed the book the editor saved.
+     */
+    private fun pinName(name: String) = name.trim().take(200)
+
     private fun bindLorebook(
         prefs: SharedPreferencesHelper,
         characterId: Long,
         name: String,
         lorebooks: List<RpLorebook>,
     ) {
-        val match = lorebooks.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        val wanted = pinName(name)
+        val match = lorebooks.firstOrNull { pinName(it.name).equals(wanted, ignoreCase = true) }
         if (match != null) {
             prefs.saveRpLorebookId(characterId, match.id)
             prefs.savePendingRpLorebookName(characterId, null)
-        } else {
-            prefs.savePendingRpLorebookName(characterId, name.take(200))
+        } else if (wanted != name) {
+            // Already stored at the pin key. Rewriting it on every launch would commit for nothing.
+            prefs.savePendingRpLorebookName(characterId, wanted)
         }
     }
 }

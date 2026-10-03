@@ -24,6 +24,10 @@ class RpImportRulesTest {
             RpLorebookExport(name = "WORLD")
         )
         assertEquals(2, RpImportRules.loreOverwriteCount(incoming, listOf("world")))
+        assertEquals(1, RpImportRules.loreOverwriteCount(
+            listOf(RpLorebookExport(name = " world "), RpLorebookExport(name = "   ")),
+            listOf("World"),
+        ))
     }
 
     @Test

@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Import wave 29)
+
+On `gradation/w29-import` (PR into `gradation/app-pass`). Import/export follow-ups after #122. Not a redo of note matching after a later save, wallpaper prepare, or torn portrait export:
+- A character side log that names one id twice (the same export key in one file) keeps the last copy. The earlier copy used to stay in the log and overwrite Memory and pictures on the next launch.
+- A lorebook backup with nothing marked active clears that flag on the books it updates. An empty library still activates the first book. Names that differ only by spaces merge. A pin matches a trimmed name, and a name longer than 200 characters, instead of waiting forever.
+- Cold start runs the same pin link a lore import does, so a kill after the lore rows commit still attaches the book.
+
+Phone: import a character file that contains the same character twice with different Memory (the second Memory should stick after relaunch). Import a lore backup where no book is active onto a phone that had one active (it should turn off). Import a character whose lore book name has a trailing space, or is very long, then import or reopen after that book exists (the pin should attach).
+
 # Handoff (2026-10-03, RP wave 29)
 
 On `gradation/w29-rp` (PR into `gradation/app-pass`). Roleplay follow-ups after #117 (not a redo of Continue swipe alts / portrait side-file delete / regen lore focus):

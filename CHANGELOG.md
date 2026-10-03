@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A character backup that lists the same character twice keeps the last copy. The earlier copy's Memory and pictures used to come back on the next launch.
+- A lorebook backup where nothing is marked active turns those books off. Names that differ only by spaces count as the same book. A character pin still attaches when the book name is padded or longer than the saved pin.
+- Opening the app finishes a character pin that was waiting on a lorebook, including after a kill between the lore import and that link.
 - Character portrait `photoUri` no longer bypasses the torn-JPEG check: picker, panel, edit, speaker header and `RpAvatars.photoModel` treat an incomplete file as missing (same rule as #117's file-path path).
 - Continue keeps the reply being extended (and the turn before it) in lore focus, so keys near the start of a long bubble still match when the recent window is tight.
 - Persona Save commits name, about and photo (enabled already did), so a kill right after Save cannot drop them.
