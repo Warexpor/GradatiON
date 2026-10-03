@@ -45,13 +45,16 @@ import java.util.concurrent.ConcurrentHashMap
  * When that was the session's last shade entry, the one-shot open token goes too, so a
  * replayed content Intent cannot open the session. Programmatic cancel does not fire the
  * DeleteIntent, so Allow, Deny, an in-app answer, a cancelled turn, and eviction past the
- * 64-entry cap clear that token themselves. A shorter session id must not own a longer
+ * shade cap clear that token themselves. A shorter session id must not own a longer
  * one's approval (`ab` vs `ab:cd`); longest known id wins.
  *
  * The cap counts shades that are still up. [clearTurnDoneDedup] drops the dedup key so the
  * next finish can alert, but leaves the notification. Counting only [posted] let a run of
- * new prompts stack past 64. Age is a seq in the same prefs file: the map's own iteration
+ * new prompts stack past the cap. Age is a seq in the same prefs file: the map's own iteration
  * order is not post order, so a cold start would otherwise drop an arbitrary shade.
+ * Android refuses a new notification once the package already has
+ * [SYSTEM_PACKAGE_NOTIF_LIMIT]. The oldest away shade is cancelled before that post, and one
+ * slot stays free for the answer-ready shade, which shares the same budget.
  *
  * A prefs row whose notification is already gone (cleared without a DeleteIntent) is not a
  * dedup seed, does not count toward the cap, and does not keep the one-shot open token.
@@ -378,8 +381,7 @@ class CodeAwayNotifier(
                 actionPending(sessionId, approval.requestId, deny, REQUEST_DENY, id),
             )
         }
-        nm?.notify(id, builder.build())
-        markPosted(key, id)
+        showShade(key, id, builder.build())
     }
 
     private fun maybePostTurnDone(sessionId: String, hostId: String, sessionTitle: String) {
@@ -394,8 +396,41 @@ class CodeAwayNotifier(
         )
         val id = idFor(key)
         val builder = baseBuilder(sessionId, headline, sessionTitle, id, key)
-        nm?.notify(id, builder.build())
+        showShade(key, id, builder.build())
+    }
+
+    /**
+     * Post [notification] and remember it. A new id needs a free slot in the package budget
+     * before [NotificationManager.notify]: the system drops the call once
+     * [SYSTEM_PACKAGE_NOTIF_LIMIT] are already up, and cancelling the oldest afterwards
+     * does not bring the refused shade back.
+     */
+    private fun showShade(key: String, id: Int, notification: android.app.Notification) {
+        makeRoomFor(id)
+        nm?.notify(id, notification)
         markPosted(key, id)
+    }
+
+    /**
+     * Drop the oldest away shade until this post can be a new notification.
+     * An id that is already showing is an update, which the system still accepts.
+     * The answer-ready shade is not an away shade; one slot stays free for it.
+     */
+    private fun makeRoomFor(id: Int) {
+        val manager = nm ?: return
+        val active = manager.activeNotifications
+        if (active.any { it.id == id }) return
+        val answerUp = active.any { it.id == ANSWER_READY_NOTIF_ID }
+        val ceiling = if (answerUp) SYSTEM_PACKAGE_NOTIF_LIMIT else AWAY_SHADE_LIMIT
+        var spins = 0
+        while (manager.activeNotifications.size >= ceiling && spins++ < SYSTEM_PACKAGE_NOTIF_LIMIT) {
+            pruneDeadVisible()
+            val oldest = visible.firstOrNull() ?: return
+            val visibleBefore = visible.size
+            val activeBefore = manager.activeNotifications.size
+            forgetShade(oldest)
+            if (visible.size >= visibleBefore && manager.activeNotifications.size >= activeBefore) return
+        }
     }
 
     private fun canPost(hostId: String): Boolean {
@@ -601,10 +636,12 @@ class CodeAwayNotifier(
         }
         pruneDeadVisible()
         rememberVisible(key)
-        // Bound memory if many sessions notify while away; cancel shade on eviction (A6).
-        // visible, not posted: a dedup-cleared turn shade is still on screen.
-        while (visible.size > 64) {
-            forgetShade(visible.first())
+        // Backstop if the package budget was not applied (no manager). Dedup-cleared turn
+        // shades stay in [visible], so they still count.
+        while (visible.size > AWAY_SHADE_LIMIT) {
+            val oldest = visible.firstOrNull() ?: return
+            if (oldest == key && visible.size == 1) return
+            forgetShade(oldest)
         }
     }
 
@@ -655,8 +692,11 @@ class CodeAwayNotifier(
         visible.remove(key)
         val ids = releaseAllocation(key)
         if (ids.isEmpty()) {
-            // Last-resort for pre-allocation leftovers.
-            nm?.cancel(CodeAwayFormat.notificationId(key))
+            // Last-resort for a shade posted before ids were stored. The 24-bit hash is only
+            // a hint: another live shade may already own it, and cancelling that id would
+            // drop a shade this key never posted.
+            val hashId = CodeAwayFormat.notificationId(key)
+            if (!otherShadeOwns(hashId, key)) nm?.cancel(hashId)
         } else {
             ids.forEach { nm?.cancel(it) }
         }
@@ -697,7 +737,32 @@ class CodeAwayNotifier(
         return ids
     }
 
+    /** True when a different key already has [id] in memory or in the persisted allocation. */
+    private fun otherShadeOwns(id: Int, key: String): Boolean {
+        val owner = idToKey[id]
+        if (owner != null && owner != key) return true
+        if (id in CodeAwayFormat.takenFromPrefs(idPrefs.all, exceptKey = key)) return true
+        if (id in CodeAwayFormat.takenFromPrefs(shadeHold.all, exceptKey = key)) return true
+        return false
+    }
+
     companion object {
+        /**
+         * AOSP NotificationManagerService.MAX_PACKAGE_NOTIFICATIONS. A new id past this
+         * is not shown. Updates of an id that is already up still go through.
+         */
+        const val SYSTEM_PACKAGE_NOTIF_LIMIT = 50
+
+        /** Answer-ready notification. It shares [SYSTEM_PACKAGE_NOTIF_LIMIT] with away shades. */
+        const val ANSWER_READY_NOTIF_ID = 2
+
+        /**
+         * Away shades kept when the answer shade is not up, so a finished chat can still notify.
+         * With the answer shade up the package is full at [SYSTEM_PACKAGE_NOTIF_LIMIT]
+         * (this many away shades, plus that one).
+         */
+        const val AWAY_SHADE_LIMIT = SYSTEM_PACKAGE_NOTIF_LIMIT - 1
+
         const val CHANNEL_ID = "code_away"
         const val EXTRA_SESSION_ID = "code_away_session_id"
         const val EXTRA_FROM_AWAY = "code_away_from_notification"
