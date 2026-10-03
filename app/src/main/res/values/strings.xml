@@ -286,8 +286,8 @@
     <string name="settings_openrouter_transform">OpenRouter transform</string>
     <string name="settings_biometrics">Biometrics</string>
     <string name="settings_notifications">Notifications</string>
-    <string name="settings_copy_instead_dismiss">Copy instead of dismiss</string>
-    <string name="settings_copy_instead_open">Copy instead of open</string>
+    <string name="settings_copy_instead_dismiss">Alert: Copy, not Dismiss</string>
+    <string name="settings_copy_instead_open">Alert: Copy, not Open</string>
     <string name="settings_keep_screen_on">Keep screen on</string>
     <string name="settings_destructive_file_tools">Destructive file tools</string>
     <string name="settings_import_chats">Import chats</string>
