@@ -26,6 +26,7 @@
             android:paddingEnd="16dp">
 
             <TextView
+                android:labelFor="@id/voiceEnabledSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"

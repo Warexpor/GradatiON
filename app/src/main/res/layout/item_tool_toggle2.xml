@@ -24,6 +24,7 @@
 
             <TextView
                 android:id="@+id/text_tool_title"
+                android:labelFor="@id/checkbox_tool"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textSize="16sp"

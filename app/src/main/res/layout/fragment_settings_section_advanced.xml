@@ -374,6 +374,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/powerToolsBarSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -411,6 +412,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/expandableInputSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -448,6 +450,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/scrollButtonsSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -485,6 +488,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/scrollProgressSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -523,6 +527,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/volumeScrollSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -560,6 +565,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/presetsExtendedSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -597,6 +603,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/animateBarOnErrorSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -635,6 +642,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/showCitationsSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -672,6 +680,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/openRouterTransformsSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
