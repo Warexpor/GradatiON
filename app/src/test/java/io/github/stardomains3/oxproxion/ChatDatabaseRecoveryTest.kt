@@ -1065,6 +1065,65 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun aFinishedSideFileIsInstalledWhenTheRecoveredNameIsAlreadyGone() {
+        val databases = tmp.newFolder("ready-missing-databases")
+        val vault = tmp.newFolder("ready-missing-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        // The empty name was deleted, then the process died before the side file took it.
+        File(hold, "chat_database.recovered-44.partial").writeText("held-history")
+        File(hold, "chat_database.recovered-44.ready").writeBytes(byteArrayOf(1))
+        File(databases, "chat_database.recovered-45.partial").writeText("root-history")
+        File(databases, "chat_database.recovered-45.ready").writeBytes(byteArrayOf(1))
+        File(vault, "chat_database.unreadable-8.partial").writeText("aside-history")
+        File(vault, "chat_database.unreadable-8.ready").writeBytes(byteArrayOf(1))
+        // No ready marker: a torn copy is not the database.
+        File(hold, "chat_database.recovered-46.partial").writeText("torn")
+
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, null))
+
+        assertEquals("held-history", File(vault, "chat_database.recovered-44").readText())
+        assertEquals("root-history", File(vault, "chat_database.recovered-45").readText())
+        assertEquals("aside-history", File(vault, "chat_database.unreadable-8").readText())
+        assertFalse(File(hold, "chat_database.recovered-44.partial").exists())
+        assertFalse(File(hold, "chat_database.recovered-44.ready").exists())
+        assertFalse(File(databases, "chat_database.recovered-45.partial").exists())
+        assertFalse(File(vault, "chat_database.unreadable-8.partial").exists())
+        assertFalse(File(vault, "chat_database.recovered-46").exists())
+        assertFalse(File(hold, "chat_database.recovered-46.partial").exists())
+        assertFalse(File(hold, "chat_database.recovered-46").exists())
+    }
+
+    @Test
+    fun aFinishedWalSideFileIsInstalledBesideTheRecoveredDatabase() {
+        val databases = tmp.newFolder("ready-wal-databases")
+        val vault = tmp.newFolder("ready-wal-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(vault, "chat_database.recovered-47").writeText("history")
+        File(vault, "chat_database.recovered-47-wal").writeBytes(ByteArray(0))
+        File(vault, "chat_database.recovered-47-wal.partial").writeText("wal-frames")
+        File(vault, "chat_database.recovered-47-wal.ready").writeBytes(byteArrayOf(1))
+        File(hold, "chat_database.recovered-48").writeText("held-history")
+        File(hold, "chat_database.recovered-48-shm.partial").writeText("held-shm")
+        File(hold, "chat_database.recovered-48-shm.ready").writeBytes(byteArrayOf(1))
+        // A wal with no main must not be promoted. Room would create an empty database beside it.
+        File(hold, "chat_database.recovered-49-wal.partial").writeText("orphan-wal")
+        File(hold, "chat_database.recovered-49-wal.ready").writeBytes(byteArrayOf(1))
+
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, null))
+
+        assertEquals("history", File(vault, "chat_database.recovered-47").readText())
+        assertEquals("wal-frames", File(vault, "chat_database.recovered-47-wal").readText())
+        assertFalse(File(vault, "chat_database.recovered-47-wal.partial").exists())
+        assertFalse(File(vault, "chat_database.recovered-47-wal.ready").exists())
+        assertEquals("held-history", File(vault, "chat_database.recovered-48").readText())
+        assertEquals("held-shm", File(vault, "chat_database.recovered-48-shm").readText())
+        assertFalse(File(hold, "chat_database.recovered-48-shm.partial").exists())
+        assertFalse(File(vault, "chat_database.recovered-49-wal").exists())
+        assertFalse(File(hold, "chat_database.recovered-49-wal").exists())
+        assertFalse(File(hold, "chat_database.recovered-49-wal.partial").exists())
+    }
+
+    @Test
     fun aZeroByteDestinationDoesNotDiscardTheReadyCopy() {
         val root = tmp.newFolder("zero-ready")
         val from = File(root, "from")
