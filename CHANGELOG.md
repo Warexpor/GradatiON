@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Chat import side notes still match after a later save refreshes the timestamp or adds messages, when the title still names that chat (stamp+count alone used to drop them). A character wallpaper apply no longer falls back to writing a raw stub when prepare fails. Character portrait export skips a torn JPEG (recover + completeJpeg), matching wallpaper encode.
 - Haptics, Data (biometrics / notifications / keep screen on / destructive tools), Models (trust self-signed LAN), Appearance (app icon / photo options), Advanced LiveData switches, streaming, Style (lore / third person / auto memory / show thoughts), Thoughts tile, chat mode, and Code Thinking preference writes commit before return, so a kill right after the Settings tap cannot drop them. Settings home skips a no-op `isChecked` write so it cannot rewrite the pref.
 - Advanced Power tools is one switch over the dock and the top bar. LiveData is ignored while that tap is still writing both halves, so turning the switch off cannot flip the dock back on.
 - Appearance chat text size commits, and a LAN certificate pin (and clearing pins) commits, so a kill cannot drop the size or forget the first-use pin and let the next certificate win.

@@ -282,6 +282,46 @@ class RpLibraryImportTest {
     }
 
     @Test
+    fun applyDoesNotInstallAStubWhenPrepareFails() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        // completeJpeg + size floor pass; BitmapFactory bounds usually fail so restore Leaves.
+        // When a factory invents bounds (Write), prepare still returns null for this pad —
+        // apply must not fall back to writing the raw stub the way it used to.
+        val stub = ByteArray(80) { 0 }
+        stub[0] = 0xFF.toByte()
+        stub[1] = 0xD8.toByte()
+        stub[78] = 0xFF.toByte()
+        stub[79] = 0xD9.toByte()
+        assertTrue(ScenePhoto.completeJpeg(stub))
+        assertNull(BackgroundPhoto.prepare(stub))
+        val encoded = android.util.Base64.encodeToString(stub, android.util.Base64.NO_WRAP)
+        val kept = 22L
+        val slot = BackgroundPhoto.slotForCharacter(kept)
+        BackgroundPhoto.delete(app, slot)
+        RpWallpaperBackup.apply(app, kept, encoded)
+        assertFalse(BackgroundPhoto.hasPhoto(app, slot))
+    }
+
+    @Test
+    fun encodeAvatarSkipsATornPortrait() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val id = 33L
+        val file = RpAvatarStorage.avatarFile(app, id)
+        file.parentFile?.mkdirs()
+        val bmp = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(Color.GRAY)
+        val jpeg = ByteArrayOutputStream().also {
+            bmp.compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        bmp.recycle()
+        assertTrue(jpeg.size >= 64)
+        file.writeBytes(jpeg.copyOf(jpeg.size - 2)) // drop EOI
+        assertFalse(ScenePhoto.completeJpeg(file))
+        assertNull(RpAvatarStorage.encodeAvatarBase64(app, id))
+        file.delete()
+    }
+
+    @Test
     fun anUndecodeablePortraitIsLeftRatherThanRetriedForever() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val prefs = SharedPreferencesHelper(app)
