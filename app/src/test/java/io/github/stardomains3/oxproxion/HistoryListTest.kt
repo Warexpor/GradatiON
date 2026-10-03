@@ -155,6 +155,19 @@ class HistoryListTest {
         assertEquals("You: a > b", HistoryList.preview("user", "\"a > b\"", you, "Photo"))
         assertEquals("You: quoted", HistoryList.preview("user", "\"> quoted\"", you, "Photo"))
         assertEquals("You: gone", HistoryList.preview("user", "\"~~gone~~\"", you, "Photo"))
+        // A star that is not emphasis stays, the same way a hash inside a word does.
+        // The row has to show the token a search matched.
+        assertEquals("You: 2 * 3 = 6", HistoryList.preview("user", "\"2 * 3 = 6\"", you, "Photo"))
+        assertEquals("You: a*b stays", HistoryList.preview("user", "\"a*b stays\"", you, "Photo"))
+        assertEquals("You: italic", HistoryList.preview("user", "\"*italic*\"", you, "Photo"))
+        assertEquals("You: item", HistoryList.preview("user", "\"* item\"", you, "Photo"))
+        assertEquals("You: bold x text", HistoryList.preview("user", "\"**bold *x* text**\"", you, "Photo"))
+        assertEquals("You: press the ` key", HistoryList.preview("user", "\"press the ` key\"", you, "Photo"))
+        assertEquals("You: run ls now", HistoryList.preview("user", "\"run `ls` now\"", you, "Photo"))
+        val star = HistoryList.preview("user", "\"use 2 * 3 here\"", you, "Photo")
+        assertTrue(star.contains("2 * 3"))
+        assertTrue(HistoryList.emphasisAt(star, "2 * 3") >= 0)
+        assertTrue(HistoryList.searchLine("user", "\"use 2 * 3 here\"", "2 * 3", you, "Photo").contains("2 * 3"))
         val sharp = HistoryList.preview("user", "\"use C# here\"", you, "Photo")
         assertTrue(sharp.contains("C#"))
         assertTrue(HistoryList.emphasisAt(sharp, "C#") >= 0)
@@ -213,6 +226,20 @@ class HistoryListTest {
         assertTrue(line.startsWith("You: short intro"))
         assertTrue(line.contains("lantern"))
         assertFalse(line.startsWith("You: …"))
+        // The two words are far apart. The row is one line, so the gap used to
+        // ellipsize the later word off the end.
+        val filler = "word ".repeat(40)
+        val gapped = HistoryList.searchLine("user", "\"hello $filler photo\"", "hello photo", you, "Photo")
+        assertTrue(gapped.startsWith("You:"))
+        assertTrue(gapped.contains("hello"))
+        assertTrue(gapped.contains("photo"))
+        assertTrue(gapped.contains("…"))
+        assertTrue(gapped.length < 80)
+        assertTrue(HistoryList.emphasis(gapped, "hello photo") != null)
+        assertEquals(
+            "You: hello there photo",
+            HistoryList.searchLine("user", "\"hello there photo\"", "hello photo", you, "Photo"),
+        )
     }
 
     @Test fun search_line_uses_a_clean_parse_and_a_mid_string_slice() {

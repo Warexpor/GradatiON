@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- History preview keeps a star or a backtick that is part of the words (`2 * 3`, `a*b`, a lone `` ` ``). Stripping every one hid the token a search had matched. Emphasis, a list star, and a closed code span still come off.
+- History search keeps both words when they are far apart in a sent message. The row is one line, and the gap between them used to ellipsize the later word off the end.
+- A text file whose name contains a Unicode line break (not only a newline) keeps that name on the header line.
 - Roleplay list lines keep an underscore between letters that are not ASCII (`déjà_vu`, `карта_реки`). The character list, a character's History, and the library card used to drop it. `snake_case` and a `#` `~` or `>` that belongs to the words still stay, and emphasis underscores still come off.
 - An example's sample name is not the character. When the card is named Jordan and you are Alex, `{{user}}` and `{{random_user_1}}` used to come out as Jordan, so both sides of the sample were the character.
 - A `<START>` or `END_OF_DIALOG` line that ends the example text is not saved as the reply, and `END_OF_DIALOG` between exchanges starts a new one. `Bot:` is the character side. A `<START>` inside a sentence still stays in the reply.
