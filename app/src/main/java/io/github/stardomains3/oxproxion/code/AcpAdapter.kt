@@ -44,10 +44,11 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`, `ListPullRequestReviewComments`, `BrowserFillForm`, `BrowserFileUpload`, `BrowserIsVisible`, `BrowserTabList`, `BrowserInstall`, `BrowserNavigateForward`, `BrowserReload`, `BrowserHighlight`, `BrowserSearch`, `BrowserMouseClickXy`, `BrowserCdp`, `BrowserMouseMoveXy`, `BrowserMouseDragXy`, `BrowserMouseDown`, `BrowserMouseUp`, `BrowserMouseWheel`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`, `ListPullRequestReviewComments`, `BrowserFillForm`, `BrowserFileUpload`, `BrowserDrop`, `BrowserFind`, `BrowserNetworkRequest`, `BrowserRunCodeUnsafe`, `BrowserIsVisible`, `BrowserTabList`, `BrowserInstall`, `BrowserNavigateForward`, `BrowserReload`, `BrowserHighlight`, `BrowserSearch`, `BrowserMouseClickXy`, `BrowserCdp`, `BrowserMouseMoveXy`, `BrowserMouseDragXy`, `BrowserMouseDown`, `BrowserMouseUp`, `BrowserMouseWheel`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
- * are answered here so those requests do not sit forever.
+ * are answered here so those requests do not sit forever. Grok Build's
+ * `x.ai/ask_user_question` uses the same card; the reply is the option label.
  */
 class AcpAdapter : HarnessAdapter {
 
@@ -303,7 +304,8 @@ class AcpAdapter : HarnessAdapter {
                 decodeSessionStatus(params, bridgeSeq(params, obj))
             }
             method == "cursor/update_todos" || method == "cursor/ask_question" || method == "cursor/create_plan" ||
-                method == "cursor/task" || method == "cursor/generate_image" -> {
+                method == "cursor/task" || method == "cursor/generate_image" ||
+                method == "x.ai/ask_user_question" || method == "_x.ai/ask_user_question" -> {
                 val params = obj["params"] as? JsonObject ?: return ignored("no params")
                 val sid = sessionOf(params).orEmpty()
                 val seq = bridgeSeq(params, obj)
@@ -470,6 +472,7 @@ class AcpAdapter : HarnessAdapter {
             "browser_snapshot", "browsersnapshot",
             "browser_console_messages", "browserconsolemessages",
             "browser_network_requests", "browsernetworkrequests",
+            "browser_network_request", "browsernetworkrequest",
             "browser_get_attribute", "browsergetattribute",
             "browser_get_input_value", "browsergetinputvalue",
             "browser_is_visible", "browserisvisible",
@@ -607,7 +610,8 @@ class AcpAdapter : HarnessAdapter {
             "query_worker_observability", "queryworkerobservability",
             "list_shells", "listshells", "list_shell", "listshell",
             "browser_tab_list", "browsertablist",
-            "browser_search", "browsersearch" -> "search"
+            "browser_search", "browsersearch",
+            "browser_find", "browserfind" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command",
             "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
             "runterminalcommand",
@@ -634,10 +638,12 @@ class AcpAdapter : HarnessAdapter {
             "browser_tab_select", "browsertabselect",
             "browser_tab_close", "browsertabclose",
             "browser_evaluate", "browserevaluate",
+            "browser_run_code_unsafe", "browserruncodeunsafe",
             "browser_fill_form", "browserfillform",
             "browser_file_upload", "browserfileupload",
             "browser_handle_dialog", "browserhandledialog",
             "browser_drag", "browserdrag",
+            "browser_drop", "browserdrop",
             "browser_resize", "browserresize",
             "browser_close", "browserclose",
             "browser_navigate_back", "browsernavigateback",
@@ -1202,8 +1208,11 @@ class AcpAdapter : HarnessAdapter {
                 // Typed text, a filled value, or selected options. Later than element so a
                 // click still shows the control name when that description is present.
                 "text", "value", "values") != null ||
-            // Form fields, a dialog, a resize, a scroll, or a drag. A bare ref is not one of these.
+            // Form fields, a dialog, a resize, a scroll, a drag, uploaded files, or a wait.
+            // A bare ref is not one of these.
             browserAction(raw) != null ||
+            waitSeconds(u) != null ||
+            runCodeFile(u) != null ||
             // A ref, or Playwright's `target`, still fills an empty row. It must not beat the action.
             firstRaw(raw, "ref", "target") != null ||
             firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
@@ -1269,7 +1278,58 @@ class AcpAdapter : HarnessAdapter {
             "element", "attribute", "selector",
             "text", "value", "values",
             "key", "keys", "button",
+            // The script, or text that should disappear. `text` still wins when both are set.
+            "function", "code",
+            "textGone", "text_gone",
         ) ?: formFieldsText(raw) ?: dialogText(raw) ?: resizeText(raw) ?: pointerText(raw)
+            ?: uploadText(raw)
+    }
+
+    /**
+     * `browser_file_upload` / `browser_drop`. The file paths, or the dropped text.
+     * An empty `paths` list is the chooser being cancelled. A git `ref` is not a
+     * browser target, so those paths must not replace the commit.
+     */
+    private fun uploadText(raw: JsonObject): String? {
+        if (raw.containsKey("ref") && !raw.containsKey("target") && !raw.containsKey("element")) return null
+        firstRaw(raw, "paths")?.let { return it }
+        dropDataText(raw)?.let { return it }
+        return when (val paths = raw["paths"]) {
+            is JsonNull -> "cancel"
+            is JsonArray -> if (paths.isEmpty()) "cancel" else null
+            else -> null
+        }
+    }
+
+    /** MIME map (`{"text/plain": "hello"}`) or one string. The values, not the types. */
+    private fun dropDataText(raw: JsonObject): String? = when (val data = raw["data"]) {
+        is JsonObject -> data.values.mapNotNull { fieldText(it) }.joinToString(", ").ifEmpty { null }
+        is JsonPrimitive -> fieldText(data)
+        else -> null
+    }
+
+    /**
+     * `browser_wait_for` with only `time`. The words (`text` / `textGone`) already
+     * won inside [browserAction], so a lone width-style number on another tool is not a wait.
+     */
+    private fun waitSeconds(u: JsonObject): String? {
+        val n = normalizeKind(u.str("name") ?: u.str("kind"))
+        if (n != "browser_wait" && n != "browser_wait_for" && n != "browserwait" && n != "browserwaitfor") {
+            return null
+        }
+        val raw = rawInputOf(u) ?: return null
+        if (browserAction(raw) != null) return null
+        val seconds = coordPiece(raw["time"]) ?: return null
+        return "${seconds}s"
+    }
+
+    /** `browser_run_code_unsafe` that names a file instead of inlining `code`. */
+    private fun runCodeFile(u: JsonObject): String? {
+        val n = normalizeKind(u.str("name") ?: u.str("kind"))
+        if (n != "browser_run_code_unsafe" && n != "browserruncodeunsafe") return null
+        val raw = rawInputOf(u) ?: return null
+        if (browserAction(raw) != null) return null
+        return firstRaw(raw, "filename", "file")
     }
 
     /**
@@ -1489,7 +1549,11 @@ class AcpAdapter : HarnessAdapter {
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId",
                 "button",
-                "text", "value", "values")),
+                "text", "value", "values")).let { line ->
+                // A wait's seconds, or a snippet loaded from a file, beat a bare element ref.
+                val extra = waitSeconds(u) ?: runCodeFile(u)
+                if (extra != null && (line == null || line == elementRef(raw))) extra else line
+            },
             filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
@@ -1907,6 +1971,7 @@ class AcpAdapter : HarnessAdapter {
             "session/update", "session/request_permission", "bridge/permissionResolved", "bridge/sessionStatus",
             "cursor/update_todos", "cursor/ask_question", "cursor/create_plan",
             "cursor/task", "cursor/generate_image",
+            "x.ai/ask_user_question", "_x.ai/ask_user_question",
         )
 
         /** Older Cursor builds send `_cursor/ask_question`. The rest of decode uses the bare name. */

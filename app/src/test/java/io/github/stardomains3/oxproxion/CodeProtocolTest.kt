@@ -2983,6 +2983,94 @@ class CodeProtocolTest {
         assertEquals("npm test", byId["sh"]?.detail)
     }
 
+    @Test fun uploadAndDropKeepTheFileLine() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"up","title":"Upload","kind":"other","name":"BrowserFileUpload","status":"completed","rawInput":{"paths":["/tmp/a.pdf","/tmp/b.pdf"]}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"cx","title":"Cancel","kind":"other","name":"browser_file_upload","status":"completed","rawInput":{"paths":[]}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dr","title":"Drop","kind":"other","name":"BrowserDrop","status":"in_progress","rawInput":{"target":"e7","paths":["/tmp/photo.jpg"]}}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"dr","status":"completed","rawInput":{"target":"e7"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"el","title":"Drop","kind":"other","name":"BrowserDrop","status":"completed","rawInput":{"element":"Upload zone","target":"e8","paths":["/tmp/photo.jpg"]}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dt","title":"Drop","kind":"other","name":"browser_drop","status":"completed","rawInput":{"target":"e12","data":{"text/plain":"hello","text/uri-list":"https://example.com"}}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sh","title":"Bash","kind":"execute","status":"completed","rawInput":{"command":"npm test","paths":["/tmp/a.pdf"],"width":10,"height":20}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"gc","title":"Commit","kind":"other","name":"GetCommit","status":"completed","rawInput":{"ref":"main","owner":"Warexpor","paths":["/tmp/a.pdf"]}}"""),
+        )
+        val byId = foldFresh(frames).filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EXECUTE, byId["up"]?.kind)
+        assertEquals("/tmp/a.pdf, /tmp/b.pdf", byId["up"]?.detail)
+        assertEquals("cancel", byId["cx"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["dr"]?.kind)
+        assertEquals("/tmp/photo.jpg", byId["dr"]?.detail)
+        assertEquals(ToolStatus.COMPLETED, byId["dr"]?.status)
+        assertEquals("Upload zone", byId["el"]?.detail)
+        assertEquals("hello, https://example.com", byId["dt"]?.detail)
+        assertEquals("npm test", byId["sh"]?.detail)
+        assertEquals("main", byId["gc"]?.detail)
+    }
+
+    @Test fun waitAndEvaluateShowTheActionNotTheRef() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wg","title":"Wait","kind":"other","name":"BrowserWaitFor","status":"completed","rawInput":{"textGone":"Loading","target":"e2"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wt","title":"Wait","kind":"other","name":"browser_wait_for","status":"completed","rawInput":{"time":3.0}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"tx","title":"Wait","kind":"other","name":"BrowserWaitFor","status":"completed","rawInput":{"text":"Ready","textGone":"Loading"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ev","title":"Eval","kind":"other","name":"BrowserEvaluate","status":"in_progress","rawInput":{"target":"e4","function":"() => document.title"}}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"ev","status":"completed","rawInput":{"target":"e4"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"el","title":"Eval","kind":"other","name":"browser_evaluate","status":"completed","rawInput":{"element":"Submit","function":"() => 1"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rc","title":"Run","kind":"other","name":"browser_run_code_unsafe","status":"completed","rawInput":{"code":"await page.title()"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rf","title":"Run","kind":"other","name":"BrowserRunCodeUnsafe","status":"completed","rawInput":{"filename":"snap.js","target":"e9"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"fd","title":"Find","kind":"other","name":"BrowserFind","status":"completed","rawInput":{"text":"Sign in"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"nr","title":"Request","kind":"other","name":"BrowserNetworkRequest","status":"completed","rawInput":{"index":2.0}}"""),
+        )
+        val byId = foldFresh(frames).filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("Loading", byId["wg"]?.detail)
+        assertEquals(ToolKind.THINK, byId["wt"]?.kind)
+        assertEquals("3s", byId["wt"]?.detail)
+        assertEquals("Ready", byId["tx"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["ev"]?.kind)
+        assertEquals("() => document.title", byId["ev"]?.detail)
+        assertEquals(ToolStatus.COMPLETED, byId["ev"]?.status)
+        assertEquals("Submit", byId["el"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["rc"]?.kind)
+        assertEquals("await page.title()", byId["rc"]?.detail)
+        assertEquals("snap.js", byId["rf"]?.detail)
+        assertEquals(ToolKind.SEARCH, byId["fd"]?.kind)
+        assertEquals("Sign in", byId["fd"]?.detail)
+        assertEquals(ToolKind.READ, byId["nr"]?.kind)
+        assertEquals("2", byId["nr"]?.detail)
+    }
+
+    @Test fun grokAskQuestionAnswersWithTheLabel() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":21,"method":"x.ai/ask_user_question","params":{"sessionId":"s1","toolCallId":"call_9","questions":[{"question":"Which colour?","multiSelect":false,"options":[{"label":"Red","description":"Red banner"},{"label":"Blue","description":"Blue banner"}]}]}}""")
+        val approval = ((out.single() as AdapterOutput.Update).update as CodeUpdate.Upsert).event as CodeEvent.Approval
+        assertEquals("Which colour?", approval.title)
+        assertEquals(listOf("Red", "Blue"), approval.options.map { it.id })
+        assertTrue(out.none { it is AdapterOutput.Reply && it.frame.contains("Method not found") })
+        val reply = Json.parseToJsonElement(acp.answerApproval("21", "Red")).jsonObject
+        val result = reply["result"]!!.jsonObject
+        assertEquals("accepted", result["outcome"]!!.jsonPrimitive.content)
+        assertEquals("Red", result["answers"]!!.jsonObject["Which colour?"]!!.jsonPrimitive.content)
+        assertTrue(result.containsKey("annotations"))
+        val cancel = Json.parseToJsonElement(acp.answerApproval("21", null)).jsonObject
+        assertEquals("cancelled", cancel["result"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
+        acp.decode("""{"jsonrpc":"2.0","id":21,"method":"session/request_permission","params":{"sessionId":"s1","toolCall":{"toolCallId":"c1","title":"Run tests","kind":"execute"},"options":[{"optionId":"allow-once","name":"Allow once","kind":"allow_once"}]}}""")
+        val perm = Json.parseToJsonElement(acp.answerApproval("21", "allow-once")).jsonObject
+        val outcome = perm["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("selected", outcome["outcome"]!!.jsonPrimitive.content)
+        assertEquals("allow-once", outcome["optionId"]!!.jsonPrimitive.content)
+
+        val multi = acp.decode("""{"jsonrpc":"2.0","id":22,"method":"_x.ai/ask_user_question","params":{"sessionId":"s1","questions":[{"question":"Which extras?","multi_select":true,"options":[{"label":"Logo"},{"label":"Icon"}]}]}}""")
+        assertTrue(multi.any { it is AdapterOutput.Update && (it.update as? CodeUpdate.Upsert)?.event is CodeEvent.Notice })
+        assertTrue(multi.filterIsInstance<AdapterOutput.Update>().none {
+            (it.update as? CodeUpdate.Upsert)?.event is CodeEvent.Approval
+        })
+        val skipped = Json.parseToJsonElement(multi.filterIsInstance<AdapterOutput.Reply>().single().frame).jsonObject
+        assertEquals("skip_interview", skipped["result"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
+        assertTrue(multi.none { it is AdapterOutput.Reply && it.frame.contains("Method not found") })
+        val two = acp.decode("""{"jsonrpc":"2.0","id":23,"method":"x.ai/ask_user_question","params":{"sessionId":"s1","questions":[{"question":"A","options":[{"label":"A"}]},{"question":"B","options":[{"label":"B"}]}]}}""")
+        val twoOutcome = Json.parseToJsonElement(two.filterIsInstance<AdapterOutput.Reply>().single().frame)
+            .jsonObject["result"]!!.jsonObject
+        assertEquals("skip_interview", twoOutcome["outcome"]!!.jsonPrimitive.content)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()
