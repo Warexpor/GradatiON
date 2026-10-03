@@ -686,6 +686,54 @@ class ScreenshotTest : ScreenshotHarness() {
         }
     }
 
+    /** Save with a blank message used to do nothing at all; it says why, like the prompt editor. */
+    @Test fun settingsSystemMessageEditorExplainsEmptySaveDark() = withChat { a, _ ->
+        val f = AddEditSystemMessageFragment()
+        pushFragment(a, f)
+        val v = f.requireView()
+        v.findViewById<android.widget.EditText>(R.id.edit_text_system_message_title).setText("Terse")
+        v.findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar).menu
+            .performIdentifierAction(R.id.action_save_system_message, 0)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(400))
+        org.junit.Assert.assertTrue("editor stays open", f.isAdded && !f.isHidden)
+        val text = root(a).findViewById<android.widget.TextView>(com.google.android.material.R.id.snackbar_text)
+        org.junit.Assert.assertEquals(a.getString(R.string.system_message_empty), text?.text?.toString())
+        snap(root(a), "settings_system_message_empty_dark")
+    }
+
+    /** Saving a preset whose model was removed used to overwrite its model with "unknown-model". */
+    @Test fun settingsPresetKeepsAMissingModelDark() = withChat { a, _ ->
+        val prefs = SharedPreferencesHelper(a)
+        val gone = Preset("p-gone", "Old favourite", "vendor/retired-model", SystemMessage("Default", ""),
+            streaming = true, reasoning = false, conversationMode = false)
+        prefs.savePresets(listOf(gone))
+        val f = PresetEditFragment.newInstance(gone)
+        pushFragment(a, f)
+        val v = f.requireView()
+        org.junit.Assert.assertEquals(a.getString(R.string.preset_model_missing, "vendor/retired-model"),
+            v.findViewById<android.widget.TextView>(R.id.autoCompleteModel).text.toString())
+        v.findViewById<android.widget.EditText>(R.id.editPresetTitle).setText("Renamed favourite")
+        snap(root(a), "settings_preset_missing_model_dark")
+        v.findViewById<View>(R.id.buttonSave).performClick(); idle()
+        val saved = prefs.getPresets().single()
+        org.junit.Assert.assertEquals("Renamed favourite", saved.title)
+        org.junit.Assert.assertEquals("vendor/retired-model", saved.modelIdentifier)
+        prefs.savePresets(emptyList())
+    }
+
+    /** Messages that send you to Settings name the page by the title its row and toolbar show. */
+    @Test fun settingsPointersNameRealSections() = withChat { a, _ ->
+        val models = "Settings > " + a.getString(R.string.settings_section_models)
+        val voice = "Settings > " + a.getString(R.string.settings_section_voice)
+        for (id in listOf(R.string.notice_need_key, R.string.notice_need_lan,
+                R.string.voice_need_openrouter_key, R.string.voice_need_lan_endpoint)) {
+            org.junit.Assert.assertTrue(a.getString(id), a.getString(id).contains(models))
+        }
+        for (id in listOf(R.string.voice_need_model, R.string.voice_need_xai_key, R.string.voice_unavailable)) {
+            org.junit.Assert.assertTrue(a.getString(id), a.getString(id).contains(voice))
+        }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",

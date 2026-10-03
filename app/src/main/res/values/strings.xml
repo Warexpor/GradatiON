@@ -341,8 +341,8 @@
     <string name="cd_font_decrease">Decrease font</string>
     <string name="cd_done">Done</string>
     <string name="cd_voice_input">Voice input</string>
-    <string name="notice_need_key">Add your OpenRouter API key in Settings &gt; Models, or pick GradatiON: Demo to try the app.</string>
-    <string name="notice_need_lan">Set your local server address in Settings &gt; Models.</string>
+    <string name="notice_need_key">Add your OpenRouter API key in Settings &gt; Models &amp; API, or pick GradatiON: Demo to try the app.</string>
+    <string name="notice_need_lan">Set your local server address in Settings &gt; Models &amp; API.</string>
     <string name="notice_export_chats_failed">Error exporting chats</string>
     <string name="notice_import_failed_format">Import failed. Check file format.</string>
     <string name="notice_no_biometrics">No biometrics available</string>
@@ -726,6 +726,7 @@
     <string name="system_message_title_exists">A message with this title already exists</string>
     <string name="prompt_title_exists">A prompt with this title already exists</string>
     <string name="prompt_empty">Title and prompt cannot be empty</string>
+    <string name="system_message_empty">Title and message cannot be empty</string>
     <string name="biometric_title">Unlock GradatiON</string>
     <string name="biometric_subtitle">Use your biometric credential</string>
     <string name="chooser_title">Choose and send\n%1$s</string>
