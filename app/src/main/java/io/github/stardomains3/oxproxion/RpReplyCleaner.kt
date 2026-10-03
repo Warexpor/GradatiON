@@ -54,6 +54,9 @@ object RpReplyCleaner {
      * curled angle `⧼OOC：…⧽`) even when the note wraps, then a "here's the rewritten reply"
      * label. An OOC line that is not that note stays: it can be the character talking.
      */
+    /** The story after a leading rewrite note or "here's the rewritten reply" label. The note alone is empty. */
+    fun withoutRewritePreamble(text: String): String = stripLeadingRewrite(text).trim()
+
     private fun stripLeadingRewrite(text: String): String {
         var out = text.trimStart()
         repeat(3) {

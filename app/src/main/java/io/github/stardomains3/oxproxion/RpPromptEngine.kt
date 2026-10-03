@@ -171,6 +171,19 @@ object RpPromptEngine {
         return rest.ifEmpty { trimmed }
     }
 
+    /**
+     * True when [text] is only a scene note, in any bracket form [withoutLeadingSceneNote]
+     * strips. The canonical ASCII wrapper is not the only echo models send.
+     */
+    fun isBareSceneNote(text: String): Boolean {
+        val trimmed = text.trim()
+        val open = sceneNoteOpenAt(trimmed, 0) ?: return false
+        if (open.index != 0) return false
+        val end = trimmed.indexOf(open.close, open.length)
+        if (end < 0) return false
+        return trimmed.substring(end + open.close.length).isBlank()
+    }
+
     private data class SceneNoteOpen(val index: Int, val length: Int, val close: String)
 
     private fun sceneNoteOpenAt(text: String, from: Int): SceneNoteOpen? {

@@ -183,4 +183,25 @@ class RpAutoMemoryTest {
         val out = RpAutoMemory.clean("- " + "y".repeat(3000))!!
         assertEquals(RpAutoMemory.MEMORY_CHARS, out.length)
     }
+
+    @Test fun transcriptDropsBracketedSceneNotesAndRewriteEchoes() {
+        val note = "（Scene note, not spoken aloud:\nmention the locket\n）"
+        val rewrite = "（OOC: Rewrite your last reply above. What to change: shorter\nKeep the voice.）"
+        val turns = listOf(
+            "user" to note,
+            "assistant" to note + "\n\nShe opens it.",
+            "assistant" to rewrite + "\n\nThe locket is warm.",
+            "user" to "(OOC: she smiles at him.)"
+        )
+        val t = RpAutoMemory.transcript(turns, "Mira", "Sam")
+        assertFalse(t.contains("Scene note"))
+        assertFalse(t.contains("Rewrite your last reply"))
+        assertTrue(t.contains("She opens it."))
+        assertTrue(t.contains("The locket is warm."))
+        assertTrue(t.contains("she smiles at him."))
+        assertTrue(RpAutoMemory.isMachinery(note))
+        assertTrue(RpAutoMemory.isMachinery(rewrite))
+        assertEquals("", RpAutoMemory.storyText(note))
+        assertEquals("She opens it.", RpAutoMemory.storyText(note + "\n\nShe opens it."))
+    }
 }

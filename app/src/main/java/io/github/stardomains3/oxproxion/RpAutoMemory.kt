@@ -67,26 +67,34 @@ object RpAutoMemory {
             t == RpPromptEngine.CONTINUE_USER_TURN ||
             t == RpPromptEngine.CONTINUE_DIRECTION ||
             isSceneNote(t) ||
-            (t.startsWith("(OOC:") && "Rewrite your last reply" in t)
-    }
-
-    /** The reminder wrapper on its own. A reply that merely starts with one still counts as story. */
-    private fun isSceneNote(text: String): Boolean {
-        val body = RpPromptEngine.sceneNoteBody(text) ?: return false
-        return text == RpPromptEngine.sceneNote(body)
+            isRewriteNote(t)
     }
 
     /**
-     * Drop a scene-note wrapper. A turn that is only the note becomes empty; a reply that
-     * echoes the note and then continues keeps the rest.
+     * The reminder wrapper on its own, including a fullwidth or other bracket echo.
+     * Comparing to the ASCII wrapper used to keep those echoes as facts.
+     */
+    private fun isSceneNote(text: String): Boolean = RpPromptEngine.isBareSceneNote(text)
+
+    /** A rewrite instruction on its own, in any bracket the reply cleaner already strips. */
+    private fun isRewriteNote(text: String): Boolean {
+        if (!text.contains("Rewrite your last reply", ignoreCase = true)) return false
+        return RpReplyCleaner.withoutRewritePreamble(text).isEmpty()
+    }
+
+    /**
+     * Drop a scene-note wrapper and a leading rewrite echo. A turn that is only the note
+     * becomes empty; a reply that echoes the note and then continues keeps the rest.
+     * The note may use any bracket [RpPromptEngine.withoutLeadingSceneNote] knows, not
+     * only the ASCII wrapper this chat sends.
      */
     fun storyText(text: String): String {
         val trimmed = text.trim()
-        val body = RpPromptEngine.sceneNoteBody(trimmed) ?: return trimmed
-        val wrapped = RpPromptEngine.sceneNote(body)
-        if (trimmed == wrapped) return ""
-        if (trimmed.startsWith(wrapped)) return trimmed.removePrefix(wrapped).trim()
-        return trimmed
+        if (trimmed.isEmpty() || isSceneNote(trimmed) || isRewriteNote(trimmed)) return ""
+        var out = RpPromptEngine.withoutLeadingSceneNote(trimmed).trim()
+        out = RpReplyCleaner.withoutRewritePreamble(out)
+        if (out.isEmpty() || isSceneNote(out) || isRewriteNote(out)) return ""
+        return out
     }
 
     /** "Name: text" lines, newest last, trimmed from the front to [TRANSCRIPT_CHARS]. */
