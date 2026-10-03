@@ -23,11 +23,14 @@ object BridgeTls {
 
     private val HEX = Regex("^[0-9a-fA-F]+$")
     private val BASE64ISH = Regex("^[A-Za-z0-9+/=_-]+$")
+    /** Spaces a wrapper inserted. `+` is not one of these: base64 uses it. */
+    private val PIN_FOLD = Regex("[\\s\\u00A0\\u2028\\u2029\\u0085]+")
 
     /**
      * Normalize a pairing `fp=` value to OkHttp pin form `sha256/<base64>`.
      * Accepts hex (optional colons, spaces, or `+` where a form encoder wrote a space),
      * URL-safe or standard base64 of the digest, or an already-prefixed `sha256/...` pin.
+     * A line break, tab, or non-breaking space from a wrapped pin is ignored.
      * Blank / unparseable → null. A `+` inside base64 is still a plus: it is only a
      * separator on the hex path, where base64 is the wrong length.
      */
@@ -42,13 +45,16 @@ object BridgeTls {
         if (body.isEmpty()) return null
 
         // URLEncoder writes the spaces in "12 AD …" as '+'. Removing those only for the
-        // hex check leaves a base64 '+' in place for the digest path below.
-        val hexCandidate = body.replace(":", "").replace(" ", "").replace("+", "")
+        // hex check leaves a base64 '+' in place for the digest path below. A wrapped
+        // pin also has newlines; those are not part of either encoding.
+        val unfolded = PIN_FOLD.replace(body, "")
+        if (unfolded.isEmpty()) return null
+        val hexCandidate = unfolded.replace(":", "").replace("+", "")
         val digest: ByteArray = when {
             hexCandidate.length == 64 && HEX.matches(hexCandidate) ->
                 hexCandidate.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-            BASE64ISH.matches(body) && body.length in 40..48 -> {
-                val standard = body.replace('-', '+').replace('_', '/')
+            BASE64ISH.matches(unfolded) && unfolded.length in 40..48 -> {
+                val standard = unfolded.replace('-', '+').replace('_', '/')
                 runCatching { Base64.getDecoder().decode(standard) }.getOrNull() ?: return null
             }
             else -> return null

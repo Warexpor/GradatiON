@@ -89,6 +89,18 @@ nwonylCc+6YBfSJvgp8P
     }
 
     @Test
+    fun normalizePin_lineBreakBetweenHexBytes() {
+        val wrapped = pinHex.chunked(16).joinToString("\n")
+        assertEquals(pinB64, BridgeTls.normalizePin(wrapped))
+        assertEquals(pinB64, BridgeTls.normalizePin(pinHex.chunked(8).joinToString("\t")))
+        assertEquals(pinB64, BridgeTls.normalizePin(pinHex.chunked(2).joinToString("\u00A0")))
+        val b64 = pinB64.removePrefix("sha256/")
+        val splitAt = 20
+        val wrappedB64 = "sha256/" + b64.substring(0, splitAt) + "\n" + b64.substring(splitAt)
+        assertEquals(pinB64, BridgeTls.normalizePin(wrappedB64))
+    }
+
+    @Test
     fun normalizePin_formEncodedSpaceBetweenHexBytes() {
         val plus = pinHex.chunked(2).joinToString("+")
         assertEquals(pinB64, BridgeTls.normalizePin(plus))

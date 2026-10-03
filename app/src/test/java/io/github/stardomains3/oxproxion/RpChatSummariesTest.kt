@@ -118,6 +118,53 @@ class RpChatSummariesTest {
     }
 
     @Test
+    fun taglineKeepsAStarOrBacktickThatIsPartOfTheWords() {
+        val sum = RpCharacter(name = "Mira", personality = "She works out 2 * 3 and a*b.")
+        assertEquals("She works out 2 * 3 and a*b.", RpChatSummaries.tagline(sum, "Alex"))
+        val lone = RpCharacter(name = "Mira", personality = "A lone ` stays.")
+        assertEquals("A lone ` stays.", RpChatSummaries.tagline(lone, "Alex"))
+        val span = RpCharacter(name = "Mira", personality = "Use `snake_case` here.")
+        assertEquals("Use snake_case here.", RpChatSummaries.tagline(span, "Alex"))
+        val emph = RpCharacter(name = "Mira", personality = "*She* keeps the locket.")
+        assertEquals("She keeps the locket.", RpChatSummaries.tagline(emph, "Alex"))
+        val fence = RpCharacter(name = "Mira", personality = "```\nShe keeps the locket.")
+        assertEquals("She keeps the locket.", RpChatSummaries.tagline(fence, "Alex"))
+        assertEquals(
+            "You: 2 * 3 and a lone `",
+            RpChatSummaries.rowLine("user", "\"2 * 3 and a lone `\"", { "You: $it" }, "Photo"),
+        )
+    }
+
+    @Test
+    fun taglineStopsAtABreakThatIsNotANewline() {
+        val br = RpCharacter(name = "Mira", personality = "She waits at the docks.<br>Second stays off.")
+        assertEquals("She waits at the docks.", RpChatSummaries.tagline(br, "Alex"))
+        val brSlash = RpCharacter(name = "Mira", personality = "She waits.<br/>Second stays off.")
+        assertEquals("She waits.", RpChatSummaries.tagline(brSlash, "Alex"))
+        val line = RpCharacter(name = "Mira", personality = "She waits.\u2028Second stays off.")
+        assertEquals("She waits.", RpChatSummaries.tagline(line, "Alex"))
+        val entity = RpCharacter(
+            name = "Mira",
+            personality = "She&apos;s at the docks &amp; the pier.",
+        )
+        assertEquals("She\u0027s at the docks & the pier.", RpChatSummaries.tagline(entity, "Alex"))
+        val twice = RpCharacter(name = "Mira", personality = "Tom &amp;amp; Jerry")
+        assertEquals("Tom &amp; Jerry", RpChatSummaries.tagline(twice, "Alex"))
+        assertEquals("She's at the docks.", RpChatSummaries.previewOf("\"She&#39;s at the docks.\""))
+        assertEquals("Hello there", RpChatSummaries.previewOf("\"Hello<br>there\""))
+        val fresh = RpChatSummaries.build(
+            sessions = emptyList(),
+            characters = listOf(br.copy(id = 4)),
+            previews = emptyMap(),
+            llmName = "GradatiON",
+            noPreview = "No messages yet",
+            startPrompt = "Tap to start",
+            userName = "Alex",
+        )
+        assertEquals("She waits at the docks.", fresh[0].preview)
+    }
+
+    @Test
     fun taglineDoesNotSplitAnEmojiAtTheLimit() {
         val gem = "\uD83D\uDC8E"
         val cut = RpCharacter(name = "Mira", personality = "a".repeat(139) + gem)

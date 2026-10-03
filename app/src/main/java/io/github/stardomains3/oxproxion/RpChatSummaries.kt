@@ -86,10 +86,11 @@ object RpChatSummaries {
         // the row blank; a rule of dashes or equals stayed, and hid the sentence under it.
         val raw = listOf(c.personality, c.scenario, c.greeting)
             .firstNotNullOfOrNull { text ->
-                text.lineSequence()
+                // Decode once, then split, so a second pass cannot turn `&amp;amp;` into `&`.
+                breakLines(decodeEntities(text)).lineSequence()
                     .map { it.trim() }
                     .filter { it.isNotEmpty() }
-                    .map { line -> foldMarkdown(RpPromptEngine.expandMacros(line, who, you)) }
+                    .map { line -> foldMarks(RpPromptEngine.expandMacros(line, who, you)) }
                     .firstOrNull { it.isNotEmpty() && !isRuleLine(it) }
             }
             .orEmpty()
@@ -107,12 +108,19 @@ object RpChatSummaries {
         return text.substring(0, end).trimEnd()
     }
 
+    /**
+     * A pasted card breaks lines with `<br>` or a Unicode line separator, not only `\n`.
+     * Leaving those in made the hub and the list show the next sentence, or the tag itself.
+     */
+    private fun breakLines(text: String): String =
+        UNICODE_LINE.replace(BR.replace(text, "\n"), "\n")
+
     /** A horizontal rule, or a line that is only heading marks. Not a sentence. */
     private fun isRuleLine(line: String): Boolean {
         var marks = 0
         for (ch in line) {
             if (ch == ' ' || ch == '\t') continue
-            if (ch != '#' && ch != '=' && ch != '-' && ch != '*' && ch != '_' && ch != '~') return false
+            if (ch != '#' && ch != '=' && ch != '-' && ch != '*' && ch != '_' && ch != '~' && ch != '`') return false
             marks++
         }
         return marks > 0
@@ -155,34 +163,83 @@ object RpChatSummaries {
         }
 
     /**
-     * Markdown marks come off. An underscore, hash, tilde or angle that is part of the words
-     * stays: stripping every `_` turned `snake_case` into `snakecase`, and stripping every
-     * `#` `~` or `>` turned `C#` and `~/Downloads` into a different line.
-     * A letter is not only ASCII, so `déjà_vu` keeps its underscore too.
-     * A heading, a blockquote and strikethrough still come off.
+     * Markdown marks come off. An underscore, hash, tilde, angle, star or backtick that is
+     * part of the words stays: stripping every `_` turned `snake_case` into `snakecase`,
+     * and stripping every `#` `~` `>` `*` or `` ` `` turned `C#`, `~/Downloads`, `2 * 3`
+     * and a lone backtick into a different line. A letter is not only ASCII, so
+     * `déjà_vu` keeps its underscore too. A heading, a blockquote, strikethrough,
+     * emphasis, a list star and a closed code span still come off. A pasted `&amp;`
+     * or `&#39;` is the character, not the entity.
      */
     private fun foldMarkdown(text: String): String =
+        foldMarks(breakLines(decodeEntities(text)))
+
+    private fun foldMarks(text: String): String =
         WHITESPACE.replace(
-            MD_EDGE_UNDERSCORE.replace(
-                MD_STARS.replace(
-                    MD_STRIKE.replace(
-                        MD_QUOTE.replace(MD_HEADING.replace(text, ""), ""),
-                        "",
+            stripBackticks(
+                MD_EDGE_UNDERSCORE.replace(
+                    stripStars(
+                        MD_STRIKE.replace(
+                            MD_QUOTE.replace(MD_HEADING.replace(text, ""), ""),
+                            "",
+                        ),
                     ),
                     "",
                 ),
-                "",
-            ).replace(MD_BACKTICK, ""),
+            ),
             " ",
         ).trim()
 
-    private val MD_STARS = Regex("\\*+")
+    /** Emphasis and a leading list star. A star in `2 * 3` or `a*b` is the word. */
+    private fun stripStars(text: String): String {
+        var cur = MD_LIST_STAR.replace(text, "")
+        repeat(4) {
+            val next = MD_STAR_EMPH.replace(cur) { it.groupValues[1] }
+            if (next == cur) return cur
+            cur = next
+        }
+        return cur
+    }
+
+    /** A closed code span. One backtick with nothing to close it is not a mark. */
+    private fun stripBackticks(text: String): String =
+        MD_BACKTICK_SPAN.replace(text) { it.groupValues[2] }
+
+    /**
+     * One HTML decode. Card text pasted from a page uses `&amp;` and `&#39;`, and the
+     * hub was showing those tokens. `&amp;amp;` stays `&amp;` so a second pass is not taken.
+     */
+    private fun decodeEntities(text: String): String {
+        if (!text.contains('&')) return text
+        return ENTITY.replace(text) { match ->
+            val body = match.groupValues[1]
+            val code = when {
+                body.equals("amp", ignoreCase = true) -> return@replace "&"
+                body.equals("lt", ignoreCase = true) -> return@replace "<"
+                body.equals("gt", ignoreCase = true) -> return@replace ">"
+                body.equals("quot", ignoreCase = true) -> return@replace "\""
+                body.equals("apos", ignoreCase = true) -> return@replace "'"
+                body.equals("nbsp", ignoreCase = true) -> return@replace " "
+                body.startsWith("#x", ignoreCase = true) -> body.substring(2).toIntOrNull(16)
+                body.startsWith("#") -> body.substring(1).toIntOrNull()
+                else -> null
+            }
+            if (code == null || code !in 1..0x10FFFF || code in 0xD800..0xDFFF) match.value
+            else String(Character.toChars(code))
+        }
+    }
+
     private val MD_HEADING = Regex("(?m)^#{1,6}[ \\t]+")
     private val MD_QUOTE = Regex("(?m)^>+[ \\t]*")
     private val MD_STRIKE = Regex("~~")
-    private val MD_BACKTICK = Regex("`+")
+    private val MD_LIST_STAR = Regex("(?m)^\\*[ \\t]+")
+    private val MD_STAR_EMPH = Regex("\\*{1,3}(?!\\s)([^*]+)(?<!\\s)\\*{1,3}")
+    private val MD_BACKTICK_SPAN = Regex("(`+)([^`]+)\\1")
     private val MD_EDGE_UNDERSCORE = Regex("(?<![\\p{L}\\p{N}])_|_(?![\\p{L}\\p{N}])")
     private val WHITESPACE = Regex("\\s+")
+    private val BR = Regex("(?i)<br\\b[^>]*>")
+    private val UNICODE_LINE = Regex("[\u2028\u2029\u0085]")
+    private val ENTITY = Regex("&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);")
 
     private const val TAGLINE_LIMIT = 140
     private const val LLM_KEY = -1L
