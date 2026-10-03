@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, RP wave 29)
+
+On `gradation/w29-rp` (PR into `gradation/app-pass`). Roleplay follow-ups after #117 (not a redo of Continue swipe alts / portrait side-file delete / regen lore focus):
+- Torn `photoUri` no longer wins over monogram: `RpAvatars.photoModel`, speaker header, character edit and picker already used `hasAvatar` for the file path; URI short-circuit is gone.
+- Continue pins the bubble it extends (and the preceding turn) in lore focus, matching rewrite/regen for keys at the start of a long reply.
+- Persona Save commits name / about / photo (enabled already committed).
+
+Phone: kill mid-portrait replace so the JPEG is torn with no `.bak` (library / panel / speaker show monogram, not a broken image). Continue after a long reply whose early keys would fall out of the recent scan (lore for those keys should still fire). Save a persona, force-stop immediately, relaunch (name/about/photo still there).
+
 # Handoff (2026-10-02, Hub/Pair/Glass wave 28)
 
 On `gradation/w28-hub` (PR into `gradation/app-pass`). Hub/Pair/Glass follow-ups after #106/#112, unit-tested (`CodePairPendingTest`, `GlassDrawableOutlineTest`):

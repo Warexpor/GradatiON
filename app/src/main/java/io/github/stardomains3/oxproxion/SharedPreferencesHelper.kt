@@ -1562,12 +1562,21 @@ class SharedPreferencesHelper(context: Context) {
     fun activeRpPersona(): String = if (isRpPersonaEnabled()) getRpPersona() else ""
     /** What a chat should call you: the persona's name, or nothing while it is off. */
     fun activeRpPersonaName(): String = if (isRpPersonaEnabled()) getRpPersonaName() else ""
-    fun saveRpPersona(persona: String) = mainPrefs.edit { putString(KEY_RP_PERSONA, persona) }
-    fun saveRpPersonaName(name: String) = mainPrefs.edit { putString(KEY_RP_PERSONA_NAME, name.trim()) }
+    fun saveRpPersona(persona: String) {
+        // commit: Save writes name/about/photo together; a kill after apply() would drop the persona.
+        mainPrefs.edit(commit = true) { putString(KEY_RP_PERSONA, persona) }
+    }
+    fun saveRpPersonaName(name: String) {
+        // commit: with saveRpPersona / photo on the same Save tap.
+        mainPrefs.edit(commit = true) { putString(KEY_RP_PERSONA_NAME, name.trim()) }
+    }
     /** Your portrait's file name in [RpAvatarStorage.personaFile]; null shows your initial. */
     fun getRpPersonaPhoto(): String? = mainPrefs.getString(KEY_RP_PERSONA_PHOTO, null)
-    fun saveRpPersonaPhoto(photo: String?) = mainPrefs.edit {
-        if (photo == null) remove(KEY_RP_PERSONA_PHOTO) else putString(KEY_RP_PERSONA_PHOTO, photo)
+    fun saveRpPersonaPhoto(photo: String?) {
+        // commit: with saveRpPersona / name on the same Save tap.
+        mainPrefs.edit(commit = true) {
+            if (photo == null) remove(KEY_RP_PERSONA_PHOTO) else putString(KEY_RP_PERSONA_PHOTO, photo)
+        }
     }
 
     fun getRpPersonaPresets(): List<RpPersonaPreset> {

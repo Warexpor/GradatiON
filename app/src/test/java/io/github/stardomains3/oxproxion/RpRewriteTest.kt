@@ -66,4 +66,14 @@ class RpRewriteTest {
         assertEquals("Hallo.", RpRewrite.snippet("⦉Hallo.⦊"))
         assertEquals("Hallo.", RpRewrite.snippet("⧼Hallo.⧽"))
     }
+
+    @Test
+    fun continueLoreFocusKeepsTheReplyBeingExtended() {
+        // Continue pins the bubble it extends (and the turn before) the same way rewrite does.
+        assertEquals(
+            listOf("You nod.", "She waits at the docks with the locket."),
+            RpRewrite.loreFocus("She waits at the docks with the locket.", "You nod."),
+        )
+    }
+
 }

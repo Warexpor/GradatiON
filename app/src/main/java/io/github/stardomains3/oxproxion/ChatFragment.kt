@@ -7449,10 +7449,12 @@ $cleanContent
         chatAdapter.rpLayout = if (rp) sharedPreferencesHelper.getRpLayout(if (llm) null else activeChar?.id) else SharedPreferencesHelper.RP_LAYOUT_CLASSIC
         if (rp && activeChar != null && !llm) {
             chatAdapter.rpSpeakerName = activeChar.name
-            chatAdapter.rpSpeakerAvatarUri = activeChar.photoUri
             // A torn write at the portrait name is not a picture (same rule as the picker).
+            // photoUri names that same file — do not prefer it when the JPEG is incomplete.
+            val hasPortrait = RpAvatarStorage.hasAvatar(requireContext(), activeChar.id)
+            chatAdapter.rpSpeakerAvatarUri = activeChar.photoUri?.takeIf { hasPortrait && it.isNotBlank() }
             chatAdapter.rpSpeakerAvatarFile = RpAvatarStorage.avatarFile(requireContext(), activeChar.id)
-                .takeIf { RpAvatarStorage.hasAvatar(requireContext(), activeChar.id) }
+                .takeIf { hasPortrait }
             chatAdapter.refreshRpSpeakerAvatars()
         } else if (rp && llm) {
             chatAdapter.rpSpeakerName = getString(R.string.rp_llm_speaker)
