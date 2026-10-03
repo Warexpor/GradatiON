@@ -44,9 +44,9 @@
                 android:layout_alignParentEnd="true"
                 android:layout_centerVertical="true"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/rp_menu_edit"
+                android:contentDescription="@string/grok_history_more"
                 android:padding="8dp"
-                android:src="@drawable/ic_editnote"
+                android:src="@drawable/ic_more_vert"
                 app:tint="@color/xai_mute" />
 
             <ImageView

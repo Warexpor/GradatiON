@@ -440,7 +440,6 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_add">Add</string>
     <string name="cd_copy_prompt">Copy prompt</string>
-    <string name="cd_edit_preset">Edit preset</string>
     <string name="cd_model_added">Added to your models</string>
     <string name="cd_add_prompt">Add new prompt</string>
     <string name="cd_add_preset">Add preset</string>
