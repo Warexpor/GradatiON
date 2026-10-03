@@ -31,7 +31,9 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferenceTempEnabled(),
             currentValue = prefs.getInferenceTempValue().toString(),
             onSwitchChanged = { prefs.saveInferenceTempEnabled(it) },
-            onValueChanged = { text -> prefs.saveInferenceTempValue(text) }
+            onValueChanged = { text -> prefs.saveInferenceTempValue(text) },
+            accepts = { acceptedInferenceDecimal(InferenceKind.TEMPERATURE, it) != null },
+            rangeError = decimalRangeError(InferenceKind.TEMPERATURE),
         )
 
         // Top P
@@ -43,7 +45,9 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferenceTopPEnabled(),
             currentValue = prefs.getInferenceTopPValue().toString(),
             onSwitchChanged = { prefs.saveInferenceTopPEnabled(it) },
-            onValueChanged = { text -> prefs.saveInferenceTopPValue(text) }
+            onValueChanged = { text -> prefs.saveInferenceTopPValue(text) },
+            accepts = { acceptedInferenceDecimal(InferenceKind.TOP_P, it) != null },
+            rangeError = decimalRangeError(InferenceKind.TOP_P),
         )
 
         // Top K
@@ -55,7 +59,9 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferenceTopKEnabled(),
             currentValue = prefs.getInferenceTopKValue().toString(),
             onSwitchChanged = { prefs.saveInferenceTopKEnabled(it) },
-            onValueChanged = { text -> acceptedTopK(text)?.let { prefs.saveInferenceTopKValue(it) } }
+            onValueChanged = { text -> acceptedTopK(text)?.let { prefs.saveInferenceTopKValue(it) } },
+            accepts = { acceptedTopK(it) != null },
+            rangeError = getString(R.string.inference_error_whole_range, 1, 100_000),
         )
 
         // Min P
@@ -67,7 +73,9 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferenceMinPEnabled(),
             currentValue = prefs.getInferenceMinPValue().toString(),
             onSwitchChanged = { prefs.saveInferenceMinPEnabled(it) },
-            onValueChanged = { text -> prefs.saveInferenceMinPValue(text) }
+            onValueChanged = { text -> prefs.saveInferenceMinPValue(text) },
+            accepts = { acceptedInferenceDecimal(InferenceKind.MIN_P, it) != null },
+            rangeError = decimalRangeError(InferenceKind.MIN_P),
         )
 
         // Repetition Penalty
@@ -79,7 +87,9 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferenceRepetitionPenaltyEnabled(),
             currentValue = prefs.getInferenceRepetitionPenaltyValue().toString(),
             onSwitchChanged = { prefs.saveInferenceRepetitionPenaltyEnabled(it) },
-            onValueChanged = { text -> prefs.saveInferenceRepetitionPenaltyValue(text) }
+            onValueChanged = { text -> prefs.saveInferenceRepetitionPenaltyValue(text) },
+            accepts = { acceptedInferenceDecimal(InferenceKind.REPETITION, it) != null },
+            rangeError = decimalRangeError(InferenceKind.REPETITION),
         )
 
         // Presence Penalty
@@ -91,7 +101,9 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             isEnabled = prefs.getInferencePresencePenaltyEnabled(),
             currentValue = prefs.getInferencePresencePenaltyValue().toString(),
             onSwitchChanged = { prefs.saveInferencePresencePenaltyEnabled(it) },
-            onValueChanged = { text -> prefs.saveInferencePresencePenaltyValue(text) }
+            onValueChanged = { text -> prefs.saveInferencePresencePenaltyValue(text) },
+            accepts = { acceptedInferenceDecimal(InferenceKind.PRESENCE, it) != null },
+            rangeError = decimalRangeError(InferenceKind.PRESENCE),
         )
 
         // Apply custom switch styling
@@ -115,7 +127,9 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
         isEnabled: Boolean,
         currentValue: String,
         onSwitchChanged: (Boolean) -> Unit,
-        onValueChanged: (String) -> Unit
+        onValueChanged: (String) -> Unit,
+        accepts: (String) -> Boolean,
+        rangeError: String,
     ) {
         val switch = view.findViewById<SwitchCompat>(switchId)
         val inputLayout = view.findViewById<TextInputLayout>(inputLayoutId)
@@ -131,11 +145,21 @@ class InferenceParametersFragment : Fragment(R.layout.fragment_inference_paramet
             inputLayout.isEnabled = isChecked
         }
 
+        // A value outside the range is not saved; say so, or the field shows a number that never applies.
         edit.doAfterTextChanged { text ->
-            if (text != null && text.isNotEmpty()) {
-                onValueChanged(text.toString())
+            val typed = text?.toString().orEmpty()
+            inputLayout.error = when {
+                typed.isBlank() -> null
+                accepts(typed) -> { onValueChanged(typed); null }
+                else -> rangeError
             }
         }
+    }
+
+    /** "Enter a number from 0 to 5", without a trailing ".0" on whole bounds. */
+    private fun decimalRangeError(kind: InferenceKind): String {
+        fun bound(v: Double) = if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
+        return getString(R.string.inference_error_range, bound(kind.min), bound(kind.max))
     }
 
     // Copy of your exact switch style helper

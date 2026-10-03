@@ -59,6 +59,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 app:hintEnabled="false"
+                app:errorIconDrawable="@null"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:hint="@string/inference_parameters_e_g_1_0"
@@ -97,6 +98,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 app:hintEnabled="false"
+                app:errorIconDrawable="@null"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:hint="@string/inference_parameters_e_g_1_0"
@@ -135,6 +137,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 app:hintEnabled="false"
+                app:errorIconDrawable="@null"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:hint="@string/inference_parameters_e_g_40"
@@ -173,6 +176,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 app:hintEnabled="false"
+                app:errorIconDrawable="@null"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:hint="@string/inference_parameters_e_g_0_0"
@@ -211,6 +215,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 app:hintEnabled="false"
+                app:errorIconDrawable="@null"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:hint="@string/inference_parameters_e_g_1_0"
@@ -249,6 +254,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 app:hintEnabled="false"
+                app:errorIconDrawable="@null"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
                     android:hint="@string/inference_parameters_e_g_0_0"
