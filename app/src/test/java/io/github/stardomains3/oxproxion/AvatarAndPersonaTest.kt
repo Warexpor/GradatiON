@@ -250,9 +250,14 @@ class AvatarAndPersonaTest {
         }.toByteArray()
         File(dir, keep).writeBytes(jpeg)
         File(dir, "$keep.bak").writeBytes(jpeg)
+        File(dir, "$keep.partial.incoming").writeBytes(jpeg)
+        // Older than the live file, so opening the portrait does not install it and drop the bak.
+        File(dir, keep).setLastModified(5_000)
+        File(dir, "$keep.partial.incoming").setLastModified(1_000)
         File(dir, drop).writeBytes(jpeg)
         File(dir, "$drop.bak").writeBytes(jpeg)
         File(dir, "$drop.partial").writeBytes(jpeg)
+        File(dir, "$drop.partial.incoming").writeBytes(jpeg)
         val torn = "persona_torn.jpg"
         File(dir, torn).writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x00))
         assertTrue(RpAvatarStorage.hasPersonaPhoto(ctx, keep))
@@ -260,9 +265,11 @@ class AvatarAndPersonaTest {
         RpAvatarStorage.prunePersonas(ctx, setOf(keep))
         assertTrue(File(dir, keep).isFile)
         assertTrue(File(dir, "$keep.bak").isFile)
+        assertTrue(File(dir, "$keep.partial.incoming").isFile)
         assertFalse(File(dir, drop).exists())
         assertFalse(File(dir, "$drop.bak").exists())
         assertFalse(File(dir, "$drop.partial").exists())
+        assertFalse(File(dir, "$drop.partial.incoming").exists())
         assertFalse(File(dir, torn).exists())
     }
 

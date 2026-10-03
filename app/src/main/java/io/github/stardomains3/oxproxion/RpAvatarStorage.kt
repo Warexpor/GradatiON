@@ -167,9 +167,18 @@ object RpAvatarStorage {
     /** Deletes persona portraits nothing points at any more, including their side files. */
     fun prunePersonas(context: Context, keep: Set<String>) {
         val dir = File(context.filesDir, PERSONA_DIR)
-        dir.listFiles()?.forEach { file ->
-            val base = file.name.removeSuffix(".bak").removeSuffix(".partial")
-            if (base !in keep) file.delete()
+        val files = dir.listFiles() ?: return
+        val bases = LinkedHashSet<String>()
+        for (file in files) {
+            bases += file.name
+                .removeSuffix(".incoming")
+                .removeSuffix(".partial")
+                .removeSuffix(".bak")
+        }
+        for (base in bases) {
+            if (base in keep) continue
+            // Side files first, so a kill here cannot put the portrait back.
+            ScenePhoto.deleteWithSides(File(dir, base))
         }
     }
 

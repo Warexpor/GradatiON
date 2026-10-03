@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A finished side file next to a 0-byte recovered database is the copy that opens. The empty name used to be moved, and the side file was then deleted, so that history was gone. An empty name with no finished side file is unchanged.
+- Clearing import notes removes the side files before the installed file. A kill after the installed file was removed used to leave an older side file, and the next launch applied those notes.
+- Rewriting a portrait or wallpaper no longer opens the finished side file for writing. That truncated the picture before the new bytes were durable. Deleting a scene photo removes the side files before the live file.
 - A portrait or wallpaper that is still over the backup cap after the usual scale is shrunk until it fits. It used to be left out, so the other phone kept the picture it already had. A torn file is still left out.
 - A lore backup counts each book once. The same name twice, or under different capitalization, is one book in the update prompt and in the result. A file whose names are blank imports nothing.
 - A character backup with no export key updates the character of that name instead of adding another every time. A second copy of that name in the file is the same character, and the last copy is the one that is saved. When two characters already share the name, the newest one is updated and a third is not added. Listing the same export key twice is one character in the update prompt and the result. A keyless row next to a keyed row of the same name is still its own character.
