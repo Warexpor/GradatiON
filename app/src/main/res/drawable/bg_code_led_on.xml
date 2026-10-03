@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status light on a mark's corner: lit. The canvas-colored ring cuts it out of the mark -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="@color/code_status_on" />
+    <stroke android:width="2dp" android:color="@color/xai_canvas" />
+    <size android:width="12dp" android:height="12dp" />
+</shape>

@@ -6,6 +6,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.Space
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -34,7 +36,11 @@ class PickerPopover(
     private val anchor: View,
     private val backdrop: GlassBackdropLayout?,
     /** Surface the card should clear and align with (e.g. the whole composer), else the anchor. */
-    private val edge: View = anchor
+    private val edge: View = anchor,
+    /** Layout for [Row]s (not the footer); it must carry the `popoverRow*` ids. */
+    private val rowLayout: Int = R.layout.item_popover_row,
+    /** Rows per line; above 1 the rows become tiles side by side (Code's agent picker). */
+    private val columns: Int = 1,
 ) {
     data class Row(
         val title: CharSequence,
@@ -98,7 +104,8 @@ class PickerPopover(
         cardView.findViewById<View>(R.id.popoverDivider).isVisible = footer.isNotEmpty() && rows.isNotEmpty()
         val rowViews = ArrayList<View>()
         var selectedView: View? = null
-        rows.forEach { r -> bindRow(inflater, rowsBox, r).also { rowViews += it; if (r.selected) selectedView = it } }
+        rows.forEach { r -> bindRow(inflater, rowsBox, r, rowLayout, columns).also { rowViews += it; if (r.selected) selectedView = it } }
+        fillLastLine(rowsBox)
         footer.forEach { r -> rowViews += bindRow(inflater, footerBox, r) }
 
         // Geometry: card hugs the anchor's leading edge and opens toward the roomier side.
@@ -205,7 +212,8 @@ class PickerPopover(
         footerBox.removeAllViews()
         cardView.findViewById<View>(R.id.popoverDivider).isVisible = footer.isNotEmpty() && rows.isNotEmpty()
         var selectedView: View? = null
-        rows.forEach { r -> bindRow(inflater, rowsBox, r).also { if (r.selected) selectedView = it } }
+        rows.forEach { r -> bindRow(inflater, rowsBox, r, rowLayout, columns).also { if (r.selected) selectedView = it } }
+        fillLastLine(rowsBox)
         footer.forEach { r -> bindRow(inflater, footerBox, r) }
         refit(cardView, selectedView, force = true)
     }
@@ -250,12 +258,48 @@ class PickerPopover(
             scroll.layoutParams = scroll.layoutParams.apply {
                 height = (scroll.measuredHeight - over).coerceAtLeast((120 * density).toInt())
             }
-            selectedView?.let { sel -> scroll.post { scroll.scrollTo(0, (sel.top - (scroll.height - sel.height) / 2).coerceAtLeast(0)) } }
+            selectedView?.let { sel ->
+                scroll.post {
+                    // A tile's top is inside its line; add the line's own top.
+                    val line = sel.parent as? View
+                    val top = sel.top + if (line != null && line !== scroll.getChildAt(0)) line.top else 0
+                    scroll.scrollTo(0, (top - (scroll.height - sel.height) / 2).coerceAtLeast(0))
+                }
+            }
         }
     }
 
-    private fun bindRow(inflater: LayoutInflater, parent: ViewGroup, r: Row): View {
-        val v = inflater.inflate(R.layout.item_popover_row, parent, false)
+    /** The line the next tile goes on when rows are laid out [columns] to a line. */
+    private fun lineFor(parent: ViewGroup, columns: Int): ViewGroup {
+        if (columns <= 1) return parent
+        val last = parent.getChildAt(parent.childCount - 1) as? LinearLayout
+        if (last != null && last.childCount < columns) return last
+        val pad = (6 * density).toInt()
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(pad, 0, pad, 0)
+        }.also { parent.addView(it, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT) }
+    }
+
+    /** Keeps an odd last tile at its column's width instead of stretching across the line. */
+    private fun fillLastLine(parent: ViewGroup) {
+        if (columns <= 1) return
+        val last = parent.getChildAt(parent.childCount - 1) as? LinearLayout ?: return
+        val margin = (4 * density).toInt()
+        repeat(columns - last.childCount) {
+            last.addView(Space(context), LinearLayout.LayoutParams(0, 0, 1f).apply { setMargins(margin, margin, margin, margin) })
+        }
+    }
+
+    private fun bindRow(
+        inflater: LayoutInflater,
+        box: ViewGroup,
+        r: Row,
+        layout: Int = R.layout.item_popover_row,
+        columns: Int = 1,
+    ): View {
+        val parent = lineFor(box, columns)
+        val v = inflater.inflate(layout, parent, false)
         v.findViewById<TextView>(R.id.popoverRowTitle).text = r.title
         v.findViewById<TextView>(R.id.popoverRowSubtitle).apply { text = r.subtitle; isVisible = !r.subtitle.isNullOrEmpty() }
         val icon = v.findViewById<ImageView>(R.id.popoverRowIcon)

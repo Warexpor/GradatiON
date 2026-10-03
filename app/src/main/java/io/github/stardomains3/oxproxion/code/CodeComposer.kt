@@ -221,6 +221,8 @@ class CodeComposer(
         rows: List<PickerPopover.Row>,
         footer: List<PickerPopover.Row> = emptyList(),
         hint: CharSequence? = null,
+        rowLayout: Int = R.layout.item_popover_row,
+        columns: Int = 1,
     ) {
         dismissSlashPopover()
         // The glass composer sits above the scrim, so a second tap on the same pill lands on
@@ -232,7 +234,7 @@ class CodeComposer(
         popover?.dismiss(animated = false)
         hideKeyboard()
         anchor.isSelected = true
-        popover = PickerPopover(popoverHost, anchor, backdropRef, edge = root).apply {
+        popover = PickerPopover(popoverHost, anchor, backdropRef, edge = root, rowLayout = rowLayout, columns = columns).apply {
             onDismiss = { anchor.isSelected = false }
             show(title, rows, footer, hint, lifecycleOwner = lifecycleOwner, modal = true)
         }

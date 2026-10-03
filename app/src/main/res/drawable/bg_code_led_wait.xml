@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status light on a mark's corner: hollow while connecting or working -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/xai_canvas" />
+            <size android:width="12dp" android:height="12dp" />
+        </shape>
+    </item>
+    <item android:bottom="2dp" android:left="2dp" android:right="2dp" android:top="2dp">
+        <shape android:shape="oval">
+            <stroke android:width="1.5dp" android:color="@color/code_status_on" />
+        </shape>
+    </item>
+</layer-list>

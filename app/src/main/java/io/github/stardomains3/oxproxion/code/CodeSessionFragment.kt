@@ -226,12 +226,15 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         // Recycle the rows so their per-row work (the "Working" sweep, stream fades) stops.
         list.adapter = null
         sessionTopFade = null
+        stateArtHarness = null
         super.onDestroyView()
     }
 
     private fun observe(view: View) {
         val title = view.findViewById<TextView>(R.id.codeSessionTitle)
         val subtitle = view.findViewById<TextView>(R.id.codeSessionSubtitle)
+        val mark = view.findViewById<android.widget.ImageView>(R.id.codeSessionMark)
+        val led = view.findViewById<View>(R.id.codeSessionHeaderLed)
         val banner = view.findViewById<TextView>(R.id.codeSessionBanner)
         val stateView = view.findViewById<TextView>(R.id.codeSessionState)
         // Tapping the banner (or the failed-load message) connects again instead of waiting out the backoff.
@@ -247,6 +250,15 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                     hub.sessions.map { it[sessionId] }.distinctUntilChanged().collect { s ->
                         if (s == null) { close(); return@collect }
                         title.text = s.summary.title
+                        mark.setImageResource(s.summary.harness.iconRes)
+                        mark.isActivated = s.status == SessionStatus.RUNNING || s.status == SessionStatus.NEEDS_APPROVAL
+                        val ledRes = when (s.status) {
+                            SessionStatus.NEEDS_APPROVAL -> R.drawable.bg_code_led_on
+                            SessionStatus.RUNNING -> R.drawable.bg_code_led_wait
+                            else -> 0
+                        }
+                        led.isVisible = ledRes != 0
+                        if (ledRes != 0) led.setBackgroundResource(ledRes)
                         subtitle.text = listOfNotNull(
                             s.summary.harness.displayName,
                             s.summary.model?.let { CodeModelSelection.pillLabel(it) },
@@ -286,6 +298,10 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
                             banner.isVisible = false
                         } else {
                             banner.isVisible = true
+                            banner.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                                if (c == ConnectionState.CONNECTING) R.drawable.ic_code_led_wait else R.drawable.ic_code_led_off,
+                                0, 0, 0,
+                            )
                             banner.text = if (c == ConnectionState.CONNECTING) {
                                 getString(R.string.code_status_connecting)
                             } else {
@@ -316,8 +332,31 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             else -> null
         }
         view.isVisible = text != null
-        if (text != null) view.text = text
+        if (text != null) {
+            view.text = text
+            if (stateArtHarness != s.summary.harness) {
+                stateArtHarness = s.summary.harness
+                view.setCompoundDrawablesRelativeWithIntrinsicBounds(null, stateArt(s.summary.harness), null, null)
+            }
+        }
         view.isClickable = s.events.isEmpty() && s.attachError != null
+        // The retry line reads as something to tap; loading and waiting stay quiet.
+        view.setTextColor(requireContext().getColor(if (view.isClickable) R.color.xai_ink else R.color.xai_mute))
+    }
+
+    private var stateArtHarness: HarnessKind? = null
+
+    /** The agent's mark inside the hairline orbits, above the loading, waiting or retry line. */
+    private fun stateArt(harness: HarnessKind): android.graphics.drawable.Drawable? {
+        val ctx = requireContext()
+        val rings = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.bg_code_rings) ?: return null
+        val glyph = androidx.core.content.ContextCompat.getDrawable(ctx, harness.iconRes)?.mutate() ?: return rings
+        glyph.setTint(ctx.getColor(R.color.xai_ink))
+        val size = (28 * resources.displayMetrics.density).toInt()
+        return android.graphics.drawable.LayerDrawable(arrayOf(rings, glyph)).apply {
+            setLayerSize(1, size, size)
+            setLayerGravity(1, android.view.Gravity.CENTER)
+        }
     }
 
     private fun render(s: CodeSessionState) {

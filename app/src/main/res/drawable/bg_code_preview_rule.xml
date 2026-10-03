@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Session row: the agent's last line hangs off a thin rule, like output in a terminal -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="2dp" android:gravity="start|fill_vertical">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/code_status_off" />
+            <corners android:radius="1dp" />
+        </shape>
+    </item>
+</layer-list>
