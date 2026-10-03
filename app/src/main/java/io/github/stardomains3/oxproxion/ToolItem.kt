@@ -2,10 +2,15 @@ package io.github.stardomains3.oxproxion
 
 import android.Manifest
 import android.content.Context
+import android.location.LocationManager
 import androidx.annotation.StringRes
 
-/** Which location provider a tool read may ask. GPS is fine-only. */
-enum class LocationFixSource { GPS, NETWORK }
+/**
+ * Which location provider a tool read may ask. GPS is fine-only.
+ * Fused is the provider Android 12 and newer actually leave on when the old network
+ * provider is off. Coarse can read it. Precise can read it when GPS is off.
+ */
+enum class LocationFixSource { GPS, NETWORK, FUSED }
 
 data class ToolItem(
     val name: String,               // e.g. "make_file"
@@ -93,18 +98,58 @@ data class ToolItem(
         /**
          * GPS requires fine location. Approximate is coarse only, and requesting GPS then throws
          * [SecurityException], which the tool reported as permission denied after the grant.
-         * Network is the provider that grant can actually read.
+         * Network is the provider that grant can actually read when it is on. This app's minimum
+         * SDK is 31, and on that release the network provider is often off while
+         * [LocationManager.FUSED_PROVIDER] is on. Coarse can read fused. Precise can read it
+         * when GPS is off. Treating that as "location is off" left Get location with nothing
+         * to ask.
          */
         fun locationFixSource(
             fineGranted: Boolean,
             coarseGranted: Boolean,
             gpsEnabled: Boolean,
             networkEnabled: Boolean,
+            fusedEnabled: Boolean = false,
         ): LocationFixSource? {
             if (!locationGrantHeld(fineGranted, coarseGranted)) return null
             if (fineGranted && gpsEnabled) return LocationFixSource.GPS
             if (networkEnabled) return LocationFixSource.NETWORK
+            if (fusedEnabled) return LocationFixSource.FUSED
             return null
+        }
+
+        /** Android provider name for [source]. */
+        fun locationProviderName(source: LocationFixSource): String = when (source) {
+            LocationFixSource.GPS -> LocationManager.GPS_PROVIDER
+            LocationFixSource.NETWORK -> LocationManager.NETWORK_PROVIDER
+            LocationFixSource.FUSED -> LocationManager.FUSED_PROVIDER
+        }
+
+        /**
+         * After the provider we are listening to times out, the last fix from network, or from
+         * fused when network is not on. Network stays first so a phone that still has it
+         * keeps the same fallback.
+         */
+        fun locationTimeoutFallback(networkEnabled: Boolean, fusedEnabled: Boolean): LocationFixSource? {
+            if (networkEnabled) return LocationFixSource.NETWORK
+            if (fusedEnabled) return LocationFixSource.FUSED
+            return null
+        }
+
+        /**
+         * The provider we are listening to just turned off. True when network or fused is still
+         * on, which is what the timeout can read. The listening provider does not count: its
+         * enabled bit can still read true for a moment. GPS is not a fallback here. Coarse
+         * cannot read it, and the timeout does not ask it.
+         */
+        fun locationHasFallback(
+            listening: LocationFixSource,
+            networkEnabled: Boolean,
+            fusedEnabled: Boolean,
+        ): Boolean {
+            val network = networkEnabled && listening != LocationFixSource.NETWORK
+            val fused = fusedEnabled && listening != LocationFixSource.FUSED
+            return network || fused
         }
 
         /**

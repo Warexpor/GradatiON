@@ -1427,18 +1427,21 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
                 val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
                 val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+                val isFusedEnabled = locationManager.isProviderEnabled(LocationManager.FUSED_PROVIDER)
                 val source = ToolItem.locationFixSource(
                     fineGranted,
                     coarseGranted,
                     isGpsEnabled,
                     isNetworkEnabled,
+                    isFusedEnabled,
                 )
                 if (source == null) {
-                    val why = if (!isGpsEnabled && !isNetworkEnabled) {
-                        "Location is disabled on the device. Please enable it in settings."
-                    } else {
+                    val why = if (!fineGranted && (isGpsEnabled || isNetworkEnabled || isFusedEnabled)) {
                         // Coarse cannot read GPS. Asking it anyway threw and said permission was denied.
+                        // Fused off as well: there is still no provider this grant can read.
                         "Approximate location needs network location, which is turned off."
+                    } else {
+                        "Location is disabled on the device. Please enable it in settings."
                     }
                     continuation.resume(why)
                     return@suspendCancellableCoroutine
@@ -1457,12 +1460,24 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                     }
 
                     override fun onProviderDisabled(provider: String) {
-                        if (provider == LocationManager.GPS_PROVIDER && locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                            // GPS turned off mid-search, fallback handled by timeout
-                        } else if (!locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                            cleanup()
-                            continuation.resume("Location provider was disabled during search.")
+                        val disabled = when (provider) {
+                            LocationManager.GPS_PROVIDER -> LocationFixSource.GPS
+                            LocationManager.NETWORK_PROVIDER -> LocationFixSource.NETWORK
+                            LocationManager.FUSED_PROVIDER -> LocationFixSource.FUSED
+                            else -> return
                         }
+                        if (disabled != source) return
+                        // Another provider this grant can read is still on. The timeout reads it.
+                        if (ToolItem.locationHasFallback(
+                                listening = source,
+                                networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER),
+                                fusedEnabled = locationManager.isProviderEnabled(LocationManager.FUSED_PROVIDER),
+                            )
+                        ) {
+                            return
+                        }
+                        cleanup()
+                        continuation.resume("Location provider was disabled during search.")
                     }
 
                     override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
@@ -1476,32 +1491,37 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 val timeoutRunnable = Runnable {
                     try { locationManager.removeUpdates(locationListener) } catch (_: Exception) {}
 
-                    // Fallback to Network Provider (equivalent to your doLocation2())
-                    if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                    val fallback = ToolItem.locationTimeoutFallback(
+                        networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER),
+                        fusedEnabled = locationManager.isProviderEnabled(LocationManager.FUSED_PROVIDER),
+                    )
+                    if (fallback != null) {
                         try {
-                            val lastNetLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                            if (lastNetLocation != null) {
-                                continuation.resume(buildLocationResult(lastNetLocation))
-                            } else {
+                            val lastLocation = locationManager.getLastKnownLocation(ToolItem.locationProviderName(fallback))
+                            if (lastLocation != null) {
+                                continuation.resume(buildLocationResult(lastLocation))
+                            } else if (fallback == LocationFixSource.NETWORK) {
                                 continuation.resume("GPS timed out (accuracy not met) and no Network location was available.")
+                            } else {
+                                continuation.resume("Location request timed out (accuracy not met within 30 seconds) and no recent fix was available.")
                             }
                         } catch (e: SecurityException) {
                             continuation.resume("GPS timed out and Network location permission was denied.")
                         }
                     } else {
-                        continuation.resume("Location request timed out (accuracy not met within 40 seconds) and no fallback was available.")
+                        continuation.resume("Location request timed out (accuracy not met within 30 seconds) and no fallback was available.")
                     }
                 }
 
                 handler.postDelayed(timeoutRunnable, timeoutMillis)
 
                 try {
-                    val provider = if (source == LocationFixSource.GPS) {
-                        LocationManager.GPS_PROVIDER
-                    } else {
-                        LocationManager.NETWORK_PROVIDER
-                    }
-                    locationManager.requestLocationUpdates(provider, 1000L, 0f, locationListener)
+                    locationManager.requestLocationUpdates(
+                        ToolItem.locationProviderName(source),
+                        1000L,
+                        0f,
+                        locationListener,
+                    )
                 } catch (e: SecurityException) {
                     handler.removeCallbacksAndMessages(null)
                     continuation.resume("Location permission denied during request.")

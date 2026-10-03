@@ -158,9 +158,13 @@ object LanEndpointValidator {
      * The base the app appends `/v1/...` to. A browser paste often has a trailing slash,
      * and an OpenAI-compatible base often already ends in `/v1`. Either one used to request
      * `//v1` or `/v1/v1`, and the local server answered 404.
+     * A pasted models or chat URL (`/v1/models`, `/api/tags`, and the rest) is the same miss
+     * one segment further on: the row showed the host, and the request called that route twice.
+     * A `%` that is not an escape (`100%`, `p%ss`) is stored as `%25`. The client will not
+     * open the raw form, so Save used to keep a URL that failed on every request.
      */
     fun normalizedBase(raw: String): String {
-        var url = raw.trim()
+        var url = encodeBarePercents(raw.trim())
         // A fragment is not sent, and a path appended after '#' or '?' becomes part of it.
         val hash = url.indexOf('#')
         if (hash >= 0) url = url.substring(0, hash)
@@ -171,6 +175,32 @@ object LanEndpointValidator {
         if (query.isNotEmpty()) url = "$url?$query"
         return url
     }
+
+    /**
+     * `%25` is already the character `%`. A lone `%`, or `%` plus a non-hex pair, is not an
+     * escape the HTTP client will open. Encoding only that `%` leaves a real `%3D` alone.
+     */
+    private fun encodeBarePercents(raw: String): String {
+        if ('%' !in raw) return raw
+        val out = StringBuilder(raw.length)
+        var i = 0
+        while (i < raw.length) {
+            if (raw[i] == '%' && i + 2 < raw.length && isHexDigit(raw[i + 1]) && isHexDigit(raw[i + 2])) {
+                out.append(raw, i, i + 3)
+                i += 3
+            } else if (raw[i] == '%') {
+                out.append("%25")
+                i += 1
+            } else {
+                out.append(raw[i])
+                i += 1
+            }
+        }
+        return out.toString()
+    }
+
+    private fun isHexDigit(c: Char): Boolean =
+        c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
 
     /**
      * [base] plus [path], with [path] before any query. String append put `/v1/models` inside
@@ -185,20 +215,54 @@ object LanEndpointValidator {
         return root + suffix + query
     }
 
+    /**
+     * Routes the app itself appends. A browser check of the server ends on one of these,
+     * and that paste used to be stored as the base.
+     */
+    private val pastedRouteSuffixes = listOf(
+        "/v1/chat/completions",
+        "/v1/audio/transcriptions",
+        "/v1/completions",
+        "/v1/models",
+        "/api/v0/models",
+        "/api/tags",
+        "/api/show",
+    )
+
     private fun stripOpenAiSuffix(raw: String): String {
         var url = raw
-        while (url.endsWith("/")) url = url.dropLast(1)
+        while (true) {
+            while (url.endsWith("/")) url = url.dropLast(1)
+            val next = stripOneOpenAiSuffix(url) ?: return url
+            if (next.length >= url.length) return url
+            url = next
+        }
+    }
+
+    /** One trailing route, or the `/v1` base. Null when [url] is already the base. */
+    private fun stripOneOpenAiSuffix(url: String): String? {
+        val scheme = url.indexOf("://")
+        if (scheme < 0) return null
+        // `http://v1` and `http://v1/models` are a host, not a pasted route.
+        val authorityStart = scheme + 3
+        for (suffix in pastedRouteSuffixes) {
+            val at = url.length - suffix.length
+            if (at > authorityStart &&
+                url.regionMatches(at, suffix, 0, suffix.length, ignoreCase = true)
+            ) {
+                return url.substring(0, at)
+            }
+        }
         val slash = url.length - 3
         // A path segment, not the "//" in "http://v1".
-        if (slash > 0 &&
+        if (slash > authorityStart &&
             url[slash - 1] != '/' &&
             url[slash - 1] != ':' &&
             url.regionMatches(slash, "/v1", 0, 3, ignoreCase = true)
         ) {
-            url = url.dropLast(3)
-            while (url.endsWith("/")) url = url.dropLast(1)
+            return url.dropLast(3)
         }
-        return url
+        return null
     }
 
     fun isPrivateOrLocalHost(host: String): Boolean {
