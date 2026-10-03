@@ -1098,6 +1098,47 @@ class ScreenshotTest : ScreenshotHarness() {
         assertSameGlyph("itself", a, a.getDrawable(R.drawable.ic_eye)!!, a.getDrawable(R.drawable.ic_eye)!!)
     }
 
+    /** A search with no match showed "No prompts yet. Tap Add..." while the library was full. */
+    @Test fun settingsPromptSearchSaysNoMatchDark() = withChat { a, _ ->
+        SharedPreferencesHelper(a).saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
+        val f = PromptLibraryFragment()
+        pushFragment(a, f)
+        val bar = f.requireView().findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+        val item = bar.menu.findItem(R.id.action_search)
+        item.expandActionView(); idle()
+        val sv = item.actionView as androidx.appcompat.widget.SearchView
+        val empty = f.requireView().findViewById<android.widget.TextView>(R.id.promptsEmptyView)
+        sv.setQuery("zzz", false); idle()
+        org.junit.Assert.assertTrue(empty.isShown)
+        org.junit.Assert.assertEquals(a.getString(R.string.prompts_no_match), empty.text.toString())
+        snap(root(a), "settings_prompts_no_match_dark")
+        sv.setQuery("", false); idle()
+        org.junit.Assert.assertFalse("the prompt is back", empty.isShown)
+        item.collapseActionView(); idle()
+        a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        SharedPreferencesHelper(a).saveCustomPrompts(emptyList())
+        val g = PromptLibraryFragment()
+        pushFragment(a, g)
+        org.junit.Assert.assertEquals(a.getString(R.string.prompts_empty),
+            g.requireView().findViewById<android.widget.TextView>(R.id.promptsEmptyView).text.toString())
+        a.supportFragmentManager.beginTransaction().remove(g).commitNow(); idle()
+        // System messages always lists Default, so it had no empty view: a miss was a blank page.
+        val m = SystemMessageLibraryFragment()
+        pushFragment(a, m)
+        val mBar = m.requireView().findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+        val mItem = mBar.menu.findItem(R.id.action_search)
+        mItem.expandActionView(); idle()
+        val mSv = mItem.actionView as androidx.appcompat.widget.SearchView
+        val mEmpty = m.requireView().findViewById<android.widget.TextView>(R.id.systemMessagesEmptyView)
+        org.junit.Assert.assertFalse(mEmpty.isShown)
+        mSv.setQuery("zzz", false); idle()
+        org.junit.Assert.assertTrue(mEmpty.isShown)
+        org.junit.Assert.assertEquals(a.getString(R.string.system_messages_no_match), mEmpty.text.toString())
+        snap(root(a), "settings_system_messages_no_match_dark")
+        mSv.setQuery("", false); idle()
+        org.junit.Assert.assertFalse(mEmpty.isShown)
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
