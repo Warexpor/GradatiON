@@ -83,6 +83,28 @@ class ListSessionsJsonTest {
         assertEquals(listOf("5", "7", "gpt-5"), list.map { it.model })
     }
 
+
+    @Test fun harnessAndBranchWrittenAsDoublesStillMatchAsDigitStrings() {
+        val el = json.parseToJsonElement(
+            """{"sessions":[
+                {"sessionId":"s1","harness":5.0,"branch":5.0,"title":"T"},
+                {"sessionId":"s2","harness":"9.0","branch":"7.0","title":"U"},
+                {"sessionId":"s3","harness":"opencode","branch":"feat/x","title":"V"}
+            ]}"""
+        )
+        val list = ListSessionsJson.parse(el, "h")
+        // Unknown numeric harness ids become CUSTOM; digit form must still be "5" / "9".
+        assertEquals(listOf("5", "9", "feat/x"), list.map { it.branch })
+        assertEquals(
+            listOf(
+                io.github.stardomains3.oxproxion.code.HarnessKind.CUSTOM,
+                io.github.stardomains3.oxproxion.code.HarnessKind.CUSTOM,
+                io.github.stardomains3.oxproxion.code.HarnessKind.OPENCODE,
+            ),
+            list.map { it.harness },
+        )
+    }
+
     @Test fun missingLastSeqStaysNullAndEmptyResultIsEmpty() {
         assertNull(ListSessionsJson.parse(json.parseToJsonElement("""{"sessions":[{"sessionId":"s1"}]}"""), "h").single().lastSeq)
         assertTrue(ListSessionsJson.parse(null, "h").isEmpty())

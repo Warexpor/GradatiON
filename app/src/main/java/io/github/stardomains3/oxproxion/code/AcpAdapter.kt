@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`, `ListPullRequestReviewComments`, `BrowserFillForm`, `BrowserFileUpload`, `BrowserIsVisible`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`, `ListPullRequestReviewComments`, `BrowserFillForm`, `BrowserFileUpload`, `BrowserIsVisible`, `BrowserTabList`, `BrowserInstall`, `BrowserNavigateForward`, `BrowserReload`, `BrowserHighlight`, `BrowserSearch`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -407,7 +407,9 @@ class AcpAdapter : HarnessAdapter {
                     status = status,
                     title = params.str("title"),
                     preview = params.str("preview"),
-                    branch = params.str("branch")
+                    // Same whole-number coercion as listSessions / gitStatus branch.
+                    // A blank string still clears; only 5.0 / "5.0" become "5".
+                    branch = branchString(params["branch"])
                 ),
                 seq
             )
@@ -470,7 +472,9 @@ class AcpAdapter : HarnessAdapter {
             "browser_is_visible", "browserisvisible",
             "browser_is_enabled", "browserisenabled",
             "browser_is_checked", "browserischecked",
-            "browser_get_bounding_box", "browsergetboundingbox" -> "read"
+            "browser_get_bounding_box", "browsergetboundingbox",
+            "browser_get_text", "browsergettext",
+            "browser_get_title", "browsergettitle" -> "read"
             "edit", "write", "write_file", "writefile", "str_replace", "strreplace",
             "apply_patch", "applypatch", "patch",
             "edit_file", "editfile", "edit_file_v2", "editfilev2",
@@ -598,7 +602,9 @@ class AcpAdapter : HarnessAdapter {
             "workers_list", "workerslist",
             "search_cloudflare_documentation", "searchcloudflaredocumentation",
             "query_worker_observability", "queryworkerobservability",
-            "list_shells", "listshells", "list_shell", "listshell" -> "search"
+            "list_shells", "listshells", "list_shell", "listshell",
+            "browser_tab_list", "browsertablist",
+            "browser_search", "browsersearch" -> "search"
             "execute", "bash", "shell", "terminal", "command", "run", "run_command",
             "run_terminal_cmd", "runterminalcmd", "run_terminal_command",
             "runterminalcommand",
@@ -619,7 +625,11 @@ class AcpAdapter : HarnessAdapter {
             "browser_forward", "browserforward",
             "take_screenshot", "takescreenshot",
             "browser_screenshot", "browserscreenshot",
+            "browser_take_screenshot", "browsertakescreenshot",
             "browser_tabs", "browsertabs",
+            "browser_tab_new", "browsertabnew",
+            "browser_tab_select", "browsertabselect",
+            "browser_tab_close", "browsertabclose",
             "browser_evaluate", "browserevaluate",
             "browser_fill_form", "browserfillform",
             "browser_file_upload", "browserfileupload",
@@ -629,6 +639,10 @@ class AcpAdapter : HarnessAdapter {
             "browser_close", "browserclose",
             "browser_navigate_back", "browsernavigateback",
             "browser_pdf_save", "browserpdfsave", "browser_pdf", "browserpdf",
+            "browser_install", "browserinstall",
+            "browser_navigate_forward", "browsernavigateforward",
+            "browser_reload", "browserreload",
+            "browser_highlight", "browserhighlight",
             "kill_shell", "killshell" -> "execute"
             "think", "thought", "reasoning",
             "await", "await_task", "awaittask",
@@ -1026,6 +1040,27 @@ class AcpAdapter : HarnessAdapter {
     /** Session id: whole-number doubles (`5.0` / `"5.0"`) still match as `"5"`. */
     private fun sessionIdString(el: JsonElement?): String? = rpcIdString(el)
 
+    /**
+     * Branch name on `bridge/sessionStatus`. Whole-number doubles (`5.0` / `"5.0"`)
+     * still match listSessions / gitStatus as `"5"`. Other strings, including `""`,
+     * stay as sent so a blank branch can still clear the previous one.
+     */
+    private fun branchString(el: JsonElement?): String? {
+        val p = el as? JsonPrimitive ?: return null
+        wholeNumberLong(p)?.let { return it.toString() }
+        return p.contentOrNull
+    }
+
+    /**
+     * File path on a tool diff or location. Whole-number doubles (`5.0` / `"5.0"`)
+     * still match git status and browse as `"5"`. A blank path stays absent.
+     */
+    private fun pathString(el: JsonElement?): String? {
+        val p = el as? JsonPrimitive ?: return null
+        val raw = wholeNumberLong(p)?.toString() ?: p.contentOrNull
+        return raw?.trim()?.ifEmpty { null }
+    }
+
     private fun metaSeq(obj: JsonObject): Long? {
         val meta = obj["_meta"] as? JsonObject ?: return null
         val el = meta["seq"] as? JsonPrimitive ?: return null
@@ -1117,6 +1152,26 @@ class AcpAdapter : HarnessAdapter {
                 "element", "attribute",
                 "is_project", "isProject",
                 "commit_message", "commitMessage",
+                "sub_issue_id", "subIssueId",
+                "after_id", "afterId", "before_id", "beforeId",
+                "commit_id", "commitId",
+                "tree_sha", "treeSha",
+                "category_id", "categoryId",
+                "from_branch", "fromBranch",
+                "author",
+                "check_run_id", "checkRunId",
+                "release_id", "releaseId",
+                "artifact_id", "artifactId",
+                "thread_id", "threadId",
+                "team_slug", "teamSlug",
+                "login",
+                "selector",
+                "language",
+                "commit_title", "commitTitle",
+                "state_reason", "stateReason",
+                "default_branch", "defaultBranch",
+                "role_name", "roleName",
+                "dataset", "time_range", "timeRange",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId") != null ||
@@ -1140,7 +1195,7 @@ class AcpAdapter : HarnessAdapter {
         val key = toolKey(sid, callId)
         val hadDetail = toolDetailSet.contains(key)
         val hasPath = (u["locations"] as? JsonArray).orEmpty().any { e ->
-            val path = (e as? JsonObject)?.str("path")
+            val path = pathString((e as? JsonObject)?.get("path"))
             !path.isNullOrBlank()
         }
         // A folder-only update must not replace `npm test`. The first path still fills an empty row.
@@ -1205,7 +1260,8 @@ class AcpAdapter : HarnessAdapter {
     private fun detailOf(u: JsonObject): String? {
         val locations = (u["locations"] as? JsonArray).orEmpty().mapNotNull { e ->
             val o = e as? JsonObject ?: return@mapNotNull null
-            val path = o.str("path") ?: return@mapNotNull null
+            // Same whole-number coercion as git status / browse paths.
+            val path = pathString(o["path"]) ?: return@mapNotNull null
             ToolCallDetail.Location(path, lineNumber(o["line"]))
         }
         val raw = rawInputOf(u)
@@ -1285,6 +1341,26 @@ class AcpAdapter : HarnessAdapter {
                 "element", "attribute",
                 "is_project", "isProject",
                 "commit_message", "commitMessage",
+                "sub_issue_id", "subIssueId",
+                "after_id", "afterId", "before_id", "beforeId",
+                "commit_id", "commitId",
+                "tree_sha", "treeSha",
+                "category_id", "categoryId",
+                "from_branch", "fromBranch",
+                "author",
+                "check_run_id", "checkRunId",
+                "release_id", "releaseId",
+                "artifact_id", "artifactId",
+                "thread_id", "threadId",
+                "team_slug", "teamSlug",
+                "login",
+                "selector",
+                "language",
+                "commit_title", "commitTitle",
+                "state_reason", "stateReason",
+                "default_branch", "defaultBranch",
+                "role_name", "roleName",
+                "dataset", "time_range", "timeRange",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId"),
@@ -1359,12 +1435,25 @@ class AcpAdapter : HarnessAdapter {
     private fun firstRaw(raw: JsonObject?, vararg keys: String): String? {
         if (raw == null) return null
         for (k in keys) {
-            val p = raw[k] as? JsonPrimitive ?: continue
-            // Numeric shell_id / offset written as 5.0 or "5.0" still shows as "5".
-            // Non-numeric strings (patterns, paths, URLs) stay as sent.
-            wholeNumberLong(p)?.let { return it.toString() }
-            val s = p.contentOrNull?.trim()?.ifEmpty { null } ?: continue
-            return s
+            when (val el = raw[k]) {
+                is JsonPrimitive -> {
+                    // Numeric shell_id / offset written as 5.0 or "5.0" still shows as "5".
+                    // Non-numeric strings (patterns, paths, URLs) stay as sent.
+                    wholeNumberLong(el)?.let { return it.toString() }
+                    val s = el.contentOrNull?.trim()?.ifEmpty { null } ?: continue
+                    return s
+                }
+                // CreateIssue labels / assignees arrive as a JSON array, not a string.
+                is JsonArray -> {
+                    val joined = el.mapNotNull { item ->
+                        val p = item as? JsonPrimitive ?: return@mapNotNull null
+                        wholeNumberLong(p)?.toString()
+                            ?: p.contentOrNull?.trim()?.ifEmpty { null }
+                    }.joinToString(", ")
+                    if (joined.isNotEmpty()) return joined
+                }
+                else -> continue
+            }
         }
         return null
     }
@@ -1413,7 +1502,7 @@ class AcpAdapter : HarnessAdapter {
         val unified = unifiedOf(o)
         val changes = diffChanges(o)
         if (changes.isEmpty()) {
-            val path = o.str("path")?.trim()?.ifEmpty { null } ?: unified?.let(::pathFromGitPatch) ?: return emptyList()
+            val path = pathString(o["path"]) ?: unified?.let(::pathFromGitPatch) ?: return emptyList()
             return listOfNotNull(classicDiff(callId, path, o, unified, now))
         }
         val sections = if (unified.isNullOrBlank()) emptyList() else splitGitSections(unified)
@@ -1439,7 +1528,7 @@ class AcpAdapter : HarnessAdapter {
         val arr = o["changes"] as? JsonArray ?: return emptyList()
         return arr.mapNotNull { el ->
             val c = el as? JsonObject ?: return@mapNotNull null
-            val path = c.str("path")?.trim()?.ifEmpty { null } ?: return@mapNotNull null
+            val path = pathString(c["path"]) ?: return@mapNotNull null
             DiffChange(path, c.str("operation")?.trim()?.lowercase().orEmpty())
         }
     }

@@ -96,4 +96,30 @@ class GitBridgeJsonTest {
         assertEquals(3, s2.ahead)
         assertEquals(0, s2.behind)
     }
+
+    @Test fun pathAndBranchWrittenAsDoublesStillMatch() {
+        val el = json.parseToJsonElement(
+            """{"branch":5.0,"ahead":0,"behind":0,"files":[
+                {"path":5.0,"status":" M"},
+                {"path":"9.0","status":"??"},
+                {"path":"a.kt","status":"A "}
+            ]}"""
+        )
+        val s = GitBridgeJson.parseStatus(el)
+        assertEquals("5", s.branch)
+        assertEquals(
+            listOf(
+                GitFileStatus("5", " M"),
+                GitFileStatus("9", "??"),
+                GitFileStatus("a.kt", "A "),
+            ),
+            s.files,
+        )
+        val elStr = json.parseToJsonElement(
+            """{"branch":"7.0","files":[{"path":"3.0","status":"M "}]}"""
+        )
+        val s2 = GitBridgeJson.parseStatus(elStr)
+        assertEquals("7", s2.branch)
+        assertEquals(listOf(GitFileStatus("3", "M ")), s2.files)
+    }
 }
