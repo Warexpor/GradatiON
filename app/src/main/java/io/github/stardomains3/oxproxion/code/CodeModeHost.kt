@@ -99,7 +99,9 @@ class CodeModeHost(private val fragment: Fragment, private val root: View) {
                 CodePairPending.error.collect { message ->
                     if (message == null) return@collect
                     val err = CodePairPending.consumeError() ?: return@collect
-                    // offer() may have won after this emit; don't toast a superseded failure.
+                    // offer() may have won after this emit (lock keeps pending/error exclusive;
+                    // consumeError already drops the failure when a pairing is queued).
+                    // don't toast a superseded failure while the host form is about to open.
                     if (CodePairPending.peek() != null) return@collect
                     GlassNotice.show(fragment.requireContext(), err)
                 }

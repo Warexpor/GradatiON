@@ -881,10 +881,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         codeMode.onBeforeActivate = { parkForCodeActivation() }
         if (codeMode.isActive) parkForCodeActivation()
         codeMode.onTabsChanged = {
-            val rp = viewModel.isRpMode()
+            // Hub Continue sets uncoveringHub for this callback only: setChatMode(RP) has not
+            // landed, so isRpMode() is still Ask and would select Chat and spring the underline.
+            val rp = viewModel.isRpMode() || uncoveringHub
             tabChat.isSelected = !codeMode.isActive && !rp
             tabRoleplay.isSelected = !codeMode.isActive && rp
-            placeModeTabIndicator(animate = true)
+            placeModeTabIndicator(animate = !uncoveringHub)
             updateRpHome()
         }
         // Tabs slide like the swipe: both pages side by side, never an empty frame between.
@@ -7329,11 +7331,29 @@ $cleanContent
      * Prefer [CodeModeHost.deactivate] over [leaveCodeMode]: Hub paths always target
      * Roleplay, and setChatMode(RP) flips asynchronously. leaveCodeMode would restore
      * an Ask chip mid-flip when isRpMode is still false.
+     *
+     * After deactivate, pin the Roleplay tab: onTabsChanged still reads isRpMode(), which
+     * may be Ask until the queued setChatMode(RP) lands, and would briefly select Chat.
+     * [uncoveringHub] is only set for this call so the callback itself does not select Chat
+     * or start that underline spring. It is not sticky — a later Ask switch must win.
      */
+    private var uncoveringHub = false
+
     fun uncoverFromHub() {
         closeHistoryPanel(animated = false)
         closeRpHome()
-        if (::codeMode.isInitialized && codeMode.isActive) codeMode.deactivate()
+        uncoveringHub = true
+        try {
+            if (::codeMode.isInitialized && codeMode.isActive) codeMode.deactivate()
+            if (::tabRoleplay.isInitialized) {
+                tabChat.isSelected = false
+                tabRoleplay.isSelected = true
+                if (::codeMode.isInitialized) codeMode.selectTabs()
+                placeModeTabIndicator(animate = false)
+            }
+        } finally {
+            uncoveringHub = false
+        }
     }
 
     fun openRpHub() {
