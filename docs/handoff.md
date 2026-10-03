@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Code wave 33)
+
+On `cursor/code-mode-wave33-f060` (PR into `gradation/app-pass`). Code-mode follow-ups after the browser line preferring typed text, the control, or a scroll over an element ref, a listed Ask staying Ask, and `session/new` / `session/load` reading `modes` (#151). Not a redo of that pass. Not a redo of Codex `read-only` / `auto` / `full-access`, OpenCode `build`, a skipped multi-select question, or browser profile start/stop on the execute card (#145).
+
+- `session/new` and `session/load` read the mode select in `configOptions` (`category: "mode"`, or an uncategorized id / `configId` of `mode`) before the legacy `modes` object. A model row whose value looks like a mode is not the pill. An id this phone does not show does not fall through to `modes` or to the mode the phone just asked for. `config_option_update` moves the pill the same way. A snapshot with no mode select leaves it.
+- Playwright names the element `target` instead of `ref`. A click or hover that only has `target` shows that ref. `startTarget` / `endTarget` draw the drag. `target` does not replace typed text, a selected value, or `down 500`, and a later update that only repeats it leaves that line. A git `ref` still wins when there is no browser action.
+- `browser_fill_form` shows each field's text or value, not the field refs. `browser_handle_dialog` shows the prompt text, or accept / dismiss. `browser_resize` shows `width × height`. A shell command that also carries a width and height stays the command.
+
+Phone: start a session whose `session/new` result has only a mode config option of `plan` (the pill should say Plan). Change mode from another client so the only update is `config_option_update` (the pill should follow). On a current Playwright browser, click a control that is only `target` (the line should be the ref), type into a field (the words, not the target), drag (the two targets), fill a form (the values), accept a prompt (the words), and resize (the two sizes).
+
 # Handoff (2026-10-03, Stability wave 32)
 
 On `cursor/stability-wave-32-5e40` (PR into `gradation/app-pass`). Persistence follow-ups after the recovered file at the databases root, portrait and wallpaper side files, and emoji slices (#143). Not a redo of that pass, of `user_version`, the live wal park, or `.stuck-N` (#132). Not a redo of #153 (history sentences, file fences, staged photos), #152 (lore pin on the chosen copy, wallpaper retry, trimmed names), #151 (browser action lines, session approval pill), #150 (cleared away shades, cap order, Speak utterance ids), #149 (homelab hostnames, LAN paths, approximate location), #147 (hub hero line, pairing query text), or #148 (example sides, lore headers, character-list marks).

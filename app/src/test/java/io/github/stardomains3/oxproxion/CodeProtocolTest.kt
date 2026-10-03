@@ -2893,6 +2893,96 @@ class CodeProtocolTest {
         assertEquals(PermissionMode.PLAN, AcpSessionMode.fromResult(plan))
     }
 
+    @Test fun configOptionModeSetsThePill() {
+        val plan = Json.parseToJsonElement(
+            """{"sessionId":"s1","configOptions":[
+                {"id":"model","name":"Model","category":"model","type":"select","currentValue":"build"},
+                {"id":"mode","name":"Session Mode","category":"mode","type":"select","currentValue":"plan",
+                 "options":[{"value":"plan","name":"Plan"},{"value":"build","name":"Build"}]}
+            ]}"""
+        )
+        assertEquals(PermissionMode.PLAN, AcpSessionMode.fromResult(plan))
+        // The mode select wins over a legacy modes object that still says something else.
+        val both = Json.parseToJsonElement(
+            """{"sessionId":"s1","modes":{"currentModeId":"full-access"},"configOptions":[
+                {"configId":"mode","category":"mode","type":"select","currentValue":"read-only"}
+            ]}"""
+        )
+        assertEquals(PermissionMode.ASK, AcpSessionMode.fromResult(both))
+        // A model row whose value looks like a mode is not the approval pill.
+        val modelOnly = Json.parseToJsonElement(
+            """{"sessionId":"s1","modes":{"currentModeId":"build"},"configOptions":[
+                {"id":"model","category":"model","currentValue":"plan"}
+            ]}"""
+        )
+        assertEquals(PermissionMode.AUTO_EDIT, AcpSessionMode.fromResult(modelOnly))
+        // An unknown mode on the select must not fall through to the mode the phone asked for.
+        val unknown = Json.parseToJsonElement(
+            """{"sessionId":"s1","permissionMode":"full-auto","configOptions":[
+                {"id":"mode","category":"mode","currentValue":"yolo"}
+            ]}"""
+        )
+        assertNull(AcpSessionMode.fromResult(unknown))
+        val live = acp.decode(update(
+            """{"sessionUpdate":"config_option_update","configOptions":[
+                {"id":"model","category":"model","currentValue":"opus"},
+                {"id":"sessionMode","category":"mode","currentValue":"agent"}
+            ]}""",
+            seq = 3,
+        ))
+        val info = (live.single() as AdapterOutput.Update).update as CodeUpdate.SessionInfo
+        assertEquals(PermissionMode.FULL_AUTO, info.permissionMode)
+        val modelChange = acp.decode(update(
+            """{"sessionUpdate":"config_option_update","configOptions":[
+                {"id":"model","category":"model","currentValue":"opus"}
+            ]}""",
+            seq = 4,
+        ))
+        assertTrue(modelChange.single() is AdapterOutput.Ignored)
+        val foreign = acp.decode(update(
+            """{"sessionUpdate":"config_option_update","configOptions":[
+                {"id":"mode","category":"mode","currentValue":"yolo"}
+            ]}""",
+            seq = 5,
+        ))
+        assertTrue(foreign.single() is AdapterOutput.Ignored)
+        assertEquals(5L, acp.lastSeq("s1"))
+    }
+
+    @Test fun playwrightBrowserLinesUseTargetAndTheAction() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ck","title":"Click","kind":"other","name":"BrowserClick","status":"completed","rawInput":{"target":"e12"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"el","title":"Click","kind":"other","name":"BrowserClick","status":"completed","rawInput":{"target":"e12","element":"Submit"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ty","title":"Type","kind":"other","name":"BrowserType","status":"in_progress","rawInput":{"target":"e3","text":"alice@example.com"}}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"ty","status":"completed","rawInput":{"target":"e3"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"so","title":"Select","kind":"other","name":"BrowserSelectOption","status":"completed","rawInput":{"target":"e7","values":["Admin"]}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sc","title":"Scroll","kind":"other","name":"BrowserScroll","status":"in_progress","rawInput":{"target":"e9","direction":"down","amount":500.0}}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"sc","status":"completed","rawInput":{"target":"e9"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dr","title":"Drag","kind":"other","name":"BrowserDrag","status":"completed","rawInput":{"startTarget":"e5","endTarget":"e10"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"rz","title":"Resize","kind":"other","name":"BrowserResize","status":"completed","rawInput":{"width":375.0,"height":"812.0"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"ff","title":"Form","kind":"other","name":"BrowserFillForm","status":"completed","rawInput":{"ref":"e1","fields":[{"element":"Email","ref":"e3","text":"alice@example.com"},{"target":"e5","value":"s3cret"}]}}"""),
+            update("""{"sessionUpdate":"tool_call_update","toolCallId":"ff","status":"completed","rawInput":{"ref":"e1"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dg","title":"Dialog","kind":"other","name":"BrowserHandleDialog","status":"completed","rawInput":{"accept":true,"promptText":"yes"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dn","title":"Dismiss","kind":"other","name":"browser_handle_dialog","status":"completed","rawInput":{"accept":false}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"sh","title":"Bash","kind":"execute","status":"completed","rawInput":{"command":"npm test","width":10,"height":20}}"""),
+        )
+        val byId = foldFresh(frames).filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("e12", byId["ck"]?.detail)
+        assertEquals("Submit", byId["el"]?.detail)
+        assertEquals("alice@example.com", byId["ty"]?.detail)
+        assertEquals(ToolStatus.COMPLETED, byId["ty"]?.status)
+        assertEquals("Admin", byId["so"]?.detail)
+        assertEquals("down 500", byId["sc"]?.detail)
+        assertEquals(ToolStatus.COMPLETED, byId["sc"]?.status)
+        assertEquals("e5 → e10", byId["dr"]?.detail)
+        assertEquals("375 × 812", byId["rz"]?.detail)
+        assertEquals("alice@example.com, s3cret", byId["ff"]?.detail)
+        assertEquals(ToolStatus.COMPLETED, byId["ff"]?.status)
+        assertEquals("yes", byId["dg"]?.detail)
+        assertEquals("dismiss", byId["dn"]?.detail)
+        assertEquals("npm test", byId["sh"]?.detail)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()

@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * Not yet: the terminal and fs client methods (the bridge answers those on the machine itself).
  * `current_mode_update` syncs the approval pill ([CodeUpdate.SessionInfo.permissionMode]).
+ * `config_option_update` does too, when the mode select's current value is one this phone shows.
  * `session_info_update` carries the agent's session title ([CodeUpdate.SessionInfo.title]).
  * Slash commands: `available_commands_update` → [CodeUpdate.AvailableCommands].
  * Prompt images: [prompt] accepts [PromptAttachment] → ACP `type: image` content blocks.
@@ -780,6 +781,13 @@ class AcpAdapter : HarnessAdapter {
                 ) ?: return ignored("current_mode_update unknown mode")
                 CodeUpdate.SessionInfo(permissionMode = mode)
             }
+            "config_option_update" -> {
+                // The same mode, when the agent only sends the config-option snapshot.
+                // A model-only update, or an id this phone does not show, leaves the pill.
+                val mode = AcpSessionMode.fromConfigOptions(u["configOptions"])
+                    ?: return ignored("config_option_update without a known mode")
+                CodeUpdate.SessionInfo(permissionMode = mode)
+            }
             "session_info_update" -> {
                 // ACP: the agent named the session. A blank title must not wipe the one we have.
                 val title = u.str("title")?.trim()?.takeIf { it.isNotEmpty() }
@@ -1194,9 +1202,10 @@ class AcpAdapter : HarnessAdapter {
                 // Typed text, a filled value, or selected options. Later than element so a
                 // click still shows the control name when that description is present.
                 "text", "value", "values") != null ||
-            pointerText(raw) != null ||
-            // A ref alone still fills an empty row. It must not beat a scroll or a drag.
-            firstRaw(raw, "ref") != null ||
+            // Form fields, a dialog, a resize, a scroll, or a drag. A bare ref is not one of these.
+            browserAction(raw) != null ||
+            // A ref, or Playwright's `target`, still fills an empty row. It must not beat the action.
+            firstRaw(raw, "ref", "target") != null ||
             firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
@@ -1232,16 +1241,27 @@ class AcpAdapter : HarnessAdapter {
     /**
      * A bare element `ref` sits earlier in the key list than the control name, the typed
      * text, and a scroll, so those used to lose to `e9`. When the generic line is that
-     * ref (or there is no generic line), the browser action wins. A git `ref` still
-     * wins over a later owner when there is no browser action.
+     * ref (or there is no generic line), the browser action wins. Playwright names the
+     * same ref `target`; that fills an empty row and does not replace the action.
+     * A git `ref` still wins over a later owner when there is no browser action.
      */
     private fun preferBrowserOverRef(raw: JsonObject?, generic: String?): String? {
         val browser = browserAction(raw)
-        val ref = firstRaw(raw, "ref")
-        return if (browser != null && (generic == null || generic == ref)) browser else generic ?: browser
+        val ref = elementRef(raw)
+        return when {
+            browser != null && (generic == null || generic == ref) -> browser
+            generic != null -> generic
+            else -> ref
+        }
     }
 
-    /** Control name, typed text, or a pointer gesture. These beat a bare element ref. */
+    /** `ref`, or the `target` Playwright now sends in its place. */
+    private fun elementRef(raw: JsonObject?): String? = firstRaw(raw, "ref", "target")
+
+    /**
+     * Control name, typed text, a form, a dialog, a window size, or a pointer gesture.
+     * These beat a bare element ref or `target`.
+     */
     private fun browserAction(raw: JsonObject?): String? {
         if (raw == null) return null
         return firstRaw(
@@ -1249,13 +1269,59 @@ class AcpAdapter : HarnessAdapter {
             "element", "attribute", "selector",
             "text", "value", "values",
             "key", "keys", "button",
-        ) ?: pointerText(raw)
+        ) ?: formFieldsText(raw) ?: dialogText(raw) ?: resizeText(raw) ?: pointerText(raw)
+    }
+
+    /**
+     * `browser_fill_form`. The typed text (or the control name) of each field.
+     * A field that only repeats its ref is skipped, so the line is not `e3, e5`.
+     * An object map of selector to text is the same values.
+     */
+    private fun formFieldsText(raw: JsonObject): String? {
+        val parts = when (val fields = raw["fields"]) {
+            is JsonArray -> fields.mapNotNull { fieldText(it) }
+            is JsonObject -> fields.values.mapNotNull { fieldText(it) }
+            else -> return null
+        }
+        if (parts.isEmpty()) return null
+        return parts.joinToString(", ")
+    }
+
+    private fun fieldText(el: JsonElement): String? = when (el) {
+        is JsonObject -> firstRaw(el, "text", "value", "values")
+            ?: firstRaw(el, "element", "name", "selector")
+        is JsonPrimitive -> {
+            if (el is JsonNull || el.booleanOrNull != null) null
+            else {
+                wholeNumberLong(el)?.toString()
+                    ?: el.contentOrNull?.trim()?.ifEmpty { null }
+            }
+        }
+        else -> null
+    }
+
+    /**
+     * `browser_handle_dialog`. The words typed into a prompt beat accept/dismiss.
+     * A boolean `accept` is the choice; a string in that key is not this tool.
+     */
+    private fun dialogText(raw: JsonObject): String? {
+        firstRaw(raw, "promptText", "prompt_text")?.let { return it }
+        val accept = raw["accept"] as? JsonPrimitive ?: return null
+        val yes = accept.booleanOrNull ?: return null
+        return if (yes) "accept" else "dismiss"
+    }
+
+    /** `browser_resize`. Both sides are required, so a lone width does not replace a command. */
+    private fun resizeText(raw: JsonObject): String? {
+        val w = coordPiece(raw["width"]) ?: return null
+        val h = coordPiece(raw["height"]) ?: return null
+        return "$w × $h"
     }
 
     /** True when [detail] is only the element ref, so it must not replace a real action line. */
     private fun refOnly(raw: JsonObject?, detail: String): Boolean {
         if (raw == null || browserAction(raw) != null || commandOf(raw) != null) return false
-        val ref = firstRaw(raw, "ref") ?: return false
+        val ref = elementRef(raw) ?: return false
         return detail == ref
     }
 
@@ -1470,8 +1536,10 @@ class AcpAdapter : HarnessAdapter {
     private fun elementDragText(raw: JsonObject): String? {
         val start = coordPiece(raw["startElement"] ?: raw["start_element"])
             ?: coordPiece(raw["startRef"] ?: raw["start_ref"])
+            ?: coordPiece(raw["startTarget"] ?: raw["start_target"])
         val end = coordPiece(raw["endElement"] ?: raw["end_element"])
             ?: coordPiece(raw["endRef"] ?: raw["end_ref"])
+            ?: coordPiece(raw["endTarget"] ?: raw["end_target"])
         if (start == null || end == null) return null
         return "$start → $end"
     }
