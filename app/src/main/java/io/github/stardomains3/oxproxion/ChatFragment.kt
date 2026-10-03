@@ -833,9 +833,15 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 rpHomeOpen = landed.open
                 rpHomeSuppressed = landed.suppressed
             } else if (!nowRp) {
-                if (lastSeenChatMode == ChatMode.RP) rpResumeAtHome = rpHomeOpen
-                rpHomeOpen = false
-                rpHomeSuppressed = false
+                // Snapshot the list only when actually leaving Roleplay. An Ask history
+                // open must not have closed it first, or coming back skips the list.
+                val left = HubUncover.afterLeaveRoleplay(
+                    wasInRoleplay = lastSeenChatMode == ChatMode.RP,
+                    home = HubUncover.Home(rpHomeOpen, rpHomeSuppressed, rpResumeAtHome),
+                )
+                rpResumeAtHome = left.resumeAtHome
+                rpHomeOpen = left.open
+                rpHomeSuppressed = left.suppressed
             }
             lastSeenChatMode = mode
             updateRpChrome()

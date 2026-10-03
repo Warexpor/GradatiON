@@ -37,13 +37,17 @@ object CodePairConnect {
     fun classifyError(lastError: String?): Outcome {
         val e = lastError?.lowercase().orEmpty()
         if (e.isEmpty()) return Outcome.UNREACHABLE
-        // Exact transport message for 401/403:
+        // Exact transport message for 401/403. A bare substring also matches port 4010
+        // and "4012 ms", which are unreachable, not a rejected token.
         if (e.contains("rejected the pairing token")) return Outcome.WRONG_TOKEN
-        if (e.contains("401") || e.contains("403")) return Outcome.WRONG_TOKEN
+        if (HTTP_STATUS.containsMatchIn(e)) return Outcome.WRONG_TOKEN
         if (e.contains("unauthor") || e.contains("forbidden")) return Outcome.WRONG_TOKEN
         if (e.contains("token") && (e.contains("reject") || e.contains("invalid") || e.contains("wrong"))) {
             return Outcome.WRONG_TOKEN
         }
         return Outcome.UNREACHABLE
     }
+
+    /** HTTP status as its own number, so 4010 / 4012 do not count as 401. */
+    private val HTTP_STATUS = Regex("""(?<!\d)(?:401|403)(?!\d)""")
 }

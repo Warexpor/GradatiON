@@ -61,6 +61,58 @@ class HubModeTest {
     }
 
     @Test
+    fun askHistoryWhileOnRoleplayList_remembersTheList() {
+        val onList = HubUncover.Home(open = true, suppressed = false, resumeAtHome = false)
+        // An Ask row must not signal, so the list is still open when Roleplay is left.
+        assertFalse(HubUncover.shouldSignalThreadOpen(loadApplied = true, loadedRoleplay = false))
+        val left = HubUncover.afterLeaveRoleplay(wasInRoleplay = true, home = onList)
+        assertTrue(left.resumeAtHome)
+        assertFalse(left.open)
+        assertFalse(left.suppressed)
+        val back = HubUncover.afterEnterRoleplay(left)
+        assertTrue(back.open)
+        assertFalse(back.suppressed)
+    }
+
+    @Test
+    fun closingListBeforeLeave_forgetsTheList() {
+        // What the old thread-open signal did: close the list, then snapshot.
+        val onList = HubUncover.Home(open = true, suppressed = false, resumeAtHome = false)
+        val closedFirst = onList.copy(open = false)
+        val left = HubUncover.afterLeaveRoleplay(wasInRoleplay = true, home = closedFirst)
+        assertFalse(left.resumeAtHome)
+        assertFalse(HubUncover.afterEnterRoleplay(left).open)
+    }
+
+    @Test
+    fun roleplayHistory_signalsSoLandingDoesNotReopen() {
+        assertTrue(HubUncover.shouldSignalThreadOpen(loadApplied = true, loadedRoleplay = true))
+        val home = HubUncover.Home(
+            open = false,
+            suppressed = HubUncover.suppressForThreadOpen(alreadyInRoleplay = false),
+            resumeAtHome = true,
+        )
+        val landed = HubUncover.afterEnterRoleplay(home)
+        assertFalse(landed.open)
+        assertFalse(landed.suppressed)
+    }
+
+    @Test
+    fun abortedHistoryLoad_doesNotSuppress() {
+        assertFalse(HubUncover.shouldSignalThreadOpen(loadApplied = false, loadedRoleplay = true))
+        assertFalse(HubUncover.shouldSignalThreadOpen(loadApplied = false, loadedRoleplay = false))
+    }
+
+    @Test
+    fun laterAskReemit_doesNotWipeResumeMemory() {
+        val onList = HubUncover.Home(open = true, suppressed = false, resumeAtHome = false)
+        val left = HubUncover.afterLeaveRoleplay(wasInRoleplay = true, home = onList)
+        val again = HubUncover.afterLeaveRoleplay(wasInRoleplay = false, home = left)
+        assertTrue(again.resumeAtHome)
+        assertFalse(again.suppressed)
+    }
+
+    @Test
     fun leaveDisabledRoleplay_onlyWhenIdle() {
         assertTrue(ModeGates.leaveDisabledRoleplay(roleplayEnabled = false, inRoleplay = true, awaitingReply = false))
         assertFalse(ModeGates.leaveDisabledRoleplay(roleplayEnabled = false, inRoleplay = true, awaitingReply = true))

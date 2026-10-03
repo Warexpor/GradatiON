@@ -159,6 +159,31 @@ class CodePairingTest {
     }
 
     @Test
+    fun parse_keepsUnencodedQueryInsideBridgeUrl() {
+        val raw = "gradation://pair?url=wss://studio.tailnet.ts.net:7878/v1?a=1&b=2&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://studio.tailnet.ts.net:7878/v1?a=1&b=2", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
+    fun parse_queryUrlStillReadsFingerprint() {
+        val raw = "gradation://pair?url=wss://h/v1?a=1&b=2&token=$goodToken&fp=$pinHex"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://h/v1?a=1&b=2", r.pairing.url)
+        assertEquals(pinB64, r.pairing.fingerprint)
+    }
+
+    @Test
+    fun parse_extraAfterTokenDoesNotJoinToken() {
+        val raw = "gradation://pair?url=${java.net.URLEncoder.encode(goodUrl, "UTF-8")}" +
+            "&token=$goodToken&extra=1"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(goodUrl, r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
     fun parse_hexWithColons() {
         val colons =
             "12:AD:50:59:23:03:1E:7D:75:A8:97:2D:CA:3A:9E:0C:ED:E9:FE:50:86:FB:7C:08:8F:42:E0:B5:6A:98:93:A9"
