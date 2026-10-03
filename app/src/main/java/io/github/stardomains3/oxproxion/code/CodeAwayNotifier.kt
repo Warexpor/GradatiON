@@ -33,7 +33,11 @@ import java.util.concurrent.ConcurrentHashMap
  * a shade entry that survived process death. Cold-start also seeds the dedup set from those
  * prefs so a reconnect cannot re-alert the same shade entry.
  * [clearTurnDoneDedup] drops the turn-done prefs row so a later finished turn is not
- * re-suppressed after process death.
+ * re-suppressed after process death. The shade id is parked in a hold prefs file that
+ * dedup seeding does not read, so forget / open-in-app and the next TurnDone still
+ * target that entry after process death (the in-memory map covers the same process).
+ * [cancelSession] also cancels keys that remain only in the in-memory allocation map after
+ * that clear (posted + prefs no longer list them, but the shade may still be up).
  *
  * Shade swipe-dismiss ([onUserDismissed]) drops dedup and the prefs allocation so a still-pending
  * approval can re-alert (including after a later process death that would otherwise re-seed).
@@ -72,6 +76,14 @@ class CodeAwayNotifier(
     /** Survives process death so cancel uses the same id that was posted (AWAY-03). */
     private val idPrefs: SharedPreferences =
         appContext.getSharedPreferences(NOTIF_ID_PREFS, Context.MODE_PRIVATE)
+
+    /**
+     * Turn-done shade ids detached by [clearTurnDoneDedup]. Not a dedup seed
+     * ([idPrefs] is): a cold start must be allowed to alert again, but cancel and
+     * the next post must still use the id that is already on the shade.
+     */
+    private val shadeHold: SharedPreferences =
+        appContext.getSharedPreferences(SHADE_HOLD_PREFS, Context.MODE_PRIVATE)
 
     fun setBackgrounded(backgrounded: Boolean) {
         this.backgrounded = backgrounded
@@ -121,24 +133,30 @@ class CodeAwayNotifier(
 
     fun cancelSession(sessionId: String) {
         ensurePostedSeeded()
-        val toRemove = posted.filter {
-            it == CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId) ||
-                it.startsWith("approval:$sessionId:")
-        }.toList()
-        // Also cancel allocated keys that may only live in prefs after process death.
-        val prefKeys = idPrefs.all.keys.filter {
-            it == CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId) ||
-                it.startsWith("approval:$sessionId:")
-        }
-        (toRemove + prefKeys).toSet().forEach { key -> cancelKey(key) }
+        val turnKey = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId)
+        val prefix = "approval:$sessionId:"
+        fun matches(key: String) = key == turnKey || key.startsWith(prefix)
+        // posted + prefs cover the usual paths; keyToId covers the gap after clearTurnDoneDedup
+        // (drops posted + prefs, keeps in-memory id so the next TurnDone can update the same shade).
+        val keys = LinkedHashSet<String>()
+        posted.filterTo(keys, ::matches)
+        idPrefs.all.keys.filterTo(keys, ::matches)
+        shadeHold.all.keys.filterTo(keys, ::matches)
+        keyToId.keys.filterTo(keys, ::matches)
+        keys.forEach { cancelKey(it) }
         clearOpenToken(sessionId)
     }
 
     /** Drops every approval alert of [sessionId] from the shade, keeping its turn-finished one. */
     private fun cancelApprovals(sessionId: String) {
         val prefix = "approval:$sessionId:"
-        val keys = posted.filter { it.startsWith(prefix) } + idPrefs.all.keys.filter { it.startsWith(prefix) }
-        keys.toSet().forEach { cancelKey(it) }
+        fun matches(key: String) = key.startsWith(prefix)
+        val keys = LinkedHashSet<String>()
+        posted.filterTo(keys, ::matches)
+        idPrefs.all.keys.filterTo(keys, ::matches)
+        shadeHold.all.keys.filterTo(keys, ::matches)
+        keyToId.keys.filterTo(keys, ::matches)
+        keys.forEach { cancelKey(it) }
     }
 
     fun cancelApproval(sessionId: String, requestId: String) {
@@ -194,7 +212,15 @@ class CodeAwayNotifier(
         ensurePostedSeeded()
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId)
         // Leave any still-visible shade entry until open/auto-cancel / next TurnDone notify.
+        // Park its id outside the dedup prefs: dropping the row (so a cold start can alert)
+        // must not forget which shade entry forget/open and the next TurnDone should update.
+        val held = keyToId[key]
+            ?: idPrefs.getInt(key, Int.MIN_VALUE).takeIf { CodeAwayFormat.isAwayNotifId(it) }
+            ?: shadeHold.getInt(key, Int.MIN_VALUE).takeIf { CodeAwayFormat.isAwayNotifId(it) }
         posted.remove(key)
+        if (held != null) {
+            shadeHold.edit().putInt(key, held).commit()
+        }
         if (idPrefs.contains(key)) {
             idPrefs.edit().remove(key).commit()
         }
@@ -403,12 +429,18 @@ class CodeAwayNotifier(
     private fun idFor(key: String): Int {
         keyToId[key]?.let { return it }
         val savedRaw = idPrefs.getInt(key, Int.MIN_VALUE)
-        val saved = savedRaw.takeIf { it != Int.MIN_VALUE && CodeAwayFormat.isAwayNotifId(it) }
+        val holdRaw = shadeHold.getInt(key, Int.MIN_VALUE)
+        val saved = sequenceOf(savedRaw, holdRaw).firstOrNull {
+            it != Int.MIN_VALUE && CodeAwayFormat.isAwayNotifId(it)
+        }
         // Usable only if no other live key owns this id.
         val existing = saved?.takeIf { owner -> idToKey[owner] == null || idToKey[owner] == key }
         // After process death idToKey is empty; prefs still hold every posted id. A new
         // key whose preferred hash matches a surviving shade entry must probe, not reuse.
-        val taken = idToKey.keys + CodeAwayFormat.takenFromPrefs(idPrefs.all, exceptKey = key)
+        // Shade-hold ids are taken too: clearTurnDoneDedup removed them from [idPrefs].
+        val taken = idToKey.keys +
+            CodeAwayFormat.takenFromPrefs(idPrefs.all, exceptKey = key) +
+            CodeAwayFormat.takenFromPrefs(shadeHold.all, exceptKey = key)
         val id = CodeAwayFormat.allocateNotificationId(key, taken, existing)
         keyToId[key] = id
         idToKey[id] = key
@@ -427,6 +459,9 @@ class CodeAwayNotifier(
         // commit: the shade already shows this id. apply() can still be in flight when the
         // process is killed, and a cold-start cancel would miss the allocation.
         idPrefs.edit().putInt(key, id).commit()
+        if (shadeHold.contains(key)) {
+            shadeHold.edit().remove(key).commit()
+        }
         // Bound memory if many sessions notify while away; cancel shade on eviction (A6).
         while (posted.size > 64) {
             val oldest = posted.first()
@@ -449,7 +484,9 @@ class CodeAwayNotifier(
         val fromMem = keyToId.remove(key)
         val fromPrefs = idPrefs.getInt(key, Int.MIN_VALUE)
             .takeIf { it != Int.MIN_VALUE && CodeAwayFormat.isAwayNotifId(it) }
-        val id = fromMem ?: fromPrefs
+        val fromHold = shadeHold.getInt(key, Int.MIN_VALUE)
+            .takeIf { it != Int.MIN_VALUE && CodeAwayFormat.isAwayNotifId(it) }
+        val id = fromMem ?: fromPrefs ?: fromHold
         if (id != null) {
             if (idToKey[id] == key) idToKey.remove(id)
         }
@@ -457,6 +494,9 @@ class CodeAwayNotifier(
             // commit: a kill after apply() is scheduled could leave a stale id that collides
             // with the next allocation for another key.
             idPrefs.edit().remove(key).commit()
+        }
+        if (fromHold != null || shadeHold.contains(key)) {
+            shadeHold.edit().remove(key).commit()
         }
         return id
     }
@@ -478,5 +518,6 @@ class CodeAwayNotifier(
         private const val REQUEST_DENY = 0xDE1
         private const val OPEN_TOKEN_PREFS = "code_away_open_tokens"
         private const val NOTIF_ID_PREFS = "code_away_notif_ids"
+        private const val SHADE_HOLD_PREFS = "code_away_shade_hold"
     }
 }
