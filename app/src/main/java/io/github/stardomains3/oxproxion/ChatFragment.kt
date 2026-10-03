@@ -825,9 +825,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             val nowRp = mode == ChatMode.RP
             if (nowRp && lastSeenChatMode != ChatMode.RP) {
                 // Roleplay opens where it was left: the characters list, or the chat you were in.
-                // A thread opened on purpose always wins.
-                rpHomeOpen = !rpHomeSuppressed && rpResumeAtHome
-                rpHomeSuppressed = false
+                // Hub Continue / Start chat set suppressed so this landing does not reopen
+                // the list they just closed (setChatMode is still in flight at uncover).
+                val landed = HubUncover.afterEnterRoleplay(
+                    HubUncover.Home(rpHomeOpen, rpHomeSuppressed, rpResumeAtHome),
+                )
+                rpHomeOpen = landed.open
+                rpHomeSuppressed = landed.suppressed
             } else if (!nowRp) {
                 if (lastSeenChatMode == ChatMode.RP) rpResumeAtHome = rpHomeOpen
                 rpHomeOpen = false
@@ -1022,8 +1026,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             view?.findViewById<View>(R.id.exportLabel)?.isVisible = hasMessages
         }
 
+        var wasAwaitingReply = viewModel.isAwaitingResponse.value == true
         viewModel.isAwaitingResponse.observe(viewLifecycleOwner) { isAwaiting ->
+            val replyFinished = wasAwaitingReply && isAwaiting != true
+            wasAwaitingReply = isAwaiting == true
             chatAdapter.replyInFlight = isAwaiting
+            // Roleplay turned off mid-reply: the tab is already hidden, but the flip
+            // to Chat waits until the reply is idle (refreshModeTabs bails while awaiting).
+            if (replyFinished) leaveRoleplayIfDisabled()
             if (!isAwaiting && sharedPreferencesHelper.getConversationModeEnabled()) {
                 val messages = viewModel.chatMessages.value ?: return@observe
                 if (messages.isNotEmpty()) {
@@ -4914,15 +4924,29 @@ $cleanContent
         (childFragmentManager.findFragmentById(R.id.historyDrawerContainer) as? SavedChatsFragment)?.refreshModeRows()
     }
 
+    /**
+     * Roleplay was turned off in Settings. Flip back to Chat once no reply is in flight.
+     * A second call while the flip is still queued asks for Chat again (not Roleplay).
+     */
+    private fun leaveRoleplayIfDisabled() {
+        if (!::tabRoleplay.isInitialized || !::chatEditText.isInitialized) return
+        if (!ModeGates.leaveDisabledRoleplay(
+                roleplayEnabled = sharedPreferencesHelper.isRoleplayEnabled(),
+                inRoleplay = viewModel.isRpMode(),
+                awaitingReply = viewModel.isAwaitingResponse.value == true,
+            )
+        ) return
+        sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, chatEditText.text?.toString().orEmpty())
+        viewModel.toggleChatMode()
+        closeRpPanel(animated = false)
+    }
+
     /** Roleplay and Code tabs follow Settings > Modes; leaving a disabled Roleplay lands on Chat. */
     private fun refreshModeTabs() {
         if (!::tabRoleplay.isInitialized) return
         val rpOn = sharedPreferencesHelper.isRoleplayEnabled()
         tabRoleplay.isVisible = rpOn
-        if (!rpOn && viewModel.isRpMode() && viewModel.isAwaitingResponse.value != true) {
-            sharedPreferencesHelper.saveComposerDraft(ChatMode.RP, chatEditText.text?.toString().orEmpty())
-            viewModel.toggleChatMode()
-        }
+        leaveRoleplayIfDisabled()
         if (!rpOn) closeRpPanel(animated = false)
         if (::codeMode.isInitialized) {
             val codeWasActive = codeMode.isActive
@@ -6756,7 +6780,9 @@ $cleanContent
         }
         viewModel.rpThreadOpenedEvent.observe(viewLifecycleOwner) { event ->
             if (event.getContentIfNotHandled() != null) {
-                rpHomeSuppressed = true
+                // Already in Roleplay: the mode observer will not clear a suppress,
+                // and the next Ask → Roleplay switch would skip the character list.
+                rpHomeSuppressed = HubUncover.suppressForThreadOpen(viewModel.isRpMode())
                 closeRpHome()
             }
         }
@@ -7341,6 +7367,15 @@ $cleanContent
 
     fun uncoverFromHub() {
         closeHistoryPanel(animated = false)
+        // setChatMode(RP) lands after this returns. Suppress the list resume so that
+        // landing cannot undo the close below. Already in Roleplay: do not stick the flag.
+        val home = HubUncover.afterUncover(
+            alreadyInRoleplay = viewModel.isRpMode(),
+            home = HubUncover.Home(rpHomeOpen, rpHomeSuppressed, rpResumeAtHome),
+        )
+        rpHomeSuppressed = home.suppressed
+        // closeRpHome no-ops once open is already false, so let it clear the flag
+        // itself when the list is up (and refresh the composer).
         closeRpHome()
         uncoveringHub = true
         try {

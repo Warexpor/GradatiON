@@ -1,3 +1,11 @@
+# Handoff (2026-10-03, Hub/Pair/Glass wave 29)
+
+On `gradation/w29-hub` (PR into `gradation/app-pass`). Hub/mode and sheet-glass follow-ups after #119, unit-tested (`HubModeTest`, `GlassDrawableOutlineTest`). Not a redo of the Roleplay tab pin, the pair pending lock, or topOnly outlines:
+- Hub Continue / Start chat keep the character list closed when setChatMode(RP) lands later, so a list you had resumed does not cover the thread. Start chat while already in Roleplay does not leave that suppress stuck (the mode observer never clears it).
+- Settings turning Roleplay off during a reply still returns to Chat when the reply goes idle. The tab already hid; the flip used to be skipped for good.
+- Bottom-sheet glass is applied again after BottomSheetBehavior's first layout, which replaces the container background with a MaterialShapeDrawable and used to leave the sheet with neither glass.
+
+Phone: on Ask, leave Roleplay from the character list, open Hub, Continue (the thread, not the list). Start a new chat from the library while already in Roleplay, switch to Ask and back (the list can still resume). Turn Roleplay off in Settings while a reply is streaming (Chat returns when it finishes). History ⋮ sheet stays glass after it settles, not a flat transparent card.
 # Handoff (2026-10-03, Settings wave 29)
 
 On `gradation/w29-settings` (PR into `gradation/app-pass`). Settings follow-ups after #121. Not a redo of pref-tap commits, the Power tools switch, exact text-size rings, Voice chips while off, or reasoning effort vs the token budget. Not a redo of #123 (persona Save commits).
