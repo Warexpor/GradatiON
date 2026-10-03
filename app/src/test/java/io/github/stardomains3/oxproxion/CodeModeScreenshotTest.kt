@@ -784,6 +784,10 @@ class CodeModeScreenshotTest {
             d.onLevel(speech[i % speech.size])
             shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(66))
         }
+        val wave = a.findViewById<View>(R.id.codeComposerVoiceWave)
+        val words = a.findViewById<android.widget.EditText>(R.id.codeComposerInput)
+        fun x(v: View) = IntArray(2).also { v.getLocationInWindow(it) }[0]
+        assertEquals("the wave starts under the words it writes", x(words) + words.compoundPaddingLeft, x(wave))
         snap(root(a), "code_dictating_dark")
         VoiceInput.deviceAvailableOverride = null
     }

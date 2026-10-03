@@ -118,13 +118,13 @@
             </LinearLayout>
         </HorizontalScrollView>
 
-        <!-- Takes the pills' place while dictating. -->
+        <!-- Takes the pills' place while dictating, starting under the words it is writing -->
         <io.github.stardomains3.oxproxion.VoiceWaveView
             android:id="@+id/codeComposerVoiceWave"
             android:layout_width="0dp"
             android:layout_height="24dp"
             android:layout_weight="1"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="10dp"
             android:importantForAccessibility="no"
             android:visibility="gone" />
 
