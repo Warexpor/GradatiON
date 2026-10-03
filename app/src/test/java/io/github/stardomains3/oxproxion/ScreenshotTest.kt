@@ -896,6 +896,33 @@ class ScreenshotTest : ScreenshotHarness() {
         }
     }
 
+    /** Key fields showed Material's filled eye; the toggle uses the line eye, struck through once shown. */
+    @Test fun settingsKeyFieldsUseTheLineEyeDark() = withChat { a, _ ->
+        fun pixels(d: android.graphics.drawable.Drawable): IntArray {
+            val c = d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
+            val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+            c.setBounds(0, 0, 48, 48); c.draw(android.graphics.Canvas(bmp))
+            return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
+        }
+        val eye = pixels(a.getDrawable(R.drawable.ic_eye)!!)
+        val eyeOff = pixels(a.getDrawable(R.drawable.ic_eye_off)!!)
+        for ((name, field, make) in listOf<Triple<String, Int, () -> androidx.fragment.app.DialogFragment>>(
+            Triple("api", R.id.edit_text_lay) { SaveApiDialogFragment() },
+            Triple("brave", R.id.edit_text_lay_brave_api) { SaveBraveApiDialogFragment() },
+            Triple("lan", R.id.edit_text_lan_api_key_layout) { SaveLANDialogFragment() },
+        )) {
+            val f = make()
+            f.show(a.supportFragmentManager, name); idle()
+            val toggle = f.requireView().findViewById<View>(field)
+                .findViewById<View>(com.google.android.material.R.id.text_input_end_icon) as android.widget.ImageView
+            org.junit.Assert.assertArrayEquals("$name: hidden key shows the eye", eye, pixels(toggle.drawable.current))
+            toggle.performClick(); idle()
+            org.junit.Assert.assertArrayEquals("$name: shown key shows the struck eye", eyeOff, pixels(toggle.drawable.current))
+            if (name == "api") snapDialogCentered(a, "settings_key_dialog_eye_dark")
+            f.dismiss(); idle()
+        }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",

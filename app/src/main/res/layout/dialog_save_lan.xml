@@ -181,7 +181,9 @@
             android:hint="@string/save_lan_enter_if_required"
             app:hintTextColor="@color/xai_mute"
             android:layout_marginBottom="16dp"
-            app:endIconMode="password_toggle">
+            app:endIconMode="password_toggle"
+            app:endIconDrawable="@drawable/ic_password_eye"
+            app:endIconTint="@color/xai_mute">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/edit_text_lan_api_key"
