@@ -16,12 +16,15 @@
     app:glassCornerRadius="26dp"
     app:glassElevation="6dp">
 
+    <!-- Attached images: they start where the words do (the input's 10dp pad), with the same 6dp
+         top air the words get, so a thumbnail never tucks under the capsule's corner -->
     <HorizontalScrollView
         android:id="@+id/codeComposerAttachStrip"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="4dp"
+        android:layout_marginBottom="6dp"
         android:overScrollMode="never"
+        android:paddingTop="6dp"
         android:scrollbars="none"
         android:visibility="gone">
 
@@ -31,8 +34,8 @@
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp" />
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp" />
     </HorizontalScrollView>
 
     <EditText

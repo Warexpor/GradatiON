@@ -173,6 +173,35 @@ class CodeModeScreenshotTest {
         snap(root(a), "code_session_rtl_dark")
     }
 
+    /** Attached images start where the composer's words do, clear of its corner and of each other. */
+    @Test fun codeSessionComposerAttachmentsDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+        hub.answer(id, approval.requestId, approval.options.first { it.id == "allow" })
+        idle(16)
+        val f = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }
+        val composer = CodeSessionFragment::class.java.getDeclaredField("composer").apply { isAccessible = true }.get(f)
+            as io.github.stardomains3.oxproxion.code.CodeComposer
+        for (shade in listOf(90, 150)) {
+            val att = io.github.stardomains3.oxproxion.code.PromptAttachment("image/png", "x")
+            att.previewBitmap = Bitmap.createBitmap(120, 120, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.rgb(shade, shade, shade)) }
+            composer.addAttachment(att)
+        }
+        composer.input.setText("What changed on this screen?")
+        idle(2)
+        val chips = f.requireView().findViewById<android.view.ViewGroup>(R.id.codeComposerAttachChips)
+        fun x(v: View) = IntArray(2).also { v.getLocationInWindow(it) }[0]
+        assertEquals(2, chips.childCount)
+        assertEquals("the first image starts under the words' edge",
+            x(composer.input) + composer.input.compoundPaddingLeft, x(chips.getChildAt(0)))
+        val d = ctx.resources.displayMetrics.density
+        assertEquals("images keep 10dp apart", (10 * d).toInt(), x(chips.getChildAt(1)) - x(chips.getChildAt(0)) - chips.getChildAt(0).width)
+        snap(root(a), "code_session_composer_attachments_dark")
+    }
+
     @Test fun codeSessionDoneDark() = withCode { a, _ ->
         val hub = CodeHub.getLoaded(ctx)
         val id = startDemo("Add a follow-system option to the theme setting")
