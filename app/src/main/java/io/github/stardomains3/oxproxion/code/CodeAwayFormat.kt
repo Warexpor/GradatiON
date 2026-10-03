@@ -100,6 +100,23 @@ object CodeAwayFormat {
     }
 
     /**
+     * Shades still allocated, including a [HOLD_PREFIX] row. [postedKeysFromPrefs] skips
+     * that prefix so the next finish can alert; the cap still has to count the notification.
+     */
+    fun visibleKeysFromPrefs(entries: Map<String, *>): Set<String> {
+        val out = LinkedHashSet<String>()
+        for ((k, v) in entries) {
+            val id = when (v) {
+                is Int -> v
+                is Number -> v.toInt()
+                else -> continue
+            }
+            if (isAwayNotifId(id)) out += logicalDedupKey(k)
+        }
+        return out
+    }
+
+    /**
      * Prefs key for a shade id parked by clearTurnDoneDedup. Lives in the same
      * file as the live allocation so the drop and the park are one commit.
      */
