@@ -54,13 +54,17 @@ internal object CharacterImportSideLog {
      */
     suspend fun resume(context: Context, db: AppDatabase): Boolean {
         val dest = file(context)
-        val snapshot = synchronized(lock) { read(dest) } ?: return true
+        val raw = synchronized(lock) { read(dest) } ?: return true
+        // The same export key twice in one file is one character. The last copy is the row
+        // that was saved. Leaving the earlier copy in the log re-applied its Memory and
+        // pictures on the next launch, over the copy that won.
+        val snapshot = raw.groupBy { it.id }.map { (_, notes) -> notes.last() }
         val dao = db.rpDao()
         val accepted = snapshot.filter { matches(it, dao.getCharacterById(it.id)) }
         val acceptedIds = accepted.map { it.id }.toSet()
         if (accepted.isEmpty()) {
             // Drop only the rejected snapshot rows. A concurrent import may have added others.
-            reconcile(dest, snapshot, doneIds = emptySet(), acceptedIds = emptySet())
+            reconcile(dest, raw, doneIds = emptySet(), acceptedIds = emptySet())
             return true
         }
         val prefs = SharedPreferencesHelper(context)
@@ -72,7 +76,7 @@ internal object CharacterImportSideLog {
         if (!saved) {
             Log.e(TAG, "Imported character notes are still waiting")
             // Still drop rejected snapshot rows; leave accepted for the next launch.
-            reconcile(dest, snapshot, doneIds = emptySet(), acceptedIds = acceptedIds)
+            reconcile(dest, raw, doneIds = emptySet(), acceptedIds = acceptedIds)
             return false
         }
         afterPrefsAppliedForTest?.let { hook ->
@@ -84,7 +88,7 @@ internal object CharacterImportSideLog {
             if (restorePictures(context, dao, note)) doneIds += note.id
         }
         val waiting = acceptedIds - doneIds
-        reconcile(dest, snapshot, doneIds = doneIds, acceptedIds = acceptedIds)
+        reconcile(dest, raw, doneIds = doneIds, acceptedIds = acceptedIds)
         if (waiting.isNotEmpty()) {
             Log.e(TAG, "Imported character pictures are still waiting")
             return false
@@ -103,11 +107,14 @@ internal object CharacterImportSideLog {
         acceptedIds: Set<Long>,
     ) {
         synchronized(lock) {
-            val snapById = snapshot.associateBy { it.id }
+            // Every version of an id from this snapshot, not only the last. associateBy would
+            // keep a duplicate that is not equal to the winner, and the next launch would
+            // apply that older copy.
+            val versionsById = snapshot.groupBy { it.id }
             val current = read(dest).orEmpty()
             val still = current.filter { note ->
-                val original = snapById[note.id] ?: return@filter true
-                if (note != original) return@filter true
+                val versions = versionsById[note.id] ?: return@filter true
+                if (versions.none { it == note }) return@filter true
                 when {
                     note.id in doneIds -> false
                     note.id !in acceptedIds -> false

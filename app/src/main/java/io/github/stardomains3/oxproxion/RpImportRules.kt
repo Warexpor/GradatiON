@@ -13,7 +13,8 @@ object RpImportRules {
         existingNames: Collection<String>
     ): Int {
         return incoming.count { ex ->
-            existingNames.any { it.equals(ex.name, ignoreCase = true) }
+            val name = ex.name.trim()
+            name.isNotEmpty() && existingNames.any { it.trim().equals(name, ignoreCase = true) }
         }
     }
 }
