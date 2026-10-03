@@ -720,6 +720,8 @@
     <string name="licenses_title">Third-party licenses</string>
     <string name="licenses_title_count">Third-party licenses (%1$d)</string>
     <string name="tools_select_folder">Tap to select Download/gradation folder</string>
+    <string name="tools_needs_destructive">Also needs Destructive file tools, in Settings &gt; Data &amp; privacy</string>
+    <string name="notice_destructive_tool_blocked">Destructive tool blocked. Turn on Destructive file tools in Settings &gt; Data &amp; privacy.</string>
     <string name="tools_permission_required">Permission required. Tap to grant.</string>
     <string name="edit_model_title">Edit model</string>
     <string name="add_model_title">Add model</string>
