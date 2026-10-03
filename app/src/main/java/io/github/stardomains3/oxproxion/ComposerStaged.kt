@@ -145,4 +145,12 @@ object ComposerStaged {
     fun withFile(base: Entry, file: FilePart): Entry =
         base.copy(files = base.files + file)
 
+    /**
+     * The composer removed its files. [live] may still hold a photo or a clip; the file
+     * list is dropped either way. Remembering an empty live used to skip the write, so
+     * a list already parked (History, Code) came back on the next open.
+     */
+    fun dropFiles(store: Map<String, Entry>, sessionId: Long?, live: Entry): Map<String, Entry> =
+        remember(store, sessionId, live.copy(files = emptyList()))
+
 }

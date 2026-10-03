@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Chat wave 30)
+
+On `gradation/w30-chat` (PR into `gradation/app-pass`). Chat/History follow-ups. Not a redo of #126 (first save keeps the rekeyed JPEG) or #116 (parked Ask caption promote).
+
+- History day sections and the time/weekday label use calendar midnights. A 24-hour step mis-filed the first hour of yesterday after a DST fallback (This week, weekday instead of the time) and the last hour of the day before yesterday after a spring-forward (Yesterday). The week edge is six calendar days, not 144 hours.
+- Remove all on attached files writes the live stage back with an empty file list (`ComposerStaged.dropFiles`). A list already parked for History or Code used to survive, because the next park skips an empty live stage, so the row still said "1 file" and the files returned.
+
+Phone: on a device set to a DST zone, the day after the clocks fall back, a chat from 12:30 a.m. yesterday is under Yesterday and shows the time, not a weekday. Attach a file, open History, close it, Remove all (the row no longer says the file is waiting; leave and come back and it stays gone). A photo staged with the file stays.
+
 # Handoff (2026-10-03, Hub/Pair wave 30)
 
 On `gradation/w30-hub` (PR into `gradation/app-pass`). Hub/mode and pairing follow-ups after #129. Not a redo of Continue/Start staying on the Roleplay thread, Start-while-Roleplay suppress, Roleplay-off-during-reply returning to Chat, or sheet glass reapplying after the first layout. Not #119 (Roleplay tab pin, pair pending lock, topOnly outlines). Not a redo of Code #131, Stability #132, Import #133, or Notifications #134.
