@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Stability wave 29)
+
+On `gradation/w29-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w28 encrypt sidecar temps / encrypt_ok discard (#118). Not a redo of that pass, and not #123–#129:
+- Plaintext-to-SQLCipher export binds the passphrase bytes on ATTACH. Room opens with `sqlite3_key` of those bytes (PBKDF2). The export used to write the raw-key literal `x'hex'`, so the migrated file opened as not a database and recovery set the history aside.
+- Before ATTACH, a leftover `encrypting` / `pre_sqlcipher` wal that cannot be deleted (non-empty directory) is renamed off the SQLite name. If it still cannot be moved, the plaintext snapshot stays and the export does not start. Throwing would run recovery and could replace the live file with the snapshot.
+- Auto Backup and device transfer exclude `ForegroundServiceAnswer.xml` (answer shade title and the speaking flag). `code_away_shade_hold.xml` is already excluded by the notifications pass.
+
+Phone: a plaintext chat database on first encrypt after upgrade should open, not show the history-set-aside notice. Leave a non-empty directory named `chat_database.encrypting-wal` next to `chat_database.pre_sqlcipher` in the no-backup chat-db folder and relaunch (the snapshot should remain only if that directory cannot be moved; otherwise the wal name should be gone before export). A cloud backup should not include the answer speaking flag (shade-hold ids stay out via the notifications exclusion).
+
 # Handoff (2026-10-03, Hub/Pair/Glass wave 29)
 
 On `gradation/w29-hub` (PR into `gradation/app-pass`). Hub/mode and sheet-glass follow-ups after #119, unit-tested (`HubModeTest`, `GlassDrawableOutlineTest`). Not a redo of the Roleplay tab pin, the pair pending lock, or topOnly outlines:
