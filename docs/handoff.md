@@ -1,3 +1,11 @@
+# Handoff (2026-10-03, Settings wave 34)
+
+On `cursor/settings-wave-34-9e0e` (PR into `gradation/app-pass`). Settings follow-ups after an IPv6 local server with `@` or a space in the password, and Get location asking for precise and approximate together (#158). Not a redo of that pass. Not a redo of a hostname with `_` or a password containing `@`, the Models row hiding that password, port 0 and above 65535, a query or fragment swallowing `/v1`, or approximate location counting as granted (#149). Not a redo of an enabled tool turning off without the grant, cleartext to CGNAT 100.64/10 and IPv6 link-local or unique-local, or the Models row hiding userinfo when the host parsed (#140).
+
+- Settings > Models: `http://10.0.0.23.:11434` saves. Java's parser reports a trailing dot on an IPv4 address as no host, so Save refused it and the row printed the whole URL. A zone id on a link-local address (`http://[fe80::1%wlan0]:11434` or `%25`) is refused. An IPv4-mapped address with a leading zero (`http://[::ffff:192.168.001.001]:11434`) is refused. The HTTP client cannot open either, and Save used to accept them. `[fe80::1]` and `[::ffff:192.168.1.1]` still save. A public literal is still refused.
+
+Phone: set the local server to `http://10.0.0.23.:11434` (Save should accept it; the Models row should say `10.0.0.23.:11434`). Set it to `http://[fe80::1%wlan0]:11434` or `http://[::ffff:192.168.001.001]:11434` (Save should refuse). Set it to `http://[fe80::1]:11434` (Save should accept it).
+
 # Handoff (2026-10-03, Notifications/Away wave 33)
 
 On `cursor/notif-wave-33-a28d` (PR into `gradation/app-pass`). Notif/away follow-ups after a cleared shade posting again, cap order, and Speak utterance ids (#150). Not a redo of that pass, of the last-shade token, the 64-cap count, or in-chat Stop (#146). Not a redo of #160, #161, #159, #158, #156, #155, or #157. Not a redo of #139–#154.
