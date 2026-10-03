@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Import wave 33)
+
+On `cursor/import-backup-pictures-b045` (PR into `gradation/app-pass`). Import/export follow-ups after #152. Not a redo of a lore pin staying on the chosen copy, a failed wallpaper clear retrying next launch, or trimmed names and a blank name not being imported. Not a redo of #144 (a waiting lore pin replacing the old pin, a failed portrait write being retried, duplicate lore names exporting the newest text and import updating every local row). Not a redo of #158, #156, #155, or #157. Not a redo of #139–#154.
+
+- A character import writes its notes before the database commit. If that commit does not land, the next launch used to apply Memory and the pictures anyway, because the export key still matched the card that rolled back. The row's old stamp means the notes are dropped. A later edit still keeps a portrait that is waiting.
+- A backup that lists the same character twice uses the last copy for the greeting. An earlier greeting used to count as a change after the last copy had put the old one back, so a rewritten opening was replaced.
+- A portrait or wallpaper over the backup cap is scaled and carried. It used to be omitted, and the other phone kept the picture it already had. A torn file is still omitted.
+
+Phone: import a character file that contains the same character twice, the second copy with the greeting already on the card, while a rewrite of the opening is showing (the rewrite should stay). Export a character whose portrait or wallpaper is a large photo (the other phone should get that picture, scaled). Not a phone check for a kill between the import note and the database commit.
+
 # Handoff (2026-10-03, Settings wave 33)
 
 On `cursor/settings-wave-33-1cff` (PR into `gradation/app-pass`). Settings follow-ups after #149, rebased onto #156 (which includes #155 and #157). Not a redo of a hostname with `_` or a password containing `@` on a host Java could still parse, the Models row hiding that password, port 0 and above 65535, a query or fragment swallowing `/v1`, or approximate location counting as granted (#149). Not a redo of an enabled tool turning off without the grant, cleartext to CGNAT 100.64/10 and IPv6 link-local or unique-local, or the Models row hiding userinfo when the host parsed (#140). Not a redo of card example exchanges split on `<START>`, `{{bot}}` as the character name, or `{{random_user_N}}` in an example (#156). Not a redo of a divider-only hub line, an emoji cut in half, a form-encoded pairing space, or a trailing `#note` after a bridge fragment (#155). Not a redo of the config-option mode pill or Playwright browser lines (#157).

@@ -274,18 +274,33 @@ internal object RpCharacterPrefsBackup {
  * card alone used to leave it behind on the next phone.
  */
 internal object RpWallpaperBackup {
-    /** Larger than this and the backup leaves the phone's copy alone instead of dropping it. */
+    /** Larger than this and the backup carries a scaled JPEG instead of the raw file. */
     private const val MAX_BYTES = 2_000_000
 
-    /** Empty when there is no picture. Null when the file cannot be carried. */
-    fun encode(file: File): String? {
+    /** prepare() refuses a source above this. Bigger than that cannot be carried. */
+    private const val MAX_READ = 32 * 1024 * 1024
+
+    /**
+     * Empty when there is no picture. Null when the file cannot be carried.
+     * A file over [maxBytes] is scaled the way a pick would be. Leaving it out used to
+     * keep whatever picture the other phone already had.
+     */
+    fun encode(file: File, maxBytes: Int = MAX_BYTES): String? {
         ScenePhoto.recover(file)
         if (!file.isFile || file.length() == 0L) return ""
         // A half-written wallpaper is not a picture; leave the phone's copy alone.
         if (!ScenePhoto.completeJpeg(file)) return null
-        if (file.length() > MAX_BYTES) return null
+        if (maxBytes <= 0 || file.length() > MAX_READ) return null
         return try {
-            Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+            val raw = file.readBytes()
+            val bytes = if (raw.size <= maxBytes) {
+                raw
+            } else {
+                val shrunk = BackgroundPhoto.prepare(raw) ?: return null
+                if (shrunk.size > maxBytes || !ScenePhoto.completeJpeg(shrunk)) return null
+                shrunk
+            }
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
         } catch (_: Exception) {
             null
         }
