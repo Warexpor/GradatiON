@@ -141,15 +141,25 @@ and never auto-send, and there's no hold-to-talk. While listening:
 - Roleplay adds a speaker line (avatar and name) and swipe navigation between alternate replies.
 
 **Code transcript.**
-- One grid: glyphs on a rail column (centred 22dp in), content from 42dp. Each turn hangs on a
-  thin rail (`CodeTranscriptRail`) from the prompt block (a `›` and the words) to an end ring
-  with the summary in mono. Steps are glyph beads on it; prose gets a dot; opaque cards let it
-  pass behind.
+- The transcript scrolls on one glass sheet (`codeSessionSheet`): live blur of the ambient
+  background only (its own backdrop, so scrolling never re-blurs it), no lens, a 32dp radius,
+  6dp in from the screen, from under the header to just below the composer, which floats inside
+  it concentrically. Rows dissolve at its top edge. Everything on it is see-through: the prompt
+  block is a soft lift with no outline, cards are tint-only glass (`GlassDrawable`), panes are
+  the recessed code fill with the beads' quiet rim.
+- One grid: glyphs on a rail column (centred 22dp in from the screen), content from 42dp. Each
+  turn hangs on a thin rail (`CodeTranscriptRail`) from the prompt block (a `›` and the words) to
+  an end ring with the summary in mono. Steps are glyph beads on it; prose gets a dot; the rail
+  stops short of beads and cards and starts under the prompt block, never running behind glass.
+- Commands, paths, output and counts are mono via `Widget.Gradation.Code.MonoLine`.
 - Each tool call is one line: a kind glyph in a bead, the verb in semibold, and a mono argument,
   with a ring orbiting the bead while running and a mark only on failure. The output hangs
   underneath on tap, in a terminal pane that starts with `$ command` for commands.
 - Diffs are editor panes: file name, folder, counts, then colored lines on the recessed code fill.
-- Approvals are glass cards with capsule choices.
+- Approvals are glass cards lifted a step above the others, with capsule choices; the expected
+  one is denser glass (`bg_glass_button_primary`), never an outline or a slab.
+- Plan steps read by shape: a filled disc (done, muted like its text), a half disc (now, ink),
+  a hollow ring (to do).
 - The session menu switches between Normal view (folded) and Thinking view (every thought and
   output open).
 
