@@ -152,7 +152,8 @@ class CodeComposer(
         attachStrip.isVisible = pendingAttachments.isNotEmpty()
         val d = context.resources.displayMetrics.density
         val chip = (56 * d).toInt()
-        val gap = (6 * d).toInt()
+        // Wide enough that a thumbnail's remove disc, on its top corner, clears the next thumbnail.
+        val gap = (10 * d).toInt()
         pendingAttachments.forEachIndexed { index, att ->
             val wrap = FrameLayout(context).apply {
                 layoutParams = LinearLayout.LayoutParams(chip, chip).also {
