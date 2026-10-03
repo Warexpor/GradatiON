@@ -97,20 +97,31 @@ interface RpDao {
 
     /**
      * Every lorebook in one transaction. A second entry with the same name updates the one just
-     * inserted. The last entry marked active wins; an empty library with none marked active
-     * activates the first when [activateFirstIfNone] is set.
+     * inserted. The last copy of a name wins, including when that copy is not active; an empty
+     * library with none marked active activates the first when [activateFirstIfNone] is set.
      */
     @Transaction
     suspend fun importLorebooks(incoming: List<RpLorebookExport>, activateFirstIfNone: Boolean): Int {
-        var firstId: Long? = null
-        // A backup that marks nothing active means those books are off. Keeping a local
-        // active flag used to leave the phone's book active after a restore that turned it off.
-        // An empty library still activates the first book below, when asked.
-        val anyActive = incoming.any { it.isActive && it.name.trim().isNotEmpty() }
+        // One book listed twice is one book. Applying the earlier copy first left it active
+        // when the last copy turned it off, and that pass also cleared a different book that
+        // was already active on the phone.
+        val collapsed = ArrayList<RpLorebookExport>(incoming.size)
         incoming.forEachIndexed { index, ex ->
             RpImportGuard.beforeRow(index)
             val name = ex.name.trim()
             if (name.isEmpty()) return@forEachIndexed
+            val row = ex.copy(name = name)
+            val at = collapsed.indexOfFirst { it.name.equals(name, ignoreCase = true) }
+            if (at >= 0) collapsed[at] = row else collapsed.add(row)
+        }
+        var firstId: Long? = null
+        // A backup that marks nothing active means those books are off. Keeping a local
+        // active flag used to leave the phone's book active after a restore that turned it off.
+        // An empty library still activates the first book below, when asked.
+        // Active is decided from the last copy of each name, not an earlier duplicate.
+        val anyActive = collapsed.any { it.isActive }
+        collapsed.forEach { ex ->
+            val name = ex.name
             val existing = getAllLorebooksOnce()
                 .firstOrNull { it.name.trim().equals(name, ignoreCase = true) }
             val row = (existing ?: RpLorebook(name = name)).copy(

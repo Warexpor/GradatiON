@@ -61,11 +61,16 @@ object RpAvatarStorage {
         return ScenePhoto.completeJpeg(file)
     }
 
+    /**
+     * Portrait as Base64. Empty when there is no file, so a backup can clear one.
+     * Null when the file is torn or cannot be read: the other phone keeps its copy
+     * (same split as wallpaper encode).
+     */
     fun encodeAvatarBase64(context: Context, characterId: Long): String? {
         val file = avatarFile(context, characterId)
         ScenePhoto.recover(file)
-        // A half-written portrait is not a picture; leave the next phone's copy alone
-        // (wallpaper encode already does this).
+        if (!file.isFile || file.length() == 0L) return ""
+        // A half-written portrait is not a picture; leave the next phone's copy alone.
         if (!ScenePhoto.completeJpeg(file)) return null
         return try {
             Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)

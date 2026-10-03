@@ -174,7 +174,21 @@ internal object CharacterImportSideLog {
                     }
                 }
             }
-            val encoded = note.exported.avatarBase64?.takeIf { it.isNotBlank() } ?: return true
+            val encoded = note.exported.avatarBase64 ?: return true
+            if (encoded.isBlank()) {
+                // Empty means the portrait was removed. Null (absent) left it alone above.
+                RpAvatarStorage.deleteAvatar(context, note.id)
+                if (RpAvatarStorage.hasAvatar(context, note.id)) {
+                    Log.w(TAG, "Character portrait still waiting")
+                    return false
+                }
+                dao.getCharacterById(note.id)?.let { character ->
+                    if (!character.photoUri.isNullOrBlank()) {
+                        dao.updateCharacter(character.copy(photoUri = null))
+                    }
+                }
+                return true
+            }
             val bytes = runCatching { Base64.decode(encoded, Base64.DEFAULT) }.getOrNull()
             if (bytes == null || bytes.isEmpty() || !ScenePhoto.completeJpeg(bytes)) {
                 Log.w(TAG, "Character portrait in the backup is not a picture; leaving it")
