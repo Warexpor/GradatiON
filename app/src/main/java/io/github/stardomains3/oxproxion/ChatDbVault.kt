@@ -54,6 +54,10 @@ internal object ChatDbVault {
     /** Leftover recovered/unreadable copies that could not enter the vault. Excluded from Auto Backup. */
     const val HOLD_DIR = "chat_db_hold"
     private val RECOVERED = Regex("^chat_database\\.recovered-[0-9]{1,16}$")
+    /** Wal, shm, or journal of a recovered database. The main name is [RECOVERED]. */
+    private val RECOVERED_SIDECAR = Regex(
+        "^chat_database\\.recovered-[0-9]{1,16}-(wal|shm|journal)$"
+    )
     private val UNREADABLE = Regex("^chat_database\\.unreadable-[0-9]{1,16}(-wal|-shm|-journal)?$")
     private val KEEP_SUFFIX = Regex("\\.kept-[0-9]+$")
     private val SIDECARS = listOf("", "-wal", "-shm", "-journal")
@@ -135,8 +139,9 @@ internal object ChatDbVault {
      */
     fun relocateLegacy(databasesDir: File, vault: File, storedRecovered: String?): Boolean {
         vault.mkdirs()
-        // A 0-byte main is not history. Install a finished side file onto that name
-        // before anything moves the empty file or deletes the side file.
+        // A 0-byte or missing main is not history. Install a finished side file onto
+        // that name, including a wal/shm/journal beside a main that has bytes, before
+        // anything moves the empty file or deletes the side file.
         installReadyCopiesOverEmpty(databasesDir)
         installReadyCopiesOverEmpty(File(databasesDir, HOLD_DIR))
         installReadyCopiesOverEmpty(vault)
@@ -723,32 +728,68 @@ internal object ChatDbVault {
     }
 
     /**
-     * Puts a finished `.partial` onto a 0-byte recovered or set-aside main in [directory].
-     * That empty file is not the database. Moving it, then deleting the side file,
-     * dropped the copy that still has bytes. A main that already has bytes is left
-     * alone, and so is a side file with no ready marker.
+     * Puts a finished `.partial` onto a recovered or set-aside file in [directory]
+     * when that name is missing or 0 bytes.
+     * An empty file is not the database. Deleting it and then dying before the side
+     * file took the name, or moving the empty name and then deleting the side file,
+     * dropped the copy that still has bytes. A name that is already gone is the same
+     * window: the next open created a new database there and the side file was never
+     * installed. A main that already has bytes is left alone, and so is a side file
+     * with no ready marker.
+     * `-wal`, `-shm` and `-journal` are included. A finished wal beside a 0-byte or
+     * missing wal used to be deleted, so messages that had not been checkpointed were
+     * gone. A sidecar is installed only when its main file already has bytes: a wal
+     * alone would make Room create an empty database next to it.
      */
     private fun installReadyCopiesOverEmpty(directory: File) {
         if (!directory.isDirectory) return
         val names = LinkedHashSet<String>()
         directory.listFiles()?.forEach { file ->
-            val base = when {
-                file.name.endsWith(".partial") -> file.name.removeSuffix(".partial")
-                file.name.endsWith(".ready") -> file.name.removeSuffix(".ready")
-                else -> return@forEach
-            }
-            if (isRecoveredName(base) || UNREADABLE.matches(base)) names += base
+            readyCopyBase(file.name)?.let { names += it }
         }
+        val mains = ArrayList<String>()
+        val sidecars = ArrayList<String>()
         for (name in names) {
-            val to = File(directory, name)
-            if (!to.isFile || to.length() != 0L) continue
-            val partial = partialFile(to)
-            val ready = readyFile(to)
-            if (!ready.isFile || !partial.isFile || partial.length() <= 0L) continue
-            if (!to.delete() && to.exists()) continue
-            if (!partial.renameTo(to)) continue
-            if (ready.exists() && !ready.delete()) Log.w(TAG, "Could not remove ${ready.path}")
+            if (sidecarSuffix(name) == null) mains.add(name) else sidecars.add(name)
         }
+        for (name in mains) installReadyCopy(directory, name)
+        for (name in sidecars) {
+            val suffix = sidecarSuffix(name) ?: continue
+            if (!hasBytes(File(directory, name.removeSuffix(suffix)))) continue
+            installReadyCopy(directory, name)
+        }
+    }
+
+    /** Recovered or set-aside main, or its `-wal` / `-shm` / `-journal`, named by a move temp. */
+    private fun readyCopyBase(fileName: String): String? {
+        val suffix = when {
+            fileName.endsWith(".partial") -> ".partial"
+            fileName.endsWith(".ready") -> ".ready"
+            else -> return null
+        }
+        val base = fileName.removeSuffix(suffix)
+        if (isRecoveredName(base) || UNREADABLE.matches(base)) return base
+        if (RECOVERED_SIDECAR.matches(base)) return base
+        return null
+    }
+
+    private fun sidecarSuffix(name: String): String? =
+        listOf("-wal", "-shm", "-journal").firstOrNull { name.endsWith(it) }
+
+    /**
+     * Installs [name]'s finished side file when [name] is missing or 0 bytes.
+     * A file that already has bytes is the database; replacing it would drop that copy.
+     */
+    private fun installReadyCopy(directory: File, name: String) {
+        val to = File(directory, name)
+        if (to.isFile && to.length() > 0L) return
+        if (to.exists() && !to.isFile) return
+        val partial = partialFile(to)
+        val ready = readyFile(to)
+        if (!ready.isFile || !partial.isFile || partial.length() <= 0L) return
+        if (to.exists() && !to.delete()) return
+        if (!partial.renameTo(to)) return
+        if (ready.exists() && !ready.delete()) Log.w(TAG, "Could not remove ${ready.path}")
     }
 
     private fun partialFile(to: File) = File(to.parentFile, to.name + ".partial")
