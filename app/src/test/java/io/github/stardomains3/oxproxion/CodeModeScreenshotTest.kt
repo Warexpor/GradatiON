@@ -152,6 +152,31 @@ class CodeModeScreenshotTest {
         snap(root(a), "code_session_done_dark")
     }
 
+    /**
+     * Scrolled back to the top in the Thinking view while the agent waits: the open thought and
+     * search pane on the grid, and the pin above the composer standing in for the card off screen.
+     */
+    @Test fun codeSessionApprovalPinDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        hub.store.showThinking = true
+        try {
+            val id = startDemo("Add a follow-system option to the theme setting")
+            push(a, CodeSessionFragment.newInstance(id))
+            idle(12)
+            val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+            val f = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }
+            CodeSessionFragment::class.java.getDeclaredField("follow").apply { isAccessible = true }.setBoolean(f, false)
+            list.scrollToPosition(0)
+            idle(2)
+            assertEquals("the pin stands in for the card off screen", View.VISIBLE,
+                root(a).findViewById<View>(R.id.codeSessionApprovalBar).visibility)
+            assertOnTranscriptGrid(list)
+            snap(root(a), "code_session_approval_pin_dark")
+        } finally {
+            hub.store.showThinking = false
+        }
+    }
+
     /** Mid-turn: a command streams into its pane while the Working footer closes the rail. */
     @Test fun codeSessionRunningDark() = withCode { a, _ ->
         val hub = CodeHub.getLoaded(ctx)

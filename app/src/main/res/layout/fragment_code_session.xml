@@ -253,7 +253,8 @@
                 app:glassInteractive="true"
                 app:glassTint="@color/glass_control_tint" />
 
-            <!-- Pending approval pin: glass capsule above the composer when the card is off-screen -->
+            <!-- Pending approval pin: glass capsule above the composer when the card is off-screen. Its
+                 words start where the composer's do (8dp pad + 10dp input pad). -->
             <io.github.stardomains3.oxproxion.GlassTextView
                 android:id="@+id/codeSessionApprovalBar"
                 android:layout_width="match_parent"
@@ -267,9 +268,9 @@
                 android:gravity="center_vertical"
                 android:maxLines="2"
                 android:minHeight="44dp"
-                android:paddingStart="14dp"
+                android:paddingStart="18dp"
                 android:paddingTop="10dp"
-                android:paddingEnd="14dp"
+                android:paddingEnd="18dp"
                 android:paddingBottom="10dp"
                 android:textColor="@color/xai_ink"
                 android:textSize="13.5sp"
