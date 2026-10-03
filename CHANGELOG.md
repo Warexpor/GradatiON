@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code away: a shade cleared without a swipe no longer blocks the next alert or keeps its one-shot open token. The system cancel does not run the DeleteIntent, so the prefs row still looked posted. The next approval or finished turn alerts again on the same id. A shade that is still up keeps its own token.
+- Code away: the 64-entry cap remembers which shade was posted first. After a restart the prefs map is not that order, so the cap could drop a newer shade and leave the oldest. The oldest is still the one that goes.
+- Answer shade: each Speak uses a new utterance id. A late end for the previous reading used the same id, so it put Speak back and stopped the engine while the next reading was still going.
 - Settings > Models: a local server hostname with an underscore (`my_nas.local`), or a password that contains `@`, saves. Java's URL parser reports those as having no host, so Save used to refuse them, and the Models row printed the raw address including the password. The port has to be from 1 to 65535. A `?query` or `#fragment` on the address no longer swallows the path the app appends (`/v1/models` and the rest); the query stays, and the fragment is dropped.
 - Settings > Tools: Get location stays available when the user allows approximate location. That grant is coarse only, and the switch used to require fine, then say location was denied. The folder URI and the local server address and server type commit with the tap.
 - The Roleplay hub hero uses the same first line as the character list. It was folding the whole card field, so `{{char}}` stayed as a placeholder and a later paragraph showed under the name.
