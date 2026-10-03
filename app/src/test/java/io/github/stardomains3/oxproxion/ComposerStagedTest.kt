@@ -186,4 +186,32 @@ class ComposerStagedTest {
         val dropped = ComposerStaged.remember(shared, 4L, ComposerStaged.Entry())
         assertTrue(ComposerStaged.evicted(shared, dropped).isEmpty())
     }
+
+    @Test fun removing_files_drops_a_parked_list_and_keeps_the_photo() {
+        // Remove all clears the live list. If that list was already parked, skipping the
+        // write (empty live) left History saying "1 file" and put the file back later.
+        val file = ComposerStaged.FilePart("notes.txt", "hi", 2)
+        val parked = ComposerStaged.remember(
+            emptyMap(),
+            4L,
+            ComposerStaged.Entry(imageUri = "file://a.jpg", files = listOf(file)),
+        )
+        val stillThere = ComposerStaged.get(parked, 4L)
+        val after = ComposerStaged.dropFiles(parked, 4L, stillThere)
+        assertTrue(after.getValue("4").files.isEmpty())
+        assertEquals("file://a.jpg", ComposerStaged.get(after, 4L).imageUri)
+        assertTrue(ComposerStaged.evicted(parked, after).isEmpty())
+        val filesOnly = ComposerStaged.remember(emptyMap(), 4L, ComposerStaged.Entry(files = listOf(file)))
+        val gone = ComposerStaged.dropFiles(filesOnly, 4L, ComposerStaged.get(filesOnly, 4L))
+        assertTrue(ComposerStaged.get(gone, 4L).isEmpty)
+        val label = HistoryList.attachmentDraft(
+            hasPhoto = false,
+            hasAudio = false,
+            fileCount = ComposerStaged.get(gone, 4L).files.size,
+            photoLabel = "Photo",
+            audioLabel = "Audio",
+            filesLabel = { n -> if (n == 1) "1 file" else "$n files" },
+        )
+        assertEquals("", label)
+    }
 }

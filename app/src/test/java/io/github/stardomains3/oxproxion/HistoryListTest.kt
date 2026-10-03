@@ -95,6 +95,31 @@ class HistoryListTest {
         assertEquals(HistoryList.TimestampKind.TIME, HistoryList.timestampKind(utc(2026, 9, 30, 1), now, zone))
     }
 
+    @Test fun a_dst_shift_does_not_move_yesterday_or_the_week_edge() {
+        // US fallback is 1 Nov 2026. The next day, the first hour of yesterday is still
+        // yesterday (25h day). A 24h window used to call it This week and show a weekday.
+        val ny = TimeZone.getTimeZone("America/New_York")
+        fun at(year: Int, month: Int, day: Int, hour: Int, minute: Int): Long {
+            val calendar = Calendar.getInstance(ny)
+            calendar.set(year, month - 1, day, hour, minute, 0)
+            calendar.set(Calendar.MILLISECOND, 0)
+            return calendar.timeInMillis
+        }
+        val afterFallback = at(2026, 11, 2, 15, 0)
+        val earlyYesterday = at(2026, 11, 1, 0, 30)
+        assertEquals(HistoryList.Section.YESTERDAY, HistoryList.section(earlyYesterday, afterFallback, false, ny))
+        assertEquals(HistoryList.TimestampKind.TIME, HistoryList.timestampKind(earlyYesterday, afterFallback, ny))
+        // Spring forward is 8 Mar 2026. The next day, 23:30 on the 7th is not yesterday.
+        val afterSpring = at(2026, 3, 9, 15, 0)
+        val nightBefore = at(2026, 3, 7, 23, 30)
+        assertEquals(HistoryList.Section.WEEK, HistoryList.section(nightBefore, afterSpring, false, ny))
+        assertEquals(HistoryList.TimestampKind.WEEKDAY, HistoryList.timestampKind(nightBefore, afterSpring, ny))
+        // Six calendar days back from 7 Nov includes 1 Nov 00:30, not Earlier.
+        val weekLater = at(2026, 11, 7, 12, 0)
+        assertEquals(HistoryList.Section.WEEK, HistoryList.section(earlyYesterday, weekLater, false, ny))
+        assertEquals(HistoryList.Section.EARLIER, HistoryList.section(at(2026, 10, 31, 23, 30), weekLater, false, ny))
+    }
+
     @Test fun preview_folds_a_user_line_and_names_a_photo() {
         val you = { text: String -> "You: $text" }
         assertEquals("You: hello there", HistoryList.preview("user", "\"hello\\n**there**\"", you, "Photo"))
