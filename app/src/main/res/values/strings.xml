@@ -676,7 +676,7 @@
     <string name="preset_edit_system_message">System message</string>
     <string name="preset_edit_streaming">Streaming</string>
     <string name="preset_edit_reasoning">Reasoning</string>
-    <string name="preset_edit_conversation_mode">Conversation mode</string>
+    <string name="preset_edit_conversation_mode">Read aloud</string>
     <string name="preset_edit_web_search">Web search</string>
     <string name="preset_edit_tools">Tools</string>
     <string name="action_advanced">Advanced</string>

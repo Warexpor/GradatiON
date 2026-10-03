@@ -483,6 +483,23 @@ class ScreenshotTest : ScreenshotHarness() {
         snap(root(a), "settings_advanced_reasoning_dark")
     }
 
+    /** The expanded preset reads like the editor: "Read aloud", not "Convo: On", and only what is on. */
+    @Test fun settingsPresetsDark() = withChat { a, _ ->
+        SharedPreferencesHelper(a).savePresets(listOf(
+            Preset("p1", "Morning brief", "openai/gpt-5", SystemMessage("Summarizer", "Be brief."),
+                streaming = true, reasoning = false, conversationMode = true, tools = false, webSearch = true),
+            Preset("p2", "Code review", "anthropic/claude-opus-4.1", SystemMessage("Default", ""),
+                streaming = false, reasoning = true, conversationMode = false),
+        ))
+        pushFragment(a, PresetsListFragment())
+        val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recyclerViewPresets)
+        list.findViewHolderForAdapterPosition(0)!!.itemView.findViewById<View>(R.id.iconExpand).performClick(); idle()
+        val summary = list.findViewHolderForAdapterPosition(0)!!.itemView.findViewById<android.widget.TextView>(R.id.textPresetSubtitle)
+        org.junit.Assert.assertEquals("openai/gpt-5 · Summarizer · Streaming, Read aloud, Web search", summary.text.toString())
+        snap(root(a), "settings_presets_dark")
+        SharedPreferencesHelper(a).savePresets(emptyList())
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
