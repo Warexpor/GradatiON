@@ -52,9 +52,27 @@ object ComposerStaged {
         return kept
     }
 
-    /** Entries [remember] dropped when the store grew past [ComposerDrafts.MAX_KEPT]. */
-    fun evicted(before: Map<String, Entry>, after: Map<String, Entry>): List<Entry> =
-        before.mapNotNull { (k, v) -> if (k in after) null else v }
+    /**
+     * Staged entries whose scene file [after] no longer holds, so the caller can delete it.
+     * A promote/rekey keeps the same [Entry] (or the same [Entry.imageUri]) under a new key;
+     * that is not a drop. Replacing the photo at one key is a drop: the previous uri is gone.
+     * Falling off [ComposerDrafts.MAX_KEPT] is still a drop. Key-only comparison used to treat
+     * the moved JPEG as evicted, and [ChatFragment] then deleted the file History still names.
+     */
+    fun evicted(before: Map<String, Entry>, after: Map<String, Entry>): List<Entry> {
+        if (before.isEmpty()) return emptyList()
+        val keptUris = HashSet<String>(after.size)
+        for (entry in after.values) {
+            val uri = entry.imageUri
+            if (!uri.isNullOrBlank()) keptUris.add(uri)
+        }
+        return before.mapNotNull { (_, old) ->
+            if (after.values.any { it === old }) return@mapNotNull null
+            val uri = old.imageUri
+            if (!uri.isNullOrBlank() && uri in keptUris) return@mapNotNull null
+            old
+        }
+    }
 
     /**
      * Live composer wins when it has anything staged. When the open thread's live stage

@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- First save no longer deletes the staged scene JPEG it just moved onto the new chat id. Eviction compared map keys only, so a promote/rekey looked like a drop and History still said Photo for a file that was gone. The same file kept under the new id (including a copied entry) stays. Replacing that photo, or parking audio over it, still drops the previous file; another chat that still holds the uri keeps it.
 - A character backup that lists the same character twice keeps the last copy. The earlier copy's Memory and pictures used to come back on the next launch.
 - A lorebook backup where nothing is marked active turns those books off. Names that differ only by spaces count as the same book. A character pin still attaches when the book name is padded or longer than the saved pin.
 - Opening the app finishes a character pin that was waiting on a lorebook, including after a kill between the lore import and that link.

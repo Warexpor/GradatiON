@@ -148,4 +148,42 @@ class ComposerStagedTest {
         assertEquals("file://fresh.jpg", ComposerStaged.get(liveWins, 8L).imageUri)
         assertTrue(ComposerStaged.promote(emptyMap(), from = null, to = 8L, live = ComposerStaged.Entry()).isEmpty())
     }
+
+    @Test fun promote_does_not_evict_the_jpeg_it_just_moved() {
+        // First save under Code rekeys null → id. Key-only eviction treated that as a drop,
+        // and the fragment deleted the scene file History still shows as Photo.
+        val before = ComposerStaged.remember(emptyMap(), null, photo("file://new.jpg"))
+        val after = ComposerStaged.promote(before, from = null, to = 8L, live = ComposerStaged.Entry())
+        assertEquals("file://new.jpg", ComposerStaged.get(after, 8L).imageUri)
+        assertTrue(ComposerStaged.evicted(before, after).isEmpty())
+        // A copied entry (same uri, not the same object) is still the file the new id holds.
+        val copied = ComposerStaged.rekey(before, from = null, to = 8L, entry = photo("file://new.jpg"))
+        assertTrue(ComposerStaged.evicted(before, copied).isEmpty())
+        // Audio-only has no uri; the same entry moving keys is not a drop either.
+        val clip = ComposerStaged.Entry(audioBytes = byteArrayOf(9), audioFormat = "wav")
+        val audioBefore = ComposerStaged.remember(emptyMap(), null, clip)
+        val audioAfter = ComposerStaged.promote(audioBefore, from = null, to = 8L, live = ComposerStaged.Entry())
+        assertEquals("wav", ComposerStaged.get(audioAfter, 8L).audioFormat)
+        assertTrue(ComposerStaged.evicted(audioBefore, audioAfter).isEmpty())
+    }
+
+    @Test fun replacing_a_parked_photo_evicts_only_the_old_file() {
+        // Same key, new uri: the previous JPEG is no longer parked (audio replaces a photo,
+        // or a second pick). A re-park of the same uri must not look evicted.
+        val before = ComposerStaged.remember(emptyMap(), 4L, photo("file://a.jpg"))
+        val replaced = ComposerStaged.remember(before, 4L, photo("file://b.jpg"))
+        assertEquals(listOf("file://a.jpg"), ComposerStaged.evicted(before, replaced).map { it.imageUri })
+        val audio = ComposerStaged.remember(
+            before,
+            4L,
+            ComposerStaged.Entry(audioBytes = byteArrayOf(1), audioFormat = "wav"),
+        )
+        assertEquals(listOf("file://a.jpg"), ComposerStaged.evicted(before, audio).map { it.imageUri })
+        val same = ComposerStaged.remember(before, 4L, photo("file://a.jpg"))
+        assertTrue(ComposerStaged.evicted(before, same).isEmpty())
+        // Another chat still holding that uri keeps the file.
+        val shared = ComposerStaged.remember(before, 9L, photo("file://a.jpg"))
+        val dropped = ComposerStaged.remember(shared, 4L, ComposerStaged.Entry())
+        assertTrue(ComposerStaged.evicted(shared, dropped).isEmpty())
+    }
 }
