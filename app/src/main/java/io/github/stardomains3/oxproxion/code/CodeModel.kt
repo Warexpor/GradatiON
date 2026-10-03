@@ -213,7 +213,7 @@ data class NewSessionRequest(
 
 enum class ToolKind { READ, EDIT, EXECUTE, SEARCH, FETCH, THINK, DELETE, MOVE, OTHER }
 enum class ToolStatus { PENDING, RUNNING, COMPLETED, FAILED, CANCELLED }
-enum class PlanStatus { PENDING, IN_PROGRESS, COMPLETED }
+enum class PlanStatus { PENDING, IN_PROGRESS, COMPLETED, CANCELLED }
 enum class NoticeLevel { INFO, WARNING, ERROR }
 
 data class PlanEntry(val content: String, val status: PlanStatus, val id: String? = null)

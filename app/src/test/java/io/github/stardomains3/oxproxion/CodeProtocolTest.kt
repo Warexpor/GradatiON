@@ -2719,6 +2719,82 @@ class CodeProtocolTest {
         assertEquals("octocat, hubot", byId["rv"]?.detail)
     }
 
+    @Test fun cancelledTodoStaysCancelledAndIsEchoed() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":12,"method":"cursor/update_todos","params":{"sessionId":"s1","merge":false,"todos":[{"id":"1","content":"Drop the old path","status":"cancelled"},{"id":"2","content":"Keep going","status":"success"}]}}""")
+        val plan = out.filterIsInstance<AdapterOutput.Update>()
+            .mapNotNull { (it.update as? CodeUpdate.Upsert)?.event as? CodeEvent.Plan }
+            .single()
+        assertEquals(PlanStatus.CANCELLED, plan.entries[0].status)
+        assertEquals(PlanStatus.COMPLETED, plan.entries[1].status)
+        val reply = out.filterIsInstance<AdapterOutput.Reply>().single().frame
+        val todos = Json.parseToJsonElement(reply).jsonObject["result"]!!.jsonObject["outcome"]!!
+            .jsonObject["todos"]!!.jsonArray
+        assertEquals("cancelled", todos[0].jsonObject["status"]!!.jsonPrimitive.content)
+        assertEquals("completed", todos[1].jsonObject["status"]!!.jsonPrimitive.content)
+        assertTrue(out.none { it is AdapterOutput.Reply && it.frame.contains("Method not found") })
+    }
+
+    @Test fun planPhasesFillTheCardWhenTopLevelTodosAreEmpty() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":13,"method":"cursor/create_plan","params":{"sessionId":"s1","name":"Phased","overview":"Two steps.","plan":"do it","phases":[{"name":"A","todos":[{"id":"a","content":"First","status":"in_progress"},{"id":"b","content":"Second","status":"canceled"}]}]}}""")
+        val plan = out.filterIsInstance<AdapterOutput.Update>()
+            .mapNotNull { (it.update as? CodeUpdate.Upsert)?.event as? CodeEvent.Plan }
+            .single()
+        assertEquals(listOf("First", "Second"), plan.entries.map { it.content })
+        assertEquals(PlanStatus.IN_PROGRESS, plan.entries[0].status)
+        assertEquals(PlanStatus.CANCELLED, plan.entries[1].status)
+    }
+
+    @Test fun underscoreCursorAskStillShowsTheQuestion() {
+        val out = acp.decode("""{"jsonrpc":"2.0","id":14,"method":"_cursor/ask_question","params":{"sessionId":"s1","questions":[{"id":"q1","prompt":"Go?","options":[{"id":"yes","label":"Yes"}]}]}}""")
+        val approval = out.filterIsInstance<AdapterOutput.Update>()
+            .mapNotNull { (it.update as? CodeUpdate.Upsert)?.event as? CodeEvent.Approval }
+            .single()
+        assertEquals("Go?", approval.title)
+        assertTrue(out.none { it is AdapterOutput.Reply && it.frame.contains("Method not found") })
+        val answer = Json.parseToJsonElement(acp.answerApproval("14", "yes")).jsonObject
+        assertEquals("answered", answer["result"]!!.jsonObject["outcome"]!!.jsonObject["outcome"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun cursorTaskAndGenerateImageAreAcknowledged() {
+        val task = acp.decode("""{"jsonrpc":"2.0","id":15,"method":"cursor/task","params":{"sessionId":"s1","toolCallId":"call_126","description":"Explore","prompt":"Find auth","subagentType":"explore","agentId":"ag1","durationMs":9.0}}""")
+        val taskReply = Json.parseToJsonElement(task.filterIsInstance<AdapterOutput.Reply>().single().frame).jsonObject
+        val taskOutcome = taskReply["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("completed", taskOutcome["outcome"]!!.jsonPrimitive.content)
+        assertEquals("ag1", taskOutcome["agentId"]!!.jsonPrimitive.content)
+        assertEquals(9L, taskOutcome["durationMs"]!!.jsonPrimitive.long)
+        assertTrue(task.none { it is AdapterOutput.Reply && it.frame.contains("Method not found") })
+        // A notification (no id) is not an error and does not need a reply.
+        val note = acp.decode("""{"jsonrpc":"2.0","method":"cursor/generate_image","params":{"sessionId":"s1","description":"Icon","filePath":"/tmp/icon.png"}}""")
+        assertTrue(note.none { it is AdapterOutput.Reply })
+        val image = acp.decode("""{"jsonrpc":"2.0","id":"img-1","method":"_cursor/generate_image","params":{"sessionId":"s1","description":"Icon","file_path":"/tmp/icon.png"}}""")
+        val imageReply = Json.parseToJsonElement(image.filterIsInstance<AdapterOutput.Reply>().single().frame).jsonObject
+        val imageOutcome = imageReply["result"]!!.jsonObject["outcome"]!!.jsonObject
+        assertEquals("generated", imageOutcome["outcome"]!!.jsonPrimitive.content)
+        assertEquals("/tmp/icon.png", imageOutcome["filePath"]!!.jsonPrimitive.content)
+        assertEquals("img-1", imageReply["id"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun laterMouseToolsUseTheExecuteCard() {
+        val frames = listOf(
+            update("""{"sessionUpdate":"tool_call","toolCallId":"mv","title":"Move","kind":"other","name":"BrowserMouseMoveXy","status":"completed","rawInput":{"x":10.0,"y":"20.0"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dg","title":"Drag","kind":"other","name":"BrowserMouseDragXy","status":"completed","rawInput":{"startX":10.0,"startY":20,"endX":"30.0","endY":40.0}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"wh","title":"Wheel","kind":"other","name":"BrowserMouseWheel","status":"completed","rawInput":{"deltaY":120.0}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"dn","title":"Down","kind":"other","name":"BrowserMouseDown","status":"completed","rawInput":{"button":"right"}}"""),
+            update("""{"sessionUpdate":"tool_call","toolCallId":"up","title":"Up","kind":"other","name":"browser_mouse_up","status":"completed"}"""),
+        )
+        val list = foldFresh(frames)
+        val byId = list.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals(ToolKind.EXECUTE, byId["mv"]?.kind)
+        assertEquals("10, 20", byId["mv"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["dg"]?.kind)
+        assertEquals("10, 20 → 30, 40", byId["dg"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["wh"]?.kind)
+        assertEquals("0, 120", byId["wh"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["dn"]?.kind)
+        assertEquals("right", byId["dn"]?.detail)
+        assertEquals(ToolKind.EXECUTE, byId["up"]?.kind)
+    }
+
     private fun foldFresh(frames: List<String>): List<CodeEvent> {
         val fresh = AcpAdapter()
         var list = emptyList<CodeEvent>()
