@@ -979,6 +979,27 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun aRootRecoveredFileBeatsAnOlderHoldCopy() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val databases = app.getDatabasePath(AppDatabase.DB_NAME).parentFile!!
+        databases.mkdirs()
+        val hold = ChatDbVault.holdDirectory(databases)
+        val stored = "chat_database.recovered-24"
+        val root = File(databases, stored).apply { writeText("current-history") }
+        val older = File(hold, stored).apply { writeText("older-hold") }
+        try {
+            // Park failed to free the hold name, so the file Room was opening is still at the root.
+            val roomName = ChatDbVault.roomDatabaseName(app, stored)
+            assertEquals(stored, roomName)
+            assertEquals("current-history", File(databases, roomName).readText())
+            assertEquals("older-hold", older.readText())
+        } finally {
+            root.delete()
+            older.delete()
+        }
+    }
+
+    @Test
     fun aHoldMainStillBeatsAStaleVaultCopy() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val databases = app.getDatabasePath(AppDatabase.DB_NAME).parentFile!!

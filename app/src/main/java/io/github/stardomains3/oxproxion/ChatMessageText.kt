@@ -40,9 +40,11 @@ internal object ChatMessageText {
             while (start <= length) {
                 val part = slice(start, sliceLen)
                 val expected = minOf(sliceLen, length - start + 1)
-                // A short slice must not advance by the full step: that skips the gap and the
-                // export then writes a message with a hole in it.
-                if (part.length < expected) {
+                // SQLite's length() and substr() count code points. String.length counts
+                // UTF-16 units, so a short slice of emoji (two units per code point) used to
+                // look complete. Advancing by the full step then skipped the gap, and the
+                // export wrote a message with a hole in it.
+                if (part.codePointCount(0, part.length) < expected) {
                     throw IOException("Chat message ended early at character $start of $length")
                 }
                 append(part)

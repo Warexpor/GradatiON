@@ -10,7 +10,9 @@ import java.io.File
  *
  * Room does not reuse an id inside one file. A fresh file after a failed open starts at 1 again.
  * Leaving these keys in place used to attach the previous chat's notes to the next one.
- * The values are renamed, not deleted. Portrait files move next to the set-aside database.
+ * The values are renamed, not deleted. Portrait files move next to the set-aside database,
+ * including a `.bak` or `.partial` left by a killed replace. Those side files are a finished
+ * picture: the next open would put them back on the live name, and a fresh database reuses the id.
  */
 internal object DbPrefQuarantine {
     private const val TAG = "DbPrefQuarantine"
@@ -21,6 +23,13 @@ internal object DbPrefQuarantine {
     internal const val ASIDE_MARK = "aside."
 
     private val CHAR_JPEG = Regex("^char_[0-9]{1,16}\\.jpg$")
+
+    /**
+     * A killed replace leaves the finished bytes beside the live name.
+     * [ScenePhoto.recover] puts that file back, so a fresh database would show the old
+     * portrait or wallpaper on the reused Room id.
+     */
+    private val CHAR_JPEG_SIDE = Regex("^char_[0-9]{1,16}\\.jpg\\.(bak|partial)$")
 
     private val EXACT = setOf(
         "pinned_session_ids",
@@ -111,7 +120,7 @@ internal object DbPrefQuarantine {
     private fun moveCharacterFiles(fromDir: File, destDir: File) {
         val files = fromDir.listFiles() ?: return
         for (file in files) {
-            if (!file.isFile || !CHAR_JPEG.matches(file.name)) continue
+            if (!file.isFile || !isCharacterPicture(file.name)) continue
             destDir.mkdirs()
             val dest = uniqueFile(destDir, file.name)
             try {
@@ -122,6 +131,9 @@ internal object DbPrefQuarantine {
             }
         }
     }
+
+    private fun isCharacterPicture(name: String): Boolean =
+        CHAR_JPEG.matches(name) || CHAR_JPEG_SIDE.matches(name)
 
     /** A name the live loaders do not open (`char_<id>.jpg` only). */
     private fun parkInPlace(file: File) {

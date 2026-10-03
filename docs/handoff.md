@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Stability wave 31)
+
+On `cursor/stability-wave-31-4ec6` (PR into `gradation/app-pass`). Persistence follow-ups after user_version, the live wal park, and `.stuck-N` discard (#132). Not a redo of that pass or of the passphrase bind and the pre-ATTACH wal park (#130). Not a redo of #139 (history preview marks, staged-file cap) or #142 (list lines, example sides, wrapped lore keys):
+- Room opens a recovered database that is still at the databases root, even when `chat_db_hold` already has that name. A failed park used to open the older hold copy and leave the current file at the root, where Auto Backup can upload it.
+- Setting history aside moves `char_<id>.jpg.bak` and `.partial` with the portrait and the wallpaper. `ScenePhoto.recover` puts a finished side file back on the live name, so the next character with the reused id showed the old picture. The app background's `photo.jpg` side file stays.
+- A sliced message read counts Unicode code points, the same unit as SQLite `length` / `substr`. A short slice of emoji used to look complete (`String.length` is two units per emoji) and the next step skipped the gap.
+
+Phone: force a recovery (wrong passphrase, or a database that will not open) while a character portrait replace was killed after the side file was written (the new character must not show that portrait). A chat whose text is mostly emoji should still open. Not a phone check for the recovered-name order.
+
 # Handoff (2026-10-03, RP wave 31)
 
 On `cursor/rp-wave-31-bab7` (PR into `gradation/app-pass`). Roleplay follow-ups after #135. Not a redo of bracketed scene notes in auto memory, Vesna edits across a stock refresh, or the active character id commit. Not #123 (torn photoUri, Continue lore focus, persona Save commits). Not a redo of #139 (history preview marks, staged-file cap).
