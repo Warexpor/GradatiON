@@ -1,3 +1,15 @@
+# Handoff (2026-10-03, Code plan and approval card spacing)
+
+On `cursor/code-plan-approval-spacing-122b` (PR into `gradation/app-pass`), from `f170af5155be4ad1adb91f21e1889b8278379a51` (#200). The plan card and the open approval card only, no color token changed. Not a redo of #182, #184, #186 or #187. The phone crops that prompted this predate #182 (glyphs on the card's edge, answers off the content column). These gaps were measured on the letters in the current renders.
+
+- Approval: the card's top pad is 14dp (was 18). The question's line box adds about 4dp above its capitals, so the air was 23dp above the words and 18dp below the answers. It is now 18dp on both sides.
+- Approval: the subject sits flush under the question (was 4dp down). The letters were 13dp apart, nearly the 16dp step down to the path pane. Now they are 9dp apart, about the gap between two lines of the subject.
+- Plan: the label sits flush on the first step (was 6dp down). It floated with the same air above it (18dp) as below it (19dp, while steps are 18dp apart). It is now 13dp from the first step and still 18dp from the card's edge.
+- Checked and left alone: the side pads (the pane and answers start on the 52dp column and stop 18dp from the card's end), the steps' 18dp rhythm, pane to answers (17dp), and the command approval's 12dp pane step.
+- New check: `codeCardHeadingsSitWithTheirContent` (fails on the old pads). Shots `code_session_approval_dark` and `code_session_trace_dark` show both cards.
+
+Phone: an edit approval (the air above "Allow this edit?" matches the air below the answers, and the file name reads as the question's second line). A plan card (PLAN sits with its steps).
+
 # Handoff (2026-10-03, Code session spacing, fourth pass)
 
 On `cursor/code-session-spacing-4-bd39` (PR into `gradation/app-pass`), from `7e62705c794b9c1b6ca5a5b517ad23dba3264ce9` (third spacing pass #186). Code composer only, no color token changed. Not a redo of #182, #184 or #186.
