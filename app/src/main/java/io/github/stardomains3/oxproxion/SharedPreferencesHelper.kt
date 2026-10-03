@@ -142,7 +142,6 @@ class SharedPreferencesHelper(context: Context) {
         const val RP_LAYOUT_BUBBLES = "bubbles"
         const val RP_LAYOUT_BOOK = "book"
         private const val KEY_SCROLL_PROGRESS_ENABLED = "scroll_progress_enabled"
-        private const val KEY_FONT_SIZE = "font_size"
         private const val KEY_CLEAR_CHAT_DEFAULT = "clear_chat_default"
         private const val KEY_CLEAR_CHAT_DEFAULT2 = "clear_chat_default2"
         const val LAN_PROVIDER_KEY = "lan_provider"
@@ -654,12 +653,8 @@ class SharedPreferencesHelper(context: Context) {
     fun getChatMemoryCount(): Int {
         return mainPrefs.getInt(KEY_CHAT_MEMORY_COUNT, Int.MAX_VALUE) // Default to All messages
     }
-    fun saveDisableWebSearchAfterSend(enabled: Boolean) {
-        mainPrefs.edit { putBoolean(KEY_DISABLE_WEB_SEARCH_AFTER_SEND, enabled) }
-    }
-
+    /** Turns web search back off after a send. No Settings row: a preset is the only thing that turns it on. */
     fun getDisableWebSearchAfterSend(): Boolean {
-        // Default to TRUE to preserve current behavior for existing users
         return mainPrefs.getBoolean(KEY_DISABLE_WEB_SEARCH_AFTER_SEND, true)
     }
     fun getReasoningExclude(): Boolean = mainPrefs.getBoolean("reasoning_exclude", true)  // Default to true (exclude)
@@ -679,13 +674,6 @@ class SharedPreferencesHelper(context: Context) {
             val oldMessage: SystemMessage = gson.fromJson(oldJson, SystemMessage::class.java)
             saveDefaultSystemMessage(oldMessage)
         }
-    }
-    fun saveFontSize(size: Int) {
-        mainPrefs.edit { putInt(KEY_FONT_SIZE, size) }
-    }
-
-    fun getFontSize(): Int {
-        return mainPrefs.getInt(KEY_FONT_SIZE, 100)  // Default: 100%
     }
     fun getVolumeScrollEnabled(): Boolean = mainPrefs.getBoolean(KEY_VOLUME_SCROLL, false)
 

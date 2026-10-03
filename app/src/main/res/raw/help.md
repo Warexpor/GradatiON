@@ -33,7 +33,7 @@ The menu button (top left) or a swipe right on the chat opens **History** {{ic_s
 
 ### Composer
 *   **+** {{ic_plus}} attaches a photo, a file or a document, or opens the tools manager. A row appears while files are attached, so you can review or remove them.
-*   **Controls** {{ic_sliders}} opens the Controls panel: model, reasoning, web search, stream, thoughts, read aloud, tools, presets, system message, settings, font and text size, plus export once the chat has messages. A filled tile means the feature is on.
+*   **Controls** {{ic_sliders}} opens the Controls panel: model, reasoning, stream, thoughts, read aloud, tools, presets, system message, settings, font and text size, plus export once the chat has messages. A filled tile means the feature is on.
 *   **Model pill** shows the active model. Tap it for the picker.
 *   **Mic** {{ic_mic}}: tap, talk, then tap the check {{ic_check}}. Your words land in the message box and nothing is sent until you press send {{ic_send}}. There is no hold-to-talk. While a reply streams, send turns into stop {{ic_stop}}.
 
@@ -104,7 +104,7 @@ Settings opens from History, from the Controls panel, and from the gear on the R
 | **Haptics** | Feedback on buttons and while a reply streams. |
 | **Voice** | The engine for the mic: Phone (on the device, private and free), Cloud (OpenRouter), Grok (xAI) or Local (your server). |
 | **Models & API** | OpenRouter and Brave keys, your local server, trusting self-signed certificates, remaining credits. |
-| **Advanced** | Tools, Prompt library, Presets, System messages and Roleplay; max tokens, timeout, inference parameters and chat memory; chat chrome and web search options. |
+| **Advanced** | Tools, Prompt library, Presets, System messages and Roleplay; max tokens, timeout, inference parameters and chat memory; chat chrome options. |
 | **Data & privacy** | Biometric lock, notifications, screen-on, file tools, import and export, this help and licenses. |
 
 Tools are experimental. Their workspace is **Download/gradation**. [Re-select folder](action://reselect-folder) if tools can't read files.

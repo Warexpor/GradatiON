@@ -42,6 +42,10 @@ class AdvancedReasoningFragment : Fragment(R.layout.fragment_advanced_reasoning)
             advancedToggle.isChecked = isEnabled
 
             advancedToggle.applyGrokionSwitchStyle()
+            // An action view gets no end inset, so the track ran into the screen edge. 16dp lines
+            // it up with the Include in response switch under it.
+            advancedToggle.setPaddingRelative(0, 0, (16 * resources.displayMetrics.density).toInt(), 0)
+            advancedToggle.contentDescription = getString(R.string.settings_advanced_reasoning)
             advancedToggle.setOnCheckedChangeListener { _, isChecked ->
                 sharedPreferencesHelper.saveAdvancedReasoningEnabled(isChecked)
                 updateControlsEnabled(isChecked)

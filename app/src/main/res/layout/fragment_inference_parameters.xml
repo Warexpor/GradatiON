@@ -13,7 +13,7 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        app:title="Inference Parameters"
+        app:title="@string/settings_inference"
         app:titleTextColor="@color/xai_ink"
         android:background="@color/xai_grouped"
         app:navigationIcon="@drawable/is_backarrow"
@@ -57,9 +57,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="@string/inference_parameters_e_g_1_0"
+                app:hintEnabled="false"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
+                    android:hint="@string/inference_parameters_e_g_1_0"
                     android:id="@+id/tempEdit"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -93,9 +94,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="@string/inference_parameters_e_g_1_0"
+                app:hintEnabled="false"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
+                    android:hint="@string/inference_parameters_e_g_1_0"
                     android:id="@+id/topPEdit"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -129,9 +131,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="@string/inference_parameters_e_g_40"
+                app:hintEnabled="false"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
+                    android:hint="@string/inference_parameters_e_g_40"
                     android:id="@+id/topKEdit"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -165,9 +168,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="@string/inference_parameters_e_g_0_0"
+                app:hintEnabled="false"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
+                    android:hint="@string/inference_parameters_e_g_0_0"
                     android:id="@+id/minPEdit"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -201,9 +205,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="@string/inference_parameters_e_g_1_0"
+                app:hintEnabled="false"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
+                    android:hint="@string/inference_parameters_e_g_1_0"
                     android:id="@+id/repPenaltyEdit"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -237,9 +242,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="@string/inference_parameters_e_g_0_0"
+                app:hintEnabled="false"
                 style="@style/Xai.TextInputLayout">
                 <com.google.android.material.textfield.TextInputEditText
+                    android:hint="@string/inference_parameters_e_g_0_0"
                     android:id="@+id/presPenaltyEdit"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

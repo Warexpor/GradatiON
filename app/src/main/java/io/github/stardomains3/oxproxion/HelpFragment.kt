@@ -10,7 +10,6 @@ import android.os.Bundle
 import android.text.Spannable
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
-import android.text.Spanned
 import android.text.TextPaint
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
@@ -75,9 +74,13 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
             "ic_stop" to R.drawable.ic_stop
         )
 
+        // The glyphs carry whatever color they were drawn in (black, white, light gray), so
+        // without the ink tint some vanish on the dark page and others on the light one.
+        val ink = ContextCompat.getColor(requireContext(), R.color.xai_ink)
          val iconSpans: Map<String, ImageSpan> = icons.mapValues { (_, resId) ->
             val drawable = ContextCompat.getDrawable(requireContext(), resId)!!.mutate().apply {
                 setBounds(0, 0, dp24, dp24)
+                setTint(ink)
             }
             ImageSpan(drawable)
         }
@@ -103,28 +106,6 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
                         .codeBlockBackgroundColor(ContextCompat.getColor(ctx, R.color.markwon_code_bg))
                         .blockQuoteColor(ContextCompat.getColor(ctx, R.color.markwon_blockquote))
                         .isLinkUnderlined(true)
-                }
-            })
-            .usePlugin(object : AbstractMarkwonPlugin() {
-                override fun afterSetText(textView: android.widget.TextView) {
-                    val spannable = textView.text as? Spannable ?: return
-                    val spans = spannable.getSpans(0, spannable.length, ClickableSpan::class.java)
-                    for (span in spans) {
-                        val start = spannable.getSpanStart(span)
-                        val end = spannable.getSpanEnd(span)
-                        val text = spannable.subSequence(start, end).toString()
-                        if (text.contains("re-select")) {
-                            spannable.removeSpan(span)
-                            spannable.setSpan(object : ClickableSpan() {
-                                override fun onClick(widget: View) {
-                                    val downloadsUri =
-                                        "content://com.android.externalstorage.documents/document/primary%3ADownload".toUri()
-
-                                    folderPickerLauncher.launch(downloadsUri)
-                                }
-                            }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                        }
-                    }
                 }
             })
             .build()
@@ -155,14 +136,10 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
         val urlSpans: Array<URLSpan> = spannable.getSpans(0, spannable.length, URLSpan::class.java)
 
         for (urlSpan in urlSpans) {
-            if (urlSpan.url == "oxproxion://licenses") {
-                val start = spannable.getSpanStart(urlSpan)
-                val end = spannable.getSpanEnd(urlSpan)
-                val flags = spannable.getSpanFlags(urlSpan)
-                spannable.removeSpan(urlSpan)
-
-                val clickableSpan = object : ClickableSpan() {
-                    override fun onClick(widget: View) {
+            // In-app links: no app handles these schemes, so a plain URLSpan tap does nothing.
+            val action: () -> Unit = when (urlSpan.url) {
+                LINK_LICENSES -> {
+                    {
                         parentFragmentManager.beginTransaction()
                             .withGrokStackAnimations()
                             .hide(this@HelpFragment)
@@ -170,15 +147,29 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
                             .addToBackStack(null)
                             .commit()
                     }
-
-                    override fun updateDrawState(ds: TextPaint) {
-                        super.updateDrawState(ds)
-                        ds.color = ContextCompat.getColor(requireContext(), R.color.xai_link)
-                        ds.isUnderlineText = true
+                }
+                LINK_RESELECT_FOLDER -> {
+                    {
+                        folderPickerLauncher.launch(
+                            "content://com.android.externalstorage.documents/document/primary%3ADownload".toUri()
+                        )
                     }
                 }
-                spannable.setSpan(clickableSpan, start, end, flags)
+                else -> continue
             }
+            val start = spannable.getSpanStart(urlSpan)
+            val end = spannable.getSpanEnd(urlSpan)
+            val flags = spannable.getSpanFlags(urlSpan)
+            spannable.removeSpan(urlSpan)
+            spannable.setSpan(object : ClickableSpan() {
+                override fun onClick(widget: View) = action()
+
+                override fun updateDrawState(ds: TextPaint) {
+                    super.updateDrawState(ds)
+                    ds.color = ContextCompat.getColor(requireContext(), R.color.xai_link)
+                    ds.isUnderlineText = true
+                }
+            }, start, end, flags)
         }
         helpContentTextView.text = spannable
         helpContentTextView.isClickable = true
@@ -194,4 +185,9 @@ class HelpFragment : Fragment(R.layout.fragment_help) {
         }
     }
 
+    companion object {
+        /** Links in res/raw/help.md that open something in the app instead of a browser. */
+        const val LINK_LICENSES = "oxproxion://licenses"
+        const val LINK_RESELECT_FOLDER = "action://reselect-folder"
+    }
 }

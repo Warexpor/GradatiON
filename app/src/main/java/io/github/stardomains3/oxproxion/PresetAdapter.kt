@@ -2,8 +2,6 @@ package io.github.stardomains3.oxproxion
 
 import android.graphics.Color import android.view.LayoutInflater import android.view.View import android.view.ViewGroup import android.view.WindowManager import android.widget.ImageView import android.widget.PopupWindow import android.widget.TextView import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable import androidx.recyclerview.widget.RecyclerView
-import androidx.core.view.isVisible
-
 class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val onItemEdit: (Preset) -> Unit, private val onItemDelete: (Preset) -> Unit ) : RecyclerView.Adapter<PresetAdapter.PresetVH>() {
 
     private val items = mutableListOf<Preset>()
@@ -43,24 +41,7 @@ class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val on
     override fun onBindViewHolder(holder: PresetVH, position: Int) {
         val preset = items[position]
         holder.title.text = preset.title
-        holder.subtitle.text = buildString {
-            append("Model: ")
-            append(preset.modelIdentifier)
-            append(" • ")
-            append("SysMsg: ")
-            append(preset.systemMessage.title)
-            append(" • Stream: ")
-            append(if (preset.streaming) "On" else "Off")
-            append(" • Reason: ")
-            append(if (preset.reasoning) "On" else "Off")
-            append(" • Convo: ")
-            append(if (preset.conversationMode) "On" else "Off")
-            append(" • Tools: ")
-            append(if (preset.tools) "On" else "Off")
-            append(" • Web Search: ")
-            append(if (preset.webSearch) "On" else "Off")
-        }
-       // updateSubtitle(holder, preset)
+        holder.subtitle.text = presetSummary(holder.itemView.context, preset)
         holder.subtitleContainer.visibility = if (preset.isExpanded) View.VISIBLE else View.GONE
         holder.expandIcon.rotation = if (preset.isExpanded) 180f else 0f
 
@@ -76,28 +57,6 @@ class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val on
         // Edit menu
         holder.edit.setOnClickListener {
             showPresetPopupWindow(holder.edit, preset)
-        }
-    }
-
-    private fun updateSubtitle(holder: PresetVH, preset: Preset) {
-        if (holder.subtitleContainer.isVisible) {
-            holder.subtitle.text = buildString {
-                append("Model: ")
-                append(preset.modelIdentifier)
-                append(" • ")
-                append("SysMsg: ")
-                append(preset.systemMessage.title)
-                append(" • Stream: ")
-                append(if (preset.streaming) "On" else "Off")
-                append(" • Reason: ")
-                append(if (preset.reasoning) "On" else "Off")
-                append(" • Convo: ")
-                append(if (preset.conversationMode) "On" else "Off")
-                append(" • Tools: ")
-                append(if (preset.tools) "On" else "Off")
-                append(" • Web: ")
-                append(if (preset.webSearch) "On" else "Off")
-            }
         }
     }
 
@@ -156,4 +115,18 @@ class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val on
         }
         MenuDim.behind(popupWindow)
     }
+}
+
+/** The expanded row: model, system message, then the switches that are on, named as in the editor. */
+internal fun presetSummary(context: android.content.Context, preset: Preset): String {
+    val on = listOf(
+        preset.streaming to R.string.preset_edit_streaming,
+        preset.reasoning to R.string.preset_edit_reasoning,
+        preset.conversationMode to R.string.preset_edit_conversation_mode,
+        preset.tools to R.string.preset_edit_tools,
+        preset.webSearch to R.string.preset_edit_web_search,
+    ).filter { it.first }.joinToString(", ") { context.getString(it.second) }
+    return listOf(preset.modelIdentifier, preset.systemMessage.title, on)
+        .filter { it.isNotBlank() }
+        .joinToString(" · ")
 }
