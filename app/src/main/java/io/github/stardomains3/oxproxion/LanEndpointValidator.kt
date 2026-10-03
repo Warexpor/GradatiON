@@ -23,13 +23,64 @@ object LanEndpointValidator {
         if (scheme != "http" && scheme != "https") {
             return R.string.lan_error_url_scheme
         }
-        val host = uri.host?.trim().orEmpty()
-        if (host.isEmpty()) return R.string.lan_error_url_host
-        if (scheme == "http" && !isPrivateOrLocalHost(host)) {
+        val endpoint = endpointHostPort(uri) ?: return R.string.lan_error_url_host
+        // 0 and anything above 65535 are not a port a request can open. Java's URI keeps them.
+        if (endpoint.port != -1 && endpoint.port !in 1..65535) return R.string.lan_error_url_port
+        if (scheme == "http" && !isPrivateOrLocalHost(endpoint.host)) {
             return R.string.lan_error_url_http_public
         }
         return null
     }
+
+    /**
+     * Host and port of a URL [java.net.URI] managed to parse.
+     * [URI.getHost] is null for a hostname that contains `_` (common on a homelab) and for a
+     * password that contains an unencoded `@`, even though the authority still has the host.
+     * Those used to fail as "needs a host". A host with no `_` and a single `@` is left alone,
+     * so a literal Java cannot parse stays a bad URL.
+     */
+    internal fun endpointHostPort(raw: String): HostPort? {
+        val uri = runCatching { URI(raw.trim()) }.getOrNull() ?: return null
+        return endpointHostPort(uri)
+    }
+
+    private fun endpointHostPort(uri: URI): HostPort? {
+        val direct = uri.host?.trim()?.takeIf { it.isNotEmpty() }
+        if (direct != null) return HostPort(direct, uri.port)
+        val auth = uri.rawAuthority?.takeIf { it.isNotEmpty() } ?: return null
+        if ('_' !in auth && auth.count { it == '@' } <= 1) return null
+        return hostPortFromAuthority(auth)
+    }
+
+    /** Authority after userinfo, which ends at the last `@`. Brackets keep an IPv6 address intact. */
+    private fun hostPortFromAuthority(authority: String): HostPort? {
+        val at = authority.lastIndexOf('@')
+        val hostport = if (at >= 0) authority.substring(at + 1) else authority
+        if (hostport.isEmpty()) return null
+        if (hostport.startsWith("[")) {
+            val end = hostport.indexOf(']')
+            if (end < 1) return null
+            val host = hostport.substring(0, end + 1)
+            val rest = hostport.substring(end + 1)
+            if (rest.isEmpty()) return HostPort(host, -1)
+            if (!rest.startsWith(":") || rest.length < 2) return null
+            val port = rest.substring(1).toIntOrNull() ?: return null
+            return HostPort(host, port)
+        }
+        val colon = hostport.lastIndexOf(':')
+        if (colon > 0) {
+            val portText = hostport.substring(colon + 1)
+            if (portText.isNotEmpty() && portText.all { it.isDigit() }) {
+                val port = portText.toIntOrNull() ?: return null
+                val host = hostport.substring(0, colon)
+                if (host.isEmpty()) return null
+                return HostPort(host, port)
+            }
+        }
+        return HostPort(hostport, -1)
+    }
+
+    internal data class HostPort(val host: String, val port: Int)
 
     /**
      * The base the app appends `/v1/...` to. A browser paste often has a trailing slash,
@@ -38,6 +89,32 @@ object LanEndpointValidator {
      */
     fun normalizedBase(raw: String): String {
         var url = raw.trim()
+        // A fragment is not sent, and a path appended after '#' or '?' becomes part of it.
+        val hash = url.indexOf('#')
+        if (hash >= 0) url = url.substring(0, hash)
+        val queryAt = url.indexOf('?')
+        val query = if (queryAt >= 0) url.substring(queryAt + 1) else ""
+        if (queryAt >= 0) url = url.substring(0, queryAt)
+        url = stripOpenAiSuffix(url)
+        if (query.isNotEmpty()) url = "$url?$query"
+        return url
+    }
+
+    /**
+     * [base] plus [path], with [path] before any query. String append put `/v1/models` inside
+     * `?token=` or after `#`, so the server saw the base path and never the route.
+     */
+    fun requestUrl(base: String, path: String): String {
+        val normalized = normalizedBase(base)
+        val queryAt = normalized.indexOf('?')
+        val root = (if (queryAt >= 0) normalized.substring(0, queryAt) else normalized).trimEnd('/')
+        val query = if (queryAt >= 0) normalized.substring(queryAt) else ""
+        val suffix = if (path.startsWith("/")) path else "/$path"
+        return root + suffix + query
+    }
+
+    private fun stripOpenAiSuffix(raw: String): String {
+        var url = raw
         while (url.endsWith("/")) url = url.dropLast(1)
         val slash = url.length - 3
         // A path segment, not the "//" in "http://v1".

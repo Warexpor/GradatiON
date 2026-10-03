@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Settings wave 32)
+
+On `cursor/settings-wave-32-0c71` (PR into `gradation/app-pass`). Settings follow-ups after #140. Not a redo of the pre-rename List/Read names, Create file, or the local-server slash and `/v1` strip (#136). Not a redo of an enabled tool turning off without the grant, cleartext to CGNAT 100.64/10 and IPv6 link-local or unique-local, or the Models row hiding userinfo when the host parsed (#140). Not a redo of #147 or #148.
+
+- Settings > Models: a hostname with `_` (`my_nas.local`, `nas_1.home`) saves. A password that contains `@` saves, and the row shows host and port, not the password. Java's parser had reported both as "no host", and the row's fallback printed the raw URL. Port 0 and anything above 65535 are refused.
+- The path the app appends (`/v1/models`, `/v1/chat/completions`, `/api/tags`, and the rest) is inserted before a query. A pasted `?` or `#` used to swallow that path, so the server saw the base and never the route. A trailing `/v1` in front of the query is still stripped. The fragment is dropped. The folder URI, the local server address, and the server type commit.
+- Settings > Tools: Get location treats approximate location as granted. Android 12+ stores that as coarse only; the switch required fine and toasted after the user had allowed it. The tool itself already accepted coarse.
+
+Phone: set the local server to `http://my_nas.local:11434` or `http://user:p@ss@10.0.0.23:11434` (Save should accept it; the Models row should not show the password). Set it to `http://10.0.0.23:11434/v1?token=abc` and load models (the request should be `http://10.0.0.23:11434/v1/models?token=abc`). Allow approximate location and turn Get location on (it should stay on, with no permission toast).
+
 # Handoff (2026-10-03, Hub/Pair wave 32)
 
 On `cursor/hub-wave32-021f` (PR into `gradation/app-pass`). Hub shell and pairing follow-ups, rebased onto #148. Not a redo of the Roleplay list surviving an Ask history open, unencoded `&` in a bridge address, or 401/403 as status codes. Not a redo of character-list buttons following whether the list is the screen, a pairing link keeping `#` and query keys named token/auth/ws/fp, or a fingerprint with spaces (#137, #141). Not a redo of example sides, lore headers, or list marks (#148).
