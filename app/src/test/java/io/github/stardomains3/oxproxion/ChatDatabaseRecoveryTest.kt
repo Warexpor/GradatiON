@@ -187,12 +187,131 @@ class ChatDatabaseRecoveryTest {
     fun thePlaintextCopyStaysUntilEncryptIsConfirmed() {
         val db = tmp.newFile("chat_database")
         val backup = File(tmp.root, "chat_database.pre_sqlcipher").apply { writeText("plain") }
+        val encrypting = File(tmp.root, "chat_database.encrypting").apply { writeText("mid") }
+        File(tmp.root, "chat_database.encrypting-wal").writeText("mid-wal")
         AppDatabase.discardPlaintextBackupIfConfirmed(db)
         assertEquals("plain", backup.readText())
+        assertEquals("mid", encrypting.readText())
         AppDatabase.confirmPlaintextBackupDisposable(db)
         AppDatabase.discardPlaintextBackupIfConfirmed(db)
         assertFalse(backup.exists())
+        assertFalse(encrypting.exists())
+        assertFalse(File(tmp.root, "chat_database.encrypting-wal").exists())
         assertFalse(File(tmp.root, "chat_database.encrypt_ok").exists())
+    }
+
+    @Test
+    fun disposableKeptAndOrphanSidecarsGoWhenEncryptIsConfirmed() {
+        val db = tmp.newFile("chat_database")
+        File(tmp.root, "chat_database.pre_sqlcipher.kept-1").writeText("old-plain")
+        File(tmp.root, "chat_database.pre_sqlcipher-wal.kept-2").writeText("old-wal")
+        File(tmp.root, "chat_database.pre_sqlcipher.kept-1.kept-1").writeText("stacked")
+        File(tmp.root, "chat_database.encrypting.kept-1").writeText("old-mid")
+        File(tmp.root, "chat_database.pre_sqlcipher-wal").writeText("orphan-wal")
+        File(tmp.root, "chat_database.recovered-3.kept-1").writeText("keep-recovered")
+        AppDatabase.confirmPlaintextBackupDisposable(db)
+        AppDatabase.discardPlaintextBackupIfConfirmed(db)
+        assertFalse(File(tmp.root, "chat_database.pre_sqlcipher.kept-1").exists())
+        assertFalse(File(tmp.root, "chat_database.pre_sqlcipher-wal.kept-2").exists())
+        assertFalse(File(tmp.root, "chat_database.pre_sqlcipher.kept-1.kept-1").exists())
+        assertFalse(File(tmp.root, "chat_database.encrypting.kept-1").exists())
+        assertFalse(File(tmp.root, "chat_database.pre_sqlcipher-wal").exists())
+        assertEquals("keep-recovered", File(tmp.root, "chat_database.recovered-3.kept-1").readText())
+        assertFalse(File(tmp.root, "chat_database.encrypt_ok").exists())
+    }
+
+    @Test
+    fun aFailedPlaintextDeleteKeepsTheEncryptMarker() {
+        val db = tmp.newFile("chat_database")
+        val backup = File(tmp.root, "chat_database.pre_sqlcipher")
+        backup.mkdirs()
+        File(backup, "child").writeText("stuck")
+        AppDatabase.confirmPlaintextBackupDisposable(db)
+        AppDatabase.discardPlaintextBackupIfConfirmed(db)
+        assertTrue(backup.exists())
+        assertTrue(File(tmp.root, "chat_database.encrypt_ok").exists())
+    }
+
+    @Test
+    fun confirmedDiscardClearsRootAndHoldBeforeDroppingTheMarker() {
+        val databases = tmp.newFolder("live-databases")
+        val vault = tmp.newFolder("live-vault")
+        val db = File(databases, "chat_database").apply { writeText("live") }
+        File(vault, "chat_database.pre_sqlcipher").writeText("snap")
+        File(vault, "chat_database.encrypting-wal").writeText("vault-wal")
+        File(databases, "chat_database.pre_sqlcipher").writeText("root-plain")
+        File(databases, "chat_database.pre_sqlcipher-wal").writeText("root-wal")
+        File(databases, "chat_database.encrypting.kept-1").writeText("root-kept")
+        val hold = File(databases, "chat_db_hold").apply { mkdirs() }
+        File(hold, "chat_database.encrypting").writeText("hold-mid")
+        File(hold, "chat_database.encrypting-shm").writeText("hold-shm")
+        File(hold, "chat_database.pre_sqlcipher.kept-1.kept-1").writeText("hold-stacked")
+        File(hold, "chat_database.recovered-2.kept-1").writeText("keep")
+
+        AppDatabase.confirmPlaintextBackupDisposable(db, vault)
+        AppDatabase.discardPlaintextBackupIfConfirmed(db, vault)
+
+        assertFalse(File(vault, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(vault, "chat_database.encrypting-wal").exists())
+        assertFalse(File(databases, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(databases, "chat_database.pre_sqlcipher-wal").exists())
+        assertFalse(File(databases, "chat_database.encrypting.kept-1").exists())
+        assertFalse(File(hold, "chat_database.encrypting").exists())
+        assertFalse(File(hold, "chat_database.encrypting-shm").exists())
+        assertFalse(File(hold, "chat_database.pre_sqlcipher.kept-1.kept-1").exists())
+        assertEquals("keep", File(hold, "chat_database.recovered-2.kept-1").readText())
+        assertEquals("live", db.readText())
+        assertFalse(File(vault, "chat_database.encrypt_ok").exists())
+    }
+
+    @Test
+    fun aStuckHoldCopyKeepsTheEncryptMarker() {
+        val databases = tmp.newFolder("hold-stuck-databases")
+        val vault = tmp.newFolder("hold-stuck-vault")
+        val db = File(databases, "chat_database").apply { writeText("live") }
+        val hold = File(databases, "chat_db_hold").apply { mkdirs() }
+        val stuck = File(hold, "chat_database.pre_sqlcipher").apply { mkdirs() }
+        File(stuck, "child").writeText("x")
+        File(hold, "chat_database.recovered-8.kept-1").writeText("keep")
+        AppDatabase.confirmPlaintextBackupDisposable(db, vault)
+        AppDatabase.discardPlaintextBackupIfConfirmed(db, vault)
+        assertTrue(stuck.exists())
+        assertTrue(File(vault, "chat_database.encrypt_ok").exists())
+        assertEquals("live", db.readText())
+        assertEquals("keep", File(hold, "chat_database.recovered-8.kept-1").readText())
+    }
+
+    @Test
+    fun aStuckKeptDirectoryKeepsTheEncryptMarker() {
+        val db = tmp.newFile("chat_database")
+        val stuck = File(tmp.root, "chat_database.encrypting.kept-1").apply { mkdirs() }
+        File(stuck, "child").writeText("x")
+        AppDatabase.confirmPlaintextBackupDisposable(db)
+        AppDatabase.discardPlaintextBackupIfConfirmed(db)
+        assertTrue(stuck.exists())
+        assertTrue(File(tmp.root, "chat_database.encrypt_ok").exists())
+    }
+
+    @Test
+    fun exportStartDropsLeftoverSidecarsButNotTheLiveFile() {
+        val vault = tmp.newFolder("export-vault")
+        File(vault, "chat_database").writeText("live")
+        File(vault, "chat_database.encrypting").writeText("mid")
+        File(vault, "chat_database.encrypting-wal").writeText("stale-wal")
+        File(vault, "chat_database.encrypting-shm").writeText("stale-shm")
+        File(vault, "chat_database.pre_sqlcipher").writeText("old-main")
+        File(vault, "chat_database.pre_sqlcipher-wal").writeText("old-wal")
+        File(vault, "chat_database.pre_sqlcipher-journal").writeText("old-journal")
+        File(vault, "chat_database.recovered-1").writeText("keep")
+        AppDatabase.clearPlaintextExportLeftovers(vault)
+        assertEquals("live", File(vault, "chat_database").readText())
+        assertEquals("keep", File(vault, "chat_database.recovered-1").readText())
+        assertFalse(File(vault, "chat_database.encrypting").exists())
+        assertFalse(File(vault, "chat_database.encrypting-wal").exists())
+        assertFalse(File(vault, "chat_database.encrypting-shm").exists())
+        assertFalse(File(vault, "chat_database.pre_sqlcipher").exists())
+        assertFalse(File(vault, "chat_database.pre_sqlcipher-wal").exists())
+        assertFalse(File(vault, "chat_database.pre_sqlcipher-journal").exists())
     }
 
     @Test
@@ -936,6 +1055,29 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun disposableKeptRenamesAreDroppedWhenVaultHasEncryptMarker() {
+        val databases = tmp.newFolder("kept-databases")
+        val vault = tmp.newFolder("kept-vault")
+        File(vault, "chat_database.encrypt_ok").writeText("ok")
+        File(databases, "chat_database.pre_sqlcipher.kept-1").writeText("root-kept")
+        File(vault, "chat_database.encrypting-wal.kept-2").writeText("vault-kept")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(hold, "chat_database.encrypting.kept-1").writeText("hold-kept")
+        File(hold, "chat_database.recovered-4.kept-1").writeText("recovered")
+
+        ChatDbVault.relocateLegacy(databases, vault, null)
+
+        assertFalse(File(databases, "chat_database.pre_sqlcipher.kept-1").exists())
+        assertFalse(File(hold, "chat_database.pre_sqlcipher.kept-1").exists())
+        assertFalse(File(hold, "chat_database.encrypting.kept-1").exists())
+        assertFalse(File(vault, "chat_database.encrypting-wal.kept-2").exists())
+        assertEquals("recovered", File(hold, "chat_database.recovered-4.kept-1").readText())
+        assertEquals("ok", File(vault, "chat_database.encrypt_ok").readText())
+        assertFalse(ChatDbVault.isDisposablePlainKeptName("chat_database.recovered-4.kept-1"))
+        assertTrue(ChatDbVault.isDisposablePlainKeptName("chat_database.pre_sqlcipher.kept-1.kept-2"))
+    }
+
+    @Test
     fun backupRulesExcludePlaintextCopiesAndHostTokens() {
         val rules = xmlText("backup_rules.xml")
         val extraction = xmlText("data_extraction_rules.xml")
@@ -959,6 +1101,25 @@ class ChatDatabaseRecoveryTest {
             "chat_database-wal.partial",
             "chat_database.encrypting.partial",
             "chat_database.encrypt_ok.bak",
+            "chat_database.pre_sqlcipher-wal.partial",
+            "chat_database.pre_sqlcipher-shm.ready",
+            "chat_database.pre_sqlcipher-journal.bak",
+            "chat_database.encrypting-wal.partial",
+            "chat_database.encrypting-shm.ready",
+            "chat_database.encrypting-journal.bak",
+            "chat_database.encrypt_ok-wal.partial",
+            "chat_database.encrypt_ok-shm.ready",
+            "chat_database.encrypt_ok-journal.bak",
+            "chat_database.pre_sqlcipher.kept-1",
+            "chat_database.pre_sqlcipher.kept-2",
+            "chat_database.pre_sqlcipher-wal.kept-1",
+            "chat_database.pre_sqlcipher-shm.kept-2",
+            "chat_database.pre_sqlcipher-journal.kept-1",
+            "chat_database.encrypting.kept-1",
+            "chat_database.encrypting.kept-2",
+            "chat_database.encrypting-wal.kept-2",
+            "chat_database.encrypting-shm.kept-1",
+            "chat_database.encrypting-journal.kept-2",
             "chat_db_hold",
             "code_mode_secrets.xml",
             "code_mode.xml",

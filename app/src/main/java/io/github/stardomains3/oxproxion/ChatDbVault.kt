@@ -34,13 +34,16 @@ import java.nio.file.StandardOpenOption
  * The live `chat_database` stays in the databases directory. The backup rules exclude it, its
  * journal, and the old plaintext / encrypting / encrypt_ok names (and their wal/shm/journal) in
  * case a move out of that directory fails. Move temps (`.partial` / `.ready` / `.bak`) of those
- * names are listed too, so a backup before the next open cannot upload a torn copy.
+ * names — including their `-wal`/`-shm`/`-journal` sidecars — are listed too, so a backup
+ * before the next open cannot upload a torn copy.
  * `code_mode.xml` is excluded too: a failed Keystore vault write can leave a pairing token in the
  * hosts JSON until the next successful scrub.
  *
  * When the vault already has the encrypt marker, leftover `pre_sqlcipher` / `encrypting` at the
  * databases root or under hold are discarded rather than drained back into the vault: the marker
- * means the plaintext snapshot was confirmed disposable.
+ * means the plaintext snapshot was confirmed disposable. `.kept-*` renames of those disposable
+ * names (including a second collision, `name.kept-1.kept-2`) are discarded too. Recovered and
+ * unreadable `.kept-*` parks stay.
  */
 internal object ChatDbVault {
     private const val TAG = "ChatDbVault"
@@ -116,7 +119,8 @@ internal object ChatDbVault {
      * `uniqueKept` into the vault). A failure to move it is logged and left in place; the backup
      * rules still name that file and its sidecars. When that marker is present, leftover
      * `pre_sqlcipher` / `encrypting` at the root or under hold are discarded too (do not
-     * resurrect disposable plaintext). Move temps parked under hold are discarded after the
+     * resurrect disposable plaintext). `.kept-*` renames of those names are discarded as well
+     * (recovered `.kept-*` stay). Move temps parked under hold are discarded after the
      * park pass: Room never opens them, and the backup rules cover the root window.
      */
     fun relocateLegacy(databasesDir: File, vault: File, storedRecovered: String?): Boolean {
@@ -173,8 +177,18 @@ internal object ChatDbVault {
         // A failed cross-directory move can leave .partial / .ready / .bak (or a .kept-* rename)
         // next to the live database. Park under hold, then discard: Room never opens those names,
         // and the backup rules list the finite root temps for the pre-open window.
+        // Drop disposable plaintext .kept-* at the root before park, so a hold-name
+        // collision cannot rename them to `.kept-1.kept-1` and hide them from this pass.
+        if (encryptMarker(vault).isFile) {
+            discardDisposableKeptRenames(databasesDir)
+            discardDisposableKeptRenames(vault)
+        }
         parkMoveTemps(databasesDir)
         discardHoldMoveTemps(databasesDir)
+        if (encryptMarker(vault).isFile) {
+            discardDisposableKeptRenames(holdDirectory(databasesDir))
+            discardDisposableKeptRenames(databasesDir)
+        }
         // Orphans parked after the first drain (sidecar-only sets) are discarded here.
         drainHold(databasesDir, vault)
         if (storedRecovered != null && isRecoveredName(storedRecovered) && dbSetPresent(databasesDir, storedRecovered)) {
@@ -424,8 +438,9 @@ internal object ChatDbVault {
     /**
      * Parks cross-directory move leftovers at the databases root under [HOLD_DIR].
      * Auto Backup has no wildcards for stamp-scoped temps; the backup rules name the finite
-     * live / plaintext / encrypting / encrypt_ok `.partial` / `.ready` / `.bak` set so a backup
-     * before the next open cannot upload those. Stamp-scoped temps still rely on this park.
+     * live / plaintext / encrypting / encrypt_ok `.partial` / `.ready` / `.bak` set (mains and
+     * their `-wal`/`-shm`/`-journal`) so a backup before the next open cannot upload those.
+     * Stamp-scoped recovered/unreadable temps still rely on this park.
      */
     private fun parkMoveTemps(databasesDir: File) {
         val hold = holdDirectory(databasesDir)
@@ -456,6 +471,32 @@ internal object ChatDbVault {
     private fun isDisposableLegacyPlain(name: String): Boolean =
         name == "${AppDatabase.DB_NAME}.pre_sqlcipher" ||
             name == "${AppDatabase.DB_NAME}.encrypting"
+
+    /**
+     * `.kept-*` from [uniqueKept] of a disposable plaintext / encrypting main or sidecar.
+     * A hold collision can stack another `.kept-N`. Recovered / unreadable parks do not match.
+     */
+    private val DISPOSABLE_KEPT = Regex(
+        "^" + Regex.escape(AppDatabase.DB_NAME) +
+            "\\.(pre_sqlcipher|encrypting)(-wal|-shm|-journal)?(\\.kept-[0-9]+)+$"
+    )
+
+    internal fun isDisposablePlainKeptName(name: String): Boolean = DISPOSABLE_KEPT.matches(name)
+
+    /**
+     * Drops [isDisposablePlainKeptName] files. A non-empty directory with that name cannot be
+     * deleted and counts as failure so the encrypt marker stays for a retry.
+     * Returns false if any matching name remains.
+     */
+    internal fun discardDisposableKeptRenames(directory: File): Boolean {
+        if (!directory.isDirectory) return true
+        var ok = true
+        directory.listFiles()?.forEach { file ->
+            if (!isDisposablePlainKeptName(file.name)) return@forEach
+            if (!file.delete() && file.exists()) ok = false
+        }
+        return ok && directory.listFiles()?.none { isDisposablePlainKeptName(it.name) } != false
+    }
 
     private fun isLiveDatabaseFileName(name: String): Boolean =
         name == AppDatabase.DB_NAME ||

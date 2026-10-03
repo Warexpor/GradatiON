@@ -42,6 +42,51 @@
         <exclude domain="database" path="chat_database.encrypt_ok.partial" />
         <exclude domain="database" path="chat_database.encrypt_ok.ready" />
         <exclude domain="database" path="chat_database.encrypt_ok.bak" />
+        <!-- Sidecar move temps of legacy plaintext / encrypting / encrypt_ok. -->
+        <exclude domain="database" path="chat_database.pre_sqlcipher-wal.partial" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-wal.ready" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-wal.bak" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-shm.partial" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-shm.ready" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-shm.bak" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-journal.partial" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-journal.ready" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-journal.bak" />
+        <exclude domain="database" path="chat_database.encrypting-wal.partial" />
+        <exclude domain="database" path="chat_database.encrypting-wal.ready" />
+        <exclude domain="database" path="chat_database.encrypting-wal.bak" />
+        <exclude domain="database" path="chat_database.encrypting-shm.partial" />
+        <exclude domain="database" path="chat_database.encrypting-shm.ready" />
+        <exclude domain="database" path="chat_database.encrypting-shm.bak" />
+        <exclude domain="database" path="chat_database.encrypting-journal.partial" />
+        <exclude domain="database" path="chat_database.encrypting-journal.ready" />
+        <exclude domain="database" path="chat_database.encrypting-journal.bak" />
+        <exclude domain="database" path="chat_database.encrypt_ok-wal.partial" />
+        <exclude domain="database" path="chat_database.encrypt_ok-wal.ready" />
+        <exclude domain="database" path="chat_database.encrypt_ok-wal.bak" />
+        <exclude domain="database" path="chat_database.encrypt_ok-shm.partial" />
+        <exclude domain="database" path="chat_database.encrypt_ok-shm.ready" />
+        <exclude domain="database" path="chat_database.encrypt_ok-shm.bak" />
+        <exclude domain="database" path="chat_database.encrypt_ok-journal.partial" />
+        <exclude domain="database" path="chat_database.encrypt_ok-journal.ready" />
+        <exclude domain="database" path="chat_database.encrypt_ok-journal.bak" />
+        <!-- uniqueKept renames of disposable plaintext / encrypting before the next open. -->
+        <exclude domain="database" path="chat_database.pre_sqlcipher.kept-1" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher.kept-2" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-wal.kept-1" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-wal.kept-2" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-shm.kept-1" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-shm.kept-2" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-journal.kept-1" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-journal.kept-2" />
+        <exclude domain="database" path="chat_database.encrypting.kept-1" />
+        <exclude domain="database" path="chat_database.encrypting.kept-2" />
+        <exclude domain="database" path="chat_database.encrypting-wal.kept-1" />
+        <exclude domain="database" path="chat_database.encrypting-wal.kept-2" />
+        <exclude domain="database" path="chat_database.encrypting-shm.kept-1" />
+        <exclude domain="database" path="chat_database.encrypting-shm.kept-2" />
+        <exclude domain="database" path="chat_database.encrypting-journal.kept-1" />
+        <exclude domain="database" path="chat_database.encrypting-journal.kept-2" />
         <!-- Recovered/unreadable copies that could not enter noBackupFilesDir. -->
         <exclude domain="database" path="chat_db_hold" />
         <exclude domain="sharedpref" path="code_mode_secrets.xml" />
@@ -92,6 +137,51 @@
         <exclude domain="database" path="chat_database.encrypt_ok.partial" />
         <exclude domain="database" path="chat_database.encrypt_ok.ready" />
         <exclude domain="database" path="chat_database.encrypt_ok.bak" />
+        <!-- Sidecar move temps of legacy plaintext / encrypting / encrypt_ok. -->
+        <exclude domain="database" path="chat_database.pre_sqlcipher-wal.partial" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-wal.ready" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-wal.bak" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-shm.partial" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-shm.ready" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-shm.bak" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-journal.partial" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-journal.ready" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-journal.bak" />
+        <exclude domain="database" path="chat_database.encrypting-wal.partial" />
+        <exclude domain="database" path="chat_database.encrypting-wal.ready" />
+        <exclude domain="database" path="chat_database.encrypting-wal.bak" />
+        <exclude domain="database" path="chat_database.encrypting-shm.partial" />
+        <exclude domain="database" path="chat_database.encrypting-shm.ready" />
+        <exclude domain="database" path="chat_database.encrypting-shm.bak" />
+        <exclude domain="database" path="chat_database.encrypting-journal.partial" />
+        <exclude domain="database" path="chat_database.encrypting-journal.ready" />
+        <exclude domain="database" path="chat_database.encrypting-journal.bak" />
+        <exclude domain="database" path="chat_database.encrypt_ok-wal.partial" />
+        <exclude domain="database" path="chat_database.encrypt_ok-wal.ready" />
+        <exclude domain="database" path="chat_database.encrypt_ok-wal.bak" />
+        <exclude domain="database" path="chat_database.encrypt_ok-shm.partial" />
+        <exclude domain="database" path="chat_database.encrypt_ok-shm.ready" />
+        <exclude domain="database" path="chat_database.encrypt_ok-shm.bak" />
+        <exclude domain="database" path="chat_database.encrypt_ok-journal.partial" />
+        <exclude domain="database" path="chat_database.encrypt_ok-journal.ready" />
+        <exclude domain="database" path="chat_database.encrypt_ok-journal.bak" />
+        <!-- uniqueKept renames of disposable plaintext / encrypting before the next open. -->
+        <exclude domain="database" path="chat_database.pre_sqlcipher.kept-1" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher.kept-2" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-wal.kept-1" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-wal.kept-2" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-shm.kept-1" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-shm.kept-2" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-journal.kept-1" />
+        <exclude domain="database" path="chat_database.pre_sqlcipher-journal.kept-2" />
+        <exclude domain="database" path="chat_database.encrypting.kept-1" />
+        <exclude domain="database" path="chat_database.encrypting.kept-2" />
+        <exclude domain="database" path="chat_database.encrypting-wal.kept-1" />
+        <exclude domain="database" path="chat_database.encrypting-wal.kept-2" />
+        <exclude domain="database" path="chat_database.encrypting-shm.kept-1" />
+        <exclude domain="database" path="chat_database.encrypting-shm.kept-2" />
+        <exclude domain="database" path="chat_database.encrypting-journal.kept-1" />
+        <exclude domain="database" path="chat_database.encrypting-journal.kept-2" />
         <!-- Recovered/unreadable copies that could not enter noBackupFilesDir. -->
         <exclude domain="database" path="chat_db_hold" />
         <exclude domain="sharedpref" path="code_mode_secrets.xml" />
