@@ -2981,10 +2981,14 @@ $cleanContent
         }
         newChatButton.setOnClickListener {
             if (codeMode.isActive) return@setOnClickListener codeMode.onNewPressed()
-            if (rpHome?.isShown == true) return@setOnClickListener openRpCharacterLibrary()
+            if (RpHomeChrome.trailing(rpListFront()) == RpHomeChrome.Trailing.MANAGE) {
+                return@setOnClickListener openRpCharacterLibrary()
+            }
             resetChatButton.performClick()
         }
         newChatButton.setOnLongClickListener {
+            // The list's button is Manage characters. Long-press used to start a chat and close the list.
+            if (!RpHomeChrome.longPressStartsNewChat(rpListFront())) return@setOnLongClickListener true
             resetChatButton.performLongClick()
         }
         topWebSearchButton.setOnLongClickListener {
@@ -3009,10 +3013,12 @@ $cleanContent
             if (codeMode.isActive) return@setOnClickListener codeMode.onMenuPressed()
             // Roleplay keeps no history of its own: inside a chat this is the way back to the characters.
             // On the list it goes straight to Settings, the one thing History offered Roleplay.
-            if (viewModel.isRpMode()) {
-                return@setOnClickListener if (rpHome?.isShown == true) openSettingsFromHistory() else openRpHome()
+            // Follow the list flag, not the view: the list stays visible while the thread slides over it.
+            when (RpHomeChrome.leading(rpListFront(), viewModel.isRpMode())) {
+                RpHomeChrome.Leading.SETTINGS -> openSettingsFromHistory()
+                RpHomeChrome.Leading.BACK -> openRpHome()
+                RpHomeChrome.Leading.HISTORY -> openHistoryPanel()
             }
-            openHistoryPanel()
         }
 
         pdfChatButton.setOnClickListener {
@@ -6844,11 +6850,19 @@ $cleanContent
     private var rpShowWas = false
     private var rpHomeAnim: android.animation.ValueAnimator? = null
 
+    /** The list is the screen, not merely still drawn while a thread slides over it. */
+    private fun rpListFront(): Boolean = RpHomeChrome.listIsFront(
+        homeOpen = rpHomeOpen,
+        inRoleplay = viewModel.isRpMode(),
+        codeCovering = ::codeMode.isInitialized && codeMode.isActive,
+    )
+
     /** Whether the home shows follows the mode and [rpHomeOpen]; the composer steps aside while it does. */
     private fun updateRpHome() {
         val root = view ?: return
-        val show = rpHomeOpen && viewModel.isRpMode() && !codeMode.isActive
-        val rpUi = viewModel.isRpMode() && !codeMode.isActive
+        val codeCovering = ::codeMode.isInitialized && codeMode.isActive
+        val show = RpHomeChrome.listIsFront(rpHomeOpen, viewModel.isRpMode(), codeCovering)
+        val rpUi = viewModel.isRpMode() && !codeCovering
         // A thread opening from the list (or closing back to it) slides; a mode switch does not.
         val slide = rpUiWas == true && rpUi && show != rpShowWas && root.isAttachedToWindow &&
             root.width > 0 && Motion.areAnimationsEnabled(requireContext())

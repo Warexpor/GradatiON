@@ -184,6 +184,81 @@ class CodePairingTest {
     }
 
     @Test
+    fun parse_spacedFingerprintIsNotRejected() {
+        val spaced = pinHex.chunked(2).joinToString(" ")
+        val raw = "gradation://pair?url=$goodUrl&token=$goodToken&fp=$spaced"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(pinB64, r.pairing.fingerprint)
+        assertEquals(goodUrl, r.pairing.url)
+        assertTrue(CodePairing.isPairUri(raw))
+    }
+
+    @Test
+    fun parse_hashInsideBridgeUrlDoesNotDropToken() {
+        val raw = "gradation://pair?url=wss://h/v1?a=1#section&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://h/v1?a=1#section", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
+    fun parse_trailingFragmentDoesNotJoinToken() {
+        val raw = "gradation://pair?url=$goodUrl&token=$goodToken#note"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(goodToken, r.pairing.token)
+        assertEquals(goodUrl, r.pairing.url)
+    }
+
+    @Test
+    fun parse_bridgeQueryKeepsReservedNamesWhenPairingFieldsFollow() {
+        val raw = "gradation://pair?url=wss://h/v1?room=1&ws=1&auth=session&b=2&token=$goodToken&fp=$pinHex"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://h/v1?room=1&ws=1&auth=session&b=2", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+        assertEquals(pinB64, r.pairing.fingerprint)
+    }
+
+    @Test
+    fun parse_tokenBeforeUrlStaysThePairingToken() {
+        val raw = "gradation://pair?token=$goodToken&url=wss://h/v1?room=1&token=bridge"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(goodToken, r.pairing.token)
+        assertEquals("wss://h/v1?room=1&token=bridge", r.pairing.url)
+    }
+
+    @Test
+    fun parse_repeatedTokenWithoutBridgeQueryKeepsTheFirst() {
+        val raw = "gradation://pair?url=wss://h/v1&token=first-token&token=second-token"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("first-token", r.pairing.token)
+        assertEquals("wss://h/v1", r.pairing.url)
+    }
+
+    @Test
+    fun parse_tokenInsideBridgeQueryDoesNotStealThePairingToken() {
+        val raw = "gradation://pair?url=wss://h/v1?room=1&token=bridge&b=2&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(goodToken, r.pairing.token)
+        assertEquals("wss://h/v1?room=1&token=bridge&b=2", r.pairing.url)
+    }
+
+    @Test
+    fun parse_authAfterTokenDoesNotReplaceIt() {
+        val raw = "gradation://pair?url=wss://h/v1?a=1&b=2&token=$goodToken&auth=session"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(goodToken, r.pairing.token)
+        assertEquals("wss://h/v1?a=1&b=2", r.pairing.url)
+    }
+
+    @Test
+    fun parse_siblingAddressIsNotSwallowed() {
+        val raw = "gradation://pair?url=wss://h/v1&address=wss://other.example/v1&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://h/v1", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
     fun parse_hexWithColons() {
         val colons =
             "12:AD:50:59:23:03:1E:7D:75:A8:97:2D:CA:3A:9E:0C:ED:E9:FE:50:86:FB:7C:08:8F:42:E0:B5:6A:98:93:A9"
