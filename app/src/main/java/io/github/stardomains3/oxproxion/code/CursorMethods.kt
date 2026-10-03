@@ -21,6 +21,10 @@ import java.util.concurrent.ConcurrentHashMap
  * and a plan approval use the same card as an ACP permission. Several questions at once
  * are skipped so the agent can continue. `cursor/update_todos` is a notification and
  * becomes the session's todo card. A later update with `merge` replaces rows by id.
+ * `cancelled` stays cancelled (it is not rewritten as pending). A plan whose todos
+ * live only under `phases` still fills that card.
+ * `cursor/task` and `cursor/generate_image` are notifications. A request-shaped copy
+ * is acknowledged so the agent is not told the method is missing.
  *
  * One JSON-RPC id is one live request. Agents restart that counter, so a later ACP
  * permission can reuse an id this class already answered. [release] drops the Cursor
@@ -69,6 +73,8 @@ internal class CursorMethods {
         "cursor/update_todos" -> updateTodos(sessionId, idEl, params, seq, now)
         "cursor/ask_question" -> askQuestion(sessionId, idEl, params, seq, now)
         "cursor/create_plan" -> createPlan(sessionId, idEl, params, seq, now)
+        "cursor/task" -> ackTask(idEl, params)
+        "cursor/generate_image" -> ackImage(idEl, params)
         else -> emptyList()
     }
 
@@ -134,7 +140,7 @@ internal class CursorMethods {
     ): List<AdapterOutput> {
         val requestId = rpcId(idEl) ?: return listOf(AdapterOutput.Ignored("cursor plan without id"))
         requests[requestId] = CursorRequest(CursorRequestKind.PLAN, "", sessionId)
-        val entries = merge(sessionId, todoEntries(params["todos"]), merge = false)
+        val entries = merge(sessionId, planTodos(params), merge = false)
         val title = params.str("name")?.trim()?.ifEmpty { null } ?: "Plan"
         val detail = params.str("overview")?.trim()?.ifEmpty { null }
             ?: params.str("plan")?.trim()?.ifEmpty { null }?.let(::clip)
@@ -222,10 +228,54 @@ internal class CursorMethods {
         }
     }
 
-    private fun planStatus(s: String?) = when (s?.trim()?.lowercase()?.replace('-', '_')) {
-        "completed", "complete", "done" -> PlanStatus.COMPLETED
+    private fun planStatus(s: String?) = when (s?.trim()?.lowercase()?.replace('-', '_')?.replace(' ', '_')) {
+        "completed", "complete", "done", "success", "succeeded", "finished" -> PlanStatus.COMPLETED
         "in_progress", "running", "inprogress" -> PlanStatus.IN_PROGRESS
+        // Cursor's own status. Pending would put the row back on the list and,
+        // on a request-shaped update, echo "pending" to the agent.
+        "cancelled", "canceled" -> PlanStatus.CANCELLED
         else -> PlanStatus.PENDING
+    }
+
+    /** Top-level todos, or the ones grouped under `phases` when the top list is empty. */
+    private fun planTodos(params: JsonObject): List<PlanEntry> {
+        val top = todoEntries(params["todos"])
+        if (top.isNotEmpty()) return top
+        val phases = params["phases"] as? JsonArray ?: return emptyList()
+        return phases.flatMap { phase ->
+            val o = phase as? JsonObject ?: return@flatMap emptyList()
+            todoEntries(o["todos"])
+        }
+    }
+
+    /**
+     * `cursor/task` tells us a subagent finished. A notification needs nothing.
+     * A request-shaped frame (some builds still send an id) must not get
+     * "Method not found", which the agent treats as the task failing.
+     */
+    private fun ackTask(idEl: JsonElement?, params: JsonObject): List<AdapterOutput> {
+        val id = rpcId(idEl) ?: return emptyList()
+        requests.remove(id)
+        val outcome = buildJsonObject {
+            put("outcome", "completed")
+            rpcId(params["agentId"])?.let { put("agentId", it) }
+            rpcId(params["durationMs"])?.let { put("durationMs", jsonRpcIdValue(it)) }
+        }
+        return listOf(AdapterOutput.Reply(rpc(id, buildJsonObject { put("outcome", outcome) })))
+    }
+
+    /** Same as [ackTask] for `cursor/generate_image`: ack with the path they already sent. */
+    private fun ackImage(idEl: JsonElement?, params: JsonObject): List<AdapterOutput> {
+        val id = rpcId(idEl) ?: return emptyList()
+        requests.remove(id)
+        val path = params.str("filePath")?.trim()?.ifEmpty { null }
+            ?: params.str("file_path")?.trim()?.ifEmpty { null }
+            ?: ""
+        val outcome = buildJsonObject {
+            put("outcome", "generated")
+            put("filePath", path)
+        }
+        return listOf(AdapterOutput.Reply(rpc(id, buildJsonObject { put("outcome", outcome) })))
     }
 
     private fun askResult(requestId: String, questionId: String, optionId: String?): String {
@@ -269,6 +319,7 @@ internal class CursorMethods {
                             put("status", when (e.status) {
                                 PlanStatus.COMPLETED -> "completed"
                                 PlanStatus.IN_PROGRESS -> "in_progress"
+                                PlanStatus.CANCELLED -> "cancelled"
                                 PlanStatus.PENDING -> "pending"
                             })
                         })

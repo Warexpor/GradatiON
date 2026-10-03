@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`, `ListPullRequestReviewComments`, `BrowserFillForm`, `BrowserFileUpload`, `BrowserIsVisible`, `BrowserTabList`, `BrowserInstall`, `BrowserNavigateForward`, `BrowserReload`, `BrowserHighlight`, `BrowserSearch`, `BrowserMouseClickXy`, `BrowserCdp`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`, `ListPullRequestReviewComments`, `BrowserFillForm`, `BrowserFileUpload`, `BrowserIsVisible`, `BrowserTabList`, `BrowserInstall`, `BrowserNavigateForward`, `BrowserReload`, `BrowserHighlight`, `BrowserSearch`, `BrowserMouseClickXy`, `BrowserCdp`, `BrowserMouseMoveXy`, `BrowserMouseDragXy`, `BrowserMouseDown`, `BrowserMouseUp`, `BrowserMouseWheel`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -227,7 +227,8 @@ class AcpAdapter : HarnessAdapter {
         val obj = runCatching { json.parseToJsonElement(frame).jsonObject }.getOrElse {
             return listOf(AdapterOutput.Ignored("not JSON"))
         }
-        val method = obj.str("method")
+        // Older Cursor builds prefix extension methods (`_cursor/ask_question`).
+        val method = cursorMethod(obj.str("method"))
         val idEl = obj["id"]
         val admit = admit(method, obj)
         if (admit is Admit.Drop) return ignored("replayed seq")
@@ -300,7 +301,8 @@ class AcpAdapter : HarnessAdapter {
                 val params = obj["params"] as? JsonObject ?: return ignored("no params")
                 decodeSessionStatus(params, bridgeSeq(params, obj))
             }
-            method == "cursor/update_todos" || method == "cursor/ask_question" || method == "cursor/create_plan" -> {
+            method == "cursor/update_todos" || method == "cursor/ask_question" || method == "cursor/create_plan" ||
+                method == "cursor/task" || method == "cursor/generate_image" -> {
                 val params = obj["params"] as? JsonObject ?: return ignored("no params")
                 val sid = sessionOf(params).orEmpty()
                 val seq = bridgeSeq(params, obj)
@@ -644,6 +646,11 @@ class AcpAdapter : HarnessAdapter {
             "browser_reload", "browserreload",
             "browser_highlight", "browserhighlight",
             "browser_mouse_click_xy", "browsermouseclickxy",
+            "browser_mouse_move_xy", "browsermousemovexy",
+            "browser_mouse_drag_xy", "browsermousedragxy",
+            "browser_mouse_down", "browsermousedown",
+            "browser_mouse_up", "browsermouseup",
+            "browser_mouse_wheel", "browsermousewheel",
             "browser_cdp", "browsercdp",
             "kill_shell", "killshell" -> "execute"
             "think", "thought", "reasoning",
@@ -1180,8 +1187,9 @@ class AcpAdapter : HarnessAdapter {
                 "reviewers", "team_reviewers", "teamReviewers",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
-                "source_path", "sourcePath", "machine_id", "machineId") != null ||
-            xyText(raw) != null ||
+                "source_path", "sourcePath", "machine_id", "machineId",
+                "button") != null ||
+            pointerText(raw) != null ||
             firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
@@ -1374,7 +1382,8 @@ class AcpAdapter : HarnessAdapter {
                 "reviewers", "team_reviewers", "teamReviewers",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
-                "source_path", "sourcePath", "machine_id", "machineId") ?: xyText(raw),
+                "source_path", "sourcePath", "machine_id", "machineId",
+                "button") ?: pointerText(raw),
             filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
@@ -1392,10 +1401,27 @@ class AcpAdapter : HarnessAdapter {
     }
 
     /**
-     * Coordinate click (`browser_mouse_click_xy`) sends `x` and `y`, not a ref.
-     * Both are required so a lone `x` does not replace a command line. Whole-number
-     * doubles still show as `10, 20`, not `10.0, 20.0`.
+     * Pointer tools. A click or move is `x, y` (both required, so a lone `x` does not
+     * replace a command). A drag is `start → end`. A wheel is `deltaX, deltaY`.
+     * Whole-number doubles still show as `10, 20`, not `10.0, 20.0`.
+     * A click still wins when both `x`/`y` and a delta are present.
      */
+    private fun pointerText(raw: JsonObject?): String? {
+        if (raw == null) return null
+        xyText(raw)?.let { return it }
+        val sx = coordPiece(raw["startX"] ?: raw["start_x"])
+        val sy = coordPiece(raw["startY"] ?: raw["start_y"])
+        val ex = coordPiece(raw["endX"] ?: raw["end_x"])
+        val ey = coordPiece(raw["endY"] ?: raw["end_y"])
+        if (sx != null && sy != null && ex != null && ey != null) {
+            return "$sx, $sy → $ex, $ey"
+        }
+        val dx = coordPiece(raw["deltaX"] ?: raw["delta_x"])
+        val dy = coordPiece(raw["deltaY"] ?: raw["delta_y"])
+        if (dx != null || dy != null) return "${dx ?: "0"}, ${dy ?: "0"}"
+        return null
+    }
+
     private fun xyText(raw: JsonObject?): String? {
         if (raw == null) return null
         val x = coordPiece(raw["x"]) ?: return null
@@ -1712,6 +1738,7 @@ class AcpAdapter : HarnessAdapter {
     private fun planStatus(s: String?) = when (normalizeKind(s)) {
         "completed", "complete", "done", "success", "succeeded", "finished" -> PlanStatus.COMPLETED
         "in_progress", "running", "inprogress" -> PlanStatus.IN_PROGRESS
+        "cancelled", "canceled" -> PlanStatus.CANCELLED
         else -> PlanStatus.PENDING
     }
 
@@ -1749,6 +1776,11 @@ class AcpAdapter : HarnessAdapter {
         private val SEQ_METHODS = setOf(
             "session/update", "session/request_permission", "bridge/permissionResolved", "bridge/sessionStatus",
             "cursor/update_todos", "cursor/ask_question", "cursor/create_plan",
+            "cursor/task", "cursor/generate_image",
         )
+
+        /** Older Cursor builds send `_cursor/ask_question`. The rest of decode uses the bare name. */
+        private fun cursorMethod(method: String?): String? =
+            if (method != null && method.startsWith("_cursor/")) method.removePrefix("_") else method
     }
 }

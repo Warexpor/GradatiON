@@ -691,15 +691,21 @@ class CodeTranscriptAdapter(
                 text = entry.content
                 textSize = 15f
                 setTextColor(ctx.getColor(when (entry.status) {
-                    PlanStatus.COMPLETED -> R.color.xai_mute
+                    PlanStatus.COMPLETED, PlanStatus.CANCELLED -> R.color.xai_mute
                     PlanStatus.IN_PROGRESS -> R.color.xai_ink
                     PlanStatus.PENDING -> R.color.xai_body
                 }))
                 if (entry.status == PlanStatus.IN_PROGRESS) setTypeface(typeface, android.graphics.Typeface.BOLD)
+                // Cancelled is not still to-do: strike it so it does not read as pending.
+                paintFlags = if (entry.status == PlanStatus.CANCELLED) {
+                    paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+                } else {
+                    paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
+                }
                 setCompoundDrawablesRelativeWithIntrinsicBounds(when (entry.status) {
                     PlanStatus.COMPLETED -> R.drawable.ic_code_plan_done
                     PlanStatus.IN_PROGRESS -> R.drawable.ic_code_plan_progress
-                    PlanStatus.PENDING -> R.drawable.ic_code_plan_pending
+                    PlanStatus.PENDING, PlanStatus.CANCELLED -> R.drawable.ic_code_plan_pending
                 }, 0, 0, 0)
                 compoundDrawablePadding = (12 * d).toInt()
                 setPadding(0, (6 * d).toInt(), 0, (6 * d).toInt())

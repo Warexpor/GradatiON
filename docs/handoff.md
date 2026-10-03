@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Code wave 30)
+
+On `gradation/w30-code` (PR into `gradation/app-pass`). Code-mode follow-ups after harness-id folding, session mode aliases, and click/CDP cards (#124). Not a redo of that pass, and not #115 (gitStatus / listSessions / sessionStatus doubles, or the earlier browser card names):
+- A Cursor todo with status `cancelled` / `canceled` stays cancelled (struck on the plan card) and a request-shaped `cursor/update_todos` echoes `cancelled`, not `pending`. `success` still counts as completed. `create_plan` todos that exist only inside `phases` still show.
+- Extension methods prefixed `_cursor/` (`_cursor/ask_question`) use the same path as `cursor/`. `cursor/task` and `cursor/generate_image` that arrive with an id are acknowledged (`completed` / `generated`) instead of JSON-RPC "Method not found". A notification with no id still needs no reply.
+- `BrowserMouseMoveXy`, `BrowserMouseDragXy`, `BrowserMouseDown`, `BrowserMouseUp`, and `BrowserMouseWheel` use the execute card. A drag with `startX`/`endX` (including `10.0`) shows `10, 20 → 30, 40`. A wheel shows `deltaX, deltaY`. A mouse-down shows `button`.
+
+Phone: cancel a todo (the row should be struck, not still pending). On Cursor Agent, a drag should show the execute icon and `10, 20 → 30, 40`. An older agent that sends `_cursor/ask_question` should still show the question, not fail the method.
+
 # Handoff (2026-10-03, Stability wave 29)
 
 On `gradation/w29-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w28 encrypt sidecar temps / encrypt_ok discard (#118). Not a redo of that pass, and not #123–#129:
