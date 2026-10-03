@@ -162,8 +162,8 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                 show(R.id.maxTokensButton, R.id.maxTokensValue, prefs.getMaxTokens())
                 show(R.id.timeoutButton, R.id.timeoutValue,
                     getString(R.string.settings_value_minutes, prefs.getTimeoutMinutes()))
-                view.findViewById<com.google.android.material.button.MaterialButton>(R.id.chatMemoryButton)
-                    ?.text = ChatMemoryDialogFragment.label(ctx, prefs.getChatMemoryCount())
+                show(R.id.chatMemoryButton, R.id.chatMemoryValue,
+                    ChatMemoryDialogFragment.label(ctx, prefs.getChatMemoryCount()))
             }
         }
     }

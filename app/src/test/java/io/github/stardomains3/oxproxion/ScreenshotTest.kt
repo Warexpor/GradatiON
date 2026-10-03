@@ -591,6 +591,25 @@ class ScreenshotTest : ScreenshotHarness() {
         snap(root(a), "settings_tools_dark")
     }
 
+    /** Chat memory's only tap target was the value on the right; the label and icon did nothing. */
+    @Test fun settingsChatMemoryRowDark() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowAdvanced)
+        val page = a.supportFragmentManager.fragments.filterIsInstance<SettingsDetailFragment>().last().requireView()
+        val button = page.findViewById<View>(R.id.chatMemoryButton)
+        org.junit.Assert.assertEquals("the whole row is the button", (button.parent as View).width, button.width)
+        button.performClick(); idle()
+        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        val list = dialog.listView
+        list.performItemClick(list.adapter.getView(3, null, list), 3, list.adapter.getItemId(3)); idle()
+        val value = page.findViewById<android.widget.TextView>(R.id.chatMemoryValue)
+        org.junit.Assert.assertEquals(ChatMemoryDialogFragment.label(a, 8), value.text.toString())
+        org.junit.Assert.assertEquals(
+            a.getString(R.string.cd_settings_row_value, a.getString(R.string.settings_chat_memory), value.text),
+            button.contentDescription
+        )
+        snap(root(a), "settings_chat_memory_dark")
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
