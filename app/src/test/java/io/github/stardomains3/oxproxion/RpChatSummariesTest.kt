@@ -80,6 +80,41 @@ class RpChatSummariesTest {
     }
 
     @Test
+    fun taglineSkipsAHorizontalRule() {
+        val dashes = RpCharacter(name = "Mira", personality = "---\nShe keeps the locket.\nSecond stays off.")
+        assertEquals("She keeps the locket.", RpChatSummaries.tagline(dashes, "Alex"))
+        val spaced = RpCharacter(name = "Mira", personality = "- - -\n{{char}} waits at the docks.")
+        assertEquals("Mira waits at the docks.", RpChatSummaries.tagline(spaced, "Alex"))
+        val equals = RpCharacter(name = "Mira", personality = "===\nShe waits.")
+        assertEquals("She waits.", RpChatSummaries.tagline(equals, "Alex"))
+        val hashes = RpCharacter(name = "Mira", personality = "###\nShe waits at the docks.")
+        assertEquals("She waits at the docks.", RpChatSummaries.tagline(hashes, "Alex"))
+        val sharp = RpCharacter(name = "Mira", personality = "C#\nSecond stays off.")
+        assertEquals("C#", RpChatSummaries.tagline(sharp, "Alex"))
+        val fresh = RpChatSummaries.build(
+            sessions = emptyList(),
+            characters = listOf(dashes.copy(id = 4)),
+            previews = emptyMap(),
+            llmName = "GradatiON",
+            noPreview = "No messages yet",
+            startPrompt = "Tap to start",
+            userName = "Alex",
+        )
+        assertEquals("She keeps the locket.", fresh[0].preview)
+    }
+
+    @Test
+    fun taglineDoesNotSplitAnEmojiAtTheLimit() {
+        val gem = "\uD83D\uDC8E"
+        val cut = RpCharacter(name = "Mira", personality = "a".repeat(139) + gem)
+        val line = RpChatSummaries.tagline(cut, "Alex")
+        assertEquals("a".repeat(139), line)
+        assertFalse(line.any { it.isHighSurrogate() })
+        val kept = RpCharacter(name = "Mira", personality = "She keeps the locket $gem")
+        assertTrue(RpChatSummaries.tagline(kept, "Alex").endsWith(gem))
+    }
+
+    @Test
     fun loreTileFollowsTheBookThatWouldBeUsed() {
         assertFalse(RpChatSummaries.loreTileOn(loreEnabled = false, pinnedBookExists = true, activeBookExists = true))
         assertFalse(RpChatSummaries.loreTileOn(loreEnabled = true, pinnedBookExists = false, activeBookExists = false))
