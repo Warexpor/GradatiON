@@ -729,7 +729,8 @@ class SharedPreferencesHelper(context: Context) {
         }
     }
     fun saveSafFolderUri(uri: String) {
-        mainPrefs.edit { putString(SAF_FOLDER_URI, uri) }
+        // commit: the persistable grant outlives the process; apply() can drop the URI that names it.
+        mainPrefs.edit(commit = true) { putString(SAF_FOLDER_URI, uri) }
     }
 
     fun getSafFolderUri(): String? {
@@ -1524,8 +1525,9 @@ class SharedPreferencesHelper(context: Context) {
     }
     fun setLanEndpoint(url: String?) {
         // Store the base only. Callers append /v1; a pasted slash or /v1 suffix would double it.
+        // commit: Models > local server. apply() can still be in memory when the process dies.
         val base = url?.let { LanEndpointValidator.normalizedBase(it) }?.takeIf { it.isNotBlank() }
-        mainPrefs.edit {
+        mainPrefs.edit(commit = true) {
             if (base == null) remove(KEY_LAN_ENDPOINT)
             else putString(KEY_LAN_ENDPOINT, base)
         }
@@ -1562,7 +1564,8 @@ class SharedPreferencesHelper(context: Context) {
         return mainPrefs.getString(LAN_PROVIDER_KEY, LAN_PROVIDER_OLLAMA) ?: LAN_PROVIDER_OLLAMA
     }
     fun setLanProvider(provider: String) {
-        mainPrefs.edit { putString(LAN_PROVIDER_KEY, provider) }
+        // commit: saved with the local server address on the same tap.
+        mainPrefs.edit(commit = true) { putString(LAN_PROVIDER_KEY, provider) }
     }
     fun saveClearChatDefault(checked: Boolean) {
         mainPrefs.edit { putBoolean(KEY_CLEAR_CHAT_DEFAULT, checked) }

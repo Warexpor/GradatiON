@@ -1823,7 +1823,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         val lanEndpoint = sharedPreferencesHelper.getLanEndpoint()
                         if (lanEndpoint.isNullOrBlank()) error("Local server not configured")
                         lanHttpClient.submitFormWithBinaryData(
-                            url = "$lanEndpoint/v1/audio/transcriptions",
+                            url = LanEndpointValidator.requestUrl(lanEndpoint, "/v1/audio/transcriptions"),
                             formData = formData {
                                 append("file", audioBytes, Headers.build {
                                     append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
@@ -1884,7 +1884,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val lanEndpoint = sharedPreferencesHelper.getLanEndpoint() ?: return
         deliverTranscription {
             val response = lanHttpClient.submitFormWithBinaryData(
-                url = "$lanEndpoint/v1/audio/transcriptions",
+                url = LanEndpointValidator.requestUrl(lanEndpoint, "/v1/audio/transcriptions"),
                 formData = formData {
                     append("file", audioBytes, Headers.build {
                         append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
@@ -2094,7 +2094,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _toastUiEvent.postValue(Event(str(R.string.toast_lan_endpoint_missing)))
             return false
         }
-        activeChatUrl = "$lanEndpoint/v1/chat/completions"
+        activeChatUrl = LanEndpointValidator.requestUrl(lanEndpoint, "/v1/chat/completions")
         activeChatApiKey = sharedPreferencesHelper.getLanApiKeyForRequest()
         return true
     }
@@ -2961,7 +2961,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             Triple(
                 activeModel.apiIdentifier,
-                "$lanEndpoint/v1/chat/completions",
+                LanEndpointValidator.requestUrl(lanEndpoint, "/v1/chat/completions"),
                 sharedPreferencesHelper.getLanApiKeyForRequest()
             )
         } else {
@@ -3109,7 +3109,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val client = if (isLanModel) {
             val lanEndpoint = sharedPreferencesHelper.getLanEndpoint()
             if (lanEndpoint.isNullOrBlank()) return null
-            requestUrl = "$lanEndpoint/v1/chat/completions"
+            requestUrl = LanEndpointValidator.requestUrl(lanEndpoint, "/v1/chat/completions")
             requestKey = sharedPreferencesHelper.getLanApiKeyForRequest()
             modelToUse = _activeChatModel.value ?: return null
             lanHttpClient
@@ -3692,7 +3692,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (lanEndpoint.isNullOrBlank()) {
                 throw IllegalStateException("LAN endpoint not configured. Please set it in settings.")
             }
-            val response = lanHttpClient.get("$lanEndpoint/v1/models") {
+            val response = lanHttpClient.get(LanEndpointValidator.requestUrl(lanEndpoint, "/v1/models")) {
                 timeout { requestTimeoutMillis = 10000 }
                 when (auth) {
                     LanListAuth.NONE -> Unit
@@ -3740,7 +3740,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         withTimeout(5_000.milliseconds) {
             withContext(Dispatchers.IO) {
                 val endpoint = sharedPreferencesHelper.getLanEndpoint() ?: return@withContext emptySet()
-                val response = lanHttpClient.get("$endpoint/api/v0/models")
+                val response = lanHttpClient.get(LanEndpointValidator.requestUrl(endpoint, "/api/v0/models"))
                 if (!response.status.isSuccess()) emptySet()
                 else LanVision.lmStudioVisionIds(response.body<JsonObject>())
             }
@@ -3798,7 +3798,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         withContext(Dispatchers.IO) {
             val lanEndpoint = sharedPreferencesHelper.getLanEndpoint()
                 ?: throw IllegalStateException("LAN endpoint not configured")
-            val response = lanHttpClient.get("$lanEndpoint/api/tags") {
+            val response = lanHttpClient.get(LanEndpointValidator.requestUrl(lanEndpoint, "/api/tags")) {
                 timeout { requestTimeoutMillis = 10000 }
             }
             if (!response.status.isSuccess()) {
@@ -3815,7 +3815,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             tags.map { (name, tag) ->
                 async {
                     val show = try {
-                        val r = lanHttpClient.post("$lanEndpoint/api/show") {
+                        val r = lanHttpClient.post(LanEndpointValidator.requestUrl(lanEndpoint, "/api/show")) {
                             contentType(ContentType.Application.Json)
                             setBody(buildJsonObject { put("model", name) })
                             timeout { requestTimeoutMillis = 5000 }
@@ -3844,7 +3844,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             throw IllegalStateException("LAN endpoint not configured.")
         }
         val lanKey = sharedPreferencesHelper.getLanApiKey()
-        val response = lanHttpClient.post("$lanEndpoint/models/$action") {
+        val response = lanHttpClient.post(LanEndpointValidator.requestUrl(lanEndpoint, "/models/$action")) {
             contentType(ContentType.Application.Json)
             if (!lanKey.isNullOrBlank()) {
                 header("Authorization", "Bearer $lanKey")
@@ -4391,7 +4391,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             charName, userName, userMemory, facts, RpAutoMemory.transcript(turns, charName, userName)
         )
         val isLan = activeModelIsLan() && !demo
-        val endpoint = if (isLan) sharedPreferencesHelper.getLanEndpoint()?.takeIf { it.isNotBlank() }?.let { "$it/v1/chat/completions" }
+        val endpoint = if (isLan) sharedPreferencesHelper.getLanEndpoint()?.takeIf { it.isNotBlank() }?.let { LanEndpointValidator.requestUrl(it, "/v1/chat/completions") }
             else "https://openrouter.ai/api/v1/chat/completions"
         val apiKey = if (isLan) sharedPreferencesHelper.getLanApiKeyForRequest() else activeChatApiKey
         if (endpoint == null || (!isLan && !demo && apiKey.isBlank())) return
