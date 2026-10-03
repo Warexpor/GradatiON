@@ -506,6 +506,8 @@
     <string name="action_copy">Copy</string>
     <string name="presets_empty">No presets yet.\nTap Add to save a model, prompt and settings combo.</string>
     <string name="prompts_empty">No prompts yet.\nTap Add to save one you reuse.</string>
+    <string name="prompts_no_match">No prompts found</string>
+    <string name="system_messages_no_match">No system messages found</string>
     <string name="mode_tab_chat">Chat</string>
     <string name="mode_tab_roleplay">Roleplay</string>
     <string name="mode_tab_roleplay_a11y">Roleplay mode. Long-press for the roleplay home</string>
