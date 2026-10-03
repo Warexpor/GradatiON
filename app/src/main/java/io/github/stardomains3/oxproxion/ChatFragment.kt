@@ -6220,26 +6220,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
 
             val mimeType = resolver.getType(uri)
-            val extension = fileName.substringAfterLast('.', "").lowercase()
+            val shownName = ComposerFiles.singleLineName(fileName)
 
-            val allowedTypes = setOf(
-                "text/plain", "text/html", "text/css", "text/javascript", "application/javascript",
-                "application/json", "application/xml", "text/yaml", "application/toml",
-                "text/csv", "application/sql", "text/markdown", "image/svg+xml"
-            )
-
-            val isAllowed = if (mimeType != null && allowedTypes.contains(mimeType)) {
-                true
-            } else {
-                val codeExtensions = setOf(
-                    "kt", "java", "py", "js", "ts", "cpp", "c", "h", "cs", "php", "rb", "go", "rs", "swift",
-                    "html", "css", "json", "xml", "yaml", "yml", "md", "txt", "sh", "sql", "csv", "log"
-                )
-                codeExtensions.contains(extension)
-            }
-
-            if (!isAllowed) {
-                GlassNotice.show(requireContext(), getString(R.string.toast_unsupported_file, fileName, mimeType))
+            if (!ComposerFiles.accepts(mimeType, fileName)) {
+                GlassNotice.show(requireContext(), getString(R.string.toast_unsupported_file, shownName, mimeType))
                 return
             }
 
@@ -6252,7 +6236,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             if (read.overflow) {
                 GlassNotice.show(
                     requireContext(),
-                    getString(R.string.toast_file_too_large, fileName, ComposerFiles.MAX_SINGLE_BYTES / 1024 / 1024),
+                    getString(R.string.toast_file_too_large, shownName, ComposerFiles.MAX_SINGLE_BYTES / 1024 / 1024),
                 )
                 return
             }
@@ -6271,7 +6255,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 ComposerFiles.Decision.TOO_BIG -> {
                     GlassNotice.show(
                         requireContext(),
-                        getString(R.string.toast_file_too_large, fileName, ComposerFiles.MAX_SINGLE_BYTES / 1024 / 1024),
+                        getString(R.string.toast_file_too_large, shownName, ComposerFiles.MAX_SINGLE_BYTES / 1024 / 1024),
                     )
                     return
                 }
@@ -6280,7 +6264,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         requireContext(),
                         getString(
                             R.string.toast_attachments_total_limit,
-                            fileName,
+                            shownName,
                             (already + fileSize) / 1024 / 1024,
                             ComposerFiles.MAX_TOTAL_BYTES / 1024 / 1024,
                         ),
@@ -6297,13 +6281,13 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 parkLateAskAttachment(
                     ComposerStaged.withFile(
                         base,
-                        ComposerStaged.FilePart(fileName, content, fileSize),
+                        ComposerStaged.FilePart(shownName, content, fileSize),
                     ),
                 )
                 return
             }
 
-            pendingFiles.add(AttachedFile(fileName, content, fileSize))
+            pendingFiles.add(AttachedFile(shownName, content, fileSize))
             updateAttachmentButton()
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -6390,7 +6374,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         if (pendingFiles.isEmpty()) return
 
         val filesList = pendingFiles.joinToString("\n") { file ->
-            "${file.fileName} (${formatFileSize(file.size)})"
+            "${ComposerFiles.singleLineName(file.fileName)} (${formatFileSize(file.size)})"
         }
 
         val builder = GlassAlertDialogBuilder(requireContext())

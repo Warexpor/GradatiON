@@ -48,8 +48,29 @@ object ComposerFiles {
         return CappedRead(text = "", bytes = total, overflow = true)
     }
 
-    private fun finish(out: ByteArrayOutputStream, total: Int, overflow: Boolean): CappedRead =
-        CappedRead(out.toByteArray().toString(Charsets.UTF_8), total, overflow)
+    private fun finish(out: ByteArrayOutputStream, total: Int, overflow: Boolean): CappedRead {
+        // Notepad writes a UTF-8 BOM. Leaving it on the first line sent a different file.
+        val text = out.toByteArray().toString(Charsets.UTF_8).removePrefix("\uFEFF")
+        return CappedRead(text, total, overflow)
+    }
+
+    /**
+     * Whether this pick is a text file. Any text type counts, including one whose
+     * subtype is not on the short list, or whose charset parameter is glued on.
+     * A generic type still counts when the name is an extension we already accept,
+     * including the siblings of those extensions (tsx next to ts, kts next to kt).
+     */
+    fun accepts(mimeType: String?, fileName: String): Boolean {
+        val mime = mimeType?.substringBefore(';')?.trim()?.lowercase().orEmpty()
+        if (mime.startsWith("text/")) return true
+        if (mime in DOCUMENT_TYPES) return true
+        val ext = fileName.substringAfterLast('.', "").lowercase()
+        return ext.isNotEmpty() && '.' in fileName && ext in CODE_EXTENSIONS
+    }
+
+    /** One header or dialog line. A line break in the name used to split the list. */
+    fun singleLineName(fileName: String): String =
+        fileName.replace(NEWLINE, " ").ifBlank { "file" }
 
     /**
      * One file, as it is pasted into the prompt. A body that contains a fence of three
@@ -58,12 +79,14 @@ object ComposerFiles {
      * on the header line, including a Unicode separator that is not CR or LF.
      */
     fun section(number: Int, fileName: String, content: String): String {
-        val name = fileName.replace(NEWLINE, " ").ifBlank { "file" }
+        val name = singleLineName(fileName)
         // trim() also ate the indent on the first line, so a snippet or a patch
         // that starts with spaces was sent as a different file. Only surrounding
         // line breaks are dropped, so the closing fence still sits on its own line.
-        if (content.isBlank()) return "File $number ($name): (empty file)"
-        val body = content.trim('\r', '\n')
+        // A leading BOM is not a line break, and it is not part of the file.
+        val raw = content.removePrefix("\uFEFF")
+        if (raw.isBlank()) return "File $number ($name): (empty file)"
+        val body = raw.trim('\r', '\n')
         if (body.isEmpty()) return "File $number ($name): (empty file)"
         val fence = "`".repeat(fenceLength(body))
         return "File $number ($name):\n\n${fence}text\n$body\n$fence"
@@ -85,4 +108,19 @@ object ComposerFiles {
 
     /** Any Unicode linebreak. CR/LF used to be the only ones folded into the header. */
     private val NEWLINE = Regex("\\R")
+
+    private val DOCUMENT_TYPES = setOf(
+        "application/javascript",
+        "application/json",
+        "application/xml",
+        "application/toml",
+        "application/sql",
+        "image/svg+xml",
+    )
+
+    private val CODE_EXTENSIONS = setOf(
+        "kt", "kts", "java", "py", "js", "jsx", "mjs", "cjs", "ts", "tsx", "cpp", "c", "h",
+        "cs", "php", "rb", "go", "rs", "swift", "html", "css", "json", "xml", "yaml", "yml",
+        "toml", "md", "txt", "sh", "sql", "csv", "log", "vue", "svelte", "svg",
+    )
 }
