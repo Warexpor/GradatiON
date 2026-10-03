@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Chat wave 32)
+
+On `cursor/chat-wave-32-f2c6` (PR into `gradation/app-pass`). Chat follow-ups. Not a redo of #138 (calendar day buckets, Remove all clearing a parked file list) or #139 (history preview keeping `#` `~` `>`, staged text files one by one and the 1 MB cap). Not a redo of #152 (lore pin on the chosen copy, wallpaper retry, trimmed character names), #151 (browser action lines, session approval pill), #150 (cleared away shades, cap order, Speak utterance ids), #149 (homelab hostnames, LAN paths, approximate location), #147 (hub hero line, pairing query text), or #148 (example sides, lore headers, character-list marks).
+
+- History preview keeps a sentence that starts with `data:` or mentions `base64,`. Those used to be treated as the photo payload, so the row went blank or said Photo. A search hit already on the first line stays at the start of the row. An underscore inside a word stays for letters beyond ASCII (`déjà_vu`).
+- A text file whose body contains ``` is wrapped in a longer fence. A line break in the file name stays on the header line.
+- Sending a staged photo does not delete the JPEG the message still shows. A new chat is not saved until the reply lands, so a database check alone removed the file. The caption and files are parked before the photo is encoded, so leaving during that send does not lose them.
+
+Phone: send a chat whose last line is `data: the numbers` or `use base64, then stop` (History should show that sentence, not Photo or a blank row). Attach a markdown file that contains a code fence (the model should still see the whole file). Stage a photo, open History, send it, and leave before the reply finishes (the picture should still be on the message). Stage a photo with a caption and a file, rotate while it is sending (the caption and the file should still be there if the send did not go out).
+
 # Handoff (2026-10-03, Import wave 32)
 
 On `cursor/import-lore-pin-names-136c` (PR into `gradation/app-pass`). Import/export follow-ups after #144. Not a redo of a waiting lore pin replacing the old pin, a failed portrait write being retried, or duplicate lore names exporting the newest text and import updating every local row. Not a redo of #133 (last lore flag, pin clearing the backup name, missing portrait exported empty). Not a redo of #151 (browser action lines, session approval pill), #150 (dead shade re-alert, cap order, utterance id), #149 (homelab hosts, LAN paths, approximate location), #147 (hub first line, pairing query text), or #148 (example sides, lore headers, list marks).

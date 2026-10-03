@@ -466,10 +466,14 @@ object ScenePhoto {
         dropped: Collection<String>,
         heldForEdit: Set<String>,
         pendingName: String?,
+        shownNames: Set<String> = emptySet(),
     ): List<String> {
         if (dropped.isEmpty()) return emptyList()
         val pending = pendingName?.takeIf { isSceneFileName(it) }
-        return dropped.filter { it !in heldForEdit && it != pending }
+        // A send puts the file on the transcript before the row exists. A new chat is
+        // not saved until the reply lands, so a database check alone deleted the JPEG
+        // the bubble was still showing.
+        return dropped.filter { it !in heldForEdit && it != pending && it !in shownNames }
     }
 
     /** Deletes scene photos we own. A name that is not one of ours is ignored. */
