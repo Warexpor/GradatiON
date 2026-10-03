@@ -92,7 +92,18 @@ object BackgroundPhoto {
         return ScenePhoto.completeJpeg(f)
     }
 
+    /**
+     * Test hook. The next [delete] leaves the file in place, as a delete that did not land.
+     * Cleared when it fires.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var failNextDeleteForTest: Boolean = false
+
     fun delete(ctx: Context, slot: String) {
+        if (failNextDeleteForTest) {
+            failNextDeleteForTest = false
+            return
+        }
         val f = file(ctx, slot)
         f.delete()
         File(f.parentFile, "${f.name}.bak").delete()

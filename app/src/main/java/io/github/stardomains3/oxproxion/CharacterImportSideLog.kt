@@ -160,6 +160,12 @@ internal object CharacterImportSideLog {
                     if (BackgroundPhoto.hasPhoto(context, slot)) {
                         BackgroundPhoto.delete(context, slot)
                     }
+                    // A delete that does not land, or a side file recover() puts back, would
+                    // leave the picture after this note was dropped. Retry, as a portrait clear does.
+                    if (BackgroundPhoto.hasPhoto(context, slot)) {
+                        Log.w(TAG, "Character wallpaper still waiting")
+                        return false
+                    }
                 }
                 is RpWallpaperBackup.Restore.Write -> {
                     val slot = BackgroundPhoto.slotForCharacter(note.id)

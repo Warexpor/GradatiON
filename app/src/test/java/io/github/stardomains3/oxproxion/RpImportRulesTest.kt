@@ -14,6 +14,10 @@ class RpImportRulesTest {
             RpCharacterExport(name = "D", exportKey = "k3")
         )
         assertEquals(2, RpImportRules.characterOverwriteCount(incoming, setOf("k1", "k3")))
+        assertEquals(0, RpImportRules.characterOverwriteCount(
+            listOf(RpCharacterExport(name = "   ", exportKey = "k1")),
+            setOf("k1"),
+        ))
     }
 
     @Test
