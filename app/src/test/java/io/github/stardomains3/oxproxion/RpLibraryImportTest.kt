@@ -725,4 +725,106 @@ class RpLibraryImportTest {
         assertNull(prefs.getPendingRpLorebookName(fresh))
         assertTrue(prefs.mainPrefs.edit().clear().commit())
     }
+
+    @Test
+    fun theLastInactiveCopyOfALorebookDoesNotStayOn() = runBlocking {
+        repo.saveLorebook(RpLorebook(name = "Notes", content = "n", isActive = true))
+        repo.importLorebooks(
+            listOf(
+                RpLorebookExport(name = "World", content = "first", isActive = true),
+                RpLorebookExport(name = " world ", content = "second", isActive = false),
+            )
+        )
+        val books = repo.getAllLorebooksOnce()
+        val world = books.single { it.name.equals("world", ignoreCase = true) }
+        assertEquals("world", world.name)
+        assertEquals("second", world.content)
+        assertFalse(world.isActive)
+        // The earlier duplicate must not have cleared the book that was already active.
+        assertTrue(books.single { it.name == "Notes" }.isActive)
+    }
+
+    @Test
+    fun choosingALorePinDropsTheNameTheBackupWasWaitingToAttach() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val id = 21L
+        RpCharacterPrefsBackup.apply(
+            prefs,
+            id,
+            RpCharacterExport(name = "Mira", lorebookName = "Forest"),
+            emptyList(),
+        )
+        assertEquals("Forest", prefs.getPendingRpLorebookName(id))
+        val city = repo.saveLorebook(RpLorebook(name = "City", content = "c"))
+        prefs.saveRpLorebookId(id, city)
+        assertNull(prefs.getPendingRpLorebookName(id))
+        repo.saveLorebook(RpLorebook(name = "Forest", content = "f"))
+        RpCharacterPrefsBackup.bindPending(prefs, repo.getAllLorebooksOnce())
+        assertEquals(city, prefs.getRpLorebookId(id))
+
+        RpCharacterPrefsBackup.apply(
+            prefs,
+            id,
+            RpCharacterExport(name = "Mira", lorebookName = "Forest"),
+            emptyList(),
+        )
+        assertEquals("Forest", prefs.getPendingRpLorebookName(id))
+        prefs.saveRpLorebookId(id, null)
+        assertNull(prefs.getPendingRpLorebookName(id))
+        RpCharacterPrefsBackup.bindPending(prefs, repo.getAllLorebooksOnce())
+        assertNull(prefs.getRpLorebookId(id))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun anEmptyPortraitClearsTheOldOneAndAMissingFieldLeavesIt() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        val bmp = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(Color.MAGENTA)
+        val jpeg = ByteArrayOutputStream().also {
+            bmp.compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        bmp.recycle()
+        assertTrue(jpeg.size >= 64)
+        val id = repo.saveCharacter(RpCharacter(name = "Ada", exportKey = "ada"))
+        val file = RpAvatarStorage.avatarFile(app, id)
+        file.writeBytes(jpeg)
+        val uri = file.toURI().toString()
+        repo.saveCharacter(repo.getCharacterById(id)!!.copy(photoUri = uri))
+        assertTrue(RpAvatarStorage.hasAvatar(app, id))
+        assertEquals("", RpAvatarStorage.encodeAvatarBase64(app, 404L))
+
+        val keep = RpCharacterExport(name = "Ada", exportKey = "ada", avatarBase64 = null)
+        repo.importCharacters(listOf(keep)) { rows ->
+            val row = rows.single()
+            CharacterImportSideLog.write(
+                log,
+                listOf(ImportedCharacterNote(row.id, keep.name, row.exportKey, keep)),
+            )
+        }
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertTrue(RpAvatarStorage.hasAvatar(app, id))
+        assertEquals(uri, repo.getCharacterById(id)!!.photoUri)
+
+        val clear = RpCharacterExport(name = "Ada", exportKey = "ada", avatarBase64 = "")
+        repo.importCharacters(listOf(clear)) { rows ->
+            val row = rows.single()
+            CharacterImportSideLog.write(
+                log,
+                listOf(ImportedCharacterNote(row.id, clear.name, row.exportKey, clear)),
+            )
+        }
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertFalse(RpAvatarStorage.hasAvatar(app, id))
+        assertNull(repo.getCharacterById(id)!!.photoUri)
+        assertEquals("", RpAvatarStorage.encodeAvatarBase64(app, id))
+        file.delete()
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
 }
