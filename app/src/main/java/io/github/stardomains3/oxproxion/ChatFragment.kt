@@ -376,8 +376,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var lastContentLength = 0
     private lateinit var textFilePicker: ActivityResultLauncher<String>
     private val pendingFiles = mutableListOf<AttachedFile>()
-    private val MAX_FILE_SIZE = 3 * 1024 * 1024 // 3MB total
-    private val MAX_SINGLE_FILE_SIZE = 1024 * 1024 // 1MB per file
     @SuppressLint("ClickableViewAccessibility")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -477,8 +475,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             uri?.let { processPdfUri(it) }  // Null-safe: Call if non-null
         }
         textFilePicker = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-            // One at a time, with the size and type checks inside processTextFile.
-            uris.forEach { uri -> processTextFile(uri) }
+            // One after another. Launching each read together let every file measure the
+            // total before any of them was added, so the 3 MB cap never saw the others.
+            if (uris.isEmpty()) return@registerForActivityResult
+            viewLifecycleOwner.lifecycleScope.launch {
+                for (uri in uris) readTextAttachment(uri)
+            }
         }
         // --- Initialize Views from fragment_chat.xml ---
         pdfChatButton = view.findViewById(R.id.pdfChatButton)
@@ -6184,106 +6186,110 @@ $cleanContent
             .setOnDismissListener { if (!converting) release() }
             .show()
     }
-    private fun processTextFile(uri: Uri) {
-        lifecycleScope.launch {
-            try {
-                // Get file info (your existing query for filename)
-                val fileName = try {
-                    val cursor = requireContext().contentResolver.query(uri, null, null, null, null)
-                    cursor?.use {
-                        if (it.moveToFirst()) {
-                            val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                            if (nameIndex != -1) it.getString(nameIndex) else "unknown.txt"
-                        } else "unknown.txt"
-                    } ?: "unknown.txt"
-                } catch (e: Exception) {
-                    "unknown.txt"
-                }
+    private suspend fun readTextAttachment(uri: Uri) {
+        try {
+            val resolver = requireContext().contentResolver
+            val fileName = try {
+                val cursor = resolver.query(uri, null, null, null, null)
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1) it.getString(nameIndex) else "unknown.txt"
+                    } else "unknown.txt"
+                } ?: "unknown.txt"
+            } catch (e: Exception) {
+                "unknown.txt"
+            }
 
-                // Get MIME type and extension for validation (before reading content)
-                val mimeType = requireContext().contentResolver.getType(uri)
-                val extension = fileName.substringAfterLast('.', "").lowercase()
+            val mimeType = resolver.getType(uri)
+            val extension = fileName.substringAfterLast('.', "").lowercase()
 
-                // Allowed MIME types (your list from earlier)
-                val allowedTypes = setOf(
-                    "text/plain", "text/html", "text/css", "text/javascript", "application/javascript",
-                    "application/json", "application/xml", "text/yaml", "application/toml",
-                    "text/csv", "application/sql", "text/markdown", "image/svg+xml"
+            val allowedTypes = setOf(
+                "text/plain", "text/html", "text/css", "text/javascript", "application/javascript",
+                "application/json", "application/xml", "text/yaml", "application/toml",
+                "text/csv", "application/sql", "text/markdown", "image/svg+xml"
+            )
+
+            val isAllowed = if (mimeType != null && allowedTypes.contains(mimeType)) {
+                true
+            } else {
+                val codeExtensions = setOf(
+                    "kt", "java", "py", "js", "ts", "cpp", "c", "h", "cs", "php", "rb", "go", "rs", "swift",
+                    "html", "css", "json", "xml", "yaml", "yml", "md", "txt", "sh", "sql", "csv", "log"
                 )
+                codeExtensions.contains(extension)
+            }
 
-                // FIXED: Fallback if MIME is known-good OR (unknown/non-text + code extension)
-                val isAllowed = if (mimeType != null && allowedTypes.contains(mimeType)) {
-                    true  // Known text MIME: Accept
-                } else {
-                    // MIME is null, unknown (e.g., octet-stream), or non-text: Fallback to extension
-                    val codeExtensions = setOf(
-                        "kt", "java", "py", "js", "ts", "cpp", "c", "h", "cs", "php", "rb", "go", "rs", "swift",
-                        "html", "css", "json", "xml", "yaml", "yml", "md", "txt", "sh", "sql", "csv", "log"
+            if (!isAllowed) {
+                GlassNotice.show(requireContext(), getString(R.string.toast_unsupported_file, fileName, mimeType))
+                return
+            }
+
+            // Stop once the file is past 1 MB. Reading it all first allocated the rest and
+            // then refused it.
+            val read = withContext(Dispatchers.IO) {
+                resolver.openInputStream(uri)?.use { ComposerFiles.readCapped(it) }
+            } ?: throw Exception("Could not read file")
+
+            if (read.overflow) {
+                GlassNotice.show(
+                    requireContext(),
+                    getString(R.string.toast_file_too_large, fileName, ComposerFiles.MAX_SINGLE_BYTES / 1024 / 1024),
+                )
+                return
+            }
+
+            val fileSize = read.bytes.toLong()
+            val content = read.text
+            // Measure the total now, after earlier files in this pick have been added.
+            // A snapshot from before the read let each file see the old sum.
+            val away = askComposerAway()
+            val already = if (away) {
+                ComposerStaged.get(viewModel.stagedAttachments(), lateAskStageId()).files.sumOf { it.size }
+            } else {
+                pendingFiles.sumOf { it.size }
+            }
+            when (ComposerFiles.decide(already, fileSize)) {
+                ComposerFiles.Decision.TOO_BIG -> {
+                    GlassNotice.show(
+                        requireContext(),
+                        getString(R.string.toast_file_too_large, fileName, ComposerFiles.MAX_SINGLE_BYTES / 1024 / 1024),
                     )
-                    codeExtensions.contains(extension)
+                    return
                 }
-
-                if (!isAllowed) {
-                    GlassNotice.show(requireContext(), getString(R.string.toast_unsupported_file, fileName, mimeType))
-                    return@launch
-                }
-
-                // Live pending list, or parked files when a late read finishes under Code/RP.
-                val askIdForSize = lateAskStageId()
-                val currentTotalSize = if (askComposerAway()) {
-                    ComposerStaged.get(viewModel.stagedAttachments(), askIdForSize).files.sumOf { it.size }
-                } else {
-                    pendingFiles.sumOf { it.size }
-                }
-
-                // Read content and check individual file size (your buffered reading)
-                val content = withContext(Dispatchers.IO) {
-                    requireContext().contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
-                        val contentBuilder = StringBuilder()
-                        val buffer = CharArray(8192)
-                        var charsRead: Int
-                        while (reader.read(buffer).also { charsRead = it } > 0) {
-                            contentBuilder.append(buffer, 0, charsRead)
-                        }
-                        contentBuilder.toString()
-                    }
-                } ?: throw Exception("Could not read file")
-
-                val fileSize = content.toByteArray().size.toLong()
-
-                // Size validation (your existing checks)
-                if (fileSize > MAX_SINGLE_FILE_SIZE) {
-                    GlassNotice.show(requireContext(), getString(R.string.toast_file_too_large, fileName, MAX_SINGLE_FILE_SIZE / 1024 / 1024))
-                    return@launch
-                }
-
-                if (currentTotalSize + fileSize > MAX_FILE_SIZE) {
-                    GlassNotice.show(requireContext(), getString(R.string.toast_attachments_total_limit, fileName, (currentTotalSize + fileSize) / 1024 / 1024, MAX_FILE_SIZE / 1024 / 1024))
-                    return@launch
-                }
-                // Read can outlive an Ask→RP / Code flip. Park for Ask; do not add the file
-                // on Roleplay (or leave it on live fields that leaveCodeMode would wipe).
-                if (askComposerAway()) {
-                    val askId = lateAskStageId()
-                    val base = ComposerStaged.get(viewModel.stagedAttachments(), askId)
-                    parkLateAskAttachment(
-                        ComposerStaged.withFile(
-                            base,
-                            ComposerStaged.FilePart(fileName, content, fileSize),
+                ComposerFiles.Decision.OVER_TOTAL -> {
+                    GlassNotice.show(
+                        requireContext(),
+                        getString(
+                            R.string.toast_attachments_total_limit,
+                            fileName,
+                            (already + fileSize) / 1024 / 1024,
+                            ComposerFiles.MAX_TOTAL_BYTES / 1024 / 1024,
                         ),
                     )
-                    return@launch
+                    return
                 }
-
-                // Add to pending files (your existing AttachedFile)
-                pendingFiles.add(AttachedFile(fileName, content, fileSize))
-
-                // Update UI (your existing)
-                updateAttachmentButton()
-
-            } catch (e: Exception) {
-                GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_file, e.message ?: ""))
+                ComposerFiles.Decision.ACCEPT -> Unit
             }
+            // Read can outlive an Ask→RP / Code flip. Park for Ask; do not add the file
+            // on Roleplay (or leave it on live fields that leaveCodeMode would wipe).
+            if (away) {
+                val askId = lateAskStageId()
+                val base = ComposerStaged.get(viewModel.stagedAttachments(), askId)
+                parkLateAskAttachment(
+                    ComposerStaged.withFile(
+                        base,
+                        ComposerStaged.FilePart(fileName, content, fileSize),
+                    ),
+                )
+                return
+            }
+
+            pendingFiles.add(AttachedFile(fileName, content, fileSize))
+            updateAttachmentButton()
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            GlassNotice.show(requireContext(), getString(R.string.toast_failed_read_file, e.message ?: ""))
         }
     }
 

@@ -147,6 +147,19 @@ class HistoryListTest {
         assertEquals("You: 100% sure", HistoryList.preview("user", "\"100% sure\"", you, "Photo"))
         assertEquals("You: snake_case", HistoryList.preview("user", "\"snake_case\"", you, "Photo"))
         assertEquals("You: hello", HistoryList.preview("user", "\"_hello_\"", you, "Photo"))
+        // Heading marks still come off. A hash, tilde or angle inside the words stays,
+        // so the row still shows why a search for that token matched.
+        assertEquals("You: Title", HistoryList.preview("user", "\"# Title\"", you, "Photo"))
+        assertEquals("You: C# and F#", HistoryList.preview("user", "\"C# and F#\"", you, "Photo"))
+        assertEquals("You: look at ~/Downloads", HistoryList.preview("user", "\"look at ~/Downloads\"", you, "Photo"))
+        assertEquals("You: a > b", HistoryList.preview("user", "\"a > b\"", you, "Photo"))
+        assertEquals("You: quoted", HistoryList.preview("user", "\"> quoted\"", you, "Photo"))
+        assertEquals("You: gone", HistoryList.preview("user", "\"~~gone~~\"", you, "Photo"))
+        val sharp = HistoryList.preview("user", "\"use C# here\"", you, "Photo")
+        assertTrue(sharp.contains("C#"))
+        assertTrue(HistoryList.emphasisAt(sharp, "C#") >= 0)
+        assertTrue(HistoryList.searchLine("user", "\"use C# here\"", "C#", you, "Photo").contains("C#"))
+        assertTrue(HistoryList.searchLine("user", "\"a > b\"", ">", you, "Photo").contains(">"))
     }
 
     @Test fun search_line_uses_a_clean_parse_and_a_mid_string_slice() {

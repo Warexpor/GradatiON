@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- History preview keeps a `#`, `~` or `>` that is part of the words. `C#`, `~/Downloads` and `a > b` used to lose those marks, so the row no longer showed the text a search had matched. A heading, a blockquote and strikethrough still come off.
+- Attaching several text files counts each one against the total already staged, and a file past 1 MB stops being read. Picking them together used to measure that total before any file was added, so the 3 MB cap never saw the rest, and a larger file was loaded in full and then refused.
 - History groups a chat by calendar day, not by a 24-hour step. After a daylight-saving fallback the first hour of yesterday stayed in This week and showed a weekday; after a spring-forward the last hour of the day before yesterday showed as Yesterday. The six-day week uses the same calendar edges.
 - Removing every attached file also drops that list from the parked composer. History and Code had already stored it, and an empty live stage skipped the next park, so the files came back on the row and in the composer.
 - Opening an Ask chat from History while the Roleplay character list is showing no longer forgets that list. Coming back to Roleplay shows it again. A history open that does not land (a reply is still streaming, or the chat is already gone) no longer hides the list the next time Roleplay opens.
