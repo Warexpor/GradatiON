@@ -17,8 +17,6 @@
     <string name="grok_history_rename">Rename</string>
     <string name="grok_history_delete">Delete</string>
     <string name="grok_history_discard_draft">Discard draft</string>
-    <string name="grok_history_import">Import</string>
-    <string name="grok_history_export">Export</string>
     <string name="grok_history_more">More</string>
     <string name="grok_ask_tab">Chat</string>
     <string name="settings_group_app">App</string>
@@ -292,6 +290,8 @@
     <string name="settings_copy_instead_open">Copy instead of open</string>
     <string name="settings_keep_screen_on">Keep screen on</string>
     <string name="settings_destructive_file_tools">Destructive file tools</string>
+    <string name="settings_import_chats">Import chats</string>
+    <string name="settings_export_chats">Export chats</string>
     <string name="settings_help">Help</string>
     <string name="toast_image_removed_no_vision">Image removed. The selected model doesn\'t support images.</string>
     <string name="toast_image_not_supported">This model doesn\'t support images</string>

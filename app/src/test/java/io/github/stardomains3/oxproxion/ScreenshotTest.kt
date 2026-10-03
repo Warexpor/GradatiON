@@ -1075,6 +1075,13 @@ class ScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals("1.5", prefs.getInferenceTempValue())
     }
 
+    /** Data & privacy's bare "Import" and "Export" did not say they move your chats. */
+    @Test fun settingsDataNamesWhatImportMoves() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowData)
+        org.junit.Assert.assertEquals("Import chats", a.findViewById<android.widget.TextView>(R.id.importHistoryButton).text.toString())
+        org.junit.Assert.assertEquals("Export chats", a.findViewById<android.widget.TextView>(R.id.exportHistoryButton).text.toString())
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
