@@ -50,6 +50,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:accessibilityLiveRegion="polite"
+            android:drawablePadding="18dp"
             android:gravity="center"
             android:minHeight="44dp"
             android:paddingStart="32dp"
@@ -102,37 +103,72 @@
                     app:iconSize="22dp"
                     app:iconTint="@color/xai_ink" />
 
+                <!-- The agent on the other end: its mark (lit while it works or waits on you), title, and where -->
                 <LinearLayout
+                    android:id="@+id/codeSessionPod"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp"
                     android:layout_weight="1"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp">
+                    android:background="@drawable/bg_code_pod"
+                    android:gravity="center_vertical"
+                    android:minHeight="48dp"
+                    android:orientation="horizontal"
+                    android:paddingStart="6dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="4dp">
 
-                    <TextView
-                        android:id="@+id/codeSessionTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:gravity="center_horizontal"
-                        android:singleLine="true"
-                        android:textColor="@color/xai_ink"
-                        android:textSize="16sp"
-                        android:textFontWeight="600" />
+                    <FrameLayout
+                        android:layout_width="38dp"
+                        android:layout_height="38dp">
 
-                    <TextView
-                        android:id="@+id/codeSessionSubtitle"
-                        android:layout_width="match_parent"
+                        <ImageView
+                            android:id="@+id/codeSessionMark"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_code_mark_tile"
+                            android:importantForAccessibility="no"
+                            android:padding="9dp"
+                            app:tint="@color/xai_ink" />
+
+                        <View
+                            android:id="@+id/codeSessionHeaderLed"
+                            android:layout_width="12dp"
+                            android:layout_height="12dp"
+                            android:layout_gravity="bottom|end"
+                            android:importantForAccessibility="no"
+                            android:visibility="gone" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="1dp"
-                        android:drawablePadding="6dp"
-                        android:ellipsize="middle"
-                        android:gravity="center"
-                        android:singleLine="true"
-                        android:textColor="@color/xai_mute"
-                        android:textSize="13sp" />
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/codeSessionTitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:singleLine="true"
+                            android:textColor="@color/xai_ink"
+                            android:textSize="15sp"
+                            android:textFontWeight="600" />
+
+                        <TextView
+                            android:id="@+id/codeSessionSubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="1dp"
+                            android:ellipsize="middle"
+                            android:singleLine="true"
+                            android:textColor="@color/xai_mute"
+                            android:textSize="13sp" />
+                    </LinearLayout>
                 </LinearLayout>
 
                 <io.github.stardomains3.oxproxion.GlassIconButton
@@ -181,6 +217,7 @@
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
                 android:layout_marginBottom="8dp"
+                android:drawablePadding="8dp"
                 android:ellipsize="end"
                 android:gravity="center"
                 android:clickable="true"

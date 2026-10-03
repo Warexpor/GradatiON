@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code home session row: tint-only control glass, so a long list adds no blur layers -->
+<drawable xmlns:app="http://schemas.android.com/apk/res-auto"
+    class="io.github.stardomains3.oxproxion.GlassDrawable"
+    app:glassTint="@color/glass_control_tint"
+    app:glassCornerRadius="20dp" />

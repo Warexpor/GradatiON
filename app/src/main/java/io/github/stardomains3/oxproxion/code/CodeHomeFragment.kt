@@ -343,6 +343,8 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
         composer.folderPill.text = if (workspace.isBlank()) getString(R.string.code_home_pick_workspace) else CodeComposer.folderName(workspace)
         composer.input.hint = getString(R.string.code_home_composer_hint, harness.shortName)
         refreshModelPill()
+        // The empty state shows the agent and folder too; a new host re-renders on its own.
+        if (lastHost?.id == boundHostId && adapter.currentList.any { it is HomeItem.Hero }) render(lastHost, lastConn)
     }
 
     private fun refreshModelPill() {
@@ -371,7 +373,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
             if (sessions.isEmpty()) {
                 searchQuery = ""
                 // Until the saved list has loaded, an empty list is not "no sessions yet".
-                if (hub.sessionsLoaded.value) items += HomeItem.Hero(host, harness, workspace)
+                if (hub.sessionsLoaded.value) items += HomeItem.Hero(host, harness, workspace, conn)
             } else {
                 items += HomeItem.Search
                 val filtered = CodeSessionFilter.filterSessions(searchQuery, sessions)
@@ -380,11 +382,11 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 } else {
                     val (active, recent) = filtered.partition { it.running || it.status == SessionStatus.NEEDS_APPROVAL }
                     if (active.isNotEmpty()) {
-                        items += HomeItem.Section(getString(R.string.code_home_section_active))
+                        items += HomeItem.Section(getString(R.string.code_home_section_active), active.size)
                         active.sortedByDescending { it.status == SessionStatus.NEEDS_APPROVAL }.forEach { items += HomeItem.Session(it) }
                     }
                     if (recent.isNotEmpty()) {
-                        items += HomeItem.Section(getString(R.string.code_home_section_recent))
+                        items += HomeItem.Section(getString(R.string.code_home_section_recent), recent.size)
                         recent.forEach { items += HomeItem.Session(it) }
                     }
                 }
@@ -427,8 +429,10 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 remote.map { info ->
                     val subtitle = when {
                         !info.available -> getString(R.string.code_home_harness_unavailable)
-                        info.models.isNotEmpty() -> info.models.take(3).joinToString(", ")
-                        else -> null
+                        info.models.isNotEmpty() -> resources.getQuantityString(
+                            R.plurals.code_home_harness_models, info.models.size, info.models.size
+                        )
+                        else -> getString(R.string.code_home_harness_ready)
                     }
                     PickerPopover.Row(
                         info.label,
@@ -454,7 +458,10 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                     }
                 }
             }
-            composer.pick(composer.agentPill, getString(R.string.code_home_pick_agent), rows)
+            composer.pick(
+                composer.agentPill, getString(R.string.code_home_pick_agent), rows,
+                rowLayout = R.layout.item_code_harness_tile, columns = 2,
+            )
         }
     }
 
@@ -707,11 +714,11 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
     private sealed class HomeItem(val key: String) {
         data class Header(val host: CodeHost, val conn: ConnectionState) : HomeItem("header")
-        data class Hero(val host: CodeHost, val harness: HarnessKind, val workspace: String) : HomeItem("hero")
+        data class Hero(val host: CodeHost, val harness: HarnessKind, val workspace: String, val conn: ConnectionState) : HomeItem("hero")
         object Onboard : HomeItem("onboard")
         object Search : HomeItem("search")
         object FilterEmpty : HomeItem("filter_empty")
-        data class Section(val title: String) : HomeItem("section:$title")
+        data class Section(val title: String, val count: Int) : HomeItem("section:$title")
         data class Session(val s: CodeSessionState) : HomeItem("s:${s.summary.id}") {
             // Only what the row shows, so streaming tokens don't rebind the whole list.
             val shown = listOf(s.summary.title, s.summary.preview, s.status, s.summary.updatedAt / 60_000)
@@ -739,7 +746,7 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 0 -> R.layout.item_code_home_header
                 1 -> R.layout.item_code_home_hero
                 2 -> R.layout.item_code_home_onboard
-                3 -> R.layout.item_code_section
+                3 -> R.layout.item_code_home_section
                 5 -> R.layout.item_code_home_search
                 6 -> R.layout.item_code_home_filter_empty
                 else -> R.layout.item_code_session
@@ -755,16 +762,18 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
             when (val item = getItem(position)) {
                 is HomeItem.Header -> {
                     v.findViewById<TextView>(R.id.codeMachineName).text = item.host.name
-                    val (label, on) = when {
-                        item.host.isDemo -> R.string.code_status_demo to true
-                        item.conn == ConnectionState.CONNECTED -> R.string.code_status_connected to true
-                        item.conn == ConnectionState.CONNECTING -> R.string.code_status_connecting to false
-                        item.conn == ConnectionState.FAILED -> R.string.code_status_failed to false
-                        else -> R.string.code_status_offline to false
+                    val (label, led) = when {
+                        item.host.isDemo -> R.string.code_status_demo to R.drawable.bg_code_led_on
+                        item.conn == ConnectionState.CONNECTED -> R.string.code_status_connected to R.drawable.bg_code_led_on
+                        item.conn == ConnectionState.CONNECTING -> R.string.code_status_connecting to R.drawable.bg_code_led_wait
+                        item.conn == ConnectionState.FAILED -> R.string.code_status_failed to R.drawable.bg_code_led_off
+                        else -> R.string.code_status_offline to R.drawable.bg_code_led_off
                     }
-                    v.findViewById<TextView>(R.id.codeMachineStatus).setText(label)
-                    v.findViewById<View>(R.id.codeMachineDot).background.mutate().setTint(
-                        requireContext().getColor(if (on) R.color.code_status_on else R.color.code_status_off))
+                    val address = if (item.host.isDemo) null
+                    else CodeMachineDetail.redactUrl(item.host.url).ifBlank { item.host.url }.ifBlank { null }
+                    v.findViewById<TextView>(R.id.codeMachineStatus).text =
+                        listOfNotNull(getString(label), address).joinToString(" · ")
+                    v.findViewById<View>(R.id.codeMachineDot).setBackgroundResource(led)
                     val pill = v.findViewById<View>(R.id.codeMachinePill)
                     pill.setOnClickListener { pickMachine(it) }
                     pill.setOnLongClickListener {
@@ -786,17 +795,32 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                         getString(label),
                     )
                 }
-                is HomeItem.Hero -> v.findViewById<TextView>(R.id.codeHeroSubtitle).text = getString(
-                    R.string.code_home_subtitle, item.harness.displayName,
-                    CodeComposer.folderName(item.workspace).ifBlank { "…" }, item.host.name
-                )
+                is HomeItem.Hero -> {
+                    v.findViewById<android.widget.ImageView>(R.id.codeHeroMark).setImageResource(item.harness.iconRes)
+                    v.findViewById<TextView>(R.id.codeHeroSubtitle).text = getString(
+                        R.string.code_home_subtitle, item.harness.displayName,
+                        CodeComposer.folderName(item.workspace).ifBlank { "…" }, item.host.name
+                    )
+                    v.findViewById<TextView>(R.id.codeHeroAgent).apply {
+                        text = listOf(item.harness.id, item.workspace.ifBlank { "…" }).joinToString(" · ")
+                        val led = when {
+                            item.host.isDemo || item.conn == ConnectionState.CONNECTED -> R.drawable.ic_code_led_on
+                            item.conn == ConnectionState.CONNECTING -> R.drawable.ic_code_led_wait
+                            else -> R.drawable.ic_code_led_off
+                        }
+                        setCompoundDrawablesRelativeWithIntrinsicBounds(led, 0, 0, 0)
+                    }
+                }
                 HomeItem.Onboard -> {
                     v.findViewById<View>(R.id.codeOnboardDemo).setOnClickListener { hub.addDemoHost() }
                     v.findViewById<View>(R.id.codeOnboardAdd).setOnClickListener {
                         CodeHostDialog.show(this@CodeHomeFragment, null)
                     }
                 }
-                is HomeItem.Section -> (v as TextView).text = item.title
+                is HomeItem.Section -> {
+                    v.findViewById<TextView>(R.id.codeSectionText).text = item.title
+                    v.findViewById<TextView>(R.id.codeSectionCount).text = item.count.toString()
+                }
                 is HomeItem.Session -> bindSession(v, item.s)
                 HomeItem.Search -> bindSearch(v)
                 HomeItem.FilterEmpty -> Unit
@@ -831,13 +855,26 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
 
         private fun bindSession(v: View, s: CodeSessionState) {
             val sum = s.summary
-            v.findViewById<android.widget.ImageView>(R.id.codeSessionGlyph).setImageResource(sum.harness.iconRes)
+            val glyph = v.findViewById<android.widget.ImageView>(R.id.codeSessionGlyph)
+            glyph.setImageResource(sum.harness.iconRes)
+            // The key lights while the session is busy; its corner light says which way.
+            glyph.isActivated = s.status == SessionStatus.RUNNING || s.status == SessionStatus.NEEDS_APPROVAL
+            v.findViewById<View>(R.id.codeSessionLed).apply {
+                val led = when (s.status) {
+                    SessionStatus.NEEDS_APPROVAL -> R.drawable.bg_code_led_on
+                    SessionStatus.RUNNING -> R.drawable.bg_code_led_wait
+                    else -> 0
+                }
+                isVisible = led != 0
+                if (led != 0) setBackgroundResource(led)
+            }
             v.findViewById<TextView>(R.id.codeSessionRowTitle).text = sum.title
             val now = System.currentTimeMillis()
             val ago = if (now - sum.updatedAt < DateUtils.MINUTE_IN_MILLIS) getString(R.string.code_just_now)
             else DateUtils.getRelativeTimeSpanString(sum.updatedAt, now, DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE)
             v.findViewById<TextView>(R.id.codeSessionRowMeta).text =
-                listOf(sum.harness.displayName, CodeComposer.folderName(sum.workspace), ago).joinToString("  ·  ")
+                listOf(sum.harness.displayName, CodeComposer.folderName(sum.workspace)).joinToString(" · ")
+            v.findViewById<TextView>(R.id.codeSessionRowAge).text = ago
             v.findViewById<TextView>(R.id.codeSessionRowPreview).apply {
                 text = sum.preview
                 isVisible = sum.preview.isNotBlank()
@@ -847,14 +884,16 @@ class CodeHomeFragment : Fragment(R.layout.fragment_code_home) {
                 SessionStatus.NEEDS_APPROVAL -> {
                     badge.isVisible = true
                     badge.setText(R.string.code_badge_needs_you)
-                    badge.setBackgroundResource(R.drawable.bg_code_badge)
+                    badge.setBackgroundResource(R.drawable.bg_code_chip_needs)
                     badge.setTextColor(requireContext().getColor(R.color.code_badge_fg))
+                    badge.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_code_led_on, 0, 0, 0)
                 }
                 SessionStatus.RUNNING -> {
                     badge.isVisible = true
                     badge.setText(R.string.code_badge_working)
-                    badge.setBackgroundResource(R.drawable.bg_code_badge_quiet)
-                    badge.setTextColor(requireContext().getColor(R.color.xai_ink))
+                    badge.setBackgroundResource(R.drawable.bg_code_chip_working)
+                    badge.setTextColor(requireContext().getColor(R.color.xai_body))
+                    badge.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_code_led_wait, 0, 0, 0)
                 }
                 else -> badge.isVisible = false
             }

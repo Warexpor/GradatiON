@@ -92,7 +92,14 @@
     <string name="code_home_composer_hint">Ask %1$s to…</string>
     <string name="code_home_pick_agent">Agent</string>
     <string name="code_home_pick_model">Model</string>
-    <string name="code_home_harness_unavailable">Not installed on this machine</string>
+    <string name="code_home_harness_unavailable">Not installed</string>
+    <string name="code_home_harness_ready">Ready</string>
+    <plurals name="code_home_harness_models">
+        <item quantity="one">%d model</item>
+        <item quantity="other">%d models</item>
+    </plurals>
+    <string name="code_home_onboard_works_with">Works with</string>
+    <string name="cd_code_onboard_agents">Works with Claude Code, Codex CLI, OpenCode, Grok Build, Cursor Agent and Pi</string>
     <string name="code_home_pick_workspace">Folder</string>
     <string name="code_home_pick_machine">Machine</string>
     <string name="code_home_manage_machines">Manage machines</string>

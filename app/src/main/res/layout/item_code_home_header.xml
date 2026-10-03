@@ -1,72 +1,87 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code home: which machine you're driving (tap to switch). Code settings live behind the
-     top bar's left button, so there is no second gear here. -->
+<!-- Code home: the machine this remote drives (tap to switch, hold for details). Its status light
+     sits on the machine's disc. Code settings live behind the top bar's left button. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="16dp"
     android:paddingTop="6dp"
     android:paddingEnd="16dp"
-    android:paddingBottom="6dp">
+    android:paddingBottom="8dp">
 
     <LinearLayout
         android:id="@+id/codeMachinePill"
         android:layout_width="0dp"
-        android:layout_height="38dp"
+        android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:background="@drawable/bg_model_pill"
+        android:background="@drawable/bg_code_console"
         android:clickable="true"
         android:focusable="true"
         android:gravity="center_vertical"
+        android:minHeight="64dp"
         android:orientation="horizontal"
         android:paddingStart="12dp"
-        android:paddingEnd="10dp">
+        android:paddingTop="10dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="10dp">
 
-        <ImageView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:importantForAccessibility="no"
-            android:src="@drawable/ic_code_machine"
-            app:tint="@color/xai_ink" />
+        <FrameLayout
+            android:layout_width="40dp"
+            android:layout_height="40dp">
 
-        <TextView
-            android:id="@+id/codeMachineName"
+            <ImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_code_disc"
+                android:importantForAccessibility="no"
+                android:padding="10dp"
+                android:src="@drawable/ic_code_machine"
+                app:tint="@color/xai_ink" />
+
+            <View
+                android:id="@+id/codeMachineDot"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_gravity="bottom|end"
+                android:background="@drawable/bg_code_led_on" />
+        </FrameLayout>
+
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:ellipsize="end"
-            android:singleLine="true"
-            android:textColor="@color/xai_ink"
-            android:textSize="15sp"
-            android:textFontWeight="600" />
+            android:orientation="vertical">
 
-        <View
-            android:id="@+id/codeMachineDot"
-            android:layout_width="7dp"
-            android:layout_height="7dp"
-            android:layout_marginStart="10dp"
-            android:background="@drawable/bg_code_dot" />
+            <TextView
+                android:id="@+id/codeMachineName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/xai_ink"
+                android:textSize="16sp"
+                android:textFontWeight="600" />
 
-        <TextView
-            android:id="@+id/codeMachineStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:ellipsize="end"
-            android:maxWidth="100dp"
-            android:singleLine="true"
-            android:textColor="@color/xai_mute"
-            android:textSize="13sp" />
+            <TextView
+                android:id="@+id/codeMachineStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="middle"
+                android:singleLine="true"
+                style="@style/Widget.Gradation.Code.MonoLine" />
+        </LinearLayout>
 
         <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginStart="4dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_code_disc"
             android:importantForAccessibility="no"
+            android:padding="7dp"
             android:src="@drawable/ic_expand_more"
             app:tint="@color/xai_body" />
     </LinearLayout>

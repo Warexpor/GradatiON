@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code home machine console: static control glass that brightens while its picker is open -->
+<drawable xmlns:app="http://schemas.android.com/apk/res-auto"
+    class="io.github.stardomains3.oxproxion.GlassDrawable"
+    app:glassTint="@color/glass_control_tint"
+    app:glassSelectedTint="@color/glass_btn_selected_tint"
+    app:glassCornerRadius="22dp"
+    app:glassInteractive="true" />

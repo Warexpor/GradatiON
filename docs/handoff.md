@@ -1,3 +1,17 @@
+# Handoff (2026-10-03, Code chrome look)
+
+On `cursor/code-chrome-redesign-7311` (PR into `gradation/app-pass`), from `d952a6bd4874acf7a932addd3502a5cb29397f9c` (Code session look #179). Look only: the harness picker, session list, empty and connecting states, and the session header. The transcript, tool cards, diffs, terminal output and in-session composer (#179) are untouched, and so are #179's `code_rail`, `code_node_*` and `code_prompt_bg`. No shared theme token changed; new Code-only tokens are `code_tile_fill` and `code_tile_lit`. Not a redo of #179 or anything before it.
+
+- Status lights (`bg_code_led_*` on a mark's corner, `ic_code_led_*` inline): lit, hollow, dark. Shape carries the state.
+- Home: machine console (`bg_code_console`) with the light on the machine's disc and status plus redacted address in mono. Session rows (`bg_code_session_card`): the mark tile (`bg_code_mark_tile`) is activated while running or waiting, the chip sits on the title line, the age (`codeSessionRowAge`) has its own view so it never truncates, and the preview hangs off `bg_code_preview_rule`. Sections (`item_code_home_section`) show a count. `item_code_section`, `bg_code_badge*` and `bg_code_icon_disc` were home-only and are gone.
+- Agent picker: `PickerPopover` takes an optional `rowLayout` and `columns` (defaults keep every other picker a list); Code passes `item_code_harness_tile` and 2. Tile line: Ready, a model count, or Not installed.
+- Empty and onboarding: `bg_code_rings` around the mark. Empty adds a mono agent-and-folder readout with a light and re-renders when the agent or folder changes. Onboarding adds a Works with strip of the six agents.
+- Session: a tint-only capsule (`codeSessionPod`) holds the mark, `codeSessionHeaderLed`, the title and the where line. `codeSessionState` gets the mark in its orbits as a top drawable; the retry line is ink. The offline or connecting banner leads with its light.
+- Mono captions use `Widget.Gradation.Code.MonoLine` (both `android:fontFamily` and AppCompat `fontFamily`; the theme sets both, so a textAppearance loses).
+- Tests: `codeHarnessPickerDark` checks the tile grid, the six agents and the check; `codeHomeDark` checks the lit key; `codeSessionApprovalDark` checks the header light; new `codeSessionLoadingDark`. `codeHomeEmptyDark` now waits in real time for the list's background diff, which used to land after the snapshot now and then.
+
+Phone: open the agent picker (tiles should grow in and the chosen tile should be checked). Switch to a bridge machine that is off (console light dark, banner light dark in a session; hollow while connecting). Long-press the console (machine details should still open).
+
 # Handoff (2026-10-03, Code session look)
 
 On `cursor/code-session-coding-surface-aa50` (PR into `gradation/app-pass`), from `35e43130c2b68270d34f9ade6662c37d4f271b51` (Import #177). Look only: the running-session transcript and its cards. The harness picker, session list, empty and connecting states, session header and composer are untouched, and no shared theme token changed (new tokens are `code_rail`, `code_node_bg`, `code_node_stroke`, `code_prompt_bg` in `code_colors.xml`). Not a redo of #177 or anything before it.
