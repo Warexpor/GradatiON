@@ -148,6 +148,38 @@ class RpExampleParseTest {
     }
 
     @Test
+    fun aTrailingStartOrEndOfDialogIsNotTheReply() {
+        val trailing = RpPromptEngine.parseExamplesFromEdit("User: hi\nChar: hello\n<START>")
+        assertEquals(1, trailing.size)
+        assertEquals("hi", trailing[0].user)
+        assertEquals("hello", trailing[0].char)
+        val withBreak = RpPromptEngine.parseExamplesFromEdit("User: hi\nChar: hello\n<START>\n")
+        assertEquals("hello", withBreak[0].char)
+        val ended = RpPromptEngine.parseExamplesFromEdit(
+            "{{user}}: hi\n{{char}}: hello\nEND_OF_DIALOG\n{{user}}: bye\n{{char}}: later"
+        )
+        assertEquals(2, ended.size)
+        assertEquals("hi", ended[0].user)
+        assertEquals("hello", ended[0].char)
+        assertEquals("bye", ended[1].user)
+        assertEquals("later", ended[1].char)
+        val markerOnly = RpPromptEngine.parseExamplesFromEdit("User: hi\nChar: hello\r\nEND_OF_DIALOG")
+        assertEquals("hello", markerOnly[0].char)
+    }
+
+    @Test
+    fun botLabelIsTheCharacterSide() {
+        val examples = RpPromptEngine.parseExamplesFromEdit("User: hi\nBot: hello")
+        assertEquals(1, examples.size)
+        assertEquals("hi", examples[0].user)
+        assertEquals("hello", examples[0].char)
+        val first = RpPromptEngine.parseExamplesFromEdit("Bot : I was here first\nUser： hi")
+        assertEquals("hi", first[0].user)
+        assertEquals("I was here first", first[0].char)
+        assertTrue(RpPromptEngine.parseExamplesFromEdit("Botany: hi").isEmpty())
+    }
+
+    @Test
     fun aStartWordInsideAReplyStaysThere() {
         val examples = RpPromptEngine.parseExamplesFromEdit(
             "User: hi\nChar: the note said <START> come back\n{{user}}: quoted"

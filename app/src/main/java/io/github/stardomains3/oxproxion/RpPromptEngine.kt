@@ -217,9 +217,17 @@ object RpPromptEngine {
     private val charMacro = Regex("""\{\{\s*(?:char|bot)\s*\}\}|<BOT>""", RegexOption.IGNORE_CASE)
     private val userMacro = Regex("""\{\{\s*user\s*\}\}|<USER>""", RegexOption.IGNORE_CASE)
 
-    /** A name that is not [avoid], so an example line is not this user. */
-    fun standInName(index: Int, avoid: String): String {
-        val pool = standInNames.filter { !it.equals(avoid, ignoreCase = true) }.ifEmpty { standInNames }
+    /**
+     * A name that is not [avoid] and not [alsoAvoid]. An example's sample speaker has to be
+     * someone other than the person in this chat, and other than the character: the first
+     * stand-in used to be the character whenever their name was the one left after the user
+     * was skipped (you are Alex, the card is Jordan).
+     */
+    fun standInName(index: Int, avoid: String, alsoAvoid: String = ""): String {
+        val pool = standInNames.filter {
+            !it.equals(avoid, ignoreCase = true) &&
+                (alsoAvoid.isBlank() || !it.equals(alsoAvoid, ignoreCase = true))
+        }.ifEmpty { standInNames }
         val n = index.coerceAtLeast(1)
         return pool[(n - 1) % pool.size]
     }
@@ -229,7 +237,7 @@ object RpPromptEngine {
         // A lambda, not a replacement string: names may contain $ or \, and a string
         // replacement reads those as group references (and can throw).
         val withStandIns = randomUserMacro.replace(text) { match ->
-            standInName(match.groupValues[1].toIntOrNull() ?: 1, userName)
+            standInName(match.groupValues[1].toIntOrNull() ?: 1, userName, charName)
         }
         return withStandIns
             .replace(charMacro) { charName }
@@ -245,7 +253,7 @@ object RpPromptEngine {
         var out = text
         if (userName.isNotBlank()) {
             out = randomUserMacro.replace(out) { match ->
-                standInName(match.groupValues[1].toIntOrNull() ?: 1, userName)
+                standInName(match.groupValues[1].toIntOrNull() ?: 1, userName, charName)
             }
         }
         if (charName.isNotBlank()) {
@@ -280,12 +288,13 @@ object RpPromptEngine {
      * {{random_user_N}}. Filling the stand-in in first used to make the random name avoid
      * that stand-in instead of the real one, so {{random_user_1}} came out as this user
      * whenever their name was the stand-in that got displaced (Alex and Jordan swap).
+     * The same list is skipped for the character, so the sample is not spoken by them.
      */
     fun expandExampleMacros(text: String, charName: String, realUserName: String): String {
         if (text.isEmpty()) return text
-        val standIn = standInName(1, realUserName)
+        val standIn = standInName(1, realUserName, charName)
         val withRandom = randomUserMacro.replace(text) { match ->
-            standInName(match.groupValues[1].toIntOrNull() ?: 1, realUserName)
+            standInName(match.groupValues[1].toIntOrNull() ?: 1, realUserName, charName)
         }
         return expandMacros(withRandom, charName, standIn)
     }
@@ -390,8 +399,8 @@ object RpPromptEngine {
                     if (char.scenario.isNotBlank()) append("\nScenario: ${macro(char.scenario)}")
                     val examples = parseExamples(char.examplesJson)
                     if (examples.isNotEmpty()) {
-                        val sampleUser = standInName(1, who)
                         val charName = char.name
+                        val sampleUser = standInName(1, who, charName)
                         append("\nExample dialogs (other conversations, not this one):")
                         examples.forEach { ex ->
                             if (ex.user.isNotBlank() || ex.char.isNotBlank()) {
@@ -454,8 +463,11 @@ object RpPromptEngine {
     /**
      * Parse the character-edit freeform example text. Blocks are separated by `---` or by a
      * card's `<START>` line; a `<START>` between exchanges used to be kept as dialogue, so the
-     * later exchange was saved as part of the first reply. Labels are `User`/`Char`, the card
-     * macros `{{user}}`/`{{char}}`/`{{bot}}`, and the older `<USER>`/`<BOT>` tags.
+     * later exchange was saved as part of the first reply. The same line at the end of the
+     * text, with no break after it, was still stored as the reply, and so was `END_OF_DIALOG`.
+     * Labels are `User`/`Char`/`Bot`, the card macros `{{user}}`/`{{char}}`/`{{bot}}`, and the
+     * older `<USER>`/`<BOT>` tags. `Bot:` is the character side; it used to be saved as the
+     * user's line.
      * A blank line before the label, a Windows line break, spaces around the dashes, a
      * space before the colon, or a fullwidth colon still count. The character may speak
      * first: that used to swallow the User line into the reply. A later line that only
@@ -465,9 +477,11 @@ object RpPromptEngine {
         if (text.isBlank()) return emptyList()
         val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
         val label = Regex(
-            """(?i)^[ \t]*((?:\{\{\s*(?:user|char|bot)\s*\}\})|(?:<(?:user|bot)>)|user|char)[ \t]*[:：][ \t]*(.*)$"""
+            """(?i)^[ \t]*((?:\{\{\s*(?:user|char|bot)\s*\}\})|(?:<(?:user|bot)>)|user|char|bot)[ \t]*[:：][ \t]*(.*)$"""
         )
-        return normalized.split(Regex("""(?i)\n[ \t]*(?:---|<(?:start)>)[ \t]*\n""")).mapNotNull { block ->
+        // A marker that ends the text has no newline after it. Requiring one used to leave
+        // that `<START>` or `END_OF_DIALOG` on the reply.
+        return normalized.split(Regex("""(?i)\n[ \t]*(?:---|<(?:start)>|end_of_dialog)[ \t]*(?:\n|$)""")).mapNotNull { block ->
             val user = StringBuilder()
             val char = StringBuilder()
             var side: StringBuilder? = null
@@ -494,7 +508,7 @@ object RpPromptEngine {
         }
     }
 
-    /** `{{bot}}` and `<BOT>` are the character side. The token keeps whatever wrapping it had. */
+    /** `{{bot}}`, `<BOT>`, and `Bot` are the character side. The token keeps whatever wrapping it had. */
     private fun exampleLabelSide(token: String): String {
         val bare = token.trim()
             .removePrefix("{{").removePrefix("<")
