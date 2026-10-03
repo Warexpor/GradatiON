@@ -357,6 +357,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
             }
         }
         bindSwitch(view, R.id.notificationsSwitch, prefs.getNotiPreference()) { on ->
+            followAnswerAlerts(view, on)
             if (on && !answerAlertsCanShow()) return@bindSwitch
             prefs.saveNotiPreference(on)
         }
@@ -371,6 +372,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         }
         bindSwitch(view, R.id.copyOrdismissSwitch, prefs.getUseCopyButton2()) { prefs.saveUseCopyButton2(it) }
         bindSwitch(view, R.id.copyOropenSwitch, prefs.getUseCopyButton()) { prefs.saveUseCopyButton(it) }
+        followAnswerAlerts(view, prefs.getNotiPreference())
         bindSwitch(view, R.id.allowDestructiveToolsSwitch, prefs.getAllowDestructiveTools()) {
             prefs.saveAllowDestructiveTools(it)
         }
@@ -378,6 +380,15 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
         view.findViewById<View>(R.id.exportHistoryButton).setOnClickListener { exportChats() }
         view.findViewById<View>(R.id.helpButton).setOnClickListener { open(HelpFragment()) }
         view.findViewById<View>(R.id.licensesButton).setOnClickListener { open(LicenseListFragment()) }
+    }
+
+    /** The two Copy rows only change the answer-ready alert's buttons, so they rest while it is off. */
+    private fun followAnswerAlerts(view: View, on: Boolean) {
+        for (id in listOf(R.id.copyOrdismissSwitch, R.id.copyOropenSwitch)) {
+            val sw = view.findViewById<SwitchCompat>(id) ?: continue
+            sw.isEnabled = on
+            (sw.parent as? View)?.alpha = if (on) 1f else DISABLED_ROW_ALPHA
+        }
     }
 
     /**
@@ -763,6 +774,8 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
     companion object {
         /** Size of the Chat text tiles' "Aa" at 100%; the tiles scale it like the chat. */
         private const val SAMPLE_TEXT_SP = 18f
+        /** A row whose switch has nothing to act on: present, but plainly resting. */
+        private const val DISABLED_ROW_ALPHA = 0.45f
         const val ARG_SECTION = "section"
         const val SECTION_APPEARANCE = "appearance"
         const val SECTION_VOICE = "voice"
