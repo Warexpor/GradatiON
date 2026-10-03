@@ -56,6 +56,30 @@ class RpChatSummariesTest {
     }
 
     @Test
+    fun previewKeepsMarksThatBelongToTheWords() {
+        assertEquals("C# and F#", RpChatSummaries.previewOf("\"C# and F#\""))
+        assertEquals("look at ~/Downloads", RpChatSummaries.previewOf("\"look at ~/Downloads\""))
+        assertEquals("a > b", RpChatSummaries.previewOf("\"a > b\""))
+        assertEquals("Title", RpChatSummaries.previewOf("\"# Title\""))
+        assertEquals("quoted", RpChatSummaries.previewOf("\"> quoted\""))
+        assertEquals("gone", RpChatSummaries.previewOf("\"~~gone~~\""))
+        assertEquals(
+            "You: C# and ~/Downloads",
+            RpChatSummaries.rowLine("user", "\"C# and ~/Downloads\"", { "You: $it" }, "Photo")
+        )
+    }
+
+    @Test
+    fun taglineSkipsALineThatIsOnlyMarkdown() {
+        val ruled = RpCharacter(name = "Mira", personality = "***\nShe keeps the locket.\nSecond stays off.")
+        assertEquals("She keeps the locket.", RpChatSummaries.tagline(ruled, "Alex"))
+        val quoted = RpCharacter(name = "Mira", personality = ">\nShe waits at the docks.")
+        assertEquals("She waits at the docks.", RpChatSummaries.tagline(quoted, "Alex"))
+        val marksOnly = RpCharacter(name = "Mira", personality = "***", scenario = "{{char}} keeps the map.")
+        assertEquals("Mira keeps the map.", RpChatSummaries.tagline(marksOnly, "Alex"))
+    }
+
+    @Test
     fun loreTileFollowsTheBookThatWouldBeUsed() {
         assertFalse(RpChatSummaries.loreTileOn(loreEnabled = false, pinnedBookExists = true, activeBookExists = true))
         assertFalse(RpChatSummaries.loreTileOn(loreEnabled = true, pinnedBookExists = false, activeBookExists = false))

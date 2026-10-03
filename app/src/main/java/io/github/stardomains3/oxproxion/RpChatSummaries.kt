@@ -80,12 +80,20 @@ object RpChatSummaries {
      * {{char}} and {{user}} are the names, so the list does not show the placeholders.
      */
     fun tagline(c: RpCharacter, userName: String = ""): String {
-        val raw = listOf(c.personality, c.scenario, c.greeting)
-            .firstNotNullOfOrNull { text -> text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() } }
-            .orEmpty()
         val who = c.name.ifBlank { "GradatiON" }
-        val named = RpPromptEngine.expandMacros(raw, who, userName.ifBlank { "you" })
-        return foldMarkdown(named).take(140)
+        val you = userName.ifBlank { "you" }
+        // A divider or a line of marks is not the description. Folding it used to leave the
+        // row blank and hide the sentence on the next line.
+        val raw = listOf(c.personality, c.scenario, c.greeting)
+            .firstNotNullOfOrNull { text ->
+                text.lineSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .map { line -> foldMarkdown(RpPromptEngine.expandMacros(line, who, you)) }
+                    .firstOrNull { it.isNotEmpty() }
+            }
+            .orEmpty()
+        return raw.take(140)
     }
 
     /**
@@ -125,17 +133,31 @@ object RpChatSummaries {
         }
 
     /**
-     * Markdown marks come off. An underscore between letters or digits stays: stripping every
-     * `_` turned `snake_case` into `snakecase` on the character list.
+     * Markdown marks come off. An underscore, hash, tilde or angle that is part of the words
+     * stays: stripping every `_` turned `snake_case` into `snakecase`, and stripping every
+     * `#` `~` or `>` turned `C#` and `~/Downloads` into a different line.
+     * A heading, a blockquote and strikethrough still come off.
      */
     private fun foldMarkdown(text: String): String =
         WHITESPACE.replace(
-            MD_EDGE_UNDERSCORE.replace(MD_STARS.replace(text, ""), "").replace(MD_MARKS, ""),
+            MD_EDGE_UNDERSCORE.replace(
+                MD_STARS.replace(
+                    MD_STRIKE.replace(
+                        MD_QUOTE.replace(MD_HEADING.replace(text, ""), ""),
+                        "",
+                    ),
+                    "",
+                ),
+                "",
+            ).replace(MD_BACKTICK, ""),
             " ",
         ).trim()
 
     private val MD_STARS = Regex("\\*+")
-    private val MD_MARKS = Regex("[#>`~]")
+    private val MD_HEADING = Regex("(?m)^#{1,6}[ \\t]+")
+    private val MD_QUOTE = Regex("(?m)^>+[ \\t]*")
+    private val MD_STRIKE = Regex("~~")
+    private val MD_BACKTICK = Regex("`+")
     private val MD_EDGE_UNDERSCORE = Regex("(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])")
     private val WHITESPACE = Regex("\\s+")
 

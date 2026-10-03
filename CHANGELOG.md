@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Roleplay example dialogs keep both sides when the label has a space before the colon (`User : hi`) or the character speaks first. A `User:` line inside the reply stays on the character side.
+- A lore header written as `Keys` or `KEYS`, or saved with a Windows line ending, still splits. Those blocks used to stay in the prompt even when the chat never mentioned the key.
+- The Roleplay character list, a character's History, and the library card keep a `#`, `~` or `>` that is part of the words (`C#`, `~/Downloads`, `a > b`). A heading, a blockquote and strikethrough still come off. A first line that is only markdown marks no longer hides the sentence under it.
 - Code away: Allow, Deny, or a cancelled turn drops the one-shot open token when that was the session's last shade. Those cancel the shade in code, so the swipe handler never runs, and a replayed tap could still open the session. Another alert for that session keeps the token. A shorter session id still does not clear a longer one.
 - Code away: the 64-entry cap counts a turn-finished shade that is still up after the next prompt clears dedup. Those shades used to sit outside the cap, so a run of new prompts stacked past 64. The oldest one is cancelled, and its open token goes with it. After a kill, a parked shade id still counts.
 - Answer shade: Stop from the chat puts Speak back after the speak service has died, and drops the shade when the chat is in front. Copy or Dismiss, then the utterance ending, does not post the shade again. Speech that is interrupted (the engine reports stop, not done) returns the shade to Speak.
