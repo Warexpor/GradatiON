@@ -2,7 +2,8 @@
 <!-- One plan step: the status glyph centred in the 20dp glyph frame on the rail, the words on the
      content column. The glyph rides the first line's baseline, so a step that wraps keeps its
      mark beside its first line instead of between the lines. 6dp above and below sets the steps
-     12dp apart. -->
+     12dp apart; 3dp between a step's own lines (never under its last) keeps a wrapped step from
+     reading denser than the steps around it. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -26,5 +27,6 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:layout_marginStart="11dp"
+        android:lineSpacingExtra="3dp"
         android:textSize="15sp" />
 </LinearLayout>
