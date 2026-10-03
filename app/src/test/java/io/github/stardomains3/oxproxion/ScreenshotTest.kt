@@ -1038,6 +1038,19 @@ class ScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertTrue("no note once it is on", warnings().values.none { it.contains(note) })
     }
 
+    /** The Brave tools are left out without a key; the screen says they exist and where the key goes. */
+    @Test fun settingsToolsMentionTheBraveToolsDark() = withChat { a, _ ->
+        pushFragment(a, ToolsFragment())
+        val note = a.findViewById<android.widget.TextView>(R.id.tools_brave_footnote)
+        org.junit.Assert.assertEquals(View.VISIBLE, note.visibility)
+        for (id in listOf(R.string.tool_brave_search_name, R.string.tool_brave_news_name, R.string.tool_find_nearby_places_name)) {
+            org.junit.Assert.assertTrue(note.text.contains(a.getString(id)))
+        }
+        org.junit.Assert.assertTrue(note.text.contains("Settings > " + a.getString(R.string.settings_section_models)))
+        note.requestRectangleOnScreen(android.graphics.Rect(0, 0, note.width, note.height), true); idle()
+        snap(root(a), "settings_tools_brave_note_dark")
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",

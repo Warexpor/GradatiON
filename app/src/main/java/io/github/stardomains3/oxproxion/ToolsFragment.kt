@@ -85,6 +85,7 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
         // Filter Brave
         val braveApiKey = sharedPreferencesHelper.getApiKeyFromPrefs("brave_search_api_key")
         val hasBraveKey = braveApiKey.isNotEmpty()
+        rootView.findViewById<View>(R.id.tools_brave_footnote).visibility = if (hasBraveKey) View.GONE else View.VISIBLE
         allItems = allItems.filter { item ->
             if (item.name == "brave_search" || item.name == "brave_news" || item.name == "find_nearby_places") {
                 hasBraveKey
