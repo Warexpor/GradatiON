@@ -277,6 +277,9 @@ internal object RpWallpaperBackup {
     /** Larger than this and the backup carries a scaled JPEG instead of the raw file. */
     private const val MAX_BYTES = 2_000_000
 
+    /** Same long edge [BackgroundPhoto.prepare] keeps. A second pass shrinks further to fit. */
+    private const val PREPARE_EDGE = 1600
+
     /** prepare() refuses a source above this. Bigger than that cannot be carried. */
     private const val MAX_READ = 32 * 1024 * 1024
 
@@ -296,9 +299,18 @@ internal object RpWallpaperBackup {
             val bytes = if (raw.size <= maxBytes) {
                 raw
             } else {
+                // The usual 1600px pass can still be over the cap. Leaving it out kept the
+                // picture already on the other phone. Shrink until it fits. A file that is
+                // not a picture still comes back null.
                 val shrunk = BackgroundPhoto.prepare(raw) ?: return null
-                if (shrunk.size > maxBytes || !ScenePhoto.completeJpeg(shrunk)) return null
-                shrunk
+                if (!ScenePhoto.completeJpeg(shrunk)) return null
+                if (shrunk.size <= maxBytes) {
+                    shrunk
+                } else {
+                    ScenePhoto.encode(raw, PREPARE_EDGE, maxBytes)?.takeIf {
+                        it.size <= maxBytes && ScenePhoto.completeJpeg(it)
+                    } ?: return null
+                }
             }
             Base64.encodeToString(bytes, Base64.NO_WRAP)
         } catch (_: Exception) {
