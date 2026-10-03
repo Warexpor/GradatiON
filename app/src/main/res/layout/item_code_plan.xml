@@ -10,7 +10,9 @@
     android:paddingBottom="6dp">
 
     <!-- Each step row carries 6dp above and below, so the rows sit 12dp apart and the card's own
-         pads finish the same air above the label and below the last step -->
+         pads finish the same air above the label and below the last step. The label sits flush on
+         the first row's 6dp, nearer its steps than they are to each other, so it heads them
+         instead of floating halfway between the card's edge and the list. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -25,7 +27,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/code_text_indent"
-            android:layout_marginBottom="6dp"
             android:baselineAligned="true"
             android:orientation="horizontal">
 

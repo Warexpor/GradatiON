@@ -12,7 +12,9 @@
 
     <!-- Glass card the rail stops at; the shield lands on the rail column. A lifted card, so a step
          more air than the others. The question and what it is about read as one block; the detail
-         and the answers each get a clear step below. -->
+         and the answers each get a clear step below. The top pad is 4dp short of the bottom's
+         because the question's line box carries that much above its capitals, while the answers'
+         pills end on their own edge: the air reads the same above the words and below the pills. -->
     <LinearLayout
         android:id="@+id/codeApprovalCard"
         android:layout_width="match_parent"
@@ -20,7 +22,7 @@
         android:background="@drawable/bg_code_approval"
         android:orientation="vertical"
         android:paddingStart="@dimen/code_card_glyph_pad"
-        android:paddingTop="18dp"
+        android:paddingTop="14dp"
         android:paddingEnd="18dp"
         android:paddingBottom="18dp">
 
@@ -52,12 +54,13 @@
                 android:textFontWeight="600" />
         </LinearLayout>
 
+        <!-- Flush under the question: the two line boxes' own descent and ascent already put a
+             line's worth of air between them, as between two lines of the subject -->
         <TextView
             android:id="@+id/codeApprovalWhat"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/code_text_indent"
-            android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="4"
             android:textAlignment="viewStart"
