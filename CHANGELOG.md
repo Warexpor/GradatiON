@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code away: clearing turn-done dedup parks the shade id in the same prefs commit that drops the live row. Two commits could die in between and leave the row, so the next finished turn stayed suppressed. A leftover legacy hold file is not a dedup seed (the next turn still alerts and reuses that shade id). Auto Backup and device transfer exclude `code_away_shade_hold.xml`.
+- Code away: swiping away the last alert for a session clears its one-shot open token, so a replayed tap cannot open it. Another alert for that session keeps the token. A session id that contains ':' is not claimed by a shorter id.
+- Answer-ready: stopping speech from the chat no longer leaves the shade saying Stop. That label started TTS again on the next tap, because the speaking flag was already clear.
 - First save no longer deletes the staged scene JPEG it just moved onto the new chat id. Eviction compared map keys only, so a promote/rekey looked like a drop and History still said Photo for a file that was gone. The same file kept under the new id (including a copied entry) stays. Replacing that photo, or parking audio over it, still drops the previous file; another chat that still holds the uri keeps it.
 - A character backup that lists the same character twice keeps the last copy. The earlier copy's Memory and pictures used to come back on the next launch.
 - A lorebook backup where nothing is marked active turns those books off. Names that differ only by spaces count as the same book. A character pin still attaches when the book name is padded or longer than the saved pin.

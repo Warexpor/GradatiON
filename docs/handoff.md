@@ -1,3 +1,11 @@
+# Handoff (2026-10-03, Notifications/Away wave 29)
+
+On `gradation/w29-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after turn-done shade hold and the speaking flag (#120). Not a redo of that pass:
+- `clearTurnDoneDedup` parks the shade id under a `hold:` key in the notif-id prefs in the same commit that drops the live row. A kill between the old two commits left the row, and process-death seeding suppressed the next finished turn. A legacy `code_away_shade_hold` row is not a dedup seed, so that next turn still alerts and reuses the id. Backup and device transfer exclude that file.
+- Swiping away the last alert for a session clears the one-shot open token. A second approval for that session keeps it (longest session id wins when ids contain ':').
+- In-chat Speak stops shade TTS and flips the answer shade back to Speak (or drops it in the foreground). Leaving Stop up with the speaking flag already clear made the next shade tap start speech again.
+
+Phone: Notify when away on, finish a turn, send another prompt, kill the app before the clear finishes if you can leave both the dedup row and the old hold file (the next finished turn should still show, one entry). Swipe the only approval away, then replay that notification's open (session should not open). Leave a second approval up and swipe the first (the other still opens). Background Chat, Speak from the shade, open the chat and tap Speak on the message (shade should say Speak, not start a second reading when you tap Stop).
 # Handoff (2026-10-03, Chat wave 29)
 
 On `gradation/w29-chat` (PR into `gradation/app-pass`). Chat/History follow-up after w27 promote (#110) and w28 caption promote (#116). Not a redo of those: the parked caption and caption+Photo search stay as they are.
