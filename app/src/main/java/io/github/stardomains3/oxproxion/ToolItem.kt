@@ -36,6 +36,39 @@ data class ToolItem(
             return result
         }
 
+        /**
+         * Older installs stored the file tools under the previous app names. The row still
+         * shows those as on, and the request still sends them, so turning the row off has
+         * to drop every alias or the tool comes back on the next open.
+         */
+        fun aliasNames(toolName: String): Set<String> = when (toolName) {
+            "list_gradation_files" -> setOf(toolName, "list_grokion_files", "list_oxproxion_files")
+            "read_gradation_file" -> setOf(toolName, "read_grokion_file", "read_oxproxion_file")
+            else -> setOf(toolName)
+        }
+
+        fun enabledToolsAfterToggle(stored: Set<String>, toolName: String, enabled: Boolean): Set<String> {
+            val next = stored.toMutableSet()
+            if (enabled) next.add(toolName) else aliasNames(toolName).forEach { next.remove(it) }
+            return next
+        }
+
+        /**
+         * The folder grant is for tools that open the workspace tree. Create file writes
+         * through MediaStore into Download/gradation and does not need that grant; treating
+         * every name that contains "file" as one locked the switch until a folder was picked.
+         */
+        fun needsFolderGrant(toolName: String): Boolean = toolName in FOLDER_GRANT_TOOLS
+
+        private val FOLDER_GRANT_TOOLS = setOf(
+            "delete_files",
+            "list_gradation_files",
+            "read_gradation_file",
+            "open_file",
+            "edit_file",
+            "copy_file",
+        )
+
         /** Names and descriptions come from resources; `%1$s` in a description is the workspace folder. */
         fun getAllToolItems(enabledSet: Set<String>, context: Context): List<ToolItem> {
             fun item(name: String, @StringRes label: Int, @StringRes desc: Int, enabled: Boolean) =

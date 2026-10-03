@@ -16,6 +16,13 @@ On `gradation/w30-notif` (PR into `gradation/app-pass`). Notif/away follow-ups a
 - A streamed tool handoff does not overwrite the follow-up's Speak/Copy line with the preamble, and errors do not replace that line (they still do not post a shade). `saveLastAiResponseForChannel` commits.
 
 Phone: Notify when away on, with two sessions whose ids share a prefix (`ab` and `ab:cd`) both waiting on approval. Finish or forget `ab` (the other approval stays). Swipe `ab`'s only alert and replay its open (it should not open; `ab:cd` still should). Background a chat whose reply calls a tool (Speak should read the finished answer, not the "I'll check" line). Force-stop right after an answer shade appears, then Speak (it should read that answer).
+# Handoff (2026-10-03, Settings wave 30)
+
+On `gradation/w30-settings` (PR into `gradation/app-pass`). Settings follow-ups after #128. Not a redo of the voice row, inference comma/non-finite values, timeout 1–45, max tokens 1–999999, or chat-memory exact presets. Not a redo of #121 (pref commits, the Power tools switch, exact chat-text tiles, Voice chips while off, reasoning effort vs the token budget). Not a redo of #131, #132, or #133.
+- Settings > Tools: turning List files or Read file off also drops the pre-rename names (`list_grokion_files`, `list_oxproxion_files`, `read_grokion_file`, `read_oxproxion_file`). The row and the request treated those as still on, so the switch came back. Create file is not a folder-grant tool (MediaStore into Download/gradation); the switch is no longer disabled until a tree is picked. Delete, list, read, open, edit, and copy still need that grant.
+- Settings > Models: the local server address is the base the app appends `/v1` to. A trailing slash or a pasted `/v1` is stripped on save and on read, so an older `http://10.0.0.23:11434/v1/` still requests `/v1/chat/completions` once.
+
+Phone: with an old file-tool name still stored, open Settings > Advanced > Tools and turn List files off (it should stay off, and the model should not get that tool). Turn Create file on without picking a folder. Set the local server to `http://10.0.0.23:11434/v1/` and load models (the request should be `http://10.0.0.23:11434/v1/models`, not `/v1/v1`).
 
 # Handoff (2026-10-03, Import wave 30)
 
@@ -34,6 +41,7 @@ On `gradation/w30-stability` (PR into `gradation/app-pass`). Persistence follow-
 - Once `encrypt_ok` is set, `name.stuck-N` renames of `pre_sqlcipher` / `encrypting` (and a parked live wal/shm/journal) are discarded in the vault, at the databases root, and under hold. A non-empty directory with that name keeps the marker for a retry. Recovered `.stuck-*` names stay.
 
 Phone: a plaintext chat database whose Room version is older than this build should open with history intact (not the set-aside notice, and not a missing-column crash). Leave a non-empty directory named `chat_database-wal` beside the live database and a `chat_database.encrypting-wal.stuck-1` file in the no-backup chat-db folder, then relaunch after a successful encrypt (the live wal name should be gone, and the stuck rename should be gone once the encrypted file has opened).
+
 
 # Handoff (2026-10-03, Code wave 30)
 

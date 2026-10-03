@@ -121,7 +121,7 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
                 permissionIntent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
             }
             // 👇 Handle SAF Tools
-            else if (item.name.contains("file") || item.name.contains("saf") || item.name == "list_files") {
+            else if (ToolItem.needsFolderGrant(item.name)) {
                 needsPermission = true
                 permissionGranted = hasSafPermission
                 isSafTool = true
@@ -156,9 +156,9 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
             }
 
             checkBox.setOnCheckedChangeListener { _, isChecked ->
-                val currentEnabled = sharedPreferencesHelper.getEnabledTools().toMutableSet()
-                if (isChecked) currentEnabled.add(item.name) else currentEnabled.remove(item.name)
-                sharedPreferencesHelper.saveEnabledTools(currentEnabled)
+                sharedPreferencesHelper.saveEnabledTools(
+                    ToolItem.enabledToolsAfterToggle(sharedPreferencesHelper.getEnabledTools(), item.name, isChecked)
+                )
             }
 
             container.addView(row)
