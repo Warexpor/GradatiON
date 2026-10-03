@@ -257,7 +257,7 @@ class PresetEditFragment : Fragment() {
         val preset = Preset(
             id = editingPreset?.id ?: java.util.UUID.randomUUID().toString(),
             title = title,
-            modelIdentifier = model?.apiIdentifier ?: "unknown-model",
+            modelIdentifier = model?.apiIdentifier ?: keptMissingModel() ?: "unknown-model",
             systemMessage = sysMsg,
             streaming = streaming,
             reasoning = reasoning,
@@ -270,6 +270,14 @@ class PresetEditFragment : Fragment() {
         repo.upsert(preset)
 
         parentFragmentManager.popBackStack()
+    }
+
+    /**
+     * The edited preset's own model id while the field still shows it as "Missing: id", so a
+     * preset whose model was removed keeps pointing at it and works again once it is re-added.
+     */
+    private fun keptMissingModel(): String? = editingPreset?.modelIdentifier?.takeIf {
+        modelAutoComplete.text.toString().trim() == getString(R.string.preset_model_missing, it)
     }
 
     /** The TextInputLayout around this field, where errors show. */

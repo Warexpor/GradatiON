@@ -701,6 +701,26 @@ class ScreenshotTest : ScreenshotHarness() {
         snap(root(a), "settings_system_message_empty_dark")
     }
 
+    /** Saving a preset whose model was removed used to overwrite its model with "unknown-model". */
+    @Test fun settingsPresetKeepsAMissingModelDark() = withChat { a, _ ->
+        val prefs = SharedPreferencesHelper(a)
+        val gone = Preset("p-gone", "Old favourite", "vendor/retired-model", SystemMessage("Default", ""),
+            streaming = true, reasoning = false, conversationMode = false)
+        prefs.savePresets(listOf(gone))
+        val f = PresetEditFragment.newInstance(gone)
+        pushFragment(a, f)
+        val v = f.requireView()
+        org.junit.Assert.assertEquals(a.getString(R.string.preset_model_missing, "vendor/retired-model"),
+            v.findViewById<android.widget.TextView>(R.id.autoCompleteModel).text.toString())
+        v.findViewById<android.widget.EditText>(R.id.editPresetTitle).setText("Renamed favourite")
+        snap(root(a), "settings_preset_missing_model_dark")
+        v.findViewById<View>(R.id.buttonSave).performClick(); idle()
+        val saved = prefs.getPresets().single()
+        org.junit.Assert.assertEquals("Renamed favourite", saved.title)
+        org.junit.Assert.assertEquals("vendor/retired-model", saved.modelIdentifier)
+        prefs.savePresets(emptyList())
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
