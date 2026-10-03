@@ -398,7 +398,7 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
                 val d = resources.displayMetrics.density
                 swatch.addView(android.widget.ImageView(ctx).apply {
                     id = R.id.backgroundPhotoPlaceholder
-                    setImageResource(R.drawable.ic_imgup)
+                    setImageResource(R.drawable.ic_photo_library)
                     imageTintList = android.content.res.ColorStateList.valueOf(ctx.getColor(R.color.xai_mute))
                 }, android.widget.FrameLayout.LayoutParams((24 * d).toInt(), (24 * d).toInt(), android.view.Gravity.CENTER))
             }

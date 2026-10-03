@@ -803,6 +803,9 @@ class ScreenshotTest : ScreenshotHarness() {
         openSettingsRow(a, R.id.settingsRowAppearance); settle(); awaitPhoto(); settle()
         org.junit.Assert.assertTrue(a.findViewById<View>(R.id.backgroundPhotoOptions).isShown)
         snap(root(a), "settings_appearance_photo_dark")
+        val choose = a.findViewById<View>(R.id.backgroundPhotoChoose)
+        choose.requestRectangleOnScreen(android.graphics.Rect(0, 0, choose.width, choose.height), true); idle()
+        snap(root(a), "settings_appearance_photo_options_dark")
         SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
     }
 
