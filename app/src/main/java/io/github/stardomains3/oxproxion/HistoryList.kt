@@ -584,19 +584,32 @@ object HistoryList {
     }
 
     /**
-     * Markdown marks come off for the preview. An underscore inside a word stays:
-     * stripping every `_` turned a search for `snake_case` into a line that no longer
-     * contained it, so the row could not show why it matched.
+     * Markdown marks come off for the preview. A mark inside a word stays: stripping
+     * every `_` hid `snake_case`, and stripping every `#`, `~` and `>` hid `C#`,
+     * `~/Downloads` and `a > b`, so the row no longer contained the words that matched.
+     * Heading hashes, a blockquote `>`, paired `~~`, stars and backticks still come off.
      */
     private fun fold(text: String): String =
         WHITESPACE.replace(
-            MD_EDGE_UNDERSCORE.replace(MD_STARS.replace(text, ""), "").replace(MD_MARKS, ""),
+            MD_EDGE_UNDERSCORE.replace(
+                MD_STARS.replace(
+                    MD_STRIKE.replace(
+                        MD_QUOTE.replace(MD_HEADING.replace(text, ""), ""),
+                        "",
+                    ),
+                    "",
+                ),
+                "",
+            ).replace(MD_BACKTICK, ""),
             " ",
         ).trim()
 
     private val DATA_URL = Regex("data:[^\"\\s]*;base64,[A-Za-z0-9+/=]+")
     private val MD_STARS = Regex("\\*+")
-    private val MD_MARKS = Regex("[#>`~]")
+    private val MD_HEADING = Regex("(?m)^#{1,6}[ \\t]+")
+    private val MD_QUOTE = Regex("(?m)^>+[ \\t]*")
+    private val MD_STRIKE = Regex("~~")
+    private val MD_BACKTICK = Regex("`+")
     private val MD_EDGE_UNDERSCORE = Regex("(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])")
     private val WHITESPACE = Regex("\\s+")
 
