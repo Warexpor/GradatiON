@@ -58,9 +58,10 @@ object CodePairing {
      *
      * Query aliases: `url`|`address`|`ws`; `token`|`t`|`auth`; `fp`|`fingerprint`|`pin`.
      * A bridge address may contain its own query (`wss://host/v1?a=1&b=2`) even when that
-     * `&` was not percent-encoded. A `#` in that address is not an outer fragment, and a
-     * query key that happens to be named `token` / `auth` / `ws` / `fp` stays in the address
-     * when a real pairing field follows it. A fingerprint may contain spaces.
+     * `&` was not percent-encoded. Those parameters stay as written: the key's case and any
+     * percent-encoding are part of the address. A `#` in that address is not an outer
+     * fragment, and a query key that happens to be named `token` / `auth` / `ws` / `fp`
+     * stays in the address when a real pairing field follows it. A fingerprint may contain spaces.
      * Missing url/token → error. Present but unparseable `fp` → [Reason.BAD_FINGERPRINT].
      * Valid `fp` with cleartext `ws://` → [Reason.PIN_REQUIRES_WSS] (pin needs `wss://`).
      * Absent `fp` is allowed (legacy cleartext LAN / no-pin path).
@@ -98,7 +99,7 @@ object CodePairing {
 
     private data class PairParts(val scheme: String, val host: String, val query: String)
 
-    private data class QueryPart(val key: String, val value: String, val piece: String)
+    private data class QueryPart(val key: String, val value: String, val raw: String)
 
     /**
      * Scheme and host only. [java.net.URI] rejects spaces (a spaced fingerprint) and
@@ -145,6 +146,10 @@ object CodePairing {
      * address is the pairing field (an earlier `auth` or `token` in that query is not).
      * A second address alias is a sibling only when the address has no `?` yet;
      * `ws` inside `?room=1&ws=1&b=2` is part of the address.
+     *
+     * Keys are matched case-insensitively, but a parameter that stays in the address is
+     * copied as written. Lowercasing it, or decoding `%20` / `%2B` while gluing, changed
+     * the bridge URL the QR actually carried.
      */
     private fun queryMap(rawQuery: String?): Map<String, String> {
         if (rawQuery.isNullOrBlank()) return emptyMap()
@@ -152,11 +157,11 @@ object CodePairing {
         for (part in rawQuery.split('&')) {
             if (part.isEmpty()) continue
             val eq = part.indexOf('=')
-            val key = decode(if (eq < 0) part else part.substring(0, eq)).lowercase()
+            val rawKey = if (eq < 0) part else part.substring(0, eq)
+            val key = decode(rawKey).lowercase()
             val value = if (eq < 0) "" else decode(part.substring(eq + 1))
             if (key.isEmpty()) continue
-            val piece = if (eq < 0) key else "$key=$value"
-            parts.add(QueryPart(key, value, piece))
+            parts.add(QueryPart(key, value, part))
         }
         val out = LinkedHashMap<String, String>()
         val urlIndex = parts.indexOfFirst { it.key in urlKeys }
@@ -167,7 +172,7 @@ object CodePairing {
             return out
         }
         val urlKey = parts[urlIndex].key
-        var urlValue = parts[urlIndex].value
+        var urlValue = bridgeUrl(parts[urlIndex])
         var tokenBefore = false
         var fpBefore = false
         for (i in 0 until urlIndex) {
@@ -196,10 +201,24 @@ object CodePairing {
                 continue
             }
             if (lastTerminator >= 0 && i > lastTerminator) continue
-            urlValue = "$urlValue&${part.piece}"
+            urlValue = "$urlValue&${part.raw}"
         }
         out[urlKey] = urlValue
         return out
+    }
+
+    /**
+     * An address that is already `ws://` or `wss://` is stored as written, so `%20` stays
+     * encoded and the key keeps its case. A percent-encoded query value (`wss%3A%2F%2F…`)
+     * is decoded once.
+     */
+    private fun bridgeUrl(part: QueryPart): String {
+        val rawValue = part.raw.substringAfter('=', missingDelimiterValue = "")
+        val trimmed = rawValue.trim()
+        if (trimmed.startsWith("ws://", ignoreCase = true) || trimmed.startsWith("wss://", ignoreCase = true)) {
+            return trimmed
+        }
+        return part.value.trim()
     }
 
     /** Prefer `token` / `t` over `auth` so a bridge `auth` query does not replace the pairing token. */
