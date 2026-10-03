@@ -1051,6 +1051,30 @@ class ScreenshotTest : ScreenshotHarness() {
         snap(root(a), "settings_tools_brave_note_dark")
     }
 
+    /** A value outside a parameter's range was dropped without a word while the field kept showing it. */
+    @Test fun settingsInferenceSaysWhenAValueIsOutOfRangeDark() = withChat { a, _ ->
+        val prefs = SharedPreferencesHelper(a)
+        pushFragment(a, InferenceParametersFragment())
+        fun field(edit: Int) = a.findViewById<android.widget.EditText>(edit)
+        fun layout(id: Int) = a.findViewById<com.google.android.material.textfield.TextInputLayout>(id)
+        a.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.tempSwitch).isChecked = true
+        a.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.presPenaltySwitch).isChecked = true
+        a.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.topKSwitch).isChecked = true
+        val before = prefs.getInferenceTempValue()
+        field(R.id.tempEdit).setText("7"); idle()
+        org.junit.Assert.assertEquals("Enter a number from 0 to 5", layout(R.id.tempInputLayout).error?.toString())
+        org.junit.Assert.assertEquals("not saved", before, prefs.getInferenceTempValue())
+        field(R.id.presPenaltyEdit).setText("-3"); idle()
+        org.junit.Assert.assertEquals("Enter a number from -2 to 2", layout(R.id.presPenaltyInputLayout).error?.toString())
+        field(R.id.topKEdit).setText("0"); idle()
+        org.junit.Assert.assertEquals("Enter a whole number from 1 to 100000", layout(R.id.topKInputLayout).error?.toString())
+        org.junit.Assert.assertNull("no filled error glyph", layout(R.id.tempInputLayout).errorIconDrawable)
+        snap(root(a), "settings_inference_out_of_range_dark")
+        field(R.id.tempEdit).setText("1.5"); idle()
+        org.junit.Assert.assertNull("a valid value clears it", layout(R.id.tempInputLayout).error)
+        org.junit.Assert.assertEquals("1.5", prefs.getInferenceTempValue())
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
