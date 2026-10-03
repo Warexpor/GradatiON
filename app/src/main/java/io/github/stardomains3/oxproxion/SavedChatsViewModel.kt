@@ -115,6 +115,10 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
      * report success. The destination is opened with mode "wt" so an overwrite truncates; a
      * failed copy can still leave a short file there.
      */
+    /** Whether a backup would hold anything. Reads the table: [allSessions] stays empty until observed. */
+    suspend fun hasSessions(): Boolean =
+        withContext(Dispatchers.IO) { repository.getAllSessionsOnce().isNotEmpty() }
+
     suspend fun exportChatsTo(uri: Uri) {
         val app = getApplication<Application>()
         val cache = File(app.cacheDir, "chat-export-${System.nanoTime()}.json")

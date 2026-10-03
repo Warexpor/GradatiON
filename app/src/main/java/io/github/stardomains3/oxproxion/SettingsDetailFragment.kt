@@ -705,17 +705,18 @@ class SettingsDetailFragment : Fragment(R.layout.fragment_settings_detail) {
     }
 
     private fun exportChats() {
-        val sessions = savedChatsViewModel.allSessions.value.orEmpty()
-        if (sessions.isEmpty()) {
-            GlassNotice.show(requireContext(), getString(R.string.notice_no_chats_export))
-            return
+        viewLifecycleOwner.lifecycleScope.launch {
+            if (!savedChatsViewModel.hasSessions()) {
+                GlassNotice.show(requireContext(), getString(R.string.notice_no_chats_export))
+                return@launch
+            }
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "application/json"
+                putExtra(Intent.EXTRA_TITLE, getString(R.string.chats_export_filename))
+            }
+            exportChatsLauncher.launch(intent)
         }
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "application/json"
-            putExtra(Intent.EXTRA_TITLE, "openchat_backup.json")
-        }
-        exportChatsLauncher.launch(intent)
     }
 
     private fun importChats() {
