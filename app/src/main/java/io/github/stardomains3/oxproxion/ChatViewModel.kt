@@ -1720,14 +1720,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
          */
         capturedImageUri: String? = null,
         useCapturedImageUri: Boolean = false,
+        /**
+         * The open chat when Send was tapped. Null means this call is still on that
+         * chat (the text path does not leave the main thread first). A photo encode
+         * does, and the chat may have changed before this runs.
+         */
+        capturedEpoch: Long? = null,
     ): Boolean {
         rpRewriteJob?.cancel()
         rpRewriteJob = null
         // The field still belongs to the chat on screen. Waiting, then sending, used to
         // report success first (the composer cleared, and an open edit closed) and append
         // the line to whichever chat finished loading. Stop could not cancel that turn.
-        if (ChatSend.decide(sessionTransitionJob?.isActive == true) == ChatSend.Outcome.Keep) {
-            _toastUiEvent.postValue(Event(str(R.string.notice_chat_still_opening)))
+        val opening = sessionTransitionJob?.isActive == true
+        val sameChat = capturedEpoch == null || capturedEpoch == sessionEpoch
+        if (ChatSend.decide(opening, sameChat) == ChatSend.Outcome.Keep) {
+            if (opening) {
+                _toastUiEvent.postValue(Event(str(R.string.notice_chat_still_opening)))
+            }
             return false
         }
         toolCallsHandledForTurn = false

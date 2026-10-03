@@ -128,7 +128,12 @@ object HistoryList {
             parsed != null -> fold(MessageContent.text(parsed))
             raw.startsWith("\"") -> fold(jsonStringPrefix(raw))
             else -> fold(textFieldPrefix(raw))
-        }.let { withoutDataPayload(it) }
+        }.let {
+            // A bare slice of photo bytes is not a stored message. This reader accepts
+            // it as text, and it used to fill the row. A quote, object, or array is
+            // the message, so a hash on its own line stays.
+            withoutDataPayload(it, storedMessage = raw.startsWith("\"") || raw.startsWith("{") || raw.startsWith("["))
+        }
         val body = when {
             text.isNotBlank() -> text
             hasImage(raw) -> photoLabel
@@ -311,7 +316,9 @@ object HistoryList {
         // A slice of a photo's data URL is one long token. It is not a line of the chat.
         // A line with no spaces still is: a link, or Chinese, Japanese or Korean.
         // "You:" is added here. It is not a match for the word in that label.
-        if (isChatLine(parsed) && matchesBeyondLabel(parsed, needle)) {
+        // preview() already dropped a photo payload. A hash or other single token
+        // is still the message, so it is not run through the raw-slice check.
+        if (parsed.isNotEmpty() && matchesBeyondLabel(parsed, needle)) {
             return clipMatch(parsed, needle)
         }
         val readable = lineFor(readableSource(window), needle)
@@ -546,28 +553,37 @@ object HistoryList {
 
     /**
      * A photo's data URL is not a preview line. A sentence that mentions one, or that
-     * starts with "data:" or talks about "base64,", still is. Treating every such
-     * string as the payload hid the caption, and a picture on that turn showed Photo.
+     * starts with "data:" or talks about "base64,", still is. A single token does too:
+     * a SHA-256 has no spaces and sits in the base64 alphabet, and it used to be
+     * treated as a slice of the photo, so the row went blank.
      */
-    private fun withoutDataPayload(text: String): String {
+    private fun withoutDataPayload(text: String, storedMessage: Boolean): String {
         if (text.isEmpty()) return ""
         val stripped = WHITESPACE.replace(DATA_URL.replace(text, " "), " ").trim()
-        if (stripped.isEmpty() || isDataPayload(stripped)) return ""
+        if (stripped.isEmpty() || isDataPayload(stripped, storedMessage)) return ""
         return stripped
     }
 
-    private fun isDataPayload(text: String): Boolean {
+    private fun isDataPayload(text: String, storedMessage: Boolean): Boolean {
         if (text.any { it.isWhitespace() }) return false
-        if (isBase64Run(text)) return true
-        return text.startsWith("data:") && text.contains("base64", ignoreCase = true)
+        if (text.startsWith("data:") && text.contains("base64", ignoreCase = true)) return true
+        return !storedMessage && isBase64Run(text)
     }
 
-    /** The value of the first `"text":"..."` field, as far as the prefix goes. */
+    /**
+     * The value of the first `"text":"..."` field, as far as the prefix goes.
+     * A picture reply is stored as `kept_turn` with the words in a string `body`.
+     * The history read is cut at 480 characters, often before that string closes,
+     * and there is no `"text"` field, so the row used to be blank.
+     */
     private fun textFieldPrefix(raw: String): String {
-        val key = "\"text\":\""
-        val at = raw.indexOf(key)
-        if (at < 0) return ""
-        return jsonStringPrefix(raw.substring(at + key.length - 1))
+        val textKey = "\"text\":\""
+        val at = raw.indexOf(textKey)
+        if (at >= 0) return jsonStringPrefix(raw.substring(at + textKey.length - 1))
+        val bodyKey = "\"body\":\""
+        val bodyAt = raw.indexOf(bodyKey)
+        if (bodyAt < 0) return ""
+        return jsonStringPrefix(raw.substring(bodyAt + bodyKey.length - 1))
     }
 
     /** Decodes a JSON string that may be missing its closing quote. */
