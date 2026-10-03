@@ -661,6 +661,31 @@ class ScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertTrue("granted: saved", prefs.getNotiPreference())
     }
 
+    /** Both toolbar capsules are 40dp, so equal centre distances mean equal margins to the edges. */
+    @Test fun settingsLibraryToolbarsAreSymmetric() = withChat { a, _ ->
+        val d = a.resources.displayMetrics.density
+        val screens: List<Pair<String, () -> androidx.fragment.app.Fragment>> = listOf(
+            "prompts" to { PromptLibraryFragment() },
+            "system messages" to { SystemMessageLibraryFragment() },
+            "add prompt" to { AddEditPromptFragment() },
+            "add system message" to { AddEditSystemMessageFragment() },
+            "preset editor" to { PresetEditFragment.newInstance(null) },
+        )
+        for ((name, make) in screens) {
+            val f = make()
+            pushFragment(a, f)
+            val bar = f.requireView().findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+            val kids = (0 until bar.childCount).map { bar.getChildAt(it) }
+            val nav = kids.first { it is android.widget.ImageButton }
+            val menu = kids.first { it is androidx.appcompat.widget.ActionMenuView } as android.view.ViewGroup
+            val last = (0 until menu.childCount).map { menu.getChildAt(it) }.last { it.visibility == View.VISIBLE }
+            val start = nav.left + nav.width / 2f
+            val end = bar.width - (menu.left + last.left + last.width / 2f)
+            org.junit.Assert.assertEquals("$name: end capsule as far from the edge as Back", start, end, 1.5f * d)
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
