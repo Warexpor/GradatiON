@@ -129,6 +129,14 @@ class CodeModeScreenshotTest {
         assertEquals(View.VISIBLE, stateView.visibility)
         assertEquals(ctx.getString(R.string.code_session_loading), stateView.text.toString())
         assertTrue("the loading line carries the agent's mark", stateView.compoundDrawablesRelative[1] != null)
+        val y = IntArray(2)
+        root(a).findViewById<View>(R.id.codeSessionSheet).getLocationInWindow(y)
+        val clearTop = y[1]
+        root(a).findViewById<View>(R.id.codeSessionDock).getLocationInWindow(y)
+        val clearBottom = y[1]
+        stateView.getLocationInWindow(y)
+        assertEquals("the mark and its line centre between the header and the composer",
+            (clearTop + clearBottom) / 2f, y[1] + stateView.height / 2f, 2f)
         snap(root(a), "code_session_loading_dark")
     }
 
@@ -142,6 +150,54 @@ class CodeModeScreenshotTest {
         idle(16)
         assertEquals(false, hub.sessions.value[id]!!.running)
         snap(root(a), "code_session_done_dark")
+    }
+
+    /**
+     * Scrolled back to the top in the Thinking view while the agent waits: the open thought and
+     * search pane on the grid, and the pin above the composer standing in for the card off screen.
+     */
+    @Test fun codeSessionApprovalPinDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        hub.store.showThinking = true
+        try {
+            val id = startDemo("Add a follow-system option to the theme setting")
+            push(a, CodeSessionFragment.newInstance(id))
+            idle(12)
+            val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+            val f = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }
+            CodeSessionFragment::class.java.getDeclaredField("follow").apply { isAccessible = true }.setBoolean(f, false)
+            list.scrollToPosition(0)
+            idle(2)
+            assertEquals("the pin stands in for the card off screen", View.VISIBLE,
+                root(a).findViewById<View>(R.id.codeSessionApprovalBar).visibility)
+            assertOnTranscriptGrid(list)
+            snap(root(a), "code_session_approval_pin_dark")
+        } finally {
+            hub.store.showThinking = false
+        }
+    }
+
+    /** Mid-turn: a command streams into its pane while the Working footer closes the rail. */
+    @Test fun codeSessionRunningDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+        hub.answer(id, approval.requestId, approval.options.first { it.id == "allow" })
+        fun midCommand() = hub.sessions.value[id]!!.events.any {
+            it is CodeEvent.ToolCall && it.kind == io.github.stardomains3.oxproxion.code.ToolKind.EXECUTE &&
+                it.status == io.github.stardomains3.oxproxion.code.ToolStatus.RUNNING && (it.output?.lines()?.size ?: 0) >= 3
+        }
+        repeat(40) { if (!midCommand()) shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100))
+        assertTrue("a command is streaming", midCommand())
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val adapter = list.adapter as io.github.stardomains3.oxproxion.code.CodeTranscriptAdapter
+        assertTrue("the Working footer closes the list",
+            adapter.currentList.last() === io.github.stardomains3.oxproxion.code.TranscriptRow.Working)
+        assertOnTranscriptGrid(list)
+        snap(root(a), "code_session_running_dark")
     }
 
     /**
@@ -179,9 +235,101 @@ class CodeModeScreenshotTest {
         assertEquals(View.VISIBLE, search.findViewById<View>(R.id.codeToolOutputScroll).visibility)
         assertEquals("only commands get a prompt line", View.GONE, search.findViewById<View>(R.id.codeToolPrompt).visibility)
         adapter.verbose = false
+        // Inline code in prose keeps clear of the words around it: the spaces beside the pill widen.
+        val prose = bindRow(a) { it is CodeEvent.AgentText && "`SettingsRepository`" in it.text }
+            .findViewById<android.widget.TextView>(R.id.codeAgentText).text as android.text.Spanned
+        val code = prose.getSpans(0, prose.length, ChatMarkdown.InlineCodeMarker::class.java).first()
+        for (at in listOf(prose.getSpanStart(code) - 1, prose.getSpanEnd(code))) {
+            assertEquals(' ', prose[at])
+            assertEquals(1, prose.getSpans(at, at + 1, io.github.stardomains3.oxproxion.code.CodeInlineAir.WideSpace::class.java).size)
+        }
+        // A step too long for one line keeps its glyph beside its first line, not between lines.
+        val plan = bindRow(a) { it is CodeEvent.Plan }
+        val step = (plan.findViewById<android.view.ViewGroup>(R.id.codePlanRows)).getChildAt(0)
+        step.findViewById<android.widget.TextView>(R.id.codePlanStepText).text =
+            "Find where the theme is stored and every screen that reads the old dark mode flag"
+        plan.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        plan.layout(0, 0, plan.measuredWidth, plan.measuredHeight)
+        val words = step.findViewById<android.widget.TextView>(R.id.codePlanStepText)
+        val glyph = step.findViewById<View>(R.id.codePlanStepGlyph)
+        assertTrue("the long step wraps", words.lineCount >= 2)
+        val firstLine = words.top + words.layout.getLineTop(0)..words.top + words.layout.getLineBottom(0)
+        assertTrue("the glyph sits beside the first line", (glyph.top + glyph.height / 2) in firstLine)
         list.scrollToPosition(0)
         idle(2)
+        assertOnTranscriptGrid(list)
         snap(root(a), "code_session_trace_dark")
+    }
+
+    /**
+     * One grid for every row on screen: glyphs (beads, card icons, plan steps) centre on the rail,
+     * and words start on the content column, inside a card or not.
+     */
+    private fun assertOnTranscriptGrid(list: androidx.recyclerview.widget.RecyclerView) {
+        val res = ctx.resources
+        val railX = res.getDimension(R.dimen.code_rail_x)
+        val textX = res.getDimensionPixelSize(R.dimen.code_text_start)
+        val origin = IntArray(2).also { list.getLocationInWindow(it) }[0]
+        fun left(v: View) = IntArray(2).also { v.getLocationInWindow(it) }[0] - origin
+        var glyphs = 0
+        var words = 0
+        for (i in 0 until list.childCount) {
+            val row = list.getChildAt(i)
+            row.findViewById<View>(R.id.codeRailNode)?.takeIf { it.isShown }?.let {
+                assertEquals("bead centres on the rail", railX, left(it) + it.width / 2f, 1.5f)
+                glyphs++
+            }
+            row.findViewById<android.view.ViewGroup>(R.id.codePlanRows)?.takeIf { it.isShown }?.let { steps ->
+                for (s in 0 until steps.childCount) {
+                    val glyph = steps.getChildAt(s).findViewById<View>(R.id.codePlanStepGlyph)
+                    assertEquals("plan step glyph centres on the rail", railX, left(glyph) + glyph.width / 2f, 1.5f)
+                    assertEquals("plan step words on the content column", textX,
+                        left(steps.getChildAt(s).findViewById(R.id.codePlanStepText)))
+                    glyphs++
+                }
+            }
+            for (id in listOf(R.id.codeUserText, R.id.codeToolTitle, R.id.codeThoughtLabel, R.id.codeAgentText,
+                R.id.codePlanTitle, R.id.codeDiffPath, R.id.codeApprovalTitle, R.id.codeApprovalWhat,
+                R.id.codeApprovalDoneText, R.id.codeTurnText, R.id.codeWorkingText, R.id.codeNoticeText)) {
+                row.findViewById<android.widget.TextView>(id)?.takeIf { it.isShown }?.let {
+                    assertEquals("${res.getResourceEntryName(id)} starts on the content column",
+                        textX, left(it) + it.compoundPaddingLeft)
+                    words++
+                }
+            }
+        }
+        assertTrue("checked the rows on screen", glyphs >= 2 && words >= 3)
+    }
+
+    /**
+     * An approval's answers share one line on the content column, pushed out to both of its edges;
+     * labels too long for that line stack full width instead of clipping or scrolling sideways.
+     */
+    @Test fun codeApprovalChoicesFillOneLineOrStack() = withCode { a, _ ->
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val row = bindRow(a) { it is CodeEvent.Approval }
+        fun lay() {
+            row.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            row.layout(0, 0, row.measuredWidth, row.measuredHeight)
+        }
+        lay()
+        val box = row.findViewById<android.widget.LinearLayout>(R.id.codeApprovalButtons)
+        val what = row.findViewById<View>(R.id.codeApprovalWhat)
+        fun xIn(v: View): Int { var x = 0; var p: View = v; while (p !== row) { x += p.left; p = p.parent as View }; return x }
+        assertEquals(android.widget.LinearLayout.HORIZONTAL, box.orientation)
+        assertEquals("answers start on the content column", xIn(what), xIn(box.getChildAt(0)))
+        val last = box.getChildAt(box.childCount - 1)
+        assertEquals("answers run to the card's end pad", xIn(box) + box.width, xIn(last) + last.width)
+        assertTrue("one line", (0 until box.childCount).all { box.getChildAt(it).top == 0 })
+        (box.getChildAt(1) as android.widget.TextView).text = "Always allow edits to every file in this workspace"
+        lay()
+        assertEquals("a label too long for the line stacks the answers", android.widget.LinearLayout.VERTICAL, box.orientation)
+        for (i in 0 until box.childCount) assertEquals("stacked answers fill the column", box.width, box.getChildAt(i).width)
     }
 
     /** Over an ambient background the transcript sheet is see-through glass: the field shows, blurred. */
@@ -315,6 +463,7 @@ class CodeModeScreenshotTest {
             it is CodeEvent.Notice && it.text == "Stopped"
         }
         assertEquals(0, stopped)
+        snap(root(a), "code_session_stopped_dark")
     }
 
     /** Audit 12 + 14: tool rows, thought headers and "full output" clear 44dp and speak their state. */
@@ -334,6 +483,27 @@ class CodeModeScreenshotTest {
         val path = (CodeHub.getLoaded(ctx).sessions.value[id]!!.events.filterIsInstance<CodeEvent.FileDiff>().first()).path
         assertTrue("diff card is described for TalkBack",
             diff.findViewById<View>(R.id.codeDiffCard).contentDescription.toString().contains(path))
+    }
+
+    /** A long tool title leaves room for its argument and keeps a failure's cross on the line. */
+    @Test fun codeToolRowLongTitleKeepsItsCross() = withCode { a, _ ->
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val row = bindRow(a) { it is CodeEvent.ToolCall && it.kind == io.github.stardomains3.oxproxion.code.ToolKind.READ }
+        row.findViewById<android.widget.TextView>(R.id.codeToolTitle).text =
+            "Read every settings screen, the theme controller and the preferences migration helper"
+        row.findViewById<View>(R.id.codeToolStatus).visibility = View.VISIBLE
+        row.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        row.layout(0, 0, row.measuredWidth, row.measuredHeight)
+        val line = row.findViewById<android.view.ViewGroup>(R.id.codeToolRow)
+        val cross = row.findViewById<View>(R.id.codeToolStatus)
+        val detail = row.findViewById<View>(R.id.codeToolDetail)
+        val min = (14 * ctx.resources.displayMetrics.density).toInt()
+        assertTrue("the cross stays whole on the line", cross.width >= min && cross.right <= line.width - line.paddingRight)
+        assertTrue("the argument keeps some room", detail.width >= 64 * ctx.resources.displayMetrics.density)
     }
 
     /** Audit 20: from another tab, a session waiting on approval puts a cue on the Code tab. */

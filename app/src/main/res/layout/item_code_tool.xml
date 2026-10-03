@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code transcript: one tool call as a single line on the rail; tap for output -->
+<!-- Code transcript: one tool call as a single line on the rail; tap for output. The output pane
+     ends on the cards' edge; the line's words end where prose does (14dp in). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingStart="6dp"
-    android:paddingEnd="8dp"
+    android:paddingStart="@dimen/code_rail_row_pad"
+    android:paddingEnd="@dimen/code_card_inset"
     android:paddingTop="1dp"
     android:paddingBottom="1dp">
 
@@ -22,7 +23,7 @@
         android:focusable="true"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingEnd="6dp">
+        android:paddingEnd="8dp">
 
         <FrameLayout
             android:id="@+id/codeRailNode"
@@ -50,6 +51,7 @@
                 app:trackColor="@android:color/transparent" />
         </FrameLayout>
 
+        <!-- Capped so a long title still leaves the argument and a failure's cross on the line -->
         <TextView
             android:id="@+id/codeToolTitle"
             android:layout_width="wrap_content"
@@ -57,6 +59,7 @@
             android:layout_marginStart="10dp"
             android:ellipsize="end"
             android:maxLines="1"
+            android:maxWidth="220dp"
             android:textColor="@color/xai_ink"
             android:textSize="14sp"
             android:textFontWeight="600" />
@@ -86,7 +89,7 @@
         android:id="@+id/codeToolOutputScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="30dp"
+        android:layout_marginStart="@dimen/code_text_indent"
         android:layout_marginTop="2dp"
         android:background="@drawable/bg_code_pane"
         android:scrollbars="none"
@@ -127,7 +130,7 @@
         android:id="@+id/codeToolFull"
         android:layout_width="match_parent"
         android:layout_height="44dp"
-        android:layout_marginStart="30dp"
+        android:layout_marginStart="@dimen/code_text_indent"
         android:layout_marginBottom="2dp"
         android:background="@drawable/bg_press_svg"
         android:clickable="true"

@@ -4,7 +4,7 @@
     android:id="@+id/codeWorkingText"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:paddingStart="36dp"
+    android:paddingStart="@dimen/code_text_start"
     android:paddingEnd="14dp"
     android:paddingTop="10dp"
     android:paddingBottom="10dp"
