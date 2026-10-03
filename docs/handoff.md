@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Stability wave 30)
+
+On `gradation/w30-stability` (PR into `gradation/app-pass`). Persistence follow-ups after the passphrase bind and the pre-ATTACH wal park (#130). Not a redo of that pass or of #118 (sidecar temps and leftover encrypting after `encrypt_ok`):
+- `sqlcipher_export` does not copy `PRAGMA user_version`. The export now sets `PRAGMA encrypted.user_version` from the plaintext file before DETACH. Left at 0, Room runs onCreate and skips migrations, so a plaintext database from before the current schema never gains columns and the next open sets the history aside.
+- After the encrypted main is installed, a plaintext `-wal`/`-shm`/`-journal` still on the live name is deleted or moved into the no-backup vault as `name.stuck-N`. If it cannot be moved, the plaintext snapshot is put back and the ciphertext is not left in place. SQLite would otherwise replay that wal into the new file.
+- Once `encrypt_ok` is set, `name.stuck-N` renames of `pre_sqlcipher` / `encrypting` (and a parked live wal/shm/journal) are discarded in the vault, at the databases root, and under hold. A non-empty directory with that name keeps the marker for a retry. Recovered `.stuck-*` names stay.
+
+Phone: a plaintext chat database whose Room version is older than this build should open with history intact (not the set-aside notice, and not a missing-column crash). Leave a non-empty directory named `chat_database-wal` beside the live database and a `chat_database.encrypting-wal.stuck-1` file in the no-backup chat-db folder, then relaunch after a successful encrypt (the live wal name should be gone, and the stuck rename should be gone once the encrypted file has opened).
+
 # Handoff (2026-10-03, Code wave 30)
 
 On `gradation/w30-code` (PR into `gradation/app-pass`). Code-mode follow-ups after harness-id folding, session mode aliases, and click/CDP cards (#124). Not a redo of that pass, and not #115 (gitStatus / listSessions / sessionStatus doubles, or the earlier browser card names):
@@ -6,6 +15,7 @@ On `gradation/w30-code` (PR into `gradation/app-pass`). Code-mode follow-ups aft
 - `BrowserMouseMoveXy`, `BrowserMouseDragXy`, `BrowserMouseDown`, `BrowserMouseUp`, and `BrowserMouseWheel` use the execute card. A drag with `startX`/`endX` (including `10.0`) shows `10, 20 → 30, 40`. A wheel shows `deltaX, deltaY`. A mouse-down shows `button`.
 
 Phone: cancel a todo (the row should be struck, not still pending). On Cursor Agent, a drag should show the execute icon and `10, 20 → 30, 40`. An older agent that sends `_cursor/ask_question` should still show the question, not fail the method.
+
 
 # Handoff (2026-10-03, Stability wave 29)
 
