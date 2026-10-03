@@ -82,18 +82,40 @@ object RpChatSummaries {
     fun tagline(c: RpCharacter, userName: String = ""): String {
         val who = c.name.ifBlank { "GradatiON" }
         val you = userName.ifBlank { "you" }
-        // A divider or a line of marks is not the description. Folding it used to leave the
-        // row blank and hide the sentence on the next line.
+        // A divider or a line of marks is not the description. Folding stars used to leave
+        // the row blank; a rule of dashes or equals stayed, and hid the sentence under it.
         val raw = listOf(c.personality, c.scenario, c.greeting)
             .firstNotNullOfOrNull { text ->
                 text.lineSequence()
                     .map { it.trim() }
                     .filter { it.isNotEmpty() }
                     .map { line -> foldMarkdown(RpPromptEngine.expandMacros(line, who, you)) }
-                    .firstOrNull { it.isNotEmpty() }
+                    .firstOrNull { it.isNotEmpty() && !isRuleLine(it) }
             }
             .orEmpty()
-        return raw.take(140)
+        return clipTagline(raw)
+    }
+
+    /**
+     * [String.take] counts UTF-16 units. A limit that landed on the first half of an
+     * emoji left a broken character at the end of the hub line.
+     */
+    private fun clipTagline(text: String): String {
+        if (text.length <= TAGLINE_LIMIT) return text
+        var end = TAGLINE_LIMIT
+        if (text[end - 1].isHighSurrogate()) end--
+        return text.substring(0, end).trimEnd()
+    }
+
+    /** A horizontal rule, or a line that is only heading marks. Not a sentence. */
+    private fun isRuleLine(line: String): Boolean {
+        var marks = 0
+        for (ch in line) {
+            if (ch == ' ' || ch == '\t') continue
+            if (ch != '#' && ch != '=' && ch != '-' && ch != '*' && ch != '_' && ch != '~') return false
+            marks++
+        }
+        return marks > 0
     }
 
     /**
@@ -161,6 +183,7 @@ object RpChatSummaries {
     private val MD_EDGE_UNDERSCORE = Regex("(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])")
     private val WHITESPACE = Regex("\\s+")
 
+    private const val TAGLINE_LIMIT = 140
     private const val LLM_KEY = -1L
     private const val ORPHAN_KEY = -1000L
 }

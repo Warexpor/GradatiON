@@ -60,8 +60,9 @@ object CodePairing {
      * A bridge address may contain its own query (`wss://host/v1?a=1&b=2`) even when that
      * `&` was not percent-encoded. Those parameters stay as written: the key's case and any
      * percent-encoding are part of the address. A `#` in that address is not an outer
-     * fragment, and a query key that happens to be named `token` / `auth` / `ws` / `fp`
-     * stays in the address when a real pairing field follows it. A fingerprint may contain spaces.
+     * fragment, and a later `#note` with no `&` after it is still dropped. A query key
+     * that happens to be named `token` / `auth` / `ws` / `fp` stays in the address when
+     * a real pairing field follows it. A fingerprint may contain spaces.
      * Missing url/token → error. Present but unparseable `fp` → [Reason.BAD_FINGERPRINT].
      * Valid `fp` with cleartext `ws://` → [Reason.PIN_REQUIRES_WSS] (pin needs `wss://`).
      * Absent `fp` is allowed (legacy cleartext LAN / no-pin path).
@@ -104,7 +105,9 @@ object CodePairing {
     /**
      * Scheme and host only. [java.net.URI] rejects spaces (a spaced fingerprint) and
      * treats `#` as a fragment, which used to drop the token that followed a bridge address.
-     * A `#` with no `&` after it is still the outer fragment (`…&token=abc#note`).
+     * A `#` with no `&` after it is the outer fragment (`…&token=abc#note`). The first `#`
+     * is not that fragment when the bridge address has one and a note follows
+     * (`…#section&token=abc#note`); that note used to stick to the token or the pin.
      */
     private fun splitPair(raw: String): PairParts? {
         val sep = raw.indexOf("://")
@@ -129,7 +132,7 @@ object CodePairing {
     }
 
     private fun stripOuterFragment(query: String): String {
-        val hash = query.indexOf('#')
+        val hash = query.lastIndexOf('#')
         if (hash < 0) return query
         return if (query.substring(hash + 1).contains('&')) query else query.substring(0, hash)
     }
@@ -210,7 +213,8 @@ object CodePairing {
     /**
      * An address that is already `ws://` or `wss://` is stored as written, so `%20` stays
      * encoded and the key keeps its case. A percent-encoded query value (`wss%3A%2F%2F…`)
-     * is decoded once.
+     * is decoded once, as a form value: `+` is a space there. The token decoder keeps
+     * `+` as a plus, and using it here saved `hello+world` for an address that had a space.
      */
     private fun bridgeUrl(part: QueryPart): String {
         val rawValue = part.raw.substringAfter('=', missingDelimiterValue = "")
@@ -218,8 +222,14 @@ object CodePairing {
         if (trimmed.startsWith("ws://", ignoreCase = true) || trimmed.startsWith("wss://", ignoreCase = true)) {
             return trimmed
         }
-        return part.value.trim()
+        return decodeForm(trimmed)
     }
+
+    /** One application/x-www-form-urlencoded decode. `+` is a space; `%2B` is a plus. */
+    private fun decodeForm(s: String): String =
+        runCatching { URLDecoder.decode(s, StandardCharsets.UTF_8.name()) }
+            .getOrDefault(s)
+            .trim()
 
     /** Prefer `token` / `t` over `auth` so a bridge `auth` query does not replace the pairing token. */
     private fun pickPairingKey(after: List<QueryPart>, keys: Set<String>, preferLast: Boolean): Int {

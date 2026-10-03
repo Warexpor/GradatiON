@@ -285,6 +285,42 @@ class CodePairingTest {
     }
 
     @Test
+    fun parse_fullyEncodedBridgeUrlDecodesAFormSpace() {
+        // URLEncoder writes a space as '+'. The token decoder keeps '+', so this used to
+        // save hello+world and turn the real plus into the same character.
+        val bridge = "wss://h/v1?name=hello world&q=a+b"
+        val raw = "gradation://pair?url=${java.net.URLEncoder.encode(bridge, "UTF-8")}&token=$goodToken"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals(bridge, r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
+    fun parse_tokenPlusIsNotASpace() {
+        val raw = "gradation://pair?url=$goodUrl&token=ab+cd"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("ab+cd", r.pairing.token)
+        assertEquals(goodUrl, r.pairing.url)
+    }
+
+    @Test
+    fun parse_trailingNoteAfterBridgeHashDoesNotJoinTheToken() {
+        val raw = "gradation://pair?url=wss://h/v1?a=1#section&token=$goodToken#note"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://h/v1?a=1#section", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+    }
+
+    @Test
+    fun parse_trailingNoteAfterBridgeHashDoesNotRejectThePin() {
+        val raw = "gradation://pair?url=wss://h/v1?a=1#section&token=$goodToken&fp=$pinHex#note"
+        val r = CodePairing.parse(raw) as CodePairing.ParseResult.Ok
+        assertEquals("wss://h/v1?a=1#section", r.pairing.url)
+        assertEquals(goodToken, r.pairing.token)
+        assertEquals(pinB64, r.pairing.fingerprint)
+    }
+
+    @Test
     fun parse_hexWithColons() {
         val colons =
             "12:AD:50:59:23:03:1E:7D:75:A8:97:2D:CA:3A:9E:0C:ED:E9:FE:50:86:FB:7C:08:8F:42:E0:B5:6A:98:93:A9"
