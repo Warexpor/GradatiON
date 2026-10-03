@@ -15,6 +15,7 @@ import kotlinx.serialization.json.longOrNull
  *
  * Null or non-object [result] throws so Hub `runCatching` surfaces a failed UI.
  * `{}` and missing optional fields stay empty success.
+ * A `path` or `branch` written as a whole-number double still matches as `"5"`, same as browse.
  */
 object GitBridgeJson {
 
@@ -23,12 +24,14 @@ object GitBridgeJson {
             ?: throw IllegalStateException("bridge/gitStatus result is not an object")
         val files = (o["files"] as? JsonArray)?.mapNotNull { e ->
             val f = e as? JsonObject ?: return@mapNotNull null
-            val path = (f["path"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            // Whole-number doubles (5.0 / "5.0") still match as "5", same as browse names.
+            val path = idString(f["path"]) ?: return@mapNotNull null
             val status = (f["status"] as? JsonPrimitive)?.contentOrNull ?: "  "
             GitFileStatus(path = path, status = status)
         }.orEmpty()
         return GitStatusResult(
-            branch = (o["branch"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+            // Same whole-number coercion as browse / listSessions cwd.
+            branch = idString(o["branch"]).orEmpty(),
             ahead = intField(o, "ahead"),
             behind = intField(o, "behind"),
             files = files
@@ -53,6 +56,13 @@ object GitBridgeJson {
         val y = status.getOrNull(1)?.takeIf { it != ' ' }
         val x = status.getOrNull(0)?.takeIf { it != ' ' }
         return (y ?: x ?: '?').toString()
+    }
+
+    /** Path / branch: whole-number doubles (`5.0` / `"5.0"`) still match as `"5"`. */
+    private fun idString(el: JsonElement?): String? {
+        val p = el as? JsonPrimitive ?: return null
+        wholeNumberLong(p)?.let { return it.toString() }
+        return p.contentOrNull?.takeIf { it.isNotEmpty() }
     }
 
     private fun intField(o: JsonObject, key: String): Int {
