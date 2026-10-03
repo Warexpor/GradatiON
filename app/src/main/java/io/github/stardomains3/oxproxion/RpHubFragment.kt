@@ -109,16 +109,19 @@ class RpHubFragment : Fragment() {
                     return@launch
                 }
                 val repo = chatViewModel.getRpRepository()
-                val existingKeys = repo.getAllCharactersOnce()
-                    .map { it.exportKey }
-                    .filter { it.isNotBlank() }
-                    .toSet()
-                val overwrite = RpImportRules.characterOverwriteCount(backup.characters, existingKeys)
+                val existing = repo.getAllCharactersOnce()
+                val existingKeys = existing.map { it.exportKey }.filter { it.isNotBlank() }.toSet()
+                val overwrite = RpImportRules.characterOverwriteCount(
+                    backup.characters,
+                    existingKeys,
+                    existing.map { it.name to it.exportKey },
+                )
+                val total = RpImportRules.characterFileCount(backup.characters)
                 if (overwrite > 0) {
                     GrokConfirmDialog.show(
                         fragment = this@RpHubFragment,
                         title = getString(R.string.rp_import_overwrite_title),
-                        message = getString(R.string.rp_import_overwrite_chars, overwrite, backup.characters.size),
+                        message = getString(R.string.rp_import_overwrite_chars, overwrite, total),
                         confirmText = getString(R.string.rp_import_confirm),
                         onConfirm = {
                             viewLifecycleOwner.lifecycleScope.launch { applyCharacterBackup(backup) }
@@ -182,18 +185,20 @@ class RpHubFragment : Fragment() {
                     return@launch
                 }
                 val backup = json.decodeFromString(RpLorebookBackup.serializer(), text)
-                if (backup.lorebooks.isEmpty()) {
+                // A blank name is not a book. A file of only those used to say the import worked.
+                if (RpImportRules.loreFileCount(backup.lorebooks) == 0) {
                     GlassNotice.show(requireContext(), getString(R.string.rp_import_empty))
                     return@launch
                 }
                 val repo = chatViewModel.getRpRepository()
                 val existingNames = repo.getAllLorebooksOnce().map { it.name }
                 val overwrite = RpImportRules.loreOverwriteCount(backup.lorebooks, existingNames)
+                val total = RpImportRules.loreFileCount(backup.lorebooks)
                 if (overwrite > 0) {
                     GrokConfirmDialog.show(
                         fragment = this@RpHubFragment,
                         title = getString(R.string.rp_import_overwrite_title),
-                        message = getString(R.string.rp_import_overwrite_lore, overwrite, backup.lorebooks.size),
+                        message = getString(R.string.rp_import_overwrite_lore, overwrite, total),
                         confirmText = getString(R.string.rp_import_confirm),
                         onConfirm = {
                             viewLifecycleOwner.lifecycleScope.launch { applyLoreBackup(backup) }
@@ -454,7 +459,10 @@ class RpHubFragment : Fragment() {
             val refresh = expandedBefore?.let { RpGreetingSync.Refresh(it, greetingChanged) }
             chatViewModel.syncActiveCharacterGreetingIfIdle(refresh)
             if (!isAdded) return
-            GlassNotice.show(requireContext(), getString(R.string.rp_import_chars_ok, imported.size))
+            GlassNotice.show(
+                requireContext(),
+                getString(R.string.rp_import_chars_ok, RpImportRules.importedCharacterCount(imported)),
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
