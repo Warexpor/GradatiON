@@ -109,15 +109,15 @@ class PrefsCorruptBlobTest {
     fun aWrongTypeDoesNotCrashAndTheValueStays() {
         val prefs = helper()
         prefs.mainPrefs.edit()
-            .putString("font_size", "nope")
+            .putString("font_sizec", "nope")
             .putString("pinned_session_ids", "1")
             .putString("chat_db_recovery_stamp", "soon")
             .commit()
 
-        assertEquals(100, prefs.getFontSize())
+        assertEquals(100, prefs.getFontSizeCh())
         assertTrue(prefs.getPinnedSessionIds().isEmpty())
         assertNull(prefs.recoveryPendingStamp())
-        assertEquals("nope", prefs.mainPrefs.all["font_size"])
+        assertEquals("nope", prefs.mainPrefs.all["font_sizec"])
     }
 
     @Test
@@ -126,7 +126,7 @@ class PrefsCorruptBlobTest {
             .edit().putString("has_migrated_to_kotlin_serialization", "yes").commit()
 
         val prefs = helper()
-        assertEquals(100, prefs.getFontSize())
+        assertEquals(100, prefs.getFontSizeCh())
     }
 
     @Test
