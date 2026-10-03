@@ -50,7 +50,12 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * The cap counts shades that are still up. [clearTurnDoneDedup] drops the dedup key so the
  * next finish can alert, but leaves the notification. Counting only [posted] let a run of
- * new prompts stack past 64.
+ * new prompts stack past 64. Age is a seq in the same prefs file: the map's own iteration
+ * order is not post order, so a cold start would otherwise drop an arbitrary shade.
+ *
+ * A prefs row whose notification is already gone (cleared without a DeleteIntent) is not a
+ * dedup seed, does not count toward the cap, and does not keep the one-shot open token.
+ * The id is kept so the next alert for that key updates the same slot.
  */
 class CodeAwayNotifier(
     context: Context,
@@ -71,6 +76,9 @@ class CodeAwayNotifier(
      * user prompt; the notification stays until cancel or the next finish updates it.
      */
     private val visible = LinkedHashSet<String>()
+
+    /** Next shade age. Zero until the first post reads the max seq already in prefs. */
+    private var orderClock = 0
 
     /** True once [posted] has been seeded from [idPrefs] after process death. */
     @Volatile
@@ -176,6 +184,8 @@ class CodeAwayNotifier(
     private fun allocatedKeys(matches: (String) -> Boolean): Set<String> {
         val keys = LinkedHashSet<String>()
         fun consider(raw: String) {
+            // Age rows share this prefs file. They are not shades.
+            if (raw.startsWith(CodeAwayFormat.ORDER_PREFIX)) return
             val logical = CodeAwayFormat.logicalDedupKey(raw)
             if (matches(logical)) keys.add(logical)
         }
@@ -278,7 +288,42 @@ class CodeAwayNotifier(
     private fun sessionHasAllocation(sessionId: String): Boolean {
         val known = knownSessionIds()
         return allocatedKeys { CodeAwayFormat.keyBelongsToSession(it, sessionId, known) }
-            .isNotEmpty()
+            .any { shadeStillUp(it) }
+    }
+
+    /** Ids recorded for [key] (memory, live row, hold row, legacy file). */
+    private fun idsRecordedFor(key: String): List<Int> {
+        val ids = ArrayList<Int>(4)
+        keyToId[key]?.let { if (CodeAwayFormat.isAwayNotifId(it)) ids += it }
+        fun add(raw: Int) {
+            if (raw != Int.MIN_VALUE && CodeAwayFormat.isAwayNotifId(raw)) ids += raw
+        }
+        add(idPrefs.getInt(key, Int.MIN_VALUE))
+        add(idPrefs.getInt(CodeAwayFormat.holdPrefKey(key), Int.MIN_VALUE))
+        add(shadeHold.getInt(key, Int.MIN_VALUE))
+        return ids.distinct()
+    }
+
+    /**
+     * True when one of [key]'s ids is still in the shade.
+     * A cancel that does not run the DeleteIntent leaves the prefs row behind; that row
+     * must not count as a shade that is still up. If the manager is missing, keep the
+     * old "prefs means up" answer rather than dropping a token we cannot check.
+     */
+    private fun shadeStillUp(key: String): Boolean {
+        val ids = idsRecordedFor(key)
+        if (ids.isEmpty()) return false
+        val manager = nm ?: return true
+        val active = manager.activeNotifications.map { it.id }.toSet()
+        return ids.any { it in active }
+    }
+
+    /** Posted set says skip, unless the shade it remembers is already gone. */
+    private fun claimPost(key: String): Boolean {
+        if (key !in posted) return true
+        if (shadeStillUp(key)) return false
+        posted.remove(key)
+        return true
     }
 
     private fun maybePostApproval(
@@ -293,7 +338,7 @@ class CodeAwayNotifier(
             sessionId,
             approval.requestId,
         )
-        if (!CodeAwayFormat.shouldPost(posted, key)) return
+        if (!claimPost(key)) return
         ensureChannel()
         val headline = awayHeadline(
             R.string.code_away_approval_title,
@@ -326,7 +371,7 @@ class CodeAwayNotifier(
     private fun maybePostTurnDone(sessionId: String, hostId: String, sessionTitle: String) {
         if (!canPost(hostId)) return
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sessionId)
-        if (!CodeAwayFormat.shouldPost(posted, key)) return
+        if (!claimPost(key)) return
         ensureChannel()
         val headline = awayHeadline(
             R.string.code_away_turn_title,
@@ -466,13 +511,27 @@ class CodeAwayNotifier(
             // died before removing the live row. Do not re-seed that key: the next
             // finished turn must still alert (and will reuse the held id).
             val legacyHeld = shadeHold.all.keys
-            val seeded = CodeAwayFormat.postedKeysFromPrefs(idPrefs.all).filter { it !in legacyHeld }
+            // A row whose notification is already gone must not suppress the next alert.
+            val seeded = CodeAwayFormat.postedKeysFromPrefs(idPrefs.all).filter { key ->
+                key !in legacyHeld && shadeStillUp(key)
+            }
             posted.addAll(seeded)
-            // Hold rows are not a dedup seed, but the shade is still up. A fresh process
-            // must count them or the next post stacks past the cap.
+            // Hold rows are not a dedup seed, but a shade that is still up counts.
+            // Seq order, not prefs iteration: the oldest one is the one the cap drops.
             if (visible.isEmpty()) {
-                visible.addAll(CodeAwayFormat.visibleKeysFromPrefs(idPrefs.all))
-                visible.addAll(CodeAwayFormat.visibleKeysFromPrefs(shadeHold.all))
+                val live = LinkedHashSet<String>()
+                CodeAwayFormat.visibleKeysFromPrefs(idPrefs.all).filterTo(live) { shadeStillUp(it) }
+                CodeAwayFormat.visibleKeysFromPrefs(shadeHold.all).filterTo(live) { shadeStillUp(it) }
+                val ordered = CodeAwayFormat.orderedVisibleKeys(idPrefs.all).filter { it in live }
+                val orderedSet = ordered.toSet()
+                val ranked = LinkedHashSet<String>()
+                live.filterTo(ranked) { it !in orderedSet }
+                ranked.addAll(ordered)
+                visible.addAll(ranked)
+            }
+            // Nothing left on screen: a replayed content Intent must not still open.
+            for (sid in knownSessionIds().toList()) {
+                if (!sessionHasAllocation(sid)) clearOpenToken(sid)
             }
             postedSeeded = true
         }
@@ -517,10 +576,16 @@ class CodeAwayNotifier(
         idToKey[id] = key
         // commit: the shade already shows this id. apply() can still be in flight when the
         // process is killed, and a cold-start cancel would miss the allocation.
-        idPrefs.edit().putInt(key, id).remove(CodeAwayFormat.holdPrefKey(key)).commit()
+        // Age is in the same commit so a kill cannot leave the id without a place in line.
+        idPrefs.edit()
+            .putInt(key, id)
+            .remove(CodeAwayFormat.holdPrefKey(key))
+            .putInt(CodeAwayFormat.orderPrefKey(key), nextOrder())
+            .commit()
         if (shadeHold.contains(key)) {
             shadeHold.edit().remove(key).commit()
         }
+        pruneDeadVisible()
         rememberVisible(key)
         // Bound memory if many sessions notify while away; cancel shade on eviction (A6).
         // visible, not posted: a dedup-cleared turn shade is still on screen.
@@ -533,6 +598,34 @@ class CodeAwayNotifier(
     private fun rememberVisible(key: String) {
         visible.remove(key)
         visible.add(key)
+    }
+
+    /** Drop shades the user (or the system) already cleared, so they do not fill the cap. */
+    private fun pruneDeadVisible() {
+        if (nm == null || visible.isEmpty()) return
+        val active = nm.activeNotifications.map { it.id }.toSet()
+        val it = visible.iterator()
+        while (it.hasNext()) {
+            val key = it.next()
+            val ids = idsRecordedFor(key)
+            if (ids.none { id -> id in active }) it.remove()
+        }
+    }
+
+    private fun nextOrder(): Int {
+        if (orderClock == 0) {
+            for ((k, v) in idPrefs.all) {
+                if (!k.startsWith(CodeAwayFormat.ORDER_PREFIX)) continue
+                val n = when (v) {
+                    is Int -> v
+                    is Number -> v.toInt()
+                    else -> continue
+                }
+                if (n > orderClock) orderClock = n
+            }
+        }
+        orderClock++
+        return orderClock
     }
 
     private fun cancelKey(key: String) = forgetShade(key)
@@ -571,12 +664,18 @@ class CodeAwayNotifier(
         for (id in ids) {
             if (idToKey[id] == key) idToKey.remove(id)
         }
+        val orderKey = CodeAwayFormat.orderPrefKey(key)
         if (fromPrefs != null || fromMem != null || fromHold != null ||
-            idPrefs.contains(key) || idPrefs.contains(CodeAwayFormat.holdPrefKey(key))
+            idPrefs.contains(key) || idPrefs.contains(CodeAwayFormat.holdPrefKey(key)) ||
+            idPrefs.contains(orderKey)
         ) {
             // commit: a kill after apply() is scheduled could leave a stale id that collides
             // with the next allocation for another key.
-            idPrefs.edit().remove(key).remove(CodeAwayFormat.holdPrefKey(key)).commit()
+            idPrefs.edit()
+                .remove(key)
+                .remove(CodeAwayFormat.holdPrefKey(key))
+                .remove(orderKey)
+                .commit()
         }
         if (fromLegacy != null || shadeHold.contains(key)) {
             shadeHold.edit().remove(key).commit()

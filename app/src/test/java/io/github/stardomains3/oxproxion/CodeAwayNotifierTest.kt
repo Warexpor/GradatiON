@@ -338,6 +338,85 @@ class CodeAwayNotifierTest {
     }
 
     @Test
+    fun cancelWithoutDismissLetsTheSameApprovalAlertAgain() {
+        val n = notifier()
+        val session = "sess-no-swipe"
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval()), sessionWasRunning = true)
+        val token = n.issueOpenToken(session)
+        val id = nm.activeNotifications.single().id
+        // System cancel does not run the swipe handler. The prefs row used to suppress the next alert.
+        nm.cancel(id)
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval()), sessionWasRunning = true)
+        assertEquals(1, nm.activeNotifications.size)
+        assertEquals(id, nm.activeNotifications.single().id)
+        assertTrue(n.consumeOpenToken(session, token))
+    }
+
+    @Test
+    fun coldStartDropsTokenForAShadeThatIsAlreadyGone() {
+        val n = notifier()
+        n.onUpdate("live", "host", "L", CodeUpdate.Upsert(approval("r-live")), sessionWasRunning = true)
+        n.onUpdate("dead", "host", "D", CodeUpdate.Upsert(approval("r-dead")), sessionWasRunning = true)
+        val liveToken = n.issueOpenToken("live")
+        val deadToken = n.issueOpenToken("dead")
+        val deadId = nm.activeNotifications.first { sbn ->
+            Shadows.shadowOf(sbn.notification.contentIntent).savedIntent
+                .getStringExtra(CodeAwayNotifier.EXTRA_SESSION_ID) == "dead"
+        }.id
+        nm.cancel(deadId)
+        val cold = notifier()
+        cold.onUpdate("fresh", "host", "F", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertFalse(cold.consumeOpenToken("dead", deadToken))
+        assertTrue(cold.consumeOpenToken("live", liveToken))
+        assertTrue("live" in showingSessions())
+        cold.onUpdate("dead", "host", "D", CodeUpdate.Upsert(approval("r-dead")), sessionWasRunning = true)
+        assertTrue("dead" in showingSessions())
+        val reposted = nm.activeNotifications.first { sbn ->
+            Shadows.shadowOf(sbn.notification.contentIntent).savedIntent
+                .getStringExtra(CodeAwayNotifier.EXTRA_SESSION_ID) == "dead"
+        }
+        assertEquals(deadId, reposted.id)
+        val freshToken = Shadows.shadowOf(reposted.notification.contentIntent).savedIntent
+            .getStringExtra(CodeAwayNotifier.EXTRA_OPEN_TOKEN)
+        assertFalse(freshToken == deadToken)
+        assertTrue(cold.consumeOpenToken("dead", freshToken))
+    }
+
+    @Test
+    fun coldStartKeepsTokenWhileShadeIsUp() {
+        val n = notifier()
+        val session = "sess-still-up"
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval()), sessionWasRunning = true)
+        val token = n.issueOpenToken(session)
+        val cold = notifier()
+        cold.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval()), sessionWasRunning = true)
+        assertEquals(1, nm.activeNotifications.size)
+        assertTrue(cold.consumeOpenToken(session, token))
+    }
+
+    @Test
+    fun coldStartEvictsOldestEvenWhenPrefsIterationChanges() {
+        val n = notifier()
+        for (i in 0 until 64) {
+            n.onUpdate("s$i", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+            n.clearTurnDoneDedup("s$i")
+        }
+        val idPrefs = ctx.getSharedPreferences("code_away_notif_ids", 0)
+        val oldest = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "s0")
+        val newer = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "s63")
+        val order0 = idPrefs.getInt(CodeAwayFormat.orderPrefKey(oldest), -1)
+        val order63 = idPrefs.getInt(CodeAwayFormat.orderPrefKey(newer), -1)
+        assertTrue(order0 > 0 && order63 > order0)
+        rewritePrefsReversed("code_away_notif_ids")
+        val cold = notifier()
+        cold.onUpdate("s64", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(64, nm.activeNotifications.size)
+        assertFalse("oldest parked shade is the one that goes", "s0" in showingSessions())
+        assertTrue("s63" in showingSessions())
+        assertTrue("s64" in showingSessions())
+    }
+
+    @Test
     fun coldStartCountsParkedShadesTowardCap() {
         val n = notifier()
         for (i in 0 until 64) {
@@ -349,6 +428,23 @@ class CodeAwayNotifierTest {
         cold.onUpdate("c64", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
         assertEquals(64, nm.activeNotifications.size)
         assertTrue("c64" in showingSessions())
+    }
+
+    /** Rewrite the id prefs newest-key-first so a cold start cannot trust map order. */
+    private fun rewritePrefsReversed(name: String) {
+        val prefs = ctx.getSharedPreferences(name, 0)
+        val all = prefs.all.entries.sortedByDescending { it.key }
+        prefs.edit().clear().commit()
+        val edit = prefs.edit()
+        for ((k, v) in all) {
+            when (v) {
+                is Int -> edit.putInt(k, v)
+                is Boolean -> edit.putBoolean(k, v)
+                is String -> edit.putString(k, v)
+                is Long -> edit.putLong(k, v)
+            }
+        }
+        edit.commit()
     }
 
     private fun showingSessions(): Set<String> =

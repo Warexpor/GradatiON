@@ -64,6 +64,7 @@ object CodeAwayFormat {
     fun takenFromPrefs(entries: Map<String, *>, exceptKey: String? = null): Set<Int> {
         val out = LinkedHashSet<Int>()
         for ((k, v) in entries) {
+            if (k.startsWith(ORDER_PREFIX)) continue
             // hold:turn:s is the same logical key as turn:s (parked shade id).
             if (exceptKey != null && logicalDedupKey(k) == exceptKey) continue
             val id = when (v) {
@@ -88,7 +89,8 @@ object CodeAwayFormat {
         for ((k, v) in entries) {
             // Parked shade ids are not a dedup seed. clearTurnDoneDedup writes them
             // in the same prefs commit that drops the live row.
-            if (k.startsWith(HOLD_PREFIX)) continue
+            // Order rows live in the same file; they are not allocations.
+            if (k.startsWith(HOLD_PREFIX) || k.startsWith(ORDER_PREFIX)) continue
             val id = when (v) {
                 is Int -> v
                 is Number -> v.toInt()
@@ -106,6 +108,7 @@ object CodeAwayFormat {
     fun visibleKeysFromPrefs(entries: Map<String, *>): Set<String> {
         val out = LinkedHashSet<String>()
         for ((k, v) in entries) {
+            if (k.startsWith(ORDER_PREFIX)) continue
             val id = when (v) {
                 is Int -> v
                 is Number -> v.toInt()
@@ -125,6 +128,32 @@ object CodeAwayFormat {
     /** Strip [HOLD_PREFIX] once. Live dedup keys are unchanged. */
     fun logicalDedupKey(prefKey: String): String =
         if (prefKey.startsWith(HOLD_PREFIX)) prefKey.removePrefix(HOLD_PREFIX) else prefKey
+
+    /**
+     * Prefs key for the shade's age. SharedPreferences iteration order is not post order,
+     * so a cold start cannot use the map itself to decide which shade is oldest.
+     */
+    fun orderPrefKey(dedupKey: String): String = ORDER_PREFIX + dedupKey
+
+    /**
+     * Oldest shade first. [entries] may be in any iteration order; the stored seq decides.
+     * Keys with no seq are omitted so the caller can treat them as older than these.
+     */
+    fun orderedVisibleKeys(entries: Map<String, *>): List<String> {
+        val pairs = ArrayList<Pair<Int, String>>(entries.size)
+        for ((k, v) in entries) {
+            if (!k.startsWith(ORDER_PREFIX)) continue
+            val seq = when (v) {
+                is Int -> v
+                is Number -> v.toInt()
+                else -> continue
+            }
+            if (seq <= 0) continue
+            pairs += seq to k.removePrefix(ORDER_PREFIX)
+        }
+        pairs.sortBy { it.first }
+        return pairs.map { it.second }
+    }
 
     /**
      * Session that owns [dedupKey], preferring the longest id.
@@ -231,6 +260,9 @@ object CodeAwayFormat {
 
     /** Prefix for a parked shade id in the notif-id prefs. Not a dedup seed. */
     const val HOLD_PREFIX = "hold:"
+
+    /** Prefix for a shade's age in the notif-id prefs. Not an allocation. */
+    const val ORDER_PREFIX = "ord:"
 
     /** High bits clear of [NOTIF_ID_BASE] (0x5A…) so Allow, Deny, dismiss, and the tap target never share a code. */
     private const val ACTION_ALLOW_TAG = 0x0100_0000

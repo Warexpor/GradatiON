@@ -369,6 +369,11 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
     /** Utterance id the shade is reading. A late end for an older id must not redraw it. */
     internal var shadeUtteranceId: String? = null
 
+    /** Bumps on every Speak. A fixed id let a late end for the previous reading match this one. */
+    private var shadeUtteranceSerial = 0
+
+    private fun nextShadeUtteranceId(): String = "fg_tts_${++shadeUtteranceSerial}"
+
     private var endingUtterance = false
 
     /**
@@ -529,7 +534,7 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             return
         }
         val cleanText = stripMarkdownWithCommonMark(lastResponse)
-        val utteranceId = "fg_tts"
+        val utteranceId = nextShadeUtteranceId()
         shadeUtteranceId = utteranceId
         tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         isTtsActive = true
