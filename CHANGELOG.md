@@ -36,6 +36,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Settings > Models: an IPv4 local server with one trailing dot (`http://10.0.0.23.:11434`) saves. Java reports that form as having no host, so Save used to refuse it, and the Models row printed the whole URL. A link-local address with a zone id (`fe80::1%wlan0`, or `%25`) is refused, and so is an IPv4-mapped address with a leading zero (`::ffff:192.168.001.001`). Those used to save, then every request failed because the HTTP client will not open them. The same addresses without the zone or the leading zero still save, and a public literal is still refused.
 - Code away: an approval whose request id contains ':' is not the same shade as a longer session id that shares that text. `ab` waiting on `cd:r2` used to replace `ab:cd` waiting on `r2`, and answering one cleared the other's open token.
 - Code away: a shade the system drops without a swipe loses its open token when a later alert is handled, not only after the process dies. The alert that was just posted again keeps the token already on that shade. A second shade for the same session still keeps it.
 - Answer shade: Speak puts Speak back when the reply strips to nothing. The engine never starts, and it never calls back, so the shade used to stay on Stop.

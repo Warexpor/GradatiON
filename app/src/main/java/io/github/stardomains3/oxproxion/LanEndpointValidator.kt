@@ -72,9 +72,15 @@ object LanEndpointValidator {
         // `fd00::1` without brackets is not a URL the HTTP client can open. A bracketed literal
         // arrives as `[fd00::1]` from the parser, or from the authority fallback.
         val host = endpoint.host
-        if (':' in host && !(host.startsWith("[") && host.endsWith("]") && host.length > 2)) {
-            return R.string.lan_error_url_invalid
-        }
+        val bracketed = host.startsWith("[") && host.endsWith("]") && host.length > 2
+        if (':' in host && !bracketed) return R.string.lan_error_url_invalid
+        val bare = if (bracketed) host.substring(1, host.length - 1) else host
+        // A zone id (`fe80::1%wlan0`, or `%25` for the percent) is a URL OkHttp will not open.
+        // Save used to accept it, and the models request then failed.
+        if (':' in bare && '%' in bare) return R.string.lan_error_url_invalid
+        // A dotted tail with a leading zero (`::ffff:192.168.001.001`) parses here and then
+        // OkHttp rejects the request. A literal this parser cannot read is the same failure.
+        if (':' in bare && ipv6Hextets(bare) == null) return R.string.lan_error_url_invalid
         if (scheme == "http" && !isPrivateOrLocalHost(host)) {
             return R.string.lan_error_url_http_public
         }
@@ -86,7 +92,8 @@ object LanEndpointValidator {
      * [URI.getHost] is null for a hostname that contains `_` (common on a homelab) and for a
      * password that contains an unencoded `@`, even though the authority still has the host.
      * Those used to fail as "needs a host". A host with no `_` and a single `@` is left alone,
-     * so a literal Java cannot parse stays a bad URL.
+     * so a literal Java cannot parse stays a bad URL. One trailing dot on an IPv4 address
+     * (`10.0.0.23.`) is the same miss: [URI.getHost] is null, and OkHttp still opens it.
      */
     internal fun endpointHostPort(raw: String): HostPort? {
         val uri = runCatching { URI(raw.trim()) }.getOrNull() ?: return null
@@ -97,8 +104,24 @@ object LanEndpointValidator {
         val direct = uri.host?.trim()?.takeIf { it.isNotEmpty() }
         if (direct != null) return HostPort(direct, uri.port)
         val auth = uri.rawAuthority?.takeIf { it.isNotEmpty() } ?: return null
-        if ('_' !in auth && auth.count { it == '@' } <= 1) return null
-        return hostPortFromAuthority(auth)
+        val parsed = hostPortFromAuthority(auth) ?: return null
+        if ('_' !in auth && auth.count { it == '@' } <= 1 && !recoverableTrailingDot(parsed.host)) {
+            return null
+        }
+        return parsed
+    }
+
+    /**
+     * One trailing dot, and the name under it is a host Java will parse.
+     * `10.0.0.23..` and `0x7f.0.0.1.` stay out: the client rejects the first, and the
+     * second is the dotted literal this check already refuses.
+     */
+    private fun recoverableTrailingDot(host: String): Boolean {
+        if (!host.endsWith('.') || host.endsWith("..")) return false
+        val stripped = host.dropLast(1)
+        if (stripped.isEmpty()) return false
+        val again = runCatching { URI("http://$stripped/") }.getOrNull() ?: return false
+        return !again.host.isNullOrEmpty()
     }
 
     /** Authority after userinfo, which ends at the last `@`. Brackets keep an IPv6 address intact. */
@@ -180,7 +203,8 @@ object LanEndpointValidator {
 
     fun isPrivateOrLocalHost(host: String): Boolean {
         // Zone id (fe80::1%wlan0) is the interface, not part of the address.
-        val h = host.trim().lowercase().removePrefix("[").removeSuffix("]").substringBefore('%')
+        // A trailing dot is the absolute DNS form of the same host (`10.0.0.23.`).
+        val h = host.trim().lowercase().removePrefix("[").removeSuffix("]").substringBefore('%').trimEnd('.')
         if (h == "localhost" || h == "127.0.0.1" || h == "::1" || h == "0:0:0:0:0:0:0:1") return true
         if (h.endsWith(".local")) return true
         if (':' in h) return isPrivateIpv6(h)
@@ -231,7 +255,12 @@ object LanEndpointValidator {
             if (colon < 0 || colon > dot) return null
             val nums = s.substring(colon + 1).split('.')
             if (nums.size != 4) return null
-            val octets = nums.map { it.toIntOrNull()?.takeIf { n -> n in 0..255 } ?: return null }
+            val octets = nums.map { octet ->
+                // `001` is not an octet OkHttp will open inside an IPv6 literal. A plain
+                // IPv4 host is left alone; only this dotted tail is rejected.
+                if (octet.length > 1 && octet[0] == '0') return null
+                octet.toIntOrNull()?.takeIf { n -> n in 0..255 } ?: return null
+            }
             val hi = (octets[0] shl 8) or octets[1]
             val lo = (octets[2] shl 8) or octets[3]
             s = s.substring(0, colon + 1) + hi.toString(16) + ":" + lo.toString(16)
