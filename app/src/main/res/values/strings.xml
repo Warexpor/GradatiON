@@ -366,7 +366,7 @@
     <string name="text_size_s">Small</string>
     <string name="text_size_m">Default</string>
     <string name="text_size_l">Large</string>
-    <string name="text_size_xl">Extra large</string>
+    <string name="text_size_xl">Larger</string>
     <string name="text_size_sample">Aa</string>
     <string name="cd_choice">%1$s: %2$s</string>
     <string name="cd_voice_done">Done dictating</string>
