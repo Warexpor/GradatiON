@@ -204,16 +204,17 @@ object ScenePhoto {
 
     /**
      * Puts a finished side file back at [destination] when the real name is missing, torn,
-     * or older than that side file. A complete picture is left alone when the side file is
-     * not a finished newer one.
+     * or not newer than that side file. A complete picture is left alone when the side file
+     * is older than it.
      */
     internal fun recover(destination: File): Boolean {
         val partial = File(destination.parentFile, "${destination.name}.partial")
         val bak = File(destination.parentFile, "${destination.name}.bak")
         // A replace that died after the new bytes were durable, and before they took the name.
-        // The picture already there is older. Put the finished side file in its place.
+        // The picture already there is the previous one. Same timestamp counts: the side file
+        // is written second, and a clock that did not tick used to leave the old picture in place.
         if (completeJpeg(destination) && completeJpeg(partial) &&
-            partial.lastModified() > destination.lastModified()
+            partial.lastModified() >= destination.lastModified()
         ) {
             return installFinished(partial, destination, bak)
         }

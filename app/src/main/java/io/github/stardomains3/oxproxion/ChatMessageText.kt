@@ -44,10 +44,18 @@ internal object ChatMessageText {
                 // UTF-16 units, so a short slice of emoji (two units per code point) used to
                 // look complete. Advancing by the full step then skipped the gap, and the
                 // export wrote a message with a hole in it.
-                if (part.codePointCount(0, part.length) < expected) {
+                val count = part.codePointCount(0, part.length)
+                if (count < expected) {
                     throw IOException("Chat message ended early at character $start of $length")
                 }
-                append(part)
+                // A slice longer than this step is not the next window. Appending it and then
+                // reading that window again repeated the overlap.
+                val piece = if (count == expected) {
+                    part
+                } else {
+                    part.substring(0, part.offsetByCodePoints(0, expected))
+                }
+                append(piece)
                 start += sliceLen
             }
         }
