@@ -1,3 +1,11 @@
+# Handoff (2026-10-03, Stability wave 28)
+
+On `gradation/w28-stability` (PR into `gradation/app-pass`). Persistence follow-ups after w27 move temps / encrypt_ok discard (#111). Not a redo of that pass:
+- Backup rules and data-extraction rules name `.partial` / `.ready` / `.bak` for `pre_sqlcipher` / `encrypting` / `encrypt_ok` `-wal`/`-shm`/`-journal` (mains were already listed), and `.kept-1` / `.kept-2` of disposable `pre_sqlcipher` / `encrypting` mains and sidecars, so Auto Backup before the next open cannot upload a torn sidecar move temp or a uniqueKept plaintext rename.
+- After `encrypt_ok` confirms the live open, `discardPlaintextBackupIfConfirmed` drops leftover `encrypting` sets and orphan sidecars (not only `pre_sqlcipher`) in the vault, at the databases root, and under `chat_db_hold` before the marker is removed. `.kept-*` renames of those disposable names go too, including a stacked `name.kept-1.kept-1` and a directory that cannot be deleted (that failure keeps the marker). Recovered / unreadable `.kept-*` stay. Clearing the marker first would let the next `drainHold` put a hold plaintext copy back into the vault.
+- A new plaintext-to-SQLCipher export deletes leftover `encrypting` / `pre_sqlcipher` wal/shm/journal before ATTACH. Deleting only the main left a crashed export's `-wal` to be replayed into the new ciphertext or paired with the replacement snapshot. Failure paths still keep the plaintext snapshot and drop only the in-progress ciphertext sidecars.
+
+Phone: leave `chat_database.pre_sqlcipher-wal.partial` or `chat_database.pre_sqlcipher.kept-1` beside the live DB and force a cloud backup before relaunch (rules should skip them). Leave vault `encrypt_ok` + `encrypting` (+ `-wal` or `.kept-1`) (after relaunch the leftovers and the marker should be gone). A plaintext name that cannot be deleted should still show `encrypt_ok` on the next launch.
 # Handoff (2026-10-02, Chat wave 28)
 
 On `gradation/w28-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w27 discard/promote (#110):
