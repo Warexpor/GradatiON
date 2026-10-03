@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Code wave 32)
+
+On `cursor/code-mode-wave32-5f81` (PR into `gradation/app-pass`). Code-mode follow-ups after Codex `read-only` / `auto` / `full-access`, OpenCode `build`, skipping a multi-select question, and browser profile start/stop plus the action line when the element description is missing (#145). Not a redo of that pass, of cancelled todos, `_cursor/` methods, or mouse cards (#131). Not #139 through #146. Not a redo of #150 (a shade cleared without a swipe, shade-cap post order, a new Speak utterance id), #149 (homelab hostnames, a password that contains `@`, the appended path before a query, approximate location), #147 (hub first line, pairing query case and percent-encoding), or #148 (example sides with a space before the colon, Keys/KEYS lore headers, list marks `#` `~` `>`).
+
+- A browser tool's `ref` was earlier in the detail keys than the control name, the typed text, and a scroll, so the line showed `e9` instead of `hello`, `Submit`, or `down 500`. A later update that only repeats the ref no longer replaces that line. A git `ref` still wins over `owner` when there is no browser action.
+- A session list row that says `ask`, `default`, or `read-only` is an explicit Ask. Refresh used to treat it as omitted and put Auto-edit or Full auto back. A missing mode, or one this phone does not show, still leaves the local pill. A blank `permissionMode` falls through to `mode`.
+- `session/new` and `session/load` read `modes.currentModeId` (then `modeId`, then a top-level mode). The pill follows the harness. An unknown id does not fall through to the mode the phone just asked for.
+
+Phone: on Cursor Agent, type into a field (the line should be the words, not `e5`) and scroll (it should stay `down 500` when the tool finishes). A Codex session that moves to `read-only` should say Ask after the session list refreshes, not Full auto. Start a session whose `session/new` result says `plan` (the pill should say Plan).
+
 # Handoff (2026-10-03, Notifications/Away wave 32)
 
 On `cursor/notif-dead-shade-order-ac2a` (PR into `gradation/app-pass`). Notif/away follow-ups after the last-shade token, the 64-cap count, and in-chat Stop (#146). Not a redo of that pass, of session-id prefix, of the shade-cap token clear, or of the answer speak line (#134). Not a redo of #149, #147, or #148.

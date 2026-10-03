@@ -862,8 +862,10 @@ class CodeHub internal constructor(context: Context) {
 /**
  * Soft-merge a remote `bridge/listSessions` row with a previously known local summary.
  * Prefer non-null / non-blank remote fields; keep local [CodeSessionSummary.model],
- * [CodeSessionSummary.lastSeq], preview, and non-ASK permission when the bridge omits them
- * (listSessions often lacks model until it echoes start `_meta.model`).
+ * [CodeSessionSummary.lastSeq], preview, and non-ASK permission when the bridge omits the
+ * mode or names one this phone does not show (listSessions often lacks model until it echoes
+ * start `_meta.model`). An explicit Ask, including Codex `read-only` and `default`, replaces
+ * a local Full auto. Those used to look omitted, so a refresh put the old pill back.
  * [keepLocalTitle] is set after a phone rename: the bridge's title must not replace it.
  * Otherwise a non-blank remote title wins, so an agent rename shows up on the next refresh (G2).
  */
@@ -873,9 +875,12 @@ internal fun mergeListSessionsSummary(
     keepLocalTitle: Boolean = true,
 ): CodeSessionSummary = remote.copy(
     lastSeq = remote.lastSeq ?: local.lastSeq,
-    permissionMode = if (remote.permissionMode != PermissionMode.ASK ||
-        local.permissionMode == PermissionMode.ASK
-    ) remote.permissionMode else local.permissionMode,
+    permissionMode = when {
+        remote.permissionModeSpecified -> remote.permissionMode
+        remote.permissionMode != PermissionMode.ASK ||
+            local.permissionMode == PermissionMode.ASK -> remote.permissionMode
+        else -> local.permissionMode
+    },
     preview = remote.preview.ifBlank { local.preview },
     // G2: a pinned rename survives refresh. An unpinned row takes the bridge title when
     // it sent one, so the agent's name replaces the first line of the prompt.
