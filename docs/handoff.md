@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Chat wave 31)
+
+On `cursor/chat-wave-31-77b7` (PR into `gradation/app-pass`). Chat follow-ups. Not a redo of #138 (calendar day buckets, Remove all clearing a parked file list) or #126 (first save keeps the rekeyed JPEG).
+
+- History preview only strips markdown marks. A `#`, `~` or `>` inside the words stays, so `C#`, `~/Downloads` and `a > b` still show on the row and can be the bold match. Heading hashes, a blockquote `>` and paired `~~` still come off.
+- Several text files picked together are added one after another, and each one is measured against the total already staged (live list, or the park map when the read finishes under Roleplay or Code). A file past 1 MB stops being read instead of being loaded and then refused.
+
+Phone: send a chat whose last line is `C#` or `~/Downloads`, open History (the row should still show those characters). Attach four text files of about 800 KB each (the fourth should be refused, and the first three should stay). Attach one file larger than 1 MB (refused, without the app stalling on the read).
+
 # Handoff (2026-10-03, Chat wave 30)
 
 On `gradation/w30-chat` (PR into `gradation/app-pass`). Chat/History follow-ups. Not a redo of #126 (first save keeps the rekeyed JPEG) or #116 (parked Ask caption promote).
