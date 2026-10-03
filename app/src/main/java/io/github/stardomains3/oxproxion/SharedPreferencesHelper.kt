@@ -1518,10 +1518,11 @@ class SharedPreferencesHelper(context: Context) {
         }
     }
     fun setLanEndpoint(url: String?) {
-        // Removing the entry is handy for “clear” / “reset” actions
+        // Store the base only. Callers append /v1; a pasted slash or /v1 suffix would double it.
+        val base = url?.let { LanEndpointValidator.normalizedBase(it) }?.takeIf { it.isNotBlank() }
         mainPrefs.edit {
-            if (url.isNullOrBlank()) remove(KEY_LAN_ENDPOINT)
-            else putString(KEY_LAN_ENDPOINT, url)
+            if (base == null) remove(KEY_LAN_ENDPOINT)
+            else putString(KEY_LAN_ENDPOINT, base)
         }
     }
 
@@ -1547,8 +1548,10 @@ class SharedPreferencesHelper(context: Context) {
         return if (key.isBlank()) "any-non-empty-string" else key
     }
     fun getLanEndpoint(): String? {
-        // May be null if the user never set a value
-        return mainPrefs.getString(KEY_LAN_ENDPOINT, null)
+        // May be null if the user never set a value. Normalize here too so a value saved
+        // before the slash strip still requests /v1 once.
+        val raw = mainPrefs.getString(KEY_LAN_ENDPOINT, null) ?: return null
+        return LanEndpointValidator.normalizedBase(raw).takeIf { it.isNotBlank() }
     }
     fun getLanProvider(): String {
         return mainPrefs.getString(LAN_PROVIDER_KEY, LAN_PROVIDER_OLLAMA) ?: LAN_PROVIDER_OLLAMA
