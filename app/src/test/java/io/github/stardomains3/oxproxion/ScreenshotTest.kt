@@ -628,6 +628,20 @@ class ScreenshotTest : ScreenshotHarness() {
         f.dismiss(); idle()
     }
 
+    /** The preset editor's dropdowns opened on a flat dark sheet; every other menu is glass. */
+    @Test fun settingsPresetDropdownDark() = withChat { a, _ ->
+        pushFragment(a, PresetEditFragment.newInstance(null))
+        for (id in listOf(R.id.autoCompleteModel, R.id.autoCompleteSystemMessage)) {
+            val field = a.findViewById<android.widget.AutoCompleteTextView>(id)
+            org.junit.Assert.assertTrue("glass dropdown", field.dropDownBackground is GlassDrawable)
+        }
+        val field = a.findViewById<android.widget.AutoCompleteTextView>(R.id.autoCompleteSystemMessage)
+        field.showDropDown(); idle()
+        val popup = android.widget.AutoCompleteTextView::class.java.getDeclaredField("mPopup")
+            .apply { isAccessible = true }.get(field) as android.widget.ListPopupWindow
+        snap(popup.listView!!.rootView, "settings_preset_dropdown_dark")
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
