@@ -478,6 +478,8 @@ object GlassChrome {
 
     /** Icon-only menu items get a capsule; text actions stay plain (iOS keeps "Done" as text). */
     private fun glassMenuItem(item: View) {
+        // A switch is a TextView with no text; a capsule under it reads as a stray disc.
+        if (item is android.widget.CompoundButton) return
         val text = (item as? android.widget.TextView)?.text
         if (item is android.widget.TextView && !text.isNullOrBlank() &&
             item.compoundDrawablesRelative.all { it == null }
