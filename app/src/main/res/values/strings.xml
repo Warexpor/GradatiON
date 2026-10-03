@@ -726,6 +726,7 @@
     <string name="system_message_title_exists">A message with this title already exists</string>
     <string name="prompt_title_exists">A prompt with this title already exists</string>
     <string name="prompt_empty">Title and prompt cannot be empty</string>
+    <string name="system_message_empty">Title and message cannot be empty</string>
     <string name="biometric_title">Unlock GradatiON</string>
     <string name="biometric_subtitle">Use your biometric credential</string>
     <string name="chooser_title">Choose and send\n%1$s</string>

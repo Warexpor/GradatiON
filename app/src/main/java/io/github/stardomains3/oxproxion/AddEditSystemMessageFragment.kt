@@ -127,6 +127,8 @@ class AddEditSystemMessageFragment : Fragment() {
                             sharedPreferencesHelper.saveCustomSystemMessages(customSystemMessages)
                         }
                         parentFragmentManager.popBackStack()
+                    } else {
+                        Snackbar.make(requireView(), R.string.system_message_empty, Snackbar.LENGTH_SHORT).show()
                     }
                     true
                 }

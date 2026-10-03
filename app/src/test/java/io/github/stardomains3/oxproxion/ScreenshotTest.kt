@@ -686,6 +686,21 @@ class ScreenshotTest : ScreenshotHarness() {
         }
     }
 
+    /** Save with a blank message used to do nothing at all; it says why, like the prompt editor. */
+    @Test fun settingsSystemMessageEditorExplainsEmptySaveDark() = withChat { a, _ ->
+        val f = AddEditSystemMessageFragment()
+        pushFragment(a, f)
+        val v = f.requireView()
+        v.findViewById<android.widget.EditText>(R.id.edit_text_system_message_title).setText("Terse")
+        v.findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar).menu
+            .performIdentifierAction(R.id.action_save_system_message, 0)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(400))
+        org.junit.Assert.assertTrue("editor stays open", f.isAdded && !f.isHidden)
+        val text = root(a).findViewById<android.widget.TextView>(com.google.android.material.R.id.snackbar_text)
+        org.junit.Assert.assertEquals(a.getString(R.string.system_message_empty), text?.text?.toString())
+        snap(root(a), "settings_system_message_empty_dark")
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
