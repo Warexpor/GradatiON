@@ -20,6 +20,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 /**
  * Character and lore imports are one transaction: a failure on a later row leaves the library
@@ -1064,6 +1065,150 @@ class RpLibraryImportTest {
         assertEquals("new", repo.getCharacterById(mira)!!.personality)
         assertEquals("Ada", saved.single { it.exportKey == "ada" }.name)
         assertTrue(saved.none { it.exportKey == "ghost" || it.personality == "nope" })
+    }
+
+    @Test
+    fun aRolledBackUpdateDoesNotApplyNotesOntoTheOldCard() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        val id = repo.saveCharacter(RpCharacter(name = "Ada", exportKey = "ada", personality = "old"))
+        prefs.saveRpMemory(id, "old note")
+        val first = RpCharacterExport(
+            name = "Ada",
+            exportKey = "ada",
+            personality = "mid",
+            memory = "mid",
+        )
+        val second = RpCharacterExport(
+            name = "Ada",
+            exportKey = "ada",
+            personality = "new",
+            memory = "new note",
+        )
+        val incoming = listOf(first, second)
+        try {
+            repo.importCharacters(incoming) { rows ->
+                CharacterImportSideLog.write(log, CharacterImportSideLog.notesFor(rows, incoming))
+                throw IllegalStateException("killed before commit")
+            }
+        } catch (_: IllegalStateException) {
+        }
+        assertEquals("old", repo.getCharacterById(id)!!.personality)
+        assertNotNull(CharacterImportSideLog.read(log))
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("old note", prefs.getRpMemory(id))
+        assertEquals("old", repo.getCharacterById(id)!!.personality)
+        assertNull(CharacterImportSideLog.read(log))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun aLaterEditStillReceivesNotesThatWereWaiting() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        val id = repo.saveCharacter(RpCharacter(name = "Ada", exportKey = "ada", personality = "old"))
+        db.rpDao().updateCharacter(repo.getCharacterById(id)!!.copy(updatedAt = 1L))
+        val exported = RpCharacterExport(
+            name = "Ada",
+            exportKey = "ada",
+            personality = "new",
+            memory = "shy",
+            wallpaperBase64 = "",
+        )
+        repo.importCharacters(listOf(exported)) { rows ->
+            CharacterImportSideLog.write(log, CharacterImportSideLog.notesFor(rows, listOf(exported)))
+        }
+        assertEquals("new", repo.getCharacterById(id)!!.personality)
+        CharacterImportSideLog.failPictureRestoreForTest = true
+        assertFalse(CharacterImportSideLog.resume(app, db))
+        assertEquals("shy", prefs.getRpMemory(id))
+        repo.saveCharacter(repo.getCharacterById(id)!!.copy(name = "Ada Lovelace"))
+        assertTrue(
+            CharacterImportSideLog.matches(
+                CharacterImportSideLog.read(log)!!.single(),
+                repo.getCharacterById(id),
+            )
+        )
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertEquals("shy", prefs.getRpMemory(id))
+        assertEquals("Ada Lovelace", repo.getCharacterById(id)!!.name)
+        assertNull(CharacterImportSideLog.read(log))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun notesForDoesNotGiveTheNextCharacterABlankRowsPictures() = runBlocking {
+        val incoming = listOf(
+            RpCharacterExport(name = "Ada", exportKey = "ada", memory = "a"),
+            RpCharacterExport(name = " \n ", exportKey = "ghost", memory = "nope"),
+            RpCharacterExport(name = "Bea", exportKey = "bea", memory = "b"),
+        )
+        val imported = repo.importCharacters(incoming)
+        val notes = CharacterImportSideLog.notesFor(imported, incoming)
+        assertEquals(listOf("ada", "bea"), notes.map { it.exportKey })
+        assertEquals(listOf("a", "b"), notes.map { it.exported.memory })
+        assertEquals(imported[0].id, notes[0].id)
+        assertEquals(imported[1].id, notes[1].id)
+        assertEquals(imported[0].writtenUpdatedAt, notes[0].writtenUpdatedAt)
+        assertEquals(imported[1].previousUpdatedAt, notes[1].previousUpdatedAt)
+    }
+
+    @Test
+    fun anOversizedWallpaperIsScaledIntoTheBackup() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val jpeg = solidJpeg(Color.DKGRAY)
+        val padded = padJpeg(jpeg, 20_000)
+        assertTrue(padded.size > jpeg.size + 10_000)
+        assertTrue(ScenePhoto.completeJpeg(padded))
+        val file = File(app.cacheDir, "oversized-wallpaper.jpg")
+        file.writeBytes(padded)
+        val encoded = RpWallpaperBackup.encode(file, padded.size - 1)
+        assertFalse(encoded.isNullOrBlank())
+        val out = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)
+        assertTrue(out.size < padded.size)
+        assertTrue(ScenePhoto.completeJpeg(out))
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(out, 0, out.size, bounds)
+        assertEquals(8, bounds.outWidth)
+        assertEquals(8, bounds.outHeight)
+        file.delete()
+    }
+
+    @Test
+    fun anOversizedPortraitIsScaledIntoTheBackup() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val jpeg = solidJpeg(Color.CYAN)
+        val padded = padJpeg(jpeg, 20_000)
+        val id = 91L
+        val file = RpAvatarStorage.avatarFile(app, id)
+        file.writeBytes(padded)
+        val encoded = RpAvatarStorage.encodeAvatarBase64(app, id, padded.size - 1)
+        assertFalse(encoded.isNullOrBlank())
+        val out = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT)
+        assertTrue(out.size < padded.size)
+        assertTrue(ScenePhoto.completeJpeg(out))
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(out, 0, out.size, bounds)
+        assertTrue(bounds.outWidth in 1..512)
+        assertTrue(bounds.outHeight in 1..512)
+        file.delete()
+    }
+
+    /** A JPEG comment after the start marker, so the file is large but still a picture. */
+    private fun padJpeg(jpeg: ByteArray, extra: Int): ByteArray {
+        val len = extra + 2
+        val segment = ByteArray(4 + extra)
+        segment[0] = 0xFF.toByte()
+        segment[1] = 0xFE.toByte()
+        segment[2] = (len shr 8).toByte()
+        segment[3] = (len and 0xFF).toByte()
+        return jpeg.copyOfRange(0, 2) + segment + jpeg.copyOfRange(2, jpeg.size)
     }
 
     private fun solidJpeg(color: Int): ByteArray {

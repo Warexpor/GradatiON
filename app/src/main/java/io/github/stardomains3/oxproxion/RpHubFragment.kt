@@ -421,25 +421,17 @@ class RpHubFragment : Fragment() {
             val activeBefore = prefs.getRpActiveCharacterId()?.let { repo.getCharacterById(it) }
             val delegate = RpChatDelegate(repo, prefs)
             val expandedBefore = activeBefore?.let { delegate.greetingMessage(it) }
-            val greetingChanged = activeBefore != null && backup.characters.any { ex ->
-                ex.exportKey == activeBefore.exportKey &&
-                    RpGreetingSync.greetingTextChanged(activeBefore.greeting, ex.greeting)
-            }
+            val greetingChanged = activeBefore != null && RpImportRules.greetingChanged(
+                activeBefore.greeting,
+                activeBefore.exportKey,
+                backup.characters,
+            )
             val app = requireContext().applicationContext
             val carried = CharacterImportSideLog.read(CharacterImportSideLog.file(app)).orEmpty()
             // The side file is written before the transaction commits. A kill after the rows
             // land is finished on the next launch, including the portraits.
             val imported = repo.importCharacters(backup.characters) { rows ->
-                val fresh = rows.mapIndexedNotNull { index, row ->
-                    backup.characters.getOrNull(index)?.let { exported ->
-                        ImportedCharacterNote(
-                            id = row.id,
-                            name = exported.name,
-                            exportKey = row.exportKey,
-                            exported = exported,
-                        )
-                    }
-                }
+                val fresh = CharacterImportSideLog.notesFor(rows, backup.characters)
                 val freshIds = fresh.map { it.id }.toSet()
                 CharacterImportSideLog.write(
                     CharacterImportSideLog.file(app),

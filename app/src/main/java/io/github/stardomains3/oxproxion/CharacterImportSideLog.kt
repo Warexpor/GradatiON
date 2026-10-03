@@ -39,11 +39,44 @@ internal object CharacterImportSideLog {
 
     fun matches(note: ImportedCharacterNote, character: RpCharacter?): Boolean {
         if (character == null) return false
+        // The side log is written before the database commit. A kill there used to apply
+        // Memory and pictures onto the card that rolled back, because the export key still
+        // matched. The row keeps its old stamp when the commit did not land. A later edit
+        // moves the stamp, so a portrait that is still waiting is not dropped.
+        if (note.writtenUpdatedAt != 0L &&
+            note.previousUpdatedAt != note.writtenUpdatedAt &&
+            character.updatedAt == note.previousUpdatedAt
+        ) {
+            return false
+        }
         // exportKey is the stable identity. A rename (or a pack that changes the display
         // name) while pictures are still waiting must not drop the portrait forever.
         if (note.exportKey.isNotBlank()) return note.exportKey == character.exportKey
         // Old log without a key: the name must still match so a recycled id cannot inherit.
         return note.name == character.name
+    }
+
+    /**
+     * One note per imported row. A blank name is not a row, so it is skipped here the same
+     * way the import skips it. Pairing by the raw file index attached the blank row's
+     * pictures to the next character.
+     */
+    fun notesFor(
+        rows: List<ImportedCharacter>,
+        incoming: List<RpCharacterExport>,
+    ): List<ImportedCharacterNote> {
+        val exported = incoming.filter { it.name.trim().isNotEmpty() }
+        return rows.mapIndexedNotNull { index, row ->
+            val ex = exported.getOrNull(index) ?: return@mapIndexedNotNull null
+            ImportedCharacterNote(
+                id = row.id,
+                name = ex.name,
+                exportKey = row.exportKey,
+                exported = ex,
+                writtenUpdatedAt = row.writtenUpdatedAt,
+                previousUpdatedAt = row.previousUpdatedAt,
+            )
+        }
     }
 
     /**
@@ -257,4 +290,7 @@ internal data class ImportedCharacterNote(
     val name: String,
     val exportKey: String,
     val exported: RpCharacterExport,
+    /** 0 on a note written before the import stamp existed. Those still match by export key. */
+    val writtenUpdatedAt: Long = 0,
+    val previousUpdatedAt: Long = 0,
 )
