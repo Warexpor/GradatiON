@@ -330,6 +330,31 @@ class ForegroundServiceNotifTest {
     }
 
     @Test
+    fun refusedSpeakDoesNotLeaveTheShadeOnStop() {
+        val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
+        prefs.edit()
+            .putString("title", "Demo Model")
+            .putString("text", "Your answer is ready.")
+            .commit()
+        ctx.getSharedPreferences("MainAppPrefs", 0).edit()
+            .putString("last_ai_response_channel_2", "The file is updated.")
+            .commit()
+        val intent = Intent(ctx, ForegroundService::class.java).setAction("TOGGLE_TTS_CHANNEL_2")
+        val controller = Robolectric.buildService(ForegroundService::class.java, intent).create()
+        val service = controller.get()
+        service.speakCallForTest = { _, _ -> android.speech.tts.TextToSpeech.ERROR }
+        controller.startCommand(0, 1)
+        service.onInit(android.speech.tts.TextToSpeech.SUCCESS)
+        assertFalse(prefs.getBoolean("speaking", true))
+        val after = nm.activeNotifications.first { it.id == 2 }.notification
+        assertEquals(
+            ctx.getString(R.string.notif_action_speak),
+            after.actions[0].title.toString(),
+        )
+        controller.destroy()
+    }
+
+    @Test
     fun blankMarkdownDoesNotLeaveTheShadeOnStop() {
         val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
         prefs.edit()
