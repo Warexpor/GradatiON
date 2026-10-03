@@ -59,7 +59,11 @@ object ComposerFiles {
      */
     fun section(number: Int, fileName: String, content: String): String {
         val name = fileName.replace(NEWLINE, " ").ifBlank { "file" }
-        val body = content.trim()
+        // trim() also ate the indent on the first line, so a snippet or a patch
+        // that starts with spaces was sent as a different file. Only surrounding
+        // line breaks are dropped, so the closing fence still sits on its own line.
+        if (content.isBlank()) return "File $number ($name): (empty file)"
+        val body = content.trim('\r', '\n')
         if (body.isEmpty()) return "File $number ($name): (empty file)"
         val fence = "`".repeat(fenceLength(body))
         return "File $number ($name):\n\n${fence}text\n$body\n$fence"
