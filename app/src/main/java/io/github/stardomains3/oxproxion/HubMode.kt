@@ -68,3 +68,31 @@ internal object ModeGates {
         awaitingReply: Boolean,
     ): Boolean = !roleplayEnabled && inRoleplay && !awaitingReply
 }
+
+/**
+ * Top-bar actions on the Roleplay character list.
+ *
+ * The list view stays visible for the whole slide into a thread, so a check on
+ * that view still looks like the list after the thread is already the screen.
+ * Manage characters sits on the new-chat button; a long-press there must not
+ * start a chat (that also closes the list).
+ */
+internal object RpHomeChrome {
+    fun listIsFront(homeOpen: Boolean, inRoleplay: Boolean, codeCovering: Boolean): Boolean =
+        homeOpen && inRoleplay && !codeCovering
+
+    fun longPressStartsNewChat(listFront: Boolean): Boolean = !listFront
+
+    enum class Leading { HISTORY, SETTINGS, BACK }
+
+    fun leading(listFront: Boolean, inRoleplay: Boolean): Leading = when {
+        listFront -> Leading.SETTINGS
+        inRoleplay -> Leading.BACK
+        else -> Leading.HISTORY
+    }
+
+    enum class Trailing { NEW_CHAT, MANAGE }
+
+    fun trailing(listFront: Boolean): Trailing =
+        if (listFront) Trailing.MANAGE else Trailing.NEW_CHAT
+}

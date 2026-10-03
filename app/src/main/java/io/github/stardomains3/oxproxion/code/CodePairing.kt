@@ -1,6 +1,5 @@
 package io.github.stardomains3.oxproxion.code
 
-import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
@@ -45,9 +44,9 @@ object CodePairing {
     /** True when [raw] is a `gradation://pair` link (query may still be invalid). */
     fun isPairUri(raw: String?): Boolean {
         if (raw.isNullOrBlank()) return false
-        val uri = parseUri(raw.trim()) ?: return false
-        return SCHEME.equals(uri.scheme, ignoreCase = true) &&
-            HOST.equals(uri.host, ignoreCase = true)
+        val parts = splitPair(raw.trim()) ?: return false
+        return SCHEME.equals(parts.scheme, ignoreCase = true) &&
+            HOST.equals(parts.host, ignoreCase = true)
     }
 
     /** Android deep-link convenience: scheme+host check without pulling Uri into the parser core. */
@@ -59,20 +58,21 @@ object CodePairing {
      *
      * Query aliases: `url`|`address`|`ws`; `token`|`t`|`auth`; `fp`|`fingerprint`|`pin`.
      * A bridge address may contain its own query (`wss://host/v1?a=1&b=2`) even when that
-     * `&` was not percent-encoded; unknown segments stay inside the address until the next
-     * known key. Missing url/token → error. Present but unparseable `fp` → [Reason.BAD_FINGERPRINT].
+     * `&` was not percent-encoded. A `#` in that address is not an outer fragment, and a
+     * query key that happens to be named `token` / `auth` / `ws` / `fp` stays in the address
+     * when a real pairing field follows it. A fingerprint may contain spaces.
+     * Missing url/token → error. Present but unparseable `fp` → [Reason.BAD_FINGERPRINT].
      * Valid `fp` with cleartext `ws://` → [Reason.PIN_REQUIRES_WSS] (pin needs `wss://`).
      * Absent `fp` is allowed (legacy cleartext LAN / no-pin path).
      */
     fun parse(raw: String?): ParseResult {
         if (raw.isNullOrBlank()) return ParseResult.Err(Reason.NOT_PAIR_URI)
-        val trimmed = raw.trim()
-        val uri = parseUri(trimmed) ?: return ParseResult.Err(Reason.NOT_PAIR_URI)
-        if (!SCHEME.equals(uri.scheme, ignoreCase = true) || !HOST.equals(uri.host, ignoreCase = true)) {
+        val parts = splitPair(raw.trim()) ?: return ParseResult.Err(Reason.NOT_PAIR_URI)
+        if (!SCHEME.equals(parts.scheme, ignoreCase = true) || !HOST.equals(parts.host, ignoreCase = true)) {
             return ParseResult.Err(Reason.NOT_PAIR_URI)
         }
 
-        val params = queryMap(uri.rawQuery)
+        val params = queryMap(parts.query)
         val url = firstParam(params, "url", "address", "ws")
         val token = firstParam(params, "token", "t", "auth")
         val fpRaw = firstParam(params, "fp", "fingerprint", "pin")
@@ -96,32 +96,125 @@ object CodePairing {
         return ParseResult.Ok(Result(url = url, token = token, fingerprint = fingerprint))
     }
 
-    private fun parseUri(raw: String): URI? =
-        runCatching { URI(raw) }.getOrNull()
+    private data class PairParts(val scheme: String, val host: String, val query: String)
+
+    private data class QueryPart(val key: String, val value: String, val piece: String)
+
+    /**
+     * Scheme and host only. [java.net.URI] rejects spaces (a spaced fingerprint) and
+     * treats `#` as a fragment, which used to drop the token that followed a bridge address.
+     * A `#` with no `&` after it is still the outer fragment (`…&token=abc#note`).
+     */
+    private fun splitPair(raw: String): PairParts? {
+        val sep = raw.indexOf("://")
+        if (sep <= 0) return null
+        val scheme = raw.substring(0, sep)
+        val afterScheme = raw.substring(sep + 3)
+        if (afterScheme.isEmpty()) return null
+        val cut = afterScheme.indexOfAny(charArrayOf('/', '?', '#'))
+        val host = if (cut < 0) afterScheme else afterScheme.substring(0, cut)
+        if (host.isEmpty()) return null
+        if (cut < 0) return PairParts(scheme, host, "")
+        val rest = afterScheme.substring(cut)
+        val query = when {
+            rest.startsWith("?") -> rest.substring(1)
+            rest.startsWith("/") -> {
+                val q = rest.indexOf('?')
+                if (q < 0) "" else rest.substring(q + 1)
+            }
+            else -> ""
+        }
+        return PairParts(scheme, host, stripOuterFragment(query))
+    }
+
+    private fun stripOuterFragment(query: String): String {
+        val hash = query.indexOf('#')
+        if (hash < 0) return query
+        return if (query.substring(hash + 1).contains('&')) query else query.substring(0, hash)
+    }
 
     private val urlKeys = setOf("url", "address", "ws")
-    private val knownKeys = urlKeys + setOf("token", "t", "auth", "fp", "fingerprint", "pin")
+    private val tokenKeys = setOf("token", "t", "auth")
+    private val fpKeys = setOf("fp", "fingerprint", "pin")
+    private val knownKeys = urlKeys + tokenKeys + fpKeys
 
+    /**
+     * The address keeps its own query until the pairing token and fingerprint.
+     * A token written before the address wins, so a later `token=` inside the bridge
+     * query stays in the address. Otherwise the last token / fingerprint after the
+     * address is the pairing field (an earlier `auth` or `token` in that query is not).
+     * A second address alias is a sibling only when the address has no `?` yet;
+     * `ws` inside `?room=1&ws=1&b=2` is part of the address.
+     */
     private fun queryMap(rawQuery: String?): Map<String, String> {
         if (rawQuery.isNullOrBlank()) return emptyMap()
-        val out = LinkedHashMap<String, String>()
-        var urlKey: String? = null
+        val parts = ArrayList<QueryPart>()
         for (part in rawQuery.split('&')) {
             if (part.isEmpty()) continue
             val eq = part.indexOf('=')
             val key = decode(if (eq < 0) part else part.substring(0, eq)).lowercase()
             val value = if (eq < 0) "" else decode(part.substring(eq + 1))
-            if (key.isNotEmpty() && key in knownKeys) {
-                if (key !in out) out[key] = value
-                // Only the address value may swallow later raw '&' segments.
-                urlKey = if (key in urlKeys) key else null
-            } else if (urlKey != null && key.isNotEmpty()) {
-                val current = out[urlKey].orEmpty()
-                val piece = if (eq < 0) key else "$key=$value"
-                out[urlKey] = "$current&$piece"
-            }
+            if (key.isEmpty()) continue
+            val piece = if (eq < 0) key else "$key=$value"
+            parts.add(QueryPart(key, value, piece))
         }
+        val out = LinkedHashMap<String, String>()
+        val urlIndex = parts.indexOfFirst { it.key in urlKeys }
+        if (urlIndex < 0) {
+            for (part in parts) {
+                if (part.key in knownKeys && part.key !in out) out[part.key] = part.value
+            }
+            return out
+        }
+        val urlKey = parts[urlIndex].key
+        var urlValue = parts[urlIndex].value
+        var tokenBefore = false
+        var fpBefore = false
+        for (i in 0 until urlIndex) {
+            val part = parts[i]
+            if (part.value.isEmpty() || part.key !in knownKeys || part.key in out) continue
+            out[part.key] = part.value
+            if (part.key in tokenKeys) tokenBefore = true
+            if (part.key in fpKeys) fpBefore = true
+        }
+        val after = parts.subList(urlIndex + 1, parts.size)
+        // Inside a bridge query, the last token/fingerprint is the pairing field so an
+        // earlier auth= or token= stays in the address. With no '?', the first one wins,
+        // matching a link that simply repeats the pairing field.
+        val bridgeQuery = urlValue.contains('?')
+        val lastToken = if (tokenBefore) -1 else pickPairingKey(after, tokenKeys, bridgeQuery)
+        val lastFp = if (fpBefore) -1 else pickPairingKey(after, fpKeys, bridgeQuery)
+        val lastTerminator = maxOf(lastToken, lastFp)
+        for (i in after.indices) {
+            val part = after[i]
+            if (i == lastToken || i == lastFp) {
+                if (part.key !in out) out[part.key] = part.value
+                continue
+            }
+            if (part.key in urlKeys && !bridgeQuery) {
+                if (part.key !in out) out[part.key] = part.value
+                continue
+            }
+            if (lastTerminator >= 0 && i > lastTerminator) continue
+            urlValue = "$urlValue&${part.piece}"
+        }
+        out[urlKey] = urlValue
         return out
+    }
+
+    /** Prefer `token` / `t` over `auth` so a bridge `auth` query does not replace the pairing token. */
+    private fun pickPairingKey(after: List<QueryPart>, keys: Set<String>, preferLast: Boolean): Int {
+        val primary = if (keys === tokenKeys) setOf("token", "t") else keys
+        val chosen = pick(after, primary, preferLast)
+        if (chosen >= 0) return chosen
+        if (primary !== keys) return pick(after, keys, preferLast)
+        return -1
+    }
+
+    private fun pick(after: List<QueryPart>, keys: Set<String>, preferLast: Boolean): Int {
+        val matches = after.indices.filter { after[it].key in keys && after[it].value.isNotEmpty() }
+        if (matches.isEmpty()) return -1
+        return if (preferLast) matches.last() else matches.first()
     }
 
     private fun firstParam(params: Map<String, String>, vararg keys: String): String {
