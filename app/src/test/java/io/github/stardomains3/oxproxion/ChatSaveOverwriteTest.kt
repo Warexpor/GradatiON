@@ -226,6 +226,26 @@ class ChatSaveOverwriteTest {
     }
 
     @Test
+    fun searchWindowKeepsALaterWordPastTheOldSlice() = runBlocking {
+        val repository = ChatRepository(dao)
+        val prefix = "Earlier today I wrote down a note about the plan and the route. "
+        val body = prefix + "hello " + "word ".repeat(400) + "photo"
+        val id = dao.insertSessionAndMessages(
+            ChatSession(title = "gap", modelUsed = "m"),
+            listOf(message("user", body)),
+        )
+        val hit = repository.searchWindows(listOf(id), "hello photo").single()
+        assertTrue(hit.content.contains("hello"))
+        assertTrue(hit.content.contains("photo"))
+        val line = HistoryList.searchLine(hit.role, hit.content, "hello photo", { "You: $it" }, "Photo")
+        assertTrue(line.contains("hello"))
+        assertTrue(line.contains("photo"))
+        assertTrue(line.contains("…"))
+        assertTrue(line.length < 80)
+        assertTrue(HistoryList.emphasis(line, "hello photo") != null)
+    }
+
+    @Test
     fun searchSkipsPhotoBytesAndJsonKeys() = runBlocking {
         val repository = ChatRepository(dao)
         val photo = """[{"type":"text","text":"sunset on the pier"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,${"A".repeat(4000)}JPEGDATA"}}]"""

@@ -97,4 +97,38 @@ class ComposerFilesTest {
             ComposerFiles.section(3, "blank.txt", "\n\n"),
         )
     }
+
+    @Test fun a_text_type_and_a_sibling_extension_are_accepted() {
+        assertTrue(ComposerFiles.accepts("text/plain", "README"))
+        assertTrue(ComposerFiles.accepts("text/plain; charset=utf-8", "README"))
+        assertTrue(ComposerFiles.accepts("text/x-kotlin", "Main"))
+        assertTrue(ComposerFiles.accepts("application/octet-stream", "Button.tsx"))
+        assertTrue(ComposerFiles.accepts("application/octet-stream", "App.jsx"))
+        assertTrue(ComposerFiles.accepts("application/octet-stream", "build.kts"))
+        assertTrue(ComposerFiles.accepts("application/octet-stream", "config.toml"))
+        assertTrue(ComposerFiles.accepts(null, "notes.py"))
+        assertTrue(ComposerFiles.accepts("image/svg+xml", "icon.svg"))
+        assertTrue(ComposerFiles.accepts("application/json", "a.json"))
+        assertFalse(ComposerFiles.accepts("application/octet-stream", "photo.png"))
+        assertFalse(ComposerFiles.accepts("application/pdf", "book.pdf"))
+        assertFalse(ComposerFiles.accepts(null, "README"))
+    }
+
+    @Test fun a_bom_is_not_part_of_the_file_and_the_name_stays_one_line() {
+        val bom = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + "hi".toByteArray()
+        val read = ComposerFiles.readCapped(ByteArrayInputStream(bom), maxBytes = 10)
+        assertEquals("hi", read.text)
+        assertFalse(read.overflow)
+        val section = ComposerFiles.section(1, "a\u2028b.txt", "\uFEFFhello")
+        assertEquals("File 1 (a b.txt):", section.lineSequence().first())
+        assertTrue(section.contains("```text\nhello\n```"))
+        assertFalse(section.contains("\uFEFF"))
+        val indented = ComposerFiles.section(2, "a.py", "\uFEFF\n    def foo():\n")
+        assertTrue(indented.contains("```text\n    def foo():\n```"))
+        assertEquals("a b.txt", ComposerFiles.singleLineName("a\nb.txt"))
+        assertEquals(
+            "File 1 (a b.txt): (empty file)",
+            ComposerFiles.section(1, "a\u2028b.txt", "\uFEFF"),
+        )
+    }
 }

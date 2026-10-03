@@ -85,7 +85,9 @@ class ChatRepository(private val chatDao: ChatDao) {
         val pattern = HistoryList.likeContains(needle)
         // The phrase may span a newline in storage; center on the first word.
         val anchor = HistoryList.searchAnchor(needle)
-        return sessionIds.distinct().chunked(200).flatMap {
+        // A wide window is a large cursor row. Keep each batch small enough that
+        // the 2MB window can hold it.
+        return sessionIds.distinct().chunked(SEARCH_CHUNK).flatMap {
             chatDao.searchMessageWindows(it, pattern, anchor, SEARCH_WINDOW)
         }
     }
@@ -97,6 +99,15 @@ class ChatRepository(private val chatDao: ChatDao) {
     }
 
     private companion object {
-        const val SEARCH_WINDOW = 240
+        /**
+         * The SQL slice starts 48 characters before the first word and is this many
+         * characters long. 240 used to include that lookback, so a match that was
+         * not at the start of the message kept about 190 characters and the later
+         * word fell off before the row could show it.
+         */
+        private const val SEARCH_LOOKBACK = 48
+        private const val SEARCH_FORWARD = 6_000
+        const val SEARCH_WINDOW = SEARCH_LOOKBACK + SEARCH_FORWARD
+        private const val SEARCH_CHUNK = 16
     }
 }
