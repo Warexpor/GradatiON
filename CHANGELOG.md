@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A 0-byte recovered database no longer takes the hold name from the copy that still has the history. Parking that empty file used to rename the hold copy to a name Room does not open, so the next launch read a stale file or an empty one. An empty file in the no-backup folder no longer blocks the hold copy from moving in.
+- Deleting a portrait or a wallpaper removes the side file before the live file. A kill between those used to leave the side file, and the next open put the picture back.
+- A sliced message stops when the next step would not fit in the character index. That addition used to wrap, and the read appended the tail again.
 - History preview keeps a line that is only a hash or another long token. It used to be treated as a slice of a photo, so the row went blank. A data URL is still not a line. A picture reply whose words are stored in `body` still shows those words when the history read is cut inside that string.
 - A text file keeps the indent on its first line. Trimming the whole file used to send a snippet or a patch as a different file. A file that is only whitespace is still empty, and a code fence inside the file is still wrapped in a longer fence.
 - Sending a staged photo uses the file from the tap, and does not start the turn if another chat opened while the photo was encoded. The line stays on the chat that was on screen.

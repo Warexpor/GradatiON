@@ -105,9 +105,9 @@ object BackgroundPhoto {
             return
         }
         val f = file(ctx, slot)
-        f.delete()
-        File(f.parentFile, "${f.name}.bak").delete()
-        File(f.parentFile, "${f.name}.partial").delete()
+        // Side files go first. A kill after the live name was removed used to leave
+        // `.bak` or `.partial`, and the next open put that wallpaper back.
+        if (!ScenePhoto.deleteWithSides(f)) return
         prefs(ctx).edit { putLong(versionKey(slot), System.currentTimeMillis()) }
     }
 

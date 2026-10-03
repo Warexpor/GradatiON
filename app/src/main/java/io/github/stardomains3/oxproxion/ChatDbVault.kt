@@ -229,8 +229,10 @@ internal object ChatDbVault {
             legacyPlainBaseName(file.name)?.let { names += it }
         }
         for (name in names) {
-            val holdMain = File(hold, name).isFile
-            val vaultMain = File(vault, name).isFile
+            val holdFile = File(hold, name)
+            val vaultFile = File(vault, name)
+            val holdMain = holdFile.isFile
+            val vaultMain = vaultFile.isFile
             if (!holdMain) {
                 // Orphan sidecars only. Never move them into the vault: Room would create an
                 // empty main beside the leftover -wal/-shm. Drop them whether or not the vault
@@ -242,9 +244,12 @@ internal object ChatDbVault {
                 if (isLegacyPlainName(name)) {
                     // Restore only reads the vault copy. Drop the parked duplicate.
                     discardShortNameSet(hold, name)
+                    continue
                 }
-                // Recovered/unreadable: leave the hold main for roomDatabaseName.
-                continue
+                // A 0-byte vault main is the placeholder an open leaves before the header.
+                // It is not history. Leaving it in place blocked the hold copy that still
+                // has bytes from ever moving into the vault. Drop it below and move that copy.
+                if (hasBytes(vaultFile) || !hasBytes(holdFile)) continue
             }
             if (isDisposableLegacyPlain(name) && encryptMarker(vault).isFile) {
                 // Migration was confirmed. Do not resurrect disposable plaintext into the vault.
@@ -298,6 +303,15 @@ internal object ChatDbVault {
         val present = SIDECARS.filter { File(fromDir, name + it).exists() }
         if (present.isEmpty()) return true
         holdDir.mkdirs()
+        val sourceMain = File(fromDir, name)
+        val destMain = File(holdDir, name)
+        // Room leaves a 0-byte main when an open dies before the header is written.
+        // Freeing the hold name for that file renamed the copy that still has bytes
+        // to `.kept-N`, which Room does not open.
+        if (sourceMain.isFile && !hasBytes(sourceMain) && hasBytes(destMain)) {
+            discardShortNameSet(fromDir, name)
+            return !sourceMain.exists()
+        }
         // Free the short name in the hold folder so Room can find this history there.
         for (suffix in present) {
             val dest = File(holdDir, name + suffix)

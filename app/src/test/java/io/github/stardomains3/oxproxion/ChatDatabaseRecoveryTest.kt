@@ -1000,6 +1000,45 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun anEmptyRecoveredFileDoesNotDisplaceTheHoldCopyThatHasBytes() {
+        val databases = tmp.newFolder("empty-displace-databases")
+        val vault = tmp.newFolder("empty-displace-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(databases, "chat_database.recovered-40").writeBytes(ByteArray(0))
+        File(databases, "chat_database.recovered-40-wal").writeText("empty-wal")
+        File(hold, "chat_database.recovered-40").writeText("current-history")
+        File(hold, "chat_database.recovered-40-wal").writeText("hold-wal")
+        File(vault, "chat_database.recovered-40").writeText("stale-vault")
+
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, "chat_database.recovered-40"))
+
+        assertEquals("current-history", File(hold, "chat_database.recovered-40").readText())
+        assertEquals("hold-wal", File(hold, "chat_database.recovered-40-wal").readText())
+        assertEquals("stale-vault", File(vault, "chat_database.recovered-40").readText())
+        assertFalse(File(databases, "chat_database.recovered-40").exists())
+        assertFalse(File(databases, "chat_database.recovered-40-wal").exists())
+        assertFalse(File(hold, "chat_database.recovered-40.kept-1").exists())
+    }
+
+    @Test
+    fun anEmptyVaultCopyDoesNotBlockTheHoldFileThatHasBytes() {
+        val databases = tmp.newFolder("empty-vault-databases")
+        val vault = tmp.newFolder("empty-vault-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(vault, "chat_database.recovered-41").writeBytes(ByteArray(0))
+        File(vault, "chat_database.recovered-41-wal").writeText("empty-wal")
+        File(hold, "chat_database.recovered-41").writeText("held-history")
+        File(hold, "chat_database.recovered-41-wal").writeText("held-wal")
+
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, null))
+
+        assertEquals("held-history", File(vault, "chat_database.recovered-41").readText())
+        assertEquals("held-wal", File(vault, "chat_database.recovered-41-wal").readText())
+        assertFalse(File(hold, "chat_database.recovered-41").exists())
+        assertFalse(File(hold, "chat_database.recovered-41-wal").exists())
+    }
+
+    @Test
     fun anEmptyRecoveredFileDoesNotHideTheCopyThatHasBytes() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val databases = app.getDatabasePath(AppDatabase.DB_NAME).parentFile!!
