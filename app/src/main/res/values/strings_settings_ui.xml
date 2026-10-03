@@ -59,9 +59,9 @@
 
     <!-- Voice input -->
     <string name="voice_need_model">Set a transcription model in Settings &gt; Voice</string>
-    <string name="voice_need_openrouter_key">Add your OpenRouter API key in Settings &gt; Models to use Cloud voice</string>
+    <string name="voice_need_openrouter_key">Add your OpenRouter API key in Settings &gt; Models &amp; API to use Cloud voice</string>
     <string name="voice_need_xai_key">Add an xAI API key in Settings &gt; Voice to use Grok voice</string>
-    <string name="voice_need_lan_endpoint">Set your local server address in Settings &gt; Models to use Local voice</string>
+    <string name="voice_need_lan_endpoint">Set your local server address in Settings &gt; Models &amp; API to use Local voice</string>
     <string name="voice_error_idle">Stopped listening after a long silence</string>
     <string name="voice_still_transcribing">Still turning your recording into text. Send once the words appear.</string>
     <string name="cd_voice_cancel_transcribing">Cancel transcription</string>
