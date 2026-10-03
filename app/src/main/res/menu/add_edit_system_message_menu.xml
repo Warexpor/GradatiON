@@ -4,6 +4,6 @@
     <item
         android:id="@+id/action_save_system_message"
         android:title="@string/action_save"
-        android:icon="@drawable/ic_savechat"
+        android:icon="@drawable/ic_check"
         app:showAsAction="ifRoom" />
 </menu>
