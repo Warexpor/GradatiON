@@ -70,4 +70,24 @@ class ChatMessageTextTest {
             ChatMessageText.sliceCharsForTest = null
         }
     }
+
+    @Test
+    fun aLongSliceDoesNotRepeatTheOverlap() = runBlocking {
+        ChatMessageText.safeCharsForTest = 1
+        ChatMessageText.sliceCharsForTest = 2
+        val emoji = "\uD83D\uDE00"
+        try {
+            val text = ChatMessageText.read(
+                sqliteLength = 4,
+                full = { error("full read") },
+                // Four emoji is longer than the two-character step. The extra used to be
+                // kept, and the next step wrote them again.
+                slice = { _, _ -> emoji + emoji + emoji + emoji },
+            )
+            assertEquals(emoji + emoji + emoji + emoji, text)
+        } finally {
+            ChatMessageText.safeCharsForTest = null
+            ChatMessageText.sliceCharsForTest = null
+        }
+    }
 }

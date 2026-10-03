@@ -273,6 +273,26 @@ class ScenePhotoTest {
         assertFalse(partial.exists())
     }
 
+    @Test fun aSideFileWithTheSameTimestampReplacesThePicture() {
+        val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "atomic-same-tick")
+        dir.mkdirs()
+        val dest = File(dir, "wall.jpg")
+        val older = tinyJpeg()
+        dest.writeBytes(older)
+        val newer = ByteArray(older.size) { index ->
+            if (index == older.size / 2) 0x11 else older[index]
+        }
+        val partial = File(dir, "wall.jpg.partial")
+        partial.writeBytes(newer)
+        val stamp = 5_000L
+        dest.setLastModified(stamp)
+        partial.setLastModified(stamp)
+        assertEquals(dest.lastModified(), partial.lastModified())
+        assertTrue(ScenePhoto.recover(dest))
+        assertTrue(newer.contentEquals(dest.readBytes()))
+        assertFalse(partial.exists())
+    }
+
     @Test fun aFailedRenameStillReplacesATornPicture() {
         val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "atomic-torn")
         dir.mkdirs()

@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -122,5 +123,41 @@ class ChatImportSideLogTest {
         assertEquals("", prefs.getRpFacts(8L))
         assertFalse(log.exists())
         prefs.mainPrefs.edit().clear().commit()
+    }
+
+    @Test
+    fun aSideFileFromTheSameTickIsStillRead() {
+        val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "side-same-tick")
+        dir.mkdirs()
+        val dest = File(dir, "notes.json")
+        SideFile.clear(dest)
+        SideFile.write(dest, """[{"id":1,"facts":"old","pinned":false}]""".toByteArray())
+        val partial = File(dir, "notes.json.partial")
+        partial.writeText("""[{"id":1,"facts":"new","pinned":true}]""")
+        val stamp = dest.lastModified()
+        partial.setLastModified(stamp)
+        assertEquals("new", ChatImportSideLog.read(dest)!!.single().facts)
+        SideFile.clear(dest)
+    }
+
+    @Test
+    fun aFailedWriteLeavesTheFinishedSideFile() {
+        val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "side-keep")
+        dir.mkdirs()
+        val dest = File(dir, "notes.json")
+        SideFile.clear(dest)
+        val partial = File(dir, "notes.json.partial")
+        partial.writeText("""[{"id":1,"facts":"kept","pinned":true}]""")
+        SideFile.failAfterIncomingForTest = true
+        try {
+            assertThrows(java.io.IOException::class.java) {
+                SideFile.write(dest, """[{"id":1,"facts":"torn","pinned":false}]""".toByteArray())
+            }
+            assertEquals("kept", ChatImportSideLog.read(dest)!!.single().facts)
+            assertFalse(File(dir, "notes.json.partial.incoming").exists())
+        } finally {
+            SideFile.failAfterIncomingForTest = false
+            SideFile.clear(dest)
+        }
     }
 }
