@@ -48,7 +48,7 @@ class RpHubFragment : Fragment() {
                             ?: sidePrefs.getPendingRpLorebookName(c.id)
                             ?: ""
                         RpCharacterExport(
-                            name = c.name,
+                            name = c.name.trim(),
                             personality = c.personality,
                             style = c.style,
                             greeting = c.greeting,
@@ -99,7 +99,11 @@ class RpHubFragment : Fragment() {
                     GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
                     return@launch
                 }
-                val backup = json.decodeFromString(RpCharacterBackup.serializer(), text)
+                val parsed = json.decodeFromString(RpCharacterBackup.serializer(), text)
+                // A blank name is not a character. Counting it asked to update a card import then skipped.
+                val backup = parsed.copy(
+                    characters = parsed.characters.filter { it.name.trim().isNotEmpty() },
+                )
                 if (backup.characters.isEmpty()) {
                     GlassNotice.show(requireContext(), getString(R.string.rp_import_empty))
                     return@launch

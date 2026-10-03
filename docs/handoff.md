@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Import wave 32)
+
+On `cursor/import-lore-pin-names-136c` (PR into `gradation/app-pass`). Import/export follow-ups after #144. Not a redo of a waiting lore pin replacing the old pin, a failed portrait write being retried, or duplicate lore names exporting the newest text and import updating every local row. Not a redo of #133 (last lore flag, pin clearing the backup name, missing portrait exported empty). Not a redo of #151 (browser action lines, session approval pill), #150 (dead shade re-alert, cap order, utterance id), #149 (homelab hosts, LAN paths, approximate location), #147 (hub first line, pairing query text), or #148 (example sides, lore headers, list marks).
+
+- A character backup that names a lorebook leaves the pin on the row already chosen when that row's name matches. The newest other row with the same name used to take the pin, and its text replaced the book the character was using. A name that is still waiting attaches to the active copy, not a newer inactive one. Chats were already reading the active book while the pin waited.
+- Clearing a wallpaper leaves the import note in place when the file is still there, and the next launch tries again. A side file that comes back counts as still there.
+- A character name is stored trimmed. A blank name is not a character, so it is not imported and it is not counted as an update.
+
+Phone: pin a character to an older World while a newer World with different text exists, export and import the character file (the pin should stay on the older text). With no pin, import a character that names World while the older World is the active one and a newer copy is off (the pin should land on the active text). Remove a character wallpaper and import; if that delete does not land, the next launch should remove the picture. Import a character named with spaces around the name, and one whose name is blank (one character, named without the spaces).
+
 # Handoff (2026-10-03, Code wave 32)
 
 On `cursor/code-mode-wave32-5f81` (PR into `gradation/app-pass`). Code-mode follow-ups after Codex `read-only` / `auto` / `full-access`, OpenCode `build`, skipping a multi-select question, and browser profile start/stop plus the action line when the element description is missing (#145). Not a redo of that pass, of cancelled todos, `_cursor/` methods, or mouse cards (#131). Not #139 through #146. Not a redo of #150 (a shade cleared without a swipe, shade-cap post order, a new Speak utterance id), #149 (homelab hostnames, a password that contains `@`, the appended path before a query, approximate location), #147 (hub first line, pairing query case and percent-encoding), or #148 (example sides with a space before the colon, Keys/KEYS lore headers, list marks `#` `~` `>`).

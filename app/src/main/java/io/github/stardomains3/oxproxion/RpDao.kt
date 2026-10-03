@@ -65,13 +65,17 @@ interface RpDao {
         incoming: List<RpCharacterExport>,
         beforeCommit: suspend (List<ImportedCharacter>) -> Unit = {},
     ): List<ImportedCharacter> {
-        val rows = incoming.mapIndexed { index, ex ->
+        val rows = incoming.mapIndexedNotNull { index, ex ->
             RpImportGuard.beforeRow(index)
+            // The editor trims and refuses a blank name. A padded name stored as typed, and
+            // a blank one became a character the library could not save over.
+            val name = ex.name.trim()
+            if (name.isEmpty()) return@mapIndexedNotNull null
             val existing = ex.exportKey.takeIf { it.isNotBlank() }?.let { getCharacterByExportKey(it) }
             val isNew = existing == null
             val exportKey = existing?.exportKey ?: ex.exportKey.ifBlank { UUID.randomUUID().toString() }
-            val row = (existing ?: RpCharacter(name = ex.name, exportKey = exportKey)).copy(
-                name = ex.name,
+            val row = (existing ?: RpCharacter(name = name, exportKey = exportKey)).copy(
+                name = name,
                 personality = ex.personality,
                 style = ex.style,
                 greeting = ex.greeting,
