@@ -5,7 +5,7 @@ object RpImportRules {
         incoming: List<RpCharacterExport>,
         existingExportKeys: Set<String>
     ): Int = incoming.count { ex ->
-        ex.exportKey.isNotBlank() && ex.exportKey in existingExportKeys
+        ex.name.trim().isNotEmpty() && ex.exportKey.isNotBlank() && ex.exportKey in existingExportKeys
     }
 
     fun loreOverwriteCount(

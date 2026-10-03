@@ -42,6 +42,7 @@ class RpLibraryImportTest {
         RpImportGuard.failAt = null
         CharacterImportSideLog.failPictureRestoreForTest = false
         CharacterImportSideLog.afterPrefsAppliedForTest = null
+        BackgroundPhoto.failNextDeleteForTest = false
     }
 
     @After
@@ -49,6 +50,7 @@ class RpLibraryImportTest {
         RpImportGuard.failAt = null
         CharacterImportSideLog.failPictureRestoreForTest = false
         CharacterImportSideLog.afterPrefsAppliedForTest = null
+        BackgroundPhoto.failNextDeleteForTest = false
         val app = ApplicationProvider.getApplicationContext<Application>()
         CharacterImportSideLog.clear(CharacterImportSideLog.file(app))
         db.close()
@@ -935,6 +937,133 @@ class RpLibraryImportTest {
         assertEquals("new", world.content)
         assertTrue(world.isActive)
         assertFalse(exported.single { it.name == "Notes" }.isActive)
+    }
+
+    @Test
+    fun aCharacterBackupKeepsTheLorePinOnTheCopyAlreadyChosen() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val older = db.rpDao().insertLorebook(
+            RpLorebook(name = "World", content = "pinned text", isActive = false, updatedAt = 1, createdAt = 1),
+        )
+        db.rpDao().insertLorebook(
+            RpLorebook(name = "World", content = "other text", isActive = true, updatedAt = 9, createdAt = 9),
+        )
+        val id = 45L
+        prefs.saveRpLorebookId(id, older)
+        val books = repo.getAllLorebooksOnce()
+        RpCharacterPrefsBackup.apply(
+            prefs,
+            id,
+            RpCharacterExport(name = "Mira", lorebookName = "World"),
+            books,
+        )
+        assertEquals(older, prefs.getRpLorebookId(id))
+        assertNull(prefs.getPendingRpLorebookName(id))
+
+        val notes = db.rpDao().insertLorebook(
+            RpLorebook(name = "Notes", content = "n", updatedAt = 3, createdAt = 3),
+        )
+        RpCharacterPrefsBackup.apply(
+            prefs,
+            id,
+            RpCharacterExport(name = "Mira", lorebookName = "Notes"),
+            repo.getAllLorebooksOnce(),
+        )
+        assertEquals(notes, prefs.getRpLorebookId(id))
+        assertNull(prefs.getPendingRpLorebookName(id))
+
+        RpCharacterPrefsBackup.apply(
+            prefs,
+            id,
+            RpCharacterExport(name = "Mira", lorebookName = "Forest"),
+            repo.getAllLorebooksOnce(),
+        )
+        assertNull(prefs.getRpLorebookId(id))
+        assertEquals("Forest", prefs.getPendingRpLorebookName(id))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun aWaitingLorePinAttachesToTheActiveCopyNotTheNewerOne() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val older = db.rpDao().insertLorebook(
+            RpLorebook(name = "World", content = "old", isActive = true, updatedAt = 1, createdAt = 1),
+        )
+        db.rpDao().insertLorebook(
+            RpLorebook(name = " world ", content = "new", isActive = false, updatedAt = 9, createdAt = 9),
+        )
+        val books = repo.getAllLorebooksOnce()
+        assertEquals(older, books.last { it.name.equals("world", ignoreCase = true) }.id)
+        val fresh = 46L
+        RpCharacterPrefsBackup.apply(
+            prefs,
+            fresh,
+            RpCharacterExport(name = "Mira", lorebookName = " World "),
+            books,
+        )
+        assertEquals(older, prefs.getRpLorebookId(fresh))
+        assertNull(prefs.getPendingRpLorebookName(fresh))
+
+        val waiting = 47L
+        prefs.savePendingRpLorebookName(waiting, "World")
+        assertNull(prefs.getRpLorebookId(waiting))
+        RpCharacterPrefsBackup.bindPending(prefs, books)
+        assertEquals(older, prefs.getRpLorebookId(waiting))
+        assertNull(prefs.getPendingRpLorebookName(waiting))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun aFailedWallpaperClearIsRetried() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val prefs = SharedPreferencesHelper(app)
+        prefs.mainPrefs.edit().clear().commit()
+        val log = CharacterImportSideLog.file(app)
+        CharacterImportSideLog.clear(log)
+        val jpeg = solidJpeg(Color.DKGRAY)
+        val id = repo.saveCharacter(RpCharacter(name = "Ada", exportKey = "ada"))
+        val slot = BackgroundPhoto.slotForCharacter(id)
+        assertTrue(BackgroundPhoto.writeBytes(app, slot, jpeg))
+        val clear = RpCharacterExport(name = "Ada", exportKey = "ada", wallpaperBase64 = "")
+        repo.importCharacters(listOf(clear)) { rows ->
+            val row = rows.single()
+            CharacterImportSideLog.write(
+                log,
+                listOf(ImportedCharacterNote(row.id, clear.name, row.exportKey, clear)),
+            )
+        }
+        BackgroundPhoto.failNextDeleteForTest = true
+        assertFalse(CharacterImportSideLog.resume(app, db))
+        assertTrue(BackgroundPhoto.hasPhoto(app, slot))
+        assertTrue(jpeg.contentEquals(BackgroundPhoto.file(app, slot).readBytes()))
+        assertNotNull(CharacterImportSideLog.read(log))
+
+        assertTrue(CharacterImportSideLog.resume(app, db))
+        assertFalse(BackgroundPhoto.hasPhoto(app, slot))
+        assertNull(CharacterImportSideLog.read(log))
+        assertTrue(prefs.mainPrefs.edit().clear().commit())
+    }
+
+    @Test
+    fun aPaddedCharacterNameIsTrimmedAndABlankNameIsSkipped() = runBlocking {
+        val mira = repo.saveCharacter(RpCharacter(name = "Mira", exportKey = "mira", personality = "keep"))
+        val imported = repo.importCharacters(
+            listOf(
+                RpCharacterExport(name = "  Mira  ", exportKey = "mira", personality = "new"),
+                RpCharacterExport(name = " \n ", exportKey = "ghost", personality = "nope"),
+                RpCharacterExport(name = " Ada ", exportKey = "ada", personality = "calm"),
+            ),
+        )
+        assertEquals(listOf("mira", "ada"), imported.map { it.exportKey })
+        val saved = repo.getAllCharactersOnce()
+        assertEquals(setOf("Mira", "Ada"), saved.map { it.name }.toSet())
+        assertEquals("new", repo.getCharacterById(mira)!!.personality)
+        assertEquals("Ada", saved.single { it.exportKey == "ada" }.name)
+        assertTrue(saved.none { it.exportKey == "ghost" || it.personality == "nope" })
     }
 
     private fun solidJpeg(color: Int): ByteArray {

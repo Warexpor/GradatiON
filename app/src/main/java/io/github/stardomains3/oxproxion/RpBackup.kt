@@ -190,7 +190,7 @@ internal object RpCharacterPrefsBackup {
             }
             else -> {
                 val wanted = pinName(exported.lorebookName)
-                val match = lorebooks.firstOrNull { pinName(it.name).equals(wanted, ignoreCase = true) }
+                val match = bookForPin(prefs, characterId, wanted, lorebooks)
                 if (match != null) {
                     lorebookId = match.id
                     clearPending = true
@@ -216,6 +216,27 @@ internal object RpCharacterPrefsBackup {
         )
     }
 
+    /**
+     * A name can match more than one row. The row already pinned stays: jumping to the
+     * newest copy used the other text. With no pin yet, the active copy is the one chats
+     * were already reading while the name waited. Otherwise the first row, which is the
+     * newest when the list comes from the library query.
+     */
+    private fun bookForPin(
+        prefs: SharedPreferencesHelper,
+        characterId: Long,
+        wanted: String,
+        lorebooks: List<RpLorebook>,
+    ): RpLorebook? {
+        val matches = lorebooks.filter { pinName(it.name).equals(wanted, ignoreCase = true) }
+        if (matches.isEmpty()) return null
+        val current = prefs.getRpLorebookId(characterId)
+        if (current != null) {
+            matches.firstOrNull { it.id == current }?.let { return it }
+        }
+        return matches.firstOrNull { it.isActive } ?: matches.first()
+    }
+
     /** After a lorebook import, attach pins that were waiting for a book that was not here yet. */
     fun bindPending(prefs: SharedPreferencesHelper, lorebooks: List<RpLorebook>) {
         for ((characterId, name) in prefs.pendingRpLorebookNames()) {
@@ -237,7 +258,7 @@ internal object RpCharacterPrefsBackup {
         lorebooks: List<RpLorebook>,
     ) {
         val wanted = pinName(name)
-        val match = lorebooks.firstOrNull { pinName(it.name).equals(wanted, ignoreCase = true) }
+        val match = bookForPin(prefs, characterId, wanted, lorebooks)
         if (match != null) {
             prefs.saveRpLorebookId(characterId, match.id)
             prefs.savePendingRpLorebookName(characterId, null)
