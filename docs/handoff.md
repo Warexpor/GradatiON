@@ -1,3 +1,10 @@
+# Handoff (2026-10-03, Chat wave 29)
+
+On `gradation/w29-chat` (PR into `gradation/app-pass`). Chat/History follow-up after w27 promote (#110) and w28 caption promote (#116). Not a redo of those: the parked caption and caption+Photo search stay as they are.
+- `ComposerStaged.evicted` no longer treats a promote/rekey as a drop. First save under Code moves the parked JPEG onto the new id, then the fragment deletes whatever eviction lists — key-only comparison listed that same file, so the chip was gone while History still showed Photo.
+- A same-key replace (new photo, or audio parked over a photo) still evicts the previous uri. Re-parking the same uri does not. If another chat still holds that uri, the file stays.
+
+Phone: stage a photo on a new Chat, open Code, let the first save mint an id, leave Code (chip returns; the scene file is still there). History search Photo still finds that row. Stage a second photo on a saved chat (or park audio over the photo) and the previous JPEG is gone. A photo that simply falls off the oldest parked slots is still deleted.
 # Handoff (2026-10-03, Import wave 29)
 
 On `gradation/w29-import` (PR into `gradation/app-pass`). Import/export follow-ups after #122. Not a redo of note matching after a later save, wallpaper prepare, or torn portrait export:
