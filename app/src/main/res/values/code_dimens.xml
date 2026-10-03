@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code session transcript grid. Rows sit on the glass sheet; every glyph (a bead, a card's icon,
+     the prompt's chevron) centres on the rail and every line of words starts on the content column. -->
+<resources>
+    <!-- Rail centre from the sheet's edge: a card's 6dp inset + its 10dp start pad + half a 20dp glyph -->
+    <dimen name="code_rail_x">26dp</dimen>
+    <!-- Start pad of a bare row (bead, ring) so its 20dp glyph frame centres on the rail -->
+    <dimen name="code_rail_row_pad">16dp</dimen>
+    <!-- A glass card's inset from the sheet, and its own pad before the glyph frame -->
+    <dimen name="code_card_inset">6dp</dimen>
+    <dimen name="code_card_glyph_pad">10dp</dimen>
+    <!-- Words after a 20dp glyph frame: frame plus a 10dp gap -->
+    <dimen name="code_text_indent">30dp</dimen>
+    <!-- The content column from the sheet's edge, for rows with no glyph of their own -->
+    <dimen name="code_text_start">46dp</dimen>
+    <!-- A card's pad on its other three sides -->
+    <dimen name="code_card_pad">16dp</dimen>
+</resources>

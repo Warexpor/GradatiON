@@ -39,8 +39,8 @@ enum class Rail {
 class CodeTranscriptRail(context: Context, private val railAt: (Int) -> Rail) : RecyclerView.ItemDecoration() {
 
     private val d = context.resources.displayMetrics.density
-    /** Centre of the rail column; every row puts its glyph on it (6dp row pad + half a 20dp gutter). */
-    private val railX = 16 * d
+    /** Centre of the rail column; every row puts its glyph on it. */
+    private val railX = context.resources.getDimension(R.dimen.code_rail_x)
     private val gap = 3 * d
     private val dotR = 3 * d
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {

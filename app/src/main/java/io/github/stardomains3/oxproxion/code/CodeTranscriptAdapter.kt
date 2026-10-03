@@ -645,6 +645,10 @@ class CodeTranscriptAdapter(
         val ctx = v.context
         val card = v.findViewById<View>(R.id.codeApprovalCard)
         val done = v.findViewById<View>(R.id.codeApprovalDone)
+        // Open, the card gets a card's air on the rail; folded, the bead keeps a tool row's rhythm.
+        val folded = e.chosen != null || e.expired
+        val edge = (ctx.resources.displayMetrics.density * if (folded) 1 else 6).toInt()
+        v.setPadding(v.paddingLeft, edge, v.paddingRight, edge)
         if (e.chosen == null && e.expired) {
             // The turn ended without an answer: nothing is waiting any more, so no buttons.
             card.isVisible = false
@@ -693,7 +697,7 @@ class CodeTranscriptAdapter(
             }
         }
         val waiting = e.requestId in answering
-        ordered.forEachIndexed { i, opt ->
+        ordered.forEach { opt ->
             val lead = opt.kind == ApprovalOption.Kind.ALLOW_ONCE
             val b = LayoutInflater.from(ctx).inflate(
                 if (lead) R.layout.item_code_button_lead else R.layout.item_code_button, box, false
@@ -707,9 +711,7 @@ class CodeTranscriptAdapter(
                 for (k in 0 until box.childCount) box.getChildAt(k).isEnabled = false
                 onApproval(e, opt)
             }
-            box.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, (44 * d).toInt()).apply {
-                if (i > 0) marginStart = (8 * d).toInt()
-            })
+            box.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, (44 * d).toInt()))
         }
     }
 

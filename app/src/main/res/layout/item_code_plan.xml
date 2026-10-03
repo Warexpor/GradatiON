@@ -4,26 +4,29 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="6dp"
-    android:paddingEnd="6dp"
-    android:paddingTop="4dp"
+    android:paddingStart="@dimen/code_card_inset"
+    android:paddingEnd="@dimen/code_card_inset"
+    android:paddingTop="6dp"
     android:paddingBottom="6dp">
 
+    <!-- Each step row carries 6dp above and below, so the rows sit 12dp apart and the card's own
+         pads finish the same air above the label and below the last step -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_code_card"
         android:orientation="vertical"
-        android:paddingEnd="16dp"
-        android:paddingTop="12dp"
-        android:paddingBottom="8dp">
+        android:paddingStart="@dimen/code_card_glyph_pad"
+        android:paddingEnd="@dimen/code_card_pad"
+        android:paddingTop="14dp"
+        android:paddingBottom="10dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="30dp"
-            android:layout_marginBottom="4dp"
-            android:gravity="center_vertical"
+            android:layout_marginStart="@dimen/code_text_indent"
+            android:layout_marginBottom="6dp"
+            android:baselineAligned="true"
             android:orientation="horizontal">
 
             <TextView
@@ -42,7 +45,7 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 1dp start pad centres the 18dp status glyphs on the rail column -->
+        <!-- 1dp start pad centres the 18dp status glyphs in the 20dp glyph frame -->
         <LinearLayout
             android:id="@+id/codePlanRows"
             android:layout_width="match_parent"

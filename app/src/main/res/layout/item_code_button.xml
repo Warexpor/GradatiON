@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- One answer on an approval card: a slimmer pill than the stock 88dp button, so three answers
+     share one line on the card's content column -->
 <com.google.android.material.button.MaterialButton xmlns:android="http://schemas.android.com/apk/res/android"
     style="@style/Widget.Gradation.Code.Button"
     android:layout_width="wrap_content"
-    android:layout_height="44dp" />
+    android:layout_height="44dp"
+    android:minWidth="64dp"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:textSize="14sp" />

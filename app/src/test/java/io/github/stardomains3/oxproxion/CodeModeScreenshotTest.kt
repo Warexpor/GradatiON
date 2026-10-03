@@ -181,7 +181,77 @@ class CodeModeScreenshotTest {
         adapter.verbose = false
         list.scrollToPosition(0)
         idle(2)
+        assertOnTranscriptGrid(list)
         snap(root(a), "code_session_trace_dark")
+    }
+
+    /**
+     * One grid for every row on screen: glyphs (beads, card icons, plan steps) centre on the rail,
+     * and words start on the content column, inside a card or not.
+     */
+    private fun assertOnTranscriptGrid(list: androidx.recyclerview.widget.RecyclerView) {
+        val res = ctx.resources
+        val railX = res.getDimension(R.dimen.code_rail_x)
+        val textX = res.getDimensionPixelSize(R.dimen.code_text_start)
+        val origin = IntArray(2).also { list.getLocationInWindow(it) }[0]
+        fun left(v: View) = IntArray(2).also { v.getLocationInWindow(it) }[0] - origin
+        var glyphs = 0
+        var words = 0
+        for (i in 0 until list.childCount) {
+            val row = list.getChildAt(i)
+            row.findViewById<View>(R.id.codeRailNode)?.takeIf { it.isShown }?.let {
+                assertEquals("bead centres on the rail", railX, left(it) + it.width / 2f, 1.5f)
+                glyphs++
+            }
+            row.findViewById<android.view.ViewGroup>(R.id.codePlanRows)?.takeIf { it.isShown }?.let { steps ->
+                for (s in 0 until steps.childCount) {
+                    val step = steps.getChildAt(s) as android.widget.TextView
+                    val glyph = step.compoundDrawablesRelative[0]!!
+                    assertEquals("plan step glyph centres on the rail", railX,
+                        left(step) + step.paddingLeft + glyph.bounds.width() / 2f, 1.5f)
+                    assertEquals("plan step words on the content column", textX, left(step) + step.compoundPaddingLeft)
+                    glyphs++
+                }
+            }
+            for (id in listOf(R.id.codeUserText, R.id.codeToolTitle, R.id.codeThoughtLabel, R.id.codeAgentText,
+                R.id.codePlanTitle, R.id.codeDiffPath, R.id.codeApprovalTitle, R.id.codeApprovalWhat)) {
+                row.findViewById<View>(id)?.takeIf { it.isShown }?.let {
+                    assertEquals("${res.getResourceEntryName(id)} starts on the content column", textX, left(it))
+                    words++
+                }
+            }
+        }
+        assertTrue("checked the rows on screen", glyphs >= 4 && words >= 4)
+    }
+
+    /**
+     * An approval's answers share one line on the content column, pushed out to both of its edges;
+     * labels too long for that line stack full width instead of clipping or scrolling sideways.
+     */
+    @Test fun codeApprovalChoicesFillOneLineOrStack() = withCode { a, _ ->
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val row = bindRow(a) { it is CodeEvent.Approval }
+        fun lay() {
+            row.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            row.layout(0, 0, row.measuredWidth, row.measuredHeight)
+        }
+        lay()
+        val box = row.findViewById<android.widget.LinearLayout>(R.id.codeApprovalButtons)
+        val what = row.findViewById<View>(R.id.codeApprovalWhat)
+        fun xIn(v: View): Int { var x = 0; var p: View = v; while (p !== row) { x += p.left; p = p.parent as View }; return x }
+        assertEquals(android.widget.LinearLayout.HORIZONTAL, box.orientation)
+        assertEquals("answers start on the content column", xIn(what), xIn(box.getChildAt(0)))
+        val last = box.getChildAt(box.childCount - 1)
+        assertEquals("answers run to the card's end pad", xIn(box) + box.width, xIn(last) + last.width)
+        assertTrue("one line", (0 until box.childCount).all { box.getChildAt(it).top == 0 })
+        (box.getChildAt(1) as android.widget.TextView).text = "Always allow edits to every file in this workspace"
+        lay()
+        assertEquals("a label too long for the line stacks the answers", android.widget.LinearLayout.VERTICAL, box.orientation)
+        for (i in 0 until box.childCount) assertEquals("stacked answers fill the column", box.width, box.getChildAt(i).width)
     }
 
     /** Over an ambient background the transcript sheet is see-through glass: the field shows, blurred. */
