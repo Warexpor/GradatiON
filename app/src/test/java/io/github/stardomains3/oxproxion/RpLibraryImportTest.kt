@@ -21,6 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.Locale
 
 /**
  * Character and lore imports are one transaction: a failure on a later row leaves the library
@@ -1290,6 +1291,49 @@ class RpLibraryImportTest {
         assertEquals(listOf("world"), repo.getAllLorebooksOnce().map { it.name })
         assertEquals(0, repo.importLorebooks(listOf(RpLorebookExport(name = "  "))))
         assertEquals(1, repo.getAllLorebooksOnce().size)
+    }
+
+    @Test
+    fun aTurkishPhoneStillUpdatesALorebookThatDiffersByI() = runBlocking {
+        val previous = Locale.getDefault()
+        Locale.setDefault(Locale("tr", "TR"))
+        try {
+            repo.saveLorebook(RpLorebook(name = "History", content = "old", isActive = true))
+            val count = repo.importLorebooks(
+                listOf(RpLorebookExport(name = "history", content = "new", isActive = true)),
+            )
+            assertEquals(1, count)
+            val books = repo.getAllLorebooksOnce()
+            assertEquals(1, books.size)
+            assertEquals("history", books.single().name)
+            assertEquals("new", books.single().content)
+            assertTrue(books.single().isActive)
+        } finally {
+            Locale.setDefault(previous)
+        }
+    }
+
+    @Test
+    fun aTurkishPhoneStillAttachesALorePinThatDiffersByI() = runBlocking {
+        val previous = Locale.getDefault()
+        Locale.setDefault(Locale("tr", "TR"))
+        try {
+            val app = ApplicationProvider.getApplicationContext<Application>()
+            val prefs = SharedPreferencesHelper(app)
+            prefs.mainPrefs.edit().clear().commit()
+            val id = repo.saveLorebook(RpLorebook(name = "History", content = "h"))
+            RpCharacterPrefsBackup.apply(
+                prefs,
+                3L,
+                RpCharacterExport(name = "Mira", lorebookName = "history"),
+                repo.getAllLorebooksOnce(),
+            )
+            assertEquals(id, prefs.getRpLorebookId(3L))
+            assertNull(prefs.getPendingRpLorebookName(3L))
+            assertTrue(prefs.mainPrefs.edit().clear().commit())
+        } finally {
+            Locale.setDefault(previous)
+        }
     }
 
     /** A JPEG comment after the start marker, so the file is large but still a picture. */
