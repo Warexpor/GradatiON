@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Notifications/Away wave 30)
+
+On `gradation/w30-notif` (PR into `gradation/app-pass`). Notif/away follow-ups after the one-commit shade hold, dismissed open tokens, and in-chat Stop (#127). Not a redo of that pass or of #120:
+- Cancel and "does this session still have a shade" use the longest known session id. A prefix match treated `approval:ab:cd:…` as session `ab`, so finishing or forgetting `ab` cleared `ab:cd`'s approval, and swiping `ab`'s last alert left its open token while `ab:cd` was still up.
+- Evicting the oldest away shade (64-entry cap) cancels it without a DeleteIntent, so the one-shot open token is cleared when that was the session's last alert.
+- Several once-reject options are not one Deny on the shade (same as several once-allows).
+- A streamed tool handoff does not overwrite the follow-up's Speak/Copy line with the preamble, and errors do not replace that line (they still do not post a shade). `saveLastAiResponseForChannel` commits.
+
+Phone: Notify when away on, with two sessions whose ids share a prefix (`ab` and `ab:cd`) both waiting on approval. Finish or forget `ab` (the other approval stays). Swipe `ab`'s only alert and replay its open (it should not open; `ab:cd` still should). Background a chat whose reply calls a tool (Speak should read the finished answer, not the "I'll check" line). Force-stop right after an answer shade appears, then Speak (it should read that answer).
+
 # Handoff (2026-10-03, Import wave 30)
 
 On `gradation/w30-import` (PR into `gradation/app-pass`). Import/export follow-ups after #125. Not a redo of the last character copy, inactive lore backups (nothing in the file marked active), or cold-start pin linking. Not a redo of #122 (notes after a later save, wallpaper prepare, torn portrait export):

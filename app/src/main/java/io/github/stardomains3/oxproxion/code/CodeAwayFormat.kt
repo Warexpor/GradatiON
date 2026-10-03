@@ -122,6 +122,25 @@ object CodeAwayFormat {
         }.maxByOrNull { it.length }
 
     /**
+     * True when [dedupKey] is [sessionId]'s alert, not a longer id that shares its
+     * prefix. `approval:ab:cd:req` starts with `approval:ab:`; the longest known id wins.
+     * [sessionId] is always a candidate so a session whose token was just cleared still
+     * matches its own keys.
+     */
+    fun keyBelongsToSession(
+        dedupKey: String,
+        sessionId: String,
+        knownSessionIds: Collection<String>,
+    ): Boolean {
+        if (sessionId.isEmpty()) return false
+        val logical = logicalDedupKey(dedupKey)
+        val candidates = LinkedHashSet<String>(knownSessionIds.size + 1)
+        for (id in knownSessionIds) if (id.isNotEmpty()) candidates.add(id)
+        candidates.add(sessionId)
+        return sessionIdForDedupKey(logical, candidates) == sessionId
+    }
+
+    /**
      * Activity PendingIntent request code. One per posted notification.
      * A hash of the session id collides, and FLAG_UPDATE_CURRENT then opens the wrong session.
      */
@@ -169,10 +188,16 @@ object CodeAwayFormat {
         return once.firstOrNull() ?: options.firstOrNull { it.kind == ApprovalOption.Kind.ALLOW_ALWAYS }
     }
 
-    /** Prefer once-reject; fall back to always-reject. */
-    fun pickDeny(options: List<ApprovalOption>): ApprovalOption? =
-        options.firstOrNull { it.kind == ApprovalOption.Kind.REJECT_ONCE }
+    /**
+     * Prefer once-reject; fall back to always-reject.
+     * Several once-rejects are a choice, not one Deny the shade can tap.
+     */
+    fun pickDeny(options: List<ApprovalOption>): ApprovalOption? {
+        val once = options.filter { it.kind == ApprovalOption.Kind.REJECT_ONCE }
+        if (once.size > 1) return null
+        return once.firstOrNull()
             ?: options.firstOrNull { it.kind == ApprovalOption.Kind.REJECT_ALWAYS }
+    }
 
     /** Whether [posted] already contains this key (skip re-alert). */
     fun shouldPost(posted: Set<String>, key: String): Boolean = key !in posted

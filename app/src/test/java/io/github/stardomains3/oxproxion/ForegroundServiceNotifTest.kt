@@ -180,4 +180,14 @@ class ForegroundServiceNotifTest {
         controller.destroy()
     }
 
+    @Test
+    fun lastAiResponseIsOnDiskBeforeReturn() {
+        val helper = SharedPreferencesHelper(ctx)
+        helper.mainPrefs.edit().clear().commit()
+        helper.saveLastAiResponseForChannel(2, "final answer")
+        val file = java.io.File(ctx.applicationInfo.dataDir, "shared_prefs/MainAppPrefs.xml")
+        assertTrue("speak text must be committed, not only applied", file.isFile)
+        assertTrue(file.readText().contains("final answer"))
+    }
+
 }
