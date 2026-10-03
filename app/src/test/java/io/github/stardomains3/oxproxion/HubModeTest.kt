@@ -1,5 +1,6 @@
 package io.github.stardomains3.oxproxion
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -110,6 +111,30 @@ class HubModeTest {
         val again = HubUncover.afterLeaveRoleplay(wasInRoleplay = false, home = left)
         assertTrue(again.resumeAtHome)
         assertFalse(again.suppressed)
+    }
+
+    @Test
+    fun listFront_ignoresAViewStillVisibleMidSlide() {
+        assertTrue(RpHomeChrome.listIsFront(homeOpen = true, inRoleplay = true, codeCovering = false))
+        // Thread is open; the list view can still be on screen for the slide.
+        assertFalse(RpHomeChrome.listIsFront(homeOpen = false, inRoleplay = true, codeCovering = false))
+        assertFalse(RpHomeChrome.listIsFront(homeOpen = true, inRoleplay = true, codeCovering = true))
+        assertFalse(RpHomeChrome.listIsFront(homeOpen = true, inRoleplay = false, codeCovering = false))
+    }
+
+    @Test
+    fun manageCharacters_longPressDoesNotStartChat() {
+        assertFalse(RpHomeChrome.longPressStartsNewChat(listFront = true))
+        assertTrue(RpHomeChrome.longPressStartsNewChat(listFront = false))
+    }
+
+    @Test
+    fun topBarFollowsTheListNotTheSlidingView() {
+        assertEquals(RpHomeChrome.Leading.SETTINGS, RpHomeChrome.leading(listFront = true, inRoleplay = true))
+        assertEquals(RpHomeChrome.Leading.BACK, RpHomeChrome.leading(listFront = false, inRoleplay = true))
+        assertEquals(RpHomeChrome.Leading.HISTORY, RpHomeChrome.leading(listFront = false, inRoleplay = false))
+        assertEquals(RpHomeChrome.Trailing.MANAGE, RpHomeChrome.trailing(listFront = true))
+        assertEquals(RpHomeChrome.Trailing.NEW_CHAT, RpHomeChrome.trailing(listFront = false))
     }
 
     @Test

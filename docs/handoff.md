@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Hub/Pair wave 31)
+
+On `cursor/hub-list-and-pairing-a23e` (PR into `gradation/app-pass`). Hub/mode and pairing follow-ups after #137. Not a redo of the Roleplay list surviving an Ask history open, unencoded `&` in a bridge address, or 401/403 as status codes. Not a redo of Continue/Start staying on the thread, Roleplay-off returning to Chat when idle, or sheet glass after the first layout (#129). Not a redo of history-preview marks or the staged-file cap (#139), of captionless Photo and underscores on the character list (#142), of the recovered-database open, side pictures, and emoji slices (#143), or of an enabled tool staying on and local IPv6/CGNAT (#140).
+
+- Character-list chrome follows whether the list is the screen. The list view stays visible while a thread slides over it, so the chevron opened Settings and the new-chat icon opened the library. Long-press on Manage characters started a new chat and closed the list.
+- Pairing parse no longer uses `java.net.URI` for the link. A `#` inside the bridge address is not an outer fragment, a query key named `token` / `auth` / `ws` / `fp` stays in the address when the real pairing field comes after it, and a fingerprint with spaces is not rejected as a bad link. A `#note` with no `&` after it is still dropped.
+
+Phone: on the character list, long-press the top-right characters button (the list should stay; no new chat). Open a thread and tap the chevron while it is still sliding (it should return to the list, not open Settings). Pair a link whose address is `wss://h/v1?room=1&auth=session&b=2#section` with the token after that (the saved host should keep `auth`, `b`, and `#section`). A fingerprint written as `12 AD 50 …` should still pin.
+
 # Handoff (2026-10-03, Settings wave 31)
 
 On `cursor/settings-wave-31-6abb` (PR into `gradation/app-pass`). Settings follow-ups after #136. Not a redo of the pre-rename List/Read names, Create file staying off the folder grant, or the local-server slash and `/v1` strip. Not a redo of #128 (voice row, inference comma/non-finite values, timeout, max tokens, chat-memory presets). Not a redo of #139 (history-preview marks, staged-file cap), #142 (roleplay list lines, example sides, wrapped lore keys), or #143 (recovered database at the root, side pictures, emoji slices).
