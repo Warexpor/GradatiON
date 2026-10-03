@@ -96,6 +96,9 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
         }
 
         fun stopTtsSpeaking() {
+            // In-chat Speak stops shade TTS. stopTts(false) must not leave the shade
+            // saying Stop: the speaking flag is already clear, so the next shade tap
+            // would start speech again.
             instance?.stopTts(false)
         }
 
@@ -429,6 +432,15 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             isTtsUpdate = true
             updateNotificationWithChannel(lastUpdateTitle!!, lastUpdateText!!)
             isTtsUpdate = false
+        } else if (!updateNotif && isNotificationActive(ANSWER_NOTIFICATION_ID)) {
+            // Flag is clear. A shade that still says Stop would restart TTS on the next tap.
+            if (isAppInForeground() || lastUpdateTitle == null || lastUpdateText == null) {
+                getSystemService(NotificationManager::class.java).cancel(ANSWER_NOTIFICATION_ID)
+            } else {
+                isTtsUpdate = true
+                updateNotificationWithChannel(lastUpdateTitle!!, lastUpdateText!!)
+                isTtsUpdate = false
+            }
         }
     }
 

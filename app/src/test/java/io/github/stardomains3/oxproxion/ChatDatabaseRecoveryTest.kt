@@ -1125,6 +1125,7 @@ class ChatDatabaseRecoveryTest {
             "code_mode.xml",
             "code_away_open_tokens.xml",
             "code_away_notif_ids.xml",
+            "code_away_shade_hold.xml",
         )
         for (name in names) {
             assertTrue(name, rules.contains("path=\"$name\""))

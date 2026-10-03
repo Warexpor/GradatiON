@@ -259,6 +259,36 @@ class CodeAwayFormatTest {
     }
 
     @Test
+    fun postedKeysSkipHoldPrefix() {
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess")
+        val id = CodeAwayFormat.notificationId(key)
+        val entries = mapOf(
+            CodeAwayFormat.holdPrefKey(key) to id,
+            key to id,
+        )
+        assertEquals(setOf(key), CodeAwayFormat.postedKeysFromPrefs(entries))
+        // The parked id is still taken for a different key, not for this one.
+        assertEquals(emptySet<Int>(), CodeAwayFormat.takenFromPrefs(entries, exceptKey = key))
+        val other = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "other")
+        assertEquals(setOf(id), CodeAwayFormat.takenFromPrefs(entries, exceptKey = other))
+    }
+
+    @Test
+    fun sessionIdForDedupKeyPrefersLongest() {
+        val sid = "ab:cd"
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, sid, "req")
+        assertEquals(sid, CodeAwayFormat.sessionIdForDedupKey(key, setOf("ab", sid)))
+        assertEquals(
+            sid,
+            CodeAwayFormat.sessionIdForDedupKey(
+                CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, sid),
+                setOf("ab", sid),
+            ),
+        )
+        assertNull(CodeAwayFormat.sessionIdForDedupKey(key, emptySet()))
+    }
+
+    @Test
     fun channelCanNotifyRejectsImportanceNone() {
         assertFalse(CodeAwayFormat.channelCanNotify(0)) // IMPORTANCE_NONE
         assertTrue(CodeAwayFormat.channelCanNotify(3)) // IMPORTANCE_DEFAULT

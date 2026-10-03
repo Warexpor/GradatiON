@@ -149,4 +149,35 @@ class ForegroundServiceNotifTest {
         assertTrue(nm.activeNotifications.none { it.id == 2 })
     }
 
+    @Test
+    fun inAppStopFlipsShadeStopBackToSpeak() {
+        val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
+        prefs.edit()
+            .putString("title", "Demo Model")
+            .putString("text", "Your answer is ready.")
+            .commit()
+        val intent = Intent(ctx, ForegroundService::class.java).setAction("TOGGLE_TTS_CHANNEL_2")
+        val controller = Robolectric.buildService(ForegroundService::class.java, intent)
+            .create()
+            .startCommand(0, 1)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertTrue("Speak must flip the shade to Stop", prefs.getBoolean("speaking", false))
+        val posted = nm.activeNotifications.first { it.id == 2 }.notification
+        assertEquals(
+            ctx.getString(R.string.notif_action_stop),
+            posted.actions[0].title.toString(),
+        )
+        // In-chat Speak stops shade TTS without going through the shade Stop action.
+        ForegroundService.stopTtsSpeaking()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertFalse(prefs.getBoolean("speaking", true))
+        val after = nm.activeNotifications.first { it.id == 2 }.notification
+        assertEquals(
+            "shade must say Speak once the flag is clear",
+            ctx.getString(R.string.notif_action_speak),
+            after.actions[0].title.toString(),
+        )
+        controller.destroy()
+    }
+
 }

@@ -145,14 +145,18 @@ class CodeAwayNotifierTest {
         n.onUpdate(session, "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
         val id = nm.activeNotifications.single().id
         n.clearTurnDoneDedup(session)
-        val hold = ctx.getSharedPreferences("code_away_shade_hold", 0)
+        val idPrefs = ctx.getSharedPreferences("code_away_notif_ids", 0)
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, session)
-        assertEquals(id, hold.getInt(key, Int.MIN_VALUE))
-        // Process death: memory maps gone, dedup prefs empty, shade still up.
+        val holdKey = CodeAwayFormat.holdPrefKey(key)
+        // One commit: live dedup row gone, shade id parked beside it.
+        assertFalse(idPrefs.contains(key))
+        assertEquals(id, idPrefs.getInt(holdKey, Int.MIN_VALUE))
+        assertFalse(ctx.getSharedPreferences("code_away_shade_hold", 0).contains(key))
+        // Process death: memory maps gone, dedup row empty, shade still up.
         val cold = notifier()
         cold.cancelSession(session)
         assertEquals(0, nm.activeNotifications.size)
-        assertFalse(hold.contains(key))
+        assertFalse(idPrefs.contains(holdKey))
     }
 
     @Test
@@ -166,9 +170,53 @@ class CodeAwayNotifierTest {
         cold.onUpdate(session, "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
         assertEquals(1, nm.activeNotifications.size)
         assertEquals(id, nm.activeNotifications.single().id)
-        assertFalse(ctx.getSharedPreferences("code_away_shade_hold", 0).contains(
-            CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, session),
-        ))
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, session)
+        val idPrefs = ctx.getSharedPreferences("code_away_notif_ids", 0)
+        assertFalse(idPrefs.contains(CodeAwayFormat.holdPrefKey(key)))
+        assertTrue(idPrefs.contains(key))
+        assertFalse(ctx.getSharedPreferences("code_away_shade_hold", 0).contains(key))
+    }
+
+    @Test
+    fun legacyHoldPlusLiveRowStillRepostsSameId() {
+        // Kill between the old two commits: shade-hold file written, dedup row still present.
+        // Seeding must not swallow the next finished turn.
+        val session = "sess-legacy-split"
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, session)
+        val id = CodeAwayFormat.NOTIF_ID_BASE + 0x44
+        ctx.getSharedPreferences("code_away_notif_ids", 0).edit().putInt(key, id).commit()
+        ctx.getSharedPreferences("code_away_shade_hold", 0).edit().putInt(key, id).commit()
+        nm.cancelAll()
+        val cold = notifier()
+        cold.onUpdate(session, "host", "After", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(1, nm.activeNotifications.size)
+        assertEquals(id, nm.activeNotifications.single().id)
+    }
+
+    @Test
+    fun userDismissClearsOpenTokenWhenNothingRemains() {
+        val n = notifier()
+        val session = "sess-token"
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval()), sessionWasRunning = true)
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, session, "r1")
+        val token = n.issueOpenToken(session)
+        nm.cancelAll()
+        n.onUserDismissed(key)
+        assertFalse(n.consumeOpenToken(session, token))
+    }
+
+    @Test
+    fun userDismissKeepsTokenWhileAnotherApprovalRemains() {
+        val n = notifier()
+        val session = "sess:with:colon"
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval("r1")), sessionWasRunning = true)
+        n.onUpdate(session, "host", "S", CodeUpdate.Upsert(approval("r2")), sessionWasRunning = true)
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, session, "r1")
+        val token = n.issueOpenToken(session)
+        assertEquals(2, nm.activeNotifications.size)
+        nm.cancelAll()
+        n.onUserDismissed(key)
+        assertTrue(n.consumeOpenToken(session, token))
     }
 
 }
