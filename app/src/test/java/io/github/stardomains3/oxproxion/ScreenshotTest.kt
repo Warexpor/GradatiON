@@ -610,6 +610,24 @@ class ScreenshotTest : ScreenshotHarness() {
         snap(root(a), "settings_chat_memory_dark")
     }
 
+    /** Server kinds were checkboxes made exclusive by hand; tapping the checked one left none picked. */
+    @Test fun settingsLanServerKindIsOneChoiceDark() = withChat { a, _ ->
+        val f = SaveLANDialogFragment()
+        f.show(a.supportFragmentManager, "lan"); idle()
+        val v = f.requireView()
+        val group = v.findViewById<android.widget.RadioGroup>(R.id.lan_provider_group)
+        val ollama = v.findViewById<android.widget.RadioButton>(R.id.checkbox_ollama)
+        val lmStudio = v.findViewById<android.widget.RadioButton>(R.id.checkbox_lm_studio)
+        ollama.performClick(); idle()
+        ollama.performClick(); idle()
+        org.junit.Assert.assertEquals("tapping the chosen kind keeps it", R.id.checkbox_ollama, group.checkedRadioButtonId)
+        lmStudio.performClick(); idle()
+        org.junit.Assert.assertEquals(R.id.checkbox_lm_studio, group.checkedRadioButtonId)
+        org.junit.Assert.assertFalse(ollama.isChecked)
+        snapDialogCentered(a, "settings_lan_dialog_dark")
+        f.dismiss(); idle()
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",

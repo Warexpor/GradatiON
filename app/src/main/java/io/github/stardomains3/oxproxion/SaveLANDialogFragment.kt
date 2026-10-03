@@ -5,7 +5,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.CheckBox
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
@@ -44,13 +45,13 @@ class SaveLANDialogFragment : DialogFragment() {
         val prefs = SharedPreferencesHelper(requireContext())
         val editTextUrl = view.findViewById<TextInputEditText>(R.id.edit_text_lan_url)
         val editTextApiKey = view.findViewById<TextInputEditText>(R.id.edit_text_lan_api_key)
-        val checkboxOllama = view.findViewById<CheckBox>(R.id.checkbox_ollama)
-        val checkboxLmStudio = view.findViewById<CheckBox>(R.id.checkbox_lm_studio)
-        val checkboxLlamaCpp = view.findViewById<CheckBox>(R.id.checkbox_llama_cpp)
-        val checkboxMlxLm = view.findViewById<CheckBox>(R.id.checkbox_mlx_lm)
-        val checkboxHermesAgent = view.findViewById<CheckBox>(R.id.checkbox_hermes_agent)
-        val checkboxOmlx = view.findViewById<CheckBox>(R.id.checkbox_olmx)
-        val checkboxNativ = view.findViewById<CheckBox>(R.id.checkbox_nativ)
+        val checkboxOllama = view.findViewById<RadioButton>(R.id.checkbox_ollama)
+        val checkboxLmStudio = view.findViewById<RadioButton>(R.id.checkbox_lm_studio)
+        val checkboxLlamaCpp = view.findViewById<RadioButton>(R.id.checkbox_llama_cpp)
+        val checkboxMlxLm = view.findViewById<RadioButton>(R.id.checkbox_mlx_lm)
+        val checkboxHermesAgent = view.findViewById<RadioButton>(R.id.checkbox_hermes_agent)
+        val checkboxOmlx = view.findViewById<RadioButton>(R.id.checkbox_olmx)
+        val checkboxNativ = view.findViewById<RadioButton>(R.id.checkbox_nativ)
         val btnSave = view.findViewById<MaterialButton>(R.id.button_save_lan)
         val btnCancel = view.findViewById<MaterialButton>(R.id.button_cancel_lan)
 
@@ -69,7 +70,6 @@ class SaveLANDialogFragment : DialogFragment() {
             SharedPreferencesHelper.LAN_PROVIDER_NATIV -> checkboxNativ.isChecked = true
         }
 
-        // Checkbox mutual exclusion
         val providerCheckboxes = listOf(
             checkboxOllama,
             checkboxLmStudio,
@@ -86,18 +86,9 @@ class SaveLANDialogFragment : DialogFragment() {
         urlLayout.clearErrorOnEdit()
         keyLayout.clearErrorOnEdit()
 
-        providerCheckboxes.forEach { checkbox ->
-            checkbox.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) {
-                    providerError.visibility = View.GONE
-                    providerCheckboxes
-                        .filter { it != checkbox }
-                        .forEach { it.isChecked = false }
-                }
-            }
+        view.findViewById<RadioGroup>(R.id.lan_provider_group).setOnCheckedChangeListener { _, _ ->
+            providerError.visibility = View.GONE
         }
-
-
 
         btnSave.setOnClickListener {
             val raw = editTextUrl.text?.toString()?.trim().orEmpty()
