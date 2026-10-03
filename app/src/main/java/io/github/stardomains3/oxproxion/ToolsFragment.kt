@@ -128,7 +128,7 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
             }
 
             checkBox.isChecked = item.isEnabled
-            checkBox.isEnabled = permissionGranted
+            checkBox.isEnabled = ToolItem.toolSwitchEnabled(needsPermission, permissionGranted, item.isEnabled)
 
             if (needsPermission && !permissionGranted) {
                 if (isSafTool) {
@@ -155,10 +155,22 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
                 }
             }
 
-            checkBox.setOnCheckedChangeListener { _, isChecked ->
+            var ignoreToggle = false
+            checkBox.setOnCheckedChangeListener { button, isChecked ->
+                if (ignoreToggle) return@setOnCheckedChangeListener
+                val accepted = ToolItem.toolEnabledAfterUserToggle(needsPermission, permissionGranted, isChecked)
+                if (accepted == null) {
+                    ignoreToggle = true
+                    button.isChecked = false
+                    ignoreToggle = false
+                    return@setOnCheckedChangeListener
+                }
                 sharedPreferencesHelper.saveEnabledTools(
-                    ToolItem.enabledToolsAfterToggle(sharedPreferencesHelper.getEnabledTools(), item.name, isChecked)
+                    ToolItem.enabledToolsAfterToggle(sharedPreferencesHelper.getEnabledTools(), item.name, accepted)
                 )
+                if (!accepted) {
+                    button.isEnabled = ToolItem.toolSwitchEnabled(needsPermission, permissionGranted, toolOn = false)
+                }
             }
 
             container.addView(row)
