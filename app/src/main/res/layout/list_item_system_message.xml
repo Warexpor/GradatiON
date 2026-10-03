@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="?android:attr/selectableItemBackground">
+    android:background="@drawable/bg_press_svg">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -34,7 +34,7 @@
                 android:ellipsize="end"
                 android:clickable="true"
                 android:focusable="true"
-                android:foreground="?attr/selectableItemBackgroundBorderless" />
+                android:foreground="@drawable/bg_press_svg" />
 
             <ImageView
                 android:id="@+id/expand_icon"
@@ -46,7 +46,7 @@
                 android:src="@drawable/ic_arrow_downward"
                 android:rotation="0"
                 android:padding="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@drawable/bg_press_svg_borderless"
                 android:clickable="true"
                 android:focusable="true"
                 android:contentDescription="@string/cd_toggle_expand"
@@ -60,7 +60,7 @@
                 android:layout_centerVertical="true"
                 android:src="@drawable/ic_editnote"
                 android:padding="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@drawable/bg_press_svg_borderless"
                 android:contentDescription="@string/rp_menu_edit"
                 app:tint="@color/xai_mute" />
         </RelativeLayout>
