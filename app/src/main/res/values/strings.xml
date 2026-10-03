@@ -87,7 +87,7 @@
     <string name="model_picker_empty_title">No models match</string>
     <string name="model_picker_clear_filters">Clear filters</string>
     <string name="model_picker_active">Active model</string>
-    <string name="grok_appearance">Appearance</string>
+    <string name="settings_appearance_preview">Preview</string>
     <string name="grok_appearance_preview_user">How do clouds stay up?</string>
     <string name="grok_appearance_preview_grok">Clouds are made of tiny droplets, light enough for rising air to hold them aloft.</string>
     <string name="settings_title">Settings</string>
@@ -203,6 +203,7 @@
     <string name="rp_import_confirm">Import</string>
     <string name="rp_export_chars_filename">gradation-rp-characters.json</string>
     <string name="rp_export_lore_filename">gradation-rp-lorebooks.json</string>
+    <string name="chats_export_filename" translatable="false">gradation-chats.json</string>
     <string name="rp_new_chat_title">Start new RP chat?</string>
     <string name="rp_new_chat_body">Replace the current RP chat with %1$s\'s greeting?</string>
     <string name="rp_new_chat_confirm">Start</string>
@@ -282,7 +283,6 @@
     <string name="settings_animate_border">Animate border</string>
     <string name="settings_citations">Citations</string>
     <string name="settings_openrouter_transform">OpenRouter transform</string>
-    <string name="settings_auto_disable_web">Auto-disable web search</string>
     <string name="settings_biometrics">Biometrics</string>
     <string name="settings_notifications">Notifications</string>
     <string name="settings_copy_instead_dismiss">Copy instead of dismiss</string>
@@ -676,7 +676,7 @@
     <string name="preset_edit_system_message">System message</string>
     <string name="preset_edit_streaming">Streaming</string>
     <string name="preset_edit_reasoning">Reasoning</string>
-    <string name="preset_edit_conversation_mode">Conversation mode</string>
+    <string name="preset_edit_conversation_mode">Read aloud</string>
     <string name="preset_edit_web_search">Web search</string>
     <string name="preset_edit_tools">Tools</string>
     <string name="action_advanced">Advanced</string>

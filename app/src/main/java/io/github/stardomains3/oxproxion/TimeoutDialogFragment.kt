@@ -26,6 +26,11 @@ class TimeoutDialogFragment : DialogFragment() {
         savedInstanceState: Bundle?
     ): View? = inflater.inflate(R.layout.dialog_timeout, container, false)
 
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.let { GlassDialogs.sizeCard(it) }
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 

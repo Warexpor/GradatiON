@@ -25,6 +25,11 @@ class MaxTokensDialogFragment : DialogFragment() {
         return inflater.inflate(R.layout.dialog_save_maxtokens, container, false)
     }
 
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.let { GlassDialogs.sizeCard(it) }
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         dialog?.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())

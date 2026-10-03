@@ -14,7 +14,7 @@
         android:layout_marginStart="16dp"
         android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp"
-        android:text="@string/grok_appearance"
+        android:text="@string/settings_appearance_preview"
         android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
     <FrameLayout
