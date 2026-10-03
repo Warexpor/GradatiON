@@ -47,9 +47,9 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/cd_edit_preset"
+            android:contentDescription="@string/grok_history_more"
             android:padding="8dp"
-            android:src="@drawable/ic_editnote"
+            android:src="@drawable/ic_more_vert"
             app:tint="@color/xai_mute" />
     </LinearLayout>
 

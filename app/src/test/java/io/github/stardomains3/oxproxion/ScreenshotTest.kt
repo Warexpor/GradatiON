@@ -1109,6 +1109,56 @@ class ScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertTrue(open.contains(a.getString(R.string.notif_action_open)))
     }
 
+    /** The library row menu drew the Grok APK's filled pencil and bin beside the line icons. */
+    @Test fun settingsLibraryRowMenuUsesLineGlyphsDark() = withChat { a, _ ->
+        fun pixels(d: android.graphics.drawable.Drawable): IntArray {
+            val c = d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
+            val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+            c.setBounds(0, 0, 48, 48); c.draw(android.graphics.Canvas(bmp))
+            return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
+        }
+        SharedPreferencesHelper(a).saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
+        val f = PromptLibraryFragment()
+        pushFragment(a, f)
+        f.requireView().findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.prompt_recycler_view)
+            .getChildAt(0).findViewById<View>(R.id.menu_button).performClick(); idle()
+        val menu = shadowOf(ApplicationProvider.getApplicationContext<Application>()).latestPopupWindow.contentView
+        for ((row, glyph) in listOf(R.id.menu_edit to R.drawable.ic_msg_edit, R.id.menu_delete to R.drawable.ic_msg_delete)) {
+            val start = menu.findViewById<android.widget.TextView>(row).compoundDrawablesRelative[0]!!
+            org.junit.Assert.assertArrayEquals(pixels(a.getDrawable(glyph)!!), pixels(start))
+        }
+        snap(menu, "settings_library_row_menu_dark")
+    }
+
+    /** The library rows opened their Edit / Delete menu from an "Edit" note glyph; every other row uses the overflow. */
+    @Test fun settingsLibraryRowsUseTheOverflowDark() = withChat { a, _ ->
+        fun pixels(d: android.graphics.drawable.Drawable): IntArray {
+            val c = d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
+            val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+            c.setBounds(0, 0, 48, 48); c.draw(android.graphics.Canvas(bmp))
+            return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
+        }
+        val more = pixels(a.getDrawable(R.drawable.ic_more_vert)!!)
+        val prefs = SharedPreferencesHelper(a)
+        prefs.saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
+        prefs.savePresets(listOf(Preset("p1", "Morning brief", "openai/gpt-5", SystemMessage("Default", ""),
+            streaming = true, reasoning = false, conversationMode = false)))
+        for ((make, list, button) in listOf(
+            Triple<() -> androidx.fragment.app.Fragment, Int, Int>({ PromptLibraryFragment() }, R.id.prompt_recycler_view, R.id.menu_button),
+            Triple({ SystemMessageLibraryFragment() }, R.id.system_message_recycler_view, R.id.menu_button),
+            Triple({ PresetsListFragment() }, R.id.recyclerViewPresets, R.id.iconEditPreset),
+        )) {
+            val f = make()
+            pushFragment(a, f)
+            val trigger = f.requireView().findViewById<androidx.recyclerview.widget.RecyclerView>(list)
+                .getChildAt(0).findViewById<android.widget.ImageView>(button)
+            org.junit.Assert.assertArrayEquals(more, pixels(trigger.drawable))
+            org.junit.Assert.assertEquals(a.getString(R.string.grok_history_more), trigger.contentDescription)
+            if (list == R.id.system_message_recycler_view) snap(root(a), "settings_library_rows_overflow_dark")
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
