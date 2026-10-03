@@ -44,6 +44,17 @@ object ComposerDrafts {
     fun rekey(store: Map<String, String>, from: Long?, to: Long?, text: String): Map<String, String> =
         remember(remember(store, from, ""), to, text)
 
+    /**
+     * Unsaved chat just received [to]. Prefer non-blank [live]; when the field is empty
+     * (rebuild under Code, or a path that cleared the composer after [parkAskDraft]),
+     * move the parked prefs entry instead of rekeying blank (which would drop the caption).
+     */
+    fun promote(store: Map<String, String>, from: Long?, to: Long?, live: String): Map<String, String> {
+        val body = live.ifBlank { text(store, from) }
+        if (body.isBlank()) return store
+        return rekey(store, from, to, body)
+    }
+
     /** Drop one saved chat. The unsaved slot stays; a missing id leaves [store] as it is. */
     fun drop(store: Map<String, String>, sessionId: Long): Map<String, String> {
         val id = key(sessionId)

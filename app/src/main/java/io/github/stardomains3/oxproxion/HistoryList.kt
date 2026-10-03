@@ -166,7 +166,9 @@ object HistoryList {
                 if (folded.length <= DRAFT_LINE) folded else folded.take(DRAFT_LINE).trimEnd() + "…"
             else -> {
                 val hit = emphasis(folded, needle)
-                if (hit != null) clipAround(folded, hit.start, hit.length)
+                // A word-order span (hello … Photo) is the whole gap. clipAround would
+                // keep every word of it and blow past one preview line.
+                if (hit != null) clipDraftHit(folded, hit)
                 else if (folded.length <= DRAFT_LINE) folded
                 else folded.take(DRAFT_LINE).trimEnd() + "…"
             }
@@ -490,6 +492,23 @@ object HistoryList {
     private fun clipMatch(text: String, needle: String): String {
         val hit = emphasis(text, needle) ?: return text
         return clipAround(text, hit.start, hit.length)
+    }
+
+    /**
+     * One History draft line. A short hit uses the search window. A hit longer than
+     * [DRAFT_LINE] (the gap between the first and last word) keeps both ends so the
+     * bold span still has the words, without drawing the whole caption.
+     */
+    private fun clipDraftHit(text: String, hit: Emphasis): String {
+        if (hit.length <= DRAFT_LINE) return clipAround(text, hit.start, hit.length)
+        val spanEnd = (hit.start + hit.length).coerceAtMost(text.length)
+        val span = text.substring(hit.start, spanEnd)
+        val head = DRAFT_LINE / 2
+        val tail = (DRAFT_LINE - head - 1).coerceAtLeast(1)
+        var body = span.take(head).trimEnd() + "…" + span.takeLast(tail).trimStart()
+        if (hit.start > 0) body = "…$body"
+        if (spanEnd < text.length) body = "$body…"
+        return body
     }
 
     private fun clipAround(text: String, at: Int, needleLen: Int): String {

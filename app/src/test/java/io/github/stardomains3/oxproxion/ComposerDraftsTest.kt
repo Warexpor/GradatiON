@@ -30,6 +30,21 @@ class ComposerDraftsTest {
         assertTrue(sent.isEmpty())
     }
 
+    @Test fun promote_keeps_parked_caption_when_live_blank() {
+        // Unsaved chat typed a caption, Code / rebuild left the field empty, then first save
+        // promotes. Blank live must move the prefs entry onto the new id — not rekey blank.
+        val parked = ComposerDrafts.remember(emptyMap(), null, "still writing")
+        val promoted = ComposerDrafts.promote(parked, from = null, to = 8L, live = "")
+        assertEquals("", ComposerDrafts.text(promoted, null))
+        assertEquals("still writing", ComposerDrafts.text(promoted, 8L))
+        val liveWins = ComposerDrafts.promote(parked, from = null, to = 8L, live = "fresh line")
+        assertEquals("fresh line", ComposerDrafts.text(liveWins, 8L))
+        assertTrue(ComposerDrafts.promote(emptyMap(), from = null, to = 8L, live = "").isEmpty())
+        // Whitespace-only live still falls back to parked (same as a cleared field).
+        val spaced = ComposerDrafts.promote(parked, from = null, to = 8L, live = "  \n")
+        assertEquals("still writing", ComposerDrafts.text(spaced, 8L))
+    }
+
     @Test fun oldest_drafts_fall_off_and_the_round_trip_keeps_order() {
         var stored: Map<String, String> = emptyMap()
         for (id in 1..ComposerDrafts.MAX_KEPT + 5) {
@@ -113,6 +128,50 @@ class AskComposerDraftTest {
         assertTrue(AskComposerDraft.shouldParkText(dirty = false, text = "still writing"))
         assertTrue(AskComposerDraft.shouldParkText(dirty = true, text = "still writing"))
         assertFalse(AskComposerDraft.shouldParkText(dirty = false, text = ""))
+    }
+
+    @Test fun promote_blank_live_keeps_caption_unless_the_user_cleared_it() {
+        // Rebuild / Code left the field empty: snapshot and the visible Chat take the caption.
+        assertFalse(AskComposerDraft.blankLiveDropsParkedCaption(live = "", dirty = false))
+        assertFalse(AskComposerDraft.blankLiveDropsParkedCaption(live = "  \n", dirty = false))
+        assertEquals("still writing", AskComposerDraft.snapshotAfterPromote("", "still writing"))
+        assertEquals("fresh", AskComposerDraft.snapshotAfterPromote("fresh", "still writing"))
+        assertTrue(
+            AskComposerDraft.revealPromotedCaption(
+                live = "",
+                dirty = false,
+                recovered = "still writing",
+                codeCovering = false,
+            )
+        )
+        // Code is covering; leave fills the field. A clear, or text already on screen, stays.
+        assertFalse(
+            AskComposerDraft.revealPromotedCaption(
+                live = "",
+                dirty = false,
+                recovered = "still writing",
+                codeCovering = true,
+            )
+        )
+        assertFalse(
+            AskComposerDraft.revealPromotedCaption(
+                live = "",
+                dirty = true,
+                recovered = "still writing",
+                codeCovering = false,
+            )
+        )
+        assertFalse(
+            AskComposerDraft.revealPromotedCaption(
+                live = "from the view",
+                dirty = false,
+                recovered = "still writing",
+                codeCovering = false,
+            )
+        )
+        // The user deleted the line before first save. Do not copy the parked caption forward.
+        assertTrue(AskComposerDraft.blankLiveDropsParkedCaption(live = "", dirty = true))
+        assertTrue(AskComposerDraft.blankLiveDropsParkedCaption(live = "  \n", dirty = true))
     }
 
     @Test fun a_relaunch_keeps_the_roleplay_line_and_drops_the_ask_snapshot() {
