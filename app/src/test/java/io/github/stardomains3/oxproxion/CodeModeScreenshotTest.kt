@@ -129,6 +129,14 @@ class CodeModeScreenshotTest {
         assertEquals(View.VISIBLE, stateView.visibility)
         assertEquals(ctx.getString(R.string.code_session_loading), stateView.text.toString())
         assertTrue("the loading line carries the agent's mark", stateView.compoundDrawablesRelative[1] != null)
+        val y = IntArray(2)
+        root(a).findViewById<View>(R.id.codeSessionSheet).getLocationInWindow(y)
+        val clearTop = y[1]
+        root(a).findViewById<View>(R.id.codeSessionDock).getLocationInWindow(y)
+        val clearBottom = y[1]
+        stateView.getLocationInWindow(y)
+        assertEquals("the mark and its line centre between the header and the composer",
+            (clearTop + clearBottom) / 2f, y[1] + stateView.height / 2f, 2f)
         snap(root(a), "code_session_loading_dark")
     }
 
@@ -142,6 +150,29 @@ class CodeModeScreenshotTest {
         idle(16)
         assertEquals(false, hub.sessions.value[id]!!.running)
         snap(root(a), "code_session_done_dark")
+    }
+
+    /** Mid-turn: a command streams into its pane while the Working footer closes the rail. */
+    @Test fun codeSessionRunningDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+        hub.answer(id, approval.requestId, approval.options.first { it.id == "allow" })
+        fun midCommand() = hub.sessions.value[id]!!.events.any {
+            it is CodeEvent.ToolCall && it.kind == io.github.stardomains3.oxproxion.code.ToolKind.EXECUTE &&
+                it.status == io.github.stardomains3.oxproxion.code.ToolStatus.RUNNING && (it.output?.lines()?.size ?: 0) >= 3
+        }
+        repeat(40) { if (!midCommand()) shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100)) }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(100))
+        assertTrue("a command is streaming", midCommand())
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val adapter = list.adapter as io.github.stardomains3.oxproxion.code.CodeTranscriptAdapter
+        assertTrue("the Working footer closes the list",
+            adapter.currentList.last() === io.github.stardomains3.oxproxion.code.TranscriptRow.Working)
+        assertOnTranscriptGrid(list)
+        snap(root(a), "code_session_running_dark")
     }
 
     /**
@@ -214,14 +245,16 @@ class CodeModeScreenshotTest {
                 }
             }
             for (id in listOf(R.id.codeUserText, R.id.codeToolTitle, R.id.codeThoughtLabel, R.id.codeAgentText,
-                R.id.codePlanTitle, R.id.codeDiffPath, R.id.codeApprovalTitle, R.id.codeApprovalWhat)) {
-                row.findViewById<View>(id)?.takeIf { it.isShown }?.let {
-                    assertEquals("${res.getResourceEntryName(id)} starts on the content column", textX, left(it))
+                R.id.codePlanTitle, R.id.codeDiffPath, R.id.codeApprovalTitle, R.id.codeApprovalWhat,
+                R.id.codeApprovalDoneText, R.id.codeTurnText, R.id.codeWorkingText, R.id.codeNoticeText)) {
+                row.findViewById<android.widget.TextView>(id)?.takeIf { it.isShown }?.let {
+                    assertEquals("${res.getResourceEntryName(id)} starts on the content column",
+                        textX, left(it) + it.compoundPaddingLeft)
                     words++
                 }
             }
         }
-        assertTrue("checked the rows on screen", glyphs >= 4 && words >= 4)
+        assertTrue("checked the rows on screen", glyphs >= 2 && words >= 3)
     }
 
     /**

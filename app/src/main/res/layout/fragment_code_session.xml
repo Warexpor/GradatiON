@@ -68,7 +68,8 @@
             </io.github.stardomains3.oxproxion.GlassFrameLayout>
         </io.github.stardomains3.oxproxion.GlassBackdropLayout>
 
-        <!-- Empty transcript: loading, waiting for the agent, or a load that failed (tap to retry) -->
+        <!-- Empty transcript: loading, waiting for the agent, or a load that failed (tap to retry).
+             Centred in the clear part of the sheet; the margins are set on layout. -->
         <TextView
             android:id="@+id/codeSessionState"
             android:layout_width="match_parent"
