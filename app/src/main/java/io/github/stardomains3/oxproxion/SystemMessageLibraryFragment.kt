@@ -181,7 +181,8 @@ class SystemMessageLibraryFragment : Fragment() {
         view.findViewById<MaterialButton>(R.id.fab_add_system_message).setOnClickListener {
             parentFragmentManager.beginTransaction()
                 .withGrokStackAnimations()
-                .replace(R.id.fragment_container, AddEditSystemMessageFragment())
+                .hide(this@SystemMessageLibraryFragment)
+                .add(R.id.fragment_container, AddEditSystemMessageFragment())
                 .addToBackStack(null)
                 .commit()
         }
@@ -363,12 +364,23 @@ class SystemMessageLibraryFragment : Fragment() {
         }
         parentFragmentManager.beginTransaction()
             .withGrokStackAnimations()
-            .replace(R.id.fragment_container, fragment)
+            .hide(this@SystemMessageLibraryFragment)
+            .add(R.id.fragment_container, fragment)
             .addToBackStack(null)
             .commit()
     }
     override fun onResume() {
         super.onResume()
+        reload()
+    }
+
+    /** Back from the editor: this screen was only hidden under it, so it never left onResume. */
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (!hidden) reload()
+    }
+
+    private fun reload() {
         if (::systemMessageAdapter.isInitialized) {
             systemMessageAdapter.selectedMessage = sharedPreferencesHelper.getSelectedSystemMessage()
             loadSystemMessages()

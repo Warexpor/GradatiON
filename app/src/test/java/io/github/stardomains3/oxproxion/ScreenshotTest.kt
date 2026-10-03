@@ -500,6 +500,59 @@ class ScreenshotTest : ScreenshotHarness() {
         SharedPreferencesHelper(a).savePresets(emptyList())
     }
 
+    /** Add in the libraries used to replace the whole stack, so Back rebuilt Chat and dropped the draft. */
+    @Test fun settingsLibraryAddKeepsTheStack() = withChat { a, chat ->
+        val chatView = chat.requireView()
+        a.findViewById<android.widget.EditText>(R.id.chatEditText).setText("half-written question")
+        val prefs = SharedPreferencesHelper(a)
+        data class Library(val row: Int, val add: Int, val list: Int, val shot: String, val saveInEditor: () -> Unit)
+        val libraries = listOf(
+            Library(R.id.promptsButton, R.id.fab_add_prompt, R.id.prompt_recycler_view, "settings_prompts_after_add_dark") {
+                prefs.saveCustomPrompts(prefs.getCustomPrompts() + Prompt("Standup", "Summarize yesterday."))
+            },
+            Library(R.id.systemMessagesButton, R.id.fab_add_system_message, R.id.system_message_recycler_view, "settings_system_messages_after_add_dark") {
+                prefs.saveCustomSystemMessages(prefs.getCustomSystemMessages() + SystemMessage("Terse", "Answer in one line."))
+            },
+            Library(R.id.presetsButton, R.id.fabAddPreset, R.id.recyclerViewPresets, "settings_presets_after_add_dark") {
+                prefs.savePresets(prefs.getPresets() + Preset("p1", "Morning brief", "openai/gpt-5", SystemMessage("Default", ""),
+                    streaming = true, reasoning = false, conversationMode = false))
+            },
+        )
+        for (lib in libraries) {
+            openSettingsRow(a, R.id.settingsRowAdvanced)
+            a.findViewById<View>(lib.row).performClick(); idle()
+            val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(lib.list)
+            val before = list.adapter!!.itemCount
+            a.findViewById<View>(lib.add).performClick(); idle()
+            lib.saveInEditor()
+            val fm = a.supportFragmentManager
+            fm.popBackStackImmediate(); idle()
+            org.junit.Assert.assertEquals("the library shows what the editor saved", before + 1, list.adapter!!.itemCount)
+            if (lib.list == R.id.prompt_recycler_view) {
+                // Edit sits last, as in System messages and Presets.
+                val row = list.getChildAt(0)
+                val x = listOf(R.id.copy_button, R.id.expand_icon, R.id.menu_button).map { row.findViewById<View>(it).left }
+                org.junit.Assert.assertEquals("copy, expand, edit", x.sorted(), x)
+            }
+            snap(root(a), lib.shot)
+            while (fm.backStackEntryCount > 0) { fm.popBackStackImmediate(); idle() }
+            org.junit.Assert.assertSame("Chat kept its view", chatView, chat.view)
+            org.junit.Assert.assertEquals("half-written question",
+                a.findViewById<android.widget.EditText>(R.id.chatEditText).text.toString())
+        }
+    }
+
+    /** License rows were the framework's simple_list_item_1: no press state and no dividers. */
+    @Test fun settingsLicensesDark() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowData)
+        a.findViewById<View>(R.id.licensesButton).performClick(); idle()
+        val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recyclerView)
+        val row = list.getChildAt(0)
+        org.junit.Assert.assertNotNull("glass license row", row.findViewById<View>(R.id.licenseName))
+        org.junit.Assert.assertTrue("row shows the press wash", row.background is android.graphics.drawable.StateListDrawable)
+        snap(root(a), "settings_licenses_dark")
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
@@ -756,6 +809,9 @@ class ScreenshotTest : ScreenshotHarness() {
         openSettingsRow(a, R.id.settingsRowAppearance); settle(); awaitPhoto(); settle()
         org.junit.Assert.assertTrue(a.findViewById<View>(R.id.backgroundPhotoOptions).isShown)
         snap(root(a), "settings_appearance_photo_dark")
+        val choose = a.findViewById<View>(R.id.backgroundPhotoChoose)
+        choose.requestRectangleOnScreen(android.graphics.Rect(0, 0, choose.width, choose.height), true); idle()
+        snap(root(a), "settings_appearance_photo_options_dark")
         SharedPreferencesHelper(a).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
     }
 

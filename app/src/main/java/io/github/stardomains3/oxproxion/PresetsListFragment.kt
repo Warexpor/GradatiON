@@ -54,7 +54,8 @@ class PresetsListFragment : Fragment() {
                 val dialog = PresetEditFragment.newInstance(preset)
                 parentFragmentManager.beginTransaction()
                     .withGrokStackAnimations()
-                    .replace(R.id.fragment_container, dialog)
+                    .hide(this@PresetsListFragment)
+                    .add(R.id.fragment_container, dialog)
                     .addToBackStack(null)
                     .commit()
             },
@@ -111,12 +112,19 @@ class PresetsListFragment : Fragment() {
             val dialog = PresetEditFragment.newInstance(null)
             parentFragmentManager.beginTransaction()
                 .withGrokStackAnimations()
-                .replace(R.id.fragment_container, dialog)
+                .hide(this@PresetsListFragment)
+                .add(R.id.fragment_container, dialog)
                 .addToBackStack(null)
                 .commit()
         }
 
         refresh()
+    }
+
+    /** Back from the editor: this screen was only hidden under it, so the list was not rebuilt. */
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (!hidden && ::adapter.isInitialized) refresh()
     }
 
     private fun refresh() {
