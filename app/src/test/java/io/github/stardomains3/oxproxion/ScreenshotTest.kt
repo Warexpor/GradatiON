@@ -945,6 +945,42 @@ class ScreenshotTest : ScreenshotHarness() {
         }
     }
 
+    /** Library exports suggested bare prompts.json and system_messages.json; every export is gradation-*.json now. */
+    @Test fun settingsLibraryExportsUseTheAppName() = withChat { a, _ ->
+        val prefs = SharedPreferencesHelper(a)
+        prefs.saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
+        prefs.saveCustomSystemMessages(prefs.getCustomSystemMessages() + SystemMessage("Terse", "Answer in one line."))
+        for ((make, file) in listOf<Pair<() -> androidx.fragment.app.Fragment, String>>(
+            { PromptLibraryFragment() } to "gradation-prompts.json",
+            { SystemMessageLibraryFragment() } to "gradation-system-messages.json",
+        )) {
+            val f = make()
+            pushFragment(a, f)
+            f.requireView().findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar).menu
+                .performIdentifierAction(R.id.action_export, 0); idle()
+            val started = generateSequence { shadowOf(a).nextStartedActivityForResult?.intent }.toList()
+            val save = started.firstOrNull { it.action == android.content.Intent.ACTION_CREATE_DOCUMENT }
+            org.junit.Assert.assertEquals(file, save?.getStringExtra(android.content.Intent.EXTRA_TITLE))
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+    }
+
+    /** The Local network dialog asks for a "provider"; its error used to say "server type". */
+    @Test fun settingsLanErrorMatchesItsHeader() = withChat { a, _ ->
+        val f = SaveLANDialogFragment()
+        f.show(a.supportFragmentManager, "lan"); idle()
+        val v = f.requireView()
+        v.findViewById<android.widget.RadioGroup>(R.id.lan_provider_group).clearCheck()
+        v.findViewById<android.widget.EditText>(R.id.edit_text_lan_url).setText("http://10.0.0.23:11434")
+        v.findViewById<View>(R.id.button_save_lan).performClick(); idle()
+        val error = v.findViewById<android.widget.TextView>(R.id.lan_provider_error)
+        org.junit.Assert.assertTrue(error.isShown)
+        org.junit.Assert.assertTrue(error.text.toString(), error.text.contains("provider"))
+        org.junit.Assert.assertTrue(a.getString(R.string.save_lan_select_provider).contains("provider"))
+        snapDialogCentered(a, "settings_lan_pick_provider_dark")
+        f.dismiss(); idle()
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
