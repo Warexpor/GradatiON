@@ -981,6 +981,32 @@ class ScreenshotTest : ScreenshotHarness() {
         f.dismiss(); idle()
     }
 
+    /** A field error drew Material's filled "!" and, on key fields, pushed the show/hide eye out. */
+    @Test fun settingsFieldErrorsKeepTheirEndIconDark() = withChat { a, _ ->
+        val t = TimeoutDialogFragment(); t.show(a.supportFragmentManager, "t"); idle()
+        t.requireView().findViewById<android.widget.EditText>(R.id.edit_text_timeout).setText("99")
+        t.requireView().findViewById<View>(R.id.button_save_timeout).performClick(); idle()
+        val timeout = t.requireView().findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.edit_text_layout_timeout)
+        org.junit.Assert.assertNotNull("timeout error shows", timeout.error)
+        org.junit.Assert.assertNull("no filled error glyph", timeout.errorIconDrawable)
+        t.dismiss(); idle()
+        val k = SaveApiDialogFragment(); k.show(a.supportFragmentManager, "k"); idle()
+        k.requireView().findViewById<View>(R.id.button_saveapi).performClick(); idle()
+        val key = k.requireView().findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.edit_text_lay)
+        org.junit.Assert.assertNotNull("key error shows", key.error)
+        org.junit.Assert.assertNull("no filled error glyph", key.errorIconDrawable)
+        org.junit.Assert.assertTrue("eye stays reachable", key.findViewById<View>(com.google.android.material.R.id.text_input_end_icon).isShown)
+        snapDialogCentered(a, "settings_key_dialog_error_dark")
+        k.dismiss(); idle()
+        val editor = PresetEditFragment.newInstance(null)
+        pushFragment(a, editor)
+        editor.requireView().findViewById<View>(R.id.buttonSave).performClick(); idle()
+        var p = editor.requireView().findViewById<View>(R.id.editPresetTitle).parent
+        while (p !is com.google.android.material.textfield.TextInputLayout) p = (p as View).parent
+        org.junit.Assert.assertNotNull("title error shows", p.error)
+        org.junit.Assert.assertNull("no filled error glyph", p.errorIconDrawable)
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
