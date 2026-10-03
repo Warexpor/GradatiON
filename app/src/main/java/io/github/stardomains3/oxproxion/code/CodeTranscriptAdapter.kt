@@ -76,6 +76,12 @@ class CodeTranscriptAdapter(
     private val streams = HashMap<String, StreamState>()
     /** How far ChatTextView paints an inline code pill past its run, on each side. */
     private val inlineAir = 3.5f * context.resources.displayMetrics.density
+    private val imageOutline = object : android.view.ViewOutlineProvider() {
+        private val radius = 12f * context.resources.displayMetrics.density
+        override fun getOutline(view: View, outline: android.graphics.Outline) {
+            outline.setRoundRect(0, 0, view.width, view.height, radius)
+        }
+    }
     /**
      * Streaming text painted in place by [tryInPlaceStream]. That path skips the differ, so
      * [getCurrentList] keeps an older row; a rebind (scrolled off and back) reads this instead.
@@ -419,6 +425,9 @@ class CodeTranscriptAdapter(
                     if (shown > 0) lp.marginStart = gap
                 }
                 contentDescription = ctx.getString(R.string.cd_code_agent_image)
+                // Rounded like the panes beside it; a square photo was the one sharp corner on the sheet.
+                outlineProvider = imageOutline
+                clipToOutline = true
             }
             row.addView(iv)
             val cached = inlineBitmaps.get(key)

@@ -250,6 +250,44 @@ class CodeModeScreenshotTest {
         snap(root(a), "code_session_offline_banner_dark")
     }
 
+    /** A prompt sent with images says so after a spaced dot; the agent's images sit rounded like the panes. */
+    @Test fun codeSessionImagesDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        hub.cancel(id)
+        idle(4)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val adapter = list.adapter as io.github.stardomains3.oxproxion.code.CodeTranscriptAdapter
+        val f = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }
+        CodeSessionFragment::class.java.getDeclaredField("follow").apply { isAccessible = true }.setBoolean(f, false)
+        fun png(w: Int, h: Int, shade: Int): String {
+            val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.rgb(shade, shade, shade)) }
+            val out = java.io.ByteArrayOutputStream(); b.compress(Bitmap.CompressFormat.PNG, 100, out)
+            return android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+        }
+        val imgs = listOf(
+            io.github.stardomains3.oxproxion.code.AgentInlineImage("image/png", png(600, 400, 90), "k1"),
+            io.github.stardomains3.oxproxion.code.AgentInlineImage("image/png", png(300, 500, 140), "k2"))
+        val ev = listOf(
+            CodeEvent.UserPrompt("u", 1, "Show me the settings screen before and after", attachmentCount = 2),
+            CodeEvent.AgentText("t", 2, "Here is the screen before and after the change.", images = imgs),
+            CodeEvent.TurnEnd("e", 3, "end_turn", "Done"),
+        )
+        adapter.submitList(ev.map { io.github.stardomains3.oxproxion.code.TranscriptRow.Event(it) })
+        val until = System.currentTimeMillis() + 3000
+        while (System.currentTimeMillis() < until) { Thread.sleep(50); shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50)) }
+        list.scrollToPosition(0)
+        idle(2)
+        val prompt = list.getChildAt(0).findViewById<android.widget.TextView>(R.id.codeUserText).text.toString()
+        assertTrue(prompt, prompt.endsWith("after · 2 images"))
+        val row = list.getChildAt(1).findViewById<android.view.ViewGroup>(R.id.codeAgentImages)
+        assertEquals(2, row.childCount)
+        for (i in 0 until row.childCount) assertTrue("image $i is rounded", row.getChildAt(i).clipToOutline)
+        snap(root(a), "code_session_images_dark")
+    }
+
     /** Mid-turn: a command streams into its pane while the Working footer closes the rail. */
     @Test fun codeSessionRunningDark() = withCode { a, _ ->
         val hub = CodeHub.getLoaded(ctx)
