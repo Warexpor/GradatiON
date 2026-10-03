@@ -134,6 +134,26 @@ class ListSessionsJsonTest {
         )
     }
 
+    @Test fun codexAndOpenCodeModesAreNotAsk() {
+        val el = json.parseToJsonElement(
+            """{"sessions":[
+                {"sessionId":"ro","permissionMode":"read-only"},
+                {"sessionId":"au","mode":"auto"},
+                {"sessionId":"fa","permissionMode":"full-access"},
+                {"sessionId":"fu","permissionMode":"full_access"},
+                {"sessionId":"bd","mode":"build"},
+                {"sessionId":"ae","permissionMode":"auto-edit"}
+            ]}"""
+        )
+        val modes = ListSessionsJson.parse(el, "h").associate { it.id to it.permissionMode }
+        assertEquals(PermissionMode.ASK, modes["ro"])
+        assertEquals(PermissionMode.AUTO_EDIT, modes["au"])
+        assertEquals(PermissionMode.FULL_AUTO, modes["fa"])
+        assertEquals(PermissionMode.FULL_AUTO, modes["fu"])
+        assertEquals(PermissionMode.AUTO_EDIT, modes["bd"])
+        assertEquals(PermissionMode.AUTO_EDIT, modes["ae"])
+    }
+
     @Test fun missingLastSeqStaysNullAndEmptyResultIsEmpty() {
         assertNull(ListSessionsJson.parse(json.parseToJsonElement("""{"sessions":[{"sessionId":"s1"}]}"""), "h").single().lastSeq)
         assertTrue(ListSessionsJson.parse(null, "h").isEmpty())
