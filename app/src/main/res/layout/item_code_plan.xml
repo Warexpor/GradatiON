@@ -45,12 +45,11 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- 1dp start pad centres the 18dp status glyphs in the 20dp glyph frame -->
+        <!-- Steps inflate item_code_plan_step -->
         <LinearLayout
             android:id="@+id/codePlanRows"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingStart="1dp" />
+            android:orientation="vertical" />
     </LinearLayout>
 </FrameLayout>

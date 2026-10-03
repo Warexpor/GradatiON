@@ -74,6 +74,8 @@ class CodeTranscriptAdapter(
     }
 
     private val streams = HashMap<String, StreamState>()
+    /** How far ChatTextView paints an inline code pill past its run, on each side. */
+    private val inlineAir = 3.5f * context.resources.displayMetrics.density
     /**
      * Streaming text painted in place by [tryInPlaceStream]. That path skips the differ, so
      * [getCurrentList] keeps an older row; a rebind (scrolled off and back) reads this instead.
@@ -140,6 +142,7 @@ class CodeTranscriptAdapter(
         try {
             val spanned = state.markdown.render(displayed)
             ChatMarkdown.polish(spanned)
+            CodeInlineAir.apply(spanned, inlineAir)
             applyStreamFades(state, spanned, SystemClock.uptimeMillis())
             tv.setText(spanned, TextView.BufferType.SPANNABLE)
             holder.ensureFadeTicker()
@@ -373,7 +376,9 @@ class CodeTranscriptAdapter(
     private fun renderFinished(e: CodeEvent.AgentText): CharSequence {
         val key = "${e.key}:${e.text.length}"
         markdownCache.get(key)?.let { return it }
-        return ChatMarkdown.polished(markwon.toMarkdown(e.text)).also { markdownCache.put(key, it) }
+        val out = ChatMarkdown.polished(markwon.toMarkdown(e.text))
+        if (out is android.text.Spannable) CodeInlineAir.apply(out, inlineAir)
+        return out.also { markdownCache.put(key, it) }
     }
 
     /**
@@ -729,14 +734,19 @@ class CodeTranscriptAdapter(
         val box = v.findViewById<LinearLayout>(R.id.codePlanRows)
         box.removeAllViews()
         val ctx = v.context
-        val d = ctx.resources.displayMetrics.density
         val finished = e.entries.count { it.status == PlanStatus.COMPLETED }
         v.findViewById<TextView>(R.id.codePlanProgress).text =
             ctx.getString(R.string.code_session_plan_progress, finished, e.entries.size)
+        val inf = LayoutInflater.from(ctx)
         for (entry in e.entries) {
-            val row = TextView(ctx).apply {
+            val row = inf.inflate(R.layout.item_code_plan_step, box, false)
+            row.findViewById<ImageView>(R.id.codePlanStepGlyph).setImageResource(when (entry.status) {
+                PlanStatus.COMPLETED -> R.drawable.ic_code_plan_done
+                PlanStatus.IN_PROGRESS -> R.drawable.ic_code_plan_progress
+                PlanStatus.PENDING, PlanStatus.CANCELLED -> R.drawable.ic_code_plan_pending
+            })
+            row.findViewById<TextView>(R.id.codePlanStepText).apply {
                 text = entry.content
-                textSize = 15f
                 setTextColor(ctx.getColor(when (entry.status) {
                     PlanStatus.COMPLETED, PlanStatus.CANCELLED -> R.color.xai_mute
                     PlanStatus.IN_PROGRESS -> R.color.xai_ink
@@ -749,14 +759,6 @@ class CodeTranscriptAdapter(
                 } else {
                     paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
                 }
-                setCompoundDrawablesRelativeWithIntrinsicBounds(when (entry.status) {
-                    PlanStatus.COMPLETED -> R.drawable.ic_code_plan_done
-                    PlanStatus.IN_PROGRESS -> R.drawable.ic_code_plan_progress
-                    PlanStatus.PENDING, PlanStatus.CANCELLED -> R.drawable.ic_code_plan_pending
-                }, 0, 0, 0)
-                // Glyph on the rail column, words on the content column.
-                compoundDrawablePadding = (11 * d).toInt()
-                setPadding(0, (6 * d).toInt(), 0, (6 * d).toInt())
             }
             box.addView(row)
         }

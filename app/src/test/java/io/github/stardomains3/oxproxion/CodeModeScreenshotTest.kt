@@ -210,6 +210,27 @@ class CodeModeScreenshotTest {
         assertEquals(View.VISIBLE, search.findViewById<View>(R.id.codeToolOutputScroll).visibility)
         assertEquals("only commands get a prompt line", View.GONE, search.findViewById<View>(R.id.codeToolPrompt).visibility)
         adapter.verbose = false
+        // Inline code in prose keeps clear of the words around it: the spaces beside the pill widen.
+        val prose = bindRow(a) { it is CodeEvent.AgentText && "`SettingsRepository`" in it.text }
+            .findViewById<android.widget.TextView>(R.id.codeAgentText).text as android.text.Spanned
+        val code = prose.getSpans(0, prose.length, ChatMarkdown.InlineCodeMarker::class.java).first()
+        for (at in listOf(prose.getSpanStart(code) - 1, prose.getSpanEnd(code))) {
+            assertEquals(' ', prose[at])
+            assertEquals(1, prose.getSpans(at, at + 1, io.github.stardomains3.oxproxion.code.CodeInlineAir.WideSpace::class.java).size)
+        }
+        // A step too long for one line keeps its glyph beside its first line, not between lines.
+        val plan = bindRow(a) { it is CodeEvent.Plan }
+        val step = (plan.findViewById<android.view.ViewGroup>(R.id.codePlanRows)).getChildAt(0)
+        step.findViewById<android.widget.TextView>(R.id.codePlanStepText).text =
+            "Find where the theme is stored and every screen that reads the old dark mode flag"
+        plan.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        plan.layout(0, 0, plan.measuredWidth, plan.measuredHeight)
+        val words = step.findViewById<android.widget.TextView>(R.id.codePlanStepText)
+        val glyph = step.findViewById<View>(R.id.codePlanStepGlyph)
+        assertTrue("the long step wraps", words.lineCount >= 2)
+        val firstLine = words.top + words.layout.getLineTop(0)..words.top + words.layout.getLineBottom(0)
+        assertTrue("the glyph sits beside the first line", (glyph.top + glyph.height / 2) in firstLine)
         list.scrollToPosition(0)
         idle(2)
         assertOnTranscriptGrid(list)
@@ -236,11 +257,10 @@ class CodeModeScreenshotTest {
             }
             row.findViewById<android.view.ViewGroup>(R.id.codePlanRows)?.takeIf { it.isShown }?.let { steps ->
                 for (s in 0 until steps.childCount) {
-                    val step = steps.getChildAt(s) as android.widget.TextView
-                    val glyph = step.compoundDrawablesRelative[0]!!
-                    assertEquals("plan step glyph centres on the rail", railX,
-                        left(step) + step.paddingLeft + glyph.bounds.width() / 2f, 1.5f)
-                    assertEquals("plan step words on the content column", textX, left(step) + step.compoundPaddingLeft)
+                    val glyph = steps.getChildAt(s).findViewById<View>(R.id.codePlanStepGlyph)
+                    assertEquals("plan step glyph centres on the rail", railX, left(glyph) + glyph.width / 2f, 1.5f)
+                    assertEquals("plan step words on the content column", textX,
+                        left(steps.getChildAt(s).findViewById(R.id.codePlanStepText)))
                     glyphs++
                 }
             }
