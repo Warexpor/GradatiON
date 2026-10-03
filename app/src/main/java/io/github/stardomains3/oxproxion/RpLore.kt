@@ -281,8 +281,11 @@ object RpLore {
     }
 
     /**
-     * A single word must sit on its own, so "dock" does not fire inside "docks", while
-     * "Mira" still matches "Mira's". A phrase matches anywhere.
+     * A key must sit on its own, so "dock" does not fire inside "docks" and "old man"
+     * does not fire inside "old manor", while "Mira" still matches "Mira's". A phrase
+     * still matches in the middle of a sentence. Case folds beyond ASCII, so "Мира"
+     * matches "мира". Scripts written without spaces have no word edge, so those keys
+     * match anywhere.
      */
     fun keyHits(key: String, haystack: String): Boolean = KeyMatcher(key).hits(haystack)
 
@@ -301,9 +304,11 @@ object RpLore {
         private val pattern: Regex? = when {
             token.isEmpty() -> null
             // A word boundary never exists inside unspaced text, so these keys match anywhere.
-            token.any { it.isWhitespace() } || token.codePoints().anyMatch { Character.UnicodeScript.of(it) in unspacedScripts } ->
-                Regex(escaped, RegexOption.IGNORE_CASE)
-            else -> Regex("""(?<![\p{L}\p{N}])$escaped(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE)
+            // A phrase used to take this path too, and "old man" then fired inside "old manor".
+            token.codePoints().anyMatch { Character.UnicodeScript.of(it) in unspacedScripts } ->
+                Regex("(?iu)$escaped")
+            // (?u) as well as (?i): IGNORE_CASE alone folds only ASCII, so "Мира" missed "мира".
+            else -> Regex("(?iu)(?<![\\p{L}\\p{N}])$escaped(?![\\p{L}\\p{N}])")
         }
 
         fun hits(haystack: String) = pattern != null && haystack.isNotEmpty() && pattern.containsMatchIn(haystack)

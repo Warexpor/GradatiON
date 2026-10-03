@@ -65,6 +65,35 @@ class RpLoreTest {
     }
 
     @Test
+    fun aPhraseDoesNotMatchInsideALongerWord() {
+        val book = """
+            [keys: old man, the dock]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertFalse(RpLore.select(book, "The old manor is quiet.").contains("dawn"))
+        assertFalse(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertFalse(RpLore.select(book, "the dockmaster waits").contains("dawn"))
+        assertTrue(RpLore.select(book, "The old man waits.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the dock.").contains("dawn"))
+        assertTrue(RpLore.keyHits("grey haven", "grey haven's name"))
+        assertFalse(RpLore.keyHits("grey haven", "grey havenwood"))
+    }
+
+    @Test
+    fun aKeyMatchesWhenOnlyTheCaseDiffersOutsideAscii() {
+        assertTrue(RpLore.keyHits("Мира", "мира ждёт"))
+        assertTrue(RpLore.keyHits("мира", "Мира ждёт"))
+        assertFalse(RpLore.keyHits("Мира", "Мираж ждёт"))
+        assertTrue(RpLore.keyHits("École", "l'école est là"))
+        val book = """
+            [keys: Мира]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "мира пришла.").contains("dawn"))
+        assertFalse(RpLore.select(book, "Мираж пришёл.").contains("dawn"))
+    }
+
+    @Test
     fun semicolonAndIdeographicCommaAreKeySeparators() {
         val book = """
             [keys: docks; pier、lantern]

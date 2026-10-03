@@ -468,20 +468,25 @@ object RpPromptEngine {
      * Labels are `User`/`Char`/`Bot`, the card macros `{{user}}`/`{{char}}`/`{{bot}}`, and the
      * older `<USER>`/`<BOT>` tags. `Bot:` is the character side; it used to be saved as the
      * user's line.
-     * A blank line before the label, a Windows line break, spaces around the dashes, a
-     * space before the colon, or a fullwidth colon still count. The character may speak
+     * A blank line before the label, a Windows line break, a Unicode line break, spaces
+     * around the dashes, a space before the colon, or a fullwidth colon still count.
+     * `<END_OF_DIALOG>` is the same end marker as `END_OF_DIALOG`; the brackets used to
+     * leave it in the reply and glue the next exchange on. The character may speak
      * first: that used to swallow the User line into the reply. A later line that only
      * looks like a label stays in the side that is already open, so a reply can quote one.
      */
     fun parseExamplesFromEdit(text: String): List<RpExampleDialog> {
         if (text.isBlank()) return emptyList()
+        // U+2028 / U+2029 are line breaks. Leaving them meant a `<START>` on the next
+        // line never split, and both exchanges were saved as one reply.
         val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
+            .replace('\u2028', '\n').replace('\u2029', '\n').replace('\u0085', '\n')
         val label = Regex(
             """(?i)^[ \t]*((?:\{\{\s*(?:user|char|bot)\s*\}\})|(?:<(?:user|bot)>)|user|char|bot)[ \t]*[:：][ \t]*(.*)$"""
         )
         // A marker that ends the text has no newline after it. Requiring one used to leave
-        // that `<START>` or `END_OF_DIALOG` on the reply.
-        return normalized.split(Regex("""(?i)\n[ \t]*(?:---|<(?:start)>|end_of_dialog)[ \t]*(?:\n|$)""")).mapNotNull { block ->
+        // that `<START>` or `END_OF_DIALOG` on the reply. `<END_OF_DIALOG>` is the same line.
+        return normalized.split(Regex("""(?i)\n[ \t]*(?:---|<(?:start|end_of_dialog)>|end_of_dialog)[ \t]*(?:\n|$)""")).mapNotNull { block ->
             val user = StringBuilder()
             val char = StringBuilder()
             var side: StringBuilder? = null
