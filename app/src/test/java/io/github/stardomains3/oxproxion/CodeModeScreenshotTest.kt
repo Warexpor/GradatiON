@@ -484,6 +484,27 @@ class CodeModeScreenshotTest {
             diff.findViewById<View>(R.id.codeDiffCard).contentDescription.toString().contains(path))
     }
 
+    /** A long tool title leaves room for its argument and keeps a failure's cross on the line. */
+    @Test fun codeToolRowLongTitleKeepsItsCross() = withCode { a, _ ->
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val row = bindRow(a) { it is CodeEvent.ToolCall && it.kind == io.github.stardomains3.oxproxion.code.ToolKind.READ }
+        row.findViewById<android.widget.TextView>(R.id.codeToolTitle).text =
+            "Read every settings screen, the theme controller and the preferences migration helper"
+        row.findViewById<View>(R.id.codeToolStatus).visibility = View.VISIBLE
+        row.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        row.layout(0, 0, row.measuredWidth, row.measuredHeight)
+        val line = row.findViewById<android.view.ViewGroup>(R.id.codeToolRow)
+        val cross = row.findViewById<View>(R.id.codeToolStatus)
+        val detail = row.findViewById<View>(R.id.codeToolDetail)
+        val min = (14 * ctx.resources.displayMetrics.density).toInt()
+        assertTrue("the cross stays whole on the line", cross.width >= min && cross.right <= line.width - line.paddingRight)
+        assertTrue("the argument keeps some room", detail.width >= 64 * ctx.resources.displayMetrics.density)
+    }
+
     /** Audit 20: from another tab, a session waiting on approval puts a cue on the Code tab. */
     @Test fun codeTabFlagsPendingApprovalFromOtherTabs() = withCode { a, _ ->
         val hub = CodeHub.getLoaded(ctx)

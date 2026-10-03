@@ -51,6 +51,7 @@
                 app:trackColor="@android:color/transparent" />
         </FrameLayout>
 
+        <!-- Capped so a long title still leaves the argument and a failure's cross on the line -->
         <TextView
             android:id="@+id/codeToolTitle"
             android:layout_width="wrap_content"
@@ -58,6 +59,7 @@
             android:layout_marginStart="10dp"
             android:ellipsize="end"
             android:maxLines="1"
+            android:maxWidth="220dp"
             android:textColor="@color/xai_ink"
             android:textSize="14sp"
             android:textFontWeight="600" />
