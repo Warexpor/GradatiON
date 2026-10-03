@@ -278,6 +278,33 @@ class CodeAwayFormatTest {
     }
 
     @Test
+    fun orderRowsAreNotShadeIds() {
+        val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess")
+        val id = CodeAwayFormat.notificationId(key)
+        val entries = mapOf(
+            key to id,
+            CodeAwayFormat.orderPrefKey(key) to 3,
+        )
+        assertEquals(setOf(key), CodeAwayFormat.postedKeysFromPrefs(entries))
+        assertEquals(setOf(key), CodeAwayFormat.visibleKeysFromPrefs(entries))
+        assertEquals(setOf(id), CodeAwayFormat.takenFromPrefs(entries))
+        assertEquals(listOf(key), CodeAwayFormat.orderedVisibleKeys(entries))
+    }
+
+    @Test
+    fun orderedVisibleKeysFollowSeqNotMapOrder() {
+        val older = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "older")
+        val newer = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "newer")
+        // Insertion order is newest-first. The seq is what the cap has to follow.
+        val entries = linkedMapOf(
+            CodeAwayFormat.orderPrefKey(newer) to 2,
+            CodeAwayFormat.orderPrefKey(older) to 1,
+            newer to CodeAwayFormat.NOTIF_ID_BASE + 2,
+        )
+        assertEquals(listOf(older, newer), CodeAwayFormat.orderedVisibleKeys(entries))
+    }
+
+    @Test
     fun postedKeysSkipHoldPrefix() {
         val key = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "sess")
         val id = CodeAwayFormat.notificationId(key)

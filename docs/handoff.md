@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Notifications/Away wave 32)
+
+On `cursor/notif-dead-shade-order-ac2a` (PR into `gradation/app-pass`). Notif/away follow-ups after the last-shade token, the 64-cap count, and in-chat Stop (#146). Not a redo of that pass, of session-id prefix, of the shade-cap token clear, or of the answer speak line (#134). Not a redo of #149, #147, or #148.
+
+- A shade the system drops without a swipe (no DeleteIntent) no longer counts as still posted. The next approval or finished turn alerts again, on the same id. That dead shade's one-shot open token is dropped, including after a kill. A shade that is still up keeps its token, and clearing one session does not drop another's.
+- The 64-entry cap stores each shade's age. Prefs iteration is not post order, so after a kill the cap could cancel a newer shade and leave the oldest. The oldest is still the one that goes.
+- Answer shade Speak uses a new utterance id each time. A late end for the previous reading was the same id, so it put Speak back and stopped the engine while the next reading was still going.
+
+Phone: Notify when away on, finish a turn, clear that notification without swiping it, then finish the turn again (the shade should come back; replaying the old tap should not open). Leave another session's shade up and clear only the first (the other still opens). Finish 64 turns, send a new prompt in each so the shades stay, kill the app, finish one more session (still 64, the first session gone, the one just before the new one still there). Background Chat, tap Speak, tap Stop, tap Speak again, and if the first reading's end still arrives the shade should stay on Stop until this reading ends.
+
 # Handoff (2026-10-03, Settings wave 32)
 
 On `cursor/settings-wave-32-0c71` (PR into `gradation/app-pass`). Settings follow-ups after #140. Not a redo of the pre-rename List/Read names, Create file, or the local-server slash and `/v1` strip (#136). Not a redo of an enabled tool turning off without the grant, cleartext to CGNAT 100.64/10 and IPv6 link-local or unique-local, or the Models row hiding userinfo when the host parsed (#140). Not a redo of #147 or #148.

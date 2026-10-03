@@ -295,6 +295,41 @@ class ForegroundServiceNotifTest {
     }
 
     @Test
+    fun lateUtteranceEndDoesNotClearTheNextReading() {
+        val prefs = ctx.getSharedPreferences("ForegroundServiceAnswer", 0)
+        prefs.edit()
+            .putString("title", "Demo Model")
+            .putString("text", "Your answer is ready.")
+            .commit()
+        ctx.getSharedPreferences("MainAppPrefs", 0).edit()
+            .putString("last_ai_response_channel_2", "Your answer is ready.")
+            .commit()
+        val intent = Intent(ctx, ForegroundService::class.java).setAction("TOGGLE_TTS_CHANNEL_2")
+        val controller = Robolectric.buildService(ForegroundService::class.java, intent)
+            .create()
+            .startCommand(0, 1)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val service = controller.get()
+        val firstId = service.shadeUtteranceId
+        assertEquals("fg_tts_1", firstId)
+        ForegroundService.stopTtsSpeaking()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        controller.withIntent(intent).startCommand(0, 2)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val secondId = service.shadeUtteranceId
+        assertEquals("fg_tts_2", secondId)
+        // The first reading's end can still arrive after Speak has started again.
+        service.onShadeUtteranceFinished(firstId)
+        assertTrue(prefs.getBoolean("speaking", false))
+        val after = nm.activeNotifications.first { it.id == 2 }.notification
+        assertEquals(
+            ctx.getString(R.string.notif_action_stop),
+            after.actions[0].title.toString(),
+        )
+        controller.destroy()
+    }
+
+    @Test
     fun lastAiResponseIsOnDiskBeforeReturn() {
         val helper = SharedPreferencesHelper(ctx)
         helper.mainPrefs.edit().clear().commit()
