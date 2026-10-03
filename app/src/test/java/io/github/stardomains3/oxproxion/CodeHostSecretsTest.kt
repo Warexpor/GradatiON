@@ -68,19 +68,23 @@ class CodeHostSecretsTest {
         s.enabled = true
         s.lastTabWasCode = true
         s.notifyWhenAway = true
+        s.showThinking = true
         s.defaultPermissionMode = io.github.stardomains3.oxproxion.code.PermissionMode.ASK
         val again = store()
         assertTrue(again.enabled)
         assertTrue(again.lastTabWasCode)
         assertTrue(again.notifyWhenAway)
+        assertTrue(again.showThinking)
         assertEquals(io.github.stardomains3.oxproxion.code.PermissionMode.ASK, again.defaultPermissionMode)
         again.enabled = false
         again.lastTabWasCode = false
         again.notifyWhenAway = false
+        again.showThinking = false
         val cold = store()
         assertFalse(cold.enabled)
         assertFalse(cold.lastTabWasCode)
         assertFalse(cold.notifyWhenAway)
+        assertFalse(cold.showThinking)
     }
 
     @Test
