@@ -60,6 +60,24 @@ data class ToolItem(
          */
         fun needsFolderGrant(toolName: String): Boolean = toolName in FOLDER_GRANT_TOOLS
 
+        /**
+         * A missing grant or runtime permission blocks turning a tool on. It must not
+         * freeze a tool that is already on: the switch stays usable so it can be turned
+         * off, otherwise the model keeps a tool the row can no longer reach.
+         */
+        fun toolSwitchEnabled(needsPermission: Boolean, permissionGranted: Boolean, toolOn: Boolean): Boolean =
+            !needsPermission || permissionGranted || toolOn
+
+        /**
+         * The enabled bit to store, or null when this toggle has to snap back.
+         * Turning a permission-gated tool on with no grant is the snap-back.
+         */
+        fun toolEnabledAfterUserToggle(
+            needsPermission: Boolean,
+            permissionGranted: Boolean,
+            enable: Boolean,
+        ): Boolean? = if (enable && needsPermission && !permissionGranted) null else enable
+
         private val FOLDER_GRANT_TOOLS = setOf(
             "delete_files",
             "list_gradation_files",
