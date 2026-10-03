@@ -6825,8 +6825,15 @@ $cleanContent
             val previews = heads.mapNotNull { row ->
                 val id = row.sessionId ?: return@mapNotNull null
                 val last = dao.getLastMessage(id)
-                val text = last?.let { RpChatSummaries.previewOf(it.content) }.orEmpty()
-                id to if (last?.role == "user" && text.isNotBlank()) getString(R.string.rp_home_you, text) else text
+                val text = last?.let {
+                    RpChatSummaries.rowLine(
+                        it.role,
+                        it.content,
+                        { line -> getString(R.string.rp_home_you, line) },
+                        getString(R.string.history_preview_photo),
+                    )
+                }.orEmpty()
+                id to text
             }.toMap()
             home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none, start, you))
             updateRpHome()

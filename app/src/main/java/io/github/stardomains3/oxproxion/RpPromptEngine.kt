@@ -436,14 +436,21 @@ object RpPromptEngine {
         }
     }
 
-    /** Parse the character-edit freeform example text (blocks separated by ---). */
+    /**
+     * Parse the character-edit freeform example text (blocks separated by ---).
+     * A blank line before User, a Windows line break, spaces around the dashes, or a
+     * fullwidth colon still count: those used to drop the User line or merge the next block.
+     */
     fun parseExamplesFromEdit(text: String): List<RpExampleDialog> {
         if (text.isBlank()) return emptyList()
-        return text.split("\n---\n").mapNotNull { block ->
-            val user = Regex("(?is)^User:\\s*(.*?)(?=\\nChar:|\\z)")
-                .find(block)?.groupValues?.get(1)?.trim().orEmpty()
-            val char = Regex("(?is)(?:^|\\n)Char:\\s*(.*)\\z")
-                .find(block)?.groupValues?.get(1)?.trim().orEmpty()
+        val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
+        return normalized.split(Regex("""\n[ \t]*---[ \t]*\n""")).mapNotNull { block ->
+            val body = block.trim()
+            if (body.isEmpty()) return@mapNotNull null
+            val user = Regex("(?is)^User[:：]\\s*(.*?)(?=\\nChar[:：]|\\z)")
+                .find(body)?.groupValues?.get(1)?.trim().orEmpty()
+            val char = Regex("(?is)(?:^|\\n)Char[:：]\\s*(.*)\\z")
+                .find(body)?.groupValues?.get(1)?.trim().orEmpty()
             if (user.isBlank() && char.isBlank()) null else RpExampleDialog(user, char)
         }
     }
