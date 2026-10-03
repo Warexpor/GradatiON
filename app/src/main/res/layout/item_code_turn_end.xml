@@ -10,20 +10,25 @@
     android:paddingTop="8dp"
     android:paddingBottom="16dp">
 
-    <!-- 9dp ring centred in the 20dp rail column -->
-    <View
-        android:id="@+id/codeRailNode"
-        android:layout_width="9dp"
-        android:layout_height="9dp"
-        android:layout_marginStart="5.5dp"
-        android:layout_marginEnd="15.5dp"
-        android:background="@drawable/bg_code_turn_cap"
-        android:importantForAccessibility="no" />
+    <!-- 9dp ring centred in the 20dp glyph frame (half-dp margins round off the grid) -->
+    <FrameLayout
+        android:layout_width="20dp"
+        android:layout_height="20dp">
+
+        <View
+            android:id="@+id/codeRailNode"
+            android:layout_width="9dp"
+            android:layout_height="9dp"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_code_turn_cap"
+            android:importantForAccessibility="no" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/codeTurnText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
         android:ellipsize="end"
         android:maxLines="2"
         style="@style/Widget.Gradation.Code.MonoLine"
