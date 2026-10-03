@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Hub Continue / Start chat pin the Roleplay tab after uncovering Code: setChatMode(RP) is async, so deactivate's onTabsChanged could briefly select Chat before Roleplay lands.
+- Pair activate: offer / offerError / clear / consume share one lock so interleaved QR and deep-link results cannot leave both pending and error set. consumeError drops a failure that a pairing already superseded.
+- Bottom-sheet glass: topOnly outlines stay empty below API 30 (no fake rounded-bottom elevation); clearDuplicateSheetGlass also drops a nested content GlassDrawable; History and model-options sheets glass before show so the first frame is not double-stacked.
 - Continue that fails after the first streamed chunk keeps swipe versions of that reply (alts used to clear on the first join, then a restored base left no way back). Success or Stop still drops them when the bubble grew.
 - Character portrait delete also removes `.bak` / `.partial` side files so a later open cannot resurrect a removed avatar; a removed persona portrait's side files go with it. Export and UI (picker, edit, panel, speaker header, persona card) treat a torn portrait as missing (same completeness rule as wallpaper).
 - Rewriting the latest reply (regen path) keeps the turn before it in lore focus, matching an earlier-reply Rewrite, so keys that live only on that beat still match after the reply is truncated out of the transcript.

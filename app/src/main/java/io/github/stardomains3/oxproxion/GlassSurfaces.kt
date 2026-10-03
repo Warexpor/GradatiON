@@ -287,14 +287,20 @@ class GlassDrawable() : Drawable() {
     override fun getOutline(outline: Outline) {
         // Bottom sheets only round the top; a full round-rect outline clipped the square
         // bottom corners' elevation. Prefer the real path when the platform accepts it.
-        if (topOnly && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            rebuild()
-            outline.setPath(path)
-        } else {
-            shapeRect(rect)
-            val r = radiusFor(rect)
-            outline.setRoundRect(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt(), r)
+        // Below API 30 there is no setPath: skip the shadow rather than fake rounded bottoms.
+        if (topOnly) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                rebuild()
+                outline.setPath(path)
+                outline.alpha = 1f
+            } else {
+                outline.setEmpty()
+            }
+            return
         }
+        shapeRect(rect)
+        val r = radiusFor(rect)
+        outline.setRoundRect(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt(), r)
         outline.alpha = 1f
     }
 
@@ -387,12 +393,20 @@ object GlassChrome {
     /**
      * Content XML still sets [R.drawable.bg_bottom_sheet] so inflate-before-glass looks right;
      * after the container is glassed, drop that duplicate so tint/outline are not stacked.
+     * Walks one wrapper deep when the direct child is a non-glass frame around the glassed root.
      */
     internal fun clearDuplicateSheetGlass(sheet: View) {
         val content = (sheet as? ViewGroup)?.let { parent ->
             if (parent.childCount == 1) parent.getChildAt(0) else null
         } ?: return
-        if (content.background is GlassDrawable) content.background = null
+        if (content.background is GlassDrawable) {
+            content.background = null
+            return
+        }
+        val nested = (content as? ViewGroup)?.let { wrap ->
+            if (wrap.childCount == 1) wrap.getChildAt(0) else null
+        } ?: return
+        if (nested.background is GlassDrawable) nested.background = null
     }
 
     fun decorateToolbars(root: View) {

@@ -396,8 +396,9 @@ class SavedChatsFragment : Fragment() {
             filterSessions(searchView.query?.toString().orEmpty())
         }
 
-        dialog.show()
+        // Glass before show: first frame must not stack content bg_bottom_sheet under the container.
         GlassChrome.glassDialog(dialog)
+        dialog.show()
     }
 
     private fun showRenameDialog(session: ChatSession) {
