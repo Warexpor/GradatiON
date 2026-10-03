@@ -158,6 +158,7 @@ object RpChatSummaries {
      * Markdown marks come off. An underscore, hash, tilde or angle that is part of the words
      * stays: stripping every `_` turned `snake_case` into `snakecase`, and stripping every
      * `#` `~` or `>` turned `C#` and `~/Downloads` into a different line.
+     * A letter is not only ASCII, so `déjà_vu` keeps its underscore too.
      * A heading, a blockquote and strikethrough still come off.
      */
     private fun foldMarkdown(text: String): String =
@@ -180,7 +181,7 @@ object RpChatSummaries {
     private val MD_QUOTE = Regex("(?m)^>+[ \\t]*")
     private val MD_STRIKE = Regex("~~")
     private val MD_BACKTICK = Regex("`+")
-    private val MD_EDGE_UNDERSCORE = Regex("(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])")
+    private val MD_EDGE_UNDERSCORE = Regex("(?<![\\p{L}\\p{N}])_|_(?![\\p{L}\\p{N}])")
     private val WHITESPACE = Regex("\\s+")
 
     private const val TAGLINE_LIMIT = 140

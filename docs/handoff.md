@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, RP wave 34)
+
+On `cursor/rp-wave-34-9771` (PR into `gradation/app-pass`). Roleplay list lines, example stand-ins, and card example markers. Rebased onto `ccf85cce` (Settings #163). Not a redo of #163 (a trailing dot on an IPv4 local server saves, and a link-local zone id or an IPv4-mapped address with a leading zero is refused). Not a redo of #156 (card `<START>` exchanges, `{{bot}}`, `{{random_user_N}}` in an example), #148 (example sides with a space before the colon, the character speaking first, `Keys`/`KEYS` headers, Windows line endings, list marks `#` `~` `>`), or #142 (list underscores, the User side after a leading blank line, lore keys in `()` `（）` `【】`).
+
+- A character-list line keeps an underscore between letters that are not ASCII. `déjà_vu` and `карта_реки` used to lose it. `snake_case` still keeps its underscore, and `_заметка_` still drops the emphasis marks.
+- An example's sample speaker is not the character. A card named Jordan with you as Alex used to print Jordan on both sides. `{{random_user_1}}` in that sample is Riley, and it is still not you.
+- A `<START>` or `END_OF_DIALOG` line at the end of the example text is not stored as the reply. `END_OF_DIALOG` between two exchanges starts the second one. `Bot:` is the character side. A `<START>` inside a sentence stays in the reply.
+
+Phone: on the character list, a first line of `déjà_vu` should still show the underscore. Save example dialogs that end on `<START>` or `END_OF_DIALOG` (the marker should not be in the reply; a second exchange after `END_OF_DIALOG` should be its own example). A card named Jordan, with your name Alex, should not use Jordan as the sample speaker.
+
 # Handoff (2026-10-03, Settings wave 34)
 
 On `cursor/settings-wave-34-9e0e` (PR into `gradation/app-pass`). Settings follow-ups after an IPv6 local server with `@` or a space in the password, and Get location asking for precise and approximate together (#158). Not a redo of that pass. Not a redo of a hostname with `_` or a password containing `@`, the Models row hiding that password, port 0 and above 65535, a query or fragment swallowing `/v1`, or approximate location counting as granted (#149). Not a redo of an enabled tool turning off without the grant, cleartext to CGNAT 100.64/10 and IPv6 link-local or unique-local, or the Models row hiding userinfo when the host parsed (#140).
