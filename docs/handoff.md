@@ -1,3 +1,12 @@
+# Handoff (2026-10-02, Chat wave 28)
+
+On `gradation/w28-chat` (PR into `gradation/app-pass`). Chat/History follow-ups after w27 discard/promote (#110):
+- First save / promote of an unsaved Chat whose caption was parked (Code, or a rebuild that left the field empty) moves that prefs entry onto the new id (`ComposerDrafts.promote`); blank-live rekey no longer drops the line. A blank field the user just edited (cleared) drops it instead.
+- The Ask mode snapshot mirrors that moved caption, not the empty field. Chat puts it back on a blank unedited composer. Leaving Code (tab or Settings disabling Code) does the same, and does not replace a line still being edited.
+- History search still finds that caption (and "hello photo" across caption+Photo) after the promote. A long draft row clips the gap to one line and keeps both ends bold.
+
+Phone: type a caption + stage a photo on a new Chat, open Code, wait for first save to mint an id (or rotate under Code so the field is empty at promote), leave Code (caption and chip return). Clear the caption before that save and it stays gone. History search "hello photo" still finds the row; a very long caption still shows both words on one line.
+
 # Handoff (2026-10-02, Code wave 28)
 
 On `gradation/w28-code` (PR into `gradation/app-pass`). Code-mode fixes, unit-tested (`CodeProtocolTest`, `GitBridgeJsonTest`, `ListSessionsJsonTest`):

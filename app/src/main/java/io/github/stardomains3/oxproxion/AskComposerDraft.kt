@@ -41,6 +41,37 @@ object AskComposerDraft {
         dirty || text.isNotEmpty()
 
     /**
+     * A blank field the user just edited is a clear: first save must drop the parked
+     * caption, not copy it onto the new id. A blank field they did not edit (Code, or a
+     * rebuild) still falls back to that caption.
+     */
+    fun blankLiveDropsParkedCaption(live: String, dirty: Boolean): Boolean =
+        dirty && live.isBlank()
+
+    /**
+     * Ask's mode snapshot after promote. Blank live must not replace the caption
+     * [ComposerDrafts.promote] just moved; a later mode re-emit would paint "".
+     */
+    fun snapshotAfterPromote(live: String, recovered: String): String =
+        if (live.isBlank()) recovered else live
+
+    /**
+     * Put [recovered] on the composer. Code is covering the field until leave; a dirty
+     * field is an edit (including a clear). Only a blank, unedited Chat field takes it.
+     * Text the view already restored is left alone.
+     */
+    fun revealPromotedCaption(
+        live: String,
+        dirty: Boolean,
+        recovered: String,
+        codeCovering: Boolean,
+    ): Boolean {
+        if (codeCovering || dirty) return false
+        if (recovered.isBlank()) return false
+        return live.isBlank()
+    }
+
+    /**
      * A relaunch drops Ask's mode snapshot. That string is one line for every chat, and the
      * per-thread draft is what comes back. Roleplay's unsent line lives only in its mode draft,
      * so a relaunch keeps it.

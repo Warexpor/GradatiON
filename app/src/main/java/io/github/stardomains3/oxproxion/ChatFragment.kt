@@ -1411,9 +1411,15 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     private fun promoteAskDraft(sessionId: Long?) {
         val text = chatEditText.text?.toString().orEmpty()
-        sharedPreferencesHelper.saveAskComposerDrafts(
-            ComposerDrafts.rekey(sharedPreferencesHelper.getAskComposerDrafts(), from = null, to = sessionId, text = text)
-        )
+        val before = sharedPreferencesHelper.getAskComposerDrafts()
+        // Empty field under Code / after rebuild must not rekey-away a caption already parked under null.
+        // A blank field the user just cleared is different: that edit drops the caption.
+        val promoted = if (AskComposerDraft.blankLiveDropsParkedCaption(text, askComposerDirty)) {
+            ComposerDrafts.rekey(before, from = null, to = sessionId, text = "")
+        } else {
+            ComposerDrafts.promote(before, from = null, to = sessionId, live = text)
+        }
+        sharedPreferencesHelper.saveAskComposerDrafts(promoted)
         askStageSessionId = sessionId
         val beforePromote = viewModel.stagedAttachments()
         // Empty live under Code must not rekey-away a chip already parked under null.
@@ -1422,7 +1428,30 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         for (gone in ComposerStaged.evicted(beforePromote, afterPromote)) {
             discardParkedScene(gone)
         }
-        mirrorAskModeDraft(text)
+        val recovered = ComposerDrafts.text(promoted, sessionId)
+        mirrorAskModeDraft(AskComposerDraft.snapshotAfterPromote(text, recovered))
+        if (AskComposerDraft.revealPromotedCaption(
+                live = text,
+                dirty = askComposerDirty,
+                recovered = recovered,
+                codeCovering = ::codeMode.isInitialized && codeMode.isActive,
+            )
+        ) {
+            applyAskDraft(sessionId)
+        }
+    }
+
+    /**
+     * Code (or a rebuild under it) can leave the composer empty while prefs hold the
+     * caption. Fill a blank unedited field; do not replace a line still being edited.
+     */
+    private fun restoreAskCaptionIfBlank(sessionId: Long?) {
+        if (!::chatEditText.isInitialized) return
+        val live = chatEditText.text?.toString().orEmpty()
+        val stored = ComposerDrafts.text(sharedPreferencesHelper.getAskComposerDrafts(), sessionId)
+        if (AskComposerDraft.revealPromotedCaption(live, askComposerDirty, stored, codeCovering = false)) {
+            applyAskDraft(sessionId)
+        }
     }
 
     /** Leave the previous thread's text and staged attachments parked, and show this thread's. */
@@ -4903,6 +4932,7 @@ $cleanContent
                     else viewModel.getCurrentSessionId()
                 // Activate may have skipped park (away/pair); keep a live chip before apply clears it.
                 softParkLiveStaged(id)
+                restoreAskCaptionIfBlank(id)
                 applyStagedAttachment(id)
             }
         }
@@ -5103,6 +5133,8 @@ $cleanContent
                 else viewModel.getCurrentSessionId()
             // Safety net when activate skipped park: keep a live chip before apply clears it.
             softParkLiveStaged(id)
+            // Promote / rebuild under Code can leave the field empty while prefs hold the caption.
+            restoreAskCaptionIfBlank(id)
             applyStagedAttachment(id)
         }
     }

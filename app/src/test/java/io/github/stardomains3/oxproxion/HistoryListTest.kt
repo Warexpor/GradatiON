@@ -431,6 +431,10 @@ class HistoryListTest {
         val hit = HistoryList.emphasis(row, "hello photo")
         assertTrue(hit != null)
         assertTrue(hit!!.length >= "hello photo".length)
+        // The gap is the whole caption. The row stays one line (not the full draft)
+        // and still has both ends for the bold span.
+        assertTrue(row.length < 200)
+        assertTrue(row.contains("…"))
     }
 
     @Test fun draft_row_shows_audio_when_search_needs_parked_label() {
@@ -514,5 +518,25 @@ class HistoryListTest {
             HistoryList.draftSearchText(prefs["$id"].orEmpty(), label)
         }
         assertTrue(HistoryList.draftMatchIds(after, "photo").isEmpty())
+    }
+
+    @Test fun promote_blank_live_keeps_caption_in_history_search() {
+        // First save under Code with an empty field must still move the parked caption onto
+        // the new id so History search finds those words (and not only a staged Photo).
+        val parked = ComposerDrafts.remember(emptyMap(), null, "hello there")
+        val promoted = ComposerDrafts.promote(parked, from = null, to = 8L, live = "")
+        val all = listOf(session(8, now, "notes"))
+        val drafts = HistoryList.draftTextsForSearch(all, promoted) { id ->
+            HistoryList.draftSearchText(ComposerDrafts.text(promoted, id), "Photo")
+        }
+        assertEquals(setOf(8L), HistoryList.draftMatchIds(drafts, "hello photo"))
+        assertTrue(HistoryList.draftMatchIds(drafts, "hello photo").isNotEmpty())
+        val wiped = ComposerDrafts.rekey(parked, from = null, to = 8L, text = "")
+        val lost = HistoryList.draftTextsForSearch(all, wiped) { id ->
+            HistoryList.draftSearchText(ComposerDrafts.text(wiped, id), "Photo")
+        }
+        // rekey blank drops the caption; only Photo remains — "hello photo" word-order fails.
+        assertTrue(HistoryList.draftMatchIds(lost, "hello photo").isEmpty())
+        assertEquals(setOf(8L), HistoryList.draftMatchIds(lost, "photo"))
     }
 }
