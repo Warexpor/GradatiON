@@ -163,6 +163,30 @@ class AvatarAndPersonaTest {
         assertNotNull(voice.findViewById<View>(R.id.rpVoicePitch))
     }
 
+    /** A kill after the side files are gone must not be able to put the portrait back. */
+    @Test fun aKilledAvatarDeleteDropsTheSideFileFirst() {
+        val id = 81L
+        val file = RpAvatarStorage.avatarFile(ctx, id)
+        file.parentFile?.mkdirs()
+        val live = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x01, 0xFF.toByte(), 0xD9.toByte())
+        val side = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x02, 0xFF.toByte(), 0xD9.toByte())
+        file.writeBytes(live)
+        val partial = File(file.parentFile, "${file.name}.partial")
+        partial.writeBytes(side)
+        partial.setLastModified(file.lastModified() + 5_000)
+        ScenePhoto.stopAfterSidesForTest = true
+        try {
+            RpAvatarStorage.deleteAvatar(ctx, id)
+            assertFalse(partial.exists())
+            assertTrue(live.contentEquals(file.readBytes()))
+            assertTrue(RpAvatarStorage.hasAvatar(ctx, id))
+            assertTrue(live.contentEquals(file.readBytes()))
+        } finally {
+            ScenePhoto.stopAfterSidesForTest = false
+            RpAvatarStorage.deleteAvatar(ctx, id)
+        }
+    }
+
     /** Delete must drop .bak / .partial too: recover would otherwise put a removed portrait back. */
     @Test fun deleteAvatarClearsSideFilesSoTheyCannotResurrect() {
         val id = 77L

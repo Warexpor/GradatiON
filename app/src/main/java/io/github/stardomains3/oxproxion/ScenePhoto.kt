@@ -477,6 +477,33 @@ object ScenePhoto {
         return dropped.filter { it !in heldForEdit && it != pending && it !in shownNames }
     }
 
+    /**
+     * Test hook. [deleteWithSides] returns after the side files are gone and before the
+     * live file is removed, as a kill in that window would. Cleared when it fires.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var stopAfterSidesForTest: Boolean = false
+
+    /**
+     * Drops `.partial` and `.bak` before the live file.
+     * Removing the live name first used to leave a side file, and the next open put that
+     * picture back on the portrait or wallpaper.
+     * Returns false when a test stops after the side files.
+     */
+    internal fun deleteWithSides(destination: File): Boolean {
+        val parent = destination.parentFile
+        if (parent != null) {
+            File(parent, "${destination.name}.partial").delete()
+            File(parent, "${destination.name}.bak").delete()
+        }
+        if (stopAfterSidesForTest) {
+            stopAfterSidesForTest = false
+            return false
+        }
+        destination.delete()
+        return true
+    }
+
     /** Deletes scene photos we own. A name that is not one of ours is ignored. */
     fun deleteSceneFiles(context: Context, names: Collection<String>) {
         if (names.isEmpty()) return

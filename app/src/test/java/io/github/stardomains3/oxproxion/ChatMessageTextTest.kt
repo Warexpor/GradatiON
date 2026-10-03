@@ -72,6 +72,29 @@ class ChatMessageTextTest {
     }
 
     @Test
+    fun aSliceStepThatDoesNotFitTheIndexDoesNotRereadTheTail() = runBlocking {
+        ChatMessageText.safeCharsForTest = 1
+        ChatMessageText.sliceCharsForTest = Int.MAX_VALUE
+        var calls = 0
+        try {
+            val text = ChatMessageText.read(
+                sqliteLength = 4,
+                full = { error("full read") },
+                slice = { start, len ->
+                    calls += 1
+                    if (calls > 2 || start < 1) error("step walked off the message at $start")
+                    "wxyz".take(len.coerceAtLeast(0))
+                },
+            )
+            assertEquals("wxyz", text)
+            assertEquals(1, calls)
+        } finally {
+            ChatMessageText.safeCharsForTest = null
+            ChatMessageText.sliceCharsForTest = null
+        }
+    }
+
+    @Test
     fun aLongSliceDoesNotRepeatTheOverlap() = runBlocking {
         ChatMessageText.safeCharsForTest = 1
         ChatMessageText.sliceCharsForTest = 2

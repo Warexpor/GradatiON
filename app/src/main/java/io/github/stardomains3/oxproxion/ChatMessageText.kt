@@ -56,7 +56,13 @@ internal object ChatMessageText {
                     part.substring(0, part.offsetByCodePoints(0, expected))
                 }
                 append(piece)
-                start += sliceLen
+                // The next start is a character index. Adding the step in an Int wraps
+                // when the message is long enough, or the step itself does not fit, and
+                // a negative index makes SQLite substr read from the end. The tail was
+                // appended again, and the read did not stop.
+                val next = start.toLong() + sliceLen.toLong()
+                if (next > length.toLong()) break
+                start = next.toInt()
             }
         }
     }
