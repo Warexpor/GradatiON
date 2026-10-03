@@ -368,9 +368,12 @@ class RpHubFragment : Fragment() {
                 RpAvatars.bind(avatar, monogram, active)
                 label.visibility = View.VISIBLE
                 name.text = active.name
-                tagline.text = listOf(active.personality, active.scenario, active.greeting)
-                    .firstOrNull { it.isNotBlank() }.orEmpty()
-                    .replace(Regex("[*_#>`]"), "").replace(Regex("\\s+"), " ").trim()
+                // Same first line as the character list. Folding the whole field here left
+                // {{char}} in place and turned snake_case and C# into other words.
+                tagline.text = RpChatSummaries.tagline(
+                    active,
+                    prefs.activeRpPersonaName().ifBlank { getString(R.string.rp_you) },
+                )
                 tagline.visibility = if (tagline.text.isNullOrBlank()) View.GONE else View.VISIBLE
                 action.setText(R.string.rp_ui_continue)
                 action.setOnClickListener { continueChat() }

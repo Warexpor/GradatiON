@@ -36,6 +36,8 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- The Roleplay hub hero uses the same first line as the character list. It was folding the whole card field, so `{{char}}` stayed as a placeholder and a later paragraph showed under the name.
+- A pairing link whose bridge address is written with its own query keeps that query's key case and percent-encoding. `Session` and `hello%20world` used to be stored as `session` and a space, so the saved address was not the one in the QR. A fully encoded address is still decoded once.
 - Roleplay example dialogs keep both sides when the label has a space before the colon (`User : hi`) or the character speaks first. A `User:` line inside the reply stays on the character side.
 - A lore header written as `Keys` or `KEYS`, or saved with a Windows line ending, still splits. Those blocks used to stay in the prompt even when the chat never mentioned the key.
 - The Roleplay character list, a character's History, and the library card keep a `#`, `~` or `>` that is part of the words (`C#`, `~/Downloads`, `a > b`). A heading, a blockquote and strikethrough still come off. A first line that is only markdown marks no longer hides the sentence under it.
