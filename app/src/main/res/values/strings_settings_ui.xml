@@ -8,7 +8,7 @@
     <string name="lan_error_url_host">The URL needs a host name or address</string>
     <string name="lan_error_url_port">The port has to be from 1 to 65535</string>
     <string name="lan_error_url_http_public">HTTP only works for localhost, private addresses (10.x, 172.16–31.x, 192.168.x), link-local addresses and .local names. Use HTTPS for other hosts.</string>
-    <string name="lan_error_pick_server">Pick a server type</string>
+    <string name="lan_error_pick_server">Pick a provider</string>
     <string name="lan_error_key_encrypt">Couldn\'t save the API key (encryption error), so nothing was saved</string>
 
     <!-- Other settings dialogs -->
