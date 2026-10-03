@@ -147,9 +147,7 @@ class RpHubFragment : Fragment() {
             try {
                 withContext(Dispatchers.IO) {
                     val books = chatViewModel.getRpRepository().getAllLorebooksOnce()
-                    val exports = books.map { b ->
-                        RpLorebookExport(name = b.name, content = b.content, isActive = b.isActive)
-                    }
+                    val exports = RpLoreBackup.exports(books)
                     val cache = File(app.cacheDir, "rp-lore-${System.nanoTime()}.json")
                     BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri, "wt") }) { stream ->
                         stream.writer(Charsets.UTF_8).buffered().use {

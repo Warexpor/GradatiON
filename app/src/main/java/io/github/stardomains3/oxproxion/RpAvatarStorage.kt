@@ -30,14 +30,32 @@ object RpAvatarStorage {
         }
     }
 
-    fun saveFromBase64(context: Context, base64: String, characterId: Long): String? {
-        return try {
-            val bytes = Base64.decode(base64, Base64.DEFAULT)
-            val bitmap = decodeSampled(bytes) ?: return null
-            writeJpeg(bitmap, characterId, context)
-        } catch (_: Exception) {
-            null
+    fun saveFromBase64(context: Context, base64: String, characterId: Long): String? =
+        (saveFromBase64Result(context, base64, characterId) as? SaveResult.Saved)?.uri
+
+    /**
+     * [SaveResult.NotAPicture] is not retried: the phone keeps the portrait it has.
+     * [SaveResult.Failed] means the new JPEG did not land, so the import tries again.
+     */
+    internal fun saveFromBase64Result(context: Context, base64: String, characterId: Long): SaveResult {
+        val bytes = try {
+            Base64.decode(base64, Base64.DEFAULT)
+        } catch (_: IllegalArgumentException) {
+            return SaveResult.NotAPicture
         }
+        return try {
+            val bitmap = decodeSampled(bytes) ?: return SaveResult.NotAPicture
+            val uri = writeJpeg(bitmap, characterId, context) ?: return SaveResult.Failed
+            SaveResult.Saved(uri)
+        } catch (_: Exception) {
+            SaveResult.Failed
+        }
+    }
+
+    internal sealed class SaveResult {
+        data class Saved(val uri: String) : SaveResult()
+        data object NotAPicture : SaveResult()
+        data object Failed : SaveResult()
     }
 
     /** Decode a packaged drawable/raw resource and write the usual JPEG avatar. */
