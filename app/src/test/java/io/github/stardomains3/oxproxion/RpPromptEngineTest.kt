@@ -98,6 +98,40 @@ class RpPromptEngineTest {
     }
 
     @Test
+    fun expandMacros_replacesBotPlaceholder() {
+        val out = RpPromptEngine.expandMacros(
+            "{{bot}} nods. {{ bot }} waits. <bot> sees {{user}}.",
+            "Mira",
+            "Alex"
+        )
+        org.junit.Assert.assertEquals("Mira nods. Mira waits. Mira sees Alex.", out)
+        org.junit.Assert.assertEquals(
+            "Mira owes Alex.",
+            RpPromptEngine.expandKnownMacros("{{bot}} owes {{user}}.", "Mira", "Alex")
+        )
+        org.junit.Assert.assertEquals(
+            "{{bot}} owes Alex.",
+            RpPromptEngine.expandKnownMacros("{{bot}} owes {{user}}.", "", "Alex")
+        )
+    }
+
+    @Test
+    fun exampleRandomUserIsNotThePersonInThisChat() {
+        val alex = RpPromptEngine.expandExampleMacros(
+            "{{random_user_1}} meets {{user}}. {{random_user_2}} watches.",
+            "Mira",
+            "Alex"
+        )
+        org.junit.Assert.assertEquals("Jordan meets Jordan. Riley watches.", alex)
+        val jordan = RpPromptEngine.expandExampleMacros("{{random_user_1}} waves", "Mira", "Jordan")
+        org.junit.Assert.assertEquals("Alex waves", jordan)
+        org.junit.Assert.assertEquals(
+            "Jordan",
+            RpPromptEngine.expandMacros("{{random_user_1}}", "Mira", "Alex")
+        )
+    }
+
+    @Test
     fun expandMacros_keepsADollarOrSlashInTheName() {
         val out = RpPromptEngine.expandMacros("{{char}} owes {{user}}.", "Sam\$1", "Mo\\e")
         org.junit.Assert.assertEquals("Sam\$1 owes Mo\\e.", out)
@@ -150,6 +184,23 @@ class RpPromptEngineTest {
         assertTrue(prompt.contains("Mira: Mira waves back at Riley"))
         assertFalse(prompt.contains("Alex: Jordan"))
         assertFalse(prompt.contains("Alex waves"))
+    }
+
+    @Test
+    fun exampleRandomUserInThePromptIsNotThisUser() {
+        val char = RpCharacter(
+            id = 1, name = "Mira",
+            examplesJson = """[{"user":"{{random_user_1}} waves","char":"{{bot}} nods"}]"""
+        )
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = char, persona = "A pilot", lore = "", instruction = "",
+            thirdPerson = false, showThoughts = false, isLlm = false,
+            userName = "Jordan"
+        )
+        assertTrue(prompt.contains("\n  Alex: Alex waves"))
+        assertTrue(prompt.contains("\n  Mira: Mira nods"))
+        assertFalse(prompt.contains("Jordan waves"))
+        assertFalse(prompt.contains("{{"))
     }
 
     @Test

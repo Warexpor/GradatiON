@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, RP wave 33)
+
+On `cursor/rp-wave-33-af37` (PR into `gradation/app-pass`). Roleplay card parsing, lore keys, example dialogs, and prompts. Rebased onto `75503c7` (Hub #155, which includes Code #157). Not a redo of #148 (example sides with a space before the colon, the character speaking first, `Keys`/`KEYS` headers, Windows line endings, list marks `#` `~` `>`) or #142 (list underscores, the User side after a leading blank line, lore keys in `()` `（）` `【】`). Not a redo of #155 or #157. Not a redo of #139–#154.
+
+- Example dialogs pasted from a card keep every exchange. A `<START>` line between them used to be stored as part of the first reply. `{{user}}`, `{{char}}`, `{{bot}}`, and `<USER>` / `<BOT>` are sides. A `<START>` inside a sentence stays in the reply. A later label still stays on the side that is already open.
+- `{{bot}}` is the character's name in the prompt, the greeting, and a lore key. A blank character name still leaves the token in place, so the key is not wiped.
+- `{{random_user_N}}` in an example is not the person in this chat. It used to avoid the stand-in instead of that person, so Alex and Jordan swapped into the sample.
+
+Phone: paste example dialogs that use `<START>` and `{{user}}:` / `{{char}}:` and save (both exchanges should be there, and the prompt should not use your name for `{{random_user_1}}` when you are Alex or Jordan). A greeting written `{{bot}} smiles` should show the character's name. A lore key `{{bot}}` should stay out of the prompt until the chat says that name.
+
 # Handoff (2026-10-03, Hub/Pair wave 33)
 
 On `cursor/hub-wave33-fc72` (PR into `gradation/app-pass`). Hub shell and pairing follow-ups after the hub hero line and pairing query text (#147), rebased onto Code #157. Not a redo of that pass. Not a redo of character-list buttons following whether the list is the screen, a pairing link keeping `#` and query keys named token/auth/ws/fp, or a fingerprint with spaces (#141). Not a redo of example sides, lore headers, or list marks (#148). Not a redo of the config-option mode pill or Playwright browser lines (#157). Not a redo of #139–#154.

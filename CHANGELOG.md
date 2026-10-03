@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Roleplay example dialogs pasted from a card keep every exchange. A `<START>` line between them used to be saved as part of the first reply, so the later lines never became their own example. `{{user}}`, `{{char}}`, `{{bot}}`, and the older `<USER>` / `<BOT>` tags are read as the two sides.
+- `{{bot}}` is the character's name in the prompt, the greeting, and a lore key, the same as `{{char}}` and `<BOT>`. It used to be left as the raw token, so a key written that way never matched.
+- An example line's `{{random_user_N}}` is someone else in that sample, not the person in this chat. When your name was Alex or Jordan, `{{random_user_1}}` used to come out as you.
 - The Roleplay hub and the character list skip a first line that is only a divider (`---`, `===`, spaced dashes, or hashes with no heading text). That line used to be the description, so the sentence under it never showed. A long first line no longer ends on half an emoji. `C#` on its own line still shows.
 - A fully encoded pairing address decodes a form space. `URLEncoder` writes a space as `+`, and that used to be saved as a plus, so the bridge address was not the one that was encoded. A plus in the token itself stays a plus. A `#note` after a bridge address that already contains `#` is dropped; it used to stick to the token or the fingerprint.
 - Code: `session/new` and `session/load` take the approval mode from the `configOptions` mode select when that is how the agent reports it, and a later `config_option_update` moves the pill the same way. A model row is not a mode. An id this phone does not show still does not fall back to the mode just requested.
