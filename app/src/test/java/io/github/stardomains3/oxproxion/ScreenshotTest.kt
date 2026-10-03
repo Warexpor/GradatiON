@@ -721,6 +721,19 @@ class ScreenshotTest : ScreenshotHarness() {
         prefs.savePresets(emptyList())
     }
 
+    /** Messages that send you to Settings name the page by the title its row and toolbar show. */
+    @Test fun settingsPointersNameRealSections() = withChat { a, _ ->
+        val models = "Settings > " + a.getString(R.string.settings_section_models)
+        val voice = "Settings > " + a.getString(R.string.settings_section_voice)
+        for (id in listOf(R.string.notice_need_key, R.string.notice_need_lan,
+                R.string.voice_need_openrouter_key, R.string.voice_need_lan_endpoint)) {
+            org.junit.Assert.assertTrue(a.getString(id), a.getString(id).contains(models))
+        }
+        for (id in listOf(R.string.voice_need_model, R.string.voice_need_xai_key, R.string.voice_unavailable)) {
+            org.junit.Assert.assertTrue(a.getString(id), a.getString(id).contains(voice))
+        }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
