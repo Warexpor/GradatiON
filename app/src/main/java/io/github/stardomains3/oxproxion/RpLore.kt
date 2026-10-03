@@ -21,8 +21,12 @@ object RpLore {
     private const val NOTES_CHARS = 800
     /** The reply a rewrite is changing, so its keys still match after the chat has moved on. */
     private const val FOCUS_CHARS = 1_500
-    /** ASCII or fullwidth brackets and colon, so a header typed either way still splits. */
-    private val header = Regex("""(?m)^[ \t]*[\[［][ \t]*keys[ \t]*[:：][ \t]*(.*?)[ \t]*[\]］][ \t]*$""")
+    /**
+     * ASCII or fullwidth brackets and colon, in any case. `Keys` is the same header as
+     * `keys`; a capital used to leave the block always on. Line endings are normalized
+     * before this runs, so a Windows break does not glue the header to the next line.
+     */
+    private val header = Regex("""(?im)^[ \t]*[\[［][ \t]*keys[ \t]*[:：][ \t]*(.*?)[ \t]*[\]］][ \t]*$""")
     private val keySplit = Regex("[,;、，|；｜]")
     private val wrappingQuotes = setOf('"', '\'', '“', '”', '‘', '’', '「', '」', '『', '』', '«', '»', '‹', '›', '„', '‚', '《', '》', '〈', '〉', '｢', '｣', '〝', '〞', '〟', '❝', '❞', '❛', '❜', '﹁', '﹂', '﹃', '﹄', '〔', '〕', '〖', '〗', '＂', '＇', '❮', '❯', '｟', '｠', '〘', '〙', '⟨', '⟩', '❰', '❱', '〚', '〛', '⟪', '⟫', '⟬', '⟭', '⟦', '⟧', '⦃', '⦄', '❨', '❩', '❪', '❫', '❬', '❭', '❲', '❳', '❴', '❵', '⦅', '⦆', '⦗', '⦘', '⦇', '⦈', '⦉', '⦊', '⧼', '⧽', '(', ')', '（', '）', '【', '】')
 
@@ -31,20 +35,21 @@ object RpLore {
     }
 
     fun parse(content: String): List<Entry> {
-        if (content.isBlank()) return emptyList()
-        val marks = header.findAll(content).toList()
+        val normalized = content.replace("\r\n", "\n").replace('\r', '\n')
+        if (normalized.isBlank()) return emptyList()
+        val marks = header.findAll(normalized).toList()
         if (marks.isEmpty()) {
-            val text = content.trim()
+            val text = normalized.trim()
             return if (text.isEmpty()) emptyList() else listOf(Entry(emptyList(), text))
         }
         val out = ArrayList<Entry>()
-        val head = content.substring(0, marks.first().range.first).trim()
+        val head = normalized.substring(0, marks.first().range.first).trim()
         if (head.isNotEmpty()) out += Entry(emptyList(), head)
         marks.forEachIndexed { i, mark ->
             val keys = mark.groupValues[1].split(keySplit).map(::cleanKey).filter { it.isNotEmpty() }
             val start = mark.range.last + 1
-            val end = marks.getOrNull(i + 1)?.range?.first ?: content.length
-            val text = content.substring(start, end).trim()
+            val end = marks.getOrNull(i + 1)?.range?.first ?: normalized.length
+            val text = normalized.substring(start, end).trim()
             if (text.isNotEmpty()) out += Entry(keys, text)
         }
         return out

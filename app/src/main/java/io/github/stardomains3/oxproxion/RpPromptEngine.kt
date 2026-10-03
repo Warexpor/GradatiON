@@ -438,20 +438,39 @@ object RpPromptEngine {
 
     /**
      * Parse the character-edit freeform example text (blocks separated by ---).
-     * A blank line before User, a Windows line break, spaces around the dashes, or a
-     * fullwidth colon still count: those used to drop the User line or merge the next block.
+     * A blank line before the label, a Windows line break, spaces around the dashes, a
+     * space before the colon, or a fullwidth colon still count. The character may speak
+     * first: that used to swallow the User line into the reply. A later line that only
+     * looks like a label stays in the side that is already open, so a reply can quote one.
      */
     fun parseExamplesFromEdit(text: String): List<RpExampleDialog> {
         if (text.isBlank()) return emptyList()
         val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
+        val label = Regex("""(?i)^[ \t]*(user|char)[ \t]*[:：][ \t]*(.*)$""")
         return normalized.split(Regex("""\n[ \t]*---[ \t]*\n""")).mapNotNull { block ->
-            val body = block.trim()
-            if (body.isEmpty()) return@mapNotNull null
-            val user = Regex("(?is)^User[:：]\\s*(.*?)(?=\\nChar[:：]|\\z)")
-                .find(body)?.groupValues?.get(1)?.trim().orEmpty()
-            val char = Regex("(?is)(?:^|\\n)Char[:：]\\s*(.*)\\z")
-                .find(body)?.groupValues?.get(1)?.trim().orEmpty()
-            if (user.isBlank() && char.isBlank()) null else RpExampleDialog(user, char)
+            val user = StringBuilder()
+            val char = StringBuilder()
+            var side: StringBuilder? = null
+            var seenUser = false
+            var seenChar = false
+            for (line in block.split('\n')) {
+                val match = label.matchEntire(line)
+                val kind = match?.groupValues?.get(1)
+                val openingUser = kind != null && kind.equals("user", ignoreCase = true) && !seenUser
+                val openingChar = kind != null && kind.equals("char", ignoreCase = true) && !seenChar
+                if ((openingUser || openingChar) && match != null) {
+                    if (openingUser) seenUser = true else seenChar = true
+                    side = if (openingUser) user else char
+                    side.append(match.groupValues[2])
+                } else if (side != null) {
+                    side.append('\n')
+                    side.append(line)
+                }
+            }
+            if (!seenUser && !seenChar) return@mapNotNull null
+            val userText = user.toString().trim()
+            val charText = char.toString().trim()
+            if (userText.isEmpty() && charText.isEmpty()) null else RpExampleDialog(userText, charText)
         }
     }
 

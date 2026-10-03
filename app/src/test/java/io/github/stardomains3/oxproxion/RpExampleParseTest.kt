@@ -98,6 +98,30 @@ class RpExampleParseTest {
     }
 
     @Test
+    fun aSpaceBeforeTheColonStillLabelsTheSides() {
+        val examples = RpPromptEngine.parseExamplesFromEdit("User : hi\nChar : hello")
+        assertEquals(1, examples.size)
+        assertEquals("hi", examples[0].user)
+        assertEquals("hello", examples[0].char)
+        val wide = RpPromptEngine.parseExamplesFromEdit("User ： hi\n  Char ： hello")
+        assertEquals("hi", wide[0].user)
+        assertEquals("hello", wide[0].char)
+    }
+
+    @Test
+    fun characterFirstStillKeepsTheUserSide() {
+        val examples = RpPromptEngine.parseExamplesFromEdit("Char: hello\nUser: hi")
+        assertEquals(1, examples.size)
+        assertEquals("hi", examples[0].user)
+        assertEquals("hello", examples[0].char)
+        val quoted = RpPromptEngine.parseExamplesFromEdit(
+            "User: hi\nChar: the note said\nUser: come back"
+        )
+        assertEquals("hi", quoted[0].user)
+        assertEquals("the note said\nUser: come back", quoted[0].char)
+    }
+
+    @Test
     fun roundTripFormatAndParse() {
         val json = """[{"user":"a","char":"b"},{"user":"c","char":"d"}]"""
         val formatted = RpPromptEngine.formatExamplesForEdit(json)
