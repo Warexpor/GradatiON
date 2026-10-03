@@ -31,6 +31,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/biometricsSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -68,6 +69,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/notificationsSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -106,6 +108,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/copyOrdismissSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -143,6 +146,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/copyOropenSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -180,6 +184,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/keepScreenOnSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -217,6 +222,7 @@
                 android:layout_marginEnd="16dp" />
 
             <TextView
+                android:labelFor="@id/allowDestructiveToolsSwitch"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
