@@ -180,6 +180,44 @@ class RpExampleParseTest {
     }
 
     @Test
+    fun aBracketedEndOfDialogIsNotTheReply() {
+        val ended = RpPromptEngine.parseExamplesFromEdit(
+            "{{user}}: hi\n{{char}}: hello\n<END_OF_DIALOG>\n{{user}}: bye\n{{char}}: later"
+        )
+        assertEquals(2, ended.size)
+        assertEquals("hi", ended[0].user)
+        assertEquals("hello", ended[0].char)
+        assertEquals("bye", ended[1].user)
+        assertEquals("later", ended[1].char)
+        val trailing = RpPromptEngine.parseExamplesFromEdit("User: hi\nChar: hello\n<END_OF_DIALOG>")
+        assertEquals(1, trailing.size)
+        assertEquals("hello", trailing[0].char)
+        val inside = RpPromptEngine.parseExamplesFromEdit(
+            "User: hi\nChar: the note said <END_OF_DIALOG> come back"
+        )
+        assertEquals(1, inside.size)
+        assertEquals("the note said <END_OF_DIALOG> come back", inside[0].char)
+    }
+
+    @Test
+    fun aUnicodeLineBreakStillSplitsAnExample() {
+        val text = "User: hi\u2028Char: hello\u2028<START>\u2028User: bye\u2028Char: later"
+        val examples = RpPromptEngine.parseExamplesFromEdit(text)
+        assertEquals(2, examples.size)
+        assertEquals("hi", examples[0].user)
+        assertEquals("hello", examples[0].char)
+        assertEquals("bye", examples[1].user)
+        assertEquals("later", examples[1].char)
+        val end = RpPromptEngine.parseExamplesFromEdit(
+            "{{user}}: hi\u2029{{char}}: hello\u2029END_OF_DIALOG\u2029{{user}}: bye\u2029{{char}}: later"
+        )
+        assertEquals(2, end.size)
+        assertEquals("hello", end[0].char)
+        assertEquals("bye", end[1].user)
+        assertEquals("later", end[1].char)
+    }
+
+    @Test
     fun aStartWordInsideAReplyStaysThere() {
         val examples = RpPromptEngine.parseExamplesFromEdit(
             "User: hi\nChar: the note said <START> come back\n{{user}}: quoted"
