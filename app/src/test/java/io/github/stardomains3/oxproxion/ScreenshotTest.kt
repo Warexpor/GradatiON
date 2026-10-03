@@ -825,6 +825,40 @@ class ScreenshotTest : ScreenshotHarness() {
                 snap(root(a), "settings_appearance_narrow_dark")
     }
 
+    /** Opening search swapped in AppCompat's gray back arrow, Material underline and thin clear glyph. */
+    @Test fun settingsLibrarySearchDark() = withChat { a, _ ->
+        SharedPreferencesHelper(a).saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
+        for ((name, make) in listOf<Pair<String, () -> androidx.fragment.app.Fragment>>(
+            "settings_prompts_search_dark" to { PromptLibraryFragment() },
+            "settings_system_messages_search_dark" to { SystemMessageLibraryFragment() },
+        )) {
+            val f = make()
+            pushFragment(a, f)
+            val bar = f.requireView().findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+            val item = bar.menu.findItem(R.id.action_search)
+            item.expandActionView(); idle()
+            val sv = item.actionView as androidx.appcompat.widget.SearchView
+            sv.setQuery("s", false); idle()
+            org.junit.Assert.assertNull("$name: no Material underline", sv.findViewById<View>(androidx.appcompat.R.id.search_plate).background)
+            val clear = sv.findViewById<android.widget.ImageView>(androidx.appcompat.R.id.search_close_btn)
+            fun pixels(d: android.graphics.drawable.Drawable): IntArray {
+                val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+                d.setBounds(0, 0, 48, 48); d.draw(android.graphics.Canvas(bmp))
+                return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
+            }
+            fun inked(d: android.graphics.drawable.Drawable) =
+                d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
+            org.junit.Assert.assertArrayEquals("$name: the app's chevron collapses search",
+                pixels(inked(a.getDrawable(R.drawable.is_backarrow)!!)), pixels(inked(bar.collapseIcon!!)))
+            val ours = a.getDrawable(R.drawable.ic_close_x)!!.mutate().apply { setTint(a.getColor(R.color.xai_mute)) }
+            org.junit.Assert.assertArrayEquals("$name: the app's clear glyph", pixels(ours),
+                pixels(clear.drawable.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_mute)) }))
+            snap(root(a), name)
+            item.collapseActionView(); idle()
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",

@@ -125,6 +125,7 @@ class PromptLibraryFragment : Fragment() {
         val searchItem = toolbar.menu.findItem(R.id.action_search)
         searchView = searchItem.actionView as SearchView
         searchView.queryHint = getString(R.string.search_prompts_hint)
+        searchView.styleLibrarySearch()
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean = true
             override fun onQueryTextChange(newText: String?): Boolean {
