@@ -3,6 +3,7 @@ package io.github.stardomains3.oxproxion
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
 import io.github.stardomains3.oxproxion.code.ApprovalOption
 import io.github.stardomains3.oxproxion.code.CodeAwayFormat
@@ -253,12 +254,13 @@ class CodeAwayNotifierTest {
     @Test
     fun evictingOldestShadeClearsItsOpenToken() {
         val n = notifier()
+        val limit = CodeAwayNotifier.AWAY_SHADE_LIMIT
         n.onUpdate("s0", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
         val token0 = n.issueOpenToken("s0")
-        for (i in 1..64) {
+        for (i in 1..limit) {
             n.onUpdate("s$i", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
         }
-        assertEquals(64, nm.activeNotifications.size)
+        assertEquals(limit, nm.activeNotifications.size)
         assertFalse(n.consumeOpenToken("s0", token0))
         assertTrue(n.consumeOpenToken("s1", n.issueOpenToken("s1")))
     }
@@ -326,18 +328,19 @@ class CodeAwayNotifierTest {
     @Test
     fun dedupClearedShadesStillCountTowardCap() {
         val n = notifier()
+        val limit = CodeAwayNotifier.AWAY_SHADE_LIMIT
         n.onUpdate("s0", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
         val token0 = n.issueOpenToken("s0")
-        for (i in 1 until 64) {
+        for (i in 1 until limit) {
             n.onUpdate("s$i", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
         }
-        assertEquals(64, nm.activeNotifications.size)
-        for (i in 0 until 64) n.clearTurnDoneDedup("s$i")
-        assertEquals("next prompt leaves the shade up", 64, nm.activeNotifications.size)
-        n.onUpdate("s64", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
-        assertEquals(64, nm.activeNotifications.size)
+        assertEquals(limit, nm.activeNotifications.size)
+        for (i in 0 until limit) n.clearTurnDoneDedup("s$i")
+        assertEquals("next prompt leaves the shade up", limit, nm.activeNotifications.size)
+        n.onUpdate("s$limit", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(limit, nm.activeNotifications.size)
         assertFalse("oldest parked shade is evicted", "s0" in showingSessions())
-        assertTrue("s64" in showingSessions())
+        assertTrue("s$limit" in showingSessions())
         assertFalse(n.consumeOpenToken("s0", token0))
         assertTrue(n.consumeOpenToken("s1", n.issueOpenToken("s1")))
     }
@@ -402,23 +405,25 @@ class CodeAwayNotifierTest {
     @Test
     fun coldStartEvictsOldestEvenWhenPrefsIterationChanges() {
         val n = notifier()
-        for (i in 0 until 64) {
+        val limit = CodeAwayNotifier.AWAY_SHADE_LIMIT
+        val last = limit - 1
+        for (i in 0 until limit) {
             n.onUpdate("s$i", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
             n.clearTurnDoneDedup("s$i")
         }
         val idPrefs = ctx.getSharedPreferences("code_away_notif_ids", 0)
         val oldest = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "s0")
-        val newer = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "s63")
+        val newer = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.TURN_DONE, "s$last")
         val order0 = idPrefs.getInt(CodeAwayFormat.orderPrefKey(oldest), -1)
-        val order63 = idPrefs.getInt(CodeAwayFormat.orderPrefKey(newer), -1)
-        assertTrue(order0 > 0 && order63 > order0)
+        val orderLast = idPrefs.getInt(CodeAwayFormat.orderPrefKey(newer), -1)
+        assertTrue(order0 > 0 && orderLast > order0)
         rewritePrefsReversed("code_away_notif_ids")
         val cold = notifier()
-        cold.onUpdate("s64", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
-        assertEquals(64, nm.activeNotifications.size)
+        cold.onUpdate("s$limit", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(limit, nm.activeNotifications.size)
         assertFalse("oldest parked shade is the one that goes", "s0" in showingSessions())
-        assertTrue("s63" in showingSessions())
-        assertTrue("s64" in showingSessions())
+        assertTrue("s$last" in showingSessions())
+        assertTrue("s$limit" in showingSessions())
     }
 
     @Test
@@ -468,15 +473,59 @@ class CodeAwayNotifierTest {
     @Test
     fun coldStartCountsParkedShadesTowardCap() {
         val n = notifier()
-        for (i in 0 until 64) {
+        val limit = CodeAwayNotifier.AWAY_SHADE_LIMIT
+        for (i in 0 until limit) {
             n.onUpdate("c$i", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
             n.clearTurnDoneDedup("c$i")
         }
-        assertEquals(64, nm.activeNotifications.size)
+        assertEquals(limit, nm.activeNotifications.size)
         val cold = notifier()
-        cold.onUpdate("c64", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
-        assertEquals(64, nm.activeNotifications.size)
-        assertTrue("c64" in showingSessions())
+        cold.onUpdate("c$limit", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(limit, nm.activeNotifications.size)
+        assertFalse("c0" in showingSessions())
+        assertTrue("c$limit" in showingSessions())
+    }
+
+    @Test
+    fun cancellingAnUnpostedApprovalDoesNotRemoveACollidingShade() {
+        val n = notifier()
+        n.onUpdate("live", "host", "L", CodeUpdate.Upsert(approval("r-live")), sessionWasRunning = true)
+        val liveId = nm.activeNotifications.single().id
+        val token = n.issueOpenToken("live")
+        // approval:ghost:40447469 hashes to the same 24-bit id as approval:live:r-live.
+        val requestId = "40447469"
+        val ghostKey = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, "ghost", requestId)
+        val liveKey = CodeAwayFormat.dedupKey(CodeAwayFormat.Kind.APPROVAL, "live", "r-live")
+        assertEquals(CodeAwayFormat.notificationId(liveKey), CodeAwayFormat.notificationId(ghostKey))
+        assertEquals(liveId, CodeAwayFormat.notificationId(liveKey))
+        // Never posted. Cancel still used to nm.cancel the 24-bit hash, which is this shade's id.
+        n.cancelApproval("ghost", requestId)
+        assertEquals(1, nm.activeNotifications.size)
+        assertEquals(liveId, nm.activeNotifications.single().id)
+        assertTrue(n.consumeOpenToken("live", token))
+    }
+
+    @Test
+    fun answerShadeKeepsASlotWhenAwayFillsThePackage() {
+        nm.notify(
+            CodeAwayNotifier.ANSWER_READY_NOTIF_ID,
+            NotificationCompat.Builder(ctx, "ForegroundServiceChannel")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Demo")
+                .setContentText("Your answer is ready.")
+                .build(),
+        )
+        val n = notifier()
+        val limit = CodeAwayNotifier.AWAY_SHADE_LIMIT
+        for (i in 0 until limit) {
+            n.onUpdate("a$i", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        }
+        assertEquals(CodeAwayNotifier.SYSTEM_PACKAGE_NOTIF_LIMIT, nm.activeNotifications.size)
+        n.onUpdate("overflow", "host", "S", CodeUpdate.TurnDone("end_turn"), sessionWasRunning = true)
+        assertEquals(CodeAwayNotifier.SYSTEM_PACKAGE_NOTIF_LIMIT, nm.activeNotifications.size)
+        assertTrue(nm.activeNotifications.any { it.id == CodeAwayNotifier.ANSWER_READY_NOTIF_ID })
+        assertFalse("a0" in showingSessions())
+        assertTrue("overflow" in showingSessions())
     }
 
     /** Rewrite the id prefs newest-key-first so a cold start cannot trust map order. */
@@ -498,7 +547,8 @@ class CodeAwayNotifierTest {
 
     private fun showingSessions(): Set<String> =
         nm.activeNotifications.mapNotNull { sbn ->
-            Shadows.shadowOf(sbn.notification.contentIntent).savedIntent
+            val content = sbn.notification.contentIntent ?: return@mapNotNull null
+            Shadows.shadowOf(content).savedIntent
                 .getStringExtra(CodeAwayNotifier.EXTRA_SESSION_ID)
         }.toSet()
 
