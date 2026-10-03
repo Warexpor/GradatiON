@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Code: a coordinate click that also names the mouse button shows the point (`10, 20`), and a click that names a target shows that target. The button used to replace both. A mouse-down that only has a button still shows it. A later update that only repeats the button leaves the point.
+- Code: a screenshot, snapshot, or PDF saved to a file shows that file. The line used to be blank, or only the element ref. The control name still wins. A console message shows the level, or the file when that is all that was sent. A network list shows the URL filter, the file, or `static` when images and scripts are included. `static: false` is not a line. One request still shows its index.
+- Code: switching or closing a browser tab shows the action and the index (`select 2`, `close 1`). The row used to be only the index, because that key is read first. A new tab still shows its URL. A later update that only repeats the index leaves the action.
 - A finished side file next to a 0-byte recovered database is the copy that opens. The empty name used to be moved, and the side file was then deleted, so that history was gone. An empty name with no finished side file is unchanged.
 - Clearing import notes removes the side files before the installed file. A kill after the installed file was removed used to leave an older side file, and the next launch applied those notes.
 - Rewriting a portrait or wallpaper no longer opens the finished side file for writing. That truncated the picture before the new bytes were durable. Deleting a scene photo removes the side files before the live file.
