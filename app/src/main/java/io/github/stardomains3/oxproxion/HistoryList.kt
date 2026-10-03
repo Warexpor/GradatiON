@@ -636,22 +636,21 @@ object HistoryList {
 
     /**
      * Markdown marks come off for the preview. A mark inside a word stays: stripping
-     * every `_` hid `snake_case` and `déjà_vu` (a letter is not only ASCII), and
-     * stripping every `#`, `~`, `>` and `*` hid `C#`, `~/Downloads`, `a > b` and `2 * 3`.
-     * Heading hashes, a blockquote `>`, a list star, paired `~~`, emphasis stars and
-     * a paired backtick span still come off. A backtick that does not close stays.
+     * every `_` hid `snake_case`, `déjà_vu` and `foo__bar`, and stripping every
+     * `#`, `~`, `>` and `*` hid `C#`, `~/Downloads`, `a > b` and `2 * 3`.
+     * Heading hashes, a blockquote `>`, a list star, a closed `~~` pair, emphasis
+     * stars and a paired backtick span still come off. A backtick, a `~~` or a
+     * `>` that does not close stays, including `>=` and `>>` at the start of a line.
      */
     private fun fold(text: String): String =
         WHITESPACE.replace(
             stripBackticks(
-                MD_EDGE_UNDERSCORE.replace(
+                stripEdgeUnderscores(
                     stripStars(
-                        MD_STRIKE.replace(
+                        stripStrike(
                             MD_QUOTE.replace(MD_HEADING.replace(text, ""), ""),
-                            "",
                         ),
                     ),
-                    "",
                 ),
             ),
             " ",
@@ -672,14 +671,41 @@ object HistoryList {
     private fun stripBackticks(text: String): String =
         MD_BACKTICK_SPAN.replace(text) { it.groupValues[2] }
 
+    /** A closed strike. `~~n` and `a~~b` are the token, not a mark that failed to close. */
+    private fun stripStrike(text: String): String =
+        MD_STRIKE.replace(text) { it.groupValues[1] }
+
+    /**
+     * Emphasis underscores come off. A single `_` between letters stays, and so does
+     * a run of two or more: `__init__`, `obj.__class__` and `foo__bar` are the name.
+     */
+    private fun stripEdgeUnderscores(text: String): String {
+        if ('_' !in text) return text
+        val out = StringBuilder(text.length)
+        var i = 0
+        while (i < text.length) {
+            if (text[i] != '_') {
+                out.append(text[i])
+                i++
+                continue
+            }
+            val start = i
+            while (i < text.length && text[i] == '_') i++
+            val before = start > 0 && text[start - 1].isLetterOrDigit()
+            val after = i < text.length && text[i].isLetterOrDigit()
+            if ((before && after) || i - start >= 2) out.append(text, start, i)
+        }
+        return out.toString()
+    }
+
     private val DATA_URL = Regex("data:[^\"\\s]*;base64,[A-Za-z0-9+/=]+")
     private val MD_HEADING = Regex("(?m)^#{1,6}[ \\t]+")
-    private val MD_QUOTE = Regex("(?m)^>+[ \\t]*")
-    private val MD_STRIKE = Regex("~~")
+    /** A blockquote marker. `>=` and `>>` at the start of a line are the token. */
+    private val MD_QUOTE = Regex("(?m)^>(?![>=])[ \\t]*")
+    private val MD_STRIKE = Regex("~~([^~]+?)~~")
     private val MD_LIST_STAR = Regex("(?m)^\\*[ \\t]+")
     private val MD_STAR_EMPH = Regex("\\*{1,3}(?!\\s)([^*]+)(?<!\\s)\\*{1,3}")
     private val MD_BACKTICK_SPAN = Regex("(`+)([^`]+)\\1")
-    private val MD_EDGE_UNDERSCORE = Regex("(?<![\\p{L}\\p{N}])_|_(?![\\p{L}\\p{N}])")
     private val WHITESPACE = Regex("\\s+")
 
     private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }

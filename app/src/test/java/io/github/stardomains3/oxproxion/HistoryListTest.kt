@@ -242,6 +242,28 @@ class HistoryListTest {
         )
     }
 
+    @Test fun preview_keeps_a_name_a_comparison_and_an_unpaired_strike() {
+        val you = { text: String -> "You: $text" }
+        // A run of underscores is the name. _hello_ is still emphasis.
+        assertEquals("You: foo__bar", HistoryList.preview("user", "\"foo__bar\"", you, "Photo"))
+        assertEquals("You: __init__", HistoryList.preview("user", "\"__init__\"", you, "Photo"))
+        assertEquals("You: obj.__class__", HistoryList.preview("user", "\"obj.__class__\"", you, "Photo"))
+        assertEquals("You: hello", HistoryList.preview("user", "\"_hello_\"", you, "Photo"))
+        // >= and >> at the start of a line are the token. A blockquote still comes off.
+        assertEquals("You: >= 5", HistoryList.preview("user", "\">= 5\"", you, "Photo"))
+        assertEquals("You: >> 1", HistoryList.preview("user", "\">> 1\"", you, "Photo"))
+        assertEquals("You: quoted", HistoryList.preview("user", "\"> quoted\"", you, "Photo"))
+        // A ~~ that does not close stays. A closed pair still comes off.
+        assertEquals("You: use ~~n", HistoryList.preview("user", "\"use ~~n\"", you, "Photo"))
+        assertEquals("You: a~~b stays", HistoryList.preview("user", "\"a~~b stays\"", you, "Photo"))
+        assertEquals("You: gone", HistoryList.preview("user", "\"~~gone~~\"", you, "Photo"))
+        val name = HistoryList.preview("user", "\"call __init__ now\"", you, "Photo")
+        assertTrue(name.contains("__init__"))
+        assertTrue(HistoryList.emphasisAt(name, "__init__") >= 0)
+        assertTrue(HistoryList.searchLine("user", "\"use >= 5 here\"", ">=", you, "Photo").contains(">="))
+        assertTrue(HistoryList.searchLine("user", "\"use ~~n here\"", "~~n", you, "Photo").contains("~~n"))
+    }
+
     @Test fun search_line_uses_a_clean_parse_and_a_mid_string_slice() {
         val you = { text: String -> "You: $text" }
         assertEquals(
