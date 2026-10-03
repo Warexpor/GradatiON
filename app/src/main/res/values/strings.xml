@@ -87,7 +87,7 @@
     <string name="model_picker_empty_title">No models match</string>
     <string name="model_picker_clear_filters">Clear filters</string>
     <string name="model_picker_active">Active model</string>
-    <string name="grok_appearance">Appearance</string>
+    <string name="settings_appearance_preview">Preview</string>
     <string name="grok_appearance_preview_user">How do clouds stay up?</string>
     <string name="grok_appearance_preview_grok">Clouds are made of tiny droplets, light enough for rising air to hold them aloft.</string>
     <string name="settings_title">Settings</string>
