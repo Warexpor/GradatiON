@@ -105,6 +105,7 @@ class CodeModeScreenshotTest {
             CodeHub.getLoaded(ctx).sessions.value[id]!!.events.any { it is CodeEvent.Approval && it.chosen == null })
         assertEquals("the header light is on while the agent waits", View.VISIBLE,
             root(a).findViewById<View>(R.id.codeSessionHeaderLed).visibility)
+        assertTranscriptOnGlassSheet(a)
         snap(root(a), "code_session_approval_dark")
     }
 
@@ -165,6 +166,10 @@ class CodeModeScreenshotTest {
             io.github.stardomains3.oxproxion.code.Rail.NODE, railOf { it is CodeEvent.Approval })
         assertEquals(io.github.stardomains3.oxproxion.code.Rail.END, railOf { it is CodeEvent.TurnEnd })
         assertEquals(io.github.stardomains3.oxproxion.code.Rail.NONE, adapter.railAt(rows.size))
+        assertEquals("the rail stops at a diff's glass card",
+            io.github.stardomains3.oxproxion.code.Rail.CARD, railOf { it is CodeEvent.FileDiff })
+        assertEquals(io.github.stardomains3.oxproxion.code.Rail.CARD, railOf { it is CodeEvent.Plan })
+        assertTranscriptOnGlassSheet(a)
         val run = bindRow(a) { it is CodeEvent.ToolCall && it.kind == io.github.stardomains3.oxproxion.code.ToolKind.EXECUTE }
         val prompt = run.findViewById<android.widget.TextView>(R.id.codeToolPrompt)
         assertEquals(View.VISIBLE, prompt.visibility)
@@ -177,6 +182,28 @@ class CodeModeScreenshotTest {
         list.scrollToPosition(0)
         idle(2)
         snap(root(a), "code_session_trace_dark")
+    }
+
+    /** Over an ambient background the transcript sheet is see-through glass: the field shows, blurred. */
+    @Test fun codeSessionGlassOverBackgroundDark() = withCode { a, _ ->
+        AmbientBackgroundView.renderFieldInline = true
+        SharedPreferencesHelper(ctx).saveBackgroundStyle(AmbientBackgroundView.Style.DRIFT.key)
+        try {
+            val hub = CodeHub.getLoaded(ctx)
+            val id = startDemo("Add a follow-system option to the theme setting")
+            push(a, CodeSessionFragment.newInstance(id))
+            idle(12)
+            val approval = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.Approval>().single()
+            hub.answer(id, approval.requestId, approval.options.first { it.id == "allow" })
+            idle(16)
+            val ambient = root(a).findViewById<AmbientBackgroundView>(R.id.codeAmbient)
+            assertEquals(AmbientBackgroundView.Style.DRIFT, ambient.resolvedStyle)
+            assertTranscriptOnGlassSheet(a)
+            snap(root(a), "code_session_glass_drift_dark")
+        } finally {
+            SharedPreferencesHelper(ctx).saveBackgroundStyle(AmbientBackgroundView.Style.OFF.key)
+            AmbientBackgroundView.renderFieldInline = false
+        }
     }
 
     /** Thinking verbosity: every thought and tool output opens; Normal folds them back. */
@@ -210,6 +237,28 @@ class CodeModeScreenshotTest {
         val diff = hub.sessions.value[id]!!.events.filterIsInstance<CodeEvent.FileDiff>().single()
         push(a, CodeDiffFragment.newInstance(id, diff.key))
         snap(root(a), "code_diff_dark")
+    }
+
+    /**
+     * The transcript scrolls inside one clipped glass sheet that blurs only the ambient background
+     * (so scrolling never re-blurs it), between the header and just below the composer.
+     */
+    private fun assertTranscriptOnGlassSheet(a: MainActivity) {
+        val list = root(a).findViewById<View>(R.id.codeTranscript)
+        val sheet = root(a).findViewById<GlassFrameLayout>(R.id.codeSessionSheet)
+        assertTrue("the transcript scrolls inside the sheet", list.parent === sheet)
+        assertTrue("the sheet clips its rows", sheet.clipToOutline)
+        assertTrue("the sheet samples only the ambient backdrop",
+            sheet.glass.source === root(a).findViewById<View>(R.id.codeSessionAmbientBackdrop))
+        val loc = IntArray(2)
+        root(a).findViewById<View>(R.id.codeSessionTop).getLocationInWindow(loc)
+        val headerBottom = loc[1] + root(a).findViewById<View>(R.id.codeSessionTop).height
+        sheet.getLocationInWindow(loc)
+        assertEquals("the sheet starts under the header", headerBottom, loc[1])
+        val composer = root(a).findViewById<View>(R.id.codeSessionComposer)
+        val composerLoc = IntArray(2).also { composer.getLocationInWindow(it) }
+        assertTrue("the composer floats inside the sheet",
+            composerLoc[1] + composer.height <= loc[1] + sheet.height && composerLoc[0] > loc[0])
     }
 
     /** Binds one transcript row straight through the adapter (the live list follows the bottom edge). */

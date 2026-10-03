@@ -19,28 +19,53 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-            <!-- Canvas + ambient background inside the backdrop so glass samples them -->
-            <View
+            <!-- Canvas + ambient background in their own backdrop: the transcript sheet blurs only
+                 these, so scrolling the transcript never re-blurs the sheet under it -->
+            <io.github.stardomains3.oxproxion.GlassBackdropLayout
+                android:id="@+id/codeSessionAmbientBackdrop"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@color/xai_canvas"
-                android:importantForAccessibility="no" />
+                android:layout_height="match_parent">
 
-            <io.github.stardomains3.oxproxion.AmbientBackgroundView
-                android:id="@+id/codeAmbient"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:importantForAccessibility="no" />
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/xai_canvas"
+                    android:importantForAccessibility="no" />
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/codeTranscript"
+                <io.github.stardomains3.oxproxion.AmbientBackgroundView
+                    android:id="@+id/codeAmbient"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no" />
+            </io.github.stardomains3.oxproxion.GlassBackdropLayout>
+
+            <!-- The transcript's glass sheet: one blur layer, no lens (too wide to bend), clipped so
+                 rows dissolve at its top edge. Top and bottom margins follow the header and dock. -->
+            <io.github.stardomains3.oxproxion.GlassFrameLayout
+                android:id="@+id/codeSessionSheet"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:overScrollMode="never"
-                android:paddingBottom="120dp"
-                android:paddingTop="72dp"
-                android:scrollbars="none" />
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="68dp"
+                android:layout_marginEnd="6dp"
+                android:layout_marginBottom="4dp"
+                app:glassBlurRadius="28dp"
+                app:glassCornerRadius="32dp"
+                app:glassLens="false"
+                app:glassTint="@color/glass_tint">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/codeTranscript"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:fadingEdgeLength="28dp"
+                    android:overScrollMode="never"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="120dp"
+                    android:requiresFadingEdge="vertical"
+                    android:scrollbars="none" />
+            </io.github.stardomains3.oxproxion.GlassFrameLayout>
         </io.github.stardomains3.oxproxion.GlassBackdropLayout>
 
         <!-- Empty transcript: loading, waiting for the agent, or a load that failed (tap to retry) -->
@@ -59,16 +84,15 @@
             android:textSize="15sp"
             android:visibility="gone" />
 
-        <!-- Top: back · title · options, floating over a scroll-edge fade -->
+        <!-- Top: back · title · options, above the sheet (the transcript never scrolls under it) -->
         <FrameLayout
             android:id="@+id/codeSessionTop"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="top"
-            android:background="@drawable/bg_code_top_edge"
             android:clipChildren="false"
             android:clipToPadding="false"
-            android:paddingBottom="14dp">
+            android:paddingBottom="6dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -193,13 +217,6 @@
                     app:iconTint="@color/xai_ink" />
             </LinearLayout>
         </FrameLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="110dp"
-            android:layout_gravity="bottom"
-            android:background="@drawable/bg_composer_fade"
-            android:importantForAccessibility="no" />
 
         <LinearLayout
             android:id="@+id/codeSessionDock"

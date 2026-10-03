@@ -8,11 +8,13 @@ import android.content.ClipboardManager
 import android.os.Bundle
 import android.text.format.DateUtils
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
@@ -23,6 +25,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import io.github.stardomains3.oxproxion.GlassNotice
 import io.github.stardomains3.oxproxion.GlassBackdropLayout
+import io.github.stardomains3.oxproxion.GlassFrameLayout
 import io.github.stardomains3.oxproxion.GlassLinearLayout
 import io.github.stardomains3.oxproxion.GlassTextView
 import io.github.stardomains3.oxproxion.GrokConfirmDialog
@@ -50,6 +53,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
     private lateinit var hub: CodeHub
     private lateinit var adapter: CodeTranscriptAdapter
     private lateinit var list: RecyclerView
+    private lateinit var sheet: GlassFrameLayout
     private lateinit var composer: CodeComposer
     /** Follow the growing edge until the user drags away (same rule as chat). */
     private var follow = true
@@ -79,6 +83,10 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         val backdrop = view.findViewById<GlassBackdropLayout>(R.id.codeSessionBackdrop)
         val frame = view.findViewById<FrameLayout>(R.id.codeSessionFrame)
         list = view.findViewById(R.id.codeTranscript)
+        sheet = view.findViewById(R.id.codeSessionSheet)
+        // The sheet sits inside the backdrop the chrome blurs, so it can't find its own source.
+        sheet.glass.source = view.findViewById(R.id.codeSessionAmbientBackdrop)
+        sheet.clipToOutline = true
         // Hold the ambient background still while the list scrolls (it re-samples the glass).
         val ambient = view.findViewById<io.github.stardomains3.oxproxion.AmbientBackgroundView>(R.id.codeAmbient)
         list.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
@@ -105,7 +113,6 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         list.setHasFixedSize(true)
         list.setItemViewCacheSize(8)
         list.adapter = adapter
-        sessionTopFade = view.findViewById<View>(R.id.codeSessionTop).background
         list.itemAnimator = androidx.recyclerview.widget.DefaultItemAnimator().apply {
             supportsChangeAnimations = false
             addDuration = 220
@@ -117,7 +124,6 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
             }
 
             override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
-                updateTopEdge()
                 val state = hub.sessions.value[sessionId]
                 if (state !== approvalScanState) {
                     approvalScanState = state
@@ -157,26 +163,35 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         composer.onAttachClick = {
             imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
-        // Keep the last event clear of the composer, whatever its height.
+        // The sheet hangs from under the header to just below the composer, which floats inside
+        // it; the last event stays clear of the composer whatever its height.
         val dock = view.findViewById<View>(R.id.codeSessionDock)
-        dock.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
-            if (bottom - top != oldBottom - oldTop) list.setPadding(list.paddingLeft, list.paddingTop, list.paddingRight,
-                bottom - top + (16 * resources.displayMetrics.density).toInt())
+        val top = view.findViewById<View>(R.id.codeSessionTop)
+        dock.addOnLayoutChangeListener { _, _, t, _, b, _, oldT, _, oldB ->
+            if (t != oldT || b != oldB) fitTranscript(dock)
             if (follow && adapter.itemCount > 0) list.post { followEdge(adapter.itemCount - 1) }
             list.post { updateApprovalBar() }
         }
+        top.addOnLayoutChangeListener { _, _, _, _, b, _, _, _, oldB -> if (b != oldB) fitSheetTop(b) }
+        sheet.addOnLayoutChangeListener { _, _, t, _, b, _, oldT, _, oldB -> if (t != oldT || b != oldB) fitTranscript(dock) }
         // Edge to edge like chat: the backdrop runs under the system bars; only the chrome and
-        // the transcript's clear area are inset (the list's bottom follows the dock above).
-        val top = view.findViewById<View>(R.id.codeSessionTop)
+        // the sheet are inset.
         val topPad = top.paddingTop
         val dockPad = dock.paddingBottom
-        val listTop = list.paddingTop
+        val sheetSide = (sheet.layoutParams as ViewGroup.MarginLayoutParams).marginStart
+        val sheetBottom = (sheet.layoutParams as ViewGroup.MarginLayoutParams).bottomMargin
         ViewCompat.setOnApplyWindowInsetsListener(frame) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottomInset = maxOf(bars.bottom, ime.bottom)
+            val rtl = frame.layoutDirection == View.LAYOUT_DIRECTION_RTL
             top.setPadding(bars.left, topPad + bars.top, bars.right, top.paddingBottom)
-            dock.setPadding(bars.left, dock.paddingTop, bars.right, dockPad + maxOf(bars.bottom, ime.bottom))
-            list.setPadding(list.paddingLeft, listTop + bars.top, list.paddingRight, list.paddingBottom)
+            dock.setPadding(bars.left, dock.paddingTop, bars.right, dockPad + bottomInset)
+            sheet.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                marginStart = sheetSide + if (rtl) bars.right else bars.left
+                marginEnd = sheetSide + if (rtl) bars.left else bars.right
+                bottomMargin = sheetBottom + bottomInset
+            }
             WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(frame)
@@ -187,7 +202,6 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
 
         view.findViewById<View>(R.id.codeSessionBack).setOnClickListener { close() }
         view.findViewById<View>(R.id.codeSessionMore).setOnClickListener { showOptions(it) }
-        view.findViewById<View>(R.id.codeSessionTop).background?.mutate()?.alpha = 0
 
         (view as SwipeNavLayout).listener = object : SwipeNavLayout.Listener {
             override fun canStart(x: Float, y: Float) = x < 40 * resources.displayMetrics.density
@@ -225,7 +239,6 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         if (::hub.isInitialized) hub.release(sessionId)
         // Recycle the rows so their per-row work (the "Working" sweep, stream fades) stops.
         list.adapter = null
-        sessionTopFade = null
         stateArtHarness = null
         super.onDestroyView()
     }
@@ -368,10 +381,7 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         maybeHapticApprovalArrival(s.events)
         adapter.submitList(rows) {
             if (follow && rows.isNotEmpty()) list.post { followEdge(rows.size - 1) }
-            list.post {
-                updateTopEdge()
-                updateApprovalBar(s)
-            }
+            list.post { updateApprovalBar(s) }
         }
     }
 
@@ -481,15 +491,20 @@ class CodeSessionFragment : Fragment(R.layout.fragment_code_session) {
         if (remaining > 0) list.smoothScrollBy(0, remaining)
     }
 
-    private var sessionTopFade: android.graphics.drawable.Drawable? = null
     private var approvalScanState: CodeSessionState? = null
     private var approvalScanPending = true
 
-    private fun updateTopEdge() {
-        val fade = sessionTopFade ?: return
-        val under = list.computeVerticalScrollOffset().toFloat()
-        val a = (255 * (under / (24f * resources.displayMetrics.density)).coerceIn(0f, 1f)).toInt()
-        if (fade.alpha != a) fade.alpha = a
+    /** The sheet starts where the header ends, so the title row never sits on the transcript. */
+    private fun fitSheetTop(headerBottom: Int) {
+        if ((sheet.layoutParams as ViewGroup.MarginLayoutParams).topMargin == headerBottom) return
+        sheet.updateLayoutParams<ViewGroup.MarginLayoutParams> { topMargin = headerBottom }
+    }
+
+    /** Clear room at the list's foot for the part of the dock (composer, pins) floating over the sheet. */
+    private fun fitTranscript(dock: View) {
+        if (sheet.height == 0 || dock.height == 0) return
+        val pad = (sheet.bottom - dock.top).coerceAtLeast(0) + (16 * resources.displayMetrics.density).toInt()
+        if (pad != list.paddingBottom) list.setPadding(list.paddingLeft, list.paddingTop, list.paddingRight, pad)
     }
 
     private fun showOptions(anchor: View) {

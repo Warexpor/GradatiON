@@ -5,8 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingStart="12dp"
-    android:paddingEnd="14dp"
+    android:paddingStart="6dp"
+    android:paddingEnd="8dp"
     android:paddingTop="1dp"
     android:paddingBottom="1dp">
 
@@ -69,7 +69,7 @@
             android:layout_marginStart="8dp"
             android:ellipsize="middle"
             android:singleLine="true"
-            android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+            style="@style/Widget.Gradation.Code.MonoLine"
             android:textColor="@color/xai_mute" />
 
         <ImageView
@@ -107,7 +107,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="6dp"
                 android:singleLine="true"
-                android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+                style="@style/Widget.Gradation.Code.MonoLine"
                 android:textColor="@color/xai_ink"
                 android:visibility="gone" />
 
@@ -116,7 +116,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:lineSpacingMultiplier="1.25"
-                android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+                style="@style/Widget.Gradation.Code.MonoLine"
                 android:textColor="@color/xai_body"
                 android:textIsSelectable="true" />
         </LinearLayout>
@@ -135,8 +135,8 @@
         android:ellipsize="end"
         android:gravity="center_vertical"
         android:maxLines="1"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
         android:textColor="@color/xai_mute"
         android:textSize="13sp"
         android:textFontWeight="600"

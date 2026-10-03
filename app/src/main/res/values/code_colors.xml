@@ -12,11 +12,12 @@
     <color name="code_status_off">#FFB2B2B2</color>
     <color name="code_badge_bg">#14000000</color>
     <color name="code_badge_fg">#FF1B1B1B</color>
-    <!-- Session transcript: the rail a turn hangs on, its step beads, the prompt block -->
-    <color name="code_rail">#2E000000</color>
-    <color name="code_node_bg">#0D000000</color>
-    <color name="code_node_stroke">#26000000</color>
-    <color name="code_prompt_bg">#FFF3F3F3</color>
+    <!-- Session transcript on its glass sheet: the rail a turn hangs on, its step beads (and the
+         panes' rim), the prompt block. All see-through, so the sheet reads under them. -->
+    <color name="code_rail">#26000000</color>
+    <color name="code_node_bg">#0A000000</color>
+    <color name="code_node_stroke">#1C000000</color>
+    <color name="code_prompt_bg">#80FFFFFF</color>
     <color name="code_diff_add_fg">#FF1A7F37</color>
     <color name="code_diff_del_fg">#FFCF222E</color>
     <!-- Home and session chrome: agent mark tiles and discs, idle and lit -->
