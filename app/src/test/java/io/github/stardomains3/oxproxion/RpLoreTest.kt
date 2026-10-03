@@ -230,6 +230,18 @@ class RpLoreTest {
     }
 
     @Test
+    fun aBotPlaceholderKeyMatchesTheCharacter() {
+        val book = """
+            [keys: {{bot}}]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "Mira keeps it.", charName = "Mira", userName = "Alex").contains("dawn"))
+        assertFalse(RpLore.select(book, "Mirage waits.", charName = "Mira", userName = "Alex").contains("dawn"))
+        assertFalse(RpLore.select(book, "Nobody mentioned them.", charName = "Mira", userName = "Alex").contains("dawn"))
+        assertFalse(RpLore.select(book, "Mira keeps it.", charName = "", userName = "Alex").contains("dawn"))
+    }
+
+    @Test
     fun aPlaceholderInOneEntryPullsTheNext() {
         val book = """
             [keys: map]
