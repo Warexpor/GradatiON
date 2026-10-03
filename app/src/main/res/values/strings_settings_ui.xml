@@ -13,6 +13,8 @@
 
     <!-- Other settings dialogs -->
     <string name="timeout_error_range">Enter a whole number from %1$d to %2$d</string>
+    <string name="inference_error_range">Enter a number from %1$s to %2$s</string>
+    <string name="inference_error_whole_range">Enter a whole number from %1$d to %2$d</string>
     <string name="maxtokens_error_range">Enter a number from 1 to 999,999</string>
     <string name="autosend_title">Auto send</string>
     <string name="autosend_message">Send this text to GradatiON now?\n\n%1$s</string>
