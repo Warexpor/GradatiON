@@ -64,8 +64,9 @@ class ChatToolRuntimeTest {
             .filter { it.role == "tool" }
             .map { (it.content as JsonPrimitive).contentOrNull }
             .joinToString()
-        assertTrue(toolText.contains("Destructive tool blocked"))
-        assertEquals("Destructive tool blocked — enable in Settings", host.toasts.single().peekContent())
+        val blocked = app.getString(R.string.notice_destructive_tool_blocked)
+        assertTrue(toolText.contains(blocked))
+        assertEquals(blocked, host.toasts.single().peekContent())
         assertTrue(host.continued)
     }
 

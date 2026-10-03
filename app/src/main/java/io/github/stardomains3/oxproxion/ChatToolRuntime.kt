@@ -778,7 +778,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
     }
 
     private fun destructiveToolsBlockedMessage(): String {
-        val message = "Destructive tool blocked — enable in Settings"
+        val message = application.getString(R.string.notice_destructive_tool_blocked)
         _toastUiEvent.postValue(Event(message))
         return message
     }
