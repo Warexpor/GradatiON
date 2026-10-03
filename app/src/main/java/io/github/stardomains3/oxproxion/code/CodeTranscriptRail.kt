@@ -13,7 +13,7 @@ import io.github.stardomains3.oxproxion.R
 enum class Rail {
     /** Not on the rail: the line breaks here. */
     NONE,
-    /** A prompt: the rail hangs from it and runs down. */
+    /** A prompt: the rail hangs from the block's bottom edge and runs down. */
     START,
     /** A bead ([R.id.codeRailNode]) the rail stops short of on both sides. */
     NODE,
@@ -21,8 +21,10 @@ enum class Rail {
     TEXT,
     /** The live "Working" footer: a quieter dot beside its line. */
     WORKING,
-    /** Runs straight through (opaque cards cover it, notices sit beside it). */
+    /** Runs straight through, beside a notice. */
     PASS,
+    /** A glass card (diff, plan, open approval): the rail stops short of it and picks up below. */
+    CARD,
     /** The turn's end: the rail comes in and stops at the ring. */
     END,
 }
@@ -30,14 +32,15 @@ enum class Rail {
 /**
  * The thread a turn hangs on: one hairline down the gutter of the transcript, from the prompt
  * through every step to the turn's end, so a turn reads as one trace instead of a pile of
- * bubbles. Drawn under the rows in a single pass with no views of its own. It stops short of
- * each bead rather than running behind it, so translucent beads over a photo background stay clean.
+ * bubbles. Drawn under the rows in a single pass with no views of its own. Every block on it is
+ * translucent glass, so it never runs behind one: it stops short of beads and cards and starts
+ * under the prompt block.
  */
 class CodeTranscriptRail(context: Context, private val railAt: (Int) -> Rail) : RecyclerView.ItemDecoration() {
 
     private val d = context.resources.displayMetrics.density
-    /** Centre of the rail column; every row puts its glyph on it (12dp row pad + half a 20dp gutter). */
-    private val railX = 22 * d
+    /** Centre of the rail column; every row puts its glyph on it (6dp row pad + half a 20dp gutter). */
+    private val railX = 16 * d
     private val gap = 3 * d
     private val dotR = 3 * d
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -65,13 +68,14 @@ class CodeTranscriptRail(context: Context, private val railAt: (Int) -> Rail) : 
             val top = child.top + child.translationY
             val bottom = child.bottom + child.translationY
             when (kind) {
-                Rail.START -> if (reachesDown(pos)) segment(c, x, (top + bottom) / 2f, bottom)
+                Rail.START -> if (reachesDown(pos)) segment(c, x, bottom - child.paddingBottom, bottom)
                 Rail.PASS -> if (reachesUp(pos) && reachesDown(pos)) segment(c, x, top, bottom)
+                Rail.CARD -> if (reachesUp(pos) && reachesDown(pos)) aroundCard(c, x, child, top, bottom)
                 Rail.NODE, Rail.END -> {
                     val node = child.findViewById<View>(R.id.codeRailNode)
                     if (node == null || !shownIn(node, child)) {
-                        // An answered approval folds to a bead; until then it is a card the rail passes behind.
-                        if (reachesUp(pos) && reachesDown(pos)) segment(c, x, top, bottom)
+                        // An answered approval folds to a bead; until then it is a card.
+                        if (reachesUp(pos) && reachesDown(pos)) aroundCard(c, x, child, top, bottom)
                         continue
                     }
                     val cy = top + offsetIn(node, child) + node.height / 2f
@@ -98,12 +102,18 @@ class CodeTranscriptRail(context: Context, private val railAt: (Int) -> Rail) : 
         if (to > from) c.drawLine(x, from, x, to, line)
     }
 
+    /** Through a card row's padding only, a bead's gap clear of the card's edges. */
+    private fun aroundCard(c: Canvas, x: Float, row: View, top: Float, bottom: Float) {
+        segment(c, x, top, top + row.paddingTop - gap)
+        segment(c, x, bottom - row.paddingBottom + gap, bottom)
+    }
+
     /** True when something above [pos] (past any pass-through rows) sends the rail down to it. */
     private fun reachesUp(pos: Int): Boolean {
         var q = pos - 1
         while (q >= 0) {
             when (railAt(q)) {
-                Rail.PASS -> q--
+                Rail.PASS, Rail.CARD -> q--
                 Rail.START, Rail.NODE, Rail.TEXT, Rail.WORKING -> return true
                 Rail.END, Rail.NONE -> return false
             }
@@ -116,7 +126,7 @@ class CodeTranscriptRail(context: Context, private val railAt: (Int) -> Rail) : 
         var q = pos + 1
         while (true) {
             when (railAt(q)) {
-                Rail.PASS -> q++
+                Rail.PASS, Rail.CARD -> q++
                 Rail.NODE, Rail.TEXT, Rail.WORKING, Rail.END -> return true
                 Rail.START, Rail.NONE -> return false
             }

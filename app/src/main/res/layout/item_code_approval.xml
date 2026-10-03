@@ -4,12 +4,12 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="12dp"
-    android:paddingEnd="14dp"
+    android:paddingStart="6dp"
+    android:paddingEnd="6dp"
     android:paddingTop="6dp"
     android:paddingBottom="8dp">
 
-    <!-- Opaque, so the rail runs behind it; the shield lands on the rail column -->
+    <!-- Glass card the rail stops at; the shield lands on the rail column -->
     <LinearLayout
         android:id="@+id/codeApprovalCard"
         android:layout_width="match_parent"
@@ -68,7 +68,7 @@
             android:maxLines="6"
             android:ellipsize="end"
             android:padding="12dp"
-            android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+            style="@style/Widget.Gradation.Code.MonoLine"
             android:textColor="@color/xai_body" />
 
         <!-- HSV so Deny / Always allow / Allow never hard-clip on narrow widths. Wider than the

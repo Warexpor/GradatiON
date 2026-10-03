@@ -5,8 +5,8 @@
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingStart="12dp"
-    android:paddingEnd="18dp"
+    android:paddingStart="6dp"
+    android:paddingEnd="14dp"
     android:paddingTop="8dp"
     android:paddingBottom="16dp">
 
@@ -26,7 +26,7 @@
         android:layout_height="wrap_content"
         android:ellipsize="end"
         android:maxLines="2"
-        android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+        style="@style/Widget.Gradation.Code.MonoLine"
         android:textColor="@color/xai_mute"
         android:textSize="12sp" />
 

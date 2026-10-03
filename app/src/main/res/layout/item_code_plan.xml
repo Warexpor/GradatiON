@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code transcript: the agent's live plan (one card per session, updates in place). Opaque, so the
-     rail runs behind it; each step's status glyph lands on the rail column. -->
+<!-- Code transcript: the agent's live plan (one card per session, updates in place). A glass card
+     the rail stops at; each step's status glyph lands on the rail column. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="12dp"
-    android:paddingEnd="14dp"
+    android:paddingStart="6dp"
+    android:paddingEnd="6dp"
     android:paddingTop="4dp"
     android:paddingBottom="6dp">
 
@@ -38,7 +38,7 @@
                 android:id="@+id/codePlanProgress"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
+                style="@style/Widget.Gradation.Code.MonoLine"
                 android:textSize="12sp" />
         </LinearLayout>
 

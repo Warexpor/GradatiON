@@ -173,8 +173,9 @@ class CodeTranscriptAdapter(
                 is CodeEvent.UserPrompt -> Rail.START
                 is CodeEvent.AgentText -> Rail.TEXT
                 is CodeEvent.Thought, is CodeEvent.ToolCall -> Rail.NODE
-                is CodeEvent.Approval -> if (e.chosen != null || e.expired) Rail.NODE else Rail.PASS
-                is CodeEvent.FileDiff, is CodeEvent.Plan, is CodeEvent.Notice -> Rail.PASS
+                is CodeEvent.Approval -> if (e.chosen != null || e.expired) Rail.NODE else Rail.CARD
+                is CodeEvent.FileDiff, is CodeEvent.Plan -> Rail.CARD
+                is CodeEvent.Notice -> Rail.PASS
                 is CodeEvent.TurnEnd -> Rail.END
             }
         }
