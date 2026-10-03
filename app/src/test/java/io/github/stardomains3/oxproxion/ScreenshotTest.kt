@@ -1007,6 +1007,37 @@ class ScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertNull("no filled error glyph", p.errorIconDrawable)
     }
 
+    /** Edit and delete refuse without Data & privacy > Destructive file tools; their rows say so now. */
+    @Test fun settingsToolsNameTheDestructiveSwitchDark() = withChat { a, _ ->
+        val prefs = SharedPreferencesHelper(a)
+        val note = a.getString(R.string.tools_needs_destructive)
+        fun warnings(): Map<String, String> {
+            val f = ToolsFragment()
+            pushFragment(a, f)
+            val box = f.requireView().findViewById<android.view.ViewGroup>(R.id.tools_container)
+            val out = (0 until box.childCount).map { box.getChildAt(it) }.associate { row ->
+                row.findViewById<android.widget.TextView>(R.id.text_tool_title).text.toString() to
+                    row.findViewById<android.widget.TextView>(R.id.text_permission_warning).let { if (it.isShown) it.text.toString() else "" }
+            }
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+            return out
+        }
+        prefs.saveAllowDestructiveTools(false)
+        val off = warnings()
+        val edit = a.getString(R.string.tool_edit_file_name)
+        val delete = a.getString(R.string.tool_delete_files_name)
+        org.junit.Assert.assertTrue(off[edit].orEmpty().contains(note))
+        org.junit.Assert.assertTrue("folder line kept", off[delete].orEmpty().contains(a.getString(R.string.tools_select_folder)))
+        org.junit.Assert.assertTrue(off[delete].orEmpty().contains(note))
+        org.junit.Assert.assertEquals("only the two destructive tools", 2, off.values.count { it.contains(note) })
+        pushFragment(a, ToolsFragment())
+        val box = a.findViewById<android.view.ViewGroup>(R.id.tools_container)
+        box.getChildAt(1).let { it.requestRectangleOnScreen(android.graphics.Rect(0, 0, it.width, it.height), true) }; idle()
+        snap(root(a), "settings_tools_destructive_note_dark")
+        prefs.saveAllowDestructiveTools(true)
+        org.junit.Assert.assertTrue("no note once it is on", warnings().values.none { it.contains(note) })
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",

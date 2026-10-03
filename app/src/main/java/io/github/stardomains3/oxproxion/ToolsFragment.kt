@@ -168,6 +168,13 @@ class ToolsFragment : Fragment(R.layout.fragment_tools) {
                     checkBox.toggle()
                 }
             }
+            // On here, these still refuse to run until the Data & privacy switch is on too.
+            if (item.name in ToolItem.DESTRUCTIVE_TOOLS && !sharedPreferencesHelper.getAllowDestructiveTools()) {
+                val note = getString(R.string.tools_needs_destructive)
+                permissionWarning.text =
+                    if (permissionWarning.visibility == View.VISIBLE) "${permissionWarning.text}\n$note" else note
+                permissionWarning.visibility = View.VISIBLE
+            }
 
             var ignoreToggle = false
             checkBox.setOnCheckedChangeListener { button, isChecked ->

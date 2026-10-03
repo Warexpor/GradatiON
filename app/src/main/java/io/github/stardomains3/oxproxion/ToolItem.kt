@@ -21,6 +21,9 @@ data class ToolItem(
     companion object {
         private const val WORKSPACE = "Download/gradation"
 
+        /** Tools ChatToolRuntime refuses unless Data & privacy > Destructive file tools is on. */
+        val DESTRUCTIVE_TOOLS = setOf("edit_file", "delete_files")
+
         fun isToolEnabled(toolName: String, enabledSet: Set<String>): Boolean {
             if (toolName in enabledSet) return true
             return when (toolName) {
