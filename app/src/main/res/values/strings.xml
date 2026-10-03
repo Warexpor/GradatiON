@@ -205,6 +205,8 @@
     <string name="rp_export_chars_filename">gradation-rp-characters.json</string>
     <string name="rp_export_lore_filename">gradation-rp-lorebooks.json</string>
     <string name="chats_export_filename" translatable="false">gradation-chats.json</string>
+    <string name="prompts_export_filename" translatable="false">gradation-prompts.json</string>
+    <string name="system_messages_export_filename" translatable="false">gradation-system-messages.json</string>
     <string name="rp_new_chat_title">Start new RP chat?</string>
     <string name="rp_new_chat_body">Replace the current RP chat with %1$s\'s greeting?</string>
     <string name="rp_new_chat_confirm">Start</string>

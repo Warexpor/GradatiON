@@ -198,7 +198,7 @@ class SystemMessageLibraryFragment : Fragment() {
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "application/json"
-            putExtra(Intent.EXTRA_TITLE, "system_messages.json")
+            putExtra(Intent.EXTRA_TITLE, getString(R.string.system_messages_export_filename))
         }
         exportSystemMessagesLauncher.launch(intent)
     }

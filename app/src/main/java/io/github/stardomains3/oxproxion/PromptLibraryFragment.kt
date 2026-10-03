@@ -169,7 +169,7 @@ class PromptLibraryFragment : Fragment() {
         val intent = android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(android.content.Intent.CATEGORY_OPENABLE)
             type = "application/json"
-            putExtra(android.content.Intent.EXTRA_TITLE, "prompts.json")
+            putExtra(android.content.Intent.EXTRA_TITLE, getString(R.string.prompts_export_filename))
         }
         exportPromptsLauncher.launch(intent)
     }
