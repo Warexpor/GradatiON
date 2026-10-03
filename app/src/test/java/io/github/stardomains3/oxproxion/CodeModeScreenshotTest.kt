@@ -177,6 +177,49 @@ class CodeModeScreenshotTest {
         }
     }
 
+    /**
+     * Rows the demo never sends, on the same grid: a failed command whose cross follows its words,
+     * a warning and an error notice, a plan with a wrapped and a struck step, and a command
+     * approval whose long answers stack.
+     */
+    @Test fun codeSessionEdgeRowsDark() = withCode { a, _ ->
+        val hub = CodeHub.getLoaded(ctx)
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        hub.cancel(id)
+        idle(4)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val adapter = list.adapter as io.github.stardomains3.oxproxion.code.CodeTranscriptAdapter
+        val f = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }
+        CodeSessionFragment::class.java.getDeclaredField("follow").apply { isAccessible = true }.setBoolean(f, false)
+        val rows = rareRows()
+        adapter.submitList(rows.map { io.github.stardomains3.oxproxion.code.TranscriptRow.Event(it) })
+        idle(2)
+        list.scrollToPosition(0)
+        idle(2)
+        val d = ctx.resources.displayMetrics.density
+        val failed = bindRow(a) { it is CodeEvent.ToolCall }
+        val detail = failed.findViewById<View>(R.id.codeToolDetail)
+        val cross = failed.findViewById<View>(R.id.codeToolStatus)
+        assertEquals(View.VISIBLE, cross.visibility)
+        failed.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        failed.layout(0, 0, failed.measuredWidth, failed.measuredHeight)
+        assertEquals("the cross follows the command", (8 * d).toInt().toFloat(), (cross.left - detail.right).toFloat(), 1f)
+        val ask = bindRow(a) { it is CodeEvent.Approval }
+        ask.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val box = ask.findViewById<android.widget.LinearLayout>(R.id.codeApprovalButtons)
+        assertEquals("long answers stack", android.widget.LinearLayout.VERTICAL, box.orientation)
+        assertOnTranscriptGrid(list)
+        snap(root(a), "code_session_edge_rows_dark")
+        list.scrollToPosition(rows.size - 1)
+        idle(2)
+        assertOnTranscriptGrid(list)
+        snap(root(a), "code_session_edge_rows_end_dark")
+    }
+
     /** Mid-turn: a command streams into its pane while the Working footer closes the rail. */
     @Test fun codeSessionRunningDark() = withCode { a, _ ->
         val hub = CodeHub.getLoaded(ctx)
@@ -679,6 +722,33 @@ class CodeModeScreenshotTest {
         idle()
         assertEquals(View.VISIBLE, code.visibility)
         assertTrue(a.findViewById<View>(R.id.tabCode).isSelected)
+    }
+
+
+    /** Rows the demo never sends: a failed command, notices, a long plan, a command approval with long labels. */
+    private fun rareRows(): List<CodeEvent> {
+        val run = io.github.stardomains3.oxproxion.code.ToolKind.EXECUTE
+        fun step(t: String, s: io.github.stardomains3.oxproxion.code.PlanStatus) = io.github.stardomains3.oxproxion.code.PlanEntry(t, s)
+        fun opt(id: String, label: String, k: io.github.stardomains3.oxproxion.code.ApprovalOption.Kind) =
+            io.github.stardomains3.oxproxion.code.ApprovalOption(id, label, k)
+        return listOf(
+            CodeEvent.UserPrompt("u", 1, "Run lint and fix whatever it finds in the settings module"),
+            CodeEvent.ToolCall("t:1", 2, "1", run, "Run lint", "./gradlew :app:lintDebug",
+                io.github.stardomains3.oxproxion.code.ToolStatus.FAILED,
+                "> Task :app:lintDebug FAILED\nLint found 2 errors, 5 warnings\nSettingsFragment.kt:52: Error: Missing contentDescription"),
+            CodeEvent.Notice("n:1", 3, "Rate limited by the provider. Retrying in 20 s.", io.github.stardomains3.oxproxion.code.NoticeLevel.WARNING),
+            CodeEvent.Plan("p", 4, listOf(
+                step("Fix the missing content description on the dark mode switch", io.github.stardomains3.oxproxion.code.PlanStatus.IN_PROGRESS),
+                step("Silence the obsolete SDK warning", io.github.stardomains3.oxproxion.code.PlanStatus.CANCELLED),
+                step("Run lint again", io.github.stardomains3.oxproxion.code.PlanStatus.PENDING))),
+            CodeEvent.Approval("a", 5, "r1", "2", "./gradlew :app:lintDebug --continue",
+                "./gradlew :app:lintDebug --continue && git add -A && git commit -m \"fix lint\"", run, listOf(
+                    opt("n", "No, and tell Codex what to do differently", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.REJECT_ONCE),
+                    opt("s", "Yes, and don't ask again for this command", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ALWAYS),
+                    opt("y", "Yes", io.github.stardomains3.oxproxion.code.ApprovalOption.Kind.ALLOW_ONCE))),
+            CodeEvent.Notice("n:2", 6, "The agent exited unexpectedly (code 137).", io.github.stardomains3.oxproxion.code.NoticeLevel.ERROR),
+            CodeEvent.TurnEnd("e", 7, "end_turn", null, io.github.stardomains3.oxproxion.code.TurnUsage(18200, 2400, 0.042)),
+        )
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────

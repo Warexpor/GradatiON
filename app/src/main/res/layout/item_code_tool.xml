@@ -12,8 +12,10 @@
     android:paddingBottom="1dp">
 
     <!-- Claude Code style: one quiet line. Kind glyph in a bead on the rail (a ring orbits it while
-         the tool runs), verb, mono argument, and a cross only on failure. Output hangs under it. -->
-    <LinearLayout
+         the tool runs), verb, mono argument, and a cross only on failure. Output hangs under it.
+         A packed chain, so a failure's cross follows the words instead of standing alone at the
+         line's end like a dismiss button; the argument gives way first when the line is full. -->
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/codeToolRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -21,15 +23,16 @@
         android:background="@drawable/bg_press_svg"
         android:clickable="true"
         android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
         android:paddingEnd="8dp">
 
         <FrameLayout
             android:id="@+id/codeRailNode"
             android:layout_width="20dp"
             android:layout_height="20dp"
-            android:background="@drawable/bg_code_node">
+            android:background="@drawable/bg_code_node"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
             <ImageView
                 android:id="@+id/codeToolIcon"
@@ -62,18 +65,28 @@
             android:maxWidth="220dp"
             android:textColor="@color/xai_ink"
             android:textSize="14sp"
-            android:textFontWeight="600" />
+            android:textFontWeight="600"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/codeToolDetail"
+            app:layout_constraintHorizontal_bias="0"
+            app:layout_constraintHorizontal_chainStyle="packed"
+            app:layout_constraintStart_toEndOf="@id/codeRailNode"
+            app:layout_constraintTop_toTopOf="parent" />
 
         <TextView
             android:id="@+id/codeToolDetail"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:layout_marginStart="8dp"
             android:ellipsize="middle"
             android:singleLine="true"
             style="@style/Widget.Gradation.Code.MonoLine"
-            android:textColor="@color/xai_mute" />
+            android:textColor="@color/xai_mute"
+            app:layout_constrainedWidth="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/codeToolStatus"
+            app:layout_constraintStart_toEndOf="@id/codeToolTitle"
+            app:layout_constraintTop_toTopOf="parent" />
 
         <ImageView
             android:id="@+id/codeToolStatus"
@@ -81,8 +94,12 @@
             android:layout_height="14dp"
             android:layout_marginStart="8dp"
             android:importantForAccessibility="no"
-            app:tint="@color/xai_mute" />
-    </LinearLayout>
+            app:tint="@color/xai_mute"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/codeToolDetail"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- The terminal pane: a $ prompt line for commands, then the output. Long lines stop inside
          the side pads and fade there, instead of running into the rim and being cut mid-letter. -->
