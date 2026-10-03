@@ -1082,6 +1082,33 @@ class ScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals("Export chats", a.findViewById<android.widget.TextView>(R.id.exportHistoryButton).text.toString())
     }
 
+    /** The Copy rows only change the answer-ready alert; they named nothing and stayed live with it off. */
+    @Test fun settingsCopyRowsFollowNotificationsDark() = withChat { a, _ ->
+        val prefs = SharedPreferencesHelper(a)
+        shadowOf(ApplicationProvider.getApplicationContext<Application>())
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        prefs.saveNotiPreference(false)
+        openSettingsRow(a, R.id.settingsRowData)
+        val copies = listOf(R.id.copyOrdismissSwitch, R.id.copyOropenSwitch)
+            .map { a.findViewById<androidx.appcompat.widget.SwitchCompat>(it) }
+        for (sw in copies) {
+            org.junit.Assert.assertFalse("rests while alerts are off", sw.isEnabled)
+            org.junit.Assert.assertTrue((sw.parent as View).alpha < 1f)
+        }
+        snap(root(a), "settings_data_alerts_off_dark")
+        a.findViewById<View>(R.id.notificationsSwitch).performClick(); idle()
+        org.junit.Assert.assertTrue(prefs.getNotiPreference())
+        for (sw in copies) {
+            org.junit.Assert.assertTrue("live with alerts on", sw.isEnabled)
+            org.junit.Assert.assertEquals(1f, (sw.parent as View).alpha)
+        }
+        val dismiss = a.getString(R.string.settings_copy_instead_dismiss)
+        org.junit.Assert.assertTrue(dismiss.contains(a.getString(R.string.action_copy)) &&
+            dismiss.contains(a.getString(R.string.notif_action_dismiss)))
+        val open = a.getString(R.string.settings_copy_instead_open)
+        org.junit.Assert.assertTrue(open.contains(a.getString(R.string.notif_action_open)))
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
