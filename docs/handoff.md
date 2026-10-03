@@ -1,3 +1,13 @@
+# Handoff (2026-10-03, Import wave 31)
+
+On `cursor/import-portrait-lore-pins-9abf` (PR into `gradation/app-pass`). Import/export follow-ups after #133. Not a redo of the last inactive lore copy, clearing a waiting pin when one is chosen, or exporting a missing portrait as empty. Not a redo of #125 (last character copy, inactive lore backups, cold-start pin linking). Not a redo of #145, #141, #140, #143, #142, or #139.
+
+- A character backup whose lorebook is not on the phone yet clears the pin already stored. The name is kept until that book is imported. The next export still carries that name, and chats stop using the previous book.
+- Replacing a portrait that fails to land (the new JPEG never takes the file name) leaves the import note in place and keeps the old picture for the next launch. A backup picture that does not decode is still left, and is not retried.
+- Lore export writes one row per name: the newest text, on if any copy of that name was on. Import applies that row to every local book with the name, so an older duplicate does not keep the old text or stay on after the backup turned the book off.
+
+Phone: pin a character to City, import a character backup that pins Forest before Forest exists (the character should not stay on City; exporting again should still say Forest). Import Forest (the pin should attach). Put a second lorebook named World next to one that is on, with older text, export and import (one World, the newer text, and it should still be on if either copy was). Import a character portrait over one the phone already has, after a failed replace (the old picture stays, and the next launch should take the new one).
+
 # Handoff (2026-10-03, Code wave 31)
 
 On `cursor/code-mode-wave31-814a` (PR into `gradation/app-pass`). Code-mode follow-ups after cancelled todos, `_cursor/` methods, and mouse execute cards (#131). Not a redo of that pass, of harness-id folding, of listSessions permissionMode aliases, or of BrowserMouseClickXy / BrowserCdp cards. Not #139 (history preview marks, staged-file cap), #140 (tool switches without a grant, local CGNAT and IPv6), #141 (character-list chrome, pairing `#` and field names), #142 (list underscores, example dialogs, wrapped lore keys), or #143 (recovered database at the root, side pictures, emoji slices).
