@@ -55,6 +55,8 @@
                 android:layout_marginBottom="24dp"
                 style="@style/Xai.TextInputLayout"
                 app:endIconMode="dropdown_menu"
+                app:endIconDrawable="@drawable/ic_expand_more"
+                app:endIconTint="@color/xai_mute"
                 android:hint="@string/preset_edit_model">
 
                 <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -78,6 +80,8 @@
                 android:layout_marginBottom="24dp"
                 style="@style/Xai.TextInputLayout"
                 app:endIconMode="dropdown_menu"
+                app:endIconDrawable="@drawable/ic_expand_more"
+                app:endIconTint="@color/xai_mute"
                 android:hint="@string/preset_edit_system_message">
 
                 <com.google.android.material.textfield.MaterialAutoCompleteTextView

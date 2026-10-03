@@ -859,6 +859,43 @@ class ScreenshotTest : ScreenshotHarness() {
         }
     }
 
+    /** Dropdowns showed Material's filled triangle and the lists a down arrow; both are the line chevron now. */
+    @Test fun settingsDisclosureChevronsDark() = withChat { a, _ ->
+        fun pixels(d: android.graphics.drawable.Drawable): IntArray {
+            val c = d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
+            val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+            c.setBounds(0, 0, 48, 48); c.draw(android.graphics.Canvas(bmp))
+            return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
+        }
+        val chevron = pixels(a.getDrawable(R.drawable.ic_expand_more)!!)
+        val prefs = SharedPreferencesHelper(a)
+        prefs.saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
+        prefs.savePresets(listOf(Preset("p1", "Morning brief", "openai/gpt-5", SystemMessage("Default", ""),
+            streaming = true, reasoning = false, conversationMode = false)))
+        val editor = PresetEditFragment.newInstance(null)
+        pushFragment(a, editor)
+        for (id in listOf(R.id.autoCompleteModel, R.id.autoCompleteSystemMessage)) {
+            var p = editor.requireView().findViewById<View>(id).parent
+            while (p !is com.google.android.material.textfield.TextInputLayout) p = (p as View).parent
+            org.junit.Assert.assertArrayEquals("dropdown chevron", chevron, pixels(p.endIconDrawable!!))
+        }
+        snap(root(a), "settings_preset_editor_chevrons_dark")
+        a.supportFragmentManager.beginTransaction().remove(editor).commitNow(); idle()
+        for ((make, list, icon) in listOf(
+            Triple<() -> androidx.fragment.app.Fragment, Int, Int>({ PromptLibraryFragment() }, R.id.prompt_recycler_view, R.id.expand_icon),
+            Triple({ SystemMessageLibraryFragment() }, R.id.system_message_recycler_view, R.id.expand_icon),
+            Triple({ PresetsListFragment() }, R.id.recyclerViewPresets, R.id.iconExpand),
+        )) {
+            val f = make()
+            pushFragment(a, f)
+            val row = f.requireView().findViewById<androidx.recyclerview.widget.RecyclerView>(list).getChildAt(0)
+            org.junit.Assert.assertArrayEquals("list expand chevron", chevron,
+                pixels(row.findViewById<android.widget.ImageView>(icon).drawable))
+            if (list == R.id.system_message_recycler_view) snap(root(a), "settings_list_chevrons_dark")
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
