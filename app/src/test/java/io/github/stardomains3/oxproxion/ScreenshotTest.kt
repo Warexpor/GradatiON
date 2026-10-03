@@ -536,6 +536,17 @@ class ScreenshotTest : ScreenshotHarness() {
         }
     }
 
+    /** License rows were the framework's simple_list_item_1: no press state and no dividers. */
+    @Test fun settingsLicensesDark() = withChat { a, _ ->
+        openSettingsRow(a, R.id.settingsRowData)
+        a.findViewById<View>(R.id.licensesButton).performClick(); idle()
+        val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recyclerView)
+        val row = list.getChildAt(0)
+        org.junit.Assert.assertNotNull("glass license row", row.findViewById<View>(R.id.licenseName))
+        org.junit.Assert.assertTrue("row shows the press wash", row.background is android.graphics.drawable.StateListDrawable)
+        snap(root(a), "settings_licenses_dark")
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
