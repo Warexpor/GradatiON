@@ -137,6 +137,7 @@ class DbPrefQuarantineTest {
         File(files, "backgrounds").mkdirs()
         // The live names were already moved, or never finished. Only the side files remain.
         File(files, "rp_avatars/char_3.jpg.bak").writeBytes(jpeg)
+        File(files, "rp_avatars/char_3.jpg.partial.incoming").writeBytes(jpeg)
         File(files, "backgrounds/char_3.jpg.partial").writeBytes(jpeg)
         File(files, "backgrounds/photo.jpg.bak").writeBytes(jpeg)
 
@@ -145,8 +146,10 @@ class DbPrefQuarantineTest {
         val avatar = File(files, "rp_avatars/char_3.jpg")
         val wall = File(files, "backgrounds/char_3.jpg")
         assertFalse(File(files, "rp_avatars/char_3.jpg.bak").exists())
+        assertFalse(File(files, "rp_avatars/char_3.jpg.partial.incoming").exists())
         assertFalse(File(files, "backgrounds/char_3.jpg.partial").exists())
         assertTrue(jpeg.contentEquals(File(vault, "aside-6/rp_avatars/char_3.jpg.bak").readBytes()))
+        assertTrue(jpeg.contentEquals(File(vault, "aside-6/rp_avatars/char_3.jpg.partial.incoming").readBytes()))
         assertTrue(jpeg.contentEquals(File(vault, "aside-6/backgrounds/char_3.jpg.partial").readBytes()))
         // The app background's side file is not a character picture.
         assertTrue(jpeg.contentEquals(File(files, "backgrounds/photo.jpg.bak").readBytes()))

@@ -160,4 +160,27 @@ class ChatImportSideLogTest {
             SideFile.clear(dest)
         }
     }
+
+    @Test
+    fun aKilledClearLeavesTheInstalledNotes() {
+        val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "side-clear")
+        dir.mkdirs()
+        val dest = File(dir, "notes.json")
+        SideFile.clear(dest)
+        SideFile.write(dest, """[{"id":1,"facts":"new","pinned":true}]""".toByteArray())
+        val bak = File(dir, "notes.json.bak")
+        bak.writeText("""[{"id":1,"facts":"old","pinned":false}]""")
+        bak.setLastModified(dest.lastModified() - 10_000)
+        SideFile.stopAfterClearingSidesForTest = true
+        try {
+            SideFile.clear(dest)
+            assertTrue(dest.isFile)
+            assertFalse(bak.exists())
+            assertFalse(File(dir, "notes.json.partial").exists())
+            assertEquals("new", ChatImportSideLog.read(dest)!!.single().facts)
+        } finally {
+            SideFile.stopAfterClearingSidesForTest = false
+            SideFile.clear(dest)
+        }
+    }
 }

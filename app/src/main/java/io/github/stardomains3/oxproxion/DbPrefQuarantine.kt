@@ -29,7 +29,9 @@ internal object DbPrefQuarantine {
      * [ScenePhoto.recover] puts that file back, so a fresh database would show the old
      * portrait or wallpaper on the reused Room id.
      */
-    private val CHAR_JPEG_SIDE = Regex("^char_[0-9]{1,16}\\.jpg\\.(bak|partial)$")
+    private val CHAR_JPEG_SIDE = Regex(
+        "^char_[0-9]{1,16}\\.jpg\\.(bak|partial|partial\\.incoming)$"
+    )
 
     private val EXACT = setOf(
         "pinned_session_ids",

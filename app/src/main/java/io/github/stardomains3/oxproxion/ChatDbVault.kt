@@ -135,6 +135,11 @@ internal object ChatDbVault {
      */
     fun relocateLegacy(databasesDir: File, vault: File, storedRecovered: String?): Boolean {
         vault.mkdirs()
+        // A 0-byte main is not history. Install a finished side file onto that name
+        // before anything moves the empty file or deletes the side file.
+        installReadyCopiesOverEmpty(databasesDir)
+        installReadyCopiesOverEmpty(File(databasesDir, HOLD_DIR))
+        installReadyCopiesOverEmpty(vault)
         // Drop vault orphans before drain so a complete hold set is not blocked by a leftover -wal.
         discardIncompleteSets(vault)
         // Earlier parks that the vault can take now.
@@ -196,6 +201,9 @@ internal object ChatDbVault {
             discardDisposableStuckRenames(vault)
         }
         parkMoveTemps(databasesDir)
+        // Temps just parked under hold can sit next to a 0-byte main. Install them
+        // before the hold pass deletes every .partial / .ready / .bak.
+        installReadyCopiesOverEmpty(File(databasesDir, HOLD_DIR))
         discardHoldMoveTemps(databasesDir)
         if (encryptMarker(vault).isFile) {
             discardDisposableKeptRenames(holdDirectory(databasesDir))
@@ -678,6 +686,11 @@ internal object ChatDbVault {
         val ready = readyFile(to)
         val bak = bakFile(to)
         val readyCopy = ready.exists() && partial.isFile && partial.length() > 0L
+        // A 0-byte name is the placeholder an open leaves before the header is written.
+        // Treating it as the destination used to delete the finished side file.
+        if (to.isFile && to.length() == 0L && readyCopy) {
+            if (!to.delete() && to.exists()) return false
+        }
         if (readyCopy && !to.exists() && (!from.exists() || from.length() == partial.length())) {
             if (partial.renameTo(to)) {
                 ready.delete()
@@ -707,6 +720,35 @@ internal object ChatDbVault {
         readyFile(to).delete()
         val bak = bakFile(to)
         if (bak.exists() && !bak.delete()) Log.w(TAG, "Could not remove ${bak.path}")
+    }
+
+    /**
+     * Puts a finished `.partial` onto a 0-byte recovered or set-aside main in [directory].
+     * That empty file is not the database. Moving it, then deleting the side file,
+     * dropped the copy that still has bytes. A main that already has bytes is left
+     * alone, and so is a side file with no ready marker.
+     */
+    private fun installReadyCopiesOverEmpty(directory: File) {
+        if (!directory.isDirectory) return
+        val names = LinkedHashSet<String>()
+        directory.listFiles()?.forEach { file ->
+            val base = when {
+                file.name.endsWith(".partial") -> file.name.removeSuffix(".partial")
+                file.name.endsWith(".ready") -> file.name.removeSuffix(".ready")
+                else -> return@forEach
+            }
+            if (isRecoveredName(base) || UNREADABLE.matches(base)) names += base
+        }
+        for (name in names) {
+            val to = File(directory, name)
+            if (!to.isFile || to.length() != 0L) continue
+            val partial = partialFile(to)
+            val ready = readyFile(to)
+            if (!ready.isFile || !partial.isFile || partial.length() <= 0L) continue
+            if (!to.delete() && to.exists()) continue
+            if (!partial.renameTo(to)) continue
+            if (ready.exists() && !ready.delete()) Log.w(TAG, "Could not remove ${ready.path}")
+        }
     }
 
     private fun partialFile(to: File) = File(to.parentFile, to.name + ".partial")
