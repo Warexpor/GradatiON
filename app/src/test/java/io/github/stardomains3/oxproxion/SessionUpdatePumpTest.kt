@@ -136,6 +136,20 @@ class SessionUpdatePumpTest {
     }
 
     @Test
+    fun turnDoneSettlesToolsLeftRunning() {
+        val live = CodeEvent.ToolCall("tool:1", 10L, "1", ToolKind.EDIT, "Edit", "a.kt", ToolStatus.PENDING)
+        val done = CodeEvent.ToolCall("tool:2", 11L, "2", ToolKind.READ, "Read", "b.kt", ToolStatus.COMPLETED)
+        val start = CodeSessionState(summary(), events = listOf(done, live), running = true)
+        val ended = CodeSessionFolder.apply(start, CodeUpdate.TurnDone("cancelled"), now = 12L)
+        val tools = ended.events.filterIsInstance<CodeEvent.ToolCall>().associateBy { it.callId }
+        assertEquals("a tool cut off by the turn's end stops spinning", ToolStatus.CANCELLED, tools["1"]!!.status)
+        assertEquals(ToolStatus.COMPLETED, tools["2"]!!.status)
+        // A stale cancel lands after the next prompt began: its tools are still live.
+        val stale = CodeSessionFolder.apply(start, CodeUpdate.TurnDone("cancelled"), now = 12L, ignoreStaleCancelTurnDone = true)
+        assertEquals(ToolStatus.PENDING, stale.events.filterIsInstance<CodeEvent.ToolCall>().first { it.callId == "1" }.status)
+    }
+
+    @Test
     fun cancelTurnDoneWithSuppressClearsRunning() {
         // Stop-only: suppress set, no ignore stamp → cancelled clears running.
         val sessions = mapOf("s1" to CodeSessionState(summary(), running = true))

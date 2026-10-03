@@ -90,7 +90,11 @@ internal object CodeSessionFolder {
         if (update is CodeUpdate.AvailableCommands) {
             return state.copy(availableCommands = update.commands)
         }
-        val events = bounded(TranscriptReducer.apply(state.events, update, now), update)
+        val staleCancel = update is CodeUpdate.TurnDone && update.stopReason == "cancelled" && ignoreStaleCancelTurnDone
+        val reduced = TranscriptReducer.apply(state.events, update, now)
+        // The turn is over, so nothing in it is still running: a tool left mid-run would spin on
+        // a finished transcript. A stale cancel lands after the next prompt began; its tools stay.
+        val events = bounded(if (update is CodeUpdate.TurnDone && !staleCancel) settleTools(reduced) else reduced, update)
         val running = when (update) {
             // B1/H1: only a *stale* local-cancel TurnDone (superseded by a newer prompt) keeps
             // running. Natural ACP stopReason=="cancelled" (no ignore stamp) clears running.
@@ -133,6 +137,15 @@ internal object CodeSessionFolder {
             )
         }
         return state.copy(events = events, running = running, summary = summary)
+    }
+
+    private fun settleTools(events: List<CodeEvent>): List<CodeEvent> {
+        if (events.none { it is CodeEvent.ToolCall && (it.status == ToolStatus.RUNNING || it.status == ToolStatus.PENDING) }) return events
+        return events.map {
+            if (it is CodeEvent.ToolCall && (it.status == ToolStatus.RUNNING || it.status == ToolStatus.PENDING)) {
+                it.copy(status = ToolStatus.CANCELLED)
+            } else it
+        }
     }
 
     fun needsPersist(update: CodeUpdate): Boolean =

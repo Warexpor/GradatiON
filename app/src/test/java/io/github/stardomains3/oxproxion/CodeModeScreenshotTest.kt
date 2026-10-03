@@ -463,6 +463,7 @@ class CodeModeScreenshotTest {
             it is CodeEvent.Notice && it.text == "Stopped"
         }
         assertEquals(0, stopped)
+        snap(root(a), "code_session_stopped_dark")
     }
 
     /** Audit 12 + 14: tool rows, thought headers and "full output" clear 44dp and speak their state. */
