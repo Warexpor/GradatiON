@@ -13,7 +13,7 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        app:title="Third-Party Licenses"
+        app:title="@string/licenses_title"
         app:titleTextColor="@color/xai_ink"
         android:background="@color/xai_canvas"
         app:navigationIcon="@drawable/is_backarrow"
@@ -23,10 +23,11 @@
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="16dp"
         android:clipToPadding="false"
         android:scrollbars="vertical"
         android:background="@color/xai_canvas"
-        tools:listitem="@android:layout/simple_list_item_1" />
+        tools:listitem="@layout/item_license" />
 
 </LinearLayout>
