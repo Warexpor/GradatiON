@@ -64,4 +64,20 @@ class ComposerFilesTest {
         assertEquals("", read.text)
         assertTrue(reads <= 8)
     }
+
+    @Test fun a_file_that_contains_a_fence_does_not_close_the_wrapper() {
+        assertEquals(
+            "File 1 (notes.txt):\n\n```text\nhello\n```",
+            ComposerFiles.section(1, "notes.txt", "hello"),
+        )
+        assertEquals(
+            "File 1 (empty.txt): (empty file)",
+            ComposerFiles.section(1, "empty.txt", "  \n"),
+        )
+        val body = "before\n```\ncode\n```\nafter"
+        val section = ComposerFiles.section(2, "a\nb.md", "\n$body\n")
+        assertEquals("File 2 (a b.md):", section.lineSequence().first())
+        assertTrue(section.contains("````text\n$body\n````"))
+        assertFalse(section.contains("\n```text\n"))
+    }
 }

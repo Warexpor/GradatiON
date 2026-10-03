@@ -214,4 +214,26 @@ class ComposerStagedTest {
         )
         assertEquals("", label)
     }
+
+    @Test fun a_photo_send_parks_the_caption_before_the_field_is_cleared() {
+        val file = ComposerStaged.FilePart("a.md", "```\ncode\n```", 12)
+        val entry = ComposerStaged.Entry(
+            imageUri = "content://app/owned/scene_photos/11111111-1111-1111-1111-111111111111.jpg",
+            files = listOf(file),
+        )
+        val held = ComposerStaged.holdBeforePhotoSend(
+            drafts = ComposerDrafts.remember(emptyMap(), 4L, "old"),
+            staged = emptyMap(),
+            sessionId = 4L,
+            text = "see the pier",
+            entry = entry,
+        )
+        // The field is cleared and a pause writes nothing. The park has to keep both.
+        val afterPause = ComposerStaged.parkLive(held.staged, 4L, ComposerStaged.Entry())
+        assertEquals("see the pier", ComposerDrafts.text(held.drafts, 4L))
+        assertEquals(entry.imageUri, ComposerStaged.get(afterPause, 4L).imageUri)
+        assertEquals(1, ComposerStaged.get(afterPause, 4L).files.size)
+        val blank = ComposerStaged.holdBeforePhotoSend(held.drafts, afterPause, 4L, "  ", entry)
+        assertEquals("", ComposerDrafts.text(blank.drafts, 4L))
+    }
 }

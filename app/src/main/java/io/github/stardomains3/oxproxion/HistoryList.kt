@@ -128,7 +128,7 @@ object HistoryList {
             parsed != null -> fold(MessageContent.text(parsed))
             raw.startsWith("\"") -> fold(jsonStringPrefix(raw))
             else -> fold(textFieldPrefix(raw))
-        }.takeUnless { it.startsWith("data:") || it.contains("base64,") }.orEmpty()
+        }.let { withoutDataPayload(it) }
         val body = when {
             text.isNotBlank() -> text
             hasImage(raw) -> photoLabel
@@ -515,7 +515,9 @@ object HistoryList {
     private fun clipAround(text: String, at: Int, needleLen: Int): String {
         if (at < 0) return text
         if (at < LINE && text.length <= LINE + LEAD) return text.trim()
-        val start = (at - LEAD).coerceAtLeast(0)
+        // A hit already inside the first line keeps the start. Stepping back by [LEAD]
+        // put an ellipsis in front of a word the row could already show.
+        val start = if (at < LINE) 0 else (at - LEAD).coerceAtLeast(0)
         val end = (at + needleLen + LINE).coerceAtMost(text.length)
         var snippet = text.substring(start, end).trim()
         if (start > 0) snippet = "…$snippet"
@@ -541,6 +543,24 @@ object HistoryList {
 
     private fun hasImage(raw: String): Boolean =
         raw.contains("\"type\":\"image_url\"") || raw.contains("\"type\": \"image_url\"")
+
+    /**
+     * A photo's data URL is not a preview line. A sentence that mentions one, or that
+     * starts with "data:" or talks about "base64,", still is. Treating every such
+     * string as the payload hid the caption, and a picture on that turn showed Photo.
+     */
+    private fun withoutDataPayload(text: String): String {
+        if (text.isEmpty()) return ""
+        val stripped = WHITESPACE.replace(DATA_URL.replace(text, " "), " ").trim()
+        if (stripped.isEmpty() || isDataPayload(stripped)) return ""
+        return stripped
+    }
+
+    private fun isDataPayload(text: String): Boolean {
+        if (text.any { it.isWhitespace() }) return false
+        if (isBase64Run(text)) return true
+        return text.startsWith("data:") && text.contains("base64", ignoreCase = true)
+    }
 
     /** The value of the first `"text":"..."` field, as far as the prefix goes. */
     private fun textFieldPrefix(raw: String): String {
@@ -585,8 +605,8 @@ object HistoryList {
 
     /**
      * Markdown marks come off for the preview. A mark inside a word stays: stripping
-     * every `_` hid `snake_case`, and stripping every `#`, `~` and `>` hid `C#`,
-     * `~/Downloads` and `a > b`, so the row no longer contained the words that matched.
+     * every `_` hid `snake_case` and `déjà_vu` (a letter is not only ASCII), and
+     * stripping every `#`, `~` and `>` hid `C#`, `~/Downloads` and `a > b`.
      * Heading hashes, a blockquote `>`, paired `~~`, stars and backticks still come off.
      */
     private fun fold(text: String): String =
@@ -610,7 +630,7 @@ object HistoryList {
     private val MD_QUOTE = Regex("(?m)^>+[ \\t]*")
     private val MD_STRIKE = Regex("~~")
     private val MD_BACKTICK = Regex("`+")
-    private val MD_EDGE_UNDERSCORE = Regex("(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])")
+    private val MD_EDGE_UNDERSCORE = Regex("(?<![\\p{L}\\p{N}])_|_(?![\\p{L}\\p{N}])")
     private val WHITESPACE = Regex("\\s+")
 
     private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }

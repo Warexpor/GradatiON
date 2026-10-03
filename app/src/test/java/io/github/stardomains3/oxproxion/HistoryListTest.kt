@@ -162,6 +162,40 @@ class HistoryListTest {
         assertTrue(HistoryList.searchLine("user", "\"a > b\"", ">", you, "Photo").contains(">"))
     }
 
+    @Test fun preview_keeps_a_sentence_about_data_and_an_underscore_in_a_word() {
+        val you = { text: String -> "You: $text" }
+        assertEquals(
+            "You: data: the report is ready",
+            HistoryList.preview("user", "\"data: the report is ready\"", you, "Photo"),
+        )
+        assertEquals(
+            "You: use base64, then decode",
+            HistoryList.preview("user", "\"use base64, then decode\"", you, "Photo"),
+        )
+        assertEquals(
+            "You: data: the report is ready",
+            HistoryList.preview(
+                "user",
+                """[{"type":"text","text":"data: the report is ready"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,AAAA"}}]""",
+                you,
+                "Photo",
+            ),
+        )
+        assertEquals(
+            "You: see hello",
+            HistoryList.preview("user", "\"see data:image/jpeg;base64,AAAA hello\"", you, "Photo"),
+        )
+        assertEquals("", HistoryList.preview("assistant", "\"data:image/jpeg;base64,AAAA\"", you, "Photo"))
+        assertEquals("You: déjà_vu", HistoryList.preview("user", "\"déjà_vu\"", you, "Photo"))
+        assertEquals("You: café", HistoryList.preview("user", "\"_café_\"", you, "Photo"))
+        // The hit starts inside the first line. It used to gain a leading ellipsis.
+        val early = "short intro lantern " + "tail ".repeat(40)
+        val line = HistoryList.searchLine("user", "\"$early\"", "lantern", you, "Photo")
+        assertTrue(line.startsWith("You: short intro"))
+        assertTrue(line.contains("lantern"))
+        assertFalse(line.startsWith("You: …"))
+    }
+
     @Test fun search_line_uses_a_clean_parse_and_a_mid_string_slice() {
         val you = { text: String -> "You: $text" }
         assertEquals(
