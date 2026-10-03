@@ -13,7 +13,7 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        app:title="Inference Parameters"
+        app:title="@string/settings_inference"
         app:titleTextColor="@color/xai_ink"
         android:background="@color/xai_grouped"
         app:navigationIcon="@drawable/is_backarrow"

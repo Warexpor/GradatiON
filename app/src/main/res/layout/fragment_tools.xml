@@ -11,7 +11,7 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        app:title="Manage Tools"
+        app:title="@string/settings_manage_tools"
         app:titleTextColor="@color/xai_ink"
         android:background="@color/xai_grouped"
         app:navigationIcon="@drawable/is_backarrow"
