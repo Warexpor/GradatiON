@@ -1,3 +1,14 @@
+# Handoff (2026-10-02, Code wave 28)
+
+On `gradation/w28-code` (PR into `gradation/app-pass`). Code-mode fixes, unit-tested (`CodeProtocolTest`, `GitBridgeJsonTest`, `ListSessionsJsonTest`):
+- A bridge `gitStatus` `path` or `branch` written as a whole-number double (`5.0` / `"5.0"`) still matches as `"5"` (same as browse names). A `listSessions` `harness` or `branch` written the same way still matches. A live `sessionStatus` `branch` does too, so it does not replace that list value with `"5.0"`; `""` still clears. A tool diff `path` (classic or v2 `changes`) and a tool location `path` written the same way still match, so the card and the Changes row agree.
+- Cursor Agent tool names `BrowserTabList`, `BrowserTabNew`, `BrowserTabSelect`, `BrowserTabClose`, `BrowserInstall`, `BrowserTakeScreenshot`, `BrowserGetText`, and `BrowserGetTitle` map to search / execute / read cards (icon and log clipping). `BrowserNavigateForward`, `BrowserReload`, and `BrowserHighlight` use the execute card; `BrowserSearch` uses the search card.
+- Tool detail lines join a `labels` / `assignees` JSON array (CreateIssue / UpdateIssue), and read Cursor's native rawInput keys `sub_issue_id`, `after_id` / `before_id`, `commit_id`, `tree_sha`, `category_id`, `from_branch`, `author`, `check_run_id`, `release_id`, `artifact_id`, `thread_id`, `team_slug`, `login`, `selector`, `language`, `commit_title`, `state_reason`, `default_branch`, `role_name`, and `dataset` / `time_range` (a whole-number double shows as `5`).
+
+Phone: on Cursor Agent, a BrowserTabList, BrowserSearch, or BrowserGetText card should show the search or read icon. BrowserNavigateForward, BrowserReload, and BrowserHighlight should show the execute icon. A CreateIssue card with `labels: ["bug","help wanted"]` should show that list under the title. A Changes file whose path is `5.0`, and a tool diff or location path written the same way, should still resolve as `"5"`. A session whose branch arrives as `5.0` on session status should stay `"5"`.
+
+---
+
 # Handoff (2026-10-02, Import wave 27)
 
 On `gradation/w27-import` (PR into `gradation/app-pass`). Import/export IO fixes, unit-tested (`RpLibraryImportTest`, `ChatImportSideLogTest`):
