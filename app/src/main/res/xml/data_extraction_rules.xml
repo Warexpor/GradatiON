@@ -96,6 +96,8 @@
         <exclude domain="sharedpref" path="code_away_open_tokens.xml" />
         <exclude domain="sharedpref" path="code_away_notif_ids.xml" />
         <exclude domain="sharedpref" path="code_away_shade_hold.xml" />
+        <!-- Answer shade title and the speaking flag. A restore must not revive Stop on a new device. -->
+        <exclude domain="sharedpref" path="ForegroundServiceAnswer.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="ApiKeysPrefsStore.xml" />
@@ -192,5 +194,7 @@
         <exclude domain="sharedpref" path="code_away_open_tokens.xml" />
         <exclude domain="sharedpref" path="code_away_notif_ids.xml" />
         <exclude domain="sharedpref" path="code_away_shade_hold.xml" />
+        <!-- Answer shade title and the speaking flag. A restore must not revive Stop on a new device. -->
+        <exclude domain="sharedpref" path="ForegroundServiceAnswer.xml" />
     </device-transfer>
 </data-extraction-rules>
