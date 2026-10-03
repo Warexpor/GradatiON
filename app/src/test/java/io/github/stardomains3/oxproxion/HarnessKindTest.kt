@@ -34,6 +34,18 @@ class HarnessKindTest {
         assertEquals(HarnessKind.PI, HarnessKind.fromId("pi"))
     }
 
+    @Test fun fromIdFoldsCaseAndUnderscores() {
+        assertEquals(HarnessKind.CLAUDE_CODE, HarnessKind.fromId("Claude_Code"))
+        assertEquals(HarnessKind.CLAUDE_CODE, HarnessKind.fromId("CLAUDE-CODE"))
+        assertEquals(HarnessKind.GROK_BUILD, HarnessKind.fromId("grok_build"))
+        assertEquals(HarnessKind.CODEX, HarnessKind.fromId(" Codex "))
+        assertEquals(HarnessKind.CURSOR_CLI, HarnessKind.fromId("CURSOR-AGENT"))
+        assertEquals(HarnessKind.CURSOR_CLI, HarnessKind.fromId("cursor_cli"))
+        // A permission-mode word must not become Cursor.
+        assertEquals(HarnessKind.CUSTOM, HarnessKind.fromId("Agent"))
+        assertEquals(HarnessKind.CUSTOM, HarnessKind.fromId("open-code"))
+    }
+
     @Test fun harnessInfoKindAndLabelFollowAliases() {
         val stale = HarnessInfo("cursor-cli", "Cursor CLI", available = false)
         assertEquals(HarnessKind.CURSOR_CLI, stale.kind)

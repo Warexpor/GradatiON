@@ -34,9 +34,18 @@ enum class HarnessKind(val id: String, val displayName: String, val shortName: S
          */
         private val CURSOR_ALIASES = setOf("cursor-agent", "cursor")
 
+        /**
+         * Case and underscores do not matter (`Claude_Code`, `CURSOR-AGENT`).
+         * `agent` stays [CUSTOM]: that word is a permission mode, not a harness.
+         * Outbound frames still send [HarnessKind.id].
+         */
         fun fromId(id: String?): HarnessKind {
-            entries.find { it.id == id }?.let { return it }
-            return if (id in CURSOR_ALIASES) CURSOR_CLI else CUSTOM
+            val key = id?.trim()?.lowercase()?.replace('_', '-')
+                ?.replace(Regex("-+"), "-")
+                ?.takeIf { it.isNotEmpty() }
+                ?: return CUSTOM
+            entries.find { it.id == key }?.let { return it }
+            return if (key in CURSOR_ALIASES) CURSOR_CLI else CUSTOM
         }
     }
 }

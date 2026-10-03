@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Shell and search output is terminal text: color and a rewritten progress line are dropped.
  * A file read keeps those bytes. Tool status accepts `in-progress`, `running`, `error`,
  * `done`, and `cancelled`. Kind accepts the names agents actually send (`Bash`, `grep`, `write`,
- * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`, `ListPullRequestReviewComments`, `BrowserFillForm`, `BrowserFileUpload`, `BrowserIsVisible`, `BrowserTabList`, `BrowserInstall`, `BrowserNavigateForward`, `BrowserReload`, `BrowserHighlight`, `BrowserSearch`), and a tool `name` when `kind` is missing or `other`.
+ * `GenerateImage`, `LS`, `ApplyPatch`, `WriteShellStdin`, `ListMachines`, `PatchEdit`, `ReadTodos`, `BrowserClick`, `CreateIssue`, `GetIssue`, `UpdatePullRequest`, `GetLabel`, `CreateRepository`, `GetMergeRequest`, `WorkersList`, `ListPullRequestReviewComments`, `BrowserFillForm`, `BrowserFileUpload`, `BrowserIsVisible`, `BrowserTabList`, `BrowserInstall`, `BrowserNavigateForward`, `BrowserReload`, `BrowserHighlight`, `BrowserSearch`, `BrowserMouseClickXy`, `BrowserCdp`), and a tool `name` when `kind` is missing or `other`.
  * `tool_call_content_chunk` appends. A diff may be old/new text or a v2 `changes` + `patch`.
  * Cursor Agent's `cursor/ask_question`, `cursor/create_plan`, and `cursor/update_todos`
  * are answered here so those requests do not sit forever.
@@ -643,6 +643,8 @@ class AcpAdapter : HarnessAdapter {
             "browser_navigate_forward", "browsernavigateforward",
             "browser_reload", "browserreload",
             "browser_highlight", "browserhighlight",
+            "browser_mouse_click_xy", "browsermouseclickxy",
+            "browser_cdp", "browsercdp",
             "kill_shell", "killshell" -> "execute"
             "think", "thought", "reasoning",
             "await", "await_task", "awaittask",
@@ -1172,9 +1174,14 @@ class AcpAdapter : HarnessAdapter {
                 "default_branch", "defaultBranch",
                 "role_name", "roleName",
                 "dataset", "time_range", "timeRange",
+                "tab_id", "tabId",
+                "action",
+                "method",
+                "reviewers", "team_reviewers", "teamReviewers",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
                 "source_path", "sourcePath", "machine_id", "machineId") != null ||
+            xyText(raw) != null ||
             firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
@@ -1361,9 +1368,13 @@ class AcpAdapter : HarnessAdapter {
                 "default_branch", "defaultBranch",
                 "role_name", "roleName",
                 "dataset", "time_range", "timeRange",
+                "tab_id", "tabId",
+                "action",
+                "method",
+                "reviewers", "team_reviewers", "teamReviewers",
                 "connection",
                 "computer_path", "computerPath", "box_path", "boxPath",
-                "source_path", "sourcePath", "machine_id", "machineId"),
+                "source_path", "sourcePath", "machine_id", "machineId") ?: xyText(raw),
             filePath = firstRaw(raw, "file_path", "filePath", "path", "target_file", "targetFile",
                 "target_directory", "targetDirectory", "relative_workspace_path",
                 "relativeWorkspacePath", "absolute_path", "absolutePath",
@@ -1378,6 +1389,25 @@ class AcpAdapter : HarnessAdapter {
                 "old_path", "oldPath", "new_path", "newPath",
                 "full_path", "fullPath"),
         )
+    }
+
+    /**
+     * Coordinate click (`browser_mouse_click_xy`) sends `x` and `y`, not a ref.
+     * Both are required so a lone `x` does not replace a command line. Whole-number
+     * doubles still show as `10, 20`, not `10.0, 20.0`.
+     */
+    private fun xyText(raw: JsonObject?): String? {
+        if (raw == null) return null
+        val x = coordPiece(raw["x"]) ?: return null
+        val y = coordPiece(raw["y"]) ?: return null
+        return "$x, $y"
+    }
+
+    private fun coordPiece(el: JsonElement?): String? {
+        val p = el as? JsonPrimitive ?: return null
+        if (p is JsonNull) return null
+        wholeNumberLong(p)?.let { return it.toString() }
+        return p.contentOrNull?.trim()?.ifEmpty { null }
     }
 
     /**
