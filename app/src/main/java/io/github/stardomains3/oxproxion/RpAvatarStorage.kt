@@ -53,7 +53,11 @@ object RpAvatarStorage {
 
     fun encodeAvatarBase64(context: Context, characterId: Long): String? {
         val file = avatarFile(context, characterId)
-        if (!file.exists() || file.length() == 0L) return null
+        ScenePhoto.recover(file)
+        // A half-written portrait is not a picture; leave the next phone's copy alone
+        // (wallpaper encode already does this).
+        if (!file.isFile || file.length() == 0L) return null
+        if (!ScenePhoto.completeJpeg(file)) return null
         return try {
             Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
         } catch (_: Exception) {

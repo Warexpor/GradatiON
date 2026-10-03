@@ -103,8 +103,10 @@ class ChatImportSideLogTest {
         assertTrue(ChatImportSideLog.matches(gone, present, 1))
         // Rename while notes wait: stamp + count still fingerprint the row.
         assertTrue(ChatImportSideLog.matches(gone, present.copy(title = "Other"), 1))
-        assertFalse(ChatImportSideLog.matches(gone, present, 2))
-        assertFalse(ChatImportSideLog.matches(gone, present.copy(timestamp = 9L), 1))
+        // A later save refreshes timestamp and can add messages; title still names the chat.
+        assertTrue(ChatImportSideLog.matches(gone, present.copy(timestamp = 9L), 2))
+        // Stamp and count both drift with a different title: recycled id, not the import.
+        assertFalse(ChatImportSideLog.matches(gone, present.copy(title = "Other", timestamp = 9L), 2))
         assertTrue(ChatImportSideLog.matches(gone.copy(title = null, timestamp = null, messageCount = null), present, 9))
         // Older log with only a title still rejects a recycled id's different name.
         assertFalse(

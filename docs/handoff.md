@@ -1,3 +1,11 @@
+# Handoff (2026-10-02, Import wave 28)
+
+On `gradation/w28-import` (PR into `gradation/app-pass`). Import/export IO follow-ups after #114:
+- Chat import side log still matches after a later save refreshes timestamp or grows the message count, when the title still names that chat (stamp+count alone used to drop waiting notes).
+- `RpWallpaperBackup.apply` leaves when `BackgroundPhoto.prepare` fails (no raw-stub fallback), matching the CharacterImportSideLog path.
+- Character portrait export (`encodeAvatarBase64`) recovers then skips a torn JPEG, matching wallpaper encode.
+
+Phone: import chats with pins/facts, kill before notes land, open and send in one imported chat (or leave so it autosaves), relaunch (pins/facts should still apply). Export a character whose portrait write was killed mid-way (backup should omit the portrait, not embed the stub).
 # Handoff (2026-10-03, Settings wave 28)
 
 On `gradation/w28-settings` (PR into `gradation/app-pass`). Settings follow-ups after Voice/switch honesty (#104) and Code/theme/persona commits (#108):
