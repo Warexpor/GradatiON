@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Code transcript: a status line on the content column, read like a log line; the rail passes by -->
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/codeNoticeText"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:gravity="center"
-    android:paddingStart="32dp"
-    android:paddingEnd="32dp"
+    android:gravity="start"
+    android:paddingStart="42dp"
+    android:paddingEnd="18dp"
     android:paddingTop="8dp"
     android:paddingBottom="8dp"
     android:textColor="@color/xai_mute"

@@ -1,21 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Code transcript: the agent is waiting on you. Collapses to one line once answered. -->
+<!-- Code transcript: the agent is waiting on you. Collapses to one bead on the rail once answered. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingStart="14dp"
+    android:paddingStart="12dp"
     android:paddingEnd="14dp"
     android:paddingTop="6dp"
     android:paddingBottom="8dp">
 
+    <!-- Opaque, so the rail runs behind it; the shield lands on the rail column -->
     <LinearLayout
         android:id="@+id/codeApprovalCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_code_approval"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -24,9 +27,10 @@
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="18dp"
+                android:layout_width="20dp"
                 android:layout_height="18dp"
                 android:importantForAccessibility="no"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_code_shield"
                 app:tint="@color/xai_ink" />
 
@@ -47,6 +51,7 @@
             android:id="@+id/codeApprovalWhat"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="30dp"
             android:layout_marginTop="6dp"
             android:ellipsize="end"
             android:maxLines="4"
@@ -57,18 +62,21 @@
             android:id="@+id/codeApprovalDetail"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="30dp"
             android:layout_marginTop="10dp"
-            android:background="@drawable/bg_code_block"
+            android:background="@drawable/bg_code_pane"
             android:maxLines="6"
             android:ellipsize="end"
             android:padding="12dp"
             android:textAppearance="@style/TextAppearance.Gradation.Code.Mono"
             android:textColor="@color/xai_body" />
 
-        <!-- HSV so Deny / Always allow / Allow never hard-clip on narrow widths. -->
+        <!-- HSV so Deny / Always allow / Allow never hard-clip on narrow widths. Wider than the
+             content column on purpose: the choices need the room more than the alignment. -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
             android:layout_marginTop="14dp"
             android:clipToPadding="true"
             android:fillViewport="true"
@@ -88,25 +96,32 @@
     <LinearLayout
         android:id="@+id/codeApprovalDone"
         android:layout_width="match_parent"
-        android:layout_height="36dp"
+        android:layout_height="40dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="8dp"
         android:visibility="gone">
 
-        <ImageView
-            android:id="@+id/codeApprovalDoneIcon"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:importantForAccessibility="no"
-            app:tint="@color/xai_mute" />
+        <FrameLayout
+            android:id="@+id/codeRailNode"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:background="@drawable/bg_code_node">
+
+            <ImageView
+                android:id="@+id/codeApprovalDoneIcon"
+                android:layout_width="11dp"
+                android:layout_height="11dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                app:tint="@color/xai_mute" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/codeApprovalDoneText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="10dp"
             android:ellipsize="end"
             android:singleLine="true"
             android:textColor="@color/xai_mute"

@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Live footer while a turn runs, on the content column; CodeTranscriptRail gives it a quiet dot -->
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/codeWorkingText"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:paddingStart="20dp"
+    android:paddingStart="42dp"
     android:paddingEnd="20dp"
     android:paddingTop="10dp"
     android:paddingBottom="10dp"
