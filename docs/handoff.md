@@ -1,3 +1,12 @@
+# Handoff (2026-10-03, Hub/Pair wave 32)
+
+On `cursor/hub-wave32-021f` (PR into `gradation/app-pass`). Hub shell and pairing follow-ups, rebased onto #148. Not a redo of the Roleplay list surviving an Ask history open, unencoded `&` in a bridge address, or 401/403 as status codes. Not a redo of character-list buttons following whether the list is the screen, a pairing link keeping `#` and query keys named token/auth/ws/fp, or a fingerprint with spaces (#137, #141). Not a redo of example sides, lore headers, or list marks (#148).
+
+- The hub hero uses the character list's first line. The old fold left `{{char}}` and `{{user}}` in place and joined every line of the field.
+- Pairing parse copies a raw bridge query as written. Lowercasing the key and decoding `%20` or `%2B` while gluing changed the address the QR carried. A fully encoded `url=` value is still decoded once.
+
+Phone: open Hub on a character whose first line is `{{char}} keeps the locket` (the hero should say the name, and not the next line). Pair a link whose address is `wss://h/v1?room=1&Session=Ab%2B1&name=hello%20world` (the saved host should keep `Session`, `%2B`, and `%20`).
+
 # Handoff (2026-10-03, RP wave 32)
 
 On `cursor/rp-wave-32-e558` (PR into `gradation/app-pass`). Roleplay follow-ups after #142. Not a redo of list lines keeping underscores, example dialogs keeping the User side on a leading blank line, or lore keys in `()` `（）` `【】`. Not a redo of bracketed scene notes in auto memory, Vesna edits across a stock refresh, or the active character id commit (#135).
