@@ -56,6 +56,20 @@ class RpChatSummariesTest {
     }
 
     @Test
+    fun previewKeepsAnUnderscoreBetweenLettersThatAreNotAscii() {
+        assertEquals("déjà_vu", RpChatSummaries.previewOf("\"déjà_vu\""))
+        assertEquals(
+            "You: déjà_vu",
+            RpChatSummaries.rowLine("user", "\"déjà_vu\"", { "You: $it" }, "Photo")
+        )
+        val word = RpCharacter(name = "Mira", personality = "She keeps the карта_реки.")
+        assertEquals("She keeps the карта_реки.", RpChatSummaries.tagline(word, "Alex"))
+        val named = RpCharacter(name = "déjà_vu", personality = "{{bot}} waits")
+        assertEquals("déjà_vu waits", RpChatSummaries.tagline(named, "Alex"))
+        assertEquals("заметка", RpChatSummaries.previewOf("\"_заметка_\""))
+    }
+
+    @Test
     fun previewKeepsMarksThatBelongToTheWords() {
         assertEquals("C# and F#", RpChatSummaries.previewOf("\"C# and F#\""))
         assertEquals("look at ~/Downloads", RpChatSummaries.previewOf("\"look at ~/Downloads\""))

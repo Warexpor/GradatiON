@@ -187,6 +187,37 @@ class RpPromptEngineTest {
     }
 
     @Test
+    fun exampleStandInIsNotTheCharacter() {
+        val namedJordan = RpPromptEngine.expandExampleMacros(
+            "{{random_user_1}} meets {{user}}. {{char}} watches.",
+            "Jordan",
+            "Alex"
+        )
+        org.junit.Assert.assertEquals("Riley meets Riley. Jordan watches.", namedJordan)
+        org.junit.Assert.assertEquals(
+            "Jordan waves",
+            RpPromptEngine.expandExampleMacros("{{user}} waves", "Alex", "Sam")
+        )
+        org.junit.Assert.assertEquals(
+            "Riley",
+            RpPromptEngine.expandMacros("{{random_user_1}}", "Jordan", "Alex")
+        )
+        val char = RpCharacter(
+            id = 1, name = "Jordan",
+            examplesJson = """[{"user":"{{user}} waves","char":"{{bot}} nods"}]"""
+        )
+        val prompt = RpPromptEngine.buildSystemPrompt(
+            character = char, persona = "", lore = "", instruction = "",
+            thirdPerson = false, showThoughts = false, isLlm = false,
+            userName = "Alex"
+        )
+        assertTrue(prompt.contains("\n  Riley: Riley waves"))
+        assertTrue(prompt.contains("\n  Jordan: Jordan nods"))
+        assertFalse(prompt.contains("\n  Jordan: Riley waves"))
+        assertFalse(prompt.contains("\n  Alex:"))
+    }
+
+    @Test
     fun exampleRandomUserInThePromptIsNotThisUser() {
         val char = RpCharacter(
             id = 1, name = "Mira",
