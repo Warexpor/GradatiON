@@ -170,7 +170,7 @@ class RpPersonaFragment : Fragment() {
         val v = view ?: return
         val image = v.findViewById<ImageView>(R.id.rpPersonaAvatar)
         val monogram = v.findViewById<TextView>(R.id.rpPersonaMonogram)
-        val file = photo?.let { RpAvatarStorage.personaFile(requireContext(), it) }?.takeIf { it.isFile }
+        val file = photo?.takeIf { RpAvatarStorage.hasPersonaPhoto(requireContext(), it) }?.let { RpAvatarStorage.personaFile(requireContext(), it) }
         RpAvatars.bindModel(image, monogram, file, name)
         v.findViewById<View>(R.id.rpPersonaSilhouette).visibility =
             if (file == null && RpAvatars.initial(name).isEmpty()) View.VISIBLE else View.GONE
@@ -212,7 +212,7 @@ class RpPersonaFragment : Fragment() {
         rows.clear()
         for (preset in prefs.getRpPersonaPresets()) {
             val row = inflater.inflate(R.layout.item_rp_persona, list, false)
-            val file = preset.photo?.let { RpAvatarStorage.personaFile(ctx, it) }?.takeIf { it.isFile }
+            val file = preset.photo?.takeIf { RpAvatarStorage.hasPersonaPhoto(ctx, it) }?.let { RpAvatarStorage.personaFile(ctx, it) }
             RpAvatars.bindModel(
                 row.findViewById(R.id.rpPersonaRowPhoto), row.findViewById(R.id.rpPersonaRowInitial), file, preset.name
             )

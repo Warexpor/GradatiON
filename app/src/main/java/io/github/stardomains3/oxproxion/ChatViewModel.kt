@@ -61,6 +61,7 @@ import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readLine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -575,9 +576,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return piece.copy(content = JsonPrimitive(base))
         }
         if (text.isBlank()) return piece.copy(content = JsonPrimitive(base))
-        // The story actually moved. A failed Continue never reaches here, so its swipe alts stay.
-        clearRpSwipeAlts()
+        // Swipe alts stay until the turn ends: clearing here on the first chunk left them gone
+        // when a later error restored the base. Success / Stop clear them in finishContinuation.
         return piece.copy(content = JsonPrimitive(RpContinuation.join(base, text)))
+    }
+
+    /**
+     * Continue is over. Drop swipe alts only when the bubble grew; a failed Continue that
+     * restored [base] keeps them. Call on the main thread (LiveData).
+     */
+    private fun finishContinuation(base: String) {
+        val last = _chatMessages.value.orEmpty().lastOrNull()
+            ?.takeIf { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val text = last?.let { getMessageText(it.content) }.orEmpty()
+        if (RpContinuation.continueDroppedAlts(base, text)) clearRpSwipeAlts()
     }
 
     /**
@@ -2121,7 +2133,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 // Only the active network turn may clear awaiting (Stop→Send must not be killed by a stale finally).
                 if (networkJob === coroutineContext[Job]) {
-                    continuationBase = null
+                    val continued = continuationBase
+                    if (continued != null) {
+                        // Stop cancels this job; a plain withContext would skip the clear.
+                        withContext(NonCancellable + Dispatchers.Main) {
+                            finishContinuation(continued)
+                            continuationBase = null
+                        }
+                    }
                     discardableRpAssistantInFlight = false
                     _isAwaitingResponse.postValue(false)
                     if (_userScrolledDuringStream.value != true) {
@@ -4814,6 +4833,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             ""
         }
+        // Same as rewriteRpReply: the turn before the reply must stay in lore focus when the
+        // recent window has moved on. Only a reply we are about to truncate needs that;
+        // a regen that leaves the transcript alone must not pin an older beat.
+        val preceding = if (lastAssistantIndex > lastUserIndex && lastAssistantIndex > 0) {
+            messages.subList(0, lastAssistantIndex).lastOrNull {
+                (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it)
+            }?.let { getMessageText(it.content) }.orEmpty()
+        } else {
+            ""
+        }
         if (lastUserIndex < 0) {
             _toastUiEvent.postValue(
                 Event(getApplication<Application>().getString(R.string.rp_need_user_turn))
@@ -4860,7 +4889,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val systemPrompt = rpDelegate.buildSystemPrompt(
                     character = rpDelegate.getActiveCharacter(),
                     extraInstruction = null,
-                    loreScan = rpLoreScan(rewrite.orEmpty(), focus = RpRewrite.loreFocus(focusedReply)),
+                    loreScan = rpLoreScan(rewrite.orEmpty(), focus = RpRewrite.loreFocus(focusedReply, preceding)),
                     definitionCap = rpDefinitionCap(),
                     facts = currentRpFacts()
                 )

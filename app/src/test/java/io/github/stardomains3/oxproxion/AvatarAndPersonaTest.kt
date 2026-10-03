@@ -161,4 +161,82 @@ class AvatarAndPersonaTest {
         assertNotNull(voice.findViewById<View>(R.id.rpVoiceList))
         assertNotNull(voice.findViewById<View>(R.id.rpVoicePitch))
     }
+
+    /** Delete must drop .bak / .partial too: recover would otherwise put a removed portrait back. */
+    @Test fun deleteAvatarClearsSideFilesSoTheyCannotResurrect() {
+        val id = 77L
+        val file = RpAvatarStorage.avatarFile(ctx, id)
+        file.parentFile?.mkdirs()
+        val jpeg = ByteArrayOutputStream().also {
+            solid(16, 16, Color.GRAY).compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        assertTrue(ScenePhoto.completeJpeg(jpeg))
+        file.writeBytes(jpeg)
+        File(file.parentFile, "${file.name}.bak").writeBytes(jpeg)
+        File(file.parentFile, "${file.name}.partial").writeBytes(jpeg)
+        assertTrue(RpAvatarStorage.hasAvatar(ctx, id))
+        assertNotNull(RpAvatarStorage.encodeAvatarBase64(ctx, id))
+        RpAvatarStorage.deleteAvatar(ctx, id)
+        assertFalse(file.exists())
+        assertFalse(File(file.parentFile, "${file.name}.bak").exists())
+        assertFalse(File(file.parentFile, "${file.name}.partial").exists())
+        assertFalse(RpAvatarStorage.hasAvatar(ctx, id))
+        assertNull(RpAvatarStorage.encodeAvatarBase64(ctx, id))
+    }
+
+    /** A torn file at the portrait name is not exported or shown as a picture. */
+    @Test fun tornAvatarIsNotAPicture() {
+        val id = 78L
+        val file = RpAvatarStorage.avatarFile(ctx, id)
+        file.parentFile?.mkdirs()
+        file.writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x00))
+        assertFalse(RpAvatarStorage.hasAvatar(ctx, id))
+        assertNull(RpAvatarStorage.encodeAvatarBase64(ctx, id))
+    }
+
+    /** A finished .bak beside a torn portrait is the picture, until delete removes both. */
+    @Test fun tornAvatarRecoversFromBakUntilDelete() {
+        val id = 79L
+        val file = RpAvatarStorage.avatarFile(ctx, id)
+        file.parentFile?.mkdirs()
+        val jpeg = ByteArrayOutputStream().also {
+            solid(16, 16, Color.BLUE).compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        file.writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x00))
+        val bak = File(file.parentFile, "${file.name}.bak")
+        bak.writeBytes(jpeg)
+        assertTrue(RpAvatarStorage.hasAvatar(ctx, id))
+        assertTrue(ScenePhoto.completeJpeg(file))
+        assertNotNull(RpAvatarStorage.encodeAvatarBase64(ctx, id))
+        RpAvatarStorage.deleteAvatar(ctx, id)
+        assertFalse(file.exists())
+        assertFalse(bak.exists())
+        assertFalse(RpAvatarStorage.hasAvatar(ctx, id))
+    }
+
+    /** A torn persona file is not a portrait, and prune drops side files nothing keeps. */
+    @Test fun tornPersonaIsMissingAndPruneDropsSideFiles() {
+        val dir = File(ctx.filesDir, "rp_persona_avatars").apply { mkdirs() }
+        val keep = "persona_keep.jpg"
+        val drop = "persona_drop.jpg"
+        val jpeg = ByteArrayOutputStream().also {
+            solid(16, 16, Color.GREEN).compress(Bitmap.CompressFormat.JPEG, 90, it)
+        }.toByteArray()
+        File(dir, keep).writeBytes(jpeg)
+        File(dir, "$keep.bak").writeBytes(jpeg)
+        File(dir, drop).writeBytes(jpeg)
+        File(dir, "$drop.bak").writeBytes(jpeg)
+        File(dir, "$drop.partial").writeBytes(jpeg)
+        val torn = "persona_torn.jpg"
+        File(dir, torn).writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x00))
+        assertTrue(RpAvatarStorage.hasPersonaPhoto(ctx, keep))
+        assertFalse(RpAvatarStorage.hasPersonaPhoto(ctx, torn))
+        RpAvatarStorage.prunePersonas(ctx, setOf(keep))
+        assertTrue(File(dir, keep).isFile)
+        assertTrue(File(dir, "$keep.bak").isFile)
+        assertFalse(File(dir, drop).exists())
+        assertFalse(File(dir, "$drop.bak").exists())
+        assertFalse(File(dir, "$drop.partial").exists())
+        assertFalse(File(dir, torn).exists())
+    }
 }
