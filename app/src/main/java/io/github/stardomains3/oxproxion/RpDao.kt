@@ -155,7 +155,7 @@ interface RpDao {
             val name = ex.name.trim()
             if (name.isEmpty()) return@forEachIndexed
             val row = ex.copy(name = name)
-            val at = collapsed.indexOfFirst { it.name.equals(name, ignoreCase = true) }
+            val at = collapsed.indexOfFirst { RpImportRules.sameLoreName(it.name, name) }
             if (at >= 0) collapsed[at] = row else collapsed.add(row)
         }
         var firstId: Long? = null
@@ -170,7 +170,7 @@ interface RpDao {
             // Newest row first. A second local book with the same name used to keep its old
             // text, and stay on after a backup that turned this book off.
             val matches = getAllLorebooksOnce()
-                .filter { it.name.trim().equals(name, ignoreCase = true) }
+                .filter { RpImportRules.sameLoreName(it.name, name) }
             val id = if (matches.isEmpty()) {
                 insertLorebook(
                     RpLorebook(

@@ -8,7 +8,6 @@ import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
-import java.util.Locale
 
 @Serializable
 data class RpCharacterBackup(
@@ -79,7 +78,7 @@ internal object RpLoreBackup {
     fun exports(books: List<RpLorebook>): List<RpLorebookExport> {
         val groups = LinkedHashMap<String, MutableList<RpLorebook>>()
         for (book in books) {
-            val key = book.name.trim().lowercase(Locale.ROOT)
+            val key = RpImportRules.loreNameKey(book.name)
             if (key.isEmpty()) continue
             groups.getOrPut(key) { mutableListOf() }.add(book)
         }
@@ -228,7 +227,7 @@ internal object RpCharacterPrefsBackup {
         wanted: String,
         lorebooks: List<RpLorebook>,
     ): RpLorebook? {
-        val matches = lorebooks.filter { pinName(it.name).equals(wanted, ignoreCase = true) }
+        val matches = lorebooks.filter { RpImportRules.sameLoreName(pinName(it.name), wanted) }
         if (matches.isEmpty()) return null
         val current = prefs.getRpLorebookId(characterId)
         if (current != null) {
@@ -274,8 +273,12 @@ internal object RpCharacterPrefsBackup {
  * card alone used to leave it behind on the next phone.
  */
 internal object RpWallpaperBackup {
-    /** Larger than this and the backup carries a scaled JPEG instead of the raw file. */
-    private const val MAX_BYTES = 2_000_000
+    /**
+     * Larger than this and the backup carries a scaled JPEG instead of the raw file.
+     * A library of pictures can be asked for less, so the whole file still fits
+     * what an import will read.
+     */
+    internal const val MAX_BYTES = 2_000_000
 
     /** Same long edge [BackgroundPhoto.prepare] keeps. A second pass shrinks further to fit. */
     private const val PREPARE_EDGE = 1600
@@ -365,4 +368,127 @@ internal object RpWallpaperBackup {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return Restore.Leave
         return Restore.Write(bytes)
     }
+}
+
+/**
+ * Shrinks portraits and wallpapers until a character backup fits in
+ * [ImportBounds.MAX_RP_BYTES]. Each picture used to stop at its own cap, so a
+ * library of them was larger than an import will read and the other phone
+ * refused every character. A torn picture stays null and a missing one stays
+ * empty: that is what [encode] already returns, and a tighter cap does not
+ * change it.
+ */
+internal object RpCharacterBackupFit {
+    /** Below this, another pass does not make a picture the encoder can still write. */
+    private const val MIN_JPEG = 8_000
+
+    private const val MAX_PASSES = 8
+
+    fun withinImportCap(
+        encode: (portraitCap: Int, wallpaperCap: Int) -> List<RpCharacterExport>,
+    ): List<RpCharacterExport> {
+        var portraitCap = RpAvatarStorage.EXPORT_MAX_BYTES
+        var wallpaperCap = RpWallpaperBackup.MAX_BYTES
+        var exports = encode(portraitCap, wallpaperCap)
+        var size = utf8Size(exports)
+        var guard = 0
+        while (size > ImportBounds.MAX_RP_BYTES && guard++ < MAX_PASSES) {
+            val ratio = ImportBounds.MAX_RP_BYTES.toDouble() / size.toDouble()
+            // A gentle step first. Pictures already under that cap do not get smaller,
+            // so the next try halves the cap until they do.
+            val stepped = reduce(portraitCap, wallpaperCap, ratio, size, encode)
+                ?: reduce(portraitCap, wallpaperCap, 0.5, size, encode)
+                ?: break
+            portraitCap = stepped.portraitCap
+            wallpaperCap = stepped.wallpaperCap
+            exports = stepped.exports
+            size = stepped.size
+        }
+        return exports
+    }
+
+    internal fun utf8Size(exports: List<RpCharacterExport>): Long {
+        val counter = Utf8Counter()
+        RpBackupWriter.writeCharacters(counter, exports)
+        return counter.bytes
+    }
+
+    private class Fit(
+        val portraitCap: Int,
+        val wallpaperCap: Int,
+        val exports: List<RpCharacterExport>,
+        val size: Long,
+    )
+
+    private fun reduce(
+        portraitCap: Int,
+        wallpaperCap: Int,
+        ratio: Double,
+        currentSize: Long,
+        encode: (portraitCap: Int, wallpaperCap: Int) -> List<RpCharacterExport>,
+    ): Fit? {
+        val nextPortrait = shrink(portraitCap, ratio)
+        val nextWallpaper = shrink(wallpaperCap, ratio)
+        if (nextPortrait == portraitCap && nextWallpaper == wallpaperCap) return null
+        val next = encode(nextPortrait, nextWallpaper)
+        val nextSize = utf8Size(next)
+        if (nextSize >= currentSize) return null
+        return Fit(nextPortrait, nextWallpaper, next, nextSize)
+    }
+
+    private fun shrink(cap: Int, ratio: Double): Int {
+        if (cap <= MIN_JPEG) return cap
+        val scaled = (cap * ratio * 0.85).toInt()
+        return scaled.coerceIn(MIN_JPEG, cap - 1)
+    }
+
+    private class Utf8Counter : Appendable {
+        var bytes: Long = 0
+            private set
+
+        override fun append(c: Char): Appendable {
+            bytes += utf8Bytes(c.toString(), 0, 1)
+            return this
+        }
+
+        override fun append(csq: CharSequence?): Appendable {
+            val s = csq ?: "null"
+            bytes += utf8Bytes(s, 0, s.length)
+            return this
+        }
+
+        override fun append(csq: CharSequence?, start: Int, end: Int): Appendable {
+            val s = csq ?: "null"
+            bytes += utf8Bytes(s, start, end)
+            return this
+        }
+    }
+}
+
+/** UTF-8 size of [s] from [start] until [end]. A surrogate pair is four bytes, not six. */
+private fun utf8Bytes(s: CharSequence, start: Int, end: Int): Int {
+    var n = 0
+    var i = start
+    while (i < end) {
+        val c = s[i].code
+        when {
+            c <= 0x7F -> {
+                n += 1
+                i++
+            }
+            c <= 0x7FF -> {
+                n += 2
+                i++
+            }
+            c in 0xD800..0xDBFF && i + 1 < end && s[i + 1].code in 0xDC00..0xDFFF -> {
+                n += 4
+                i += 2
+            }
+            else -> {
+                n += 3
+                i++
+            }
+        }
+    }
+    return n
 }
