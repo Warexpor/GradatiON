@@ -789,6 +789,42 @@ class ScreenshotTest : ScreenshotHarness() {
         } finally { org.robolectric.RuntimeEnvironment.setFontScale(1f) }
     }
 
+    /** Labels under the Appearance tiles that end in "...": nothing there may be cut short. */
+    private fun appearanceLabelsCut(a: MainActivity): List<String> {
+        openSettingsRow(a, R.id.settingsRowAppearance); settle()
+        val page = a.supportFragmentManager.fragments.filterIsInstance<SettingsDetailFragment>().last().requireView()
+        val cut = mutableListOf<String>()
+        fun scan(v: View) {
+            if (v is android.widget.TextView && (v.id == R.id.choiceLabel || v.id == R.id.backgroundStyleLabel)) {
+                val l = v.layout
+                if (l != null && (0 until l.lineCount).any { l.getEllipsisCount(it) > 0 }) cut += v.text.toString()
+            }
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) scan(v.getChildAt(i))
+        }
+        scan(page)
+        return cut
+    }
+
+    /** At 1.3x text the last Chat text tile read "Extra lar..." and the Adaptive background "Adapt...". */
+    @Test fun settingsAppearanceLargeTextDark() {
+        org.robolectric.RuntimeEnvironment.setFontScale(1.3f)
+        try {
+            withChat { a, _ ->
+                org.junit.Assert.assertEquals("tile labels cut short", emptyList<String>(), appearanceLabelsCut(a))
+                a.findViewById<View>(R.id.backgroundStylePicker).let { it.requestRectangleOnScreen(android.graphics.Rect(0, 0, it.width, it.height), true) }; idle()
+                snap(root(a), "settings_appearance_large_text_dark")
+            }
+        } finally { org.robolectric.RuntimeEnvironment.setFontScale(1f) }
+    }
+
+    /** A 360dp phone at the default text size leaves each of the five background labels about 56dp. */
+    @Test @Config(qualifiers = "w360dp-h780dp-night-xxhdpi")
+    fun settingsAppearanceNarrowDark() = withChat { a, _ ->
+        org.junit.Assert.assertEquals("tile labels cut short", emptyList<String>(), appearanceLabelsCut(a))
+        a.findViewById<View>(R.id.backgroundStylePicker).let { it.requestRectangleOnScreen(android.graphics.Rect(0, 0, it.width, it.height), true) }; idle()
+                snap(root(a), "settings_appearance_narrow_dark")
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
