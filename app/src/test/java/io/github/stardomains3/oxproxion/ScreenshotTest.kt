@@ -923,6 +923,28 @@ class ScreenshotTest : ScreenshotHarness() {
         }
     }
 
+    /** In light, the field boxes on Inference and Advanced reasoning were #E0 on an #E1 page: invisible. */
+    @Test @Config(qualifiers = LIGHT)
+    fun settingsFieldsStandOutFromTheirPageLight() = withChat { a, _ ->
+        for (make in listOf<() -> androidx.fragment.app.Fragment>({ InferenceParametersFragment() }, { AdvancedReasoningFragment() })) {
+            val f = make()
+            pushFragment(a, f)
+            val page = (f.requireView().background as android.graphics.drawable.ColorDrawable).color
+            val fields = mutableListOf<com.google.android.material.textfield.TextInputLayout>()
+            fun scan(v: View) {
+                if (v is com.google.android.material.textfield.TextInputLayout) fields += v
+                if (v is android.view.ViewGroup) for (i in 0 until v.childCount) scan(v.getChildAt(i))
+            }
+            scan(f.requireView())
+            org.junit.Assert.assertTrue(fields.isNotEmpty())
+            for (field in fields) {
+                val step = kotlin.math.abs((field.boxBackgroundColor and 0xFF) - (page and 0xFF))
+                org.junit.Assert.assertTrue("${f.javaClass.simpleName}: box only $step gray steps off the page", step >= 6)
+            }
+            a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        }
+    }
+
     @Test fun settingsSectionsDark() = withChat { a, _ ->
         for ((row, name) in listOf(
             R.id.settingsRowModels to "settings_models_dark",
