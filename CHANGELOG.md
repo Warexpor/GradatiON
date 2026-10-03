@@ -36,6 +36,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- A `#note` on the pairing token or fingerprint is dropped even when a later `#` in the bridge address keeps the rest of the query. The note used to stay on the token, or on the pin so the link was rejected. A `#section` followed by those fields still stays in the address, and a `%23` in the token is still a hash.
+- The first bridge address in a pairing link wins when a later parameter repeats it under another name. `address` (or `ws`) then `url` used to save the later address, because `url` is checked first. An empty `url=` still does not hide a later `address`. A query key inside an address that already has `?` is unchanged.
+- A fingerprint whose spaces were written as `+`, which is what `URLEncoder` does, still pins. That used to be rejected as a bad pin. A `+` inside a base64 pin is still a plus.
 - History preview keeps a star or a backtick that is part of the words (`2 * 3`, `a*b`, a lone `` ` ``). Stripping every one hid the token a search had matched. Emphasis, a list star, and a closed code span still come off.
 - History search keeps both words when they are far apart in a sent message. The row is one line, and the gap between them used to ellipsize the later word off the end.
 - A text file whose name contains a Unicode line break (not only a newline) keeps that name on the header line.

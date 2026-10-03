@@ -60,9 +60,13 @@ object CodePairing {
      * A bridge address may contain its own query (`wss://host/v1?a=1&b=2`) even when that
      * `&` was not percent-encoded. Those parameters stay as written: the key's case and any
      * percent-encoding are part of the address. A `#` in that address is not an outer
-     * fragment, and a later `#note` with no `&` after it is still dropped. A query key
-     * that happens to be named `token` / `auth` / `ws` / `fp` stays in the address when
-     * a real pairing field follows it. A fingerprint may contain spaces.
+     * fragment, and a later `#note` with no `&` after it is still dropped. A `#note`
+     * stuck to the token or the fingerprint is dropped even when a later `#` keeps
+     * the rest of the query (that note used to stay, and a pin with it was rejected).
+     * A query key that happens to be named `token` / `auth` / `ws` / `fp` stays in the
+     * address when a real pairing field follows it. The first bridge address wins when
+     * a later parameter repeats it under another alias (`address` then `url`). A
+     * fingerprint may contain spaces, including spaces a form encoder wrote as `+`.
      * Missing url/token → error. Present but unparseable `fp` → [Reason.BAD_FINGERPRINT].
      * Valid `fp` with cleartext `ws://` → [Reason.PIN_REQUIRES_WSS] (pin needs `wss://`).
      * Absent `fp` is allowed (legacy cleartext LAN / no-pin path).
@@ -107,7 +111,8 @@ object CodePairing {
      * treats `#` as a fragment, which used to drop the token that followed a bridge address.
      * A `#` with no `&` after it is the outer fragment (`…&token=abc#note`). The first `#`
      * is not that fragment when the bridge address has one and a note follows
-     * (`…#section&token=abc#note`); that note used to stick to the token or the pin.
+     * (`…#section&token=abc#note`). A `#note` on the token or the pin is removed from
+     * that field even when it is not the last `#` (`token=abc#note&url=…#section&fp=…`).
      */
     private fun splitPair(raw: String): PairParts? {
         val sep = raw.indexOf("://")
@@ -147,8 +152,10 @@ object CodePairing {
      * A token written before the address wins, so a later `token=` inside the bridge
      * query stays in the address. Otherwise the last token / fingerprint after the
      * address is the pairing field (an earlier `auth` or `token` in that query is not).
-     * A second address alias is a sibling only when the address has no `?` yet;
-     * `ws` inside `?room=1&ws=1&b=2` is part of the address.
+     * A second address alias is a sibling only when the address has no `?` yet, and it
+     * does not replace the first. `address` then `url` used to save the later `url`
+     * because that name is checked first. `ws` inside `?room=1&ws=1&b=2` is part of
+     * the address.
      *
      * Keys are matched case-insensitively, but a parameter that stays in the address is
      * copied as written. Lowercasing it, or decoding `%20` / `%2B` while gluing, changed
@@ -167,10 +174,11 @@ object CodePairing {
             parts.add(QueryPart(key, value, part))
         }
         val out = LinkedHashMap<String, String>()
-        val urlIndex = parts.indexOfFirst { it.key in urlKeys }
+        // The first non-empty address. An empty `url=` must not hide a later `address=`.
+        val urlIndex = parts.indexOfFirst { it.key in urlKeys && bridgeUrl(it).isNotEmpty() }
         if (urlIndex < 0) {
             for (part in parts) {
-                if (part.key in knownKeys && part.key !in out) out[part.key] = part.value
+                if (part.key in knownKeys && part.key !in out) out[part.key] = storedValue(part)
             }
             return out
         }
@@ -180,8 +188,10 @@ object CodePairing {
         var fpBefore = false
         for (i in 0 until urlIndex) {
             val part = parts[i]
-            if (part.value.isEmpty() || part.key !in knownKeys || part.key in out) continue
-            out[part.key] = part.value
+            if (part.key !in knownKeys || part.key in out) continue
+            val value = storedValue(part)
+            if (value.isEmpty()) continue
+            out[part.key] = value
             if (part.key in tokenKeys) tokenBefore = true
             if (part.key in fpKeys) fpBefore = true
         }
@@ -196,13 +206,15 @@ object CodePairing {
         for (i in after.indices) {
             val part = after[i]
             if (i == lastToken || i == lastFp) {
-                if (part.key !in out) out[part.key] = part.value
+                if (part.key !in out) {
+                    val value = storedValue(part)
+                    if (value.isNotEmpty()) out[part.key] = value
+                }
                 continue
             }
-            if (part.key in urlKeys && !bridgeQuery) {
-                if (part.key !in out) out[part.key] = part.value
-                continue
-            }
+            // A repeated address is not the bridge. Storing it used to win in firstParam
+            // when its alias is checked before the one that actually came first.
+            if (part.key in urlKeys && !bridgeQuery) continue
             if (lastTerminator >= 0 && i > lastTerminator) continue
             urlValue = "$urlValue&${part.raw}"
         }
@@ -223,6 +235,18 @@ object CodePairing {
             return trimmed
         }
         return decodeForm(trimmed)
+    }
+
+    /**
+     * Token and fingerprint values as stored. A raw `#note` on that field is not part of
+     * the value, even when a later `#section&…` kept the outer query intact. Cutting after
+     * [decode] would also drop a `%23` that belongs in the token.
+     */
+    private fun storedValue(part: QueryPart): String {
+        if (part.key !in tokenKeys && part.key !in fpKeys) return part.value
+        val rawValue = part.raw.substringAfter('=', missingDelimiterValue = "")
+        val hash = rawValue.indexOf('#')
+        return decode(if (hash < 0) rawValue else rawValue.substring(0, hash))
     }
 
     /** One application/x-www-form-urlencoded decode. `+` is a space; `%2B` is a plus. */

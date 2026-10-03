@@ -89,6 +89,15 @@ nwonylCc+6YBfSJvgp8P
     }
 
     @Test
+    fun normalizePin_formEncodedSpaceBetweenHexBytes() {
+        val plus = pinHex.chunked(2).joinToString("+")
+        assertEquals(pinB64, BridgeTls.normalizePin(plus))
+        assertEquals(pinB64, BridgeTls.normalizePin("SHA256:$plus"))
+        // A plus in the base64 digest is not a separator.
+        assertEquals(pinB64, BridgeTls.normalizePin(pinB64))
+    }
+
+    @Test
     fun normalizePin_alreadyPrefixed() {
         assertEquals(pinB64, BridgeTls.normalizePin(pinB64))
         assertEquals(pinB64, BridgeTls.normalizePin("SHA256/" + pinB64.removePrefix("sha256/")))
