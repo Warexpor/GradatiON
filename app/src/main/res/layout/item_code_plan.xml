@@ -29,12 +29,15 @@
             android:baselineAligned="true"
             android:orientation="horizontal">
 
+            <!-- viewStart: in an RTL locale an English label would align by its own text and run
+                 into the count -->
             <TextView
                 android:id="@+id/codePlanTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/code_session_plan"
+                android:textAlignment="viewStart"
                 android:textAppearance="@style/TextAppearance.Gradation.SectionHeader" />
 
             <TextView

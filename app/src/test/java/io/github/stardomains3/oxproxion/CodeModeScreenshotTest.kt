@@ -106,6 +106,8 @@ class CodeModeScreenshotTest {
         assertEquals("the header light is on while the agent waits", View.VISIBLE,
             root(a).findViewById<View>(R.id.codeSessionHeaderLed).visibility)
         assertTranscriptOnGlassSheet(a)
+        assertEquals("an edit names its file above the path", View.VISIBLE,
+            bindRow(a) { it is CodeEvent.Approval }.findViewById<View>(R.id.codeApprovalWhat).visibility)
         snap(root(a), "code_session_approval_dark")
     }
 
@@ -138,6 +140,37 @@ class CodeModeScreenshotTest {
         assertEquals("the mark and its line centre between the header and the composer",
             (clearTop + clearBottom) / 2f, y[1] + stateView.height / 2f, 2f)
         snap(root(a), "code_session_loading_dark")
+    }
+
+    /**
+     * Right to left: labels on the cards sit at the view's start beside their glyphs, so the plan's
+     * label no longer runs into its count and the approval's question sits by its shield. The app
+     * ships no RTL strings, so an RTL locale shows the English labels this way.
+     */
+    @Test @Config(qualifiers = "ar-w411dp-h891dp-night-xxhdpi")
+    fun codeSessionRtlDark() = withCode { a, _ ->
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        assertEquals(View.LAYOUT_DIRECTION_RTL, list.layoutDirection)
+        fun x(v: View) = IntArray(2).also { v.getLocationInWindow(it) }[0]
+        fun live(id: Int): android.widget.TextView =
+            (0 until list.childCount).firstNotNullOf { list.getChildAt(it).findViewById<android.widget.TextView>(id)?.takeIf { v -> v.isShown } }
+        val title = live(R.id.codeApprovalTitle)
+        assertEquals("the question ends at its shield", title.width.toFloat(), title.layout.getLineRight(0), 1f)
+        val f = a.supportFragmentManager.fragments.last { it is CodeSessionFragment }
+        CodeSessionFragment::class.java.getDeclaredField("follow").apply { isAccessible = true }.setBoolean(f, false)
+        list.scrollToPosition(0)
+        idle(2)
+        val label = live(R.id.codePlanTitle)
+        val count = live(R.id.codePlanProgress)
+        assertTrue("the plan's label keeps clear of its count",
+            x(label) + label.layout.getLineLeft(0) >= x(count) + count.width + 8 * ctx.resources.displayMetrics.density)
+        val pin = root(a).findViewById<android.widget.TextView>(R.id.codeSessionApprovalBar)
+        assertEquals(View.VISIBLE, pin.visibility)
+        assertEquals("the pin's words start at its start edge", pin.layout.width.toFloat(), pin.layout.getLineRight(0), 1f)
+        snap(root(a), "code_session_rtl_dark")
     }
 
     @Test fun codeSessionDoneDark() = withCode { a, _ ->
@@ -210,6 +243,8 @@ class CodeModeScreenshotTest {
         val ask = bindRow(a) { it is CodeEvent.Approval }
         ask.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        assertEquals("a command already in the pane is not repeated above it", View.GONE,
+            ask.findViewById<View>(R.id.codeApprovalWhat).visibility)
         val box = ask.findViewById<android.widget.LinearLayout>(R.id.codeApprovalButtons)
         assertEquals("long answers stack", android.widget.LinearLayout.VERTICAL, box.orientation)
         assertOnTranscriptGrid(list)

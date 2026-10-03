@@ -693,10 +693,18 @@ class CodeTranscriptAdapter(
             ToolKind.FETCH -> R.string.code_approval_fetch
             else -> R.string.code_approval_generic
         })
-        v.findViewById<TextView>(R.id.codeApprovalWhat).text = e.title
+        val detail = e.detail?.takeIf { it.isNotBlank() }
+        // A command's title is often its own first words; the pane already shows them in full.
+        val repeats = detail != null && detail.trim().startsWith(e.title.trim())
+        v.findViewById<TextView>(R.id.codeApprovalWhat).apply {
+            text = e.title
+            isVisible = !repeats
+        }
         v.findViewById<TextView>(R.id.codeApprovalDetail).apply {
-            text = e.detail
-            isVisible = !e.detail.isNullOrBlank()
+            text = detail
+            isVisible = detail != null
+            // Without the subject line the pane follows the question directly, one step closer.
+            (layoutParams as ViewGroup.MarginLayoutParams).topMargin = (ctx.resources.displayMetrics.density * if (repeats) 12 else 14).toInt()
         }
         val box = v.findViewById<LinearLayout>(R.id.codeApprovalButtons)
         box.removeAllViews()
