@@ -113,12 +113,15 @@ class RpChatHistoryFragment : Fragment() {
                 lastSection = section
             }
             val last = dao.getLastMessage(s.id)
-            val text = last?.let { RpChatSummaries.previewOf(it.content) }.orEmpty()
-            val preview = when {
-                text.isBlank() -> getString(R.string.rp_home_no_preview)
-                last?.role == "user" -> getString(R.string.rp_home_you, text)
-                else -> text
-            }
+            val text = last?.let {
+                RpChatSummaries.rowLine(
+                    it.role,
+                    it.content,
+                    { line -> getString(R.string.rp_home_you, line) },
+                    getString(R.string.history_preview_photo),
+                )
+            }.orEmpty()
+            val preview = text.ifBlank { getString(R.string.rp_home_no_preview) }
             items += Item.Chat(s.id, whenOf(s.timestamp), preview, dao.countMessages(s.id), s.id == current)
         }
         return items

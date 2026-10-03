@@ -568,4 +568,24 @@ class RpLoreTest {
         assertFalse(RpLore.select(book, withoutFocus).contains("dawn"))
     }
 
+    @Test
+    fun parenthesesAndFullwidthSeparatorsStillMatch() {
+        val book = """
+            [keys: (locket), (grey haven), docks；pier｜lantern]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(book, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(book, "People still say grey haven.").contains("dawn"))
+        assertTrue(RpLore.select(book, "Meet me at the docks.").contains("dawn"))
+        assertTrue(RpLore.select(book, "The pier is quiet.").contains("dawn"))
+        assertTrue(RpLore.select(book, "She lights the lantern.").contains("dawn"))
+        assertFalse(RpLore.select(book, "She waits.").contains("dawn"))
+        val wrapped = """
+            [keys: （locket）, 【docks】]
+            The locket opens at dawn.
+        """.trimIndent()
+        assertTrue(RpLore.select(wrapped, "She holds the locket.").contains("dawn"))
+        assertTrue(RpLore.select(wrapped, "Meet me at the docks.").contains("dawn"))
+    }
+
 }
