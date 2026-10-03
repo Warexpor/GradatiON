@@ -115,7 +115,7 @@
             android:textColor="@color/xai_ink"
             android:textSize="16sp"
             app:backgroundTint="@android:color/transparent"
-            app:icon="@drawable/ic_tune"
+            app:icon="@drawable/ic_system_prompt"
             app:iconGravity="start"
             app:iconPadding="16dp"
             app:iconSize="22dp"
@@ -265,7 +265,7 @@
             android:textColor="@color/xai_ink"
             android:textSize="16sp"
             app:backgroundTint="@android:color/transparent"
-            app:icon="@drawable/ic_param"
+            app:icon="@drawable/ic_tune"
             app:iconGravity="start"
             app:iconPadding="16dp"
             app:iconSize="22dp"
@@ -293,7 +293,7 @@
                 android:layout_height="22dp"
                 android:layout_marginEnd="16dp"
                 android:importantForAccessibility="no"
-                android:src="@drawable/ic_summariz"
+                android:src="@drawable/ic_chat_memory"
                 app:tint="@color/xai_ink" />
 
             <TextView
