@@ -93,8 +93,8 @@ class ListSessionsJsonTest {
             ]}"""
         )
         val list = ListSessionsJson.parse(el, "h")
-        // Unknown numeric harness ids become CUSTOM; digit form must still be "5" / "9".
-        assertEquals(listOf("5", "9", "feat/x"), list.map { it.branch })
+        // Unknown numeric harness ids become CUSTOM. Branch "7.0" is "7", not the harness digit.
+        assertEquals(listOf("5", "7", "feat/x"), list.map { it.branch })
         assertEquals(
             listOf(
                 io.github.stardomains3.oxproxion.code.HarnessKind.CUSTOM,
@@ -102,6 +102,35 @@ class ListSessionsJsonTest {
                 io.github.stardomains3.oxproxion.code.HarnessKind.OPENCODE,
             ),
             list.map { it.harness },
+        )
+    }
+
+    @Test fun permissionModeUsesAcpAliasesNotOnlyExactIds() {
+        val el = json.parseToJsonElement(
+            """{"sessions":[
+                {"sessionId":"a","permissionMode":"acceptEdits"},
+                {"sessionId":"b","mode":"bypassPermissions"},
+                {"sessionId":"c","permissionMode":"agent"},
+                {"sessionId":"d","permissionMode":"full_auto"},
+                {"sessionId":"e","permissionMode":"default"},
+                {"sessionId":"f","mode":"Plan"},
+                {"sessionId":"g","permissionMode":"not-a-mode"},
+                {"sessionId":"h"}
+            ]}"""
+        )
+        val modes = ListSessionsJson.parse(el, "h").map { it.permissionMode }
+        assertEquals(
+            listOf(
+                PermissionMode.AUTO_EDIT,
+                PermissionMode.FULL_AUTO,
+                PermissionMode.FULL_AUTO,
+                PermissionMode.FULL_AUTO,
+                PermissionMode.ASK,
+                PermissionMode.PLAN,
+                PermissionMode.ASK,
+                PermissionMode.ASK,
+            ),
+            modes,
         )
     }
 

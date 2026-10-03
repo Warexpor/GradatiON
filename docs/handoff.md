@@ -7,6 +7,15 @@ On `gradation/w29-rp` (PR into `gradation/app-pass`). Roleplay follow-ups after 
 
 Phone: kill mid-portrait replace so the JPEG is torn with no `.bak` (library / panel / speaker show monogram, not a broken image). Continue after a long reply whose early keys would fall out of the recent scan (lore for those keys should still fire). Save a persona, force-stop immediately, relaunch (name/about/photo still there).
 
+# Handoff (2026-10-03, Code wave 29)
+
+On `gradation/w29-code` (PR into `gradation/app-pass`). Code-mode follow-ups after w28 double-coercion and browser cards (#115). Not a redo of that pass:
+- `HarnessKind.fromId` folds case and underscores (`Claude_Code`, `CURSOR-AGENT`, `grok_build`) onto the canonical harness. `agent` stays custom so a permission-mode word is not Cursor. Outbound frames still send the canonical id.
+- `bridge/listSessions` `permissionMode` / `mode` uses the same aliases as a live `current_mode_update` (`acceptEdits`, `bypassPermissions`, `dontAsk`, `agent`, `default`, `full_auto`). An unknown or omitted mode stays Ask, so merge still treats a missing mode as omitted.
+- Cursor `BrowserMouseClickXy` and `BrowserCdp` map to the execute card. A click with `x`/`y` (including `10.0`) shows `10, 20`. Detail lines also read `tabId` / `tab_id`, `action`, `method`, and a `reviewers` / `team_reviewers` array.
+
+Phone: a session listed as `acceptEdits` or `agent` should not show Ask. A harness id `claude_code` should show Claude. On Cursor Agent, BrowserMouseClickXy should show the execute icon and `10, 20`; RequestPullRequestReviewers should list the reviewers under the title.
+
 # Handoff (2026-10-02, Hub/Pair/Glass wave 28)
 
 On `gradation/w28-hub` (PR into `gradation/app-pass`). Hub/Pair/Glass follow-ups after #106/#112, unit-tested (`CodePairPendingTest`, `GlassDrawableOutlineTest`):
