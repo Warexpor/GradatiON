@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/bg_press_svg">
+    android:background="?android:attr/selectableItemBackground">
 
     <LinearLayout
         android:id="@+id/card_area"
@@ -35,7 +35,7 @@
                 android:ellipsize="end"
                 android:clickable="true"
                 android:focusable="true"
-                android:foreground="@drawable/bg_press_svg" />
+                android:foreground="?attr/selectableItemBackgroundBorderless" />
 
             <ImageView
                 android:id="@+id/menu_button"
@@ -44,7 +44,7 @@
                 android:layout_toStartOf="@+id/expand_icon"
                 android:layout_centerVertical="true"
                 android:layout_marginEnd="4dp"
-                android:background="@drawable/bg_press_svg_borderless"
+                android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/rp_menu_edit"
                 android:padding="8dp"
                 android:src="@drawable/ic_editnote"
@@ -57,7 +57,7 @@
                 android:layout_centerVertical="true"
                 android:layout_marginEnd="4dp"
                 android:layout_toStartOf="@+id/copy_button"
-                android:background="@drawable/bg_press_svg_borderless"
+                android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/cd_toggle_expand"
                 android:padding="8dp"
                 android:rotation="0"
@@ -72,7 +72,7 @@
                 android:layout_height="40dp"
                 android:layout_alignParentEnd="true"
                 android:layout_centerVertical="true"
-                android:background="@drawable/bg_press_svg_borderless"
+                android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/cd_copy_prompt"
                 android:padding="8dp"
                 android:src="@drawable/ic_copi"
