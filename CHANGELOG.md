@@ -36,6 +36,12 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Haptics, Data (biometrics / notifications / keep screen on / destructive tools), Models (trust self-signed LAN), Appearance (app icon / photo options), Advanced LiveData switches, streaming, Style (lore / third person / auto memory / show thoughts), Thoughts tile, chat mode, and Code Thinking preference writes commit before return, so a kill right after the Settings tap cannot drop them. Settings home skips a no-op `isChecked` write so it cannot rewrite the pref.
+- Advanced Power tools is one switch over the dock and the top bar. LiveData is ignored while that tap is still writing both halves, so turning the switch off cannot flip the dock back on.
+- Appearance chat text size commits, and a LAN certificate pin (and clearing pins) commits, so a kill cannot drop the size or forget the first-use pin and let the next certificate win.
+- Appearance chat text only rings a preset tile when the stored scale is exactly that preset. In-chat +/- (50–300, step 5) no longer looks selected at the nearest of 90/100/115/130, which swallowed the tap that would snap back to it.
+- A Voice engine chip picked while the master switch is off is remembered, and does not turn the mic back on. Turning Voice on still restores that chip.
+- Advanced reasoning effort buttons follow the master switch and a positive token budget: a budget disables the presets (the request already sends max tokens instead), and turning advanced reasoning off cannot leave those buttons on. The master switch, effort, include-thoughts, and budget commit.
 - Code away: after `clearTurnDoneDedup`, `cancelSession` (forget / open-in-app) still cancels the turn-done shade by consulting the in-memory key→id map (posted + prefs no longer list that key).
 - Code away: that same clear parks the shade id outside the dedup prefs, so after process death forget / open-in-app still cancels the surviving entry and the next finished turn updates it instead of stacking a second one.
 - Answer-ready: Speak chrome persists a `speaking` flag with the shade meta, so a cold Stop tap after process death clears Stop instead of restarting TTS; Dismiss/Copy/`stopTts`/opening Chat (shade dropped) clear the flag.

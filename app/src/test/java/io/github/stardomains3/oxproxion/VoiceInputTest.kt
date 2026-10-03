@@ -65,6 +65,19 @@ class VoiceInputTest {
         assertEquals(VoiceEngine.GROK, VoiceInput.resolve(ctx, prefs))
     }
 
+    @Test fun pickingAnEngineWhileVoiceIsOffRemembersIt() {
+        prefs.setVoiceInputProvider(VoiceEngine.CLOUD.key)
+        prefs.setVoiceInputProvider(VoiceEngine.OFF.key)
+        prefs.rememberVoiceInputEngine(VoiceEngine.GROK.key)
+        assertEquals(VoiceEngine.OFF.key, prefs.getVoiceInputProvider())
+        assertNull(VoiceInput.resolve(ctx, prefs))
+        assertEquals(VoiceEngine.GROK.key, prefs.getVoiceInputLastEngine())
+        prefs.rememberVoiceInputEngine(VoiceEngine.OFF.key)
+        assertEquals(VoiceEngine.GROK.key, prefs.getVoiceInputLastEngine())
+        prefs.setVoiceInputProvider(prefs.getVoiceInputLastEngine())
+        assertEquals(VoiceEngine.GROK, VoiceInput.resolve(ctx, prefs))
+    }
+
     @Test fun lastEngineFallsBackToPhoneWhenNeverSet() {
         prefs.mainPrefs.edit().remove("voice_input_last_engine").remove("voice_input_provider").commit()
         assertEquals(VoiceEngine.DEVICE.key, prefs.getVoiceInputLastEngine())

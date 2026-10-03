@@ -91,9 +91,14 @@ class SettingsFragment : Fragment(R.layout.fragment_settings) {
         if (hidden) return
         view?.let { bindValues(it) }
         // Sub-screens (Code settings, Appearance…) may have changed a mode flag.
-        view?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsRoleplaySwitch)?.isChecked =
-            SharedPreferencesHelper(requireContext()).isRoleplayEnabled()
-        view?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsCodeSwitch)?.isChecked =
-            io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store.enabled
+        // Only write isChecked when it disagrees so the listener does not rewrite the pref.
+        view?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsRoleplaySwitch)?.let { sw ->
+            val on = SharedPreferencesHelper(requireContext()).isRoleplayEnabled()
+            if (sw.isChecked != on) sw.isChecked = on
+        }
+        view?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.settingsCodeSwitch)?.let { sw ->
+            val on = io.github.stardomains3.oxproxion.code.CodeHub.get(requireContext()).store.enabled
+            if (sw.isChecked != on) sw.isChecked = on
+        }
     }
 }

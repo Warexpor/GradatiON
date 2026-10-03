@@ -67,7 +67,10 @@ object BackgroundPhoto {
         color = p.getBoolean(KEY_COLOR, false),
     )
 
-    fun setOption(ctx: Context, key: String, on: Boolean) = prefs(ctx).edit { putBoolean(key, on) }
+    fun setOption(ctx: Context, key: String, on: Boolean) {
+        // commit: Appearance photo options; AmbientBackgroundView follows these after the tap.
+        prefs(ctx).edit(commit = true) { putBoolean(key, on) }
+    }
 
     /*
      * [slot] picks whose picture: null is the app background, "char_<id>" a roleplay
