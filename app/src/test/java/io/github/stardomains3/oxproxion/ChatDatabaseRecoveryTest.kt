@@ -1039,6 +1039,47 @@ class ChatDatabaseRecoveryTest {
     }
 
     @Test
+    fun aFinishedSideFileReplacesAnEmptyRecoveredDatabase() {
+        val databases = tmp.newFolder("ready-empty-databases")
+        val vault = tmp.newFolder("ready-empty-vault")
+        val hold = ChatDbVault.holdDirectory(databases)
+        File(hold, "chat_database.recovered-42").writeBytes(ByteArray(0))
+        File(hold, "chat_database.recovered-42.partial").writeText("held-history")
+        File(hold, "chat_database.recovered-42.ready").writeBytes(byteArrayOf(1))
+
+        assertTrue(ChatDbVault.relocateLegacy(databases, vault, null))
+
+        assertEquals("held-history", File(vault, "chat_database.recovered-42").readText())
+        assertFalse(File(hold, "chat_database.recovered-42").exists())
+        assertFalse(File(hold, "chat_database.recovered-42.partial").exists())
+        assertFalse(File(hold, "chat_database.recovered-42.ready").exists())
+
+        File(vault, "chat_database.recovered-43").writeBytes(ByteArray(0))
+        File(vault, "chat_database.recovered-43.partial").writeText("vault-history")
+        File(vault, "chat_database.recovered-43.ready").writeBytes(byteArrayOf(1))
+
+        ChatDbVault.relocateLegacy(databases, vault, "chat_database.recovered-43")
+
+        assertEquals("vault-history", File(vault, "chat_database.recovered-43").readText())
+        assertFalse(File(vault, "chat_database.recovered-43.partial").exists())
+    }
+
+    @Test
+    fun aZeroByteDestinationDoesNotDiscardTheReadyCopy() {
+        val root = tmp.newFolder("zero-ready")
+        val from = File(root, "from")
+        val to = File(root, "to").apply { writeBytes(ByteArray(0)) }
+        File(root, "to.partial").writeText("history")
+        File(root, "to.ready").writeBytes(byteArrayOf(1))
+
+        ChatDbVault.moveReplacing(from, to)
+
+        assertEquals("history", to.readText())
+        assertFalse(File(root, "to.partial").exists())
+        assertFalse(File(root, "to.ready").exists())
+    }
+
+    @Test
     fun anEmptyRecoveredFileDoesNotHideTheCopyThatHasBytes() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val databases = app.getDatabasePath(AppDatabase.DB_NAME).parentFile!!

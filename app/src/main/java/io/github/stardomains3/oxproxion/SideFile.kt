@@ -23,6 +23,13 @@ internal object SideFile {
     @androidx.annotation.VisibleForTesting
     internal var failAfterIncomingForTest: Boolean = false
 
+    /**
+     * Test hook. [clear] returns after the side files are gone and before the
+     * installed file is removed, as a kill in that window would. Cleared when it fires.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var stopAfterClearingSidesForTest: Boolean = false
+
     fun write(dest: File, bytes: ByteArray) {
         val dir = dest.parentFile ?: throw IOException("no directory")
         dir.mkdirs()
@@ -95,10 +102,16 @@ internal object SideFile {
     }
 
     fun clear(dest: File) {
-        dest.delete()
+        // Side files first. Removing the installed notes first used to leave an older
+        // side file, and the next read applied those notes.
         sibling(dest, ".partial").delete()
         sibling(dest, ".partial.incoming").delete()
         sibling(dest, ".bak").delete()
+        if (stopAfterClearingSidesForTest) {
+            stopAfterClearingSidesForTest = false
+            return
+        }
+        dest.delete()
     }
 
     private fun sibling(dest: File, suffix: String) = File(dest.parentFile, dest.name + suffix)

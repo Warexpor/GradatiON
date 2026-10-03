@@ -305,6 +305,75 @@ class ScenePhotoTest {
         assertFalse(File(dir, "torn.jpg.partial").exists())
     }
 
+    @Test fun aKilledRewriteDoesNotTruncateTheFinishedSideFile() {
+        val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "atomic-incoming")
+        dir.mkdirs()
+        val dest = File(dir, "wall.jpg")
+        val kept = tinyJpeg()
+        val partial = File(dir, "wall.jpg.partial")
+        partial.writeBytes(kept)
+        dest.writeBytes(kept)
+        dest.setLastModified(1_000)
+        partial.setLastModified(5_000)
+        val bak = File(dir, "wall.jpg.bak").apply { mkdirs() }
+        File(bak, "blocked").writeText("x")
+        val replacement = ByteArray(kept.size) { index ->
+            if (index == kept.size / 2) 0x11 else kept[index]
+        }
+        ScenePhoto.stopAfterIncomingForTest = true
+        try {
+            ScenePhoto.writeAtomically(dest, replacement)
+            throw AssertionError("rewrite should stop after the new bytes are durable")
+        } catch (_: java.io.IOException) {
+        } finally {
+            ScenePhoto.stopAfterIncomingForTest = false
+        }
+        assertTrue(kept.contentEquals(partial.readBytes()))
+        assertTrue(kept.contentEquals(dest.readBytes()))
+    }
+
+    @Test fun aDurableIncomingFileReplacesThePicture() {
+        val dir = File(ApplicationProvider.getApplicationContext<Application>().cacheDir, "atomic-incoming-recover")
+        dir.mkdirs()
+        val dest = File(dir, "wall.jpg")
+        val older = tinyJpeg()
+        dest.writeBytes(older)
+        val newer = ByteArray(older.size) { index ->
+            if (index == older.size / 2) 0x11 else older[index]
+        }
+        val incoming = File(dir, "wall.jpg.partial.incoming")
+        incoming.writeBytes(newer)
+        val stamp = 8_000L
+        dest.setLastModified(stamp)
+        incoming.setLastModified(stamp)
+        assertTrue(ScenePhoto.recover(dest))
+        assertTrue(newer.contentEquals(dest.readBytes()))
+        assertFalse(incoming.exists())
+    }
+
+    @Test fun deleteSceneFilesDropsSideFilesBeforeTheLiveFile() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val name = "44444444-4444-4444-4444-444444444444.jpg"
+        val dir = File(context.filesDir, "scene_photos").apply { mkdirs() }
+        val live = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x01, 0xFF.toByte(), 0xD9.toByte())
+        val side = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x02, 0xFF.toByte(), 0xD9.toByte())
+        val file = File(dir, name).apply { writeBytes(live) }
+        val bak = File(dir, "$name.bak").apply { writeBytes(side) }
+        val incoming = File(dir, "$name.partial.incoming").apply { writeBytes(side) }
+        ScenePhoto.stopAfterSidesForTest = true
+        try {
+            ScenePhoto.deleteSceneFiles(context, listOf(name))
+            assertFalse(bak.exists())
+            assertFalse(incoming.exists())
+            assertTrue(live.contentEquals(file.readBytes()))
+            assertTrue(ScenePhoto.recover(file))
+            assertTrue(live.contentEquals(file.readBytes()))
+        } finally {
+            ScenePhoto.stopAfterSidesForTest = false
+            ScenePhoto.deleteSceneFiles(context, listOf(name))
+        }
+    }
+
     private fun tinyJpeg(): ByteArray {
         val bmp = Bitmap.createBitmap(8, 4, Bitmap.Config.ARGB_8888)
         bmp.eraseColor(Color.DKGRAY)

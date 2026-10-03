@@ -175,30 +175,63 @@ object ScenePhoto {
     }
 
     /**
+     * Test hook. [writeAtomically] throws after the new bytes are durable and before
+     * they replace a finished side file, as a kill in that window would. Cleared when it fires.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var stopAfterIncomingForTest: Boolean = false
+
+    /**
      * Writes [bytes] to a side file, syncs it, then renames it over [destination].
      * A crash leaves the side file, not a truncated picture at the real name.
      * The destination is never opened for writing: that truncates a finished picture
-     * before the new bytes are durable.
+     * before the new bytes are durable. The new bytes go to `.partial.incoming` first
+     * so a finished `.partial` is not truncated while the rewrite is still in flight.
      */
+
     internal fun writeAtomically(destination: File, bytes: ByteArray) {
         val dir = destination.parentFile ?: throw IOException("no directory")
         dir.mkdirs()
         // A kill after the bytes were durable used to leave them beside a missing picture.
         recover(destination)
-        val tmp = File(dir, "${destination.name}.partial")
+        val partial = File(dir, "${destination.name}.partial")
+        // Opening [partial] for write truncates it first. A finished side file the replace
+        // could not install yet used to be wiped before the new bytes were durable.
+        val incoming = File(dir, "${destination.name}.partial.incoming")
+        var replacedPartial = false
         try {
-            FileOutputStream(tmp).use { out ->
+            if (incoming.exists() && !incoming.delete()) {
+                throw IOException("Could not replace ${incoming.path}")
+            }
+            FileOutputStream(incoming).use { out ->
                 out.write(bytes)
                 out.fd.sync()
             }
-            val floor = destination.lastModified()
-            if (tmp.lastModified() <= floor) tmp.setLastModified(floor + 1)
-            if (!install(tmp, destination) && !sameBytes(destination, bytes)) {
+            syncDirectory(dir)
+            if (stopAfterIncomingForTest) {
+                stopAfterIncomingForTest = false
+                throw IOException("simulated picture write failure")
+            }
+            val floor = maxOf(
+                destination.lastModified(),
+                partial.lastModified(),
+                File(dir, "${destination.name}.bak").lastModified(),
+            )
+            if (incoming.lastModified() <= floor) incoming.setLastModified(floor + 1)
+            if (!incoming.renameTo(partial)) {
+                throw IOException("Could not replace ${partial.path}")
+            }
+            replacedPartial = true
+            if (!install(partial, destination) && !sameBytes(destination, bytes)) {
                 throw IOException("Could not replace ${destination.path}")
             }
+            replacedPartial = false
             syncDirectory(dir)
+        } catch (e: Exception) {
+            if (e is IOException) throw e
+            throw IOException("Could not replace ${destination.path}", e)
         } finally {
-            if (tmp.exists()) tmp.delete()
+            if (replacedPartial && partial.exists()) partial.delete()
         }
     }
 
@@ -209,22 +242,36 @@ object ScenePhoto {
      */
     internal fun recover(destination: File): Boolean {
         val partial = File(destination.parentFile, "${destination.name}.partial")
+        val incoming = File(destination.parentFile, "${destination.name}.partial.incoming")
         val bak = File(destination.parentFile, "${destination.name}.bak")
         // A replace that died after the new bytes were durable, and before they took the name.
         // The picture already there is the previous one. Same timestamp counts: the side file
         // is written second, and a clock that did not tick used to leave the old picture in place.
-        if (completeJpeg(destination) && completeJpeg(partial) &&
-            partial.lastModified() >= destination.lastModified()
+        // `.partial.incoming` is that side file when the rewrite had not yet replaced `.partial`.
+        val staged = stagedSide(incoming, partial)
+        if (staged != null && completeJpeg(destination) &&
+            staged.lastModified() >= destination.lastModified()
         ) {
-            return installFinished(partial, destination, bak)
+            return installFinished(staged, destination, bak)
         }
         if (completeJpeg(destination)) return true
-        val source = when {
-            completeJpeg(partial) -> partial
-            completeJpeg(bak) -> bak
-            else -> return false
-        }
+        val source = staged ?: if (completeJpeg(bak)) bak else return false
         return installFinished(source, destination, bak)
+    }
+
+    /**
+     * Newest finished side file. The same stamp prefers incoming: it is written after partial.
+     */
+    private fun stagedSide(incoming: File, partial: File): File? {
+        val incomingOk = completeJpeg(incoming)
+        val partialOk = completeJpeg(partial)
+        return when {
+            incomingOk && partialOk ->
+                if (incoming.lastModified() >= partial.lastModified()) incoming else partial
+            incomingOk -> incoming
+            partialOk -> partial
+            else -> null
+        }
     }
 
     /**
@@ -242,9 +289,14 @@ object ScenePhoto {
             if (!destination.exists() && bak.exists()) bak.renameTo(destination)
             return completeJpeg(destination)
         }
-        val partial = File(destination.parentFile, "${destination.name}.partial")
-        if (partial.exists() && partial != destination) partial.delete()
-        if (bak.exists()) bak.delete()
+        val parent = destination.parentFile
+        if (parent != null) {
+            for (suffix in listOf(".partial", ".partial.incoming")) {
+                val side = File(parent, destination.name + suffix)
+                if (side.exists() && side != destination) side.delete()
+            }
+        }
+        if (bak.exists() && bak != destination) bak.delete()
         destination.parentFile?.let { syncDirectory(it) }
         return completeJpeg(destination)
     }
@@ -485,7 +537,7 @@ object ScenePhoto {
     internal var stopAfterSidesForTest: Boolean = false
 
     /**
-     * Drops `.partial` and `.bak` before the live file.
+     * Drops `.partial.incoming`, `.partial` and `.bak` before the live file.
      * Removing the live name first used to leave a side file, and the next open put that
      * picture back on the portrait or wallpaper.
      * Returns false when a test stops after the side files.
@@ -493,6 +545,7 @@ object ScenePhoto {
     internal fun deleteWithSides(destination: File): Boolean {
         val parent = destination.parentFile
         if (parent != null) {
+            File(parent, "${destination.name}.partial.incoming").delete()
             File(parent, "${destination.name}.partial").delete()
             File(parent, "${destination.name}.bak").delete()
         }
@@ -510,10 +563,9 @@ object ScenePhoto {
         val dir = File(context.filesDir, DIR)
         for (name in names) {
             if (!isSceneFileName(name)) continue
-            File(dir, name).delete()
-            // A side file left by a killed replace would bring the picture back on the next open.
-            File(dir, "$name.bak").delete()
-            File(dir, "$name.partial").delete()
+            // Side files first, same as a portrait. Removing the live name first left a side
+            // file, and the next open put that picture back.
+            deleteWithSides(File(dir, name))
         }
     }
 
