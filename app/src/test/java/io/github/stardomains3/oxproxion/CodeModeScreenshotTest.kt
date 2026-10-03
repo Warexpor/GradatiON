@@ -536,6 +536,58 @@ class CodeModeScreenshotTest {
         for (i in 0 until box.childCount) assertEquals("stacked answers fill the column", box.width, box.getChildAt(i).width)
     }
 
+    /**
+     * Air measured on the letters, not the line boxes. The approval's question and its subject read
+     * as one block, and the air above the question matches the air below the answers. The plan's
+     * label heads its steps instead of floating halfway between the card's edge and the list.
+     */
+    @Test fun codeCardHeadingsSitWithTheirContent() = withCode { a, _ ->
+        val id = startDemo("Add a follow-system option to the theme setting")
+        push(a, CodeSessionFragment.newInstance(id))
+        idle(12)
+        val list = root(a).findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.codeTranscript)
+        val d = ctx.resources.displayMetrics.density
+        fun lay(row: View) {
+            row.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            row.layout(0, 0, row.measuredWidth, row.measuredHeight)
+        }
+        fun yIn(v: View, top: View): Int { var y = 0; var p: View = v; while (p !== top) { y += p.top; p = p.parent as View }; return y }
+        fun cap(t: android.widget.TextView) = android.graphics.Rect().also { t.paint.getTextBounds("H", 0, 1, it) }.let { -it.top }
+        fun capTop(t: android.widget.TextView, top: View) = yIn(t, top) + t.baseline - cap(t)
+        fun lastBaseline(t: android.widget.TextView, top: View) =
+            yIn(t, top) + t.paddingTop + t.layout.getLineBaseline(t.lineCount - 1)
+
+        val ask = bindRow(a) { it is CodeEvent.Approval }
+        lay(ask)
+        val card = ask.findViewById<View>(R.id.codeApprovalCard)
+        val title = ask.findViewById<android.widget.TextView>(R.id.codeApprovalTitle)
+        val what = ask.findViewById<android.widget.TextView>(R.id.codeApprovalWhat)
+        val buttons = ask.findViewById<View>(R.id.codeApprovalButtons)
+        val above = capTop(title, card)
+        val below = card.height - (yIn(buttons, card) + buttons.height)
+        assertEquals("as much air above the question as below the answers", below / d, above / d, 1.5f)
+        val toSubject = capTop(what, card) - lastBaseline(title, card)
+        // Within 2dp: the question's larger type hangs a little lower below its baseline.
+        val ownLine = what.lineHeight - cap(what)
+        assertTrue("the subject follows the question like its next line (${toSubject / d} vs ${ownLine / d}dp)",
+            toSubject <= ownLine + 2 * d)
+
+        val plan = bindRow(a) { it is CodeEvent.Plan }
+        lay(plan)
+        val label = plan.findViewById<android.widget.TextView>(R.id.codePlanTitle)
+        val steps = plan.findViewById<android.view.ViewGroup>(R.id.codePlanRows)
+        val first = steps.getChildAt(0).findViewById<android.widget.TextView>(R.id.codePlanStepText)
+        val second = steps.getChildAt(1).findViewById<android.widget.TextView>(R.id.codePlanStepText)
+        val toFirst = capTop(first, plan) - lastBaseline(label, plan)
+        val between = capTop(second, plan) - lastBaseline(first, plan)
+        assertTrue("the label sits nearer its steps than they sit to each other (${toFirst / d} vs ${between / d}dp)",
+            toFirst <= between - 4 * d)
+        val planCard = steps.parent as View
+        assertTrue("and the card's edge keeps more air above the label than the label's step down",
+            capTop(label, planCard) > toFirst)
+    }
+
     /** Over an ambient background the transcript sheet is see-through glass: the field shows, blurred. */
     @Test fun codeSessionGlassOverBackgroundDark() = withCode { a, _ ->
         AmbientBackgroundView.renderFieldInline = true
