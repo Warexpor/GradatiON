@@ -122,6 +122,42 @@ class RpExampleParseTest {
     }
 
     @Test
+    fun cardStartMarkerKeepsLaterExchanges() {
+        val pasted = """
+            <START>
+            {{user}}: hi
+            {{char}}: hello
+            <START>
+            {{bot}}: I was here first
+            <USER>: bye
+        """.trimIndent()
+        val examples = RpPromptEngine.parseExamplesFromEdit(pasted)
+        assertEquals(2, examples.size)
+        assertEquals("hi", examples[0].user)
+        assertEquals("hello", examples[0].char)
+        assertEquals("bye", examples[1].user)
+        assertEquals("I was here first", examples[1].char)
+        val plain = RpPromptEngine.parseExamplesFromEdit(
+            "User: hi\nChar: hello\n<START>\nUser: bye\nChar: later"
+        )
+        assertEquals(2, plain.size)
+        assertEquals("hi", plain[0].user)
+        assertEquals("hello", plain[0].char)
+        assertEquals("bye", plain[1].user)
+        assertEquals("later", plain[1].char)
+    }
+
+    @Test
+    fun aStartWordInsideAReplyStaysThere() {
+        val examples = RpPromptEngine.parseExamplesFromEdit(
+            "User: hi\nChar: the note said <START> come back\n{{user}}: quoted"
+        )
+        assertEquals(1, examples.size)
+        assertEquals("hi", examples[0].user)
+        assertEquals("the note said <START> come back\n{{user}}: quoted", examples[0].char)
+    }
+
+    @Test
     fun roundTripFormatAndParse() {
         val json = """[{"user":"a","char":"b"},{"user":"c","char":"d"}]"""
         val formatted = RpPromptEngine.formatExamplesForEdit(json)

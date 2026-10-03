@@ -208,10 +208,14 @@ object RpPromptEngine {
             "- When a user message includes a photo, that photo is in the scene. React only to what it actually shows.\n"
 
     /**
-     * SillyTavern-style placeholders used by imported cards: {{char}}, {{user}} and the older
-     * <BOT>/<USER>. Case-insensitive.
+     * SillyTavern-style placeholders used by imported cards: {{char}}, {{bot}}, {{user}} and the
+     * older <BOT>/<USER>. {{bot}} is the same slot as {{char}}; cards use either spelling.
+     * Case-insensitive.
      */
     private val standInNames = listOf("Alex", "Jordan", "Riley", "Casey", "Morgan", "Quinn")
+    private val randomUserMacro = Regex("""\{\{\s*random_user_(\d+)\s*\}\}""", RegexOption.IGNORE_CASE)
+    private val charMacro = Regex("""\{\{\s*(?:char|bot)\s*\}\}|<BOT>""", RegexOption.IGNORE_CASE)
+    private val userMacro = Regex("""\{\{\s*user\s*\}\}|<USER>""", RegexOption.IGNORE_CASE)
 
     /** A name that is not [avoid], so an example line is not this user. */
     fun standInName(index: Int, avoid: String): String {
@@ -224,12 +228,12 @@ object RpPromptEngine {
         if (text.isEmpty()) return text
         // A lambda, not a replacement string: names may contain $ or \, and a string
         // replacement reads those as group references (and can throw).
-        val withStandIns = Regex("""\{\{\s*random_user_(\d+)\s*\}\}""", RegexOption.IGNORE_CASE).replace(text) { match ->
+        val withStandIns = randomUserMacro.replace(text) { match ->
             standInName(match.groupValues[1].toIntOrNull() ?: 1, userName)
         }
         return withStandIns
-            .replace(Regex("""\{\{\s*char\s*\}\}|<BOT>""", RegexOption.IGNORE_CASE)) { charName }
-            .replace(Regex("""\{\{\s*user\s*\}\}|<USER>""", RegexOption.IGNORE_CASE)) { userName }
+            .replace(charMacro) { charName }
+            .replace(userMacro) { userName }
     }
 
     /**
@@ -240,15 +244,15 @@ object RpPromptEngine {
         if (text.isEmpty() || (charName.isBlank() && userName.isBlank())) return text
         var out = text
         if (userName.isNotBlank()) {
-            out = Regex("""\{\{\s*random_user_(\d+)\s*\}\}""", RegexOption.IGNORE_CASE).replace(out) { match ->
+            out = randomUserMacro.replace(out) { match ->
                 standInName(match.groupValues[1].toIntOrNull() ?: 1, userName)
             }
         }
         if (charName.isNotBlank()) {
-            out = out.replace(Regex("""\{\{\s*char\s*\}\}|<BOT>""", RegexOption.IGNORE_CASE)) { charName }
+            out = out.replace(charMacro) { charName }
         }
         if (userName.isNotBlank()) {
-            out = out.replace(Regex("""\{\{\s*user\s*\}\}|<USER>""", RegexOption.IGNORE_CASE)) { userName }
+            out = out.replace(userMacro) { userName }
         }
         return out
     }
@@ -271,9 +275,20 @@ object RpPromptEngine {
         character.instruction,
     ).map { it.trim() }.filter { it.isNotEmpty() }
 
-    /** Example dialogs: {{user}} is a stand-in, not the person in this chat. */
-    fun expandExampleMacros(text: String, charName: String, realUserName: String): String =
-        expandMacros(text, charName, standInName(1, realUserName))
+    /**
+     * Example dialogs: {{user}} is a stand-in, not the person in this chat, and so is
+     * {{random_user_N}}. Filling the stand-in in first used to make the random name avoid
+     * that stand-in instead of the real one, so {{random_user_1}} came out as this user
+     * whenever their name was the stand-in that got displaced (Alex and Jordan swap).
+     */
+    fun expandExampleMacros(text: String, charName: String, realUserName: String): String {
+        if (text.isEmpty()) return text
+        val standIn = standInName(1, realUserName)
+        val withRandom = randomUserMacro.replace(text) { match ->
+            standInName(match.groupValues[1].toIntOrNull() ?: 1, realUserName)
+        }
+        return expandMacros(withRandom, charName, standIn)
+    }
 
     private fun taboos(minorsNote: String, closing: String) =
         "TABOOS (violation = block):\n" +
@@ -437,7 +452,10 @@ object RpPromptEngine {
     }
 
     /**
-     * Parse the character-edit freeform example text (blocks separated by ---).
+     * Parse the character-edit freeform example text. Blocks are separated by `---` or by a
+     * card's `<START>` line; a `<START>` between exchanges used to be kept as dialogue, so the
+     * later exchange was saved as part of the first reply. Labels are `User`/`Char`, the card
+     * macros `{{user}}`/`{{char}}`/`{{bot}}`, and the older `<USER>`/`<BOT>` tags.
      * A blank line before the label, a Windows line break, spaces around the dashes, a
      * space before the colon, or a fullwidth colon still count. The character may speak
      * first: that used to swallow the User line into the reply. A later line that only
@@ -446,8 +464,10 @@ object RpPromptEngine {
     fun parseExamplesFromEdit(text: String): List<RpExampleDialog> {
         if (text.isBlank()) return emptyList()
         val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
-        val label = Regex("""(?i)^[ \t]*(user|char)[ \t]*[:：][ \t]*(.*)$""")
-        return normalized.split(Regex("""\n[ \t]*---[ \t]*\n""")).mapNotNull { block ->
+        val label = Regex(
+            """(?i)^[ \t]*((?:\{\{\s*(?:user|char|bot)\s*\}\})|(?:<(?:user|bot)>)|user|char)[ \t]*[:：][ \t]*(.*)$"""
+        )
+        return normalized.split(Regex("""(?i)\n[ \t]*(?:---|<(?:start)>)[ \t]*\n""")).mapNotNull { block ->
             val user = StringBuilder()
             val char = StringBuilder()
             var side: StringBuilder? = null
@@ -455,9 +475,9 @@ object RpPromptEngine {
             var seenChar = false
             for (line in block.split('\n')) {
                 val match = label.matchEntire(line)
-                val kind = match?.groupValues?.get(1)
-                val openingUser = kind != null && kind.equals("user", ignoreCase = true) && !seenUser
-                val openingChar = kind != null && kind.equals("char", ignoreCase = true) && !seenChar
+                val kind = match?.groupValues?.get(1)?.let(::exampleLabelSide)
+                val openingUser = kind == "user" && !seenUser
+                val openingChar = kind == "char" && !seenChar
                 if ((openingUser || openingChar) && match != null) {
                     if (openingUser) seenUser = true else seenChar = true
                     side = if (openingUser) user else char
@@ -472,6 +492,15 @@ object RpPromptEngine {
             val charText = char.toString().trim()
             if (userText.isEmpty() && charText.isEmpty()) null else RpExampleDialog(userText, charText)
         }
+    }
+
+    /** `{{bot}}` and `<BOT>` are the character side. The token keeps whatever wrapping it had. */
+    private fun exampleLabelSide(token: String): String {
+        val bare = token.trim()
+            .removePrefix("{{").removePrefix("<")
+            .removeSuffix("}}").removeSuffix(">")
+            .trim()
+        return if (bare.equals("user", ignoreCase = true)) "user" else "char"
     }
 
     /** Keep the start of a long definition. Cut on a line break when one sits in the latter half. */
