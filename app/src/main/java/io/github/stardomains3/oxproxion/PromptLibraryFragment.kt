@@ -82,15 +82,9 @@ class PromptLibraryFragment : Fragment() {
                         }
                         if (jsonString != null) {
                             val importedPrompts = LibraryBackup.prompts(jsonString)
-                            val currentPrompts = sharedPreferencesHelper.getCustomPrompts().toMutableList()
-
-                            importedPrompts.forEach { importedPrompt ->
-                                val isDuplicate = currentPrompts.any { it.title == importedPrompt.title }
-                                if (!isDuplicate) {
-                                    currentPrompts.add(importedPrompt)
-                                }
-                            }
-                            sharedPreferencesHelper.saveCustomPrompts(currentPrompts)
+                            sharedPreferencesHelper.saveCustomPrompts(
+                                planPromptImport(importedPrompts, sharedPreferencesHelper.getCustomPrompts())
+                            )
                             loadPrompts()
                             GlassNotice.show(requireContext(), getString(R.string.notice_prompts_imported))
                         } else {
