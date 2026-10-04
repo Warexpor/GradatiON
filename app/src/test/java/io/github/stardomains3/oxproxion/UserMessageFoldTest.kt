@@ -69,4 +69,13 @@ class UserMessageFoldTest {
         assertTrue(text.length > 150)
         assertEquals("hi\nhi\nhi…", UserMessageFold.collapse(text, maxChars = 150))
     }
+
+    @Test fun a_fold_cut_does_not_leave_half_an_emoji() {
+        // "😀" is two UTF-16 units. A limit of 10 lands on its high surrogate.
+        val text = "a".repeat(9) + "😀" + " and more words so this folds"
+        val cut = UserMessageFold.collapse(text, maxChars = 10)
+        assertTrue(cut.endsWith("…"))
+        assertFalse(cut.dropLast(1).any { it.isHighSurrogate() })
+        assertEquals("aaaaaaaaa…", cut)
+    }
 }
