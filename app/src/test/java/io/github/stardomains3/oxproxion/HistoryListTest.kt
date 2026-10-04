@@ -680,4 +680,37 @@ class HistoryListTest {
         assertTrue(HistoryList.draftMatchIds(lost, "hello photo").isEmpty())
         assertEquals(setOf(8L), HistoryList.draftMatchIds(lost, "photo"))
     }
+    @Test fun draft_preview_cut_does_not_leave_half_an_emoji() {
+        val label = { text: String -> "Draft: $text" }
+        // DRAFT_LINE is 160. "😀" is two UTF-16 units; a limit of 160 lands on its high surrogate.
+        val draft = "a".repeat(159) + "😀" + " and more draft text"
+        val row = HistoryList.rowPreview("You: sent", draft, "", label)
+        assertTrue(row.startsWith("Draft: "))
+        val body = row.removePrefix("Draft: ")
+        assertTrue(body.endsWith("…"))
+        assertFalse(body.dropLast(1).any { it.isHighSurrogate() || it.isLowSurrogate() })
+        assertEquals("a".repeat(159) + "…", body)
+    }
+
+    @Test fun a_long_search_gap_cut_does_not_leave_half_an_emoji() {
+        val label = { text: String -> "Draft: $text" }
+        // Word-order hit longer than DRAFT_LINE uses clipHit head/tail takes.
+        val mid = "😀" + "m".repeat(200) + "😀"
+        val draft = "hello " + mid + " Photo"
+        val row = HistoryList.rowPreview("You: sent", draft, "hello photo", label)
+        assertTrue(row.startsWith("Draft: "))
+        val body = row.removePrefix("Draft: ")
+        var i = 0
+        while (i < body.length) {
+            val c = body[i]
+            if (c.isHighSurrogate()) {
+                assertTrue(i + 1 < body.length && body[i + 1].isLowSurrogate())
+                i += 2
+            } else {
+                assertFalse(c.isLowSurrogate())
+                i++
+            }
+        }
+    }
+
 }
