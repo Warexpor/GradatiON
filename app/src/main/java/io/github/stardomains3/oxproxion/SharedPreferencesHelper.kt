@@ -77,7 +77,8 @@ class SharedPreferencesHelper(context: Context) {
     companion object {
 
         private const val KEY_VOICE_INPUT_MODEL = "voice_input_model"
-        private const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // VoiceEngine keys: device, cloud, grok, lan, off
+        /** Settings > Voice on/off and engine. Chat watches this live so the mic hides/shows. */
+        const val KEY_VOICE_INPUT_PROVIDER = "voice_input_provider" // VoiceEngine keys: device, cloud, grok, lan, off
         /** Last non-off engine so Settings > Voice can restore it after the master switch is turned off. */
         private const val KEY_VOICE_INPUT_LAST_ENGINE = "voice_input_last_engine"
         /** Encrypted prefs alias for an xAI API key (Grok STT / future Grok voice). */
