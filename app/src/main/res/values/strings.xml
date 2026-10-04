@@ -354,7 +354,6 @@
     <string name="notice_no_prompts_export">No prompts to export</string>
     <string name="notice_export_system_messages_failed">Error exporting system messages</string>
     <string name="notice_import_failed">Import failed</string>
-    <string name="notice_no_system_messages_export">No system messages to export</string>
     <string name="notice_default_system_message_undeletable">Default system message cannot be deleted</string>
     <string name="api_key_save_failed">Failed to save API key</string>
     <string name="api_key_empty">API key cannot be empty</string>
