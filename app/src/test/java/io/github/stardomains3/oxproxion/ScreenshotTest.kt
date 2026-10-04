@@ -841,18 +841,9 @@ class ScreenshotTest : ScreenshotHarness() {
             sv.setQuery("s", false); idle()
             org.junit.Assert.assertNull("$name: no Material underline", sv.findViewById<View>(androidx.appcompat.R.id.search_plate).background)
             val clear = sv.findViewById<android.widget.ImageView>(androidx.appcompat.R.id.search_close_btn)
-            fun pixels(d: android.graphics.drawable.Drawable): IntArray {
-                val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
-                d.setBounds(0, 0, 48, 48); d.draw(android.graphics.Canvas(bmp))
-                return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
-            }
-            fun inked(d: android.graphics.drawable.Drawable) =
-                d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
-            org.junit.Assert.assertArrayEquals("$name: the app's chevron collapses search",
-                pixels(inked(a.getDrawable(R.drawable.is_backarrow)!!)), pixels(inked(bar.collapseIcon!!)))
-            val ours = a.getDrawable(R.drawable.ic_close_x)!!.mutate().apply { setTint(a.getColor(R.color.xai_mute)) }
-            org.junit.Assert.assertArrayEquals("$name: the app's clear glyph", pixels(ours),
-                pixels(clear.drawable.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_mute)) }))
+            assertSameGlyph("$name: the app's chevron collapses search", a,
+                a.getDrawable(R.drawable.is_backarrow)!!, bar.collapseIcon!!)
+            assertSameGlyph("$name: the app's clear glyph", a, a.getDrawable(R.drawable.ic_close_x)!!, clear.drawable)
             snap(root(a), name)
             item.collapseActionView(); idle()
             a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
@@ -861,13 +852,7 @@ class ScreenshotTest : ScreenshotHarness() {
 
     /** Dropdowns showed Material's filled triangle and the lists a down arrow; both are the line chevron now. */
     @Test fun settingsDisclosureChevronsDark() = withChat { a, _ ->
-        fun pixels(d: android.graphics.drawable.Drawable): IntArray {
-            val c = d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
-            val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
-            c.setBounds(0, 0, 48, 48); c.draw(android.graphics.Canvas(bmp))
-            return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
-        }
-        val chevron = pixels(a.getDrawable(R.drawable.ic_expand_more)!!)
+        val chevron = a.getDrawable(R.drawable.ic_expand_more)!!
         val prefs = SharedPreferencesHelper(a)
         prefs.saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
         prefs.savePresets(listOf(Preset("p1", "Morning brief", "openai/gpt-5", SystemMessage("Default", ""),
@@ -877,7 +862,7 @@ class ScreenshotTest : ScreenshotHarness() {
         for (id in listOf(R.id.autoCompleteModel, R.id.autoCompleteSystemMessage)) {
             var p = editor.requireView().findViewById<View>(id).parent
             while (p !is com.google.android.material.textfield.TextInputLayout) p = (p as View).parent
-            org.junit.Assert.assertArrayEquals("dropdown chevron", chevron, pixels(p.endIconDrawable!!))
+            assertSameGlyph("dropdown chevron", a, chevron, p.endIconDrawable!!)
         }
         snap(root(a), "settings_preset_editor_chevrons_dark")
         a.supportFragmentManager.beginTransaction().remove(editor).commitNow(); idle()
@@ -889,8 +874,7 @@ class ScreenshotTest : ScreenshotHarness() {
             val f = make()
             pushFragment(a, f)
             val row = f.requireView().findViewById<androidx.recyclerview.widget.RecyclerView>(list).getChildAt(0)
-            org.junit.Assert.assertArrayEquals("list expand chevron", chevron,
-                pixels(row.findViewById<android.widget.ImageView>(icon).drawable))
+            assertSameGlyph("list expand chevron", a, chevron, row.findViewById<android.widget.ImageView>(icon).drawable)
             if (list == R.id.system_message_recycler_view) snap(root(a), "settings_list_chevrons_dark")
             a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
         }
@@ -898,14 +882,8 @@ class ScreenshotTest : ScreenshotHarness() {
 
     /** Key fields showed Material's filled eye; the toggle uses the line eye, struck through once shown. */
     @Test fun settingsKeyFieldsUseTheLineEyeDark() = withChat { a, _ ->
-        fun pixels(d: android.graphics.drawable.Drawable): IntArray {
-            val c = d.constantState!!.newDrawable().mutate().apply { setTint(a.getColor(R.color.xai_ink)) }
-            val bmp = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
-            c.setBounds(0, 0, 48, 48); c.draw(android.graphics.Canvas(bmp))
-            return IntArray(48 * 48).also { bmp.getPixels(it, 0, 48, 0, 0, 48, 48) }
-        }
-        val eye = pixels(a.getDrawable(R.drawable.ic_eye)!!)
-        val eyeOff = pixels(a.getDrawable(R.drawable.ic_eye_off)!!)
+        val eye = a.getDrawable(R.drawable.ic_eye)!!
+        val eyeOff = a.getDrawable(R.drawable.ic_eye_off)!!
         for ((name, field, make) in listOf<Triple<String, Int, () -> androidx.fragment.app.DialogFragment>>(
             Triple("api", R.id.edit_text_lay) { SaveApiDialogFragment() },
             Triple("brave", R.id.edit_text_lay_brave_api) { SaveBraveApiDialogFragment() },
@@ -915,9 +893,9 @@ class ScreenshotTest : ScreenshotHarness() {
             f.show(a.supportFragmentManager, name); idle()
             val toggle = f.requireView().findViewById<View>(field)
                 .findViewById<View>(com.google.android.material.R.id.text_input_end_icon) as android.widget.ImageView
-            org.junit.Assert.assertArrayEquals("$name: hidden key shows the eye", eye, pixels(toggle.drawable.current))
+            assertSameGlyph("$name: hidden key shows the eye", a, eye, toggle.drawable.current)
             toggle.performClick(); idle()
-            org.junit.Assert.assertArrayEquals("$name: shown key shows the struck eye", eyeOff, pixels(toggle.drawable.current))
+            assertSameGlyph("$name: shown key shows the struck eye", a, eyeOff, toggle.drawable.current)
             if (name == "api") snapDialogCentered(a, "settings_key_dialog_eye_dark")
             f.dismiss(); idle()
         }
@@ -1157,6 +1135,58 @@ class ScreenshotTest : ScreenshotHarness() {
             if (list == R.id.system_message_recycler_view) snap(root(a), "settings_library_rows_overflow_dark")
             a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
         }
+    }
+
+    /** The glyph checks forgive a few edge pixels; they must still tell the nearest pairs apart. */
+    @Test fun glyphComparisonTellsNearGlyphsApart() = withChat { a, _ ->
+        for ((x, y) in listOf(R.drawable.ic_eye to R.drawable.ic_eye_off, R.drawable.is_backarrow to R.drawable.ic_expand_more,
+                R.drawable.ic_close_x to R.drawable.ic_check)) {
+            org.junit.Assert.assertThrows(AssertionError::class.java) {
+                assertSameGlyph("pair", a, a.getDrawable(x)!!, a.getDrawable(y)!!)
+            }
+        }
+        assertSameGlyph("itself", a, a.getDrawable(R.drawable.ic_eye)!!, a.getDrawable(R.drawable.ic_eye)!!)
+    }
+
+    /** A search with no match showed "No prompts yet. Tap Add..." while the library was full. */
+    @Test fun settingsPromptSearchSaysNoMatchDark() = withChat { a, _ ->
+        SharedPreferencesHelper(a).saveCustomPrompts(listOf(Prompt("Standup", "Summarize yesterday.")))
+        val f = PromptLibraryFragment()
+        pushFragment(a, f)
+        val bar = f.requireView().findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+        val item = bar.menu.findItem(R.id.action_search)
+        item.expandActionView(); idle()
+        val sv = item.actionView as androidx.appcompat.widget.SearchView
+        val empty = f.requireView().findViewById<android.widget.TextView>(R.id.promptsEmptyView)
+        sv.setQuery("zzz", false); idle()
+        org.junit.Assert.assertTrue(empty.isShown)
+        org.junit.Assert.assertEquals(a.getString(R.string.prompts_no_match), empty.text.toString())
+        snap(root(a), "settings_prompts_no_match_dark")
+        sv.setQuery("", false); idle()
+        org.junit.Assert.assertFalse("the prompt is back", empty.isShown)
+        item.collapseActionView(); idle()
+        a.supportFragmentManager.beginTransaction().remove(f).commitNow(); idle()
+        SharedPreferencesHelper(a).saveCustomPrompts(emptyList())
+        val g = PromptLibraryFragment()
+        pushFragment(a, g)
+        org.junit.Assert.assertEquals(a.getString(R.string.prompts_empty),
+            g.requireView().findViewById<android.widget.TextView>(R.id.promptsEmptyView).text.toString())
+        a.supportFragmentManager.beginTransaction().remove(g).commitNow(); idle()
+        // System messages always lists Default, so it had no empty view: a miss was a blank page.
+        val m = SystemMessageLibraryFragment()
+        pushFragment(a, m)
+        val mBar = m.requireView().findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+        val mItem = mBar.menu.findItem(R.id.action_search)
+        mItem.expandActionView(); idle()
+        val mSv = mItem.actionView as androidx.appcompat.widget.SearchView
+        val mEmpty = m.requireView().findViewById<android.widget.TextView>(R.id.systemMessagesEmptyView)
+        org.junit.Assert.assertFalse(mEmpty.isShown)
+        mSv.setQuery("zzz", false); idle()
+        org.junit.Assert.assertTrue(mEmpty.isShown)
+        org.junit.Assert.assertEquals(a.getString(R.string.system_messages_no_match), mEmpty.text.toString())
+        snap(root(a), "settings_system_messages_no_match_dark")
+        mSv.setQuery("", false); idle()
+        org.junit.Assert.assertFalse(mEmpty.isShown)
     }
 
     @Test fun settingsSectionsDark() = withChat { a, _ ->

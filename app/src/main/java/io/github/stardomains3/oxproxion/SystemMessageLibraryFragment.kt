@@ -234,6 +234,7 @@ class SystemMessageLibraryFragment : Fragment() {
         recyclerView.apply {
             layoutManager = LinearLayoutManager(context)
             adapter = systemMessageAdapter
+            EmptyState.bind(this, view.findViewById(R.id.systemMessagesEmptyView))
 
             // Drag-and-drop reordering (customs only; default fixed at top)
             val callback = object : ItemTouchHelper.SimpleCallback(
