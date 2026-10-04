@@ -52,10 +52,7 @@ class SystemMessageLibraryFragment : Fragment() {
                         withContext(Dispatchers.IO) {
                             val customMessages = sharedPreferencesHelper.getCustomSystemMessages()
                             val defaultMessage = sharedPreferencesHelper.getDefaultSystemMessage()
-                            val allMessages = mutableListOf<SystemMessage>().apply {
-                                add(SystemMessage(defaultMessage.title, defaultMessage.prompt))
-                                addAll(customMessages)
-                            }
+                            val allMessages = systemMessagesExportList(defaultMessage, customMessages)
                             val json = Json.encodeToString(allMessages)
                             val cache = File(app.cacheDir, "system-messages-${System.nanoTime()}.json")
                             BackupIo.publish(cache, { app.contentResolver.openOutputStream(uri, "wt") }) { stream ->
@@ -87,22 +84,20 @@ class SystemMessageLibraryFragment : Fragment() {
                         }
                         if (jsonString != null) {
                             val importedMessages = LibraryBackup.systemMessages(jsonString)
-                            val currentMessages = sharedPreferencesHelper.getCustomSystemMessages().toMutableList()
-                            // Fetch the single default message for duplicate checking
-                            val defaultMessage = sharedPreferencesHelper.getDefaultSystemMessage()
-
-                            importedMessages.forEach { importedMessage ->
-                                // Check for duplicates against current custom messages AND the single default message
-                                val isDuplicateInCustoms = currentMessages.any { it.title == importedMessage.title }
-                                val isDuplicateInDefault = (importedMessage.title == defaultMessage.title)
-
-                                if (!isDuplicateInCustoms && !isDuplicateInDefault) {
-                                    currentMessages.add(importedMessage)
+                            val currentDefault = sharedPreferencesHelper.getDefaultSystemMessage()
+                            val plan = planSystemMessageImport(
+                                importedMessages,
+                                currentDefault,
+                                sharedPreferencesHelper.getCustomSystemMessages(),
+                            )
+                            plan.default?.let { next ->
+                                sharedPreferencesHelper.saveDefaultSystemMessage(next)
+                                val selected = sharedPreferencesHelper.getSelectedSystemMessage()
+                                if (selected.isDefault || selected.title == currentDefault.title) {
+                                    sharedPreferencesHelper.saveSelectedSystemMessage(next)
                                 }
-                                // Optional: Log skipped duplicates
-                                // else { Log.d("Import", "Skipped duplicate: ${importedMessage.title}") }
                             }
-                            sharedPreferencesHelper.saveCustomSystemMessages(currentMessages)
+                            sharedPreferencesHelper.saveCustomSystemMessages(plan.customs)
                             loadSystemMessages()
                             GlassNotice.show(requireContext(), getString(R.string.notice_system_messages_imported))
                         } else {
@@ -191,10 +186,8 @@ class SystemMessageLibraryFragment : Fragment() {
 
 
     private fun exportSystemMessages() {
-        if (sharedPreferencesHelper.getCustomSystemMessages().isEmpty()) {
-            GlassNotice.show(requireContext(), getString(R.string.notice_no_system_messages_export))
-            return
-        }
+        // Always export: Default is in the file too. Refusing when customs were empty meant a
+        // customized Default could not be backed up, and Import used to skip Default anyway.
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "application/json"
