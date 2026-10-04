@@ -169,14 +169,14 @@ object HistoryList {
         // draft truncates from the start and drops the bold words.
         val body = when {
             needle.isEmpty() || !wordsMatch(folded, query) ->
-                if (folded.length <= DRAFT_LINE) folded else folded.take(DRAFT_LINE).trimEnd() + "…"
+                if (folded.length <= DRAFT_LINE) folded else clipChars(folded, DRAFT_LINE).trimEnd() + "…"
             else -> {
                 val hit = emphasis(folded, needle)
                 // A word-order span (hello … Photo) is the whole gap. clipAround would
                 // keep every word of it and blow past one preview line.
                 if (hit != null) clipDraftHit(folded, hit)
                 else if (folded.length <= DRAFT_LINE) folded
-                else folded.take(DRAFT_LINE).trimEnd() + "…"
+                else clipChars(folded, DRAFT_LINE).trimEnd() + "…"
             }
         }
         return draftLabel(body)
@@ -528,10 +528,28 @@ object HistoryList {
         val span = text.substring(hit.start, spanEnd)
         val head = budget / 2
         val tail = (budget - head - 1).coerceAtLeast(1)
-        var body = span.take(head).trimEnd() + "…" + span.takeLast(tail).trimStart()
+        // [String.take] / [String.takeLast] count UTF-16 units. A cut on either half of an
+        // emoji left a broken character in the History draft / search preview.
+        var body = clipChars(span, head).trimEnd() + "…" + clipCharsFromEnd(span, tail).trimStart()
         if (hit.start > 0) body = "…$body"
         if (spanEnd < text.length) body = "$body…"
         return body
+    }
+
+    /** Cut without ending on a high surrogate (Speak / fold already do this). */
+    private fun clipChars(text: String, limit: Int): String {
+        if (text.length <= limit) return text
+        var end = limit.coerceAtLeast(0)
+        if (end > 0 && end <= text.length && text[end - 1].isHighSurrogate()) end--
+        return text.substring(0, end)
+    }
+
+    /** Tail cut without starting on a low surrogate. */
+    private fun clipCharsFromEnd(text: String, limit: Int): String {
+        if (text.length <= limit) return text
+        var start = (text.length - limit).coerceAtLeast(0)
+        if (start < text.length && text[start].isLowSurrogate()) start++
+        return text.substring(start)
     }
 
     private fun clipAround(text: String, at: Int, needleLen: Int): String {
