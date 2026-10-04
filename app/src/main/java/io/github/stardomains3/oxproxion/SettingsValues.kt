@@ -18,6 +18,17 @@ internal fun settingsVoiceRowEngine(providerKey: String?): VoiceEngine =
     VoiceEngine.fromKey(providerKey)
 
 /**
+ * Bearer for OpenRouter Cloud STT (Settings > Voice). Always the saved OpenRouter key —
+ * never [activeChatApiKey], which becomes the LAN key after a local-model send. Voice
+ * preflight already checks `openrouter_api_key`; the upload must use the same source
+ * (same footgun Remaining credits fixed in Models & API).
+ */
+internal fun cloudVoiceOpenRouterKey(
+    savedOpenRouterKey: String,
+    @Suppress("UNUSED_PARAMETER") activeChatApiKey: String,
+): String = savedOpenRouterKey
+
+/**
  * Host (and port) for the Models local-server row. [java.net.URI.authority] includes
  * userinfo, so `http://user:secret@10.0.0.23:11434` used to print the password on the row.
  * IPv6 is bracketed so the port stays readable.
