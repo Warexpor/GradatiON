@@ -287,6 +287,17 @@ class PrefsCorruptBlobTest {
         assertEquals(115, prefs.mainPrefs.getInt(SharedPreferencesHelper.KEY_FONT_SIZEC, -1))
     }
 
+    @Test fun advancedReasoningPrefKeyIsTheOneSettingsSaves() {
+        // History opens Settings without hiding Chat; Chat only refreshed advanced
+        // reasoning LiveData on resume/hidden. Watch this key the same way as chat text.
+        assertEquals("advanced_reasoning_enabled", SharedPreferencesHelper.KEY_ADVANCED_REASONING_ENABLED)
+        val prefs = helper()
+        prefs.saveAdvancedReasoningEnabled(true)
+        assertTrue(prefs.mainPrefs.getBoolean(SharedPreferencesHelper.KEY_ADVANCED_REASONING_ENABLED, false))
+        prefs.saveAdvancedReasoningEnabled(false)
+        assertFalse(prefs.mainPrefs.getBoolean(SharedPreferencesHelper.KEY_ADVANCED_REASONING_ENABLED, true))
+    }
+
     @Test
     fun reasoningEffortFollowsTheMasterSwitchAndAPositiveBudget() {
         assertTrue(reasoningEffortControlsEnabled(advancedOn = true, maxTokens = null))
