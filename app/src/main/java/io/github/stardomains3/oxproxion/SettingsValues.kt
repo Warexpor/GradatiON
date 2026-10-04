@@ -29,6 +29,14 @@ internal fun cloudVoiceOpenRouterKey(
 ): String = savedOpenRouterKey
 
 /**
+ * Saved OpenRouter key from Models & API. Never read [ChatViewModel.activeChatApiKey] for
+ * this: after a local-model send that field holds the LAN key (often blank), so Chat would
+ * say the OpenRouter key was missing or upload with the wrong Bearer.
+ */
+internal fun settingsOpenRouterApiKey(prefs: SharedPreferencesHelper): String =
+    prefs.getApiKeyFromPrefs("openrouter_api_key")
+
+/**
  * Host (and port) for the Models local-server row. [java.net.URI.authority] includes
  * userinfo, so `http://user:secret@10.0.0.23:11434` used to print the password on the row.
  * IPv6 is bracketed so the port stays readable.

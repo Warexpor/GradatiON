@@ -2691,8 +2691,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         return@setOnClickListener
                     }
                 } else {
-                    // Non-LAN model: Check API key
-                    if (viewModel.activeChatApiKey.isBlank() && !viewModel.activeModelIsDemo()) {
+                    // Non-LAN: the saved OpenRouter key. activeChatApiKey is the LAN key after a local send.
+                    if (settingsOpenRouterApiKey(sharedPreferencesHelper).isBlank() && !viewModel.activeModelIsDemo()) {
                         GlassNotice.show(requireContext(), getString(R.string.notice_need_key))
                         return@setOnClickListener
                     }
@@ -3258,23 +3258,28 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
         menuButton.setOnLongClickListener {
             val inputText = chatEditText.text.toString().trim()
-            if (inputText.isBlank()) {
-                GlassNotice.show(requireContext(), getString(R.string.toast_no_text_to_correct))
-            } else if (viewModel.activeChatApiKey.isBlank()) {
-                GlassNotice.show(requireContext(), getString(R.string.toast_api_key_missing))
-            } else {
-                menuButton.isSelected = true
-                menuButton.setIconResource(R.drawable.ic_magic)
-
-                lifecycleScope.launch {
-                    val corrected = viewModel.correctText(inputText)
-                    if (!corrected.isNullOrBlank()) {
-                        chatEditText.setText(corrected)
-                        chatEditText.setSelection(corrected.length)
-                    } else {
-                        GlassNotice.show(requireContext(), getString(R.string.toast_correction_failed))
+            when {
+                inputText.isBlank() ->
+                    GlassNotice.show(requireContext(), getString(R.string.toast_no_text_to_correct))
+                viewModel.activeModelIsLan() && viewModel.getLanEndpoint().isNullOrBlank() ->
+                    GlassNotice.show(requireContext(), getString(R.string.notice_need_lan))
+                // Saved OpenRouter key — not activeChatApiKey (LAN key after a local-model send).
+                !viewModel.activeModelIsLan() && !viewModel.activeModelIsDemo() &&
+                    settingsOpenRouterApiKey(sharedPreferencesHelper).isBlank() ->
+                    GlassNotice.show(requireContext(), getString(R.string.toast_api_key_missing))
+                else -> {
+                    menuButton.isSelected = true
+                    menuButton.setIconResource(R.drawable.ic_magic)
+                    lifecycleScope.launch {
+                        val corrected = viewModel.correctText(inputText)
+                        if (!corrected.isNullOrBlank()) {
+                            chatEditText.setText(corrected)
+                            chatEditText.setSelection(corrected.length)
+                        } else {
+                            GlassNotice.show(requireContext(), getString(R.string.toast_correction_failed))
+                        }
+                        restoreAttachPlusIcon()
                     }
-                    restoreAttachPlusIcon()
                 }
             }
             true
