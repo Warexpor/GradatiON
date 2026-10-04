@@ -298,6 +298,17 @@ class PrefsCorruptBlobTest {
         assertFalse(prefs.mainPrefs.getBoolean(SharedPreferencesHelper.KEY_ADVANCED_REASONING_ENABLED, true))
     }
 
+    @Test fun voiceInputProviderPrefKeyIsTheOneSettingsSaves() {
+        // History opens Settings without hiding Chat; Chat only refreshed the mic from
+        // onResume. Watch this key the same way as chat text / advanced reasoning.
+        assertEquals("voice_input_provider", SharedPreferencesHelper.KEY_VOICE_INPUT_PROVIDER)
+        val prefs = helper()
+        prefs.setVoiceInputProvider(VoiceEngine.OFF.key)
+        assertEquals(VoiceEngine.OFF.key, prefs.mainPrefs.getString(SharedPreferencesHelper.KEY_VOICE_INPUT_PROVIDER, null))
+        prefs.setVoiceInputProvider(VoiceEngine.CLOUD.key)
+        assertEquals(VoiceEngine.CLOUD.key, prefs.mainPrefs.getString(SharedPreferencesHelper.KEY_VOICE_INPUT_PROVIDER, null))
+    }
+
     @Test
     fun reasoningEffortFollowsTheMasterSwitchAndAPositiveBudget() {
         assertTrue(reasoningEffortControlsEnabled(advancedOn = true, maxTokens = null))
