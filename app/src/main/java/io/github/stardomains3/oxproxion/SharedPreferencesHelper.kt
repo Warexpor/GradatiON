@@ -148,7 +148,8 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_LAST_AI_RESPONSE_CHANNEL = "last_ai_response_channel_"
         const val LAN_PROVIDER_LLAMA_CPP = "llama_cpp"
-        private const val KEY_FONT_SIZEC = "font_sizec"
+        /** Appearance > Chat text (and the in-chat stepper). Chat watches this live. */
+        const val KEY_FONT_SIZEC = "font_sizec"
         private const val KEY_USE_COPY_BUTTON = "use_copy_button"
         const val LAN_PROVIDER_OLLAMA = "ollama"
         private const val KEY_WEB_SEARCH_ENGINE = "web_search_engine"
