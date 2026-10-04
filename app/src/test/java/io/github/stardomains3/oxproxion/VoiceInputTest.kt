@@ -127,6 +127,11 @@ class VoiceInputTest {
         assertEquals("sk-or", cloudVoiceOpenRouterKey("sk-or", ""))
     }
 
+    @Test fun settingsOpenRouterApiKeyReadsTheModelsAlias() {
+        // Chat send / title / OpenRouter transcription must use this, not activeChatApiKey.
+        assertEquals("", settingsOpenRouterApiKey(prefs))
+    }
+
     @Test fun grokNeedsAnXaiKey() {
         assertEquals(R.string.voice_need_xai_key, VoiceInput.preflight(VoiceEngine.GROK, prefs))
     }
