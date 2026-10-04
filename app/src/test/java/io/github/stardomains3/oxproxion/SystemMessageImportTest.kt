@@ -74,4 +74,43 @@ class SystemMessageImportTest {
         assertEquals("A custom that reused the stock title.", plan.customs.single().prompt)
         assertFalse(plan.customs.single().isDefault)
     }
+
+    @Test
+    fun matchingCustomTitleIgnoreCaseIsSkipped() {
+        val plan = planSystemMessageImport(
+            listOf(SystemMessage("terse", "new body")),
+            stock,
+            listOf(SystemMessage("Terse", "old body")),
+        )
+        assertNull(plan.default)
+        assertEquals(listOf("Terse"), plan.customs.map { it.title })
+        assertEquals("old body", plan.customs.single().prompt)
+    }
+
+    @Test
+    fun legacyExportUpdatesDefaultIgnoreCase() {
+        val plan = planSystemMessageImport(
+            listOf(SystemMessage("default", "Legacy body.")),
+            stock,
+            emptyList(),
+        )
+        assertEquals("default", plan.default!!.title)
+        assertEquals("Legacy body.", plan.default!!.prompt)
+        assertTrue(plan.customs.isEmpty())
+    }
+
+    @Test
+    fun customMatchingFileDefaultTitleIgnoreCaseIsSkipped() {
+        val plan = planSystemMessageImport(
+            listOf(
+                SystemMessage("Default", "Be a pirate.", isDefault = true),
+                SystemMessage("default", "Would clash with Default."),
+                SystemMessage("Terse", "Be brief."),
+            ),
+            stock,
+            emptyList(),
+        )
+        assertEquals("Be a pirate.", plan.default!!.prompt)
+        assertEquals(listOf("Terse"), plan.customs.map { it.title })
+    }
 }

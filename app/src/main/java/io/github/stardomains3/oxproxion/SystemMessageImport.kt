@@ -18,6 +18,9 @@ internal data class SystemMessageImportPlan(
  * A legacy export that stripped `isDefault` still updates Default when the title matches — but
  * only when the file has no explicit Default flag. Otherwise a custom that reused the stock
  * title ("Default") would overwrite the file's real Default on a device that still uses that name.
+ *
+ * Title matches follow the editor: ignore case. Import used exact equality, so a backup with
+ * "terse" beside a saved "Terse" created a second custom the editor would reject.
  */
 internal fun planSystemMessageImport(
     imported: List<SystemMessage>,
@@ -25,17 +28,22 @@ internal fun planSystemMessageImport(
     currentCustoms: List<SystemMessage>,
 ): SystemMessageImportPlan {
     val hasExplicitDefault = imported.any { it.isDefault }
+    // Reserved even before the Default row is visited, so a custom ahead of it cannot land
+    // under the same title the editor would refuse against Default.
+    val fileDefaultTitle = imported.lastOrNull { it.isDefault }?.title
     var nextDefault: SystemMessage? = null
     val customs = currentCustoms.toMutableList()
     for (row in imported) {
         val asDefault = row.isDefault ||
-            (!hasExplicitDefault && row.title == currentDefault.title)
+            (!hasExplicitDefault && row.title.equals(currentDefault.title, ignoreCase = true))
         if (asDefault) {
             // One Default wins: the last Default-like row in the file.
             nextDefault = SystemMessage(row.title, row.prompt, isDefault = true)
             continue
         }
-        if (customs.any { it.title == row.title }) continue
+        val reservedDefaultTitle = nextDefault?.title ?: fileDefaultTitle ?: currentDefault.title
+        if (row.title.equals(reservedDefaultTitle, ignoreCase = true)) continue
+        if (customs.any { it.title.equals(row.title, ignoreCase = true) }) continue
         customs.add(SystemMessage(row.title, row.prompt, isDefault = false))
     }
     return SystemMessageImportPlan(nextDefault, customs)
