@@ -57,4 +57,21 @@ class SystemMessageImportTest {
         assertNull(plan.default)
         assertEquals("Terse", plan.customs.single().title)
     }
+
+    @Test
+    fun explicitDefaultNotOverriddenByCustomMatchingCurrentTitle() {
+        // Device A renamed Default to Helper and added a custom titled Default. Device B still
+        // has the stock Default title — the custom must not steal the file's real Default.
+        val imported = listOf(
+            SystemMessage("Helper", "From file Default.", isDefault = true),
+            SystemMessage("Default", "A custom that reused the stock title."),
+        )
+        val plan = planSystemMessageImport(imported, stock, emptyList())
+        assertEquals("Helper", plan.default!!.title)
+        assertEquals("From file Default.", plan.default!!.prompt)
+        assertTrue(plan.default!!.isDefault)
+        assertEquals(listOf("Default"), plan.customs.map { it.title })
+        assertEquals("A custom that reused the stock title.", plan.customs.single().prompt)
+        assertFalse(plan.customs.single().isDefault)
+    }
 }

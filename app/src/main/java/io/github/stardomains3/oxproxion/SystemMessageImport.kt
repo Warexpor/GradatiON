@@ -15,17 +15,21 @@ internal data class SystemMessageImportPlan(
 /**
  * Rows marked Default update the saved Default (title and prompt). Every other row is a custom
  * with [SystemMessage.isDefault] forced off; titles that already exist as a custom are skipped.
- * A legacy export that stripped `isDefault` still updates Default when the title matches.
+ * A legacy export that stripped `isDefault` still updates Default when the title matches — but
+ * only when the file has no explicit Default flag. Otherwise a custom that reused the stock
+ * title ("Default") would overwrite the file's real Default on a device that still uses that name.
  */
 internal fun planSystemMessageImport(
     imported: List<SystemMessage>,
     currentDefault: SystemMessage,
     currentCustoms: List<SystemMessage>,
 ): SystemMessageImportPlan {
+    val hasExplicitDefault = imported.any { it.isDefault }
     var nextDefault: SystemMessage? = null
     val customs = currentCustoms.toMutableList()
     for (row in imported) {
-        val asDefault = row.isDefault || row.title == currentDefault.title
+        val asDefault = row.isDefault ||
+            (!hasExplicitDefault && row.title == currentDefault.title)
         if (asDefault) {
             // One Default wins: the last Default-like row in the file.
             nextDefault = SystemMessage(row.title, row.prompt, isDefault = true)
