@@ -50,8 +50,9 @@
     <string name="transcription_empty">No transcription received.</string>
     <string name="credits_remaining">Remaining credits: %1$s</string>
     <string name="credits_failed">Failed to retrieve credits.</string>
-    <string name="lan_models_timeout">LAN models timed out (10 s, %1$s). Check the server and endpoint.</string>
-    <string name="lan_models_failed">LAN fetch failed (%1$s): %2$s</string>
+    <string name="lan_models_timeout">%1$s did not answer in 10 s. Check that it is running and the address is right.</string>
+    <string name="lan_models_failed">Could not list %1$s models: %2$s</string>
+    <string name="lan_models_need_endpoint">Set your local server address in Settings &gt; Models &amp; API first</string>
 
     <!-- Import -->
     <string name="import_error_too_large">Import file too large (max %1$d MB)</string>

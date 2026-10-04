@@ -5,7 +5,6 @@ import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
 import androidx.test.core.app.ApplicationProvider
 import com.google.android.material.bottomsheet.BottomSheetDialog
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,9 +16,8 @@ import org.robolectric.annotation.Config
 
 /**
  * Bottom-sheet glass ([GlassDrawable.topOnly]) must outline without throwing; the real
- * top-round path is used on API 30+ (Robolectric's Outline.radius after setPath is not
- * always RADIUS_UNDEFINED, so we only assert clip-ability here). Below API 30 the outline
- * is empty so elevation does not fake rounded bottom corners.
+ * top-round path is used (Robolectric's Outline.radius after setPath is not always
+ * RADIUS_UNDEFINED, so we only assert clip-ability here).
  * [GlassChrome.clearDuplicateSheetGlass] must drop a stacked content GlassDrawable, including
  * one wrapper deep.
  */
@@ -35,29 +33,6 @@ class GlassDrawableOutlineTest {
         val outline = Outline()
         d.getOutline(outline)
         assertTrue(outline.canClip())
-    }
-
-    @Test
-    @Config(sdk = [29])
-    fun topOnly_preR_outlineIsEmpty() {
-        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val d = GlassDrawable.sheet(ctx, topOnly = true)
-        d.setBounds(0, 0, 400, 800)
-        val outline = Outline()
-        d.getOutline(outline)
-        assertFalse(outline.canClip())
-    }
-
-    @Test
-    @Config(sdk = [29])
-    fun fullSheet_preR_outlineStillClips() {
-        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val d = GlassDrawable.sheet(ctx, topOnly = false)
-        d.setBounds(0, 0, 400, 400)
-        val outline = Outline()
-        d.getOutline(outline)
-        assertTrue(outline.canClip())
-        assertTrue(outline.radius > 0f)
     }
 
     @Test

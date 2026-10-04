@@ -1326,11 +1326,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // bailed (reply in flight, missing row) or the row was Ask, which closed the
         // Roleplay list before leave-mode could remember it.
         beginSessionTransition {
-            loadChatInternal(sessionId)
+            loadChatInternal(sessionId, openedByUser = true)
         }
     }
 
-    private suspend fun loadChatInternal(sessionId: Long) {
+    /** [openedByUser]: a row tapped in History or the list, not a draft restored on a mode switch. */
+    private suspend fun loadChatInternal(sessionId: Long, openedByUser: Boolean = false) {
         awaitPendingSaves()
         if (networkJob?.isActive == true) {
             _isChatLoading.value = false
@@ -1374,7 +1375,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 sharedPreferencesHelper.saveRpDraftSessionId(loadedMode, sessionId)
                 // Before the mode write, so a Roleplay landing cannot reopen the list
                 // this open just closed. Ask (and a load that never got here) does not signal.
-                if (HubUncover.shouldSignalThreadOpen(
+                // Nor does the draft a tab switch restores behind the list: that one is only
+                // the thread under it, and closing the list there lost "left on the list".
+                if (openedByUser && HubUncover.shouldSignalThreadOpen(
                         loadApplied = true,
                         loadedRoleplay = loadedMode == ChatMode.RP,
                     )
@@ -3706,7 +3709,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startLanModelsFetch() {
         val provider = getCurrentLanProvider()
+        val label = LanProviderNames.of(provider) ?: provider
         lanFetchJob?.cancel()
+        // Without an address there is nothing to ask. Say where to set it rather than
+        // surfacing the exception text, or a "no models" notice that blames the server.
+        if (sharedPreferencesHelper.getLanEndpoint() == null) {
+            _toastUiEvent.value = Event(str(R.string.lan_models_need_endpoint))
+            return
+        }
         lanFetchJob = viewModelScope.launch {
             try {
                 val models = fetchLanModels(provider)
@@ -3715,11 +3725,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: CancellationException) {
                 if (e is TimeoutCancellationException) {
                     _lanModels.value = emptyList()
-                    _toastUiEvent.value = Event(str(R.string.lan_models_timeout, provider))
+                    _toastUiEvent.value = Event(str(R.string.lan_models_timeout, label))
                 }
             } catch (e: Exception) {
                 _lanModels.value = emptyList()
-                _toastUiEvent.value = Event(str(R.string.lan_models_failed, provider, e.message))
+                _toastUiEvent.value = Event(str(R.string.lan_models_failed, label, e.message))
             }
         }
     }

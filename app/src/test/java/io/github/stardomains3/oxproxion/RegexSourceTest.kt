@@ -18,7 +18,8 @@ class RegexSourceTest {
         val root = listOf(File("src/main/java"), File("app/src/main/java")).first { it.exists() }
         val bad = root.walkTopDown().filter { it.extension == "kt" }.flatMap { f ->
             literal.findAll(f.readText()).mapNotNull { m ->
-                val pattern = m.groupValues[1].ifEmpty { m.groupValues[2] }
+                // A plain string spells the regex `\p{L}` as `\\p{L}`; read it as the regex text.
+                val pattern = m.groupValues[1].ifEmpty { m.groupValues[2].replace("\\\\", "\\") }
                 val stripped = quantifier.replace(property.replace(pattern.replace("\\\\", ""), ""), "")
                 if (Regex("""(?<!\\)\}""").containsMatchIn(stripped)) "${f.name}: $pattern" else null
             }

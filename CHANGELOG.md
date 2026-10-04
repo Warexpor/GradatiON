@@ -39,6 +39,9 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Roleplay opens on the character list again when you left it there. Switching back used to reopen your last chat, because restoring that chat behind the list counted as opening it.
+- Editing a preset says "Edit preset". It said "Create preset" for every preset.
+- The local models page says to set the server address when there is none, instead of "LAN fetch failed (ollama): LAN endpoint not configured". Its errors name the provider as the app shows it.
 - A character backup with several portraits or wallpapers stays small enough to import. Each picture used to be packed up to its own cap, and the file then passed the size an import will read, so the other phone refused the whole library. A torn picture is still left out, and a missing one still clears.
 - Importing a character file that has no export key counts as a greeting change when that file's greeting is different. A rewritten opening used to stay, because only a row with the export key was checked. The last copy of that name is the one that counts. When two characters already share the name, only the newest one's opening follows the file. A keyless row next to a keyed row of that name is still its own character.
 - A lorebook named History updates the one named history, including on a phone whose language treats a capital I as a different letter. The import used to add a second book, and a pin to that name did not attach. The update prompt counts them as one book.

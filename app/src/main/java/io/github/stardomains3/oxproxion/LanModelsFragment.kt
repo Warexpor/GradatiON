@@ -54,16 +54,7 @@ class LanModelsFragment : Fragment() {
         viewModel = ViewModelProvider(requireActivity(), AppViewModelFactory(requireActivity().application))[ChatViewModel::class.java]
 
         val provider = viewModel.getCurrentLanProvider()
-        val title = when (provider) {
-            "lm_studio" -> "LM Studio"
-            "llama_cpp" -> "llama.cpp"
-            "mlx_lm" -> "MLX LM"
-            "ollama" -> "Ollama"
-            "omlx" -> "oMLX"
-            "nativ" -> "Nativ"
-            "hermes_agent" -> "Hermes Agent"
-            else -> getString(R.string.model_lan_title)
-        }
+        val title = LanProviderNames.of(provider) ?: getString(R.string.model_lan_title)
         view.findViewById<android.widget.TextView>(R.id.lanTitle).text = title
 
         // CANCEL BEFORE BACK
@@ -205,5 +196,19 @@ class LanModelsFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         viewModel.cancelCurrentRequest()
+    }
+}
+
+/** How a local server's provider id reads on screen. Null for an id the app does not know. */
+internal object LanProviderNames {
+    fun of(id: String): String? = when (id) {
+        "lm_studio" -> "LM Studio"
+        "llama_cpp" -> "llama.cpp"
+        "mlx_lm" -> "MLX LM"
+        "ollama" -> "Ollama"
+        "omlx" -> "oMLX"
+        "nativ" -> "Nativ"
+        "hermes_agent" -> "Hermes Agent"
+        else -> null
     }
 }

@@ -47,13 +47,14 @@ class PresetEditFragment : Fragment() {
         prefs = SharedPreferencesHelper(requireContext())
 
         initViews(view)
-        setupToolbar()
 
         // Load preset for editing if available
         val currentPreset = arguments?.getString(ARG_PRESET_ID)?.let { id ->
             PresetRepository(requireContext()).findById(id)
         }
         editingPreset = currentPreset
+        // After the load: the title says Create or Edit from it.
+        setupToolbar()
 
         // Setup AutoComplete dropdowns
         setupModelAutoComplete()

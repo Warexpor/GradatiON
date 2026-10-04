@@ -710,6 +710,8 @@ class ScreenshotTest : ScreenshotHarness() {
         val f = PresetEditFragment.newInstance(gone)
         pushFragment(a, f)
         val v = f.requireView()
+        org.junit.Assert.assertEquals(a.getString(R.string.preset_edit_edit_title),
+            v.findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar).title)
         org.junit.Assert.assertEquals(a.getString(R.string.preset_model_missing, "vendor/retired-model"),
             v.findViewById<android.widget.TextView>(R.id.autoCompleteModel).text.toString())
         v.findViewById<android.widget.EditText>(R.id.editPresetTitle).setText("Renamed favourite")
