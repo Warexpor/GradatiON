@@ -1904,8 +1904,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun sendTranscriptionOpenRouter(audioBytes: ByteArray, audioFormat: String) {
         val modelId = _activeChatModel.value ?: return
         deliverTranscription {
+            // activeChatApiKey is the LAN key after a local-model send; OpenRouter STT needs Models & API.
+            val openRouterKey = settingsOpenRouterApiKey(sharedPreferencesHelper)
+            if (openRouterKey.isBlank()) error("OpenRouter API key not set")
             val response = httpClient.post("https://openrouter.ai/api/v1/audio/transcriptions") {
-                header("Authorization", "Bearer $activeChatApiKey")
+                header("Authorization", "Bearer $openRouterKey")
                 contentType(ContentType.Application.Json)
                 setBody(buildJsonObject {
                     put("model", JsonPrimitive(modelId))
@@ -3010,7 +3013,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             Triple(
                 cloudModelId,
                 "https://openrouter.ai/api/v1/chat/completions",
-                activeChatApiKey
+                // Same footgun as Cloud Voice / Remaining credits: not activeChatApiKey after LAN.
+                settingsOpenRouterApiKey(sharedPreferencesHelper)
             )
         }
 
