@@ -119,6 +119,14 @@ class VoiceInputTest {
         assertEquals(R.string.voice_need_openrouter_key, VoiceInput.preflight(VoiceEngine.CLOUD, prefs))
     }
 
+    @Test fun cloudSttUsesTheSavedOpenRouterKeyNotTheActiveChatKey() {
+        // After a local-model send, activeChatApiKey holds the LAN key. Cloud STT must still
+        // send the saved OpenRouter key that Settings > Voice preflight checked.
+        assertEquals("sk-or", cloudVoiceOpenRouterKey("sk-or", "lan-key"))
+        assertEquals("", cloudVoiceOpenRouterKey("", "lan-key"))
+        assertEquals("sk-or", cloudVoiceOpenRouterKey("sk-or", ""))
+    }
+
     @Test fun grokNeedsAnXaiKey() {
         assertEquals(R.string.voice_need_xai_key, VoiceInput.preflight(VoiceEngine.GROK, prefs))
     }
