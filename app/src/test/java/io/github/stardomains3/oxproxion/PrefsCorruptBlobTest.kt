@@ -278,6 +278,15 @@ class PrefsCorruptBlobTest {
         assertNull(chatTextSizeTileToSelect(108, presets))
     }
 
+    @Test fun chatTextSizePrefKeyIsTheOneAppearanceSaves() {
+        // History opens Settings without hiding Chat; Chat must watch this key live
+        // (same path as chat mark) or Appearance > Chat text would not apply.
+        assertEquals("font_sizec", SharedPreferencesHelper.KEY_FONT_SIZEC)
+        val prefs = helper()
+        prefs.saveFontSizeCh(115)
+        assertEquals(115, prefs.mainPrefs.getInt(SharedPreferencesHelper.KEY_FONT_SIZEC, -1))
+    }
+
     @Test
     fun reasoningEffortFollowsTheMasterSwitchAndAPositiveBudget() {
         assertTrue(reasoningEffortControlsEnabled(advancedOn = true, maxTokens = null))
