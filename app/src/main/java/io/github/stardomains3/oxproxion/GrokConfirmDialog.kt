@@ -5,7 +5,6 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 object GrokConfirmDialog {
 
@@ -48,8 +47,13 @@ object GrokConfirmDialog {
         }
 
         dialog.setView(sheet)
+        // Own card on a transparent window, same as the Save API / max-tokens DialogFragments:
+        // without sizeCard the window wraps content (too narrow) or runs edge to edge.
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.let { GlassDialogs.frost(it) }
         dialog.show()
+        dialog.window?.let {
+            GlassDialogs.frost(it)
+            GlassDialogs.sizeCard(it)
+        }
     }
 }

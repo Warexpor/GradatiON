@@ -4,7 +4,6 @@ import android.view.LayoutInflater
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 
@@ -53,9 +52,14 @@ object GrokInputDialog {
         }
 
         dialog.setView(sheet)
+        // Own card on a transparent window, same as the Save API / max-tokens DialogFragments:
+        // without sizeCard the window wraps content (too narrow) or runs edge to edge.
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.let { GlassDialogs.frost(it) }
         dialog.show()
+        dialog.window?.let {
+            GlassDialogs.frost(it)
+            GlassDialogs.sizeCard(it)
+        }
         inputField.requestFocus()
     }
 }
