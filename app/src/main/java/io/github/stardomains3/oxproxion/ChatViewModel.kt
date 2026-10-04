@@ -1872,9 +1872,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     else -> {
                         val modelId = sharedPreferencesHelper.getVoiceInputModel()
                         if (modelId.isBlank()) error("Set a voice model in Settings > Voice")
-                        if (activeChatApiKey.isBlank()) error("OpenRouter API key not set")
+                        // Same footgun as Remaining credits: activeChatApiKey is the LAN key
+                        // after a local-model send; Cloud STT must use the saved OpenRouter key.
+                        val openRouterKey = cloudVoiceOpenRouterKey(
+                            sharedPreferencesHelper.getApiKeyFromPrefs("openrouter_api_key"),
+                            activeChatApiKey,
+                        )
+                        if (openRouterKey.isBlank()) error("OpenRouter API key not set")
                         httpClient.post("https://openrouter.ai/api/v1/audio/transcriptions") {
-                            header("Authorization", "Bearer $activeChatApiKey")
+                            header("Authorization", "Bearer $openRouterKey")
                             contentType(ContentType.Application.Json)
                             setBody(buildJsonObject {
                                 put("model", JsonPrimitive(modelId))
