@@ -217,19 +217,24 @@ class PromptLibraryFragment : Fragment() {
             adapter = promptAdapter
             EmptyState.bind(this, view.findViewById(R.id.promptsEmptyView))
 
-            // Drag-and-drop reordering (all items)
+            // Drag-and-drop reordering (full list only: a search used to save the subset and drop the rest)
             val callback = object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0) {
                 override fun onMove(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+                    if (!libraryDragAllowed(searchView.query)) return false
                     val fromPos = viewHolder.bindingAdapterPosition
                     val toPos = target.bindingAdapterPosition
+                    if (fromPos < 0 || toPos < 0) return false
                     Collections.swap(prompts, fromPos, toPos)
+                    Collections.swap(allPrompts, fromPos, toPos)
                     promptAdapter.notifyItemMoved(fromPos, toPos)
-                    sharedPreferencesHelper.saveCustomPrompts(prompts)
+                    sharedPreferencesHelper.saveCustomPrompts(allPrompts.toList())
                     return true
                 }
                 override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
                 override fun getMovementFlags(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int =
-                    ItemTouchHelper.Callback.makeMovementFlags(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0)
+                    if (libraryDragAllowed(searchView.query))
+                        ItemTouchHelper.Callback.makeMovementFlags(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0)
+                    else 0
             }
             ItemTouchHelper(callback).attachToRecyclerView(recyclerView)
         }
