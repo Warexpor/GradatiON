@@ -9,6 +9,7 @@ import android.view.View
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.graphics.toColorInt
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
@@ -18,6 +19,7 @@ import kotlin.text.toIntOrNull
 
 class AdvancedReasoningFragment : Fragment(R.layout.fragment_advanced_reasoning) {
 
+    private val viewModel: ChatViewModel by activityViewModels { AppViewModelFactory(requireActivity().application) }
     private lateinit var sharedPreferencesHelper: SharedPreferencesHelper
     private lateinit var effortGroup: MaterialButtonToggleGroup
     private lateinit var includeSwitch: SwitchCompat
@@ -48,6 +50,8 @@ class AdvancedReasoningFragment : Fragment(R.layout.fragment_advanced_reasoning)
             advancedToggle.contentDescription = getString(R.string.settings_advanced_reasoning)
             advancedToggle.setOnCheckedChangeListener { _, isChecked ->
                 sharedPreferencesHelper.saveAdvancedReasoningEnabled(isChecked)
+                // History opens Settings with add(); Chat may never resume. Push LiveData now.
+                viewModel.checkAdvancedReasoningStatus()
                 updateControlsEnabled(isChecked)
             }
         }
@@ -68,6 +72,7 @@ class AdvancedReasoningFragment : Fragment(R.layout.fragment_advanced_reasoning)
                     else -> "medium"
                 }
                 sharedPreferencesHelper.saveReasoningEffort(effort)
+                viewModel.checkAdvancedReasoningStatus()
             }
         }
 
@@ -81,6 +86,7 @@ class AdvancedReasoningFragment : Fragment(R.layout.fragment_advanced_reasoning)
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val value = s?.toString()?.toIntOrNull()
                 sharedPreferencesHelper.saveReasoningMaxTokens(value)
+                viewModel.checkAdvancedReasoningStatus()
                 applyEffortEnabled(
                     reasoningEffortControlsEnabled(sharedPreferencesHelper.getAdvancedReasoningEnabled(), value)
                 )

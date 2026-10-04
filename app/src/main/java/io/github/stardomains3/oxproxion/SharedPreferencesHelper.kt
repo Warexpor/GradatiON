@@ -150,6 +150,8 @@ class SharedPreferencesHelper(context: Context) {
         const val LAN_PROVIDER_LLAMA_CPP = "llama_cpp"
         /** Appearance > Chat text (and the in-chat stepper). Chat watches this live. */
         const val KEY_FONT_SIZEC = "font_sizec"
+        /** Advanced > Advanced reasoning master switch. Chat watches this live. */
+        const val KEY_ADVANCED_REASONING_ENABLED = "advanced_reasoning_enabled"
         private const val KEY_USE_COPY_BUTTON = "use_copy_button"
         const val LAN_PROVIDER_OLLAMA = "ollama"
         private const val KEY_WEB_SEARCH_ENGINE = "web_search_engine"
@@ -601,10 +603,10 @@ class SharedPreferencesHelper(context: Context) {
         }
     }
 
-    fun getAdvancedReasoningEnabled(): Boolean = mainPrefs.getBoolean("advanced_reasoning_enabled", false)
+    fun getAdvancedReasoningEnabled(): Boolean = mainPrefs.getBoolean(KEY_ADVANCED_REASONING_ENABLED, false)
     fun saveAdvancedReasoningEnabled(enabled: Boolean) {
         // commit: Advanced reasoning master switch; a kill after the tap must keep it.
-        mainPrefs.edit(commit = true) { putBoolean("advanced_reasoning_enabled", enabled) }
+        mainPrefs.edit(commit = true) { putBoolean(KEY_ADVANCED_REASONING_ENABLED, enabled) }
     }
 
     fun getReasoningEffort(): String = mainPrefs.getString("reasoning_effort", "medium") ?: "medium"
