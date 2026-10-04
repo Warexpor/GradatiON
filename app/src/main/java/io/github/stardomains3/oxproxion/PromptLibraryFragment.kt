@@ -350,7 +350,10 @@ class PromptLibraryFragment : Fragment() {
 
     private fun deletePrompt(prompt: Prompt) {
         val customPrompts = sharedPreferencesHelper.getCustomPrompts().toMutableList()
-        if (customPrompts.remove(prompt)) {
+        // Match title+body: isExpanded is in Prompt.equals, so remove() missed an expanded row.
+        val index = indexOfStoredPrompt(customPrompts, prompt)
+        if (index != -1) {
+            customPrompts.removeAt(index)
             sharedPreferencesHelper.saveCustomPrompts(customPrompts)
             loadPrompts()
         }

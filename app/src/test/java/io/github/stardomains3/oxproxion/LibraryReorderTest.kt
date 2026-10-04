@@ -33,4 +33,15 @@ class LibraryReorderTest {
         assertNull(customSystemMessagesAfterReorder(listOf(a, b)))
         assertNull(customSystemMessagesAfterReorder(emptyList()))
     }
+
+    @Test
+    fun promptDeleteIgnoresExpandState() {
+        val saved = Prompt("Stand", "say hi")
+        val expanded = Prompt("Stand", "say hi", isExpanded = true)
+        // Data-class equals includes isExpanded, so List.remove of the expanded row would miss.
+        assertTrue(saved != expanded)
+        assertEquals(0, indexOfStoredPrompt(listOf(saved, Prompt("Other", "x")), expanded))
+        assertEquals(-1, indexOfStoredPrompt(listOf(Prompt("Stand", "other body")), expanded))
+        assertEquals(-1, indexOfStoredPrompt(emptyList(), expanded))
+    }
 }
