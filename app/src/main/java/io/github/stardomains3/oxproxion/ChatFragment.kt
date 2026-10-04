@@ -4924,8 +4924,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     /**
      * Settings can sit on top of the chat without hiding it (opened from the history panel), so
      * neither onResume nor onHiddenChanged runs when a mode switch flips. Follow the prefs.
-     * Chat mark and chat text size already did; advanced reasoning LiveData did not, so the
-     * reasoning outline and effort chips stayed stale until a later hide/resume.
+     * Chat mark, chat text size, and advanced reasoning already did; Voice only refreshed the
+     * mic from onResume, so turning Voice off left the mic on the composer until a later resume.
      */
     private fun watchModeSwitches() {
         val prefs = sharedPreferencesHelper.mainPrefs
@@ -4936,6 +4936,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 SharedPreferencesHelper.KEY_FONT_SIZEC -> applyChatTextScale()
                 SharedPreferencesHelper.KEY_ADVANCED_REASONING_ENABLED ->
                     viewModel.checkAdvancedReasoningStatus()
+                SharedPreferencesHelper.KEY_VOICE_INPUT_PROVIDER -> dictation?.refresh()
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(rp)
