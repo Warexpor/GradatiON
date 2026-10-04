@@ -17,3 +17,12 @@ internal fun customSystemMessagesAfterReorder(visible: List<SystemMessage>): Lis
     if (visible.isEmpty() || !visible.first().isDefault) return null
     return visible.drop(1)
 }
+
+/**
+ * Prefs row for a Prompt library delete. [Prompt.isExpanded] is UI-only but still in data-class
+ * equals, so [List.remove] of an expanded row never matched the stored copy (always collapsed)
+ * and Delete did nothing. Match title and body the same way System messages already do.
+ */
+internal fun indexOfStoredPrompt(stored: List<Prompt>, row: Prompt): Int =
+    stored.indexOfFirst { it.title == row.title && it.prompt == row.prompt }
+
