@@ -53,13 +53,23 @@ object UserMessageFold {
         val moreLines = lines.hasNext()
         val limited = kept.toString()
         if (limited.length > maxChars) {
-            val head = limited.take(maxChars)
+            // [String.take] counts UTF-16 units. A limit on the first half of an emoji
+            // left a broken character before the ellipsis.
+            val head = clipChars(limited, maxChars)
             val cut = maxOf(head.lastIndexOf(' '), head.lastIndexOf('\n'))
             // A space in the first half is the word before a long token (a link). Breaking
             // there used to leave "See…" and hide the rest of the line.
-            val end = if (cut > 0 && cut >= maxChars / 2) cut else maxChars
-            return limited.take(end).trimEnd() + "…"
+            val end = if (cut > 0 && cut >= maxChars / 2) cut else head.length
+            return limited.substring(0, end).trimEnd() + "…"
         }
         return if (moreLines) limited.trimEnd() + "…" else text
+    }
+
+    /** Cut without ending on a high surrogate, the same way Speak and the hub tagline do. */
+    private fun clipChars(text: String, limit: Int): String {
+        if (text.length <= limit) return text
+        var end = limit
+        if (end > 0 && text[end - 1].isHighSurrogate()) end--
+        return text.substring(0, end)
     }
 }
