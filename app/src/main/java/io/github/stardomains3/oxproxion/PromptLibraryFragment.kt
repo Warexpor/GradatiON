@@ -332,6 +332,10 @@ class PromptLibraryFragment : Fragment() {
             prompts.addAll(filtered)
             prompts.forEach { it.isExpanded = false }
         }
+        // An empty list during a search means no match, not an empty library.
+        view?.findViewById<TextView>(R.id.promptsEmptyView)?.setText(
+            if (allPrompts.isNotEmpty() && query.isNotBlank()) R.string.prompts_no_match else R.string.prompts_empty
+        )
         promptAdapter.notifyDataSetChanged()
     }
 
