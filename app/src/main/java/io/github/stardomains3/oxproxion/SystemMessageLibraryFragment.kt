@@ -235,7 +235,9 @@ class SystemMessageLibraryFragment : Fragment() {
             layoutManager = LinearLayoutManager(context)
             adapter = systemMessageAdapter
 
-            // Drag-and-drop reordering (customs only; default fixed at top)
+            // Drag-and-drop reordering (customs only; default fixed at top).
+            // A search shows a subset: saving drop(1) of that used to delete the first hit and every
+            // non-matching custom. Drag is off while searching.
             val callback = object : ItemTouchHelper.SimpleCallback(
                 ItemTouchHelper.UP or ItemTouchHelper.DOWN,  // Vertical drag only
                 0  // No swipe
@@ -245,15 +247,19 @@ class SystemMessageLibraryFragment : Fragment() {
                     viewHolder: RecyclerView.ViewHolder,
                     target: RecyclerView.ViewHolder
                 ): Boolean {
-                    val fromPos = viewHolder.bindingAdapterPosition  // Updated: Use bindingAdapterPosition instead of deprecated adapterPosition
-                    val toPos = target.bindingAdapterPosition  // Updated: Use bindingAdapterPosition instead of deprecated adapterPosition
-                    // Only allow reordering if both are custom (index > 0)
+                    if (!libraryDragAllowed(if (::searchView.isInitialized) searchView.query else null)) return false
+                    val fromPos = viewHolder.bindingAdapterPosition
+                    val toPos = target.bindingAdapterPosition
+                    // Only allow reordering if both are custom (index > 0 and not Default)
                     if (fromPos > 0 && toPos > 0) {
+                        // Refuse before swapping when the visible list is not the full library.
+                        if (customSystemMessagesAfterReorder(systemMessages) == null) return false
                         Collections.swap(systemMessages, fromPos, toPos)
+                        Collections.swap(allSystemMessages, fromPos, toPos)
                         systemMessageAdapter.notifyItemMoved(fromPos, toPos)
-                        // Persist: Save reordered customs (skip default)
-                        val customs = systemMessages.drop(1).toMutableList()
-                        sharedPreferencesHelper.saveCustomSystemMessages(customs)
+                        sharedPreferencesHelper.saveCustomSystemMessages(
+                            customSystemMessagesAfterReorder(systemMessages) ?: return false
+                        )
                         return true
                     }
                     return false
@@ -264,8 +270,11 @@ class SystemMessageLibraryFragment : Fragment() {
                 }
 
                 override fun getMovementFlags(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
-                    // No drag on default (position 0)
-                    return if (viewHolder.bindingAdapterPosition > 0) {  // Updated: Use bindingAdapterPosition instead of deprecated adapterPosition
+                    if (!libraryDragAllowed(if (::searchView.isInitialized) searchView.query else null)) return 0
+                    val pos = viewHolder.bindingAdapterPosition
+                    val row = systemMessages.getOrNull(pos)
+                    // No drag on Default, and not while a search has reshuffled positions
+                    return if (pos > 0 && row != null && !row.isDefault) {
                         makeMovementFlags(
                             ItemTouchHelper.UP or ItemTouchHelper.DOWN,
                             0
