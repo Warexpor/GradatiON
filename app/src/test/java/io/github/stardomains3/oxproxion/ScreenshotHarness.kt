@@ -422,12 +422,11 @@ abstract class ScreenshotHarness {
         dao.insertLorebook(RpLorebook(name = "Outer Rim", content = "Ports, pirates and old wars.", isActive = true))
         val prefs = SharedPreferencesHelper(ctx)
         prefs.saveRpActiveCharacterId(if (withActive) ids[0] else null)
-        prefs.saveRpPersona("Sam, a courier with a bad sense of direction.")
-        prefs.saveRpPersonaName("Sam")
         val portrait = RpAvatarStorage.personaFile(ctx, "persona_test.jpg")
         portrait.parentFile?.mkdirs()
         file.copyTo(portrait, overwrite = true)
-        prefs.saveRpPersonaPhoto(portrait.name)
+        // Personas are per character: Mira (the first) has Sam, the rest have none.
+        prefs.saveRpPersonaFor(ids[0], RpPersonaChoice("Sam", "Sam, a courier with a bad sense of direction.", portrait.name))
         prefs.saveRpPersonaPresets(listOf(
             RpPersonaPreset("Sam", "Sam, a courier with a bad sense of direction.", portrait.name),
             RpPersonaPreset("Captain Rhee", "A retired pilot who still salutes the sunrise.")

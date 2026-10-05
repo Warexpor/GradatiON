@@ -425,6 +425,9 @@ class RpScreenshotTest : ScreenshotHarness() {
         val second = vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content)
         input.setText("I slide the map across the table.")
         send.performClick()
+        // Already earlier while the answer is still thinking: the redraw that shows its control runs now.
+        waitFor(30_000) { vm.chatMessages.value.orEmpty().size >= replyAt + 3 }
+        org.junit.Assert.assertEquals(2, vm.getRpVersionNav(replyAt)?.totalVariants)
         waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().size == replyAt + 3 }
         settle()
         org.junit.Assert.assertEquals(2, vm.getRpVersionNav(replyAt)?.totalVariants)
@@ -472,6 +475,18 @@ class RpScreenshotTest : ScreenshotHarness() {
         }
         org.junit.Assert.assertTrue("bubbles on screen", fills.size >= 2)
         fills.forEach { org.junit.Assert.assertNull("flat fill", it.colors) }
+        // Mira's persona (Sam) sits over your lines; the Layout switch takes it away.
+        fun youHeaders() = (0 until rv.childCount).mapNotNull { rv.getChildAt(it).findViewById<View>(R.id.rpUserHeader) }
+        org.junit.Assert.assertTrue("your lines on screen", youHeaders().isNotEmpty())
+        youHeaders().forEach {
+            org.junit.Assert.assertEquals(View.VISIBLE, it.visibility)
+            org.junit.Assert.assertEquals("Sam", it.findViewById<android.widget.TextView>(R.id.rpUserName).text.toString())
+        }
+        SharedPreferencesHelper(a).saveRpShowPersona(mira.id, false)
+        a.findViewById<View>(R.id.tabChat).performClick(); settle()
+        a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
+        youHeaders().forEach { org.junit.Assert.assertEquals(View.GONE, it.visibility) }
+        SharedPreferencesHelper(a).saveRpShowPersona(mira.id, true)
         SharedPreferencesHelper(a).saveRpLayout(mira.id, SharedPreferencesHelper.RP_LAYOUT_CLASSIC)
         BackgroundPhoto.delete(ctx, BackgroundPhoto.slotForCharacter(mira.id))
         a.findViewById<View>(R.id.tabChat).performClick(); settle()

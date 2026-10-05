@@ -78,6 +78,22 @@ class ChatAdapter(
             field = value
             if (isRpMode && messages.isNotEmpty()) notifyDataSetChanged()
         }
+    /** Your persona's name over your lines in RP; null hides that row (no persona, or the Layout switch is off). */
+    var rpUserName: String? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            if (isRpMode && messages.isNotEmpty()) notifyDataSetChanged()
+        }
+
+    /** Your persona's portrait for that row; null shows the name's initial. */
+    var rpUserAvatarFile: File? = null
+        set(value) {
+            if (field?.absolutePath == value?.absolutePath) return
+            field = value
+            if (isRpMode && messages.isNotEmpty()) notifyDataSetChanged()
+        }
+
     var rpSpeakerName: String? = null
         set(value) {
             if (field == value) return
@@ -882,7 +898,27 @@ class ChatAdapter(
         private val imageView: ImageView = itemView.findViewById(R.id.userImageView)
         private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
         private val collapseToggleButton: TextView = itemView.findViewById(R.id.collapseToggleButton)
+        private val rpUserHeader: View = itemView.findViewById(R.id.rpUserHeader)
         private var actionsMsgKey: String = ""
+
+        /** Your persona over your line, like the character's row over theirs. Book has neither. */
+        private fun bindRpUserHeader() {
+            val name = rpUserName
+            if (!isRpMode || name.isNullOrBlank() || rpLayout == SharedPreferencesHelper.RP_LAYOUT_BOOK) {
+                rpUserHeader.visibility = View.GONE
+                return
+            }
+            rpUserHeader.visibility = View.VISIBLE
+            itemView.findViewById<TextView>(R.id.rpUserName).text = name
+            val file = rpUserAvatarFile
+            RpAvatars.bindModel(
+                itemView.findViewById(R.id.rpUserAvatar),
+                itemView.findViewById(R.id.rpUserInitial),
+                file,
+                name,
+                file?.let { "rp-persona-${it.absolutePath}-${it.lastModified()}" },
+            )
+        }
 
         private fun applyActionsVisibility(expanded: Boolean, animate: Boolean) {
             val running = buttonContainer.getTag(R.id.tag_visibility_animator) != null
@@ -962,6 +998,7 @@ class ChatAdapter(
         }
 
         fun bind(message: FlexibleMessage) {
+            bindRpUserHeader()
             messageTextView.textSize = 16f * currentFontScale / 100f
             messageTextView.typeface = currentTypeface
             val rawUserContent = getMessageText(message.content)

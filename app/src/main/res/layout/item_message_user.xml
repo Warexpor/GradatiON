@@ -19,6 +19,58 @@
         app:layout_constraintWidth_percent="0.88"
         app:layout_constraintHorizontal_bias="1.0">
 
+        <!-- Roleplay: your persona's name and portrait over your line, mirroring the
+             character's row over theirs. Only when this character has a persona and the
+             Layout switch is on. -->
+        <LinearLayout
+            android:id="@+id/rpUserHeader"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <TextView
+                android:id="@+id/rpUserName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:maxWidth="220dp"
+                android:textColor="@color/xai_ink"
+                android:textSize="13sp"
+                android:textFontWeight="600" />
+
+            <FrameLayout
+                android:id="@+id/rpUserAvatarFrame"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:importantForAccessibility="no">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/rpUserAvatar"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/rp_bg_monogram"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearanceOverlay="@style/XaiShapePill" />
+
+                <TextView
+                    android:id="@+id/rpUserInitial"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:fontFamily="@font/app_sans"
+                    android:gravity="center"
+                    android:textColor="@color/xai_ink"
+                    android:textFontWeight="600"
+                    android:textSize="15sp" />
+            </FrameLayout>
+        </LinearLayout>
+
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/messageContainer"
             android:layout_width="wrap_content"
@@ -32,7 +84,7 @@
             android:focusable="true"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/rpUserHeader"
             app:layout_constraintHorizontal_bias="1.0">
 
             <!-- A sent photo: a rounded picture capped in size, never stretched across the bubble. -->

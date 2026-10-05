@@ -66,7 +66,7 @@ Inside a chat, each reply carries the character's portrait and name. Tap it to o
 | **Lore** | Pick which lorebook the character uses. |
 | **Edit** | The character card: greeting, personality, speech style, scenario and more. |
 | **Voice** | The voice used by read aloud, with pitch and speed. Every choice plays a sample. |
-| **Persona** | Who you are in the story. Save several and switch between them, or turn the persona off. |
+| **Persona** | Who you are with this character. Each character keeps its own; a new one starts with none. Save several and switch between them, or turn the persona off. |
 | **Wallpaper** | A picture behind this character's chat. |
 | **Layout** | Classic, Bubbles or Book. |
 | **Style** | Third-person narration, inner thoughts, Facts on or off, and LLM mode (no character card). |

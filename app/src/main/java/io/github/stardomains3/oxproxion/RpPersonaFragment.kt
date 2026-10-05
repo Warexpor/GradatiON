@@ -71,6 +71,10 @@ class RpPersonaFragment : Fragment() {
         photo = baseline.photo
 
         renderList()
+        // Personas are per character, so say whose this is.
+        val whose = if (prefs.isRpLlmMode()) getString(R.string.rp_llm_speaker)
+        else chatViewModel.activeRpCharacter.value?.name?.takeIf { it.isNotBlank() }
+        if (whose != null) view.findViewById<TextView>(R.id.rpPersonaIntro).text = getString(R.string.rp_ui_persona_intro_for, whose)
         val enabledCard = view.findViewById<View>(R.id.rpPersonaEnabledCard)
         val enabledSwitch = view.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.rpPersonaEnabledSwitch)
         // Turning it off only makes sense once there is one to turn off.
@@ -196,7 +200,9 @@ class RpPersonaFragment : Fragment() {
 
     /** Drops portraits that neither you, any saved persona, nor the editor uses any more. */
     private fun prune() {
-        val keep = (prefs.getRpPersonaPresets().mapNotNull { it.photo } + listOfNotNull(prefs.getRpPersonaPhoto(), photo)).toSet()
+        // Other characters' personas still point at their portraits.
+        val keep = prefs.getRpPersonaPresets().mapNotNull { it.photo }.toSet() + prefs.rpPersonaPhotosInUse() +
+            listOfNotNull(prefs.getRpPersonaPhoto(), photo)
         RpAvatarStorage.prunePersonas(requireContext(), keep)
     }
 

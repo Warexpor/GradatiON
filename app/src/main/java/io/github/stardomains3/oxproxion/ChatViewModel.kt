@@ -855,6 +855,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         sessionTransitionJob = viewModelScope.launch {
             try {
                 dbWarmup.join()
+                // Once, before the first greeting reads a name: the old shared persona goes to
+                // every character that already exists.
+                try {
+                    withContext(Dispatchers.IO) {
+                        sharedPreferencesHelper.migrateRpPersonaPerCharacter(
+                            rpRepo.getAllCharactersOnce().map { it.id }
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Unmarked, so the next launch tries again.
+                    Log.w("ChatViewModel", "Persona migration skipped", e)
+                }
                 refreshActiveRpCharacter()
                 restoreDraftOrNewChat(_chatMode.value ?: ChatMode.ASK)
             } finally {
@@ -5128,7 +5142,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (!isRpMode()) return null
         val v = rpSwipeState.earlier[position]?.takeIf { it.alts.size > 1 } ?: return null
         val messages = _chatMessages.value ?: return null
-        if (position == messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }) return null
+        // The newest reply uses the swipe bar. A reply with your next line after it is earlier,
+        // even while the answer to that line is still the thinking placeholder; the redraw that
+        // shows this control runs then, and nothing redraws the row once the answer lands.
+        if (messages.drop(position + 1).none { it.role == "user" }) return null
         return ForkNavState(
             variantIndex = v.index + 1,
             totalVariants = v.alts.size,

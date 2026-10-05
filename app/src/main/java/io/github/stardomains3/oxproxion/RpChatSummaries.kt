@@ -32,7 +32,9 @@ object RpChatSummaries {
         llmName: String,
         noPreview: String,
         startPrompt: String = noPreview,
-        userName: String = ""
+        userName: String = "",
+        /** What each character calls you; personas are per character. */
+        userNameFor: (RpCharacter) -> String = { userName },
     ): List<RpChatSummary> {
         val byId = characters.associateBy { it.id }
         val groups = sessions
@@ -66,7 +68,7 @@ object RpChatSummaries {
                     sessionId = null,
                     character = c,
                     name = c.name,
-                    preview = tagline(c, userName).ifBlank { startPrompt },
+                    preview = tagline(c, userNameFor(c)).ifBlank { startPrompt },
                     timestamp = 0L,
                     chats = 0,
                     isLlm = false

@@ -1,3 +1,19 @@
+# Handoff (2026-10-05, per-character personas)
+
+- Personas are per character: `rp_persona_for_<id|llm>` holds an `RpPersonaChoice` (name, about, photo, on).
+  The plain persona getters/setters act on the open character (LLM mode, else the active one); with no
+  character open they read nothing and write nothing (Save still adds to the saved list). No entry means
+  none selected, so a new character starts without one. `migrateRpPersonaPerCharacter` runs once at launch
+  and copies the old shared persona to every existing character and LLM mode.
+- Your persona's portrait and name sit above your lines in Classic and Bubbles (not Book), when this chat's
+  persona is on and named. Layout page switch, per character, on by default (`rp_show_persona_<id|llm>`).
+- Fixed: an earlier reply's versions control could stay hidden after a send (drawn while the answer was
+  the thinking placeholder). `getRpVersionNav` now treats a reply with a user line after it as earlier.
+
+Phone: pick a persona with one character, open another (none, switch off), pick a different one, go back
+(the first is still there). Existing characters keep the old persona after the update. Send in Classic and
+Bubbles (your name and portrait over your line), turn it off on Layout, and check Book shows neither.
+
 # Handoff (2026-10-04, second app-pass merge and polish)
 
 `gradation/app-pass` at `8b23525d` (198 commits, PRs #137 to #221) is fast-forwarded into `liquid-glass-redesign`.

@@ -169,6 +169,7 @@ class PrefsCorruptBlobTest {
         val prefs = helper()
         prefs.saveThemeMode(SharedPreferencesHelper.THEME_LIGHT)
         prefs.saveBackgroundStyle("drift")
+        prefs.saveRpActiveCharacterId(5L)
         prefs.setRpPersonaEnabled(false)
         prefs.setVoiceInputModel("whisper-1")
         val again = helper()

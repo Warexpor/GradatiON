@@ -254,6 +254,9 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_RP_PERSONA_NAME = "rp_persona_name"
         private const val KEY_RP_PERSONA_PHOTO = "rp_persona_photo"
         private const val KEY_RP_PERSONA_ENABLED = "rp_persona_enabled"
+        private const val KEY_RP_PERSONA_PER_CHARACTER = "rp_persona_per_character"
+        /** Roleplay is open with no character picked: there is no persona to read or write. */
+        private const val NO_CHARACTER = -1L
         private const val KEY_RP_LORE_ENABLED = "rp_lore_enabled"
         private const val KEY_RP_THIRD_PERSON = "rp_third_person"
         private const val KEY_RP_SHOW_THOUGHTS = "rp_show_thoughts"
@@ -1595,31 +1598,83 @@ class SharedPreferencesHelper(context: Context) {
         }
     }
 
-    fun getRpPersona(): String = mainPrefs.getString(KEY_RP_PERSONA, "") ?: ""
-    /** Whether chats use your persona. Off keeps it saved but sends and shows nothing of it. */
-    fun isRpPersonaEnabled(): Boolean = mainPrefs.getBoolean(KEY_RP_PERSONA_ENABLED, true)
-    fun setRpPersonaEnabled(enabled: Boolean) {
-        // commit: chats hide or show the persona from this; do not lose a Style/Persona tap to apply().
-        mainPrefs.edit(commit = true) { putBoolean(KEY_RP_PERSONA_ENABLED, enabled) }
+    /**
+     * Each character keeps its own persona (and GradatiON in LLM mode keeps one too). The plain
+     * getters and setters below act on the open character: LLM mode, else the active one.
+     * A character with no entry has none selected, so a new character starts without one.
+     */
+    private fun rpPersonaKey(characterId: Long?) = "rp_persona_for_" + (characterId?.toString() ?: "llm")
+    private fun openPersonaScope(): Long? = if (isRpLlmMode()) null else getRpActiveCharacterId() ?: NO_CHARACTER
+    fun getRpPersonaFor(characterId: Long?): RpPersonaChoice? {
+        if (characterId == NO_CHARACTER) return null
+        val raw = mainPrefs.getString(rpPersonaKey(characterId), null) ?: return null
+        return runCatching { json.decodeFromString<RpPersonaChoice>(raw) }.getOrNull()
     }
+    fun saveRpPersonaFor(characterId: Long?, choice: RpPersonaChoice?) {
+        if (characterId == NO_CHARACTER) return
+        // commit: Save writes name/about/photo/switch together; a kill after apply() would drop it.
+        mainPrefs.edit(commit = true) {
+            if (choice == null) remove(rpPersonaKey(characterId))
+            else putString(rpPersonaKey(characterId), json.encodeToString(choice))
+        }
+    }
+    private fun updateOpenPersona(change: (RpPersonaChoice) -> RpPersonaChoice) {
+        val scope = openPersonaScope()
+        saveRpPersonaFor(scope, change(getRpPersonaFor(scope) ?: RpPersonaChoice()))
+    }
+    /** What this character should call you, or nothing when it has no persona or it is off. */
+    fun activeRpPersonaNameFor(characterId: Long?): String =
+        getRpPersonaFor(characterId)?.takeIf { it.enabled }?.name.orEmpty()
+
+    /** Layout: your persona's portrait and name over your lines with this character. On by default. */
+    fun isRpShowPersona(characterId: Long?): Boolean =
+        mainPrefs.getBoolean("rp_show_persona_" + (characterId?.toString() ?: "llm"), true)
+    fun saveRpShowPersona(characterId: Long?, show: Boolean) = mainPrefs.edit(commit = true) {
+        putBoolean("rp_show_persona_" + (characterId?.toString() ?: "llm"), show)
+    }
+
+    fun getRpPersona(): String = getRpPersonaFor(openPersonaScope())?.description.orEmpty()
+    /** Whether this chat uses your persona. Off keeps it saved but sends and shows nothing of it. */
+    fun isRpPersonaEnabled(): Boolean = getRpPersonaFor(openPersonaScope())?.enabled ?: false
+    fun setRpPersonaEnabled(enabled: Boolean) = updateOpenPersona { it.copy(enabled = enabled) }
     /** What a chat should use: the persona's description, or nothing while it is off. */
     fun activeRpPersona(): String = if (isRpPersonaEnabled()) getRpPersona() else ""
     /** What a chat should call you: the persona's name, or nothing while it is off. */
     fun activeRpPersonaName(): String = if (isRpPersonaEnabled()) getRpPersonaName() else ""
-    fun saveRpPersona(persona: String) {
-        // commit: Save writes name/about/photo together; a kill after apply() would drop the persona.
-        mainPrefs.edit(commit = true) { putString(KEY_RP_PERSONA, persona) }
-    }
-    fun saveRpPersonaName(name: String) {
-        // commit: with saveRpPersona / photo on the same Save tap.
-        mainPrefs.edit(commit = true) { putString(KEY_RP_PERSONA_NAME, name.trim()) }
-    }
+    fun saveRpPersona(persona: String) = updateOpenPersona { it.copy(description = persona) }
+    fun saveRpPersonaName(name: String) = updateOpenPersona { it.copy(name = name.trim()) }
     /** Your portrait's file name in [RpAvatarStorage.personaFile]; null shows your initial. */
-    fun getRpPersonaPhoto(): String? = mainPrefs.getString(KEY_RP_PERSONA_PHOTO, null)
-    fun saveRpPersonaPhoto(photo: String?) {
-        // commit: with saveRpPersona / name on the same Save tap.
+    fun getRpPersonaPhoto(): String? = getRpPersonaFor(openPersonaScope())?.photo
+    fun saveRpPersonaPhoto(photo: String?) = updateOpenPersona { it.copy(photo = photo) }
+    /** Every portrait a character's persona still points at, so pruning keeps them. */
+    fun rpPersonaPhotosInUse(): Set<String> = mainPrefs.all.entries
+        .filter { it.key.startsWith("rp_persona_for_") }
+        .mapNotNull { (it.value as? String)?.let { raw -> runCatching { json.decodeFromString<RpPersonaChoice>(raw) }.getOrNull()?.photo } }
+        .toSet()
+
+    /**
+     * Before personas were per character there was one for every chat. Give that one to each
+     * character that already exists and to LLM mode, once, so nothing changes for them; only
+     * characters made after this start with none.
+     */
+    fun migrateRpPersonaPerCharacter(existingCharacterIds: List<Long>) {
+        if (mainPrefs.getBoolean(KEY_RP_PERSONA_PER_CHARACTER, false)) return
+        val description = mainPrefs.getString(KEY_RP_PERSONA, "").orEmpty()
+        val name = mainPrefs.getString(KEY_RP_PERSONA_NAME, null)
+            ?: description.trim().takeIf { it.isNotEmpty() }?.let { d ->
+                getRpPersonaPresets().firstOrNull { it.description.trim() == d }?.name
+            }.orEmpty()
+        val photo = mainPrefs.getString(KEY_RP_PERSONA_PHOTO, null)
+        val legacy = RpPersonaChoice(name, description, photo, mainPrefs.getBoolean(KEY_RP_PERSONA_ENABLED, true))
+        val had = name.isNotBlank() || description.isNotBlank() || photo != null
         mainPrefs.edit(commit = true) {
-            if (photo == null) remove(KEY_RP_PERSONA_PHOTO) else putString(KEY_RP_PERSONA_PHOTO, photo)
+            if (had) {
+                val encoded = json.encodeToString(legacy)
+                (existingCharacterIds.map { it.toString() } + "llm").forEach { k ->
+                    if (!mainPrefs.contains("rp_persona_for_$k")) putString("rp_persona_for_$k", encoded)
+                }
+            }
+            putBoolean(KEY_RP_PERSONA_PER_CHARACTER, true)
         }
     }
 
@@ -1715,6 +1770,8 @@ class SharedPreferencesHelper(context: Context) {
     fun clearRpCharacterPrefs(characterId: Long) {
         mainPrefs.edit(commit = true) {
             remove(rpMemoryKey(characterId))
+            remove(rpPersonaKey(characterId))
+            remove("rp_show_persona_$characterId")
             remove("rp_layout_$characterId")
             remove("rp_voice_$characterId")
             remove("rp_voice_pitch_$characterId")
@@ -1732,13 +1789,8 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit(commit = true) { putBoolean("rp_auto_memory", on) }
     }
 
-    /** The name characters call you. Before it was its own field it came from a matching preset. */
-    fun getRpPersonaName(): String {
-        mainPrefs.getString(KEY_RP_PERSONA_NAME, null)?.let { return it }
-        val persona = getRpPersona().trim()
-        if (persona.isEmpty()) return ""
-        return getRpPersonaPresets().firstOrNull { it.description.trim() == persona }?.name.orEmpty()
-    }
+    /** The name the open character calls you, from its persona. */
+    fun getRpPersonaName(): String = getRpPersonaFor(openPersonaScope())?.name.orEmpty()
 
     fun isRpLoreEnabled(): Boolean = mainPrefs.getBoolean(KEY_RP_LORE_ENABLED, true)
     fun saveRpLoreEnabled(enabled: Boolean) {

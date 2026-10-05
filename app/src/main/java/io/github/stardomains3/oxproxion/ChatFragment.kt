@@ -6833,8 +6833,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             val llm = getString(R.string.rp_llm_speaker)
             val none = getString(R.string.rp_home_no_preview)
             val start = getString(R.string.rp_home_start)
-            val you = sharedPreferencesHelper.activeRpPersonaName().ifBlank { getString(R.string.rp_you) }
-            val heads = RpChatSummaries.build(sessions, characters, emptyMap(), llm, none, start, you)
+            val youWord = getString(R.string.rp_you)
+            val you: (RpCharacter) -> String = { c -> sharedPreferencesHelper.activeRpPersonaNameFor(c.id).ifBlank { youWord } }
+            val heads = RpChatSummaries.build(sessions, characters, emptyMap(), llm, none, start, userNameFor = you)
             val previews = heads.mapNotNull { row ->
                 val id = row.sessionId ?: return@mapNotNull null
                 val last = dao.getLastMessage(id)
@@ -6848,7 +6849,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 }.orEmpty()
                 id to text
             }.toMap()
-            home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none, start, you))
+            home.submit(RpChatSummaries.build(sessions, characters, previews, llm, none, start, userNameFor = you))
             updateRpHome()
         }
     }
@@ -7548,6 +7549,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             chatAdapter.rpSpeakerAvatarUri = null
             chatAdapter.rpSpeakerAvatarFile = null
         }
+        // Your persona over your lines: only when this chat has one and Layout shows it.
+        val scope = if (llm) null else activeChar?.id
+        val showYou = rp && (llm || activeChar != null) && sharedPreferencesHelper.isRpShowPersona(scope)
+        val youName = sharedPreferencesHelper.activeRpPersonaName().takeIf { showYou && it.isNotBlank() }
+        chatAdapter.rpUserName = youName
+        chatAdapter.rpUserAvatarFile = sharedPreferencesHelper.getRpPersonaPhoto()
+            ?.takeIf { youName != null && RpAvatarStorage.hasPersonaPhoto(requireContext(), it) }
+            ?.let { RpAvatarStorage.personaFile(requireContext(), it) }
         reflectToolButtons()
         if (rp) {
             // A staged photo goes along to the scene; files and audio stay in Chat.

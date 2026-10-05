@@ -370,6 +370,20 @@ class RpLayoutFragment : RpPageFragment() {
             labels += key to label
         }
         select(current)
+
+        // Your side of the chat: the persona's portrait and name over your lines, when there is one.
+        section(getString(R.string.rp_layout_you_section))
+        val card = card()
+        val toggle = androidx.appcompat.widget.SwitchCompat(ctx).apply {
+            applyGrokionSwitchStyle()
+            isChecked = prefs.isRpShowPersona(characterId)
+            contentDescription = getString(R.string.rp_layout_show_persona)
+            setOnCheckedChangeListener { _, on -> prefs.saveRpShowPersona(characterId, on) }
+        }
+        val (row, _) = row(card, getString(R.string.rp_layout_show_persona), null) { toggle.toggle() }
+        (row as LinearLayout).addView(toggle, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
+        row.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        footnote(getString(R.string.rp_layout_show_persona_note))
     }
 
     companion object {

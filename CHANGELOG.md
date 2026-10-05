@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- Roleplay personas are per character. The one you pick with a character stays with that character when you switch to another, and a new character starts with no persona. Characters you already had keep the persona you were using.
+- Roleplay shows your persona's portrait and name above your messages, like the character's above theirs, when that chat has a persona. Each character's Layout page can turn it off.
 - History shows the line you have not sent yet, as "Draft: …", in place of the last message. Search finds that text even when it is not in a sent message. Long-press offers Discard draft. Deleting the chat drops the unsent line too.
 - Code: the Changes screen filters the file list by path. The line under the title says how many of those files are already tracked and how many are new.
 - Each Chat thread keeps the message you were typing. Open another chat, or start a new one, and that text is there when you come back. A photo or file staged on the composer stays with the thread you attached it to (and comes back with it), instead of being sent into the next one. A chat that is saved for the first time keeps the line you have already started.
@@ -39,6 +41,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- An earlier Roleplay reply's versions control (‹ 1/2 ›) could stay hidden after you sent the next line. It was drawn while the answer was still thinking, when that reply still counted as the newest.
 - Roleplay opens on the character list again when you left it there. Switching back used to reopen your last chat, because restoring that chat behind the list counted as opening it.
 - Editing a preset says "Edit preset". It said "Create preset" for every preset.
 - The local models page says to set the server address when there is none, instead of "LAN fetch failed (ollama): LAN endpoint not configured". Its errors name the provider as the app shows it.

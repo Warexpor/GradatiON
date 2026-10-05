@@ -68,6 +68,7 @@ class AvatarAndPersonaTest {
 
     @Test fun personaCanBeSwitchedOffWithoutLosingIt() {
         val prefs = SharedPreferencesHelper(ctx)
+        prefs.saveRpActiveCharacterId(7L)
         prefs.saveRpPersona("A tall stranger")
         prefs.saveRpPersonaName("Lilith")
         assertTrue(prefs.isRpPersonaEnabled())
@@ -81,6 +82,49 @@ class AvatarAndPersonaTest {
         assertEquals("Lilith", prefs.getRpPersonaName())
         prefs.setRpPersonaEnabled(true)
         assertEquals("A tall stranger", prefs.activeRpPersona())
+    }
+
+    /** Each character keeps its own persona; switching characters leaves the other one alone. */
+    @Test fun personaIsPerCharacter() {
+        val prefs = SharedPreferencesHelper(ctx)
+        prefs.saveRpActiveCharacterId(1L)
+        prefs.saveRpPersonaName("Lilith")
+        prefs.saveRpPersona("A tall stranger")
+        prefs.setRpPersonaEnabled(true)
+        prefs.saveRpActiveCharacterId(2L)
+        // A character never given one starts with none, and off.
+        assertEquals("", prefs.getRpPersonaName())
+        assertFalse(prefs.isRpPersonaEnabled())
+        assertEquals("", prefs.activeRpPersona())
+        prefs.saveRpPersonaName("Sam")
+        prefs.setRpPersonaEnabled(true)
+        assertEquals("Sam", prefs.activeRpPersonaName())
+        prefs.saveRpActiveCharacterId(1L)
+        assertEquals("Lilith", prefs.activeRpPersonaName())
+        assertEquals("A tall stranger", prefs.activeRpPersona())
+        assertEquals("Sam", prefs.activeRpPersonaNameFor(2L))
+        // LLM mode has its own, too.
+        prefs.saveRpLlmMode(true)
+        assertEquals("", prefs.activeRpPersonaName())
+        prefs.saveRpLlmMode(false)
+        prefs.clearRpCharacterPrefs(2L)
+        assertNull(prefs.getRpPersonaFor(2L))
+    }
+
+    /** The old shared persona goes to every character that already existed, and to LLM mode, once. */
+    @Test fun sharedPersonaMovesToExistingCharactersOnce() {
+        val raw = ctx.getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, android.content.Context.MODE_PRIVATE)
+        val prefs = SharedPreferencesHelper(ctx)
+        prefs.saveRpPersonaFor(4L, RpPersonaChoice("Kept", "already chosen"))
+        raw.edit().putString("rp_persona", "A tall stranger").putString("rp_persona_name", "Lilith")
+            .putBoolean("rp_persona_enabled", false).commit()
+        prefs.migrateRpPersonaPerCharacter(listOf(3L, 4L))
+        assertEquals(RpPersonaChoice("Lilith", "A tall stranger", null, enabled = false), prefs.getRpPersonaFor(3L))
+        assertEquals("Lilith", prefs.getRpPersonaFor(null)?.name)
+        assertEquals("Kept", prefs.getRpPersonaFor(4L)?.name)
+        // A character made later has none, and a second run does not hand it the old one.
+        prefs.migrateRpPersonaPerCharacter(listOf(3L, 4L, 9L))
+        assertNull(prefs.getRpPersonaFor(9L))
     }
 
     /** A camera JPEG is stored on its side. The portrait written for a character has to be upright. */
@@ -291,6 +335,7 @@ class AvatarAndPersonaTest {
     /** Persona Save commits name/about/photo so a kill after the tap cannot drop them. */
     @Test fun personaSaveKeepsNameAboutAndPhoto() {
         val prefs = SharedPreferencesHelper(ctx)
+        prefs.saveRpActiveCharacterId(7L)
         prefs.saveRpPersona("A tall stranger")
         prefs.saveRpPersonaName("Lilith")
         prefs.saveRpPersonaPhoto("persona_lilith.jpg")

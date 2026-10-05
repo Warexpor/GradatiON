@@ -83,7 +83,7 @@ class RpCharacterLibraryFragment : Fragment() {
         adapter = RpCharacterAdapter(
             onActivate = { character -> activateCharacter(character) },
             onMenu = { anchor, character -> showCardMenu(anchor, character, openEditor, confirmDelete) },
-            userName = { prefs.activeRpPersonaName().ifBlank { getString(R.string.rp_you) } }
+            userName = { c -> prefs.activeRpPersonaNameFor(c.id).ifBlank { getString(R.string.rp_you) } }
         )
         val recycler = view.findViewById<RecyclerView>(R.id.rpCharacterRecyclerView)
         recycler.layoutManager = GridLayoutManager(requireContext(), 2)
@@ -172,7 +172,7 @@ class RpCharacterLibraryFragment : Fragment() {
     private class RpCharacterAdapter(
         private val onActivate: (RpCharacter) -> Unit,
         private val onMenu: (View, RpCharacter) -> Unit,
-        private val userName: () -> String,
+        private val userName: (RpCharacter) -> String,
         private var activeCharacterId: Long? = null
     ) : RecyclerView.Adapter<RpCharacterAdapter.Holder>() {
         private var items: List<RpCharacter> = emptyList()
@@ -197,7 +197,7 @@ class RpCharacterLibraryFragment : Fragment() {
         override fun getItemCount(): Int = items.size
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
-            holder.bind(items[position], activeCharacterId, onActivate, onMenu, userName())
+            holder.bind(items[position], activeCharacterId, onActivate, onMenu, userName(items[position]))
         }
 
         class Holder(itemView: View) : RecyclerView.ViewHolder(itemView) {

@@ -48,6 +48,8 @@ internal object DbPrefQuarantine {
         "rp_swipe_",
         "rp_facts_",
         "rp_memory_",
+        "rp_persona_for_",
+        "rp_show_persona_",
         "rp_layout_",
         "rp_voice_",
         "rp_lorebook_",

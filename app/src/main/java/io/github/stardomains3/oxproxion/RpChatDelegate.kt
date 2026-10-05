@@ -79,7 +79,8 @@ class RpChatDelegate(
         RpPromptEngine.expandMacros(
             character.greeting.ifBlank { prefs.string(R.string.rp_default_greeting, character.name) },
             character.name,
-            prefs.activeRpPersonaName().ifBlank { prefs.string(R.string.rp_you) }
+            // This character's persona, even when another one is open (a library preview).
+            prefs.activeRpPersonaNameFor(character.id).ifBlank { prefs.string(R.string.rp_you) }
         )
 
     fun sessionTitle(character: RpCharacter?): String {

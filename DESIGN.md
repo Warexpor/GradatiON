@@ -190,7 +190,7 @@ and never auto-send, and there's no hold-to-talk. While listening:
 - A 3-column grid of square tiles, in this order: History, Memory, Lore / Edit, Voice, Persona / Wallpaper, Layout, Style.
 - Each tile is a drawing (`RpTileArt`) in one flat palette, with no gradients, filling the whole card and clipped by it, so the art sits low and runs off an edge. The Persona tile shows the persona's portrait when there is one. Layout has no state line, though TalkBack still reads its state.
 - Every tile opens a full-screen page built from `RpPageKit` (a 96dp hero drawing with a caption, section labels, cards of 56dp rows with hairlines, footnotes, and a Save pinned above the keyboard). The sheet stays open under the page and refreshes when you come back.
-- The pages: History (this character's chats by day, with a New chat button), Memory (your note, plus the Facts of the open chat), Lore, Edit, Voice, Persona, Wallpaper (a phone-shaped preview), Layout (three drawings, a ring on the chosen one) and Style (Writing, Story and Mode cards).
+- The pages: History (this character's chats by day, with a New chat button), Memory (your note, plus the Facts of the open chat), Lore, Edit, Voice, Persona, Wallpaper (a phone-shaped preview), Layout (three drawings, a ring on the chosen one, then a switch for your persona over your lines) and Style (Writing, Story and Mode cards).
 
 **Sheets, popovers, dialogs.**
 - Sheets and dialogs are glass and blur the screen behind them.

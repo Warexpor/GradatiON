@@ -47,7 +47,11 @@
     <string name="rp_ui_advanced_footer">Optional. The prompt override replaces the whole generated prompt.</string>
 
     <!-- Persona -->
-    <string name="rp_ui_persona_intro">How characters see you. Used in every RP chat.</string>
+    <string name="rp_ui_persona_intro">How characters see you. Each character keeps its own.</string>
+    <string name="rp_layout_you_section">You</string>
+    <string name="rp_layout_show_persona">Your name and portrait</string>
+    <string name="rp_layout_show_persona_note">Shown above your messages when this chat has a persona.</string>
+    <string name="rp_ui_persona_intro_for">How %1$s sees you. Other characters keep their own.</string>
     <string name="rp_ui_section_you">You</string>
     <!-- Roleplay home: the characters list you land on -->
     <string name="rp_home_chats">Characters</string>
