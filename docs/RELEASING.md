@@ -43,4 +43,5 @@ or debug-signed release can't be produced by accident. Dev builds (`assembleDev`
 
 `.github/workflows/release.yml` does step 4 and publishes the release when a `v*` tag is pushed. It needs the
 repo secrets `GRADATION_KEYSTORE_BASE64` (`base64 -w0 gradation-release.jks`),
-`GRADATION_STORE_PASSWORD`, `GRADATION_KEY_ALIAS`, `GRADATION_KEY_PASSWORD`.
+`GRADATION_STORE_PASSWORD`, `GRADATION_KEY_ALIAS`, `GRADATION_KEY_PASSWORD`. Without them the job is
+skipped, and the release is built and published locally as above.

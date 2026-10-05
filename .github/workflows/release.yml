@@ -11,7 +11,21 @@ permissions:
   contents: write
 
 jobs:
+  # Without the signing secrets the release is built and published locally (docs/RELEASING.md),
+  # so the build job is skipped instead of failing on every tag.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      has_key: ${{ steps.key.outputs.has_key }}
+    steps:
+      - id: key
+        env:
+          KEYSTORE_B64: ${{ secrets.GRADATION_KEYSTORE_BASE64 }}
+        run: echo "has_key=$([ -n "$KEYSTORE_B64" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   release:
+    needs: check
+    if: needs.check.outputs.has_key == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
