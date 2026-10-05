@@ -55,7 +55,7 @@ Models with the image badge generate pictures, which save to Downloads. Transcri
 
 ## Roleplay
 
-The Roleplay tab opens on your **characters**. Tap one to start a chat. The ⋮ on a row offers New chat, Edit character and Delete chat. The button at the top right opens the character library (create, edit, import and export); the gear at the top left opens Settings.
+The Roleplay tab opens on your **characters**. Tap one to start a chat; the back arrow at the top left, or the phone's back button, returns you to the list. The ⋮ on a row offers New chat, Edit character and Delete chat. The button at the top right opens the character library (create, edit, import and export); the gear at the top left opens Settings.
 
 Inside a chat, each reply carries the character's portrait and name. Tap it to open the **character panel**. Each tile opens its own full-screen page:
 

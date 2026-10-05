@@ -7,7 +7,7 @@ monochrome interface made of iOS-style Liquid Glass. Fork of
 
 | | |
 |--|--|
-| **Version** | 3.0.0 |
+| **Version** | 3.1.0 |
 | **Package** | `io.github.warexpor.gradation` |
 | **Android** | 12+ (min SDK 31, target 36) |
 | **License** | Apache 2.0 |
@@ -53,12 +53,14 @@ branches. Chats save automatically to History, where you can pin, rename, search
 
 **Roleplay** (opt-in in Settings > Modes). Build your own characters, personas and lorebooks.
 - The tab opens on a list of your characters, the ones you are mid-story with first. Tap one
-  and its chat slides in over the list; the back arrow slides it away again.
+  and its chat slides in over the list; the back arrow (or the phone's back) slides it away again.
 - Tap the character's name to open a panel with History, Memory, Lore, Edit, Voice, Persona,
   Wallpaper, Layout and Style. Memory holds facts the character keeps true for the rest of
   the story; History lists that character's past chats.
 - On an empty composer the send button becomes Continue: the character takes the next beat
   without you having to write anything.
+- Each character keeps its own persona, and your portrait and name sit over your lines
+  (switch it off on the Layout page).
 - Swipe for alternate replies. Imported cards can use `{{char}}` and `{{user}}`.
 
 **Code.** Pair your computers and drive Claude Code, Codex, OpenCode and other agents from your

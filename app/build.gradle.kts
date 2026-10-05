@@ -17,7 +17,7 @@ configurations.all {
     }
 }
 val appVersionMajor = 3
-val appVersionMinor = 0
+val appVersionMinor = 1
 val appVersionPatch = 0
 
 android {

@@ -1,3 +1,12 @@
+# Handoff (2026-10-05, 3.1.0 release prep)
+
+- Version 3.1.0 (versionCode 30100). CHANGELOG `## 3.1.0`, fastlane `changelogs/30100.txt`, README, help and the
+  showcase screenshots are updated. `liquid-glass-redesign` is fast-forwarded into `main`.
+- Not done here: the signed build. Cloud sessions have no release key, so run `scripts/release.sh` on the machine
+  with `~/.gradation-release`, install over 3.0.0 on the phone and open an old chat, then
+  `git tag v3.1.0 && git push origin v3.1.0` and attach `build-out/gradation-3.1.0.apk` + `.sha256` to the release.
+- System back inside a Roleplay chat returns to the characters list (same path as the top-left arrow).
+
 # Handoff (2026-10-05, per-character personas)
 
 - Personas are per character: `rp_persona_for_<id|llm>` holds an `RpPersonaChoice` (name, about, photo, on).

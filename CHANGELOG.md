@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 3.1.0 — 2026-10-05
+
+Roleplay personas per character, a Code mode that reads like a coding surface, unsent drafts kept per chat, sturdier encrypted history, and a long polish pass. Installs over 3.0.0 and keeps your chats.
+
 ### Added
 - Roleplay: the phone's back button inside a chat goes back to the characters list instead of closing the app.
 - Roleplay personas are per character. The one you pick with a character stays with that character when you switch to another, and a new character starts with no persona. Characters you already had keep the persona you were using.
@@ -42,6 +46,7 @@
 - Build: one `buildFeatures` and one `configurations.all` block, view binding off, Gradle build cache and parallel on, lint checks for unused resources, hard-coded text, missing descriptions and small touch targets, and the project is named GradatiON.
 
 ### Fixed
+- Going back from a Roleplay chat to the characters list no longer leaves the jump-down button floating over the list.
 - An earlier Roleplay reply's versions control (‹ 1/2 ›) could stay hidden after you sent the next line. It was drawn while the answer was still thinking, when that reply still counted as the newest.
 - Roleplay opens on the character list again when you left it there. Switching back used to reopen your last chat, because restoring that chat behind the list counted as opening it.
 - Editing a preset says "Edit preset". It said "Create preset" for every preset.

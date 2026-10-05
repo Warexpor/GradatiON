@@ -1,0 +1,5 @@
+GradatiON 3.1.
+- Roleplay: personas per character, your portrait and name over your lines, back returns to the characters list, full-screen character pages, smarter lore.
+- Code: one glass transcript with a running rail, approvals that expire, Changes filter and revert.
+- Chat: each thread keeps its unsent draft; History groups by day with previews.
+- Safer encrypted database recovery, every error now shows a notice, and a long polish pass.
