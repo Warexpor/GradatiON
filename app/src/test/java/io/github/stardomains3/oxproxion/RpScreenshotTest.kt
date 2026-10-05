@@ -481,6 +481,9 @@ class RpScreenshotTest : ScreenshotHarness() {
         youHeaders().forEach {
             org.junit.Assert.assertEquals(View.VISIBLE, it.visibility)
             org.junit.Assert.assertEquals("Sam", it.findViewById<android.widget.TextView>(R.id.rpUserName).text.toString())
+            // Air between your row and your bubble, as the character's row has over theirs.
+            val bubble = (it.parent as View).findViewById<View>(R.id.messageContainer)
+            org.junit.Assert.assertEquals((6 * a.resources.displayMetrics.density).toInt(), bubble.top - it.bottom)
         }
         SharedPreferencesHelper(a).saveRpShowPersona(mira.id, false)
         a.findViewById<View>(R.id.tabChat).performClick(); settle()

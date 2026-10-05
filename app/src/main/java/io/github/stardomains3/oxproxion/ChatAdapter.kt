@@ -909,6 +909,12 @@ class ChatAdapter(
                 return
             }
             rpUserHeader.visibility = View.VISIBLE
+            // Same portrait size as the character's row in this layout, so both sides match.
+            val edge = ((if (rpLayout == SharedPreferencesHelper.RP_LAYOUT_BUBBLES) 40 else 36) *
+                itemView.resources.displayMetrics.density).toInt()
+            itemView.findViewById<View>(R.id.rpUserAvatarFrame).layoutParams.let { lp ->
+                if (lp.width != edge) { lp.width = edge; lp.height = edge; itemView.findViewById<View>(R.id.rpUserAvatarFrame).layoutParams = lp }
+            }
             itemView.findViewById<TextView>(R.id.rpUserName).text = name
             val file = rpUserAvatarFile
             RpAvatars.bindModel(
