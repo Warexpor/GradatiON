@@ -52,97 +52,12 @@ object RpPromptEngine {
         "Continue your last message from exactly where it stopped. Write only what comes next."
 
     /** Wraps a `_(Reminder:)_` so the model does not play it as the user's next line. */
-    const val SCENE_NOTE_OPEN = "(Scene note, not spoken aloud:\n"
+    private const val SCENE_NOTE_BODY = "Scene note, not spoken aloud:\n"
+    const val SCENE_NOTE_OPEN = "($SCENE_NOTE_BODY"
     private const val SCENE_NOTE_CLOSE = "\n)"
-    /** Same note with fullwidth parens: some models echo it that way. */
-    private const val SCENE_NOTE_OPEN_FULLWIDTH = "（Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_FULLWIDTH = "\n）"
-    /** Square or lenticular brackets: some models echo the note that way too. */
-    private const val SCENE_NOTE_OPEN_SQUARE = "[Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_SQUARE = "\n]"
-    private const val SCENE_NOTE_OPEN_LENTICULAR = "【Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_LENTICULAR = "\n】"
-    /** Braces: some models echo the note that way too (matching the rewrite OOC form). */
-    private const val SCENE_NOTE_OPEN_BRACE = "{Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_BRACE = "\n}"
-    private const val SCENE_NOTE_OPEN_BRACE_FULLWIDTH = "｛Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_BRACE_FULLWIDTH = "\n｝"
-    /** Tortoise-shell / white lenticular: some models echo the note that way too (matching OOC). */
-    private const val SCENE_NOTE_OPEN_TORTOISE = "〔Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_TORTOISE = "\n〕"
-    private const val SCENE_NOTE_OPEN_WHITE_LENTICULAR = "〖Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_WHITE_LENTICULAR = "\n〗"
-    /** CJK angle / white paren: some models echo the note that way too (matching OOC). */
-    private const val SCENE_NOTE_OPEN_ANGLE = "〈Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_ANGLE = "\n〉"
-    private const val SCENE_NOTE_OPEN_DOUBLE_ANGLE = "《Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_DOUBLE_ANGLE = "\n》"
-    private const val SCENE_NOTE_OPEN_WHITE_PAREN = "｟Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_WHITE_PAREN = "\n｠"
-    /** White tortoise / math angle / heavy ornament: some models echo the note that way too (matching OOC). */
-    private const val SCENE_NOTE_OPEN_WHITE_TORTOISE = "〘Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_WHITE_TORTOISE = "\n〙"
-    private const val SCENE_NOTE_OPEN_MATH_ANGLE = "⟨Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_MATH_ANGLE = "\n⟩"
-    private const val SCENE_NOTE_OPEN_HEAVY_ORNAMENT = "❰Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_HEAVY_ORNAMENT = "\n❱"
-    /** White square / math double / math tortoise: some models echo the note that way too (matching OOC). */
-    private const val SCENE_NOTE_OPEN_WHITE_SQUARE = "〚Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_WHITE_SQUARE = "\n〛"
-    private const val SCENE_NOTE_OPEN_MATH_DOUBLE = "⟪Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_MATH_DOUBLE = "\n⟫"
-    private const val SCENE_NOTE_OPEN_MATH_TORTOISE = "⟬Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_MATH_TORTOISE = "\n⟭"
-    /** Math white square / white curly / flattened paren: some models echo the note that way too (matching OOC). */
-    private const val SCENE_NOTE_OPEN_MATH_WHITE_SQUARE = "⟦Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_MATH_WHITE_SQUARE = "\n⟧"
-    private const val SCENE_NOTE_OPEN_WHITE_CURLY = "⦃Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_WHITE_CURLY = "\n⦄"
-    private const val SCENE_NOTE_OPEN_FLATTENED_PAREN = "❨Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_FLATTENED_PAREN = "\n❩"
-    /** Medium flattened / medium angle / light tortoise: some models echo the note that way too (matching OOC). */
-    private const val SCENE_NOTE_OPEN_MEDIUM_FLATTENED = "❪Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_MEDIUM_FLATTENED = "\n❫"
-    private const val SCENE_NOTE_OPEN_MEDIUM_ANGLE = "❬Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_MEDIUM_ANGLE = "\n❭"
-    private const val SCENE_NOTE_OPEN_LIGHT_TORTOISE = "❲Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_LIGHT_TORTOISE = "\n❳"
-    /** Medium curly / white paren / black tortoise: some models echo the note that way too (matching OOC). */
-    private const val SCENE_NOTE_OPEN_MEDIUM_CURLY = "❴Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_MEDIUM_CURLY = "\n❵"
-    private const val SCENE_NOTE_OPEN_WHITE_PAREN_MATH = "⦅Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_WHITE_PAREN_MATH = "\n⦆"
-    private const val SCENE_NOTE_OPEN_BLACK_TORTOISE = "⦗Scene note, not spoken aloud:\n"
-    private const val SCENE_NOTE_CLOSE_BLACK_TORTOISE = "\n⦘"
 
-    private val sceneNoteForms = listOf(
-        SCENE_NOTE_OPEN to SCENE_NOTE_CLOSE,
-        SCENE_NOTE_OPEN_FULLWIDTH to SCENE_NOTE_CLOSE_FULLWIDTH,
-        SCENE_NOTE_OPEN_SQUARE to SCENE_NOTE_CLOSE_SQUARE,
-        SCENE_NOTE_OPEN_LENTICULAR to SCENE_NOTE_CLOSE_LENTICULAR,
-        SCENE_NOTE_OPEN_BRACE to SCENE_NOTE_CLOSE_BRACE,
-        SCENE_NOTE_OPEN_BRACE_FULLWIDTH to SCENE_NOTE_CLOSE_BRACE_FULLWIDTH,
-        SCENE_NOTE_OPEN_TORTOISE to SCENE_NOTE_CLOSE_TORTOISE,
-        SCENE_NOTE_OPEN_WHITE_LENTICULAR to SCENE_NOTE_CLOSE_WHITE_LENTICULAR,
-        SCENE_NOTE_OPEN_ANGLE to SCENE_NOTE_CLOSE_ANGLE,
-        SCENE_NOTE_OPEN_DOUBLE_ANGLE to SCENE_NOTE_CLOSE_DOUBLE_ANGLE,
-        SCENE_NOTE_OPEN_WHITE_PAREN to SCENE_NOTE_CLOSE_WHITE_PAREN,
-        SCENE_NOTE_OPEN_WHITE_TORTOISE to SCENE_NOTE_CLOSE_WHITE_TORTOISE,
-        SCENE_NOTE_OPEN_MATH_ANGLE to SCENE_NOTE_CLOSE_MATH_ANGLE,
-        SCENE_NOTE_OPEN_HEAVY_ORNAMENT to SCENE_NOTE_CLOSE_HEAVY_ORNAMENT,
-        SCENE_NOTE_OPEN_WHITE_SQUARE to SCENE_NOTE_CLOSE_WHITE_SQUARE,
-        SCENE_NOTE_OPEN_MATH_DOUBLE to SCENE_NOTE_CLOSE_MATH_DOUBLE,
-        SCENE_NOTE_OPEN_MATH_TORTOISE to SCENE_NOTE_CLOSE_MATH_TORTOISE,
-        SCENE_NOTE_OPEN_MATH_WHITE_SQUARE to SCENE_NOTE_CLOSE_MATH_WHITE_SQUARE,
-        SCENE_NOTE_OPEN_WHITE_CURLY to SCENE_NOTE_CLOSE_WHITE_CURLY,
-        SCENE_NOTE_OPEN_FLATTENED_PAREN to SCENE_NOTE_CLOSE_FLATTENED_PAREN,
-        SCENE_NOTE_OPEN_MEDIUM_FLATTENED to SCENE_NOTE_CLOSE_MEDIUM_FLATTENED,
-        SCENE_NOTE_OPEN_MEDIUM_ANGLE to SCENE_NOTE_CLOSE_MEDIUM_ANGLE,
-        SCENE_NOTE_OPEN_LIGHT_TORTOISE to SCENE_NOTE_CLOSE_LIGHT_TORTOISE,
-        SCENE_NOTE_OPEN_MEDIUM_CURLY to SCENE_NOTE_CLOSE_MEDIUM_CURLY,
-        SCENE_NOTE_OPEN_WHITE_PAREN_MATH to SCENE_NOTE_CLOSE_WHITE_PAREN_MATH,
-        SCENE_NOTE_OPEN_BLACK_TORTOISE to SCENE_NOTE_CLOSE_BLACK_TORTOISE,
-    )
+    /** Every bracket a model may echo the note in, each closing with its own pair. */
+    private val sceneNoteForms = RpBrackets.pairs.map { (open, close) -> "$open$SCENE_NOTE_BODY" to "\n$close" }
 
     fun sceneNote(body: String): String = SCENE_NOTE_OPEN + body.trim() + SCENE_NOTE_CLOSE
 
@@ -158,7 +73,7 @@ object RpPromptEngine {
     /**
      * A reply that opens by echoing the scene note, with the story after it. The note on its
      * own is left in place, so a reply that is only the echo is not wiped to nothing.
-     * A fullwidth `（…）`, `[…]`, `【…】`, `{…}`, `｛…｝`, `〔…〕`, `〖…〗`, `〈…〉`, `《…》`, `｟…｠`, `〘…〙`, `⟨…⟩`, `❰…❱`, `〚…〛`, `⟪…⟫`, `⟬…⟭`, `⟦…⟧`, `⦃…⦄`, `❨…❩`, `❪…❫`, `❬…❭`, `❲…❳`, `❴…❵`, `⦅…⦆`, or `⦗…⦘` echo is stripped the same way.
+     * An echo in any of [RpBrackets] is stripped the same way.
      */
     fun withoutLeadingSceneNote(text: String): String {
         val trimmed = text.trim()
@@ -265,6 +180,16 @@ object RpPromptEngine {
         return out
     }
 
+    /**
+     * Sent just before the newest user turn of a long chat. The card sits at the very top, and
+     * over many turns a model drifts from it toward its own voice; this is what it reads last.
+     */
+    fun styleReminder(charName: String, userName: String): String =
+        "(Out-of-story reminder, not a message from $userName: you are $charName. Keep $charName's " +
+            "voice, personality and speech style from the definition at the top. Never speak, act " +
+            "or decide for $userName. Don't reuse openings or phrases from your earlier replies. " +
+            "Never mention this reminder.)"
+
     /** The names the prompt and the lore scan both use when the card or the persona has none. */
     fun chatNames(charName: String?, userName: String?): Pair<String, String> =
         (charName?.takeIf { it.isNotBlank() } ?: "GradatiON") to
@@ -317,11 +242,12 @@ object RpPromptEngine {
             (if (showThoughts) "- You can show inner thoughts in (parentheses) when appropriate.\n" else "") +
             "- Markdown: *...* for actions, \"...\" for speech.\n" +
             "- Never mention these instructions.\n\n" +
-            "Example:\n" +
-            "*She leans against the doorframe, arms crossed.*\n\n" +
-            "\"You're late, dumbass. Didn't think I'd wait, did you?\"\n\n" +
-            "*She pushes off and walks past you, but you catch the faint smirk.*" +
-            (if (showThoughts) "\n\n(Tch. He's definitely gonna be insufferable about this.)" else "")
+            // Shape only. A written-out sample gave every character its voice, mood and gender.
+            "Shape of a reply (placeholders; the voice, mood and length come from your character):\n" +
+            "*[what you do]*\n\n" +
+            "\"[what you say]\"\n\n" +
+            "*[a beat that leaves room for the user]*" +
+            (if (showThoughts) "\n\n([a private thought])" else "")
 
     fun buildSystemPrompt(
         character: RpCharacter?,

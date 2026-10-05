@@ -77,7 +77,7 @@ Other things to know:
 *   Lorebooks are plain text. Text above the first `[keys: word, phrase]` line is always included; each block under it joins when the recent chat, the character, your memory, the facts, or a scene reminder mentions a key. A block can pull the next one in the chain. A reminder is a note for the scene, not a line you say.
 *   The **+** menu attaches a photo for the scene (from the library or the camera), inserts a scene reminder, and opens Controls or the character library. Files and audio stay in Chat. A photo on its own is enough to send; say what it is if you want the character to treat it a certain way.
 *   A reply's menu can **Rewrite** it. The latest reply comes back as another swipe; an earlier one, including the greeting, changes where it is and can be undone.
-*   Characters and lorebooks export and import as JSON from the library.
+*   Characters and lorebooks export and import as JSON from the library. Import also takes SillyTavern and Chub character cards (PNG or JSON, V1 to V3): the picture becomes the portrait, and a card's own lorebook comes along, pinned to that character.
 
 ---
 

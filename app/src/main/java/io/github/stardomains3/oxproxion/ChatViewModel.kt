@@ -136,7 +136,8 @@ data class ModelData(
     val name: String,
     val architecture: Architecture,
     @SerialName("created") val created: Long,
-    @SerialName("supported_parameters") val supportedParameters: List<String>? = null
+    @SerialName("supported_parameters") val supportedParameters: List<String>? = null,
+    @SerialName("context_length") val contextLength: Int? = null
 )
 
 @Serializable
@@ -2161,9 +2162,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** One network turn for a new send and a resend. Stop and failure stay on this path. */
     private fun startChatTurn(
-        messagesForApiRequest: List<FlexibleMessage>,
+        messages: List<FlexibleMessage>,
         thinkingMessage: FlexibleMessage,
     ) {
+        val messagesForApiRequest = withRpStyleReminder(messages)
         startNetworkJob {
             try {
                 val modelForRequest =
@@ -2232,10 +2234,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /** Cap API history; in character RP keep the opening greeting when budget allows. */
     private fun trimMessagesForApiMemory(messagesForApiRequest: MutableList<FlexibleMessage>) {
         val memoryCount = sharedPreferencesHelper.getChatMemoryCount()
-        if (messagesForApiRequest.size <= memoryCount) return
         val systemMessages = messagesForApiRequest.filter { it.role == "system" }
         val nonSystem = messagesForApiRequest.filter { it.role != "system" }
-        val budget = (memoryCount - systemMessages.size).coerceAtLeast(1)
+        var budget = (memoryCount - systemMessages.size).coerceAtLeast(1)
+        if (isRpMode()) {
+            val systemChars = systemMessages.sumOf { getMessageText(it.content).length }
+            budget = minOf(budget, rpFitCount(nonSystem, systemChars))
+        }
+        if (nonSystem.size <= budget) return
         val recentMessages = RpApiMemory.trimNonSystem(
             nonSystem = nonSystem,
             budget = budget,
@@ -3526,6 +3532,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         isTranscription = transcription,
         created = created,
         isFree = id.endsWith(":free"),
+        contextLength = contextLength ?: 0,
     )
 
     fun fetchOpenRouterModels() {
@@ -3561,7 +3568,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             isTranscription = models.any { it.isTranscription },
                             created = base.created,
                             isFree = base.isFree,
-                            isLANModel = false
+                            isLANModel = false,
+                            contextLength = models.maxOf { it.contextLength }
                         )
                     }
 
@@ -3604,6 +3612,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     private fun migrateOpenRouterModels() {
+        if (!sharedPreferencesHelper.getOpenRouterContextMigrated()) {
+            // Caches saved before context sizes were kept: refresh once so Roleplay knows each window.
+            sharedPreferencesHelper.saveOpenRouterContextMigrated()
+            val saved = sharedPreferencesHelper.getOpenRouterModels()
+            if (sharedPreferencesHelper.getOpenRouterReasoningMigrated() &&
+                saved.isNotEmpty() && saved.none { it.contextLength > 0 }
+            ) fetchOpenRouterModels()
+        }
         if (sharedPreferencesHelper.getOpenRouterReasoningMigrated()) return
         val savedModels = sharedPreferencesHelper.getOpenRouterModels()
         val refresh = openRouterCacheMissingReasoning(alreadyMigrated = false, models = savedModels)
@@ -4446,7 +4462,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             turns += "assistant" to latestReply
         }
         val sessionKey = currentSessionId ?: RpAutoMemory.UNSAVED_KEY
-        val budget = sharedPreferencesHelper.getChatMemoryCount()
+        val budget = rpMemoryCount(_chatMessages.value.orEmpty().filter {
+            (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it)
+        })
         val previousRun = rpMemoryRunAt[sessionKey] ?: 0
         if (!RpAutoMemory.shouldUpdate(turns.size, budget, previousRun)) return
 
@@ -4757,12 +4775,63 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** History is cut before the card. Null means the whole definition still fits. */
-    private fun rpDefinitionCap(): Int? = RpApiMemory.definitionCap(
-        messageCount = _chatMessages.value.orEmpty().count {
+    private fun rpDefinitionCap(): Int? {
+        val turns = _chatMessages.value.orEmpty().filter {
             (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it)
-        },
-        historyBudget = sharedPreferencesHelper.getChatMemoryCount()
-    )
+        }
+        return RpApiMemory.definitionCap(messageCount = turns.size, historyBudget = rpMemoryCount(turns))
+    }
+
+    /**
+     * A long character chat gets [RpPromptEngine.styleReminder] near the end of the request.
+     * LAN servers are left alone: many chat templates reject a system turn mid-history.
+     */
+    private fun withRpStyleReminder(messages: List<FlexibleMessage>): List<FlexibleMessage> {
+        if (!isRpMode() || sharedPreferencesHelper.isRpLlmMode() || activeModelIsLan() || activeModelIsDemo()) {
+            return messages
+        }
+        val character = _activeRpCharacter.value ?: return messages
+        val at = RpApiMemory.reminderIndex(messages.map { it.role })
+        if (at < 0) return messages
+        val (charName, userName) = RpPromptEngine.chatNames(
+            character.name, sharedPreferencesHelper.activeRpPersonaName()
+        )
+        val note = FlexibleMessage(
+            role = "system",
+            content = JsonPrimitive(RpPromptEngine.styleReminder(charName, userName))
+        )
+        return messages.toMutableList().apply { add(at, note) }
+    }
+
+    /** Context window of the active model, when OpenRouter reported one. */
+    private fun activeContextTokens(): Int? {
+        val id = _activeChatModel.value ?: return null
+        return (allOpenRouterModels.find { it.apiIdentifier == id } ?: getActiveLlmModel())
+            ?.contextLength?.takeIf { it > 0 }
+    }
+
+    /** A message's share of the window: its words, framing, and a flat cost for a photo. */
+    private fun rpWindowChars(message: FlexibleMessage): Int =
+        getMessageText(message.content).length + RpApiMemory.MESSAGE_OVERHEAD_CHARS +
+            if (isImageMessage(message)) RpApiMemory.IMAGE_CHARS else 0
+
+    /** How many of the newest [messages] fit the model's window next to a [systemChars] prompt. */
+    private fun rpFitCount(messages: List<FlexibleMessage>, systemChars: Int): Int =
+        RpApiMemory.fitCount(
+            messages.map(::rpWindowChars),
+            RpApiMemory.historyChars(activeContextTokens(), systemChars)
+        )
+
+    /**
+     * The memory setting, narrowed to the newest [turns] that fit the window. Long replies fill a
+     * window long before the message count does. While everything fits the setting stands, so
+     * "All messages" still means the card is never cut.
+     */
+    private fun rpMemoryCount(turns: List<FlexibleMessage>): Int {
+        val setting = sharedPreferencesHelper.getChatMemoryCount()
+        val fit = rpFitCount(turns, RpApiMemory.SYSTEM_RESERVE_CHARS)
+        return if (fit >= turns.size) setting else minOf(setting, fit)
+    }
 
     /** True when a "continue" beat makes sense: RP, a character (or LLM) and a reply to build on. */
     fun canContinueRpStory(): Boolean =
@@ -5084,7 +5153,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 request.add(FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.rewriteDirective(note))))
                 if (epoch != sessionEpoch) return@launch
                 val rewritten = completeContent(
-                    turns = request.toApiMessages().map { it.role to it.content },
+                    turns = withRpStyleReminder(request).toApiMessages().map { it.role to it.content },
                     model = _activeChatModel.value,
                     timeoutMs = 120_000,
                     maxTokens = sharedPreferencesHelper.getMaxTokens().toIntOrNull() ?: 12_000,

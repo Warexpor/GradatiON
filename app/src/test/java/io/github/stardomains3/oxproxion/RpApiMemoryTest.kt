@@ -70,4 +70,41 @@ class RpApiMemoryTest {
         assertEquals(RpApiMemory.DEFINITION_HEAD, RpApiMemory.definitionCap(messageCount = 12, historyBudget = 10))
         assertEquals(null, RpApiMemory.definitionCap(messageCount = 80, historyBudget = 10_000))
     }
+
+    @Test
+    fun longRepliesFillTheWindowBeforeTheCount() {
+        // Thirty 3,000-character scenes do not fit 40k characters; the newest thirteen do.
+        assertEquals(13, RpApiMemory.fitCount(List(30) { 3_000 }, 40_000))
+        assertEquals(30, RpApiMemory.fitCount(List(30) { 100 }, 40_000))
+        // The newest turn is always sent, even when it alone is over.
+        assertEquals(1, RpApiMemory.fitCount(listOf(10, 90_000), 40_000))
+        assertEquals(0, RpApiMemory.fitCount(emptyList(), 40_000))
+    }
+
+    @Test
+    fun windowComesFromTheModelsContext() {
+        val reply = RpApiMemory.REPLY_RESERVE_TOKENS
+        val perToken = RpApiMemory.CHARS_PER_TOKEN
+        assertEquals((200_000 - reply) * perToken - 10_000, RpApiMemory.historyChars(200_000, 10_000))
+        // Unknown size falls back to the default window.
+        assertEquals(
+            RpApiMemory.historyChars(RpApiMemory.DEFAULT_CONTEXT_TOKENS, 10_000),
+            RpApiMemory.historyChars(null, 10_000)
+        )
+        assertEquals(RpApiMemory.historyChars(null, 10_000), RpApiMemory.historyChars(0, 10_000))
+        // A tiny window still keeps a few turns.
+        assertEquals(8_000, RpApiMemory.historyChars(4_096, 50_000))
+    }
+
+    @Test
+    fun styleReminderSitsBeforeTheNewestUserTurnOfALongChat() {
+        val short = listOf("system", "assistant", "user", "assistant", "user")
+        assertEquals(-1, RpApiMemory.reminderIndex(short))
+        val long = listOf("system", "assistant", "user", "assistant", "user", "assistant", "user")
+        assertEquals(6, RpApiMemory.reminderIndex(long))
+        // A rewrite ends on its own note after the old reply; the reminder goes before that note.
+        val rewrite = long + listOf("assistant", "user")
+        assertEquals(8, RpApiMemory.reminderIndex(rewrite))
+        assertEquals(-1, RpApiMemory.reminderIndex(List(8) { "assistant" }))
+    }
 }

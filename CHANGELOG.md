@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+- Roleplay imports SillyTavern and Chub character cards, as a PNG or as JSON (V1, V2 and V3). The picture becomes the portrait, the card's example dialogs, scenario and instructions land in their own fields, and the card's own lorebook comes along, pinned to that character.
+- Long roleplay chats get a short reminder near the end of what the model reads, to keep the character's own voice and not act for you. It is not shown in the chat. LAN models are left alone.
+
+### Changed
+- Roleplay history is fitted to the model's context window, not only the message count. Thirty long scenes no longer overflow a model that fits thirty short lines. The window size comes from OpenRouter's model list; unknown models assume 32k tokens.
+- The reply-format sample in the roleplay prompt is a neutral shape instead of a written-out sarcastic woman, which was nudging every character toward that voice.
+
+### Fixed
+- Roleplay: after going back to the characters list and opening a chat, a second pair of jump buttons (the Scrollers setting, off by default) appeared over the story and never went away. They now only show when that setting is on. Came in with 3.1.0.
+
 ## 3.1.0 — 2026-10-05
 
 Roleplay personas per character, a Code mode that reads like a coding surface, unsent drafts kept per chat, sturdier encrypted history, and a long polish pass. Installs over 3.0.0 and keeps your chats.

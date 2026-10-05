@@ -58,8 +58,9 @@ class RpRepository(private val rpDao: RpDao) {
     ): List<ImportedCharacter> = rpDao.importCharacters(incoming, beforeCommit)
 
     /** [activateFirstIfNone] matches the old import: a library that was empty gets one active book. */
-    suspend fun importLorebooks(incoming: List<RpLorebookExport>): Int {
+    /** [activateFirstIfNone] off for a card's own book: it is pinned to that card, not the default. */
+    suspend fun importLorebooks(incoming: List<RpLorebookExport>, activateFirstIfNone: Boolean = true): Int {
         val hadBooks = getAllLorebooksOnce().isNotEmpty()
-        return rpDao.importLorebooks(incoming, activateFirstIfNone = !hadBooks)
+        return rpDao.importLorebooks(incoming, activateFirstIfNone = activateFirstIfNone && !hadBooks)
     }
 }

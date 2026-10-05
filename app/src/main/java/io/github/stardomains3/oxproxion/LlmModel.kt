@@ -13,5 +13,7 @@ data class LlmModel(
     val created: Long = 0L,
     val isFree: Boolean = apiIdentifier.endsWith(":free")||apiIdentifier.endsWith("/free"),
     val isLANModel: Boolean = false,
-    val isLoaded: Boolean = false  // Used by llama.cpp to indicate if model is loaded
+    val isLoaded: Boolean = false,  // Used by llama.cpp to indicate if model is loaded
+    /** Context window in tokens from OpenRouter; 0 when unknown. */
+    val contextLength: Int = 0
 )

@@ -173,7 +173,7 @@
     <string name="rp_save_failed">Save failed — try again</string>
     <string name="rp_select_character">Pick a character or enable LLM mode in RP settings</string>
     <string name="rp_export_characters">Export characters (JSON)</string>
-    <string name="rp_import_characters">Import characters (JSON)</string>
+    <string name="rp_import_characters">Import characters or cards</string>
     <string name="rp_export_lorebooks">Export lorebooks (JSON)</string>
     <string name="rp_import_lorebooks">Import lorebooks (JSON)</string>
     <string name="rp_field_examples">Example dialogs (User:/Char: blocks, --- between)</string>
@@ -193,6 +193,7 @@
     <string name="rp_export_empty_lore">No lorebooks to export</string>
     <string name="rp_export_failed">Export failed</string>
     <string name="rp_import_failed">Import failed</string>
+    <string name="rp_import_not_a_card">This picture has no character card in it</string>
     <string name="rp_import_chars_ok">Imported %1$d characters</string>
     <string name="rp_import_lore_ok">Imported %1$d lorebooks</string>
     <string name="rp_import_empty">Nothing to import</string>

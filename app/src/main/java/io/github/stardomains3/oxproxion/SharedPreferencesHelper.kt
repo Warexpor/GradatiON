@@ -237,6 +237,7 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_OPEN_ROUTER_MODELS = "open_router_models"
         /** One-shot. Old caches had no reasoning flag, so every model read as not reasoning. */
         private const val KEY_OPEN_ROUTER_REASONING_MIGRATED = "open_router_reasoning_migrated"
+        private const val KEY_OPEN_ROUTER_CONTEXT_MIGRATED = "open_router_context_migrated"
         private const val KEY_NOTI_ENABLED = "noti_enabled"
         private const val KEY_EXT_ENABLED = "ext_enabled"
         private const val KEY_EXT_ENABLED2 = "ext_enabled2"
@@ -472,6 +473,10 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.getBoolean(KEY_OPEN_ROUTER_REASONING_MIGRATED, false)
     fun saveOpenRouterReasoningMigrated() =
         mainPrefs.edit { putBoolean(KEY_OPEN_ROUTER_REASONING_MIGRATED, true) }
+    fun getOpenRouterContextMigrated(): Boolean =
+        mainPrefs.getBoolean(KEY_OPEN_ROUTER_CONTEXT_MIGRATED, false)
+    fun saveOpenRouterContextMigrated() =
+        mainPrefs.edit { putBoolean(KEY_OPEN_ROUTER_CONTEXT_MIGRATED, true) }
     fun saveBiometricEnabled(enabled: Boolean) {
         // commit: Data > Biometrics; a kill after the tap must keep lock-on.
         mainPrefs.edit(commit = true) { putBoolean(KEY_BIOMETRIC_ENABLED, enabled) }

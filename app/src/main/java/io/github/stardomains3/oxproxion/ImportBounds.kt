@@ -16,7 +16,10 @@ internal object ImportBounds {
 
     class TooLarge(val limitBytes: Int) : IOException("import larger than $limitBytes bytes")
 
-    fun readUtf8(input: InputStream, maxBytes: Int = MAX_TEXT_BYTES): String {
+    fun readUtf8(input: InputStream, maxBytes: Int = MAX_TEXT_BYTES): String = decode(readBytes(input, maxBytes))
+
+    /** The whole stream, refused past [maxBytes]. */
+    fun readBytes(input: InputStream, maxBytes: Int): ByteArray {
         val out = ByteArrayOutputStream()
         val buf = ByteArray(8192)
         var total = 0
@@ -28,7 +31,7 @@ internal object ImportBounds {
             out.write(buf, 0, n)
             total += n
         }
-        return decode(out.toByteArray())
+        return out.toByteArray()
     }
 
     /**

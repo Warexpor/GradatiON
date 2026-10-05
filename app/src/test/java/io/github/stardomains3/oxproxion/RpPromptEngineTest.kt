@@ -275,11 +275,13 @@ class RpPromptEngineTest {
             thirdPerson = false, showThoughts = thoughts, isLlm = false
         )
         assertTrue(prompt(true).contains("You can show inner thoughts in (parentheses)"))
-        assertTrue(prompt(true).endsWith("insufferable about this.)"))
+        assertTrue(prompt(true).endsWith("([a private thought])"))
         assertFalse(prompt(true).contains("no thoughts from the user"))
         assertTrue(prompt(false).contains("no thoughts from the user"))
         assertFalse(prompt(false).contains("inner thoughts"))
-        assertTrue(prompt(false).endsWith("the faint smirk.*"))
+        assertTrue(prompt(false).endsWith("room for the user]*"))
+        // The format sample carries no voice, gender or mood of its own.
+        for (word in listOf(" She ", " He ", "dumbass", "smirk")) assertFalse(word, prompt(true).contains(word))
     }
 
     @Test

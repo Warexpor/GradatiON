@@ -96,15 +96,26 @@ class RpHubFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             val app = requireContext().applicationContext
             try {
-                val text = withContext(Dispatchers.IO) {
+                val bytes = withContext(Dispatchers.IO) {
                     app.contentResolver.openInputStream(uri)?.use {
-                        ImportBounds.readUtf8(it, ImportBounds.MAX_RP_BYTES)
+                        ImportBounds.readBytes(it, ImportBounds.MAX_RP_BYTES)
                     }
                 } ?: run {
                     GlassNotice.show(requireContext(), getString(R.string.rp_import_failed))
                     return@launch
                 }
-                val parsed = json.decodeFromString(RpCharacterBackup.serializer(), text)
+                // A SillyTavern or Chub card, as a PNG or as JSON, imports as a one-character backup.
+                val text = if (RpCardImport.isPng(bytes)) null else ImportBounds.decode(bytes)
+                val card = withContext(Dispatchers.Default) {
+                    if (text == null) RpCardImport.fromPng(bytes) else RpCardImport.fromJson(text)
+                }
+                if (text == null && card == null) {
+                    GlassNotice.show(requireContext(), getString(R.string.rp_import_not_a_card))
+                    return@launch
+                }
+                cardLorebook = card?.lorebook
+                val parsed = if (card != null) RpCharacterBackup(listOf(card.character))
+                    else json.decodeFromString(RpCharacterBackup.serializer(), text!!)
                 // A blank name is not a character. Counting it asked to update a card import then skipped.
                 val backup = parsed.copy(
                     characters = parsed.characters.filter { it.name.trim().isNotEmpty() },
@@ -289,7 +300,13 @@ class RpHubFragment : Fragment() {
         view.findViewById<MaterialButton>(R.id.rpHubImportCharsButton).setOnClickListener {
             importCharsLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/json"
+                // App backups, and character cards as PNG or JSON. Some file managers label
+                // a card's .json as plain text or a binary stream.
+                type = "*/*"
+                putExtra(
+                    Intent.EXTRA_MIME_TYPES,
+                    arrayOf("application/json", "image/png", "text/plain", "application/octet-stream")
+                )
             })
         }
         view.findViewById<MaterialButton>(R.id.rpHubExportLoreButton).setOnClickListener {
@@ -424,10 +441,18 @@ class RpHubFragment : Fragment() {
             .commit()
     }
 
+    /** The book of the card being imported, written just before the character so its pin binds. */
+    private var cardLorebook: RpLorebookExport? = null
+
     private suspend fun applyCharacterBackup(backup: RpCharacterBackup) {
         if (!isAdded) return
         try {
             val repo = chatViewModel.getRpRepository()
+            cardLorebook?.let {
+                repo.importLorebooks(listOf(it), activateFirstIfNone = false)
+                RpCharacterPrefsBackup.bindPending(prefs, repo.getAllLorebooksOnce())
+            }
+            cardLorebook = null
             val activeBefore = prefs.getRpActiveCharacterId()?.let { repo.getCharacterById(it) }
             val delegate = RpChatDelegate(repo, prefs)
             val expandedBefore = activeBefore?.let { delegate.greetingMessage(it) }
