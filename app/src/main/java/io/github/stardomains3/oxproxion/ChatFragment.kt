@@ -1022,8 +1022,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 chatRecyclerView.post {
                     val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                     val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                    scrollToTopButton.setShownAnimated(canScrollUp)
-                    scrollToBottomButton.setShownAnimated(canScrollDown)
+                    scrollToTopButton.setScrollShown(canScrollUp)
+                    scrollToBottomButton.setScrollShown(canScrollDown)
                 }
             }
             resetChatButton.isVisible = hasMessages
@@ -1195,8 +1195,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 chatRecyclerView.post {
                     val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                     val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                    scrollToTopButton.setShownAnimated(canScrollUp)
-                    scrollToBottomButton.setShownAnimated(canScrollDown)
+                    scrollToTopButton.setScrollShown(canScrollUp)
+                    scrollToBottomButton.setScrollShown(canScrollDown)
                 }
             } else {
                 scrollToTopButton.visibility = View.INVISIBLE
@@ -1208,8 +1208,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 chatRecyclerView.post {
                     val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                     val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                    scrollToTopButton.setShownAnimated(canScrollUp)
-                    scrollToBottomButton.setShownAnimated(canScrollDown)
+                    scrollToTopButton.setScrollShown(canScrollUp)
+                    scrollToBottomButton.setScrollShown(canScrollDown)
                 }
             }
             else{
@@ -1285,8 +1285,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     if (sharedPreferencesHelper.getScrollersPreference()) {
                         val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                         val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                        scrollToTopButton.setShownAnimated(canScrollUp)
-                        scrollToBottomButton.setShownAnimated(canScrollDown)
+                        scrollToTopButton.setScrollShown(canScrollUp)
+                        scrollToBottomButton.setScrollShown(canScrollDown)
                     }
                 }
             }
@@ -2482,8 +2482,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     chatRecyclerView.post {  // Keep post for layout safety
                         val canScrollUp = chatRecyclerView.canScrollVertically(-1)
                         val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                        scrollToTopButton.setShownAnimated(canScrollUp)
-                        scrollToBottomButton.setShownAnimated(canScrollDown)
+                        scrollToTopButton.setScrollShown(canScrollUp)
+                        scrollToBottomButton.setScrollShown(canScrollDown)
                     }
             },
             forkNavStateForPosition = { position ->
@@ -4767,8 +4767,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         chatRecyclerView.post {
             val canScrollUp = chatRecyclerView.canScrollVertically(-1)
             val canScrollDown = chatRecyclerView.canScrollVertically(1)
-            scrollToTopButton.setShownAnimated(canScrollUp)
-            scrollToBottomButton.setShownAnimated(canScrollDown)
+            scrollToTopButton.setScrollShown(canScrollUp)
+            scrollToBottomButton.setScrollShown(canScrollDown)
         }
     }
 
@@ -5262,8 +5262,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         chatRecyclerView.post {
             updateJumpToBottom()
             if (isScrollersEnabled) {
-                scrollToTopButton.setShownAnimated(chatRecyclerView.canScrollVertically(-1))
-                scrollToBottomButton.setShownAnimated(chatRecyclerView.canScrollVertically(1))
+                scrollToTopButton.setScrollShown(chatRecyclerView.canScrollVertically(-1))
+                scrollToBottomButton.setScrollShown(chatRecyclerView.canScrollVertically(1))
             }
         }
     }
@@ -6508,6 +6508,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var scrollerCanUp: Boolean? = null
     private var scrollerCanDown: Boolean? = null
 
+    /** The jump buttons belong to the transcript, so the Roleplay characters list never shows them. */
+    private fun View.setScrollShown(show: Boolean) = setShownAnimated(show && !rpListFront())
+
     /** Scroll-button visibility. onScrolled already has a laid-out list, so no posted runnable per pixel. */
     private fun refreshScrollButtons() {
         val up = chatRecyclerView.canScrollVertically(-1)
@@ -6515,8 +6518,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         if (up == scrollerCanUp && down == scrollerCanDown) return
         scrollerCanUp = up
         scrollerCanDown = down
-        scrollToTopButton.setShownAnimated(up)
-        scrollToBottomButton.setShownAnimated(down)
+        scrollToTopButton.setScrollShown(up)
+        scrollToBottomButton.setScrollShown(down)
     }
 
     private var progressArmedAt = 0L
@@ -6911,6 +6914,17 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         newChatButton.contentDescription = getString(if (show) R.string.rp_home_manage else R.string.grok_new_conversation)
         // While the chat slides away the composer goes with it; it is hidden when the slide ends.
         if (!(slide && changed && show)) applyRpHomeComposer(root, show)
+        if (changed && ::scrollToBottomButton.isInitialized) {
+            // Forget the last state so the thread's buttons come back for whatever it can scroll to.
+            scrollerCanUp = null
+            scrollerCanDown = null
+            if (show) {
+                scrollToTopButton.setShownAnimated(false)
+                scrollToBottomButton.setShownAnimated(false)
+            } else {
+                chatRecyclerView.post { if (view != null) refreshScrollButtons() }
+            }
+        }
     }
 
     /** Only undo what the home did itself: Code mode hides the same composer for its own reasons. */

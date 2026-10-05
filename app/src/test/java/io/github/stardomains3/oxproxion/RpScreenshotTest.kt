@@ -297,8 +297,12 @@ class RpScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals("left in a chat", View.GONE, home.visibility)
         org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.composerDock).visibility)
         // The phone's back button leaves the chat for the list instead of closing the app.
+        // A long thread shows the jump-down button; it must not follow you onto the list.
+        val down = a.findViewById<View>(R.id.scrollToBottomButton)
+        down.visibility = View.VISIBLE
         a.onBackPressedDispatcher.onBackPressed(); idle()
         org.junit.Assert.assertEquals("system back lands on the list", View.VISIBLE, home.visibility)
+        org.junit.Assert.assertNotEquals("jump-down button left on the list", View.VISIBLE, down.visibility)
         org.junit.Assert.assertFalse(a.isFinishing)
         a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
             .findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
