@@ -111,3 +111,6 @@ secrets/
 
 # Kotlin daemon / incremental compiler local state
 .kotlin/
+
+# Release and dev APKs from scripts/release.sh (attached to GitHub releases, never committed)
+build-out/
