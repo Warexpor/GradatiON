@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Roleplay: the phone's back button inside a chat goes back to the characters list instead of closing the app.
 - Roleplay personas are per character. The one you pick with a character stays with that character when you switch to another, and a new character starts with no persona. Characters you already had keep the persona you were using.
 - Roleplay shows your persona's portrait and name above your messages, like the character's above theirs, when that chat has a persona. Each character's Layout page can turn it off.
 - History shows the line you have not sent yet, as "Draft: …", in place of the last message. Search finds that text even when it is not in a sent message. Long-press offers Discard draft. Deleting the chat drops the unsent line too.

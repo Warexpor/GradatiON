@@ -5998,7 +5998,15 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         if (headerContainer.isVisible) {
             hideMenu()
             return true
-        } else if (menuClosedByTouch) {
+        }
+        // Inside a roleplay chat, back goes to the characters list, like the toolbar's back arrow.
+        if (RpHomeChrome.leading(rpListFront(), viewModel.isRpMode()) == RpHomeChrome.Leading.BACK) {
+            menuClosedByTouch = false
+            hideKeyboard()
+            openRpHome()
+            return true
+        }
+        if (menuClosedByTouch) {
             menuClosedByTouch = false  // Reset immediately
             return true  // Consume to prevent app hide (menu already closed by touch)
         }

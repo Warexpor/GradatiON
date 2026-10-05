@@ -296,6 +296,13 @@ class RpScreenshotTest : ScreenshotHarness() {
         a.findViewById<View>(R.id.tabRoleplay).performClick(); settle()
         org.junit.Assert.assertEquals("left in a chat", View.GONE, home.visibility)
         org.junit.Assert.assertEquals(View.VISIBLE, a.findViewById<View>(R.id.composerDock).visibility)
+        // The phone's back button leaves the chat for the list instead of closing the app.
+        a.onBackPressedDispatcher.onBackPressed(); idle()
+        org.junit.Assert.assertEquals("system back lands on the list", View.VISIBLE, home.visibility)
+        org.junit.Assert.assertFalse(a.isFinishing)
+        a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
+            .findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
+        org.junit.Assert.assertEquals(View.GONE, home.visibility)
         // Back to the list, leave, return: the list.
         a.findViewById<View>(R.id.openSavedChatsButton).performClick(); settle()
         org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
