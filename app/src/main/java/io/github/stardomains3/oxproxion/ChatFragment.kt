@@ -6513,6 +6513,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
 
     /** Scroll-button visibility. onScrolled already has a laid-out list, so no posted runnable per pixel. */
     private fun refreshScrollButtons() {
+        // The pair is the opt-in Scrollers setting. Leaving the Roleplay list showed it with the
+        // setting off, and nothing hid it again: only a scroll with the setting on does.
+        if (!isScrollersEnabled) return
         val up = chatRecyclerView.canScrollVertically(-1)
         val down = chatRecyclerView.canScrollVertically(1)
         if (up == scrollerCanUp && down == scrollerCanDown) return

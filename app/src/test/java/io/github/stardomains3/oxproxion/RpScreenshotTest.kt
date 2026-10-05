@@ -304,9 +304,20 @@ class RpScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals("system back lands on the list", View.VISIBLE, home.visibility)
         org.junit.Assert.assertNotEquals("jump-down button left on the list", View.VISIBLE, down.visibility)
         org.junit.Assert.assertFalse(a.isFinishing)
+        // The top/bottom pair is the opt-in Scrollers setting (off here). Reopening a thread
+        // that can scroll used to show it anyway, for good.
+        val thread = a.findViewById<View>(R.id.chatRecyclerView)
+        val fullHeight = thread.layoutParams.height
+        // Just past the composer and top-bar padding, so even a short thread scrolls.
+        thread.layoutParams = thread.layoutParams.apply { height = thread.paddingTop + thread.paddingBottom + 60 }
         a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rpHomeList)
             .findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
         org.junit.Assert.assertEquals(View.GONE, home.visibility)
+        org.junit.Assert.assertTrue("thread scrolls", thread.canScrollVertically(-1) || thread.canScrollVertically(1))
+        org.junit.Assert.assertNotEquals("scrollers shown with the setting off", View.VISIBLE,
+            a.findViewById<View>(R.id.scrollToTopButton).visibility)
+        org.junit.Assert.assertNotEquals("scrollers shown with the setting off", View.VISIBLE, down.visibility)
+        thread.layoutParams = thread.layoutParams.apply { height = fullHeight }
         // Back to the list, leave, return: the list.
         a.findViewById<View>(R.id.openSavedChatsButton).performClick(); settle()
         org.junit.Assert.assertEquals(View.VISIBLE, home.visibility)
