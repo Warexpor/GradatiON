@@ -7,7 +7,7 @@ monochrome interface made of iOS-style Liquid Glass. Fork of
 
 | | |
 |--|--|
-| **Version** | 3.1.0 |
+| **Version** | 3.1.1 |
 | **Package** | `io.github.warexpor.gradation` |
 | **Android** | 12+ (min SDK 31, target 36) |
 | **License** | Apache 2.0 |

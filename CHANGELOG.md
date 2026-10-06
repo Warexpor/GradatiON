@@ -10,6 +10,10 @@
 - Roleplay history is fitted to the model's context window, not only the message count. Thirty long scenes no longer overflow a model that fits thirty short lines. The window size comes from OpenRouter's model list; unknown models assume 32k tokens.
 - The reply-format sample in the roleplay prompt is a neutral shape instead of a written-out sarcastic woman, which was nudging every character toward that voice.
 
+## 3.1.1 — 2026-10-06
+
+Fixes two stray jump buttons in Roleplay. Installs over 3.1.0 and keeps your chats.
+
 ### Fixed
 - Roleplay: after going back to the characters list and opening a chat, a second pair of jump buttons (the Scrollers setting, off by default) appeared over the story and never went away. They now only show when that setting is on. Came in with 3.1.0.
 
