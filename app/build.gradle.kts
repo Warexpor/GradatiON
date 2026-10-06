@@ -18,7 +18,7 @@ configurations.all {
 }
 val appVersionMajor = 3
 val appVersionMinor = 1
-val appVersionPatch = 0
+val appVersionPatch = 1
 
 android {
     namespace = "io.github.stardomains3.oxproxion"

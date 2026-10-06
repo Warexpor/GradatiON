@@ -1,0 +1,2 @@
+GradatiON 3.1.1.
+- Roleplay: fixed a stray pair of jump buttons that stayed over the story after returning to the characters list.

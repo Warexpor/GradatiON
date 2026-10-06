@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 3.1.1 — 2026-10-06
+
+Fixes two stray jump buttons in Roleplay. Installs over 3.1.0 and keeps your chats.
+
+### Fixed
+- Roleplay: after going back to the characters list and opening a chat, a second pair of jump buttons (the Scrollers setting, off by default) appeared over the story and never went away. They now only show when that setting is on. Came in with 3.1.0.
+
 ## 3.1.0 — 2026-10-05
 
 Roleplay personas per character, a Code mode that reads like a coding surface, unsent drafts kept per chat, sturdier encrypted history, and a long polish pass. Installs over 3.0.0 and keeps your chats.
