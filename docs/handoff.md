@@ -1,3 +1,9 @@
+# Handoff (2026-10-06, 3.1.1)
+
+- `main` is at 1bdf7610: 3.1.0 plus only the jump-buttons fix (versionCode 30101, CHANGELOG `## 3.1.1`, fastlane `30101.txt`). Not signed or tagged yet: run `scripts/release.sh` where the key is, install over 3.1.0, then `git tag v3.1.1 && git push origin v3.1.1`.
+- `liquid-glass-redesign` has main merged in and carries the unreleased RP harness work (history fitted to the model window, neutral format sample, late style reminder, card import; see CHANGELOG `Unreleased`). Still needs a phone check.
+- Code-mode screenshot tests (`CodeModeScreenshotTest`) are flaky in full runs: a different visibility assertion failed in each of three full runs, and the class passes alone. Not touched.
+
 # Handoff (2026-10-05, 3.1.0 release prep)
 
 - Version 3.1.0 (versionCode 30100). CHANGELOG `## 3.1.0`, fastlane `changelogs/30100.txt`, README, help and the
