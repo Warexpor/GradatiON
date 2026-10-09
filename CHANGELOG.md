@@ -14,7 +14,13 @@
 - Roleplay history is fitted to the model's context window, not only the message count. Thirty long scenes no longer overflow a model that fits thirty short lines. The window size comes from OpenRouter's model list; unknown models assume 32k tokens.
 - The reply-format sample in the roleplay prompt is a neutral shape instead of a written-out sarcastic woman, which was nudging every character toward that voice.
 
+### Performance
+- Faster launch. Reply versions and a fork's other branch moved out of the settings file into a file per chat. That settings file is read whole before the first screen draws and rewritten whole on every save, so a long Roleplay history slowed every launch and every regenerate. Existing data moves over once, on the first launch.
+- Opening a long chat parses it off the main thread, and its last replies are prepared before it shows.
+- Long chats hold fewer parsed messages in memory (the newest 120), and photos stored inside messages are decoded once instead of on every scroll.
+
 ### Fixed
+- An opened chat starts at its end, where the conversation left off, instead of wherever the previous chat was scrolled.
 - Roleplay: editing an earlier line of yours wiped everything after it at once, with no warning. It now asks first.
 - Roleplay: reply versions of earlier replies could be dropped from the save when the newest reply had none.
 - Roleplay: a picture shared by a chat and its branch is kept until neither uses it.

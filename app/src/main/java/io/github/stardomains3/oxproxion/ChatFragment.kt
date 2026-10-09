@@ -955,83 +955,26 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             presetsButton.isVisible = !isPresetsOnChatScreen && !isTopBarEnabled
         }
         viewModel.chatMessages.observe(viewLifecycleOwner) { messages ->
-            refreshEditBanner()
-            chatAdapter.continuingFrom = viewModel.continuationText
-            chatAdapter.setMessages(messages)
-            restoreListSpot()
-            chatRecyclerView.post { updateJumpToBottom() }
-            updateSendButtonChrome()
-            val hasMessages = messages.isNotEmpty()
-            centerWatermarkIcon.isClickable = false
-            if(hasMessages){
-                // Right after a mode swipe the list is the other mode's thread landing, not a
-                // conversation starting: the mark just goes, or it swells on the new page.
-                val justSwitched = android.os.SystemClock.uptimeMillis() - modeSwitchedAt < MODE_LOAD_WINDOW_MS
-                if (!justSwitched && emptyStateContainer.isVisible && emptyStateContainer.alpha > 0f && Motion.areAnimationsEnabled(requireContext())) {
-                    // The mark dissolves into the background as the conversation starts.
-                    emptyStateContainer.animate().cancel()
-                    emptyStateContainer.animate().alpha(0f).scaleX(1.06f).scaleY(1.06f)
-                        .setDuration(420).setInterpolator(Motion.easeOut).withEndAction {
-                            emptyStateContainer.visibility = View.GONE
-                            emptyStateContainer.scaleX = 1f
-                            emptyStateContainer.scaleY = 1f
-                        }.start()
-                } else {
-                    emptyStateContainer.visibility = View.GONE
+            val serial = viewModel.threadOpenSerial
+            val opening = ChatOpen.opensThread(
+                newOpen = serial != shownOpenSerial,
+                cachedThreadShown = cachedThreadShown,
+                incomingEmpty = messages.isEmpty(),
+            )
+            shownOpenSerial = serial
+            cachedThreadShown = false
+            openWarmJob?.cancel()
+            if (opening && messages.size > 1) {
+                // A saved chat landing: parse its last screens off the main thread first, then
+                // show it at its end. A newer list arriving meanwhile takes over.
+                openWarmJob = viewLifecycleOwner.lifecycleScope.launch {
+                    chatAdapter.warm(messages.takeLast(ChatOpen.WARM_ROWS))
+                    if (viewModel.chatMessages.value !== messages) return@launch
+                    showMessages(messages, opening = true)
                 }
-                val lastMessage = messages.last()
-                if (lastMessage.role == "assistant" && lastMessage.content is JsonPrimitive) {
-                    val contentStr = lastMessage.content.content
-                    val currentLen = contentStr.length
-                    if (ThinkingPlaceholder.matches(contentStr)) {
-                        lastContentLength = 0
-                        // Grok-style: pin the user message near the top; leave room below for the reply.
-                        pinUserMessageForReply()
-                    } else if (currentLen > lastContentLength) {
-                        lastContentLength = currentLen
-                        if (isShare) {
-                            homeButton.visibility = View.GONE
-                            backcopyButton.visibility = View.VISIBLE
-                            isShare = false
-                        }
-                        // Stream reveal is painted by ChatAdapter; followStreamingEdge keeps it in view.
-                    } else {
-                        lastContentLength = currentLen
-                    }
-                }
+                return@observe
             }
-            else
-            {
-                val wasHidden = !emptyStateContainer.isVisible
-                emptyStateContainer.animate().cancel()
-                emptyStateContainer.scaleX = 1f
-                emptyStateContainer.scaleY = 1f
-                emptyStateContainer.visibility = View.VISIBLE
-                bindEmptyState(viewModel.isRpMode())
-                val landing = pager == null && wasHidden &&
-                    android.os.SystemClock.uptimeMillis() - modeSwitchedAt < MODE_LOAD_WINDOW_MS
-                if (landing && Motion.areAnimationsEnabled(requireContext())) {
-                    // An empty thread arriving after the slide settled fades in instead of popping.
-                    emptyStateContainer.alpha = 0f
-                    emptyStateContainer.animate().alpha(1f).setDuration(220).setInterpolator(Motion.easeOut).start()
-                } else {
-                    emptyStateContainer.alpha = 1f
-                }
-            }
-            if(sharedPreferencesHelper.getScrollersPreference()){
-                chatRecyclerView.post {
-                    val canScrollUp = chatRecyclerView.canScrollVertically(-1)
-                    val canScrollDown = chatRecyclerView.canScrollVertically(1)
-                    scrollToTopButton.setScrollShown(canScrollUp)
-                    scrollToBottomButton.setScrollShown(canScrollDown)
-                }
-            }
-            resetChatButton.isVisible = hasMessages
-            updateMenuRowVisibilities()
-           // pdfChatButton.isVisible = hasMessages
-            //copyChatButton.isVisible = hasMessages
-            buttonsRow2.isVisible = hasMessages
-            view?.findViewById<View>(R.id.exportLabel)?.isVisible = hasMessages
+            showMessages(messages, opening)
         }
 
         var wasAwaitingReply = viewModel.isAwaitingResponse.value == true
@@ -5313,6 +5256,97 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         return true
     }
 
+    /** A saved chat's open waiting on its warm-up; a newer list cancels it. */
+    private var openWarmJob: Job? = null
+    private var shownOpenSerial = -1
+    /** The mode's cached thread is already on screen at its spot; the reload is not an open. */
+    private var cachedThreadShown = false
+
+    /** The transcript on screen. [opening]: a saved chat just landed, shown from its end. */
+    private fun showMessages(messages: List<FlexibleMessage>, opening: Boolean) {
+            refreshEditBanner()
+            chatAdapter.continuingFrom = viewModel.continuationText
+            chatAdapter.setMessages(messages)
+            if (!restoreListSpot() && opening) {
+                // Opened at its end, where the story left off. Straight away, not posted: the
+                // first layout lands there, with no frame at the old spot.
+                layoutManager.scrollToPositionWithOffset(messages.lastIndex, -1000000)
+            }
+            chatRecyclerView.post { updateJumpToBottom() }
+            updateSendButtonChrome()
+            val hasMessages = messages.isNotEmpty()
+            centerWatermarkIcon.isClickable = false
+            if(hasMessages){
+                // Right after a mode swipe the list is the other mode's thread landing, not a
+                // conversation starting: the mark just goes, or it swells on the new page.
+                val justSwitched = android.os.SystemClock.uptimeMillis() - modeSwitchedAt < MODE_LOAD_WINDOW_MS
+                if (!justSwitched && emptyStateContainer.isVisible && emptyStateContainer.alpha > 0f && Motion.areAnimationsEnabled(requireContext())) {
+                    // The mark dissolves into the background as the conversation starts.
+                    emptyStateContainer.animate().cancel()
+                    emptyStateContainer.animate().alpha(0f).scaleX(1.06f).scaleY(1.06f)
+                        .setDuration(420).setInterpolator(Motion.easeOut).withEndAction {
+                            emptyStateContainer.visibility = View.GONE
+                            emptyStateContainer.scaleX = 1f
+                            emptyStateContainer.scaleY = 1f
+                        }.start()
+                } else {
+                    emptyStateContainer.visibility = View.GONE
+                }
+                val lastMessage = messages.last()
+                if (lastMessage.role == "assistant" && lastMessage.content is JsonPrimitive) {
+                    val contentStr = lastMessage.content.content
+                    val currentLen = contentStr.length
+                    if (ThinkingPlaceholder.matches(contentStr)) {
+                        lastContentLength = 0
+                        // Grok-style: pin the user message near the top; leave room below for the reply.
+                        pinUserMessageForReply()
+                    } else if (currentLen > lastContentLength) {
+                        lastContentLength = currentLen
+                        if (isShare) {
+                            homeButton.visibility = View.GONE
+                            backcopyButton.visibility = View.VISIBLE
+                            isShare = false
+                        }
+                        // Stream reveal is painted by ChatAdapter; followStreamingEdge keeps it in view.
+                    } else {
+                        lastContentLength = currentLen
+                    }
+                }
+            }
+            else
+            {
+                val wasHidden = !emptyStateContainer.isVisible
+                emptyStateContainer.animate().cancel()
+                emptyStateContainer.scaleX = 1f
+                emptyStateContainer.scaleY = 1f
+                emptyStateContainer.visibility = View.VISIBLE
+                bindEmptyState(viewModel.isRpMode())
+                val landing = pager == null && wasHidden &&
+                    android.os.SystemClock.uptimeMillis() - modeSwitchedAt < MODE_LOAD_WINDOW_MS
+                if (landing && Motion.areAnimationsEnabled(requireContext())) {
+                    // An empty thread arriving after the slide settled fades in instead of popping.
+                    emptyStateContainer.alpha = 0f
+                    emptyStateContainer.animate().alpha(1f).setDuration(220).setInterpolator(Motion.easeOut).start()
+                } else {
+                    emptyStateContainer.alpha = 1f
+                }
+            }
+            if(sharedPreferencesHelper.getScrollersPreference()){
+                chatRecyclerView.post {
+                    val canScrollUp = chatRecyclerView.canScrollVertically(-1)
+                    val canScrollDown = chatRecyclerView.canScrollVertically(1)
+                    scrollToTopButton.setScrollShown(canScrollUp)
+                    scrollToBottomButton.setScrollShown(canScrollDown)
+                }
+            }
+            resetChatButton.isVisible = hasMessages
+            updateMenuRowVisibilities()
+           // pdfChatButton.isVisible = hasMessages
+            //copyChatButton.isVisible = hasMessages
+            buttonsRow2.isVisible = hasMessages
+            view?.findViewById<View>(R.id.exportLabel)?.isVisible = hasMessages
+    }
+
     /** Each mode's thread as last shown, so swiping back paints it in the same frame. */
     private val modeThreads = HashMap<ChatMode, List<FlexibleMessage>>()
 
@@ -5323,6 +5357,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private fun showCachedThread(mode: ChatMode) {
         val cached = modeThreads[mode] ?: return
         chatAdapter.setMessages(cached)
+        cachedThreadShown = true
         emptyStateContainer.animate().cancel()
         emptyStateContainer.scaleX = 1f
         emptyStateContainer.scaleY = 1f
@@ -5367,19 +5402,20 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     }
 
     /** The thread that just landed is the one we left: put the reader back where they were. */
-    private fun restoreListSpot() {
-        val spot = pendingSpot ?: return
-        if (android.os.SystemClock.uptimeMillis() - modeSwitchedAt > MODE_LOAD_WINDOW_MS) { pendingSpot = null; return }
-        if (spot.sessionId == null || spot.sessionId != viewModel.getCurrentSessionId()) return
+    private fun restoreListSpot(): Boolean {
+        val spot = pendingSpot ?: return false
+        if (android.os.SystemClock.uptimeMillis() - modeSwitchedAt > MODE_LOAD_WINDOW_MS) { pendingSpot = null; return false }
+        if (spot.sessionId == null || spot.sessionId != viewModel.getCurrentSessionId()) return false
         pendingSpot = null
         val last = chatAdapter.itemCount - 1
-        if (last < 0) return
+        if (last < 0) return false
         // Straight away, not posted: the next layout lands on the spot, with no frame elsewhere.
         if (spot.atBottom || spot.position > last) {
             layoutManager.scrollToPositionWithOffset(last, -1000000)
         } else {
             layoutManager.scrollToPositionWithOffset(spot.position, spot.offset)
         }
+        return true
     }
 
     /** When Ask/RP last flipped; the next thread to load belongs to the switch, not to a new chat. */

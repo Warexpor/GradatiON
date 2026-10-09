@@ -9,6 +9,9 @@ import io.github.stardomains3.oxproxion.code.CodeHub
 class MainApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Starts reading the settings file on its own thread now, while the native library
+        // loads; the first screen's read then finds it ready instead of waiting on the disk.
+        getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, MODE_PRIVATE)
         // Fail fast if the native lib is missing; Room open also loads it.
         try {
             System.loadLibrary("sqlcipher")

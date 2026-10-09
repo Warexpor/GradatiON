@@ -53,7 +53,8 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         val swipePhotos = ScenePhoto.fileNamesIn(prefs.getRpSwipeJson(sessionId).orEmpty())
         repository.deleteSession(sessionId)
         val unused = (photos + swipePhotos).distinct().filter {
-            !repository.scenePhotoStillUsed(it) && !prefs.rpSwipeNamesPhoto(it, setOf(sessionId))
+            !repository.scenePhotoStillUsed(it) &&
+                !withContext(Dispatchers.IO) { prefs.rpSwipeNamesPhoto(it, setOf(sessionId)) }
         }
         ScenePhoto.deleteSceneFiles(getApplication(), unused)
         listOf(ChatMode.ASK, ChatMode.RP).forEach { mode ->

@@ -129,10 +129,38 @@ class ChatAdapter(
     private val collapsedStates = mutableMapOf<String, Boolean>()
     /** User bubble tap → show/hide action row (Grok-style). */
     private val userActionsExpanded = mutableSetOf<String>()
-    // The "Baked" Cache for Markdown CharSequences
-    private val renderCache = HashMap<FlexibleMessage, CharSequence>()
+    /**
+     * Parsed replies. Bounded: a long chat scrolled end to end used to keep every reply's
+     * spans (code highlighting included) for as long as it stayed open. The newest stay.
+     */
+    private val renderCache = LruMap<FlexibleMessage, CharSequence>(RENDER_CACHE_ROWS)
     /** Parsed user bubbles, keyed by the exact markdown shown. Scrolling rebinds; it should not re-parse. */
-    private val userRenderCache = HashMap<String, Spanned>()
+    private val userRenderCache = LruMap<String, Spanned>(RENDER_CACHE_ROWS)
+    /** Photos that live only inside a message, decoded once rather than on every rebind. */
+    private val inlinePhotos = object : android.util.LruCache<String, android.graphics.Bitmap>(INLINE_PHOTO_BYTES) {
+        override fun sizeOf(key: String, value: android.graphics.Bitmap) = value.allocationByteCount
+    }
+
+    /** Access-ordered map that drops its least recently used entry past [max]. */
+    private class LruMap<K, V>(private val max: Int) : LinkedHashMap<K, V>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>?) = size > max
+    }
+
+    /**
+     * Parses [tail]'s replies off the main thread, so a chat that just opened binds its last
+     * screens from the cache instead of parsing markdown on the main thread as it lays out.
+     */
+    suspend fun warm(tail: List<FlexibleMessage>) {
+        val todo = tail.filter {
+            it.role == "assistant" && !renderCache.containsKey(it) &&
+                !ThinkingPlaceholder.matches(getMessageText(it.content))
+        }
+        if (todo.isEmpty()) return
+        val done = withContext(Dispatchers.Default) {
+            todo.mapNotNull { m -> try { m to renderContent(m) } catch (e: Exception) { null } }
+        }
+        done.forEach { (m, content) -> renderCache[m] = content }
+    }
 
     private val noCopyFactory = NoCopySpannableFactory.getInstance()
     var isSpeaking = false
@@ -311,6 +339,7 @@ class ChatAdapter(
     fun clearCache() {
         renderCache.clear()
         userRenderCache.clear()
+        inlinePhotos.evictAll()
         collapsedStates.clear()
         resetStreamRender()
         streamRevealBoundHolder = null
@@ -604,6 +633,11 @@ class ChatAdapter(
         }
 
         /** A stored photo scaled to about [maxEdge] pixels across; the full 12 MB bitmap is never built. */
+        /** Rows of parsed text kept; several screens of a long chat either side of where you are. */
+        private const val RENDER_CACHE_ROWS = 120
+        /** Decoded in-message photos kept, by size. */
+        private const val INLINE_PHOTO_BYTES = 24 * 1024 * 1024
+
         private fun decodeSampled(base64: String, maxEdge: Int): android.graphics.Bitmap? {
             val bytes = try {
                 android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
@@ -985,7 +1019,11 @@ class ChatAdapter(
             imageView.visibility = View.VISIBLE
             val maxEdge = itemView.resources.displayMetrics.widthPixels
             scope.launch {
-                val bitmap = withContext(Dispatchers.Default) { decodeSampled(base64, maxEdge) }
+                // The tag is a hash; the length keeps two different photos apart.
+                val key = "$tag#${base64.length}"
+                val bitmap = inlinePhotos.get(key) ?: withContext(Dispatchers.Default) {
+                    decodeSampled(base64, maxEdge)
+                }?.also { inlinePhotos.put(key, it) }
                 if (bitmap != null && imageView.getTag(R.id.userImageView) == tag) {
                     val (w, h) = ChatPhoto.frame(bitmap.width, bitmap.height, maxW, maxH)
                     imageView.layoutParams.width = w

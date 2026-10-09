@@ -26,6 +26,41 @@ class SharedPreferencesHelper(context: Context) {
         TolerantPrefs(appContext.getSharedPreferences(API_KEYS_PREFS_STORE, Context.MODE_PRIVATE))
     val mainPrefs: SharedPreferences =
         TolerantPrefs(appContext.getSharedPreferences(MAIN_PREFS, Context.MODE_PRIVATE))
+
+    /**
+     * Per-chat blobs: every reply version, and the other branch of a fork. [mainPrefs] is read
+     * whole on the main thread before the first screen draws, and written whole on every commit;
+     * these grow with each chat, so each lives in its own file ([ChatBlobs]).
+     */
+    internal val blobs = ChatBlobs(java.io.File(appContext.filesDir, ChatBlobs.DIR))
+
+    init {
+        moveBlobsOutOfMainPrefs()
+    }
+
+    /**
+     * One time per install: blobs already in [mainPrefs] move to [blobs]. The copy lands
+     * before the originals go, and the done mark goes in with that removal, so a kill in
+     * between repeats the move instead of losing anything.
+     */
+    private fun moveBlobsOutOfMainPrefs() {
+        if (blobsMoved) return
+        synchronized(BLOB_LOCK) {
+            if (blobsMoved) return
+            if (mainPrefs.getBoolean(KEY_BLOBS_MOVED, false)) {
+                blobsMoved = true
+                return
+            }
+            val moving = mainPrefs.all.filter { (key, value) -> value is String && isBlobKey(key) }
+            for ((key, value) in moving) {
+                if (!blobs.put(key, value as String)) return
+            }
+            val clean = mainPrefs.edit()
+            moving.keys.forEach { clean.remove(it) }
+            clean.putBoolean(KEY_BLOBS_MOVED, true)
+            if (clean.commit()) blobsMoved = true
+        }
+    }
     private val json = Json { ignoreUnknownKeys = true }
     private val gson = Gson() // Kept temporarily for migration only
 
@@ -206,6 +241,17 @@ class SharedPreferencesHelper(context: Context) {
         private const val KEY_LAN_API_KEY_MIGRATED = "lan_api_key_migrated"
         private const val API_KEYS_PREFS_STORE = "ApiKeysPrefsStore"
         const val MAIN_PREFS = "MainAppPrefs"
+        private const val KEY_BLOBS_MOVED = "blobs_moved_v1"
+        private val BLOB_LOCK = Any()
+        @Volatile private var blobsMoved = false
+
+        /** Reply versions (`rp_swipe_<id>`) and a fork's other branch (`chat_fork_<id>`). */
+        internal fun isBlobKey(key: String): Boolean =
+            key.startsWith(KEY_RP_SWIPE_PREFIX) ||
+                (key.startsWith(KEY_CHAT_FORK_PREFIX) && key.removePrefix(KEY_CHAT_FORK_PREFIX).toLongOrNull() != null)
+
+        /** Tests that wipe the prefs start the move over. */
+        internal fun resetBlobMoveForTest() { blobsMoved = false }
         private const val KEY_MODEL_NEW_CHAT = "modelvalenewchat"
         private const val KEY_CUSTOM_MODELS = "custom_models"
         private const val KEY_DEFAULT_MODELS_SEEDED = "default_models_seeded"
@@ -771,10 +817,11 @@ class SharedPreferencesHelper(context: Context) {
     /** Stashed alternate message tree for one-chat forks (JSON list of FlexibleMessage). */
     fun saveChatFork(sessionId: Long, forkIndex: Int, anchorIndex: Int, messagesJson: String) {
         // commit: the other branch of this chat is gone if the process dies before apply() flushes.
+        // The branch first: an index with no branch reads as no fork, the other way round would not.
+        blobs.put("$KEY_CHAT_FORK_PREFIX$sessionId", messagesJson)
         mainPrefs.edit(commit = true) {
             putInt("$KEY_CHAT_FORK_INDEX_PREFIX$sessionId", forkIndex)
             putInt("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId", anchorIndex)
-            putString("$KEY_CHAT_FORK_PREFIX$sessionId", messagesJson)
         }
     }
 
@@ -785,13 +832,13 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.getInt("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId", -1)
 
     fun getChatForkMessagesJson(sessionId: Long): String? =
-        mainPrefs.getString("$KEY_CHAT_FORK_PREFIX$sessionId", null)
+        blobs.get("$KEY_CHAT_FORK_PREFIX$sessionId")
 
     fun clearChatFork(sessionId: Long) {
+        blobs.remove("$KEY_CHAT_FORK_PREFIX$sessionId")
         mainPrefs.edit(commit = true) {
             remove("$KEY_CHAT_FORK_INDEX_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId")
-            remove("$KEY_CHAT_FORK_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId")
         }
@@ -832,13 +879,13 @@ class SharedPreferencesHelper(context: Context) {
      */
     fun clearSessionPrefs(sessionId: Long) {
         val pins = getPinnedSessionIds()
+        blobs.remove("$KEY_CHAT_FORK_PREFIX$sessionId")
+        blobs.remove("$KEY_RP_SWIPE_PREFIX$sessionId")
         mainPrefs.edit(commit = true) {
             remove("$KEY_CHAT_FORK_INDEX_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId")
-            remove("$KEY_CHAT_FORK_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId")
-            remove("$KEY_RP_SWIPE_PREFIX$sessionId")
             remove("rp_facts_$sessionId")
             if (sessionId in pins) {
                 putStringSet(
@@ -860,14 +907,17 @@ class SharedPreferencesHelper(context: Context) {
         var drafts = getAskComposerDrafts()
         var draftsTouched = false
         val editor = mainPrefs.edit()
+        // Blobs land first. A kill before the notes commit leaves a branch with no index,
+        // which reads as no fork.
+        val blobWrites = LinkedHashMap<String, String?>()
         for (entry in entries) {
             val id = entry.id
             editor.remove("$KEY_CHAT_FORK_INDEX_PREFIX$id")
             editor.remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$id")
-            editor.remove("$KEY_CHAT_FORK_PREFIX$id")
+            blobWrites["$KEY_CHAT_FORK_PREFIX$id"] = null
             editor.remove("$KEY_CHAT_FORK_EDITING_PREFIX$id")
             editor.remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$id")
-            editor.remove("$KEY_RP_SWIPE_PREFIX$id")
+            blobWrites["$KEY_RP_SWIPE_PREFIX$id"] = null
             editor.remove("rp_facts_$id")
             if (!entry.facts.isNullOrBlank()) editor.putString("rp_facts_$id", entry.facts)
             if (entry.pinned) pins += id else pins -= id
@@ -876,7 +926,7 @@ class SharedPreferencesHelper(context: Context) {
             if (entry.forkIndex != null && entry.forkIndex >= 0 && !entry.forkMessages.isNullOrBlank()) {
                 editor.putInt("$KEY_CHAT_FORK_INDEX_PREFIX$id", entry.forkIndex)
                 editor.putInt("$KEY_CHAT_FORK_ANCHOR_PREFIX$id", entry.forkAnchor ?: -1)
-                editor.putString("$KEY_CHAT_FORK_PREFIX$id", entry.forkMessages)
+                blobWrites["$KEY_CHAT_FORK_PREFIX$id"] = entry.forkMessages
             }
             if (entry.forkEditing == true) {
                 editor.putBoolean("$KEY_CHAT_FORK_EDITING_PREFIX$id", true)
@@ -886,7 +936,7 @@ class SharedPreferencesHelper(context: Context) {
                 )
             }
             if (!entry.swipeJson.isNullOrBlank()) {
-                editor.putString("$KEY_RP_SWIPE_PREFIX$id", entry.swipeJson)
+                blobWrites["$KEY_RP_SWIPE_PREFIX$id"] = entry.swipeJson
             }
             // A reused id must not keep the previous chat's unsent line. A backup that
             // carries one puts it back in the same commit.
@@ -904,6 +954,9 @@ class SharedPreferencesHelper(context: Context) {
             torn?.let { editor.putString(archive, it) }
             if (drafts.isEmpty()) editor.remove(KEY_ASK_COMPOSER_DRAFTS)
             else editor.putString(KEY_ASK_COMPOSER_DRAFTS, ComposerDrafts.encode(drafts))
+        }
+        for ((key, value) in blobWrites) {
+            if (value == null) blobs.remove(key) else if (!blobs.put(key, value)) return false
         }
         return editor.commit()
     }
@@ -1881,14 +1934,14 @@ class SharedPreferencesHelper(context: Context) {
     }
 
     fun getRpSwipeJson(sessionId: Long): String? =
-        mainPrefs.getString("$KEY_RP_SWIPE_PREFIX$sessionId", null)
+        blobs.get("$KEY_RP_SWIPE_PREFIX$sessionId")
 
     fun saveRpSwipeJson(sessionId: Long, jsonText: String) {
-        mainPrefs.edit(commit = true) { putString("$KEY_RP_SWIPE_PREFIX$sessionId", jsonText) }
+        blobs.put("$KEY_RP_SWIPE_PREFIX$sessionId", jsonText)
     }
 
     fun clearRpSwipeJson(sessionId: Long) {
-        mainPrefs.edit(commit = true) { remove("$KEY_RP_SWIPE_PREFIX$sessionId") }
+        blobs.remove("$KEY_RP_SWIPE_PREFIX$sessionId")
     }
 
     /**
@@ -1897,9 +1950,9 @@ class SharedPreferencesHelper(context: Context) {
      */
     fun rpSwipeNamesPhoto(name: String, exceptSessions: Set<Long> = emptySet()): Boolean {
         val skip = exceptSessions.mapTo(HashSet()) { "$KEY_RP_SWIPE_PREFIX$it" }
-        return mainPrefs.all.any { (key, value) ->
+        return blobs.keys().any { key ->
             key.startsWith(KEY_RP_SWIPE_PREFIX) && key !in skip &&
-                value is String && name in ScenePhoto.fileNamesIn(value)
+                name in ScenePhoto.fileNamesIn(blobs.get(key).orEmpty())
         }
     }
 

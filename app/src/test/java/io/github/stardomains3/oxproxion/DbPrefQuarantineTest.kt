@@ -186,7 +186,7 @@ class DbPrefQuarantineTest {
             helper.saveRpFacts(4L, "note")
             helper.setSessionPinned(4L, true)
             helper.setSessionPinned(9L, true)
-            helper.mainPrefs.edit().putString("chat_fork_4", "[]").commit()
+            helper.saveChatFork(4L, 1, 1, "[]")
 
             helper.clearSessionPrefs(4L)
 
@@ -197,6 +197,31 @@ class DbPrefQuarantineTest {
         } finally {
             helper.mainPrefs.edit().clear().commit()
         }
+    }
+
+    @Test
+    fun oldBlobsMoveOutOfMainPrefs() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val main = app.getSharedPreferences(SharedPreferencesHelper.MAIN_PREFS, Context.MODE_PRIVATE)
+        main.edit().clear()
+            .putString("rp_swipe_7", """{"alts":["a"]}""")
+            .putString("chat_fork_7", "[]")
+            .putInt("chat_fork_idx_7", 2)
+            .putString("rp_facts_7", "f")
+            .commit()
+        SharedPreferencesHelper.resetBlobMoveForTest()
+        val helper = SharedPreferencesHelper(app)
+        assertEquals("""{"alts":["a"]}""", helper.getRpSwipeJson(7L))
+        assertEquals("[]", helper.getChatForkMessagesJson(7L))
+        assertEquals(2, helper.getChatForkIndex(7L))
+        assertEquals("f", helper.getRpFacts(7L))
+        assertFalse("swipe left in the main file", main.contains("rp_swipe_7"))
+        assertFalse("fork left in the main file", main.contains("chat_fork_7"))
+        assertTrue(main.contains("chat_fork_idx_7"))
+        // A second helper does not move anything again.
+        helper.saveRpSwipeJson(7L, "{}")
+        SharedPreferencesHelper(app)
+        assertEquals("{}", helper.getRpSwipeJson(7L))
     }
 
     private fun prefs() =

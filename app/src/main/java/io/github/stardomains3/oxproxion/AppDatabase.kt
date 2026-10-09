@@ -202,7 +202,10 @@ abstract class AppDatabase : RoomDatabase() {
             vault: File,
             stamp: Long
         ): Boolean {
-            if (DbPrefQuarantine.quarantine(prefs.mainPrefs, context.filesDir, vault, stamp)) return true
+            // Reply versions and fork branches are keyed by row id too, in their own files.
+            if (DbPrefQuarantine.quarantine(prefs.mainPrefs, context.filesDir, vault, stamp) &&
+                prefs.blobs.setAside(File(vault, "aside-$stamp-${System.nanoTime()}/${ChatBlobs.DIR}"))
+            ) return true
             Log.e(TAG, "Row-scoped preferences could not be set aside")
             return false
         }

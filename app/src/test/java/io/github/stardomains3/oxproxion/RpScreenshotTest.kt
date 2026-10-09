@@ -314,6 +314,7 @@ class RpScreenshotTest : ScreenshotHarness() {
             .findViewHolderForAdapterPosition(0)!!.itemView.performClick(); settle()
         org.junit.Assert.assertEquals(View.GONE, home.visibility)
         org.junit.Assert.assertTrue("thread scrolls", thread.canScrollVertically(-1) || thread.canScrollVertically(1))
+        org.junit.Assert.assertFalse("an opened chat starts at its end", thread.canScrollVertically(1))
         org.junit.Assert.assertNotEquals("scrollers shown with the setting off", View.VISIBLE,
             a.findViewById<View>(R.id.scrollToTopButton).visibility)
         org.junit.Assert.assertNotEquals("scrollers shown with the setting off", View.VISIBLE, down.visibility)

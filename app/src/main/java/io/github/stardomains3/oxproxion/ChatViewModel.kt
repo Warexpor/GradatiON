@@ -972,6 +972,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _sessionReady.value = true
     }
 
+    /**
+     * Bumped each time a saved chat, or a branch, replaces the transcript. The screen opens that
+     * thread at its end, where the story left off, rather than wherever the last one was.
+     */
+    var threadOpenSerial = 0
+        private set
+
     /** True once, when the open chat just gained its first saved id. */
     fun consumeOpenSessionPromoted(): Boolean {
         val was = openSessionPromoted
@@ -1390,20 +1397,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             assignOpenSession(sessionId)
             draftRpFacts = null
-            val parsedMessages = messages.map {
-                val parsed = try {
-                    json.parseToJsonElement(it.content)
-                } catch (e: Exception) {
-                    JsonPrimitive(it.content)
+            // Off the main thread: a long chat with photos is megabytes of JSON, and parsing it
+            // on Main stalled the open and the launch that restores it.
+            val parsedMessages = withContext(Dispatchers.Default) {
+                messages.map {
+                    val parsed = try {
+                        json.parseToJsonElement(it.content)
+                    } catch (e: Exception) {
+                        JsonPrimitive(it.content)
+                    }
+                    val kept = MessageContent.unwrap(parsed)
+                    FlexibleMessage(
+                        role = it.role,
+                        content = kept.body,
+                        imageUri = kept.fileUri
+                    )
                 }
-                val kept = MessageContent.unwrap(parsed)
-                FlexibleMessage(
-                    role = it.role,
-                    content = kept.body,
-                    imageUri = kept.fileUri
-                )
             }
             val healed = withContext(Dispatchers.IO) { healPhotoLinks(parsedMessages) }
+            threadOpenSerial++
             _chatMessages.value = healed
 
             session?.let {
@@ -1569,7 +1581,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /** A saved message, or another chat's reply versions, still names [name]. */
     private suspend fun scenePhotoKept(name: String, openSession: Long? = currentSessionId): Boolean =
         repository.scenePhotoStillUsed(name) ||
-            sharedPreferencesHelper.rpSwipeNamesPhoto(name, setOfNotNull(openSession))
+            withContext(Dispatchers.IO) { sharedPreferencesHelper.rpSwipeNamesPhoto(name, setOfNotNull(openSession)) }
 
     /** Bumped when the open chat changes, so a photo read for one edit cannot land on the next. */
     fun openChatEpoch(): Long = sessionEpoch
@@ -2887,6 +2899,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val mark = str(R.string.rp_branch_title, "")
             clearOpenTranscript(clearDraft = true)
             draftRpFacts = facts
+            threadOpenSerial++
             _chatMessages.value = kept
             rpSwipeState = RpSwipeState(earlier = versions)
             syncRpSwipeAfterTranscriptChange()
