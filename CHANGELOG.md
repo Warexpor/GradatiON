@@ -9,7 +9,7 @@
 - Roleplay branches. Editing an earlier line of yours offers **Branch**: the edit carries on in a new chat and the original keeps its whole story. A reply's ⋮ menu has **Branch from here**. A branch takes the reply versions and Facts along.
 
 ### Changed
-- Roleplay Continue is a new version of the reply instead of a rewrite of it. Swipe back undoes a bad continuation, Continue again from there tries another, and the reply's other versions are kept. They used to be thrown away by any Continue.
+- Roleplay Continue adds its own bubble instead of growing the last reply. Each Continue regenerates, swipes and deletes on its own, so a regenerate no longer wipes every Continue before it. The model still reads the pieces as one reply.
 - Roleplay Delete removes only that message, and the story after it stays. "Delete this and everything after" is still offered.
 - Roleplay history is fitted to the model's context window, not only the message count. Thirty long scenes no longer overflow a model that fits thirty short lines. The window size comes from OpenRouter's model list; unknown models assume 32k tokens.
 - The reply-format sample in the roleplay prompt is a neutral shape instead of a written-out sarcastic woman, which was nudging every character toward that voice.

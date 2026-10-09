@@ -404,7 +404,7 @@ class RpScreenshotTest : ScreenshotHarness() {
         a.findViewById<View>(R.id.tabChat).performClick(); settle()
     }
 
-    /** RP with the demo model: a character reply, then Continue on an empty composer takes the next beat. */
+    /** RP with the demo model: a character reply, then Continue on an empty composer adds the next beat as its own bubble. */
     @Test fun rpConversationContinueDark() = withChat { a, _ ->
         seedRp()
         val vm = ViewModelProvider(a)[ChatViewModel::class.java]
@@ -428,27 +428,45 @@ class RpScreenshotTest : ScreenshotHarness() {
         val before = beforeMsgs.size
         val beforeText = vm.getMessageText(beforeMsgs.last().content)
         send.performClick()
-        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.getMessageText(vm.chatMessages.value.orEmpty().last().content).length > beforeText.length }
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().size == before + 1 }
         idle()
         val msgs = vm.chatMessages.value.orEmpty()
-        // Continue is a hidden turn: no bubble for the prompt, and no new reply bubble either.
-        // The words land at the end of the last reply.
-        org.junit.Assert.assertEquals(before, msgs.size)
-        org.junit.Assert.assertEquals("assistant", msgs.last().role)
-        val afterText = vm.getMessageText(msgs.last().content)
-        org.junit.Assert.assertTrue("kept what was there: $afterText", afterText.startsWith(beforeText))
-        org.junit.Assert.assertTrue(afterText.length > beforeText.length)
+        // Continue is a hidden turn: no bubble for the prompt. The new words are a bubble of
+        // their own after the reply, which stays as it was.
+        org.junit.Assert.assertEquals(listOf("assistant", "assistant"), msgs.takeLast(2).map { it.role })
+        org.junit.Assert.assertEquals("kept what was there", beforeText, vm.getMessageText(msgs[before - 1].content))
         org.junit.Assert.assertTrue(msgs.none { vm.getMessageText(it.content) == a.getString(R.string.rp_continue_prompt) })
-        org.junit.Assert.assertNull("nothing left to extend once the turn is over", vm.continuationText)
         snap(root(a), "rp_conversation_dark")
-        // Continue made a version: the reply before it is a swipe back (the undo), and back again.
         val replyAt = msgs.lastIndex
         fun replyText() = vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content)
-        org.junit.Assert.assertEquals(ChatViewModel.RpSwipeNav(2, 2, canPrev = true, canNext = true), vm.rpSwipeNav.value)
+        val firstPiece = replyText()
+        // Regenerate redoes only the Continue's bubble: the reply before it is untouched.
+        vm.swipeRpNext()
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.rpSwipeNav.value?.total == 2 }
+        idle()
+        org.junit.Assert.assertEquals(before + 1, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals("regen leaves the reply before alone", beforeText,
+            vm.getMessageText(vm.chatMessages.value.orEmpty()[before - 1].content))
         vm.swipeRpPrev(); idle()
-        org.junit.Assert.assertEquals("swipe back undoes the Continue", beforeText, replyText())
+        org.junit.Assert.assertEquals(firstPiece, replyText())
         vm.swipeRpNext(); idle()
+        val afterText = replyText()
+        // Stop a second Continue mid-stream: its bubble goes, the pieces before it and their versions stay.
+        DemoModel.pace = 1f
+        try {
+            send.performClick()
+            waitFor(30_000) {
+                vm.chatMessages.value.orEmpty().getOrNull(before + 1)
+                    ?.let { vm.getMessageText(it.content).let { t -> t.isNotBlank() && !ThinkingPlaceholder.matches(t) } } == true
+            }
+            org.junit.Assert.assertEquals("still streaming", true, vm.isAwaitingResponse.value)
+            vm.cancelCurrentRequest(); idle()
+        } finally {
+            DemoModel.pace = 0.02f
+        }
+        org.junit.Assert.assertEquals(before + 1, vm.chatMessages.value.orEmpty().size)
         org.junit.Assert.assertEquals(afterText, replyText())
+        org.junit.Assert.assertEquals("versions come back with the swipe bar", 2, vm.rpSwipeNav.value?.total)
         // A third version, then a new turn: the reply keeps all three, a swipe away.
         vm.swipeRpNext()
         waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.rpSwipeNav.value?.total == 3 }

@@ -10,8 +10,8 @@ object RpPromptEngine {
     const val MEMORY_MAX_CHARS = 4_000
 
     /**
-     * Instruction for a "continue" beat. The reply is appended to your last message in the same
-     * bubble, so it has to start where that message ends.
+     * Instruction for a "continue" beat. The reply is its own bubble, but the model reads it
+     * joined onto the last one, so it has to start where that message ends.
      */
     const val CONTINUE_DIRECTION =
         "The user tapped Continue. Carry on your last message seamlessly from exactly where it ends: " +
@@ -45,13 +45,9 @@ object RpPromptEngine {
         "(A photo was shown with this message. It is no longer attached.)"
 
     /**
-     * The hidden user line for Continue. Same words as `rp_continue_prompt`: the transcript
-     * must not treat it as something the user said.
+     * The hidden user line for Continue, and for redoing a reply that follows the character's
+     * own line: the transcript must not treat it as something the user said.
      */
-    /** Hidden turn for a reply that follows the character's own line, with no user line between. */
-    const val NEXT_BEAT_USER_TURN =
-        "(No new line from the user. Take the scene on from your last message.)"
-
     const val CONTINUE_USER_TURN =
         "Continue your last message from exactly where it stopped. Write only what comes next."
 

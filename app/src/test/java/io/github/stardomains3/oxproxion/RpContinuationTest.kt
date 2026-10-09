@@ -61,19 +61,9 @@ class RpContinuationTest {
         assertEquals("彼女は待つ。", RpContinuation.join("彼女は待つ", "。"))
     }
 
-    @Test fun continueKeepsThePictureAlreadyOnTheReply() {
-        val piece = FlexibleMessage(role = "assistant", content = JsonPrimitive("She turns."))
-        val kept = RpContinuation.keepPicture("content://scene/1", piece)
-        assertEquals("content://scene/1", kept.imageUri)
-        assertEquals("She turns.", (kept.content as JsonPrimitive).content)
-        val fresh = piece.copy(imageUri = "content://scene/2")
-        assertEquals("content://scene/2", RpContinuation.keepPicture("content://scene/1", fresh).imageUri)
-        assertEquals(null, RpContinuation.keepPicture("data:image/jpeg;base64,qq", piece).imageUri)
-    }
-
-    @Test fun continueKeepsTheJpegStoredOnTheReply() {
+    @Test fun continueBubblesReachTheModelAsOneReply() {
         val jpeg = "data:image/jpeg;base64,qq"
-        val prior = buildJsonArray {
+        val pictured = buildJsonArray {
             add(buildJsonObject {
                 put("type", "text")
                 put("text", "She holds it up.")
@@ -83,14 +73,26 @@ class RpContinuationTest {
                 put("image_url", buildJsonObject { put("url", jpeg) })
             })
         }
-        val piece = FlexibleMessage(role = "assistant", content = JsonPrimitive("She turns."))
-        val kept = RpContinuation.keepPicture("content://scene/1", piece, prior)
-        assertEquals("content://scene/1", kept.imageUri)
-        assertEquals("She turns.", MessageContent.text(kept.content))
-        assertEquals(jpeg, MessageContent.imageUrl(kept.content))
-        val wire = kept.toApiMessage()
-        assertFalse(MessageContent.hasImage(wire.content))
-        assertFalse(wire.content.toString().contains("qq"))
+        val wire = listOf(
+            FlexibleMessage(role = "system", content = JsonPrimitive("card")),
+            FlexibleMessage(role = "user", content = JsonPrimitive("Show me.")),
+            FlexibleMessage(role = "assistant", content = pictured, imageUri = "content://scene/1"),
+            FlexibleMessage(role = "assistant", content = JsonPrimitive("Then she turns")),
+            FlexibleMessage(role = "assistant", content = JsonPrimitive("and leaves.")),
+            FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.CONTINUE_USER_TURN)),
+        ).toApiMessages()
+        assertEquals(listOf("system", "user", "assistant", "user"), wire.map { it.role })
+        assertEquals(
+            "She holds it up.\n\nThen she turns and leaves.",
+            (wire[2].content as JsonPrimitive).content,
+        )
+        assertFalse(wire.toString().contains("qq"))
+        // A tool call is never folded into a reply.
+        val tool = FlexibleMessage(role = "assistant", content = JsonPrimitive(""), toolCalls = emptyList())
+        val kept = RpContinuation.joinBlocks(
+            listOf(FlexibleMessage(role = "assistant", content = JsonPrimitive("a")), tool)
+        )
+        assertEquals(2, kept.size)
     }
 
     @Test fun swipeKeepsThePictureStoredOnTheReply() {
@@ -468,12 +470,5 @@ class RpContinuationTest {
         val d = RpPromptEngine.CONTINUE_DIRECTION
         assert("exactly where it ends" in d)
         assert("mid-sentence" in d)
-    }
-
-    @Test
-    fun aContinueThatDidNotGrowAddsNoVersion() {
-        assertFalse(RpContinuation.grew("She waits.", "She waits."))
-        assertFalse(RpContinuation.grew("She waits.", ""))
-        assertTrue(RpContinuation.grew("She waits.", "She waits.\n\nHe nods."))
     }
 }

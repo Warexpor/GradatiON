@@ -176,27 +176,6 @@ object RpSwipeRules {
     }
 
     /**
-     * A Continue grew the reply from [base] to [grown]. The grown text becomes its own version
-     * at the end, with the same picture, and [base] stays a swipe back: that is the undo, and
-     * Continue from there tries the continuation again. Versions the reply already had stay.
-     */
-    fun addContinued(
-        alts: List<String>,
-        pictureUris: List<String>,
-        selectedIndex: Int,
-        base: String,
-        basePicture: String,
-        grown: String,
-    ): Triple<List<String>, List<String>, Int> {
-        val (seeded, pictures, _) = stashAlt(alts, pictureUris, selectedIndex, base, basePicture)
-        val at = seeded.indexOf(grown)
-        if (at >= 0) return Triple(seeded, pictures, at)
-        val next = seeded + grown
-        val nextPictures = if (picturesTracked(pictures, seeded.size)) pictures + basePicture else pictures
-        return Triple(next, nextPictures, next.lastIndex)
-    }
-
-    /**
      * One message at [removed] left the transcript and the rest moved up a row. Earlier versions
      * follow their reply; the removed reply's own versions go.
      */

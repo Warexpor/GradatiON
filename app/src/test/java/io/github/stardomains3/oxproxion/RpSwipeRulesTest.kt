@@ -181,35 +181,6 @@ class RpSwipeRulesTest {
     }
 
     @Test
-    fun continueAddsAVersionAndKeepsTheOthers() {
-        // Three versions, the second picked, then Continue: all three stay, the grown one is new.
-        val (alts, pics, index) = RpSwipeRules.addContinued(
-            listOf("a", "b", "c"), emptyList(), 1, "b", "", "b more",
-        )
-        assertEquals(listOf("a", "b", "c", "b more"), alts)
-        assertEquals(3, index)
-        assertTrue(pics.isEmpty())
-        // A single reply becomes two: the base is the swipe back.
-        val (seeded, seededPics, at) = RpSwipeRules.addContinued(
-            emptyList(), emptyList(), 0, "base", "file:///p.jpg", "base more",
-        )
-        assertEquals(listOf("base", "base more"), seeded)
-        assertEquals(listOf("file:///p.jpg", "file:///p.jpg"), seededPics)
-        assertEquals(1, at)
-        // Tracked pictures: the grown version keeps the base's.
-        val (_, tracked, _) = RpSwipeRules.addContinued(
-            listOf("x", "y"), listOf("", "file:///y.jpg"), 1, "y", "file:///y.jpg", "y more",
-        )
-        assertEquals(listOf("", "file:///y.jpg", "file:///y.jpg"), tracked)
-        // The same grown text twice selects it instead of adding it again.
-        val (again, _, againAt) = RpSwipeRules.addContinued(
-            listOf("base", "base more"), emptyList(), 0, "base", "", "base more",
-        )
-        assertEquals(listOf("base", "base more"), again)
-        assertEquals(1, againAt)
-    }
-
-    @Test
     fun removingOneMessageMovesLaterVersionsUp() {
         val v = RpVersions(listOf("p", "q"), 0)
         val w = RpVersions(listOf("r", "s"), 1)

@@ -61,7 +61,6 @@ import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readLine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -505,11 +504,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /** Index of the in-flight assistant placeholder / streaming bubble in `_chatMessages`. */
     private var streamingAssistantIndex: Int = -1
     /**
-     * Continue (Roleplay): the text of the reply being extended in place, else null. While set,
-     * what the model streams is sewn onto it ([RpContinuation.join]) and lands in the same bubble.
+     * Where Stop cuts an unfinished RP reply: the bubble this send added. A Continue adds its own
+     * bubble after the reply it carries on, and Stop must not take that reply with it.
      */
-    private var continuationBase: String? = null
-    val continuationText: String? get() = continuationBase
+    private var rpDiscardFrom = -1
+    /** The slot a regenerate took its reply from, so a failed one puts it back there. */
+    private var rpRegenSlot = -1
     /**
      * True after an RP (non-regen) send has added its thinking/stream bubble.
      * Used so Stop discards that partial without wiping a finished prior reply during prep.
@@ -554,85 +554,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun putAssistantMessage(list: MutableList<FlexibleMessage>, thinkingMessage: FlexibleMessage?, message: FlexibleMessage) {
-        val merged = continuationBase?.let { mergeContinuation(it, message) } ?: message
         val index = resolveAssistantSlot(list, thinkingMessage)
-        val newMessage = if (index != -1 && continuationBase != null) {
-            RpContinuation.keepPicture(list[index].imageUri, merged, list[index].content)
-        } else {
-            merged
-        }
         if (index != -1) {
-            list[index] = newMessage
+            list[index] = message
             streamingAssistantIndex = index
         } else {
-            list.add(newMessage)
+            list.add(message)
             streamingAssistantIndex = list.lastIndex
         }
-        noteRpSwipePicture(newMessage)
+        noteRpSwipePicture(message)
     }
 
     /**
-     * A streamed piece of a Continue, as the whole reply: the old text plus the new. A failure or
-     * an empty answer leaves the reply as it was (and says so in a toast) instead of writing an
-     * error bubble into the middle of it.
+     * The newest reply's versions stop being the swipe bar's: a new turn, or a Continue's new
+     * bubble, starts after it. They stay on that reply as earlier versions.
      */
-    private fun mergeContinuation(base: String, piece: FlexibleMessage): FlexibleMessage {
-        if (piece.role != "assistant" || piece.toolCalls != null) return piece
-        val text = (piece.content as? JsonPrimitive)?.contentOrNull ?: return piece
-        if (text.startsWith("**Error:**") || text == str(R.string.error_no_response)) {
-            _toastUiEvent.postValue(Event(text.removePrefix("**Error:**").trim().trimStart('-').trim().ifBlank { text }))
-            return piece.copy(content = JsonPrimitive(base))
-        }
-        if (text.isBlank()) return piece.copy(content = JsonPrimitive(base))
-        // Swipe alts stay until the turn ends: clearing here on the first chunk left them gone
-        // when a later error restored the base. Success / Stop clear them in finishContinuation.
-        return piece.copy(content = JsonPrimitive(RpContinuation.join(base, text)))
-    }
-
-    /**
-     * Continue is over. When the bubble grew, the grown text is a new version and [base] stays
-     * a swipe back, with every version the reply already had. A failed Continue that restored
-     * [base] changes nothing. Call on the main thread (LiveData).
-     */
-    private fun finishContinuation(base: String) {
-        val messages = _chatMessages.value.orEmpty()
-        val last = messages.lastOrNull()?.takeIf { it.role == "assistant" && !isAssistantPlaceholder(it) }
-        val text = last?.let { getMessageText(it.content) }.orEmpty()
-        if (last == null || !RpContinuation.grew(base, text)) return
-        val swipeable = isRpMode() && RpSwipeRules.isSwipeableMessages(
-            messages,
-            isUser = { it.role == "user" },
-            isAssistant = { it.role == "assistant" && !isAssistantPlaceholder(it) }
-        )
-        // The greeting has no versions; nothing to keep.
-        if (!swipeable || isNonSwipeableRpAssistantText(base)) {
-            clearRpSwipeAlts()
-            return
-        }
-        // Resolved first: settling a picture can remap the versions' links.
-        val picture = durableSwipeUri(last)
-        val (alts, pictures, index) = RpSwipeRules.addContinued(
-            rpSwipeState.alts,
-            rpSwipeState.pictureUris,
-            rpSwipeState.index,
-            base,
-            picture,
-            text,
-        )
-        rpSwipeState = rpSwipeState.copy(alts = alts, index = index, pictureUris = pictures)
-        persistRpSwipeState()
-        updateRpSwipeNav()
-    }
-
-    /**
-     * The newest reply's versions stop being the swipe bar's. With [archive] (a new turn) they
-     * stay on that reply as earlier versions; a Continue changed its text, so they go.
-     */
-    private fun clearRpSwipeAlts(archive: Boolean = false) {
+    private fun archiveRpSwipeAlts() {
         if (rpSwipeState.alts.isEmpty() && rpSwipeState.pictureUris.isEmpty()) return
         val messages = _chatMessages.value.orEmpty()
         val position = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
-        val earlier = if (archive && position >= 0) {
+        val earlier = if (position >= 0) {
             RpSwipeRules.archive(rpSwipeState, position, getMessageText(messages[position].content))
         } else {
             rpSwipeState.earlier
@@ -1693,7 +1634,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             rpSwipeRestoreToken++
         } else if (restoreSwipeAlt && discardPartial) {
             // Normal RP send Stop mid-stream: drop the partial so it isn't autosaved as canon.
-            discardIncompleteRpAssistantAfterLastUser()
+            discardIncompleteRpAssistant()
             rpSwipeRestoreToken++
         } else {
             rpSwipeRestoreToken++
@@ -1716,13 +1657,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         while (messages.isNotEmpty() && isAssistantPlaceholder(messages.last())) {
             messages.removeAt(messages.lastIndex)
         }
+        // A Continue's bubble sits right after the reply it carried on: the slot says which one
+        // the regenerate took, so the reply before it is not the one overwritten.
+        val slot = rpRegenSlot.also { rpRegenSlot = -1 }
         val lastUserIndex = messages.indexOfLast { it.role == "user" }
         if (lastUserIndex < 0) return
         val alt = rpSwipeState.alts.getOrNull(rpSwipeState.index)
             ?: rpRegenRestoreFallback
             ?: return
         rpRegenRestoreFallback = null
-        val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val lastAssistantIndex = if (slot > lastUserIndex && slot <= messages.size) {
+            slot.takeIf { it < messages.size && messages[it].role == "assistant" } ?: -1
+        } else {
+            messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        }
         val picture = RpSwipeRules.pictureForAlt(
             rpSwipeState.pictureUris,
             rpSwipeState.alts.size,
@@ -1750,13 +1698,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         autoSaveChat()
     }
 
-    /** Drop a partial/thinking assistant after the last user turn (Stop mid-stream on a normal send). */
-    private fun discardIncompleteRpAssistantAfterLastUser() {
+    /**
+     * Drop the partial/thinking bubble this send added (Stop mid-stream on a normal send or a
+     * Continue). Replies before it stay, and the one a Continue carried on gets its versions back.
+     */
+    private fun discardIncompleteRpAssistant() {
+        val from = rpDiscardFrom.also { rpDiscardFrom = -1 }
         val messages = _chatMessages.value?.toMutableList() ?: return
         val lastUserIndex = messages.indexOfLast { it.role == "user" }
-        if (lastUserIndex < 0) return
+        val start = if (from in messages.indices) from else lastUserIndex + 1
+        if (start <= 0 && lastUserIndex < 0) return
         var changed = false
-        while (messages.lastIndex > lastUserIndex) {
+        while (messages.lastIndex >= start) {
             val last = messages.last()
             if (last.role != "assistant") break
             messages.removeAt(messages.lastIndex)
@@ -1765,6 +1718,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (!changed) return
         streamingAssistantIndex = -1
         _chatMessages.value = messages
+        // A Continue's stop leaves the reply it carried on as the newest one again.
+        if (messages.lastOrNull()?.role == "assistant") syncRpSwipeAfterTranscriptChange()
     }
     private var toolCallsHandledForTurn = false
     private var toolRecursionDepth = 0
@@ -1772,8 +1727,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         userContent: JsonElement,
         systemMessage: String? = null,
         clearRpSwipeOnStart: Boolean = false,
-        /** Roleplay's Continue: [userContent] is a hidden prompt, and the reply grows the last bubble. */
-        continueInPlace: Boolean = false,
+        /** Roleplay's Continue: [userContent] is a hidden prompt, and the reply is a new bubble after the last one. */
+        continueBeat: Boolean = false,
         /**
          * The staged file at the moment send was asked for. Roleplay clears [pendingUserImageUri]
          * before this runs; [useCapturedImageUri] keeps that file on the message anyway.
@@ -1820,7 +1775,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // Only wipe alts once the send is known to proceed (after early returns above).
         if (clearRpSwipeOnStart && isRpMode()) {
             pendingRpSwipeAppend = false
-            clearRpSwipeAlts(archive = true)
+            archiveRpSwipeAlts()
         }
 
         val thinkingMessage = THINKING_MESSAGE
@@ -1839,36 +1794,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             messagesForApiRequest.addAll(history)
         }
 
-        // Continue: the model sees the prompt, the transcript doesn't. When the thread ends on a
-        // reply the new words go into it; when it ends on the user's turn there is nothing to
-        // extend, so the character simply answers that turn (no prompt needed).
+        // Continue: the model sees the prompt, the transcript doesn't. The new words are their
+        // own bubble after the last reply, so a regenerate redoes only them. When the thread ends
+        // on the user's turn there is nothing to carry on: the character answers that turn.
         val history = _chatMessages.value.orEmpty()
-        val lastReply = history.lastOrNull()?.takeIf { it.role == "assistant" && !isAssistantPlaceholder(it) }
-        val inPlace = continueInPlace && lastReply != null
+        val endsOnReply = history.lastOrNull()?.let { it.role == "assistant" && !isAssistantPlaceholder(it) } == true
         // The transcript keeps a bare photo. toApiMessage adds the scene line on the wire,
         // including when this picture comes back on a later turn or a rewrite.
-        if (!continueInPlace || inPlace) {
+        if (!continueBeat || endsOnReply) {
             messagesForApiRequest.add(userMessage)
         }
         trimMessagesForApiMemory(messagesForApiRequest)
 
         val uiMessages = history.toMutableList()
-        if (inPlace) {
-            continuationBase = getMessageText(lastReply!!.content)
-            streamingAssistantIndex = uiMessages.lastIndex
-        } else {
-            continuationBase = null
-            if (!continueInPlace) uiMessages.add(userMessage)
-            uiMessages.add(thinkingMessage)
-            streamingAssistantIndex = uiMessages.lastIndex
-            markForkAnchorIfPending(streamingAssistantIndex)
-            _chatMessages.value = uiMessages
-        }
+        if (!continueBeat) uiMessages.add(userMessage)
+        uiMessages.add(thinkingMessage)
+        streamingAssistantIndex = uiMessages.lastIndex
+        markForkAnchorIfPending(streamingAssistantIndex)
+        _chatMessages.value = uiMessages
         _isAwaitingResponse.value = true
         _userScrolledDuringStream.value = false
         // Mark only non-regen RP streams so Stop can discard the partial (not a finished prior reply).
-        // A Continue keeps whatever it wrote before Stop: the earlier text is not the partial.
-        discardableRpAssistantInFlight = isRpMode() && !pendingRpSwipeAppend && !inPlace
+        discardableRpAssistantInFlight = isRpMode() && !pendingRpSwipeAppend
+        rpDiscardFrom = streamingAssistantIndex
 
         startChatTurn(messagesForApiRequest, thinkingMessage)
         return true
@@ -2164,10 +2112,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // A rewrite's old reply and its note have to survive a tight memory window. Trim pins
         // the newest turn, which would be the note, and would drop the reply the note refers to.
         messagesForApiRequest.addAll(extraTurns)
-        // Ending on the character's own line reads as "finish this message". Hand the turn back.
+        // Ending on the character's own line: the reply being redone is a Continue's bubble (or
+        // follows a reply whose user line was deleted), so it carries that line on.
         if (extraTurns.isEmpty() && messagesForApiRequest.lastOrNull()?.role == "assistant") {
             messagesForApiRequest.add(
-                FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.NEXT_BEAT_USER_TURN))
+                FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.CONTINUE_USER_TURN))
             )
         }
 
@@ -2258,7 +2207,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     if (wasRpRegen) {
                         restoreRpSwipeAltIfMissingAssistant()
                     } else if (discardPartial) {
-                        discardIncompleteRpAssistantAfterLastUser()
+                        discardIncompleteRpAssistant()
                     } else {
                         removeAssistantPlaceholder(thinkingMessage)
                     }
@@ -2269,14 +2218,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 // Only the active network turn may clear awaiting (Stop→Send must not be killed by a stale finally).
                 if (networkJob === coroutineContext[Job]) {
-                    val continued = continuationBase
-                    if (continued != null) {
-                        // Stop cancels this job; a plain withContext would skip the clear.
-                        withContext(NonCancellable + Dispatchers.Main) {
-                            finishContinuation(continued)
-                            continuationBase = null
-                        }
-                    }
                     discardableRpAssistantInFlight = false
                     _isAwaitingResponse.postValue(false)
                     if (_userScrolledDuringStream.value != true) {
@@ -2513,7 +2454,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (wasRpRegen) restoreRpSwipeAltIfMissingAssistant()
             else if (discardableRpAssistantInFlight) {
                 discardableRpAssistantInFlight = false
-                discardIncompleteRpAssistantAfterLastUser()
+                discardIncompleteRpAssistant()
             }
             return
         }
@@ -2535,12 +2476,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         ?: getApplication<Application>().getString(R.string.rp_regen_failed)
             }
             _toastUiEvent.postValue(Event(shortMsg))
-            return
-        }
-        // Continue grows the last reply. An HTTP error used to write the Error bubble later,
-        // after this turn had already forgotten the original text, so the story was replaced.
-        if (continuationBase != null) {
-            failContinuation(e, thinkingMessage, lanCertChange)
             return
         }
         val errorMsg = if (lanCertChange != null) {
@@ -2597,52 +2532,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Leave the reply Continue was extending, and say why in a notice. The HTTP body is read
-     * afterwards: that used to land as a second write once [continuationBase] was already cleared.
-     */
-    private fun failContinuation(
-        e: Throwable,
-        thinkingMessage: FlexibleMessage?,
-        lanCertChange: LanCertChangedException?,
-    ) {
-        val base = continuationBase ?: return
-        updateMessages { list ->
-            val index = resolveAssistantSlot(list, thinkingMessage)
-            if (index != -1) {
-                val current = list[index]
-                list[index] = current.copy(
-                    content = ScenePhoto.replaceTextKeepingPicture(current.content, base)
-                )
-            }
-        }
-        val fallback = continuationErrorText(e, lanCertChange)
-        if (e is ClientRequestException || e is ServerResponseException) {
-            viewModelScope.launch {
-                val parsed = try {
-                    parseOpenRouterError(e.response.bodyAsText()).takeIf { it.isNotBlank() }
-                } catch (_: Exception) {
-                    null
-                }
-                _toastUiEvent.postValue(Event(parsed ?: fallback))
-            }
-        } else {
-            _toastUiEvent.postValue(Event(fallback))
-        }
-    }
-
-    private fun continuationErrorText(e: Throwable, lanCertChange: LanCertChangedException?): String {
-        if (lanCertChange != null) return lanCertChange.message ?: str(R.string.error_lan_cert_changed)
-        return when (e) {
-            is ClientRequestException -> str(R.string.error_client_request, e.response.status)
-            is ServerResponseException -> str(R.string.error_server_request, e.response.status)
-            is TimeoutCancellationException, is SocketTimeoutException ->
-                str(R.string.error_request_timeout, sharedPreferencesHelper.getTimeoutMinutes())
-            is IOException -> str(R.string.error_network)
-            else -> e.localizedMessage?.takeIf { it.isNotBlank() } ?: str(R.string.error_unknown)
-        }
-    }
-
     private fun updateMessages(updateBlock: (MutableList<FlexibleMessage>) -> Unit) {
         val current = _chatMessages.value?.toMutableList() ?: mutableListOf()
         updateBlock(current)
@@ -2677,6 +2566,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         pendingRpSwipeAppend = false
         discardableRpAssistantInFlight = false
         rpRegenRestoreFallback = null
+        rpRegenSlot = -1
+        rpDiscardFrom = -1
         rpSwipeState = RpSwipeState()
         _rpSwipeNav.value = null
     }
@@ -4656,6 +4547,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         discardableRpAssistantInFlight = false
         val cleaned = rpDelegate.cleanReply(text)
         rpRegenRestoreFallback = null
+        rpRegenSlot = -1
         if (cleaned.isBlank() || isNonSwipeableRpAssistantText(cleaned)) {
             pendingRpSwipeAppend = false
             return cleaned
@@ -4970,7 +4862,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         isRpMode() && canSendRpMessage() && _isAwaitingResponse.value != true &&
             _chatMessages.value.orEmpty().any { it.role == "assistant" && !isAssistantPlaceholder(it) }
 
-    /** Continue: the character carries on inside its last reply, with no new words from the user (and no bubble for the prompt). */
+    /**
+     * Continue: the character carries on from its last reply in a new bubble, with no new words
+     * from the user (and no bubble for the prompt). Each one regenerates and swipes on its own.
+     */
     fun continueRpStory(): Boolean = sendRpUserMessage("", continueBeat = true)
 
     /** [imageUrl]: a photo for the scene as a data URL, sent with the words (or alone). */
@@ -5071,9 +4966,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (!sendUserMessage(
                         content,
                         systemPrompt,
-                        // Continue keeps swipe alts until the new text actually arrives.
-                        clearRpSwipeOnStart = !continueBeat,
-                        continueInPlace = continueBeat,
+                        // Continue starts a bubble of its own: the reply it follows keeps its versions.
+                        clearRpSwipeOnStart = true,
+                        continueBeat = continueBeat,
                         capturedImageUri = capturedImageUri,
                         useCapturedImageUri = imageUrl != null,
                     )
@@ -5169,6 +5064,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.rewriteDirective(rewrite)))
             )
         }
+        // A Continue's bubble follows the reply it carried on, and a regenerate carries it on again.
+        val continuing = rewriteTurns.isEmpty() && lastAssistantIndex > lastUserIndex &&
+            messages.getOrNull(lastAssistantIndex - 1)?.let { it.role == "assistant" && !isAssistantPlaceholder(it) } == true
         _toastUiEvent.postValue(
             Event(str(if (rewriteTurns.isEmpty()) R.string.rp_regen_started else R.string.rp_rewrite_started))
         )
@@ -5179,6 +5077,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (lastAssistantIndex > lastUserIndex) {
             stashRpSwipeFromLastAssistant()
             truncateWithoutFork(lastAssistantIndex)
+            rpRegenSlot = lastAssistantIndex
             // So Stop mid-prep restores the stashed alt (pending was previously set only at resend).
             pendingRpSwipeAppend = true
         }
@@ -5196,7 +5095,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 val systemPrompt = rpDelegate.buildSystemPrompt(
                     character = rpDelegate.getActiveCharacter(),
-                    extraInstruction = null,
+                    extraInstruction = if (continuing) RpPromptEngine.CONTINUE_DIRECTION else null,
                     loreScan = rpLoreScan(rewrite.orEmpty(), focus = RpRewrite.loreFocus(focusedReply, preceding)),
                     definitionCap = rpDefinitionCap(),
                     facts = currentRpFacts()

@@ -72,7 +72,7 @@ Inside a chat, each reply carries the character's portrait and name. Tap it to o
 | **Style** | Third-person narration, inner thoughts, Facts on or off, and LLM mode (no character card). |
 
 Other things to know:
-*   On an empty composer, send becomes **Continue** (»). It extends the last reply from where it stopped. The longer reply is a new swipe: swipe back to undo it, or Continue again from there for a different ending. Other versions of the reply stay.
+*   On an empty composer, send becomes **Continue** (»). The character carries on from where the last reply stopped, in a new bubble of its own. Regenerate or swipe that bubble and only it changes: the reply before it and earlier Continues stay. Delete it to undo.
 *   Swipe a reply, or use the arrows, for alternate replies.
 *   Lorebooks are plain text. Text above the first `[keys: word, phrase]` line is always included; each block under it joins when the recent chat, the character, your memory, the facts, or a scene reminder mentions a key. A block can pull the next one in the chain. A reminder is a note for the scene, not a line you say.
 *   The **+** menu attaches a photo for the scene (from the library or the camera), inserts a scene reminder, and opens Controls or the character library. Files and audio stay in Chat. A photo on its own is enough to send; say what it is if you want the character to treat it a certain way.

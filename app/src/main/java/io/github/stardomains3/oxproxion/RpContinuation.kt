@@ -1,12 +1,11 @@
 package io.github.stardomains3.oxproxion
 
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
- * Roleplay's Continue: the character carries on inside its last reply instead of starting a new
- * bubble. The model is asked (with a hidden user turn) to pick up exactly where the reply ends;
- * [join] then sews what it writes onto what was already there.
+ * Roleplay's Continue: the character carries on from its last reply in a bubble of its own, so
+ * each piece regenerates and swipes on its own. The model is asked (with a hidden user turn) to
+ * pick up exactly where the reply ends; on the wire [joinBlocks] sews the pieces back together.
  */
 object RpContinuation {
 
@@ -49,32 +48,30 @@ object RpContinuation {
     private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״\u201C\u2018\u00AB\u2039《》〈〉｣〞❞❜﹂﹄〕〗＂＇❯｠〙⟩❱〛⟫⟭⟧⦄❩❫❭❳❵⦆⦘⦈⦊⧽"
 
     /**
-     * After a Continue ends: the bubble actually grew, so the grown text becomes a new version.
-     * A failed Continue that put [base] back leaves the versions as they were.
+     * The wire form of a Continue: each one is its own bubble, but the model reads a reply and
+     * the bubbles that carried it on as one message. Some providers refuse two assistant turns
+     * in a row, and the next Continue has to pick up where the last bubble ends.
+     * Only plain-text replies join; a tool call or a reply with parts stays as it is.
      */
-    fun grew(base: String, finalText: String): Boolean =
-        finalText.isNotEmpty() && finalText != base
-
-    /**
-     * Continue replaces the reply with the joined text. A picture already on that reply stays
-     * unless the new piece brought one of its own. A data URL is not a file we can show.
-     * The JPEG stored in the message stays too, so the next save still has the picture.
-     */
-    fun keepPicture(
-        priorUri: String?,
-        updated: FlexibleMessage,
-        priorContent: JsonElement? = null,
-    ): FlexibleMessage {
-        val withUri = when {
-            priorUri.isNullOrEmpty() || priorUri.startsWith("data:") -> updated
-            !updated.imageUri.isNullOrEmpty() -> updated
-            else -> updated.copy(imageUri = priorUri)
+    fun joinBlocks(messages: List<FlexibleMessage>): List<FlexibleMessage> {
+        if (messages.size < 2) return messages
+        val out = ArrayList<FlexibleMessage>(messages.size)
+        for (message in messages) {
+            val previous = out.lastOrNull()
+            val text = plainReply(message)
+            val before = previous?.let(::plainReply)
+            if (text != null && before != null) {
+                out[out.lastIndex] = previous.copy(content = JsonPrimitive(join(before, text)))
+            } else {
+                out.add(message)
+            }
         }
-        val priorImage = priorContent?.let { MessageContent.imageUrl(it) }
-            ?.takeIf { it.startsWith("data:image") }
-            ?: return withUri
-        if (MessageContent.hasImage(withUri.content)) return withUri
-        return withUri.copy(content = ScenePhoto.embed(withUri.content, priorImage))
+        return out
+    }
+
+    private fun plainReply(message: FlexibleMessage): String? {
+        if (message.role != "assistant" || message.toolCalls != null) return null
+        return (message.content as? JsonPrimitive)?.takeIf { it.isString }?.content
     }
 
     /**

@@ -112,16 +112,6 @@ class StreamRevealAnimator(
         onFrame(target, from)
     }
 
-    /** [text] is already on screen (a reply that keeps growing): reveal only what comes after it. */
-    fun seed(text: String) {
-        stop()
-        target = text
-        shown = text.length
-        finishing = false
-        pacing.reset()
-        lastSetTargetMs = SystemClock.uptimeMillis()
-    }
-
     fun displayed(): String =
         if (shown <= 0) "" else target.substring(0, shown.coerceAtMost(target.length))
 

@@ -93,7 +93,7 @@ fun FlexibleMessage.toApiMessage(): FlexibleMessage {
 }
 
 fun List<FlexibleMessage>.toApiMessages(): List<FlexibleMessage> =
-    MessageContent.keepRecentPhotos(this).map { it.toApiMessage() }
+    RpContinuation.joinBlocks(MessageContent.keepRecentPhotos(this).map { it.toApiMessage() })
 
 @Serializable
 data class Plugin(

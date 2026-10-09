@@ -5265,7 +5265,6 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     /** The transcript on screen. [opening]: a saved chat just landed, shown from its end. */
     private fun showMessages(messages: List<FlexibleMessage>, opening: Boolean) {
             refreshEditBanner()
-            chatAdapter.continuingFrom = viewModel.continuationText
             chatAdapter.setMessages(messages)
             if (!restoreListSpot() && opening) {
                 // Opened at its end, where the story left off. Straight away, not posted: the

@@ -251,23 +251,6 @@ class ChatAdapter(
         super.onDetachedFromRecyclerView(recyclerView)
     }
 
-    /**
-     * Set while a reply grows in place (Roleplay's Continue): the text it started from. The first
-     * streamed update seeds the reveal with it, so that text stays put and only the new words
-     * ease in, rather than the whole reply replaying from its first letter.
-     */
-    var continuingFrom: String? = null
-
-    private fun seedContinuation(previous: String) {
-        streamReveal.seed(previous)
-        streamMarkdown.reset()
-        fadeStarts.clear()
-        fadeTimes.clear()
-        // Prime the incremental parser and the fade bookkeeping with what is already shown.
-        val shown = streamMarkdown.render(previous)
-        lastRenderedLen = shown.length
-    }
-
     private fun resetStreamRender() {
         streamReveal.reset()
         streamMarkdown.reset()
@@ -319,10 +302,6 @@ class ChatAdapter(
                 val text = getMessageText(newMessage.content)
                 if (!ThinkingPlaceholder.matches(text) && text.isNotBlank()) {
                     if (streamReveal.displayed().isEmpty()) beginStream()
-                    val from = continuingFrom
-                    if (from != null && from.isNotBlank() && streamReveal.displayed().isEmpty() && text.startsWith(from)) {
-                        seedContinuation(from)
-                    }
                     streamReveal.setTarget(text)
                 }
                 // Holder already painting via Choreographer — skip notify. Rebind+markwon
