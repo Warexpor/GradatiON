@@ -424,8 +424,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         return@launch
                     }
                     if (rawBytes.size > 12_000_000) {
+                        // The photo is the user's own gallery copy now; too big to send is not a reason to delete it.
                         GlassNotice.show(requireContext(), getString(R.string.toast_image_too_large))
-                        withContext(Dispatchers.IO) { runCatching { resolver.delete(imageUri, null, null) } }
                         return@launch
                     }
                     // The gallery copy stays. What we send is upright and small; EXIF rotation
@@ -985,7 +985,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             // Roleplay turned off mid-reply: the tab is already hidden, but the flip
             // to Chat waits until the reply is idle (refreshModeTabs bails while awaiting).
             if (replyFinished) leaveRoleplayIfDisabled()
-            if (!isAwaiting && sharedPreferencesHelper.getConversationModeEnabled()) {
+            // Only a reply that just finished: the observer also replays false on every view rebuild.
+            if (replyFinished && sharedPreferencesHelper.getConversationModeEnabled()) {
                 val messages = viewModel.chatMessages.value ?: return@observe
                 if (messages.isNotEmpty()) {
                     val lastMessage = messages.last()
@@ -3241,9 +3242,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 else -> {
                     menuButton.isSelected = true
                     menuButton.setIconResource(R.drawable.ic_magic)
-                    lifecycleScope.launch {
+                    // View scope: a rotation mid-request must not touch the old view.
+                    viewLifecycleOwner.lifecycleScope.launch {
                         val corrected = viewModel.correctText(inputText)
-                        if (!corrected.isNullOrBlank()) {
+                        if (chatEditText.text.toString().trim() != inputText) {
+                            // Sent or retyped while waiting: the fix is for text that is gone.
+                        } else if (!corrected.isNullOrBlank()) {
                             chatEditText.setText(corrected)
                             chatEditText.setSelection(corrected.length)
                         } else {
@@ -6644,7 +6648,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var progressArmedAt = 0L
 
     private val hideScrollProgress = Runnable {
-        if (!Motion.areAnimationsEnabled(requireContext())) { progressBar.alpha = 0f; return@Runnable }
+        // Posted for 700ms: the fragment can be detached by then, so no requireContext().
+        if (!Motion.areAnimationsEnabled(progressBar.context)) { progressBar.alpha = 0f; return@Runnable }
         progressBar.animate().alpha(0f).setDuration(280).setInterpolator(Motion.easeOut).start()
     }
 

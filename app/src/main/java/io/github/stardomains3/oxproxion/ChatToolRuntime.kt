@@ -826,7 +826,11 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
         val toolResults = mutableListOf<FlexibleMessage>()
         try {
             // File and network tools must not run on the main thread.
-            withContext(Dispatchers.IO) { executeToolCalls(toolCalls, toolResults) }
+            withContext(Dispatchers.IO) {
+                executeToolCalls(toolCalls, toolResults)
+                // A tool that caught Stop as a plain error still returned; land on the stub path.
+                ensureActive()
+            }
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
             // Stop mid-run: the assistant turn already cites these ids, and a provider rejects a
             // transcript where a tool call has no reply, so every later send would fail.
@@ -1068,7 +1072,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 }) { arguments ->
                     val hour = arguments["hour"]?.jsonPrimitive?.intOrNull
                     val minutes = arguments["minutes"]?.jsonPrimitive?.intOrNull
-                    val message = arguments["message"]?.jsonPrimitive?.content
+                    val message = arguments["message"]?.jsonPrimitive?.contentOrNull
 
                     if (hour != null && hour in 0..23 && minutes != null && minutes in 0..59) {
                         val context = application.applicationContext
@@ -1088,9 +1092,9 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 "start_navigation" -> withToolArgs(toolCall.function.arguments, {
                     "Error launching navigation: ${it.message}"
                 }) { arguments ->
-                    val destination = arguments["destination"]?.jsonPrimitive?.content
-                    val mode = arguments["mode"]?.jsonPrimitive?.content ?: "d"
-                    val avoid = arguments["avoid"]?.jsonPrimitive?.content
+                    val destination = arguments["destination"]?.jsonPrimitive?.contentOrNull
+                    val mode = arguments["mode"]?.jsonPrimitive?.contentOrNull ?: "d"
+                    val avoid = arguments["avoid"]?.jsonPrimitive?.contentOrNull
 
                     if (destination.isNullOrBlank()) {
                         "Error: destination is required to start navigation."
@@ -1155,7 +1159,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 "process_plus_code" -> withToolArgs(toolCall.function.arguments, {
                     "Error parsing plus code arguments: ${it.message}"
                 }) { arguments ->
-                    val action = arguments["action"]?.jsonPrimitive?.content
+                    val action = arguments["action"]?.jsonPrimitive?.contentOrNull
                     val lat = arguments["latitude"]?.jsonPrimitive?.doubleOrNull
                     val lng = arguments["longitude"]?.jsonPrimitive?.doubleOrNull
                     val plusCode = arguments["plus_code"]?.jsonPrimitive?.contentOrNull
@@ -1164,7 +1168,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 "create_folder" -> withToolArgs(toolCall.function.arguments, {
                     "Error creating folder: ${it.message}"
                 }) { arguments ->
-                    val folderPath = arguments["folder_path"]?.jsonPrimitive?.content
+                    val folderPath = arguments["folder_path"]?.jsonPrimitive?.contentOrNull
                     if (folderPath != null) {
                         createFolderInWorkspaceViaMediaStore(folderPath)
                         "Folder '$folderPath' created successfully."
@@ -1178,13 +1182,13 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                     _toastUiEvent.postValue(Event(error))
                     error
                 }) { arguments ->
-                        val title = arguments["title"]?.jsonPrimitive?.content ?: ""
-                        val location = arguments["location"]?.jsonPrimitive?.content ?: ""
-                        val description = arguments["description"]?.jsonPrimitive?.content ?: ""
+                        val title = arguments["title"]?.jsonPrimitive?.contentOrNull ?: ""
+                        val location = arguments["location"]?.jsonPrimitive?.contentOrNull ?: ""
+                        val description = arguments["description"]?.jsonPrimitive?.contentOrNull ?: ""
                         val allDay = arguments["allDay"]?.jsonPrimitive?.booleanOrNull ?: false
                         val startDateTimeStr =
-                            arguments["startDateTime"]?.jsonPrimitive?.content ?: ""
-                        val endDateTimeStr = arguments["endDateTime"]?.jsonPrimitive?.content
+                            arguments["startDateTime"]?.jsonPrimitive?.contentOrNull ?: ""
+                        val endDateTimeStr = arguments["endDateTime"]?.jsonPrimitive?.contentOrNull
 
                         if (title.isBlank() || startDateTimeStr.isBlank()) {
                             val error =
@@ -1274,9 +1278,9 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 "make_file" -> withToolArgs(toolCall.function.arguments, {
                     "Error creating file: ${it.message}"
                 }) { args ->
-                    val filename = args["filename"]?.jsonPrimitive?.content ?: ""
-                    val content = args["content"]?.jsonPrimitive?.content ?: ""
-                    val mimeType = args["mimetype"]?.jsonPrimitive?.content ?: "text/plain"
+                    val filename = args["filename"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val content = args["content"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val mimeType = args["mimetype"]?.jsonPrimitive?.contentOrNull ?: "text/plain"
                     val subfolder = args["subfolder"]?.jsonPrimitive?.contentOrNull ?: ""
 
                     if (filename.isBlank() || content.isBlank()) {
@@ -1350,7 +1354,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 "brave_search" -> withToolArgs(toolCall.function.arguments, {
                     "Error: Failed to search with Brave LLM Context – ${it.message}"
                 }) { arguments ->
-                    val query = arguments["query"]?.jsonPrimitive?.content
+                    val query = arguments["query"]?.jsonPrimitive?.contentOrNull
                     val freshness = arguments["freshness"]?.jsonPrimitive?.contentOrNull
                     val count = arguments["count"]?.jsonPrimitive?.intOrNull ?: 10
                     val maxTokens = arguments["max_tokens"]?.jsonPrimitive?.intOrNull ?: 4096
@@ -1366,7 +1370,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 "brave_news" -> withToolArgs(toolCall.function.arguments, {
                     "Error: Failed to search Brave News – ${it.message}"
                 }) { arguments ->
-                    val query = arguments["query"]?.jsonPrimitive?.content
+                    val query = arguments["query"]?.jsonPrimitive?.contentOrNull
                     val freshness = arguments["freshness"]?.jsonPrimitive?.contentOrNull
                     val count = arguments["count"]?.jsonPrimitive?.intOrNull ?: 20
                     val safesearch = arguments["safesearch"]?.jsonPrimitive?.contentOrNull ?: "moderate"
@@ -1380,8 +1384,8 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                 "open_file" -> withToolArgs(toolCall.function.arguments, {
                     "Error opening file: ${it.message}"
                 }) { arguments ->
-                    val filepath = arguments["filepath"]?.jsonPrimitive?.content
-                    val mimeType = arguments["mimetype"]?.jsonPrimitive?.content
+                    val filepath = arguments["filepath"]?.jsonPrimitive?.contentOrNull
+                    val mimeType = arguments["mimetype"]?.jsonPrimitive?.contentOrNull
                     if (filepath != null) {
                         openFileViaSaf(filepath, mimeType)
                     } else {
@@ -1398,7 +1402,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                     toolCall.function.arguments,
                     { "Error reading file: ${it.message}" },
                 ) { arguments ->
-                    val filepath = arguments["filepath"]?.jsonPrimitive?.content
+                    val filepath = arguments["filepath"]?.jsonPrimitive?.contentOrNull
                     if (filepath != null) {
                         readOpenChatFileViaSaf(filepath)
                     } else {
@@ -1880,7 +1884,7 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
                 resultsArray.forEachIndexed { index, element ->
                     val result = element.jsonObject
-                    val title = result["title"]?.jsonPrimitive?.content ?: "Untitled"
+                    val title = result["title"]?.jsonPrimitive?.contentOrNull ?: "Untitled"
                     val address = result["postal_address"]?.jsonObject?.get("displayAddress")?.jsonPrimitive?.contentOrNull ?: ""
 
                     // --- NEW: Extract Coordinates ---
@@ -2013,8 +2017,8 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
                 generic.forEachIndexed { index, element ->
                     val item = element.jsonObject
-                    val url = item["url"]?.jsonPrimitive?.content ?: ""
-                    val title = item["title"]?.jsonPrimitive?.content ?: "Untitled"
+                    val url = item["url"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val title = item["title"]?.jsonPrimitive?.contentOrNull ?: "Untitled"
                     val snippets = item["snippets"]?.jsonArray
                         ?.mapNotNull { it.jsonPrimitive.contentOrNull }
                         ?.filter { it.isNotBlank() }
@@ -2106,10 +2110,10 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
 
                 resultsArray.forEachIndexed { index, element ->
                     val result = element.jsonObject
-                    val title = result["title"]?.jsonPrimitive?.content ?: "Untitled"
-                    val url = result["url"]?.jsonPrimitive?.content ?: ""
-                    val description = result["description"]?.jsonPrimitive?.content
-                        ?: result["snippets"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.content
+                    val title = result["title"]?.jsonPrimitive?.contentOrNull ?: "Untitled"
+                    val url = result["url"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val description = result["description"]?.jsonPrimitive?.contentOrNull
+                        ?: result["snippets"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.contentOrNull
                         ?: ""
 
                     val extraSnippets = result["extra_snippets"]?.jsonArray
@@ -2117,13 +2121,13 @@ internal class ChatToolRuntime(private val host: ChatToolHost) {
                         ?.filter { it.isNotBlank() }
                         ?: emptyList()
 
-                    val publisher = result["meta_url"]?.jsonObject?.get("hostname")?.jsonPrimitive?.content
-                        ?: result["profile"]?.jsonObject?.get("name")?.jsonPrimitive?.content
+                    val publisher = result["meta_url"]?.jsonObject?.get("hostname")?.jsonPrimitive?.contentOrNull
+                        ?: result["profile"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
                         ?: ""
 
                     // News uses "age" (e.g. "2 hours ago"); fall back to "page_age" (ISO date)
-                    val pageAge = result["age"]?.jsonPrimitive?.content
-                        ?: result["page_age"]?.jsonPrimitive?.content
+                    val pageAge = result["age"]?.jsonPrimitive?.contentOrNull
+                        ?: result["page_age"]?.jsonPrimitive?.contentOrNull
                         ?: ""
 
                     val breaking = result["breaking"]?.jsonPrimitive?.booleanOrNull == true

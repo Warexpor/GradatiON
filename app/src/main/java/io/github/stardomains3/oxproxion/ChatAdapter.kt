@@ -339,7 +339,8 @@ class ChatAdapter(
 
     fun finalizeStreaming() {
         val text = getLatestPlainText().orEmpty()
-        if (text.isBlank() || ThinkingPlaceholder.matches(text)) {
+        // Stop before any output leaves the user's message last: there is no reply to finish.
+        if (text.isBlank() || ThinkingPlaceholder.matches(text) || messages.lastOrNull()?.role != "assistant") {
             pendingStreamFinalize = false
             resetStreamRender()
             if (messages.isNotEmpty()) notifyItemChanged(messages.size - 1)
@@ -555,7 +556,8 @@ class ChatAdapter(
         } catch (e: RuntimeException) {
             // 5. Prism4j Crash Handler
             if (e.message?.contains("Prism4j") == true || e.message?.contains("entry nodes") == true) {
-                fullText // Fallback: Return the plain text
+                // Fallback: plain text, still Spanned, since bind() hands this to setParsedMarkdown.
+                android.text.SpannableString(fullText)
             } else {
                 throw e
             }

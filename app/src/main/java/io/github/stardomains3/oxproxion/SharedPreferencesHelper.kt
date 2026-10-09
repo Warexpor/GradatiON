@@ -1589,7 +1589,8 @@ class SharedPreferencesHelper(context: Context) {
     /** @return false if [apiKey] non-blank but Keystore encrypt failed */
     fun setLanApiKey(apiKey: String?): Boolean {
         if (apiKey.isNullOrBlank()) {
-            apiKeysPrefs.edit {
+            // commit like every other secret write: the endpoint saved next to it commits too.
+            apiKeysPrefs.edit(commit = true) {
                 remove("${LAN_API_KEY_ALIAS}_encrypted")
                 remove("${LAN_API_KEY_ALIAS}_iv")
             }

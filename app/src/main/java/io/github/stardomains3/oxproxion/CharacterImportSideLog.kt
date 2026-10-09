@@ -229,7 +229,8 @@ internal object CharacterImportSideLog {
                 return true
             }
             val bytes = runCatching { Base64.decode(encoded, Base64.DEFAULT) }.getOrNull()
-            if (bytes == null || bytes.isEmpty() || !ScenePhoto.completeJpeg(bytes)) {
+            // A PNG card carries its own PNG as the portrait; it is re-encoded to JPEG on save.
+            if (bytes == null || bytes.isEmpty() || !(ScenePhoto.completeJpeg(bytes) || RpCardImport.isPng(bytes))) {
                 Log.w(TAG, "Character portrait in the backup is not a picture; leaving it")
                 return true
             }

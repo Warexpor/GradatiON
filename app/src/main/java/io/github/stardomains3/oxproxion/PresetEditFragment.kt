@@ -248,7 +248,13 @@ class PresetEditFragment : Fragment() {
             }
         }
 
-        val sysMsg = getSelectedSystemMessage() ?: prefs.getDefaultSystemMessage()
+        // A system message renamed or deleted in the library keeps the preset's own copy
+        // rather than silently becoming Default.
+        val sysMsg = getSelectedSystemMessage()
+            ?: editingPreset?.systemMessage?.takeIf {
+                it.title == systemMessageAutoComplete.text.toString().trim()
+            }
+            ?: prefs.getDefaultSystemMessage()
 
         val streaming = streamingSwitch.isChecked
         val reasoning = if (reasoningSwitch.isVisible) reasoningSwitch.isChecked else false

@@ -48,7 +48,8 @@ class PresetAdapter( private val onItemClicked: (Preset) -> Unit, private val on
         // Expand/collapse on chevron click only
         holder.expandIcon.setOnClickListener {
             preset.isExpanded = !preset.isExpanded
-            notifyItemChanged(position)
+            // The bind-time position goes stale after a drag reorder.
+            holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }?.let { notifyItemChanged(it) }
         }
 
         // Apply preset on list item click (root view)

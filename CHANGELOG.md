@@ -20,6 +20,21 @@
 - Long chats hold fewer parsed messages in memory (the newest 120), and photos stored inside messages are decoded once instead of on every scroll.
 
 ### Fixed
+- Security: another app could make GradatiON send a message, apply a preset or wipe the chat through the share hand-off, skipping the confirm dialog. Only GradatiON's own share screens can do that now.
+- App lock: the assistant gesture, share and spell-check screens skipped the lock after 30 s away, and a rotation during the fingerprint prompt let them through. A busy sensor no longer turns the lock off for good.
+- Stop before the first word left the thinking bubble in the chat. Stop during a tool call (location, search) left the call unanswered, so every later send failed.
+- Leaving the local models screen killed a reply still streaming behind it.
+- A provider error sent mid-stream with a numeric code, or one odd citation, silently dropped the chunk and its text.
+- Tools: an optional argument sent as `null` became the word "null" (an alarm named "null", a calendar event that failed to parse).
+- PNG character cards imported without their portrait.
+- Photos sent to the model were downscaled to about 1000 px instead of the 1536 px cap.
+- A camera photo over 12 MB was deleted from your gallery instead of just not attached.
+- Conversation mode read the last reply aloud again on every rotation.
+- A crash when a code block tripped the syntax highlighter; a crash when the scroll bar faded after leaving the screen.
+- PDF export failed on links containing `$`, and split replies that mentioned "AI:" into fake turns.
+- Roleplay: Redo during an in-place Rewrite dropped it and left Send stuck. Reply versions came back after an app kill or an edit cut. Facts from an unsaved character chat leaked into a new LLM chat.
+- Lorebook editor lost unsaved edits on rotation. Editing a model wiped its context window. A preset whose system message was renamed saved as Default. Expand arrows refreshed the wrong row after a drag.
+- Exported chats of a deleted character attached to an unrelated character on import. Grammar fix no longer overwrites text sent or retyped while it ran. The animated background no longer redraws a still frame on Android 12.
 - An opened chat starts at its end, where the conversation left off, instead of wherever the previous chat was scrolled.
 - Roleplay: editing an earlier line of yours wiped everything after it at once, with no warning. It now asks first.
 - Roleplay: reply versions of earlier replies could be dropped from the save when the newest reply had none.

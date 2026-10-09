@@ -20,7 +20,12 @@ class AutosendActivity : AppCompatActivity() {
                 handleIntent(intent)
             }
         } else {
-            biometricUnlocked = true
+            biometricUnlocked = BiometricGateHelper.unlocked ||
+                !SharedPreferencesHelper(this).getBiometricEnabled()
+            if (!biometricUnlocked) BiometricGateHelper.gateIfNeeded(this) {
+                biometricUnlocked = true
+                handleIntent(intent)
+            }
         }
     }
 
@@ -55,7 +60,7 @@ class AutosendActivity : AppCompatActivity() {
             putExtra("shared_text", sharedText)
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        startActivity(mainIntent)
+        startActivity(HandoffToken.stamp(mainIntent))
         finish()
     }
 

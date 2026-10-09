@@ -473,7 +473,8 @@ class PdfGenerator(private val context: Context) {
 
     private fun parseChatTextToMessages(chatText: String): List<FlexibleMessage> {
         val messages = mutableListOf<FlexibleMessage>()
-        val parts = chatText.split(Regex("(?=(User:|AI:))")).filter { it.isNotBlank() }
+        // Turns are joined by a blank line and start with their label; "AI:" inside a reply is text.
+        val parts = chatText.split(Regex("\n\n(?=(?:User|AI): )")).filter { it.isNotBlank() }
         for (part in parts) {
             val role = if (part.startsWith("User:")) "user" else "assistant"
             val content = part.substringAfter(":").trim()
@@ -584,7 +585,8 @@ class PdfGenerator(private val context: Context) {
         while (matcher.find()) {
             val text = matcher.group(1)
             val url = matcher.group(2)
-            matcher.appendReplacement(sb, "$text ($url)")
+            // Literal: a `$` or `\\` in a link would otherwise be read as a group reference and throw.
+            matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement("$text ($url)"))
         }
         matcher.appendTail(sb)
         return sb.toString()

@@ -103,7 +103,7 @@ class ChooserActivity : AppCompatActivity() {
             if (inputOnly) putExtra("input_only", true)
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        startActivity(mainIntent)
+        startActivity(HandoffToken.stamp(mainIntent))
         finish()
     }
 

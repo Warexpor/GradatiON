@@ -82,13 +82,15 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         sessions.forEachIndexed { index, session ->
             if (index > 0) out.append(',')
             try {
-                val exportKey = session.characterId?.let { rpRepository.getCharacterById(it)?.exportKey }
+                val character = session.characterId?.let { rpRepository.getCharacterById(it) }
+                val exportKey = character?.exportKey
                 val forkJson = prefs.getChatForkMessagesJson(session.id)
                 val forkIndex = prefs.getChatForkIndex(session.id)
                 val editing = prefs.isChatForkEditing(session.id)
                 ChatBackupWriter.writeSession(
                     out,
-                    session,
+                    // A deleted character's raw id would attach the chat to whoever holds that id on import.
+                    if (session.characterId != null && character == null) session.copy(characterId = null) else session,
                     characterExportKey = exportKey,
                     facts = prefs.getRpFacts(session.id).takeIf { it.isNotBlank() },
                     pinned = prefs.isSessionPinned(session.id),

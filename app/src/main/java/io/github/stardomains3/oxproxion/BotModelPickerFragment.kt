@@ -260,6 +260,7 @@ class BotModelPickerFragment : Fragment() {
                 putBoolean("isImageGenerationCapable", modelToEdit.isImageGenerationCapable)
                 putBoolean("isTranscription", modelToEdit.isTranscription)
                 putLong("created", modelToEdit.created)
+                putInt("contextLength", modelToEdit.contextLength)
                 putBoolean("isLANModel", modelToEdit.isLANModel)
                 putBoolean("isFree", modelToEdit.isFree)
             }

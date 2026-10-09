@@ -298,9 +298,12 @@ data class StreamedChatResponse(
 
 @Serializable
 data class ApiError(
-    val code: String? = null,  // Can be string or number per docs
+    // String or number depending on the provider; a String field would fail the whole chunk on a number.
+    val code: JsonElement? = null,
     val message: String? = null
-)
+) {
+    val codeText: String? get() = (code as? kotlinx.serialization.json.JsonPrimitive)?.content
+}
 
 @Serializable
 data class StreamedChoice(
@@ -338,11 +341,12 @@ data class Annotation(
 // NEW: Added from my code for citations
 @Serializable
 data class UrlCitation(
-    val url: String,
-    val title: String,
+    // All optional: one citation missing a field must not drop the chunk and the text in it.
+    val url: String? = null,
+    val title: String? = null,
     val content: String? = null,
-    val start_index: Int,
-    val end_index: Int
+    val start_index: Int? = null,
+    val end_index: Int? = null
 )
 @Serializable
 data class ModerationErrorMetadata(

@@ -57,9 +57,7 @@ class LanModelsFragment : Fragment() {
         val title = LanProviderNames.of(provider) ?: getString(R.string.model_lan_title)
         view.findViewById<android.widget.TextView>(R.id.lanTitle).text = title
 
-        // CANCEL BEFORE BACK
         view.findViewById<View>(R.id.lanBack).setOnClickListener {
-            viewModel.cancelCurrentRequest()
             parentFragmentManager.popBackStack()
         }
 
@@ -195,7 +193,8 @@ class LanModelsFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        viewModel.cancelCurrentRequest()
+        // Only the model-list fetch: a chat reply may still be streaming behind this screen.
+        viewModel.cancelLanModelFetch()
     }
 }
 

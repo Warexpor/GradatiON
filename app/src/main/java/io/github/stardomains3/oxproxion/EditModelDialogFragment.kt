@@ -55,6 +55,7 @@ class EditModelDialogFragment : DialogFragment() {
                     isImageGenerationCapable = isImageGen,
                     isTranscription = isTranscription, // NEW
                     created = created,
+                    contextLength = args.getInt("contextLength", 0),
                     isLANModel = args.getBoolean("isLANModel", false),
                     isFree = isFree
                 )
@@ -102,6 +103,8 @@ class EditModelDialogFragment : DialogFragment() {
                     isReasoningCapable  = reasoning,
                     isTranscription = isTranscription, // NEW
                     created = createdTimestamp,
+                    // Not editable here; an edit must not wipe the catalog's context window.
+                    contextLength = existingModel?.contextLength ?: 0,
                     isLANModel         = isLan,
                     isFree = isFree
                 )

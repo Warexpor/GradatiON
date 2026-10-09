@@ -322,7 +322,9 @@ class AmbientBackgroundView @JvmOverloads constructor(
         Motion.areAnimationsEnabled(context) && GlassQuality.level != GlassQuality.Level.SOLID
 
     private fun updateTicking() {
-        val run = tuning.field != null && tuning.frameMs > 0 && animated && !scrolling &&
+        // Below 13 the field is a still bitmap: ticking would only redraw it, and re-blur the glass over it.
+        val run = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            tuning.field != null && tuning.frameMs > 0 && animated && !scrolling &&
             isAttachedToWindow && windowVisible && isShown && canAnimate()
         if (run == ticking) return
         if (run) {

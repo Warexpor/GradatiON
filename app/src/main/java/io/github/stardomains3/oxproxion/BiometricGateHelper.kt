@@ -40,6 +40,8 @@ object BiometricGateHelper {
         onUnlocked: () -> Unit
     ) {
         val prefs = SharedPreferencesHelper(activity)
+        // Every entry point (assistant, share, spell check) checks the same away timer, not just MainActivity.
+        relockIfAway()
         if (!prefs.getBiometricEnabled() || unlocked) {
             onUnlocked()
             return
@@ -48,7 +50,16 @@ object BiometricGateHelper {
         when (BiometricManager.from(activity).canAuthenticate(BIOMETRIC_STRONG)) {
             BiometricManager.BIOMETRIC_SUCCESS -> showPrompt(activity, onUnlocked)
             else -> {
-                prefs.saveBiometricEnabled(false)
+                // No sensor or nothing enrolled turns the lock off. A busy sensor or a pending
+                // security update is temporary: let this launch through but keep the setting.
+                val permanent = setOf(
+                    BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED,
+                    BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE,
+                    BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED,
+                )
+                if (BiometricManager.from(activity).canAuthenticate(BIOMETRIC_STRONG) in permanent) {
+                    prefs.saveBiometricEnabled(false)
+                }
                 onUnlocked()
                 GlassNotice.show(activity, activity.getString(R.string.notice_biometrics_unavailable))
             }

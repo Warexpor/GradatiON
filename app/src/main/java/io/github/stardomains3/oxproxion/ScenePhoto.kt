@@ -114,7 +114,9 @@ object ScenePhoto {
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
             val maxSide = maxOf(bounds.outWidth, bounds.outHeight)
             var sample = 1
-            while (sample < 32 && maxSide / sample > maxEdge) sample *= 2
+            // Largest sample that keeps the long edge at or above maxEdge; scale() trims the rest.
+            // The old rule overshot: a 4032px photo decoded at 1008px, a third under the cap.
+            while (sample < 32 && maxSide / (sample * 2) >= maxEdge) sample *= 2
             val decoded = BitmapFactory.decodeByteArray(
                 raw, 0, raw.size, BitmapFactory.Options().apply { inSampleSize = sample }
             ) ?: return null

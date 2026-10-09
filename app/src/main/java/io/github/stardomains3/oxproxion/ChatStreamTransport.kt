@@ -626,7 +626,7 @@ internal class ChatStreamTransport(private val host: ChatStreamHost) {
 
                         chunk.error?.let { apiError ->
                             val rawDetails =
-                                "Code: ${apiError.code ?: "unknown"} - ${apiError.message ?: "Mid-stream error"}"
+                                "Code: ${apiError.codeText ?: "unknown"} - ${apiError.message ?: "Mid-stream error"}"
                             withContext(Dispatchers.Main) {
                                 pump.cancel()
                                 handleError(Exception(rawDetails), thinkingMessage)

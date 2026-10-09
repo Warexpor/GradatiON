@@ -29,7 +29,8 @@ class PromptAdapter(
 
         holder.expandIcon.setOnClickListener {
             prompt.isExpanded = !prompt.isExpanded
-            notifyItemChanged(position)
+            // The bind-time position goes stale after a drag reorder.
+            holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }?.let { notifyItemChanged(it) }
         }
 
         // Title and prompt text click - send to chat

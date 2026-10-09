@@ -166,7 +166,7 @@ class PresetChooserActivity : AppCompatActivity() {
 
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        startActivity(mainIntent)
+        startActivity(HandoffToken.stamp(mainIntent))
         finish()
     }
 

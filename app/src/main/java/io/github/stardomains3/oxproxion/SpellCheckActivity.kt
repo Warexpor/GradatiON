@@ -39,11 +39,7 @@ class SpellCheckActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (savedInstanceState != null) {
-            buildUi()
-            return
-        }
-
+        // Also on a recreate: a rotation while the prompt is up must ask again.
         BiometricGateHelper.gateIfNeeded(this) {
             buildUi()
         }

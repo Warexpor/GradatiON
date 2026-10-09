@@ -255,6 +255,10 @@ class MainActivity : AppCompatActivity() {
      * go, so the same intent coming back on a recreate cannot send the message again.
      */
     private fun consumeSharedTextIntent(intent: Intent) {
+        if (!HandoffToken.isOurs(intent)) {
+            listOf("autosend", "input_only", "shared_text", "clear_chat").forEach(intent::removeExtra)
+            return
+        }
         val autosend = intent.getBooleanExtra("autosend", false)
         val inputOnly = !autosend && intent.getBooleanExtra("input_only", false)
         if (!autosend && !inputOnly) return
@@ -348,6 +352,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private fun handlePresetIntent(intent: Intent) {
+        if (!HandoffToken.isOurs(intent)) {
+            intent.removeExtra("apply_preset")
+            return
+        }
         if (intent.getBooleanExtra("apply_preset", false)) {
             val presetId = intent.getStringExtra("preset_id") ?: return
 

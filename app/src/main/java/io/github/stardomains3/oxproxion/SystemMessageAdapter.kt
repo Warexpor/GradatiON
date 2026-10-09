@@ -44,7 +44,8 @@ class SystemMessageAdapter(
         // Chevron click: Toggle expand/collapse ONLY (no selection/pop)
         holder.expandIcon.setOnClickListener {
             systemMessage.isExpanded = !systemMessage.isExpanded
-            notifyItemChanged(position)
+            // The bind-time position goes stale after a drag reorder.
+            holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }?.let { notifyItemChanged(it) }
         }
 
         // Title click: Auto-expand if compact + select (existing flow)

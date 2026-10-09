@@ -61,6 +61,8 @@ import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readLine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -1976,8 +1978,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             } catch (e: CancellationException) {
-                withContext(Dispatchers.Main) {
-                    removeAssistantPlaceholder(thinkingMessage)
+                withContext(NonCancellable + Dispatchers.Main) {
+                    if (viewModelScope.isActive) removeAssistantPlaceholder(thinkingMessage)
                 }
                 throw e
             } catch (e: Throwable) {
@@ -2195,7 +2197,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 handleError(e, thinkingMessage)
             } catch (e: CancellationException) {
                 val cancelled = coroutineContext[Job]
-                withContext(Dispatchers.Main) {
+                // NonCancellable: this job is cancelled, and a plain withContext would throw before running.
+                withContext(NonCancellable + Dispatchers.Main) {
+                    // Torn down, not stopped: this chat is gone and must not write anywhere.
+                    if (!viewModelScope.isActive) return@withContext
                     // Send, or a regenerate, may already own the list. Removing "the"
                     // placeholder then deletes the new one: every thinking bubble is
                     // the same object, so the lookup matches whichever is on screen.
@@ -2352,8 +2357,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 handleError(e, toolThinkingMessage)
             }
         } catch (e: CancellationException) {
-            withContext(Dispatchers.Main) {
-                removeAssistantPlaceholder(toolThinkingMessage)
+            withContext(NonCancellable + Dispatchers.Main) {
+                if (viewModelScope.isActive) removeAssistantPlaceholder(toolThinkingMessage)
             }
             throw e
         } catch (e: Throwable) {
@@ -2819,6 +2824,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         truncateWithoutFork(startIndex)
         clearForkMemory()
         forgetRpSwipeVersions()
+        // The reply now newest gets its archived versions back as the swipe bar.
+        syncRpSwipeAfterTranscriptChange()
         autoSaveChat()
     }
 
@@ -3253,7 +3260,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         response.body<JsonObject>()["choices"]?.jsonArray
                             ?.firstOrNull()?.jsonObject
                             ?.get("message")?.jsonObject
-                            ?.get("content")?.jsonPrimitive?.content
+                            ?.get("content")?.jsonPrimitive?.contentOrNull
                 }
             }
         } catch (e: CancellationException) {
@@ -3758,6 +3765,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         "nativ" -> fetchOpenAiModelList(LanListAuth.IF_PRESENT) { id, _ -> plainLanModel(id) }
         "hermes_agent" -> fetchOpenAiModelList(LanListAuth.PLACEHOLDER) { id, _ -> hermesLanModel(id) }
         else -> emptyList()
+    }
+
+    /** Stops a local-server model-list fetch without touching the chat request. */
+    fun cancelLanModelFetch() {
+        lanFetchJob?.cancel()
     }
 
     fun startLanModelsFetch() {
@@ -4745,6 +4757,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 // Preserve character draft pointer until this LLM thread autosaves.
                 clearOpenTranscript(clearDraft = false)
+                // Facts typed into an unsaved character chat are not this thread's.
+                draftRpFacts = null
             }
             _composerRestoreEvent.value = Event("")
         }
@@ -5013,14 +5027,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * @return false if soft-failed (toast already shown); true if prep started.
      */
     fun regenerateLastRpReply(instruction: String? = null, rewrite: String? = null): Boolean {
-        rpRewriteJob?.cancel()
-        rpRewriteJob = null
+        // Guard first: cancelling an in-place rewrite and then refusing would drop it and leave
+        // awaiting stuck on (its finally only clears awaiting for the current job).
         if (_isAwaitingResponse.value == true) {
             _toastUiEvent.postValue(
                 Event(getApplication<Application>().getString(R.string.rp_wait_for_reply))
             )
             return false
         }
+        rpRewriteJob?.cancel()
+        rpRewriteJob = null
         if (!canSendRpMessage()) {
             _toastUiEvent.postValue(
                 Event(getApplication<Application>().getString(R.string.rp_select_character))
@@ -5478,6 +5494,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
         if (!swipeable || rpSwipeState.alts.isEmpty()) {
             if (!swipeable) forgetRpSwipeVersions()
+            // Killed after a send archived the versions but before the new turn was saved:
+            // the newest reply's versions are in earlier, so promote them back.
+            else if (rpSwipeState.earlier.isNotEmpty()) syncRpSwipeAfterTranscriptChange()
             updateRpSwipeNav()
             return
         }

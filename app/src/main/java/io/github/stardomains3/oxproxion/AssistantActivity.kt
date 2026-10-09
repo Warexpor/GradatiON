@@ -12,12 +12,8 @@ class AssistantActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (savedInstanceState != null) {
-            biometricUnlocked = true
-            continueOnCreate()
-            return
-        }
-
+        // Also on a recreate: a rotation while the prompt is up must ask again. Once unlocked this
+        // passes straight through.
         BiometricGateHelper.gateIfNeeded(this) {
             biometricUnlocked = true
             continueOnCreate()
@@ -81,6 +77,7 @@ class AssistantActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        if (!isChangingConfigurations) BiometricGateHelper.noteStopped()
         super.onStop()
         finish()
     }

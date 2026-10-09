@@ -74,9 +74,12 @@ class RpLorebookEditFragment : Fragment() {
                         parentFragmentManager.popBackStack()
                         return@launch
                     }
-                    nameInput.setText(book.name)
-                    contentInput.setText(book.content)
-                    baseline = currentSnapshot()
+                    // After a rotation the fields already hold the user's unsaved edits.
+                    if (savedInstanceState == null) {
+                        nameInput.setText(book.name)
+                        contentInput.setText(book.content)
+                    }
+                    baseline = LoreEditSnapshot(name = book.name, content = book.content)
                 } finally {
                     if (isAdded) saveButton.isEnabled = true
                 }
