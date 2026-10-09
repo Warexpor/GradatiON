@@ -6,9 +6,18 @@
 - Roleplay imports SillyTavern and Chub character cards, as a PNG or as JSON (V1, V2 and V3). The picture becomes the portrait, the card's example dialogs, scenario and instructions land in their own fields, and the card's own lorebook comes along, pinned to that character.
 - Long roleplay chats get a short reminder near the end of what the model reads, to keep the character's own voice and not act for you. It is not shown in the chat. LAN models are left alone.
 
+- Roleplay branches. Editing an earlier line of yours offers **Branch**: the edit carries on in a new chat and the original keeps its whole story. A reply's ⋮ menu has **Branch from here**. A branch takes the reply versions and Facts along.
+
 ### Changed
+- Roleplay Continue is a new version of the reply instead of a rewrite of it. Swipe back undoes a bad continuation, Continue again from there tries another, and the reply's other versions are kept. They used to be thrown away by any Continue.
+- Roleplay Delete removes only that message, and the story after it stays. "Delete this and everything after" is still offered.
 - Roleplay history is fitted to the model's context window, not only the message count. Thirty long scenes no longer overflow a model that fits thirty short lines. The window size comes from OpenRouter's model list; unknown models assume 32k tokens.
 - The reply-format sample in the roleplay prompt is a neutral shape instead of a written-out sarcastic woman, which was nudging every character toward that voice.
+
+### Fixed
+- Roleplay: editing an earlier line of yours wiped everything after it at once, with no warning. It now asks first.
+- Roleplay: reply versions of earlier replies could be dropped from the save when the newest reply had none.
+- Roleplay: a picture shared by a chat and its branch is kept until neither uses it.
 
 ## 3.1.1 — 2026-10-06
 

@@ -590,14 +590,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Continue is over. Drop swipe alts only when the bubble grew; a failed Continue that
-     * restored [base] keeps them. Call on the main thread (LiveData).
+     * Continue is over. When the bubble grew, the grown text is a new version and [base] stays
+     * a swipe back, with every version the reply already had. A failed Continue that restored
+     * [base] changes nothing. Call on the main thread (LiveData).
      */
     private fun finishContinuation(base: String) {
-        val last = _chatMessages.value.orEmpty().lastOrNull()
-            ?.takeIf { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val messages = _chatMessages.value.orEmpty()
+        val last = messages.lastOrNull()?.takeIf { it.role == "assistant" && !isAssistantPlaceholder(it) }
         val text = last?.let { getMessageText(it.content) }.orEmpty()
-        if (RpContinuation.continueDroppedAlts(base, text)) clearRpSwipeAlts()
+        if (last == null || !RpContinuation.grew(base, text)) return
+        val swipeable = isRpMode() && RpSwipeRules.isSwipeableMessages(
+            messages,
+            isUser = { it.role == "user" },
+            isAssistant = { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        )
+        // The greeting has no versions; nothing to keep.
+        if (!swipeable || isNonSwipeableRpAssistantText(base)) {
+            clearRpSwipeAlts()
+            return
+        }
+        // Resolved first: settling a picture can remap the versions' links.
+        val picture = durableSwipeUri(last)
+        val (alts, pictures, index) = RpSwipeRules.addContinued(
+            rpSwipeState.alts,
+            rpSwipeState.pictureUris,
+            rpSwipeState.index,
+            base,
+            picture,
+            text,
+        )
+        rpSwipeState = rpSwipeState.copy(alts = alts, index = index, pictureUris = pictures)
+        persistRpSwipeState()
+        updateRpSwipeNav()
     }
 
     /**
@@ -676,7 +700,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             val unused = names.filter {
-                it !in live && it !in held && it != pending && !repository.scenePhotoStillUsed(it)
+                it !in live && it !in held && it != pending && !scenePhotoKept(it)
             }
             ScenePhoto.deleteSceneFiles(app, unused)
         }
@@ -1193,7 +1217,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         if (!chatSaveSerial.isCurrent(ticket)) return
-        releaseDroppedScenePhotos(previousPhotos, messagesToSave + snap.fork?.messages.orEmpty(), snap.swipe)
+        releaseDroppedScenePhotos(sessionId, previousPhotos, messagesToSave + snap.fork?.messages.orEmpty(), snap.swipe)
         if (
             ChatSaveGate.decide(
                 epochAtSchedule = snap.epoch,
@@ -1469,6 +1493,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * other branch ([messages] includes the stashed fork) keeps it.
      */
     private suspend fun releaseDroppedScenePhotos(
+        sessionId: Long,
         previous: List<String>,
         messages: List<FlexibleMessage>,
         swipe: RpSwipeState?,
@@ -1484,7 +1509,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             dropped,
             held,
             ScenePhoto.sceneFileName(pendingUserImageUri),
-        ).filter { !repository.scenePhotoStillUsed(it) }
+        ).filter { !scenePhotoKept(it, sessionId) }
         ScenePhoto.deleteSceneFiles(app, unused)
     }
 
@@ -1537,9 +1562,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val app = getApplication<Application>()
         viewModelScope.launch(Dispatchers.IO) {
             if (scenePhotoShown(name)) return@launch
-            if (!repository.scenePhotoStillUsed(name)) ScenePhoto.deleteSceneFiles(app, listOf(name))
+            if (!scenePhotoKept(name)) ScenePhoto.deleteSceneFiles(app, listOf(name))
         }
     }
+
+    /** A saved message, or another chat's reply versions, still names [name]. */
+    private suspend fun scenePhotoKept(name: String, openSession: Long? = currentSessionId): Boolean =
+        repository.scenePhotoStillUsed(name) ||
+            sharedPreferencesHelper.rpSwipeNamesPhoto(name, setOfNotNull(openSession))
 
     /** Bumped when the open chat changes, so a photo read for one edit cannot land on the next. */
     fun openChatEpoch(): Long = sessionEpoch
@@ -2091,8 +2121,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // The picture is already in the message. pendingUserImageUri is only the photo staged
         // in the composer; copying this turn's data URL into it made the next send inherit it.
 
+        // Roleplay: regenerate already took the reply off. A reply between this turn and that
+        // one (its user line deleted) stays, in the transcript and in what the model reads.
+        val rpBetween = if (isRpMode()) {
+            currentMessages.drop(userMessageIndex + 1).filterNot { isAssistantPlaceholder(it) }
+        } else {
+            emptyList()
+        }
         if (isRpMode()) {
-            truncateWithoutFork(userMessageIndex + 1)
+            truncateWithoutFork(userMessageIndex + 1 + rpBetween.size)
             clearForkMemory()
         } else {
             truncateHistory(userMessageIndex + 1, anchorAssistantIndex = userMessageIndex + 1)
@@ -2110,10 +2147,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         messagesForApiRequest.addAll(currentMessages.take(userMessageIndex))
         messagesForApiRequest.add(userMessage)
+        messagesForApiRequest.addAll(rpBetween)
         trimMessagesForApiMemory(messagesForApiRequest)
         // A rewrite's old reply and its note have to survive a tight memory window. Trim pins
         // the newest turn, which would be the note, and would drop the reply the note refers to.
         messagesForApiRequest.addAll(extraTurns)
+        // Ending on the character's own line reads as "finish this message". Hand the turn back.
+        if (extraTurns.isEmpty() && messagesForApiRequest.lastOrNull()?.role == "assistant") {
+            messagesForApiRequest.add(
+                FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.NEXT_BEAT_USER_TURN))
+            )
+        }
 
         val uiMessages = _chatMessages.value?.toMutableList() ?: mutableListOf()
         uiMessages.add(THINKING_MESSAGE)
@@ -2789,6 +2833,80 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         autoSaveChat()
     }
 
+    /**
+     * Roleplay's Delete: only the message at [index] goes. The story after it stays, and an
+     * earlier reply's versions move up with their reply.
+     */
+    fun deleteRpMessageOnly(index: Int) {
+        val size = _chatMessages.value?.size ?: return
+        if (!isRpMode() || index < 0 || index >= size) return
+        stopTurnBeforeCut()
+        val current = _chatMessages.value?.toMutableList() ?: return
+        if (index >= current.size) return
+        val lastReply = current.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        current.removeAt(index)
+        // The newest reply keeps its versions unless it is the one going.
+        val keepAlts = lastReply != index
+        val earlier = RpSwipeRules.afterRemoval(rpSwipeState.earlier, index)
+        dropEarlierPictures(rpSwipeState.earlier.filterKeys { it == index })
+        rpSwipeState = rpSwipeState.copy(earlier = earlier)
+        if (!keepAlts) {
+            dropUnreferencedSwipePictures()
+            rpSwipeState = RpSwipeState(earlier = earlier)
+        }
+        _chatMessages.value = current
+        syncRpSwipeAfterTranscriptChange()
+        autoSaveChat()
+    }
+
+    /**
+     * Branch: a new chat with this character that keeps the first [end] messages, the versions
+     * of those replies and this chat's Facts. The chat it came from is saved as it was and
+     * stays in the list. Returns the switch, or null when a reply is still running.
+     */
+    fun branchRpChat(end: Int): Job? {
+        if (!isRpMode()) return null
+        if (_isAwaitingResponse.value == true || rpRewriteJob?.isActive == true) {
+            _toastUiEvent.value = Event(str(R.string.rp_wait_for_reply))
+            return null
+        }
+        val messages = _chatMessages.value.orEmpty()
+        if (end <= 0 || end > messages.size) return null
+        val kept = messages.take(end).filterNot(::isAssistantPlaceholder).map { it.copy() }
+        if (kept.none { it.role == "assistant" }) return null
+        val lastReply = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val versions = RpSwipeRules.forBranch(
+            rpSwipeState,
+            end,
+            lastReply,
+            messages.getOrNull(lastReply)?.let { getMessageText(it.content) }.orEmpty(),
+        )
+        val facts = currentRpFacts()
+        return beginSessionTransition {
+            val source = getCurrentSessionTitle().orEmpty()
+            val mark = str(R.string.rp_branch_title, "")
+            clearOpenTranscript(clearDraft = true)
+            draftRpFacts = facts
+            _chatMessages.value = kept
+            rpSwipeState = RpSwipeState(earlier = versions)
+            syncRpSwipeAfterTranscriptChange()
+            // A branch of a branch keeps one mark.
+            when {
+                source.isBlank() -> autoSaveChat()
+                source.endsWith(mark.trim()) -> saveCurrentChat(source)
+                else -> saveCurrentChat(str(R.string.rp_branch_title, source))
+            }
+            _toastUiEvent.value = Event(str(R.string.rp_branched))
+        }
+    }
+
+    /** True when something after [index] would go with it: Delete offers to keep it. */
+    fun hasMessagesAfter(index: Int): Boolean = index < (_chatMessages.value?.lastIndex ?: -1)
+
+    /** True when cutting at [index] would drop later turns of the user's, not just its own reply. */
+    fun rpCutDropsLaterTurns(index: Int): Boolean =
+        _chatMessages.value.orEmpty().withIndex().any { (i, m) -> i > index && m.role == "user" }
+
     /** Truncate for RP user-edit without creating an Ask-mode fork or leaving stale swipe state. */
     fun truncateForRpEdit(startIndex: Int) {
         val size = _chatMessages.value?.size ?: return
@@ -2917,7 +3035,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun persistCapturedSwipe(sessionId: Long, swipe: RpSwipeState?) {
-        if (swipe == null || swipe.alts.isEmpty()) {
+        // Earlier replies' versions count too: a snapshot with only those used to clear them.
+        if (swipe == null || swipe.isEmpty) {
             sharedPreferencesHelper.clearRpSwipeJson(sessionId)
             return
         }
@@ -5214,7 +5333,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // The newest reply uses the swipe bar. A reply with your next line after it is earlier,
         // even while the answer to that line is still the thinking placeholder; the redraw that
         // shows this control runs then, and nothing redraws the row once the answer lands.
-        if (messages.drop(position + 1).none { it.role == "user" }) return null
+        // A reply right after it (your line between deleted) makes it earlier too.
+        if (messages.drop(position + 1).none {
+                it.role == "user" || (it.role == "assistant" && !isAssistantPlaceholder(it))
+            }
+        ) return null
         return ForkNavState(
             variantIndex = v.index + 1,
             totalVariants = v.alts.size,

@@ -179,4 +179,55 @@ class RpSwipeRulesTest {
         val kept = RpSwipeRules.reconcileEarlier(earlier, listOf("You again?")) { it }
         assertTrue(kept.isEmpty())
     }
+
+    @Test
+    fun continueAddsAVersionAndKeepsTheOthers() {
+        // Three versions, the second picked, then Continue: all three stay, the grown one is new.
+        val (alts, pics, index) = RpSwipeRules.addContinued(
+            listOf("a", "b", "c"), emptyList(), 1, "b", "", "b more",
+        )
+        assertEquals(listOf("a", "b", "c", "b more"), alts)
+        assertEquals(3, index)
+        assertTrue(pics.isEmpty())
+        // A single reply becomes two: the base is the swipe back.
+        val (seeded, seededPics, at) = RpSwipeRules.addContinued(
+            emptyList(), emptyList(), 0, "base", "file:///p.jpg", "base more",
+        )
+        assertEquals(listOf("base", "base more"), seeded)
+        assertEquals(listOf("file:///p.jpg", "file:///p.jpg"), seededPics)
+        assertEquals(1, at)
+        // Tracked pictures: the grown version keeps the base's.
+        val (_, tracked, _) = RpSwipeRules.addContinued(
+            listOf("x", "y"), listOf("", "file:///y.jpg"), 1, "y", "file:///y.jpg", "y more",
+        )
+        assertEquals(listOf("", "file:///y.jpg", "file:///y.jpg"), tracked)
+        // The same grown text twice selects it instead of adding it again.
+        val (again, _, againAt) = RpSwipeRules.addContinued(
+            listOf("base", "base more"), emptyList(), 0, "base", "", "base more",
+        )
+        assertEquals(listOf("base", "base more"), again)
+        assertEquals(1, againAt)
+    }
+
+    @Test
+    fun removingOneMessageMovesLaterVersionsUp() {
+        val v = RpVersions(listOf("p", "q"), 0)
+        val w = RpVersions(listOf("r", "s"), 1)
+        val earlier = mapOf(1 to v, 3 to w, 5 to v)
+        assertEquals(mapOf(1 to v, 4 to v), RpSwipeRules.afterRemoval(earlier, 3))
+        assertEquals(mapOf(1 to v, 2 to w, 4 to v), RpSwipeRules.afterRemoval(earlier, 2))
+        assertSame(emptyMap<Int, RpVersions>(), RpSwipeRules.afterRemoval(emptyMap(), 0))
+    }
+
+    @Test
+    fun aBranchTakesTheVersionsBeforeItsCut() {
+        val v = RpVersions(listOf("p", "q"), 1)
+        val state = RpSwipeState(alts = listOf("n1", "n2"), index = 0, earlier = mapOf(1 to v, 5 to v))
+        // Cut before the newest reply: only the earlier ones before the cut.
+        assertEquals(mapOf(1 to v), RpSwipeRules.forBranch(state, 4, 7, "n1"))
+        // The whole chat: the newest reply's versions go along under its position.
+        val all = RpSwipeRules.forBranch(state, 8, 7, "n1")
+        assertEquals(RpVersions(listOf("n1", "n2"), 0), all[7])
+        assertEquals(v, all[5])
+    }
 }

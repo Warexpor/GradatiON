@@ -48,6 +48,10 @@ object RpPromptEngine {
      * The hidden user line for Continue. Same words as `rp_continue_prompt`: the transcript
      * must not treat it as something the user said.
      */
+    /** Hidden turn for a reply that follows the character's own line, with no user line between. */
+    const val NEXT_BEAT_USER_TURN =
+        "(No new line from the user. Take the scene on from your last message.)"
+
     const val CONTINUE_USER_TURN =
         "Continue your last message from exactly where it stopped. Write only what comes next."
 

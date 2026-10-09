@@ -146,6 +146,8 @@ class ChatAdapter(
     private var acceptStreamFrames = false
     /** Opens a reply's ⋮ menu anchored to its button; the host owns the popover. */
     var onMessageMenu: ((View, List<MessageMenu.Item>) -> Unit)? = null
+    /** Roleplay's Branch from here, with the reply's position. */
+    var onBranchMessage: ((Int) -> Unit)? = null
 
     /** Show the model's thinking above replies; off hides the block entirely. */
     var showThinking = true
@@ -1173,7 +1175,7 @@ class ChatAdapter(
         private val moreActionsButton: ImageButton = itemView.findViewById(R.id.moreActionsButton)
 
         /** ⋮ after Regenerate: Read aloud, Rewrite (any Roleplay reply) and Edit. */
-        private fun bindMoreActions(speakingHere: Boolean, canRewrite: Boolean) {
+        private fun bindMoreActions(speakingHere: Boolean, canRewrite: Boolean, canBranch: Boolean) {
             val ctx = itemView.context
             val rows = buildList {
                 if (ttsAvailable) add(MessageMenu.Item(
@@ -1185,6 +1187,11 @@ class ChatAdapter(
                 })
                 add(MessageMenu.Item(ctx.getString(R.string.msg_menu_edit), R.drawable.ic_msg_edit) {
                     editButton.performClick()
+                })
+                // A new chat with the story up to this reply; this one stays as it is.
+                if (canBranch) add(MessageMenu.Item(ctx.getString(R.string.rp_branch_from_here), R.drawable.ic_msg_branch) {
+                    val pos = bindingAdapterPosition
+                    if (pos >= 0) onBranchMessage?.invoke(pos)
                 })
             }
             moreActionsButton.setOnClickListener { onMessageMenu?.invoke(moreActionsButton, rows) }
@@ -1676,7 +1683,7 @@ class ChatAdapter(
                 val pos = bindingAdapterPosition
                 if (pos <= 0 || pos >= messages.size) return@setOnClickListener
                 val prev = messages[pos - 1]
-                if (prev.role == "user") {
+                if (prev.role == "user" || isRpMode) {
                     Haptics.tap(regenerateButton)
                     onRedoMessage(pos - 1, prev.content)
                 }
@@ -1701,9 +1708,11 @@ class ChatAdapter(
             regenerateButton.visibility = if (
                 position > 0 &&
                 position < messages.size &&
-                messages[position - 1].role == "user" &&
+                // Roleplay: the newest reply after any line of yours, even with a reply between
+                // (your line there deleted).
+                (if (isRpMode) position == lastAssistantIndex && lastUserIndex in 0 until position
+                else messages[position - 1].role == "user") &&
                 !isThinking &&
-                (!isRpMode || (position == lastAssistantIndex && position > lastUserIndex)) &&
                 (!isError || isRpMode)
             ) View.VISIBLE else View.GONE
             copyButton.setOnClickListener {
@@ -1737,6 +1746,8 @@ class ChatAdapter(
                 speakingHere = isSpeaking && position == currentPosition,
                 // Any finished reply, the greeting included; an error bubble has nothing to rewrite.
                 canRewrite = isRpMode && !isThinking && !isError && text.isNotBlank(),
+                // Past the greeting: a branch at the greeting is just a new chat.
+                canBranch = isRpMode && !isThinking && position > 0,
             )
 
             ttsButton.setOnClickListener {

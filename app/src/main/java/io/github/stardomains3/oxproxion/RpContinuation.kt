@@ -49,10 +49,10 @@ object RpContinuation {
     private const val TRAILERS = "*_~\"')]’”」』\u00BB\u203A׳״\u201C\u2018\u00AB\u2039《》〈〉｣〞❞❜﹂﹄〕〗＂＇❯｠〙⟩❱〛⟫⟭⟧⦄❩❫❭❳❵⦆⦘⦈⦊⧽"
 
     /**
-     * After a Continue ends: drop the newest reply's swipe versions only when the bubble
-     * actually grew. A failed Continue that put [base] back keeps those versions.
+     * After a Continue ends: the bubble actually grew, so the grown text becomes a new version.
+     * A failed Continue that put [base] back leaves the versions as they were.
      */
-    fun continueDroppedAlts(base: String, finalText: String): Boolean =
+    fun grew(base: String, finalText: String): Boolean =
         finalText.isNotEmpty() && finalText != base
 
     /**

@@ -440,19 +440,26 @@ class RpScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertTrue(msgs.none { vm.getMessageText(it.content) == a.getString(R.string.rp_continue_prompt) })
         org.junit.Assert.assertNull("nothing left to extend once the turn is over", vm.continuationText)
         snap(root(a), "rp_conversation_dark")
-        // A second version of that reply, then a new turn: the reply keeps both, a swipe away.
+        // Continue made a version: the reply before it is a swipe back (the undo), and back again.
         val replyAt = msgs.lastIndex
+        fun replyText() = vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content)
+        org.junit.Assert.assertEquals(ChatViewModel.RpSwipeNav(2, 2, canPrev = true, canNext = true), vm.rpSwipeNav.value)
+        vm.swipeRpPrev(); idle()
+        org.junit.Assert.assertEquals("swipe back undoes the Continue", beforeText, replyText())
+        vm.swipeRpNext(); idle()
+        org.junit.Assert.assertEquals(afterText, replyText())
+        // A third version, then a new turn: the reply keeps all three, a swipe away.
         vm.swipeRpNext()
-        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.rpSwipeNav.value?.total == 2 }
-        val second = vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content)
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.rpSwipeNav.value?.total == 3 }
+        val second = replyText()
         input.setText("I slide the map across the table.")
         send.performClick()
         // Already earlier while the answer is still thinking: the redraw that shows its control runs now.
         waitFor(30_000) { vm.chatMessages.value.orEmpty().size >= replyAt + 3 }
-        org.junit.Assert.assertEquals(2, vm.getRpVersionNav(replyAt)?.totalVariants)
+        org.junit.Assert.assertEquals(3, vm.getRpVersionNav(replyAt)?.totalVariants)
         waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().size == replyAt + 3 }
         settle()
-        org.junit.Assert.assertEquals(2, vm.getRpVersionNav(replyAt)?.totalVariants)
+        org.junit.Assert.assertEquals(3, vm.getRpVersionNav(replyAt)?.totalVariants)
         val transcript = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
         transcript.scrollToPosition(replyAt); idle()
         val versions = transcript.findViewHolderForAdapterPosition(replyAt)!!.itemView.findViewById<View>(R.id.forkNavigator)
@@ -462,6 +469,32 @@ class RpScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals("what came after stays", replyAt + 3, vm.chatMessages.value.orEmpty().size)
         vm.swipeEarlierRpReply(replyAt, 1); idle()
         org.junit.Assert.assertEquals(second, vm.getMessageText(vm.chatMessages.value.orEmpty()[replyAt].content))
+        // Delete on your line offers to keep the story after it; the plain Delete takes only that line.
+        val userAt = replyAt + 1
+        transcript.scrollToPosition(userAt); idle()
+        transcript.findViewHolderForAdapterPosition(userAt)!!.itemView.findViewById<View>(R.id.deleteButton).performClick(); idle()
+        val deleteDialog = ShadowDialog.getLatestDialog()
+        org.junit.Assert.assertEquals(View.VISIBLE, deleteDialog.findViewById<View>(R.id.confirmSecondary).visibility)
+        deleteDialog.findViewById<View>(R.id.confirmAction).performClick(); settle()
+        val afterDelete = vm.chatMessages.value.orEmpty()
+        org.junit.Assert.assertEquals("one line gone, the reply after it stays", replyAt + 2, afterDelete.size)
+        org.junit.Assert.assertEquals(listOf("assistant", "assistant"), afterDelete.takeLast(2).map { it.role })
+        org.junit.Assert.assertEquals("versions stay with their reply", 3, vm.getRpVersionNav(replyAt)?.totalVariants)
+        // Branch from the earlier reply: a new chat with the story up to it, versions included.
+        val source = vm.getCurrentSessionId()
+        val branching = vm.branchRpChat(replyAt + 1)!!
+        waitFor(30_000) { branching.isCompleted && vm.getCurrentSessionId() != null }
+        settle()
+        val branchId = vm.getCurrentSessionId()
+        org.junit.Assert.assertNotNull(branchId)
+        org.junit.Assert.assertNotEquals(source, branchId)
+        org.junit.Assert.assertEquals(replyAt + 1, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals(second, replyText())
+        org.junit.Assert.assertEquals("the branch's newest reply swipes its versions", 3, vm.rpSwipeNav.value?.total)
+        org.junit.Assert.assertTrue(runBlocking { vm.getCurrentSessionTitle() }.orEmpty().endsWith("(branch)"))
+        vm.loadChat(source!!); settle()
+        org.junit.Assert.assertEquals("the original stays whole", replyAt + 2, vm.chatMessages.value.orEmpty().size)
+        vm.loadChat(branchId!!); settle()
         SharedPreferencesHelper(a).saveRpMemory(mira.id, "Owes Sam a favor from the Kessel run. Hates the innkeeper.")
         // Top of a chat with messages: no stray rule under the tabs (the old scroll-progress bar).
         org.junit.Assert.assertEquals(0f, a.findViewById<View>(R.id.progressBar).alpha)

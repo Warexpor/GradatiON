@@ -72,10 +72,12 @@ Inside a chat, each reply carries the character's portrait and name. Tap it to o
 | **Style** | Third-person narration, inner thoughts, Facts on or off, and LLM mode (no character card). |
 
 Other things to know:
-*   On an empty composer, send becomes **Continue** (»). It extends the last reply from where it stopped.
+*   On an empty composer, send becomes **Continue** (»). It extends the last reply from where it stopped. The longer reply is a new swipe: swipe back to undo it, or Continue again from there for a different ending. Other versions of the reply stay.
 *   Swipe a reply, or use the arrows, for alternate replies.
 *   Lorebooks are plain text. Text above the first `[keys: word, phrase]` line is always included; each block under it joins when the recent chat, the character, your memory, the facts, or a scene reminder mentions a key. A block can pull the next one in the chain. A reminder is a note for the scene, not a line you say.
 *   The **+** menu attaches a photo for the scene (from the library or the camera), inserts a scene reminder, and opens Controls or the character library. Files and audio stay in Chat. A photo on its own is enough to send; say what it is if you want the character to treat it a certain way.
+*   **Delete** on a message removes just that message; the story after it stays. "Delete this and everything after" is the old cut.
+*   Editing one of your earlier lines asks first: **Branch** carries on with the edit in a new chat and keeps this one whole. A reply's menu also has **Branch from here**. Branches are ordinary chats in the character's list.
 *   A reply's menu can **Rewrite** it. The latest reply comes back as another swipe; an earlier one, including the greeting, changes where it is and can be undone.
 *   Characters and lorebooks export and import as JSON from the library. Import also takes SillyTavern and Chub character cards (PNG or JSON, V1 to V3): the picture becomes the portrait, and a card's own lorebook comes along, pinned to that character.
 

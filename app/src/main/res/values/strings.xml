@@ -46,6 +46,16 @@
     <string name="delete_message_title">Delete message?</string>
     <string name="delete_message_body">This message and everything after it will be removed from the chat.</string>
     <string name="delete_message_confirm">Delete</string>
+    <string name="rp_delete_one_body">Only this message goes. The story after it stays.</string>
+    <string name="rp_delete_last_body">This message will be removed from the chat.</string>
+    <string name="rp_delete_from_here">Delete this and everything after</string>
+    <string name="rp_edit_earlier_title">Edit an earlier line?</string>
+    <string name="rp_edit_earlier_body">Editing here cuts the story after it. Branch keeps this chat whole and carries on with the edit in a new one.</string>
+    <string name="rp_branch">Branch</string>
+    <string name="rp_edit_here">Cut the rest and edit here</string>
+    <string name="rp_branch_from_here">Branch from here</string>
+    <string name="rp_branch_title">%1$s (branch)</string>
+    <string name="rp_branched">New branch. The original chat stays in your chats.</string>
     <string name="delete_model_title">Delete model?</string>
     <string name="delete_model_body">Remove \"%1$s\" from your models? This can\'t be undone.</string>
     <string name="delete_prompt_title">Delete prompt?</string>

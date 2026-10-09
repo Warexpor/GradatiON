@@ -16,7 +16,11 @@ object GrokConfirmDialog {
         onConfirm: () -> Unit,
         destructive: Boolean = true,
         cancelText: String? = null,
-        onCancel: (() -> Unit)? = null
+        onCancel: (() -> Unit)? = null,
+        /** A third choice, full width above the pair. Hidden when null. */
+        secondaryText: String? = null,
+        onSecondary: (() -> Unit)? = null,
+        secondaryDestructive: Boolean = destructive,
     ) {
         val context = fragment.requireContext()
         val dialog = GlassAlertDialogBuilder(
@@ -33,6 +37,23 @@ object GrokConfirmDialog {
         if (destructive) {
             actionButton.setTextColor(ContextCompat.getColor(context, R.color.delete_action))
             actionButton.background = ContextCompat.getDrawable(context, R.drawable.bg_glass_button)
+        }
+
+        val secondaryButton = sheet.findViewById<MaterialButton>(R.id.confirmSecondary)
+        if (secondaryText != null) {
+            secondaryButton.visibility = android.view.View.VISIBLE
+            secondaryButton.text = secondaryText
+            if (secondaryDestructive) {
+                secondaryButton.setTextColor(ContextCompat.getColor(context, R.color.delete_action))
+            }
+            secondaryButton.setOnClickListener {
+                dialog.dismiss()
+                onSecondary?.invoke()
+            }
+            // The pair sits just under it, as one stack.
+            val pair = sheet.findViewById<android.view.View>(R.id.confirmButtons)
+            (pair.layoutParams as android.view.ViewGroup.MarginLayoutParams).topMargin =
+                (10 * context.resources.displayMetrics.density).toInt()
         }
 
         val cancelButton = sheet.findViewById<MaterialButton>(R.id.confirmCancel)

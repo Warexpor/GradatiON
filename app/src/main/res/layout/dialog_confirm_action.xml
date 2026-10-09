@@ -28,7 +28,18 @@
         android:textColor="@color/xai_mute"
         android:textSize="15sp" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/confirmSecondary"
+        style="@style/Widget.Gradation.Button.Tonal"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="22dp"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:visibility="gone" />
+
     <LinearLayout
+        android:id="@+id/confirmButtons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="22dp"

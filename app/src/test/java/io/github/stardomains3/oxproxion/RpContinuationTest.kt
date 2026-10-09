@@ -471,13 +471,9 @@ class RpContinuationTest {
     }
 
     @Test
-    fun continueKeepsAltsWhenTheBubbleDidNotGrow() {
-        assertFalse(RpContinuation.continueDroppedAlts("She waits.", "She waits."))
-        assertFalse(RpContinuation.continueDroppedAlts("She waits.", ""))
-    }
-
-    @Test
-    fun continueDropsAltsWhenTheBubbleGrew() {
-        assertTrue(RpContinuation.continueDroppedAlts("She waits.", "She waits.\n\nHe nods."))
+    fun aContinueThatDidNotGrowAddsNoVersion() {
+        assertFalse(RpContinuation.grew("She waits.", "She waits."))
+        assertFalse(RpContinuation.grew("She waits.", ""))
+        assertTrue(RpContinuation.grew("She waits.", "She waits.\n\nHe nods."))
     }
 }

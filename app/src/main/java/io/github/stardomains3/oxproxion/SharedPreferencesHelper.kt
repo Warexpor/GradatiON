@@ -1891,6 +1891,18 @@ class SharedPreferencesHelper(context: Context) {
         mainPrefs.edit(commit = true) { remove("$KEY_RP_SWIPE_PREFIX$sessionId") }
     }
 
+    /**
+     * True when another chat's reply versions name the scene file [name]. A branch shares its
+     * pictures with the chat it came from, and a version is not in any saved message.
+     */
+    fun rpSwipeNamesPhoto(name: String, exceptSessions: Set<Long> = emptySet()): Boolean {
+        val skip = exceptSessions.mapTo(HashSet()) { "$KEY_RP_SWIPE_PREFIX$it" }
+        return mainPrefs.all.any { (key, value) ->
+            key.startsWith(KEY_RP_SWIPE_PREFIX) && key !in skip &&
+                value is String && name in ScenePhoto.fileNamesIn(value)
+        }
+    }
+
     /** Facts the model keeps for one chat. Separate from the Memory note the user wrote. */
     fun getRpFacts(sessionId: Long): String = mainPrefs.getString("rp_facts_$sessionId", "") ?: ""
     fun saveRpFacts(sessionId: Long, text: String) = mainPrefs.edit(commit = true) {

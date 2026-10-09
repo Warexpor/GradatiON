@@ -176,6 +176,52 @@ object RpSwipeRules {
     }
 
     /**
+     * A Continue grew the reply from [base] to [grown]. The grown text becomes its own version
+     * at the end, with the same picture, and [base] stays a swipe back: that is the undo, and
+     * Continue from there tries the continuation again. Versions the reply already had stay.
+     */
+    fun addContinued(
+        alts: List<String>,
+        pictureUris: List<String>,
+        selectedIndex: Int,
+        base: String,
+        basePicture: String,
+        grown: String,
+    ): Triple<List<String>, List<String>, Int> {
+        val (seeded, pictures, _) = stashAlt(alts, pictureUris, selectedIndex, base, basePicture)
+        val at = seeded.indexOf(grown)
+        if (at >= 0) return Triple(seeded, pictures, at)
+        val next = seeded + grown
+        val nextPictures = if (picturesTracked(pictures, seeded.size)) pictures + basePicture else pictures
+        return Triple(next, nextPictures, next.lastIndex)
+    }
+
+    /**
+     * One message at [removed] left the transcript and the rest moved up a row. Earlier versions
+     * follow their reply; the removed reply's own versions go.
+     */
+    fun afterRemoval(earlier: Map<Int, RpVersions>, removed: Int): Map<Int, RpVersions> {
+        if (earlier.isEmpty()) return earlier
+        return earlier.mapNotNull { (pos, v) ->
+            when {
+                pos < removed -> pos to v
+                pos == removed -> null
+                else -> pos - 1 to v
+            }
+        }.toMap()
+    }
+
+    /**
+     * The versions a branch that keeps the first [end] messages takes along: earlier replies
+     * before the cut, and the newest reply's own versions when that reply is kept.
+     */
+    fun forBranch(state: RpSwipeState, end: Int, lastReplyAt: Int, lastReplyText: String): Map<Int, RpVersions> {
+        val kept = state.earlier.filterKeys { it < end }
+        if (lastReplyAt !in 0 until end) return kept
+        return archive(state.copy(earlier = kept), lastReplyAt, lastReplyText)
+    }
+
+    /**
      * The newest reply is being left behind by a new turn. Keep its versions under its position
      * when there is more than one, so they can still be swiped later.
      */

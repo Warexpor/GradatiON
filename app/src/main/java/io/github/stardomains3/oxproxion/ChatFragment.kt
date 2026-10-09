@@ -2357,6 +2357,29 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         }
     }
 
+    /**
+     * Roleplay's Delete takes only this message; the story after it stays. "Delete from here"
+     * is the old cut, offered when there is something after it.
+     */
+    private fun confirmRpDelete(position: Int) {
+        val after = viewModel.hasMessagesAfter(position)
+        GrokConfirmDialog.show(
+            fragment = this,
+            title = getString(R.string.delete_message_title),
+            message = getString(if (after) R.string.rp_delete_one_body else R.string.rp_delete_last_body),
+            confirmText = getString(R.string.delete_message_confirm),
+            onConfirm = { viewModel.deleteRpMessageOnly(position) },
+            secondaryText = if (after) getString(R.string.rp_delete_from_here) else null,
+            onSecondary = {
+                viewModel.deleteMessageAt(position)
+                chatRecyclerView.post {
+                    if (chatAdapter.itemCount > 0) layoutManager.scrollToPosition(chatAdapter.itemCount - 1)
+                }
+            },
+            secondaryDestructive = true,
+        )
+    }
+
     /** Keep the last bubble's action row (copy / instruct / regen) above the composer. */
     private fun scrollChatToLatestEnd() {
         chatRecyclerView.post {
@@ -2448,21 +2471,25 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             },
             onDeleteMessage = { position ->
                 hideMenu()
-                GrokConfirmDialog.show(
-                    fragment = this@ChatFragment,
-                    title = getString(R.string.delete_message_title),
-                    message = getString(R.string.delete_message_body),
-                    confirmText = getString(R.string.delete_message_confirm),
-                    onConfirm = {
-                        viewModel.deleteMessageAt(position)
-                        chatRecyclerView.post {
-                            if (chatAdapter.itemCount > 0) {
-                                layoutManager.scrollToPosition(chatAdapter.itemCount - 1)
+                if (viewModel.isRpMode()) {
+                    confirmRpDelete(position)
+                } else {
+                    GrokConfirmDialog.show(
+                        fragment = this@ChatFragment,
+                        title = getString(R.string.delete_message_title),
+                        message = getString(R.string.delete_message_body),
+                        confirmText = getString(R.string.delete_message_confirm),
+                        onConfirm = {
+                            viewModel.deleteMessageAt(position)
+                            chatRecyclerView.post {
+                                if (chatAdapter.itemCount > 0) {
+                                    layoutManager.scrollToPosition(chatAdapter.itemCount - 1)
+                                }
                             }
+                            viewModel.autoSaveChat()
                         }
-                        viewModel.autoSaveChat()
-                    }
-                )
+                    )
+                }
             },
             onEditAssistantMessage = { position, currentRawText ->
                 val editFragment = EditMessageFragment.newInstance(position, currentRawText)
@@ -2517,6 +2544,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         chatAdapter.onStreamVisualUpdate = { followStreamingEdge() }
         chatAdapter.showThinking = sharedPreferencesHelper.isShowThinkingBlocks()
         chatAdapter.onMessageMenu = { anchor, items -> showMessageMenu(anchor, items) }
+        chatAdapter.onBranchMessage = { position -> viewModel.branchRpChat(position + 1) }
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 // Freeze the ambient field while the list moves: each frame re-blurs the glass.
@@ -3948,6 +3976,53 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
      * The save that drops the turn must not delete that file in the meantime.
      */
     private fun beginEditMessage(position: Int, text: String) {
+        // Roleplay: an older line has a story after it. Ask before cutting it, and offer a
+        // branch that keeps this chat whole.
+        if (viewModel.isRpMode() && viewModel.rpCutDropsLaterTurns(position)) {
+            hideMenu()
+            GrokConfirmDialog.show(
+                fragment = this,
+                title = getString(R.string.rp_edit_earlier_title),
+                message = getString(R.string.rp_edit_earlier_body),
+                confirmText = getString(R.string.rp_branch),
+                onConfirm = { branchEditMessage(position, text) },
+                destructive = false,
+                secondaryText = getString(R.string.rp_edit_here),
+                onSecondary = { editMessageInPlace(position, text) },
+            )
+            return
+        }
+        editMessageInPlace(position, text)
+    }
+
+    /**
+     * Edit in a branch: a new chat holds the story up to this line, the field gets the line
+     * (and its photo), and the chat it came from keeps everything.
+     */
+    private fun branchEditMessage(position: Int, text: String) {
+        val message = viewModel.chatMessages.value?.getOrNull(position)
+        val editPhoto = ScenePhoto.editPhoto(
+            message?.content?.let { MessageContent.imageUrl(it) },
+            message?.imageUri
+        )
+        val branch = viewModel.branchRpChat(position) ?: return
+        if (editPhoto != null) photoSendInFlight = true
+        forgetStagedAttachment()
+        clearStagedAttachment(discardSceneFile = true)
+        viewLifecycleOwner.lifecycleScope.launch {
+            branch.join()
+            if (!isAdded) return@launch
+            chatEditText.setText(text)
+            chatEditText.setSelection(text.length)
+            chatEditText.showKeyboard()
+            updateSendButtonChrome()
+            // The chat it came from still has this photo, so nothing holds the file.
+            if (editPhoto == null) return@launch
+            stageEditPhoto(editPhoto, heldUri = null, editEpoch = viewModel.openChatEpoch())
+        }
+    }
+
+    private fun editMessageInPlace(position: Int, text: String) {
         val previousDraft = chatEditText.text?.toString().orEmpty()
         val message = viewModel.chatMessages.value?.getOrNull(position)
         val editPhoto = ScenePhoto.editPhoto(
@@ -3974,6 +4049,12 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         updateSendButtonChrome()
         refreshEditBanner()
         if (editPhoto == null) return
+        stageEditPhoto(editPhoto, heldUri, editEpoch)
+    }
+
+    /** Read the edited turn's photo back into the composer. [heldUri] is released or dropped once it is staged. */
+    private fun stageEditPhoto(editPhoto: ScenePhoto.EditPhoto, heldUri: String?, editEpoch: Long) {
+        photoSendInFlight = true
         val appContext = requireContext().applicationContext
         val photoGen = ++editPhotoGen
         viewLifecycleOwner.lifecycleScope.launch {
