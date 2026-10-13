@@ -97,6 +97,29 @@ object RpAutoMemory {
         return out
     }
 
+    /** Turns kept before the new ones, so the summary still knows the scene they continue. */
+    const val CONTEXT_TURNS = 4
+    /** A failed run waits this many messages before it tries again, then every time after a success. */
+    const val FAILURES_BEFORE_BACKOFF = 2
+
+    /**
+     * The end (exclusive) of the turns one run covers, starting at [from]. A chat whose new turns
+     * do not fit [TRANSCRIPT_CHARS] is caught up in batches, oldest first, so turns that left the
+     * window before a run saw them are not lost. Always covers at least one turn.
+     */
+    fun batchEnd(turns: List<Pair<String, String>>, from: Int, maxChars: Int = TRANSCRIPT_CHARS): Int {
+        val start = from.coerceIn(0, turns.size)
+        var used = 0
+        var end = start
+        while (end < turns.size) {
+            val len = turns[end].second.length + 16
+            if (end > start && used + len > maxChars) break
+            used += len
+            end++
+        }
+        return end
+    }
+
     /** "Name: text" lines, newest last, trimmed from the front to [TRANSCRIPT_CHARS]. */
     fun transcript(turns: List<Pair<String, String>>, charName: String, userName: String): String {
         val lines = turns.map { (role, text) -> role to storyText(text) }

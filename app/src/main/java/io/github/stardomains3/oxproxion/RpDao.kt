@@ -64,6 +64,8 @@ interface RpDao {
     suspend fun importCharacters(
         incoming: List<RpCharacterExport>,
         beforeCommit: suspend (List<ImportedCharacter>) -> Unit = {},
+        /** A SillyTavern card has no style or prompt of ours: a character already here keeps its own. */
+        keepLocalExtras: Boolean = false,
     ): List<ImportedCharacter> {
         // The stamp from before this batch. A second copy of the same key sees the row
         // this transaction already updated; the rollback check has to use the original.
@@ -108,11 +110,11 @@ interface RpDao {
             val row = (existing ?: RpCharacter(name = name, exportKey = exportKey)).copy(
                 name = name,
                 personality = ex.personality,
-                style = ex.style,
+                style = if (keepLocalExtras && existing != null) existing.style else ex.style,
                 greeting = ex.greeting,
                 scenario = ex.scenario,
                 examplesJson = ex.examplesJson,
-                prompt = ex.prompt,
+                prompt = if (keepLocalExtras && existing != null) existing.prompt else ex.prompt,
                 instruction = ex.instruction,
                 photoUri = existing?.photoUri,
                 exportKey = exportKey,
@@ -145,7 +147,12 @@ interface RpDao {
      * An empty library with none marked active activates the first when [activateFirstIfNone] is set.
      */
     @Transaction
-    suspend fun importLorebooks(incoming: List<RpLorebookExport>, activateFirstIfNone: Boolean): Int {
+    suspend fun importLorebooks(
+        incoming: List<RpLorebookExport>,
+        activateFirstIfNone: Boolean,
+        /** A card's own book: a book of that name already on the phone keeps its on or off. */
+        keepActive: Boolean = false,
+    ): Int {
         // One book listed twice is one book. Applying the earlier copy first left it active
         // when the last copy turned it off, and that pass also cleared a different book that
         // was already active on the phone.
@@ -186,7 +193,7 @@ interface RpDao {
                         existing.copy(
                             name = name,
                             content = ex.content,
-                            isActive = if (anyActive) existing.isActive else false,
+                            isActive = if (anyActive || keepActive) existing.isActive else false,
                             updatedAt = now,
                         )
                     )

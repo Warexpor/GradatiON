@@ -2489,6 +2489,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         chatAdapter.showThinking = sharedPreferencesHelper.isShowThinkingBlocks()
         chatAdapter.onMessageMenu = { anchor, items -> showMessageMenu(anchor, items) }
         chatAdapter.onBranchMessage = { position -> viewModel.branchRpChat(position + 1) }
+        chatAdapter.onRegenerateEarlier = { position -> viewModel.regenerateEarlierRpReply(position) }
+        chatAdapter.onDeleteReply = { position -> hideMenu(); confirmRpDelete(position) }
         chatRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 // Freeze the ambient field while the list moves: each frame re-blurs the glass.
@@ -3983,7 +3985,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         if (heldUri != null) viewModel.holdScenePhoto(heldUri)
         val editEpoch = viewModel.openChatEpoch()
         if (viewModel.isRpMode()) {
-            viewModel.truncateForRpEdit(position)
+            viewModel.truncateForRpEdit(position, previousDraft)
         } else {
             viewModel.stashAndTruncateFrom(position, anchorAssistantIndex = -1)
             viewModel.openComposerEdit(previousDraft)

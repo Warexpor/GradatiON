@@ -8,21 +8,21 @@ package io.github.stardomains3.oxproxion
 object ChatEdit {
 
     /**
-     * The composer is holding a cut that has not been sent. Variant 2 is the side that
-     * shows the cut; the stashed side is the original turn. Once a message occupies the
-     * cut, the edit has been sent and the fork navigator takes over.
+     * The composer is holding a cut that has not been sent. The newest branch is the one
+     * that shows the cut; the older branches hold the original turn. Once a message occupies
+     * the cut, the edit has been sent and the fork navigator takes over.
      */
     fun awaitingSend(
         marked: Boolean,
         sameChat: Boolean,
         roleplay: Boolean,
         hasFork: Boolean,
-        variant: Int,
+        onNewestBranch: Boolean,
         forkIndex: Int,
         messageCount: Int,
     ): Boolean {
         if (!marked || !sameChat || roleplay) return false
-        if (!hasFork || variant != 2 || forkIndex < 0) return false
+        if (!hasFork || !onNewestBranch || forkIndex < 0) return false
         return messageCount <= forkIndex
     }
 

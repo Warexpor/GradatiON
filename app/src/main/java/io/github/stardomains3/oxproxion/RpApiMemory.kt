@@ -35,7 +35,9 @@ object RpApiMemory {
     fun historyChars(contextTokens: Int?, systemChars: Int = SYSTEM_RESERVE_CHARS): Int {
         val tokens = contextTokens?.takeIf { it > 0 } ?: DEFAULT_CONTEXT_TOKENS
         val room = (tokens.toLong() - REPLY_RESERVE_TOKENS) * CHARS_PER_TOKEN - systemChars
-        return room.coerceIn(MIN_HISTORY_CHARS.toLong(), Int.MAX_VALUE.toLong()).toInt()
+        // A small window cannot hold the full floor next to the card: keep a quarter of it at most.
+        val floor = minOf(MIN_HISTORY_CHARS.toLong(), tokens.toLong() * CHARS_PER_TOKEN / 4)
+        return room.coerceIn(floor, Int.MAX_VALUE.toLong()).toInt()
     }
 
     /** How many of the newest messages fit in [maxChars]. The newest one always counts. */

@@ -639,4 +639,20 @@ class RpLoreTest {
         assertTrue(RpLore.select(wrapped, "Meet me at the docks.").contains("dawn"))
     }
 
+
+    @Test
+    fun anAlwaysOnNoteDoesNotPullAKeyedBlock() {
+        val book = "Note: the docks are closed.\n\n[keys: docks]\nThe Grey Docks smell of tar."
+        assertFalse(RpLore.select(book, "hi").contains("Grey Docks"))
+        assertTrue(RpLore.select(book, "the docks").contains("Grey Docks"))
+    }
+
+    @Test
+    fun aMatchTooBigForWhatIsLeftDoesNotDropTheShorterOnesAfterIt() {
+        val book = "[keys: alpha]\n" + "A".repeat(900) + "\n\n[keys: beta]\n" + "B".repeat(300) +
+            "\n\n[keys: gamma]\nGamma is short."
+        val out = RpLore.select(book, "alpha beta gamma", maxChars = 1_000)
+        assertTrue(out.contains("Gamma is short."))
+        assertFalse(out.contains("BBB"))
+    }
 }

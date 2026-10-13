@@ -574,7 +574,47 @@ class RpMemoryFragment : RpPageFragment() {
         section(getString(R.string.rp_page_facts_section))
         facts = field(R.string.rp_facts_hint, saved?.getString(KEY_FACTS) ?: factsStart)
         footnote(getString(R.string.rp_page_facts_foot))
+        factsControls()
         pinSave(::save)
+    }
+
+    /** Update now, start over, one step back, and auto updates off for this chat only. */
+    private fun factsControls() {
+        val coverage = chatViewModel.rpFactsCoverage()
+        section(getString(R.string.rp_facts_controls_section))
+        val box = card()
+        row(box, getString(R.string.rp_facts_refresh), getString(R.string.rp_facts_refresh_sub, coverage.first, coverage.second)) {
+            if (chatViewModel.refreshRpFactsNow()) GlassNotice.show(requireContext(), getString(R.string.rp_facts_working))
+            else GlassNotice.show(requireContext(), getString(R.string.rp_wait_for_reply))
+        }
+        row(box, getString(R.string.rp_facts_rebuild), getString(R.string.rp_facts_rebuild_sub)) {
+            if (chatViewModel.refreshRpFactsNow(rebuild = true)) GlassNotice.show(requireContext(), getString(R.string.rp_facts_working))
+            else GlassNotice.show(requireContext(), getString(R.string.rp_wait_for_reply))
+        }
+        val previous = chatViewModel.previousRpFacts()
+        if (previous.isNotBlank()) {
+            row(box, getString(R.string.rp_facts_undo), getString(R.string.rp_facts_undo_sub)) {
+                facts?.setText(previous)
+            }
+        }
+        var paused = chatViewModel.isRpFactsPausedHere()
+        var check: ImageView? = null
+        check = row(box, getString(R.string.rp_facts_pause), getString(R.string.rp_facts_pause_sub), selected = paused) {
+            paused = !paused
+            chatViewModel.setRpFactsPausedHere(paused)
+            check?.visibility = if (paused) View.VISIBLE else View.INVISIBLE
+        }.second
+        chatViewModel.rpFactsStatus.observe(viewLifecycleOwner) { event ->
+            val ok = event.getContentIfNotHandled() ?: return@observe
+            if (!isAdded) return@observe
+            val fresh = chatViewModel.currentRpFacts()
+            // The new facts land in the field unless the user is already changing it.
+            if (ok && facts?.text?.toString() == factsStart) {
+                facts?.setText(fresh)
+            }
+            if (ok) factsStart = fresh
+            GlassNotice.show(requireContext(), getString(if (ok) R.string.rp_facts_updated else R.string.rp_facts_failed))
+        }
     }
 
     private fun field(hintRes: Int, text: String): EditText {

@@ -70,11 +70,17 @@ object ChatSaveGate {
         sessionId: Long?,
         hasAssistant: Boolean,
         messagesEmpty: Boolean,
-        hasUser: Boolean = true
+        hasUser: Boolean = true,
+        /**
+         * The chat is being left. A line you sent whose answer had not come yet is still a chat:
+         * leaving used to throw it away with the reply it was waiting for.
+         */
+        leaving: Boolean = false,
     ): AutoSaveKind = when {
         sessionId != null -> AutoSaveKind.ReuseExisting
         // A Roleplay greeting alone is not a chat yet. Leaving it would add a row to History.
-        messagesEmpty || !hasAssistant || !hasUser -> AutoSaveKind.Skip
+        messagesEmpty || !hasUser -> AutoSaveKind.Skip
+        !hasAssistant && !leaving -> AutoSaveKind.Skip
         else -> AutoSaveKind.FirstSaveNeedsAssistant
     }
 

@@ -93,7 +93,8 @@ class RpApiMemoryTest {
         )
         assertEquals(RpApiMemory.historyChars(null, 10_000), RpApiMemory.historyChars(0, 10_000))
         // A tiny window still keeps a few turns.
-        assertEquals(8_000, RpApiMemory.historyChars(4_096, 50_000))
+        assertEquals(4_096 * 3 / 4, RpApiMemory.historyChars(4_096, 50_000))
+        assertEquals(8_000, RpApiMemory.historyChars(32_768, 200_000))
     }
 
     @Test

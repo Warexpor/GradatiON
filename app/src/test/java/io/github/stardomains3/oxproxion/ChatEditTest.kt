@@ -14,7 +14,7 @@ class ChatEditTest {
                 sameChat = true,
                 roleplay = false,
                 hasFork = true,
-                variant = 2,
+                onNewestBranch = true,
                 forkIndex = 2,
                 messageCount = 2,
             )
@@ -28,7 +28,7 @@ class ChatEditTest {
                 sameChat = true,
                 roleplay = false,
                 hasFork = true,
-                variant = 2,
+                onNewestBranch = true,
                 forkIndex = 2,
                 messageCount = 2,
             )
@@ -39,7 +39,7 @@ class ChatEditTest {
                 sameChat = true,
                 roleplay = false,
                 hasFork = true,
-                variant = 2,
+                onNewestBranch = true,
                 forkIndex = 2,
                 messageCount = 3,
             )
@@ -50,7 +50,7 @@ class ChatEditTest {
                 sameChat = false,
                 roleplay = false,
                 hasFork = true,
-                variant = 2,
+                onNewestBranch = true,
                 forkIndex = 2,
                 messageCount = 2,
             )
@@ -61,7 +61,7 @@ class ChatEditTest {
                 sameChat = true,
                 roleplay = true,
                 hasFork = true,
-                variant = 2,
+                onNewestBranch = true,
                 forkIndex = 2,
                 messageCount = 2,
             )

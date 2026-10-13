@@ -2,6 +2,7 @@ package io.github.stardomains3.oxproxion
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
@@ -93,7 +94,20 @@ fun FlexibleMessage.toApiMessage(): FlexibleMessage {
 }
 
 fun List<FlexibleMessage>.toApiMessages(): List<FlexibleMessage> =
-    RpContinuation.joinBlocks(MessageContent.keepRecentPhotos(this).map { it.toApiMessage() })
+    RpContinuation.joinBlocks(MessageContent.keepRecentPhotos(this).map { it.withoutErrorText().toApiMessage() })
+
+/**
+ * An error bubble is the app talking, not the model. Sent as is, the model read "Error: 429"
+ * as its own last reply. The turn stays, so roles still alternate, with a neutral note.
+ */
+private fun FlexibleMessage.withoutErrorText(): FlexibleMessage {
+    if (role != "assistant") return this
+    val text = (content as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return this
+    if (!text.startsWith(ChatViewModel.ERROR_BUBBLE_PREFIX)) return this
+    return copy(content = JsonPrimitive(FAILED_TURN_NOTE), reasoning = null, thinking = null)
+}
+
+internal const val FAILED_TURN_NOTE = "(No reply: the request failed.)"
 
 @Serializable
 data class Plugin(

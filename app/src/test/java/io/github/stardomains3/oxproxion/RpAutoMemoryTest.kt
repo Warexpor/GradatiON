@@ -204,4 +204,14 @@ class RpAutoMemoryTest {
         assertEquals("", RpAutoMemory.storyText(note))
         assertEquals("She opens it.", RpAutoMemory.storyText(note + "\n\nShe opens it."))
     }
+
+    @Test fun aLongBacklogIsCaughtUpInBatchesOldestFirst() {
+        val turns = (1..10).map { "user" to "x".repeat(4_000) }
+        val first = RpAutoMemory.batchEnd(turns, 0)
+        assertTrue(first in 1..4)
+        assertEquals(first + RpAutoMemory.batchEnd(turns.drop(first), 0), RpAutoMemory.batchEnd(turns, first))
+        // One turn longer than the whole batch still moves forward.
+        assertEquals(1, RpAutoMemory.batchEnd(listOf("user" to "y".repeat(50_000)), 0))
+        assertEquals(10, RpAutoMemory.batchEnd(turns, 10))
+    }
 }

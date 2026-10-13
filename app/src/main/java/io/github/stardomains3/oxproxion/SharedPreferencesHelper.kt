@@ -887,6 +887,9 @@ class SharedPreferencesHelper(context: Context) {
             remove("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId")
             remove("rp_facts_$sessionId")
+            remove("rp_facts_prev_$sessionId")
+            remove("rp_facts_run_$sessionId")
+            remove("rp_facts_paused_$sessionId")
             if (sessionId in pins) {
                 putStringSet(
                     KEY_PINNED_SESSION_IDS,
@@ -1960,7 +1963,25 @@ class SharedPreferencesHelper(context: Context) {
     /** Facts the model keeps for one chat. Separate from the Memory note the user wrote. */
     fun getRpFacts(sessionId: Long): String = mainPrefs.getString("rp_facts_$sessionId", "") ?: ""
     fun saveRpFacts(sessionId: Long, text: String) = mainPrefs.edit(commit = true) {
+        // The facts being replaced stay one step back, for the Memory page's Undo.
+        val old = mainPrefs.getString("rp_facts_$sessionId", "").orEmpty()
+        if (old.isNotBlank() && old != text.trim()) putString("rp_facts_prev_$sessionId", old)
         if (text.isBlank()) remove("rp_facts_$sessionId") else putString("rp_facts_$sessionId", text.trim())
+    }
+
+    /** The facts before the last change, or blank. */
+    fun getRpFactsPrevious(sessionId: Long): String = mainPrefs.getString("rp_facts_prev_$sessionId", "") ?: ""
+
+    /** How many turns the facts already cover, so a restart does not start the catch-up over. */
+    fun getRpFactsRunAt(sessionId: Long): Int = mainPrefs.getInt("rp_facts_run_$sessionId", 0)
+    fun saveRpFactsRunAt(sessionId: Long, count: Int) = mainPrefs.edit {
+        if (count <= 0) remove("rp_facts_run_$sessionId") else putInt("rp_facts_run_$sessionId", count)
+    }
+
+    /** Auto facts off for one chat, whatever the global switch says. */
+    fun isRpFactsPaused(sessionId: Long): Boolean = mainPrefs.getBoolean("rp_facts_paused_$sessionId", false)
+    fun setRpFactsPaused(sessionId: Long, paused: Boolean) = mainPrefs.edit {
+        if (paused) putBoolean("rp_facts_paused_$sessionId", true) else remove("rp_facts_paused_$sessionId")
     }
 
     fun getRpPendingInstruct(): String? = mainPrefs.getString(KEY_RP_PENDING_INSTRUCT, null)

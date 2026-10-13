@@ -451,7 +451,7 @@ class RpScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals(firstPiece, replyText())
         vm.swipeRpNext(); idle()
         val afterText = replyText()
-        // Stop a second Continue mid-stream: its bubble goes, the pieces before it and their versions stay.
+        // Stop a second Continue mid-stream: what arrived stays as its own bubble, the pieces before it stay.
         DemoModel.pace = 1f
         try {
             send.performClick()
@@ -464,8 +464,13 @@ class RpScreenshotTest : ScreenshotHarness() {
         } finally {
             DemoModel.pace = 0.02f
         }
-        org.junit.Assert.assertEquals(before + 1, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals("the partial is kept", before + 2, vm.chatMessages.value.orEmpty().size)
         org.junit.Assert.assertEquals(afterText, replyText())
+        org.junit.Assert.assertTrue(vm.getMessageText(vm.chatMessages.value.orEmpty()[before + 1].content).isNotBlank())
+        org.junit.Assert.assertEquals("the kept partial is the newest version", 1, vm.rpSwipeNav.value?.total)
+        // Deleting it hands the newest-reply versions back to the piece before.
+        vm.deleteRpMessageOnly(before + 1); idle()
+        org.junit.Assert.assertEquals(before + 1, vm.chatMessages.value.orEmpty().size)
         org.junit.Assert.assertEquals("versions come back with the swipe bar", 2, vm.rpSwipeNav.value?.total)
         // A third version, then a new turn: the reply keeps all three, a swipe away.
         vm.swipeRpNext()

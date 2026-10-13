@@ -68,7 +68,8 @@ class RpPersonaFragment : Fragment() {
         var baseline = RpPersonaPreset(prefs.getRpPersonaName(), prefs.getRpPersona(), prefs.getRpPersonaPhoto())
         nameInput.setText(baseline.name)
         aboutInput.setText(baseline.description)
-        photo = baseline.photo
+        // The fields restore themselves after a rotation; a portrait picked before it is ours to bring back.
+        photo = if (savedInstanceState?.getBoolean(KEY_PHOTO_SET) == true) savedInstanceState.getString(KEY_PHOTO) else baseline.photo
 
         renderList()
         // Personas are per character, so say whose this is.
@@ -134,8 +135,8 @@ class RpPersonaFragment : Fragment() {
             prefs.saveRpPersona(persona.description)
             prefs.saveRpPersonaName(persona.name)
             prefs.saveRpPersonaPhoto(persona.photo)
-            // Saving a persona is choosing to be it, so it comes back on if it was off.
-            prefs.setRpPersonaEnabled(true)
+            // Saving a persona is choosing to be it, so it comes back on if it was off. A blank one is not a persona.
+            if (persona.name.isNotBlank() || persona.description.isNotBlank()) prefs.setRpPersonaEnabled(true)
             baseline = persona
             val droppedOldest = if (persona.name.isNotEmpty()) keep(persona) else false
             prune()
@@ -286,7 +287,15 @@ class RpPersonaFragment : Fragment() {
         )
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_PHOTO_SET, true)
+        outState.putString(KEY_PHOTO, photo)
+    }
+
     companion object {
+        private const val KEY_PHOTO_SET = "state_persona_photo_set"
+        private const val KEY_PHOTO = "state_persona_photo"
         private const val MAX = 12
 
         fun newInstance() = RpPersonaFragment()

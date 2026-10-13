@@ -176,6 +176,10 @@ class ChatAdapter(
     var onMessageMenu: ((View, List<MessageMenu.Item>) -> Unit)? = null
     /** Roleplay's Branch from here, with the reply's position. */
     var onBranchMessage: ((Int) -> Unit)? = null
+    /** Roleplay: a new version of a reply that has the story after it, made in place. */
+    var onRegenerateEarlier: ((Int) -> Unit)? = null
+    /** Roleplay: delete a reply (the confirm offers this one only, or everything after too). */
+    var onDeleteReply: ((Int) -> Unit)? = null
 
     /** Show the model's thinking above replies; off hides the block entirely. */
     var showThinking = true
@@ -1194,13 +1198,23 @@ class ChatAdapter(
         private val moreActionsButton: ImageButton = itemView.findViewById(R.id.moreActionsButton)
 
         /** ⋮ after Regenerate: Read aloud, Rewrite (any Roleplay reply) and Edit. */
-        private fun bindMoreActions(speakingHere: Boolean, canRewrite: Boolean, canBranch: Boolean) {
+        private fun bindMoreActions(
+            speakingHere: Boolean,
+            canRewrite: Boolean,
+            canBranch: Boolean,
+            canRegenerateHere: Boolean = false,
+            canDelete: Boolean = false,
+        ) {
             val ctx = itemView.context
             val rows = buildList {
                 if (ttsAvailable) add(MessageMenu.Item(
                     ctx.getString(if (speakingHere) R.string.msg_menu_stop_reading else R.string.msg_menu_read),
                     if (speakingHere) R.drawable.ic_msg_stop else R.drawable.ic_msg_speak,
                 ) { ttsButton.performClick() })
+                if (canRegenerateHere) add(MessageMenu.Item(ctx.getString(R.string.msg_menu_regenerate), R.drawable.ic_msg_regenerate) {
+                    val pos = bindingAdapterPosition
+                    if (pos >= 0) onRegenerateEarlier?.invoke(pos)
+                })
                 if (canRewrite) add(MessageMenu.Item(ctx.getString(R.string.msg_menu_instruct), R.drawable.ic_msg_instruct) {
                     instructButton.performClick()
                 })
@@ -1211,6 +1225,10 @@ class ChatAdapter(
                 if (canBranch) add(MessageMenu.Item(ctx.getString(R.string.rp_branch_from_here), R.drawable.ic_msg_branch) {
                     val pos = bindingAdapterPosition
                     if (pos >= 0) onBranchMessage?.invoke(pos)
+                })
+                if (canDelete) add(MessageMenu.Item(ctx.getString(R.string.msg_menu_delete), R.drawable.ic_msg_delete) {
+                    val pos = bindingAdapterPosition
+                    if (pos >= 0) onDeleteReply?.invoke(pos)
                 })
             }
             moreActionsButton.setOnClickListener { onMessageMenu?.invoke(moreActionsButton, rows) }
@@ -1731,8 +1749,7 @@ class ChatAdapter(
                 // (your line there deleted).
                 (if (isRpMode) position == lastAssistantIndex && lastUserIndex in 0 until position
                 else messages[position - 1].role == "user") &&
-                !isThinking &&
-                (!isError || isRpMode)
+                !isThinking
             ) View.VISIBLE else View.GONE
             copyButton.setOnClickListener {
                 val clipboard = itemView.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -1767,6 +1784,10 @@ class ChatAdapter(
                 canRewrite = isRpMode && !isThinking && !isError && text.isNotBlank(),
                 // Past the greeting: a branch at the greeting is just a new chat.
                 canBranch = isRpMode && !isThinking && position > 0,
+                // The newest reply has its own Regenerate. One with the story after it gets a version in place.
+                canRegenerateHere = isRpMode && !isThinking && !isError && position > 0 &&
+                    regenerateButton.visibility != View.VISIBLE,
+                canDelete = isRpMode && !isThinking && position > 0,
             )
 
             ttsButton.setOnClickListener {

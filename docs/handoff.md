@@ -1,3 +1,16 @@
+# Handoff (2026-10-13, RP and chat audit fixes)
+
+- From a read-only audit of RP and the chat harness. Fixed on `liquid-glass-redesign`:
+  - Stop keeps what arrived. RP: the partial is the reply (a new version on a regenerate); only an empty stop rolls back. Main chat: an error mid-stream keeps the partial and puts the error under it.
+  - Main-chat branches: any number per chat (`ForkBranches`, stored by `ForkLoad.encode`; two branches keep the old blob shape). One cut point; a deeper cut keeps the whole tail as a branch, a shallower one moves the cut up and carries every branch. Edit Cancel restores the exact pre-cut state from memory (`preCut`).
+  - RP Edit can be cancelled (banner) until sent: transcript, versions and pictures come back (`RpEditUndo`, pictures held meanwhile).
+  - RP reply menu: Regenerate (in place, as a version, on replies with story after them) and Delete.
+  - Facts: watermark persisted (`rp_facts_run_<id>`), long backlogs caught up in batches, two failures in a row skip ahead, regenerations no longer write facts, cuts clamp the watermark, measured system prompt drives the trigger. Memory page: Update now, Rebuild, Undo (`rp_facts_prev_<id>`), Pause in this chat.
+  - Rewrite of a Continue piece no longer merges it with the piece before on the wire. Leak filter keeps "Important:" story lines. Lore: always-on text does not chain keyed entries; an oversized match is skipped instead of ending the fit. Card import keeps a same-named book's on/off and an existing character's style/prompt.
+  - Error bubbles: Regenerate in main chat, sent to the model as a neutral note. Leaving a new chat before its first answer saves it. LAN `<think>` leaks stripped in the main chat. Persona portrait survives rotation; a blank persona no longer switches personas on.
+- Not done: a save waiting in line can still undo a History rename; lorebook keys with commas still split; Continue mid-word joins with a space on the wire; alternate greetings not imported; process death mid-first-reply still loses the line.
+- Phone checks: Stop mid-reply and mid-regenerate (RP and main), Redo three times in main chat (1/4 counter), Edit then Cancel in RP, Memory page buttons.
+
 # Handoff (2026-10-06, 3.1.1)
 
 - `main` is at 1bdf7610: 3.1.0 plus only the jump-buttons fix (versionCode 30101, CHANGELOG `## 3.1.1`, fastlane `30101.txt`). Not signed or tagged yet: run `scripts/release.sh` where the key is, install over 3.1.0, then `git tag v3.1.1 && git push origin v3.1.1`.

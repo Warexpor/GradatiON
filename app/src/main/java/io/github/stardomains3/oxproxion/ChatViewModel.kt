@@ -479,8 +479,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val hasChatFork: LiveData<Boolean> = _hasChatFork
     private var forkIndex: Int = -1
     private var forkAnchorAssistantIndex: Int = -1
-    private var stashedForkTail: List<FlexibleMessage> = emptyList()
-    private var forkDisplayVariant: Int = 1
+    /**
+     * Every branch from [forkIndex], oldest first. The one on screen is [forkActive]; its slot is
+     * empty, since the transcript holds it. Each Redo or Edit at the cut adds one.
+     */
+    private var forkBranches: List<List<FlexibleMessage>> = emptyList()
+    private var forkActive: Int = 0
+    private val forkDisplayVariant: Int get() = forkActive + 1
+    /** Where the last cut was made, and everything as it was before it, so Cancel on an Edit puts it all back. */
+    private var lastCutIndex: Int = -1
+    private var preCut: PreCut? = null
+
+    private class PreCut(
+        val transcript: List<FlexibleMessage>,
+        val index: Int,
+        val anchor: Int,
+        val branches: List<List<FlexibleMessage>>,
+        val active: Int,
+    )
+    private val hasStashedBranch: Boolean
+        get() = forkIndex >= 0 && forkBranches.withIndex().any { (i, t) -> i != forkActive && t.isNotEmpty() }
     /**
      * Set while Edit has cut a turn and the replacement has not been sent. A regenerate
      * uses the fork too, and must not show Cancel. Keyed like [ComposerDrafts].
@@ -535,6 +553,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         message.role == "assistant" &&
             (message.content as? JsonPrimitive)?.contentOrNull?.let(ThinkingPlaceholder::matches) == true
 
+    private fun withoutLeakedThinking(text: String): String {
+        if (!text.contains("</think>") && !text.trimStart().startsWith("<think>")) return text
+        var out = text.replace(Regex("(?s)<think>.*?</think>"), "")
+        if (out.contains("</think>")) out = out.substringAfterLast("</think>")
+        out = out.replace(Regex("(?s)^\\s*<think>.*"), "")
+        return out.trim().ifEmpty { text }
+    }
+
+    private fun isErrorBubble(message: FlexibleMessage): Boolean =
+        message.role == "assistant" &&
+            (message.content as? JsonPrimitive)?.contentOrNull?.startsWith(ERROR_BUBBLE_PREFIX) == true
+
     private fun isAssistantPlaceholder(message: FlexibleMessage): Boolean {
         if (message.role != "assistant") return false
         val text = (message.content as? JsonPrimitive)?.contentOrNull ?: return false
@@ -557,7 +587,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun putAssistantMessage(list: MutableList<FlexibleMessage>, thinkingMessage: FlexibleMessage?, message: FlexibleMessage) {
         val index = resolveAssistantSlot(list, thinkingMessage)
-        if (index != -1) {
+        val incomingText = (message.content as? JsonPrimitive)?.contentOrNull
+        val partialText = list.getOrNull(index)?.takeIf { it.role == "assistant" && !isAssistantPlaceholder(it) }
+            ?.let { (it.content as? JsonPrimitive)?.contentOrNull }
+        if (index != -1 && incomingText?.startsWith(ERROR_BUBBLE_PREFIX) == true &&
+            partialText != null && !partialText.startsWith(ERROR_BUBBLE_PREFIX)
+        ) {
+            // The stream broke after words arrived: they stay, and the error goes under them.
+            list.add(index + 1, message)
+            streamingAssistantIndex = index + 1
+        } else if (index != -1) {
             list[index] = message
             streamingAssistantIndex = index
         } else {
@@ -990,7 +1029,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private data class CapturedFork(
         val index: Int,
         val anchor: Int,
-        val messages: List<FlexibleMessage>,
+        val branches: List<List<FlexibleMessage>>,
+        val active: Int,
     )
 
     private data class ChatPersistSnapshot(
@@ -1028,10 +1068,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             messages = (_chatMessages.value ?: emptyList()).filterNot(::isThinkingBubble).map { it.copy() },
             draftFacts = if (id == null) draftRpFacts else null,
             draftAtCapture = sharedPreferencesHelper.getRpDraftSessionId(ChatMode.fromStorage(mode)),
-            fork = if (stashedForkTail.isEmpty() || forkIndex < 0) null else CapturedFork(
+            fork = if (!hasStashedBranch) null else CapturedFork(
                 index = forkIndex,
                 anchor = forkAnchorAssistantIndex,
-                messages = stashedForkTail.map { it.copy() },
+                branches = forkBranches.map { tail -> tail.map { it.copy() } },
+                active = forkActive,
             ),
             swipe = rpSwipeState.takeIf { !it.isEmpty },
             editDraft = composerEditDrafts[ComposerDrafts.key(id)]
@@ -1167,7 +1208,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         if (!chatSaveSerial.isCurrent(ticket)) return
-        releaseDroppedScenePhotos(sessionId, previousPhotos, messagesToSave + snap.fork?.messages.orEmpty(), snap.swipe)
+        releaseDroppedScenePhotos(sessionId, previousPhotos, messagesToSave + snap.fork?.branches.orEmpty().flatten(), snap.swipe)
         if (
             ChatSaveGate.decide(
                 epochAtSchedule = snap.epoch,
@@ -1204,7 +1245,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 sessionId = snap.sessionId,
                 hasAssistant = hasAssistant,
                 messagesEmpty = snap.messages.isEmpty(),
-                hasUser = snap.messages.any { it.role == "user" }
+                hasUser = snap.messages.any { it.role == "user" },
+                leaving = !allowNetworkTitle,
             )
         ) {
             ChatSaveGate.AutoSaveKind.Skip -> return
@@ -1243,7 +1285,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        if (snap.messages.isEmpty() || snap.messages.none { it.role == "assistant" }) return ""
+        if (snap.messages.isEmpty()) return ""
+        if (snap.messages.none { it.role == "assistant" }) {
+            // Left before the first answer: keep the line under its own words.
+            return if (!allowNetworkTitle && snap.mode != ChatMode.RP.storageValue) localChatTitle(snap.messages) else ""
+        }
         if (snap.mode == ChatMode.RP.storageValue) {
             return buildRpAutosaveTitle(snap.messages, snap.isLlm)
         }
@@ -1630,8 +1676,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         activeStreamPump = null
         lanFetchJob?.cancel()
         sharedPreferencesHelper.saveRpPendingInstruct(null)
-        if (restoreSwipeAlt && wasRpRegen) {
-            // Restore immediately so Fragment autosave-on-awaiting-clear cannot persist a hole.
+        if (restoreSwipeAlt && (wasRpRegen || discardPartial) && keepStoppedRpPartial(wasRpRegen)) {
+            rpSwipeRestoreToken++
+        } else if (restoreSwipeAlt && wasRpRegen) {
+            // Nothing arrived yet. Restore immediately so Fragment autosave-on-awaiting-clear cannot persist a hole.
             restoreRpSwipeAltIfMissingAssistant()
             rpSwipeRestoreToken++
         } else if (restoreSwipeAlt && discardPartial) {
@@ -1646,6 +1694,39 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (clearAwaiting && _isAwaitingResponse.value == true) {
             _isAwaitingResponse.value = false
         }
+    }
+
+    /**
+     * Stop mid-stream keeps what already arrived: the partial is cleaned and stays as the reply.
+     * On a regenerate it joins the versions as the newest one, so the earlier reply is a swipe
+     * away. False when no words came yet (only the thinking bubble), so the caller rolls back.
+     */
+    private fun keepStoppedRpPartial(wasRpRegen: Boolean): Boolean {
+        if (!isRpMode()) return false
+        val messages = _chatMessages.value?.toMutableList() ?: return false
+        val at = streamingAssistantIndex.takeIf { it in messages.indices } ?: return false
+        val partial = messages[at]
+        if (partial.role != "assistant" || isAssistantPlaceholder(partial)) return false
+        val cleaned = rpDelegate.cleanReply(getMessageText(partial.content))
+        if (cleaned.isBlank() || isNonSwipeableRpAssistantText(cleaned)) return false
+        while (messages.lastIndex > at && isAssistantPlaceholder(messages.last())) {
+            messages.removeAt(messages.lastIndex)
+        }
+        messages[at] = partial.copy(content = JsonPrimitive(cleaned), reasoning = null, thinking = null)
+        streamingAssistantIndex = -1
+        rpRegenSlot = -1
+        rpDiscardFrom = -1
+        rpRegenRestoreFallback = null
+        _chatMessages.value = messages
+        if (wasRpRegen) {
+            appendRpSwipeAlt(cleaned)
+        } else {
+            rpSwipeState = rpSwipeState.copy(alts = listOf(cleaned), index = 0, pictureUris = emptyList())
+            persistRpSwipeState()
+            updateRpSwipeNav()
+        }
+        autoSaveChat()
+        return true
     }
 
     /**
@@ -2113,6 +2194,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         trimMessagesForApiMemory(messagesForApiRequest)
         // A rewrite's old reply and its note have to survive a tight memory window. Trim pins
         // the newest turn, which would be the note, and would drop the reply the note refers to.
+        // A Continue's piece follows the reply it carried on. Back to back, the wire joins them
+        // and the model rewrites both, so a hidden turn keeps the piece being rewritten apart.
+        if (extraTurns.firstOrNull()?.role == "assistant" && messagesForApiRequest.lastOrNull()?.role == "assistant") {
+            messagesForApiRequest.add(FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.CONTINUE_USER_TURN)))
+        }
         messagesForApiRequest.addAll(extraTurns)
         // Ending on the character's own line: the reply being redone is a Continue's bubble (or
         // follows a reply whose user line was deleted), so it carries that line on.
@@ -2241,6 +2327,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         var budget = (memoryCount - systemMessages.size).coerceAtLeast(1)
         if (isRpMode()) {
             val systemChars = systemMessages.sumOf { getMessageText(it.content).length }
+            if (systemChars > 0) lastRpSystemChars = systemChars
             budget = minOf(budget, rpFitCount(nonSystem, systemChars))
         }
         if (nonSystem.size <= budget) return
@@ -2626,8 +2713,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Stash messages from [startIndex] as the alternate branch, then truncate.
-     * One fork per chat: restoring swaps the active tail with the stash.
+     * Stash messages from [startIndex] as a branch, then truncate. A chat keeps one cut with any
+     * number of branches. A cut deeper than it keeps the whole tail from the cut as the branch,
+     * and a shallower one moves the cut up and carries every branch with it, so nothing is lost.
      */
     fun stashAndTruncateFrom(startIndex: Int, anchorAssistantIndex: Int = startIndex) {
         // A new cut replaces an edit that had not been sent. Edit marks itself again just after.
@@ -2636,14 +2724,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (startIndex < 0 || startIndex >= current.size) return
         // Stop does not change the messages. The copy above is still the tail to fork.
         stopTurnBeforeCut()
+        // An error bubble is not a reply worth keeping as a branch (Regenerate on it just retries).
         val discarded = current.subList(startIndex, current.size)
-            .filterNot { isAssistantPlaceholder(it) }
+            .filterNot { isAssistantPlaceholder(it) || isErrorBubble(it) }
             .map { it.copy() }
         if (discarded.isNotEmpty()) {
-            forkIndex = startIndex
-            stashedForkTail = discarded
-            forkDisplayVariant = 2
-            forkAnchorAssistantIndex = anchorAssistantIndex
+            preCut = PreCut(current.map { it.copy() }, forkIndex, forkAnchorAssistantIndex, forkBranches, forkActive)
+            lastCutIndex = startIndex
+            val prior = forkBranches.takeIf { forkIndex >= 0 && hasStashedBranch }
+            val raw = ForkBranches.cut(
+                current.map { it.copy() },
+                startIndex,
+                prior?.let { ForkBranches.State(forkIndex, it, forkActive) },
+            )
+            val cut = raw.copy(branches = raw.branches.map { t -> t.filterNot { isAssistantPlaceholder(it) || isErrorBubble(it) } })
+            val movedUp = prior != null && cut.index != forkIndex
+            forkIndex = cut.index
+            forkBranches = cut.branches
+            forkActive = cut.active
+            if (prior == null || movedUp || forkAnchorAssistantIndex < 0) {
+                forkAnchorAssistantIndex = if (cut.index == startIndex) anchorAssistantIndex else -1
+            }
             _hasChatFork.value = true
             persistForkToPrefs()
         }
@@ -2651,14 +2752,42 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _chatMessages.value = current
     }
 
+    /** A Roleplay Edit that has not been sent: what the chat was before the cut. */
+    private class RpEditUndo(
+        val key: String,
+        val transcript: List<FlexibleMessage>,
+        val swipe: RpSwipeState,
+        val held: Set<String>,
+        val cut: Int,
+        val draft: String,
+    )
+    private var rpEditUndo: RpEditUndo? = null
+
+    private fun openRpEdit(): RpEditUndo? {
+        val undo = rpEditUndo ?: return null
+        if (!isRpMode()) return null
+        // Sent, or another chat opened: the cut stands and its pictures may go.
+        if (undo.key != ComposerDrafts.key(currentSessionId) || (_chatMessages.value?.size ?: 0) > undo.cut) {
+            releaseRpEditUndo()
+            return null
+        }
+        return undo
+    }
+
+    private fun releaseRpEditUndo() {
+        val undo = rpEditUndo ?: return
+        rpEditUndo = null
+        synchronized(scenePhotosHeld) { scenePhotosHeld.removeAll(undo.held) }
+    }
+
     /** True while Edit has cut a turn and the replacement has not been sent. */
-    fun isComposerEditOpen(): Boolean = ChatEdit.awaitingSend(
+    fun isComposerEditOpen(): Boolean = openRpEdit() != null || ChatEdit.awaitingSend(
         marked = composerEditKey != null,
         sameChat = composerEditKey == ComposerDrafts.key(currentSessionId),
         roleplay = isRpMode(),
         hasFork = _hasChatFork.value == true,
-        variant = forkDisplayVariant,
-        forkIndex = forkIndex,
+        onNewestBranch = forkActive == forkBranches.lastIndex,
+        forkIndex = if (lastCutIndex >= 0) lastCutIndex else forkIndex,
         messageCount = _chatMessages.value?.size ?: 0,
     )
 
@@ -2668,8 +2797,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun openComposerEdit(draft: String) {
         if (isRpMode()) return
-        if (_hasChatFork.value != true || forkDisplayVariant != 2 || forkIndex < 0) return
-        if ((_chatMessages.value?.size ?: 0) > forkIndex) return
+        if (_hasChatFork.value != true || forkActive != forkBranches.lastIndex || forkIndex < 0) return
+        if ((_chatMessages.value?.size ?: 0) > (if (lastCutIndex >= 0) lastCutIndex else forkIndex)) return
         val key = ComposerDrafts.key(currentSessionId)
         if (composerEditKey != key || key !in composerEditDrafts) composerEditDrafts[key] = draft
         composerEditKey = key
@@ -2679,7 +2808,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** The replacement was sent, or a different cut replaced this one. The fork itself can stay. */
-    fun finishComposerEdit() = clearComposerEditMark()
+    fun finishComposerEdit() {
+        releaseRpEditUndo()
+        clearComposerEditMark()
+    }
 
     private fun clearComposerEditMark() {
         val id = currentSessionId
@@ -2702,6 +2834,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * is nothing to cancel (the edit was already sent, or this is not the chat it belongs to).
      */
     fun cancelComposerEdit(): EditCancel? {
+        openRpEdit()?.let { undo ->
+            releaseRpEditUndo()
+            _chatMessages.value = undo.transcript
+            rpSwipeState = undo.swipe
+            persistOrClearRpSwipe()
+            updateRpSwipeNav()
+            _rpEarlierVersionsChanged.value = Event(Unit)
+            autoSaveChat()
+            val restored = undo.transcript.getOrNull(undo.cut)?.let { getMessageText(it.content) }.orEmpty()
+            return EditCancel(undo.draft, restored)
+        }
         if (!isComposerEditOpen()) return null
         val id = currentSessionId
         val key = ComposerDrafts.key(id)
@@ -2710,11 +2853,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             id != null -> sharedPreferencesHelper.getChatForkEditDraft(id)
             else -> null
         }
-        val index = forkIndex
+        val index = if (lastCutIndex >= 0) lastCutIndex else forkIndex
         composerEditKey = null
         composerEditDrafts.remove(ComposerDrafts.NEW)
         id?.let { sharedPreferencesHelper.setChatForkEditing(it, false, null) }
-        restoreChatFork()
+        val before = preCut
+        if (before != null) {
+            // Everything as it was before the cut: the transcript and every branch.
+            preCut = null
+            lastCutIndex = -1
+            forkIndex = before.index
+            forkAnchorAssistantIndex = before.anchor
+            forkBranches = before.branches
+            forkActive = before.active
+            _chatMessages.value = before.transcript
+            _hasChatFork.value = hasStashedBranch
+            persistForkToPrefs()
+            autoSaveChat()
+        } else {
+            showForkBranch(forkBranches.lastIndex - 1, dropEmptyActive = true)
+        }
         val restored = _chatMessages.value?.getOrNull(index)?.let { getMessageText(it.content) }.orEmpty()
         return EditCancel(remembered, restored)
     }
@@ -2737,7 +2895,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (index >= current.size) return
         current.subList(index, current.size).clear()
         _chatMessages.value = current
+        // Branches hang off the turn at the cut. With that turn gone they would splice in elsewhere.
+        if (forkIndex >= 0 && index < forkIndex) {
+            clearForkMemory()
+            persistForkToPrefs()
+        } else {
+            preCut = null
+            lastCutIndex = -1
+        }
         syncRpSwipeAfterTranscriptChange()
+        clampRpMemoryWatermark()
         autoSaveChat()
     }
 
@@ -2764,6 +2931,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         _chatMessages.value = current
         syncRpSwipeAfterTranscriptChange()
+        clampRpMemoryWatermark()
         autoSaveChat()
     }
 
@@ -2817,15 +2985,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _chatMessages.value.orEmpty().withIndex().any { (i, m) -> i > index && m.role == "user" }
 
     /** Truncate for RP user-edit without creating an Ask-mode fork or leaving stale swipe state. */
-    fun truncateForRpEdit(startIndex: Int) {
+    fun truncateForRpEdit(startIndex: Int, draft: String = "") {
         val size = _chatMessages.value?.size ?: return
         if (startIndex < 0 || startIndex >= size) return
         stopTurnBeforeCut()
-        truncateWithoutFork(startIndex)
+        val before = _chatMessages.value.orEmpty().filterNot(::isAssistantPlaceholder).map { it.copy() }
+        val swipeBefore = rpSwipeState
         clearForkMemory()
+        releaseRpEditUndo()
+        // Cancel brings the cut turns back with their pictures, so no save may delete those files meanwhile.
+        val held = (before.drop(startIndex).mapNotNull { ScenePhoto.sceneFileName(it.imageUri) } +
+            swipePictureNames(swipeBefore)).toSet()
+        synchronized(scenePhotosHeld) { scenePhotosHeld.addAll(held) }
+        rpEditUndo = RpEditUndo(ComposerDrafts.key(currentSessionId), before, swipeBefore, held, startIndex, draft)
+        truncateWithoutFork(startIndex)
         forgetRpSwipeVersions()
         // The reply now newest gets its archived versions back as the swipe bar.
         syncRpSwipeAfterTranscriptChange()
+        clampRpMemoryWatermark()
         autoSaveChat()
     }
 
@@ -2874,71 +3051,97 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (position != forkAnchorAssistantIndex) return null
         return ForkNavState(
             variantIndex = forkDisplayVariant,
-            canGoPrev = forkDisplayVariant > 1,
-            canGoNext = forkDisplayVariant < 2
+            totalVariants = forkBranches.size,
+            canGoPrev = forkActive > 0,
+            canGoNext = forkActive < forkBranches.lastIndex
         )
     }
 
     fun navigateFork(direction: Int) {
         if (_hasChatFork.value != true) return
-        when {
-            direction < 0 && forkDisplayVariant > 1 -> restoreChatFork()
-            direction > 0 && forkDisplayVariant < 2 -> restoreChatFork()
-        }
+        val target = forkActive + direction.coerceIn(-1, 1)
+        if (target != forkActive && target in forkBranches.indices) showForkBranch(target)
     }
 
     private fun clearForkMemory() {
         forkIndex = -1
         forkAnchorAssistantIndex = -1
-        stashedForkTail = emptyList()
-        forkDisplayVariant = 1
+        forkBranches = emptyList()
+        forkActive = 0
+        lastCutIndex = -1
+        preCut = null
         composerEditKey = null
         _hasChatFork.value = false
     }
+    /** Flip to the branch before the one on screen (the original turn, after one cut). */
     fun restoreChatFork() {
-        if (_hasChatFork.value != true || forkIndex < 0 || stashedForkTail.isEmpty()) return
+        if (forkBranches.size < 2) return
+        showForkBranch(if (forkActive > 0) forkActive - 1 else 1)
+    }
+
+    /**
+     * Put branch [target] on screen and park the current tail in its slot. [dropEmptyActive]
+     * removes the slot being left when it holds nothing (an Edit that was cancelled).
+     */
+    private fun showForkBranch(target: Int, dropEmptyActive: Boolean = false) {
+        if (_hasChatFork.value != true || forkIndex < 0 || target !in forkBranches.indices) return
+        if (target == forkActive || forkBranches[target].isEmpty()) return
         val current = _chatMessages.value?.toMutableList() ?: return
+        preCut = null
+        lastCutIndex = -1
         val safeIndex = forkIndex.coerceIn(0, current.size)
         val prefix = current.take(safeIndex)
         val activeTail = current.drop(safeIndex)
             .filterNot { isAssistantPlaceholder(it) }
             .map { it.copy() }
-        val restoredTail = stashedForkTail.map { it.copy() }
-        stashedForkTail = activeTail
+        val restoredTail = forkBranches[target].map { it.copy() }
+        val slots = forkBranches.toMutableList()
+        slots[forkActive] = activeTail
+        slots[target] = emptyList()
+        var nextActive = target
+        if (activeTail.isEmpty() && dropEmptyActive) {
+            slots.removeAt(forkActive)
+            if (forkActive < target) nextActive--
+        }
+        forkBranches = slots
+        forkActive = nextActive
         forkIndex = safeIndex
-        forkDisplayVariant = 3 - forkDisplayVariant
         val merged = prefix + restoredTail
         _chatMessages.value = merged
         forkAnchorAssistantIndex = merged.indices.firstOrNull { i ->
             i >= safeIndex && merged[i].role == "assistant" && !isAssistantPlaceholder(merged[i])
         } ?: forkAnchorAssistantIndex
-        _hasChatFork.value = stashedForkTail.isNotEmpty()
+        if (!hasStashedBranch) {
+            forkIndex = -1
+            forkBranches = emptyList()
+            forkActive = 0
+            _hasChatFork.value = false
+        } else {
+            _hasChatFork.value = true
+        }
         persistForkToPrefs()
         autoSaveChat()
     }
 
     private fun persistForkToPrefs() {
         val sessionId = currentSessionId ?: return
-        if (stashedForkTail.isEmpty() || forkIndex < 0) {
+        if (!hasStashedBranch) {
             sharedPreferencesHelper.clearChatFork(sessionId)
             return
         }
         persistCapturedFork(
             sessionId,
-            CapturedFork(forkIndex, forkAnchorAssistantIndex, stashedForkTail)
+            CapturedFork(forkIndex, forkAnchorAssistantIndex, forkBranches, forkActive)
         )
     }
 
     private fun persistCapturedFork(sessionId: Long, fork: CapturedFork?) {
-        if (fork == null || fork.messages.isEmpty() || fork.index < 0) {
+        if (fork == null || fork.branches.size < 2 || fork.index < 0) {
             sharedPreferencesHelper.clearChatFork(sessionId)
             return
         }
         try {
-            val encoded = json.encodeToString(
-                ListSerializer(FlexibleMessage.serializer()),
-                fork.messages
-            )
+            val encoded = ForkLoad.encode(fork.branches, fork.active)
             sharedPreferencesHelper.saveChatFork(sessionId, fork.index, fork.anchor, encoded)
         } catch (e: Exception) {
             Log.e("ChatViewModel", "Could not save the other branch of chat $sessionId", e)
@@ -2976,10 +3179,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val idx = sharedPreferencesHelper.getChatForkIndex(sessionId)
         val raw = sharedPreferencesHelper.getChatForkMessagesJson(sessionId) ?: return
         if (idx < 0) return
-        val decoded = ForkLoad.messages(raw) ?: return
+        val decoded = ForkLoad.branches(raw) ?: return
         forkIndex = idx
-        stashedForkTail = decoded
-        forkDisplayVariant = 2
+        forkBranches = decoded.tails
+        forkActive = decoded.active
         forkAnchorAssistantIndex = sharedPreferencesHelper.getChatForkAnchor(sessionId)
         if (forkAnchorAssistantIndex < 0) {
             val msgs = _chatMessages.value.orEmpty()
@@ -2989,7 +3192,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         val editing = sharedPreferencesHelper.isChatForkEditing(sessionId)
         val size = _chatMessages.value?.size ?: 0
-        if (editing && forkDisplayVariant == 2 && size <= forkIndex) {
+        if (editing && forkActive == forkBranches.lastIndex && size <= forkIndex) {
             val key = ComposerDrafts.key(sessionId)
             composerEditKey = key
             if (key !in composerEditDrafts) {
@@ -4480,28 +4683,115 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * After a finished RP reply: once the chat nears the API window, have the model rewrite this
      * chat's Facts. The Memory note the user wrote is passed in as read-only and is not saved over.
      */
-    private fun maybeUpdateRpMemory(latestReply: String) {
-        if (!sharedPreferencesHelper.isRpAutoMemory() || rpMemoryJob?.isActive == true) return
-        val modelId = _activeChatModel.value ?: return
+    /** Failed fact runs in a row, per chat. Two in a row skip ahead instead of retrying on every reply. */
+    private val rpMemoryFailures = HashMap<Long, Int>()
+    /** The system prompt the last roleplay request really sent, for the facts trigger's window. */
+    private var lastRpSystemChars = RpApiMemory.SYSTEM_RESERVE_CHARS
+
+    private val _rpFactsStatus = MutableLiveData<Event<Boolean>>()
+    /** A Refresh the user asked for finished: true when the facts were updated. */
+    val rpFactsStatus: LiveData<Event<Boolean>> = _rpFactsStatus
+
+    private fun rpMemoryKey(): Long = currentSessionId ?: RpAutoMemory.UNSAVED_KEY
+
+    private fun rpMemoryWatermark(key: Long): Int? =
+        rpMemoryRunAt[key] ?: key.takeIf { it != RpAutoMemory.UNSAVED_KEY }
+            ?.let { sharedPreferencesHelper.getRpFactsRunAt(it) }?.takeIf { it > 0 }
+
+    private fun setRpMemoryWatermark(key: Long, count: Int) {
+        rpMemoryRunAt[key] = count
+        if (key != RpAutoMemory.UNSAVED_KEY) sharedPreferencesHelper.saveRpFactsRunAt(key, count)
+    }
+
+    /** Turns were cut: the facts only cover what is still there, so the next run picks up from the cut. */
+    private fun clampRpMemoryWatermark() {
+        if (!isRpMode()) return
+        val key = rpMemoryKey()
+        val mark = rpMemoryWatermark(key) ?: return
+        val count = _chatMessages.value.orEmpty().count {
+            (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it)
+        }
+        if (mark > count) setRpMemoryWatermark(key, count)
+    }
+
+    /** How many messages the facts cover, and how many the chat has. */
+    fun rpFactsCoverage(): Pair<Int, Int> {
+        val count = _chatMessages.value.orEmpty().count {
+            (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it)
+        }
+        return (rpMemoryWatermark(rpMemoryKey()) ?: 0).coerceIn(0, count) to count
+    }
+
+    /** The facts before their last change, for Undo. */
+    fun previousRpFacts(): String = currentSessionId?.let { sharedPreferencesHelper.getRpFactsPrevious(it) }.orEmpty()
+
+    /** Facts auto-update is off for this chat only. */
+    fun isRpFactsPausedHere(): Boolean = currentSessionId?.let { sharedPreferencesHelper.isRpFactsPaused(it) } == true
+
+    fun setRpFactsPausedHere(paused: Boolean) {
+        currentSessionId?.let { sharedPreferencesHelper.setRpFactsPaused(it, paused) }
+    }
+
+    /**
+     * Update the facts now, from where they left off. [rebuild] starts over from the first turn,
+     * one batch per run, for a chat whose facts are empty or went stale after edits.
+     */
+    fun refreshRpFactsNow(rebuild: Boolean = false): Boolean {
+        if (!isRpMode() || _isAwaitingResponse.value == true || rpMemoryJob?.isActive == true) return false
+        val key = rpMemoryKey()
+        if (rebuild) {
+            setRpMemoryWatermark(key, 0)
+            rpMemoryFailures.remove(key)
+        }
+        return maybeUpdateRpMemory(null, force = true)
+    }
+
+    private fun maybeUpdateRpMemory(latestReply: String?, force: Boolean = false): Boolean {
+        if (rpMemoryJob?.isActive == true) return false
+        if (!force && (!sharedPreferencesHelper.isRpAutoMemory() || isRpFactsPausedHere())) return false
+        return startRpMemoryRun(latestReply, force)
+    }
+
+    private fun startRpMemoryRun(latestReply: String?, force: Boolean): Boolean {
+        val modelId = _activeChatModel.value ?: return false
         val demo = DemoModel.isDemo(modelId)
         val llm = sharedPreferencesHelper.isRpLlmMode()
         val character = _activeRpCharacter.value
-        if (!llm && character == null) return
+        if (!llm && character == null) return false
         val characterId = if (llm) null else character?.id
         val turns = _chatMessages.value.orEmpty()
             .filter { (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it) }
             .map { it.role to RpAutoMemory.turnBody(getMessageText(it.content), isImageMessage(it)) }
             .toMutableList()
         // The finished reply may not be in the list yet.
-        if (turns.lastOrNull()?.let { it.first == "assistant" && it.second.trim() == latestReply.trim() } != true) {
+        if (latestReply != null &&
+            turns.lastOrNull()?.let { it.first == "assistant" && it.second.trim() == latestReply.trim() } != true
+        ) {
             turns += "assistant" to latestReply
         }
-        val sessionKey = currentSessionId ?: RpAutoMemory.UNSAVED_KEY
-        val budget = rpMemoryCount(_chatMessages.value.orEmpty().filter {
-            (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it)
-        })
-        val previousRun = rpMemoryRunAt[sessionKey] ?: 0
-        if (!RpAutoMemory.shouldUpdate(turns.size, budget, previousRun)) return
+        if (turns.isEmpty()) return false
+        val sessionKey = rpMemoryKey()
+        val budget = rpMemoryCount(
+            _chatMessages.value.orEmpty().filter {
+                (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it)
+            },
+            systemChars = lastRpSystemChars,
+        )
+        val stored = rpMemoryWatermark(sessionKey)
+        // Facts from before the mark was kept: assume they cover all but the last few turns.
+        val previousRun = (stored ?: if (currentRpFacts().isNotBlank()) (turns.size - RpAutoMemory.EVERY * 2).coerceAtLeast(0) else 0)
+            .coerceIn(0, turns.size)
+        if (force) {
+            if (previousRun >= turns.size && currentRpFacts().isNotBlank()) {
+                // Nothing new: redo the newest batch so Refresh still does something.
+                setRpMemoryWatermark(sessionKey, (turns.size - RpAutoMemory.EVERY).coerceAtLeast(0))
+                return startRpMemoryRun(latestReply, force)
+            }
+        } else if (!RpAutoMemory.shouldUpdate(turns.size, budget, previousRun)) {
+            return false
+        }
+        val batchEnd = RpAutoMemory.batchEnd(turns, previousRun)
+        val batch = turns.subList((previousRun - RpAutoMemory.CONTEXT_TURNS).coerceAtLeast(0), batchEnd)
 
         val charName = if (llm) getApplication<Application>().getString(R.string.rp_llm_speaker) else character!!.name
         // Same fallback as the prompt and the lore scan, so a {{user}} key still matches these notes.
@@ -4509,13 +4799,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val userMemory = sharedPreferencesHelper.getRpMemory(characterId)
         val facts = currentRpFacts()
         val prompt = RpAutoMemory.prompt(
-            charName, userName, userMemory, facts, RpAutoMemory.transcript(turns, charName, userName)
+            charName, userName, userMemory, facts, RpAutoMemory.transcript(batch, charName, userName)
         )
         val isLan = activeModelIsLan() && !demo
         val endpoint = if (isLan) sharedPreferencesHelper.getLanEndpoint()?.takeIf { it.isNotBlank() }?.let { LanEndpointValidator.requestUrl(it, "/v1/chat/completions") }
             else "https://openrouter.ai/api/v1/chat/completions"
         val apiKey = if (isLan) sharedPreferencesHelper.getLanApiKeyForRequest() else activeChatApiKey
-        if (endpoint == null || (!isLan && !demo && apiKey.isBlank())) return
+        if (endpoint == null || (!isLan && !demo && apiKey.isBlank())) return false
         // Which chat this note is for: the session (null while it is still unsaved) and the open-chat epoch.
         val launchSessionId = currentSessionId
         val launchEpoch = sessionEpoch
@@ -4525,7 +4815,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 apiKey = apiKey,
                 modelId = modelId,
                 endpoint = endpoint,
-                maxTokens = 400,
+                // Room for a reasoning model's thinking as well; clean() caps the note itself.
+                maxTokens = 1_200,
                 lanProvider = if (isLan) sharedPreferencesHelper.getLanProvider() else null,
                 isReasoningModel = isReasoningModel(modelId),
                 client = if (demo) demoHttpClient else if (isLan) lanHttpClient else null
@@ -4547,14 +4838,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (launchSessionId == null) rpMemoryRunAt.remove(RpAutoMemory.UNSAVED_KEY)
                 val key = RpAutoMemory.runKey(launchSessionId, currentSessionId, sameChat)
                 if (key != null) {
-                    rpMemoryRunAt[key] = RpAutoMemory.watermarkAfter(previousRun, turns.size, note != null)
+                    val failures = if (note != null) 0 else (rpMemoryFailures[key] ?: 0) + 1
+                    // Two failures in a row: move on, so a model that cannot do it does not cost a call per reply.
+                    val skip = failures >= RpAutoMemory.FAILURES_BEFORE_BACKOFF
+                    if (failures == 0 || skip) rpMemoryFailures.remove(key) else rpMemoryFailures[key] = failures
+                    setRpMemoryWatermark(key, RpAutoMemory.watermarkAfter(previousRun, batchEnd, note != null || skip))
                 }
+                if (force) _rpFactsStatus.value = Event(note != null)
             }
         }
+        return true
     }
 
     private fun finalizeAssistantContent(text: String): String {
-        if (!isRpMode()) return text
+        // A local server can leave its reasoning in the reply ("…</think>answer"). Remote models send it apart.
+        if (!isRpMode()) return if (activeModelIsLan()) withoutLeakedThinking(text) else text
         // Reply is complete — Stop must not treat the finished bubble as a mid-stream partial.
         discardableRpAssistantInFlight = false
         val cleaned = rpDelegate.cleanReply(text)
@@ -4564,7 +4862,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             pendingRpSwipeAppend = false
             return cleaned
         }
-        maybeUpdateRpMemory(cleaned)
+        // A new version of the same reply is not new story; the facts wait for the next turn.
+        if (!pendingRpSwipeAppend) maybeUpdateRpMemory(cleaned)
         if (pendingRpSwipeAppend) {
             pendingRpSwipeAppend = false
             appendRpSwipeAlt(cleaned)
@@ -4865,9 +5164,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * window long before the message count does. While everything fits the setting stands, so
      * "All messages" still means the card is never cut.
      */
-    private fun rpMemoryCount(turns: List<FlexibleMessage>): Int {
+    private fun rpMemoryCount(turns: List<FlexibleMessage>, systemChars: Int = RpApiMemory.SYSTEM_RESERVE_CHARS): Int {
         val setting = sharedPreferencesHelper.getChatMemoryCount()
-        val fit = rpFitCount(turns, RpApiMemory.SYSTEM_RESERVE_CHARS)
+        val fit = rpFitCount(turns, systemChars)
         return if (fit >= turns.size) setting else minOf(setting, fit)
     }
 
@@ -5149,9 +5448,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * with an Undo, and everything after it is left as it was.
      * @return false if soft-failed (toast already shown).
      */
-    fun rewriteRpReply(position: Int, instruction: String): Boolean {
+    /** A fresh version of any reply. One with the story after it is redone in place, as a version. */
+    fun regenerateEarlierRpReply(position: Int): Boolean = rewriteRpReply(position, "", fresh = true)
+
+    fun rewriteRpReply(position: Int, instruction: String, fresh: Boolean = false): Boolean {
         val note = instruction.trim()
-        if (note.isEmpty() || !isRpMode()) return false
+        if ((note.isEmpty() && !fresh) || !isRpMode()) return false
         if (_isAwaitingResponse.value == true || rpRewriteJob?.isActive == true) {
             _toastUiEvent.postValue(Event(str(R.string.rp_wait_for_reply)))
             return false
@@ -5167,13 +5469,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             (it.role == "user" || it.role == "assistant") && !isAssistantPlaceholder(it)
         }?.let { getMessageText(it.content) }.orEmpty()
         if (RpRewrite.streamsAsNewSwipe(position, lastAssistantIndex, lastUserIndex)) {
-            return regenerateLastRpReply(rewrite = note)
+            return if (fresh) regenerateLastRpReply() else regenerateLastRpReply(rewrite = note)
         }
         if (!canSendRpMessage()) {
             _toastUiEvent.postValue(Event(str(R.string.rp_select_character)))
             return false
         }
-        _toastUiEvent.postValue(Event(str(R.string.rp_rewrite_started)))
+        _toastUiEvent.postValue(Event(str(if (fresh) R.string.rp_regen_started else R.string.rp_rewrite_started)))
         // Hold the turn the way a reply does, so Send becomes Stop and a tap cancels this
         // instead of dropping it. The latest-reply path already does that via regenerate.
         _isAwaitingResponse.value = true
@@ -5187,17 +5489,31 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     definitionCap = rpDefinitionCap(),
                     facts = currentRpFacts()
                 )
-                val prefix = messages.take(position + 1).filter { it.role != "system" && !isAssistantPlaceholder(it) }
+                // A fresh version answers the turn before the reply; a Rewrite shows the reply itself.
+                val prefix = messages.take(if (fresh) position else position + 1)
+                    .filter { it.role != "system" && !isAssistantPlaceholder(it) }
                 val request = mutableListOf(FlexibleMessage(role = "system", content = JsonPrimitive(systemPrompt)))
                 request.addAll(prefix)
                 trimMessagesForApiMemory(request)
                 // The reply, and the turn before it, stay even when the greeting ate the budget.
-                val pinned = RpApiMemory.pinTail(request, prefix.takeLast(2)) { a, b ->
+                val pinned = RpApiMemory.pinTail(request, prefix.takeLast(if (fresh) 1 else 2)) { a, b ->
                     a.role == b.role && a.content == b.content
                 }
                 request.clear()
                 request.addAll(pinned)
-                request.add(FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.rewriteDirective(note))))
+                // A Continue's piece right after the reply it carried on: keep them apart on the wire,
+                // or the model rewrites both and the earlier words come back twice.
+                if (!fresh && request.size >= 2 && request[request.lastIndex].role == "assistant" &&
+                    request[request.lastIndex - 1].role == "assistant"
+                ) {
+                    request.add(request.lastIndex, FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.CONTINUE_USER_TURN)))
+                }
+                if (!fresh) {
+                    request.add(FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.rewriteDirective(note))))
+                } else if (request.lastOrNull()?.role != "user") {
+                    // The reply carried on the one before it (a Continue): carry that on again.
+                    request.add(FlexibleMessage(role = "user", content = JsonPrimitive(RpPromptEngine.CONTINUE_USER_TURN)))
+                }
                 if (epoch != sessionEpoch) return@launch
                 val rewritten = completeContent(
                     turns = withRpStyleReminder(request).toApiMessages().map { it.role to it.content },

@@ -216,13 +216,16 @@ object RpLore {
         take(scan)
         // A key that lives only inside an entry that just came in still gets its block.
         // Stop when a pass adds nothing; the set cannot grow past the book.
+        // Only blocks that a key brought in pull others: an always-on note that names the docks
+        // must not send the docks block every turn. Each pass reads only what the last one added.
+        var fresh = picked.filter { entries[it].keys.isNotEmpty() }
         var guard = entries.size
-        while (guard-- > 0) {
-            val before = picked.size
-            val broughtIn = picked.joinToString("\n") { expandNames(entries[it].text, charName, userName) }
+        while (guard-- > 0 && fresh.isNotEmpty()) {
+            val before = picked.toSet()
+            val broughtIn = fresh.joinToString("\n") { expandNames(entries[it].text, charName, userName) }
             if (broughtIn.isBlank()) break
             take(broughtIn)
-            if (picked.size == before) break
+            fresh = picked.filter { it !in before }
         }
 
         return fitPicked(entries, picked.sorted(), maxChars)
@@ -249,14 +252,17 @@ object RpLore {
         for ((i, text) in keyed) {
             val add = text.length + if (keyedCount == 0) 0 else 2
             if (keyedLen + add > keyedBudget) {
+                // The first match is cut to fit. A later one that does not fit is skipped, and a
+                // shorter one after it still gets its turn.
                 if (keyedCount == 0 && keyedBudget > 0) {
                     val piece = clipTail(text, keyedBudget)
                     if (piece.isNotEmpty()) {
                         kept[i] = piece
                         keyedLen = piece.length
+                        keyedCount++
                     }
                 }
-                break
+                continue
             }
             kept[i] = text
             keyedLen += add

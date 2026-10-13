@@ -6,9 +6,9 @@ object RpReplyCleaner {
     private val openThinkRegex = Regex("""<think>.*""", RegexOption.DOT_MATCHES_ALL)
     // Only lines that read as the prompt echoed back. Story prose that happens to start with "No limits,"
     // or "Instructions were clear" must survive, so labels need their colon and the short phrases must
-    // be the whole line.
+    // be the whole line. "Important:" in a letter or a line of narration is story; only the shouted label is a leak.
     private val leakRegex = Regex(
-        """(?i)^[ \t]*(?:(?:Response Format|Format|Instructions?|IMPORTANT|THE ONLY TABOOS)[ \t]*:|##[ \t]*Response Format\b|(?:Always respond in English|DO NOT output|Answer IMMEDIATELY)\b)[^\n]*$|^[ \t]*(?:Never break character|No restrictions|No filters|No limits)[ \t]*[.!:]?[ \t]*$""",
+        """(?i)^[ \t]*(?:(?:Response Format|Format|Instructions?)[ \t]*:|(?-i:IMPORTANT|THE ONLY TABOOS)[ \t]*:|##[ \t]*Response Format\b|(?:Always respond in English|DO NOT output|Answer IMMEDIATELY)\b)[^\n]*$|^[ \t]*(?:Never break character|No restrictions|No filters|No limits)[ \t]*[.!:]?[ \t]*$""",
         RegexOption.MULTILINE
     )
     private val blankRuns = Regex("""\n{3,}""")

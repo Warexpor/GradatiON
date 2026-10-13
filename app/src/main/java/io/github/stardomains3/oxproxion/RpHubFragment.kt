@@ -114,6 +114,7 @@ class RpHubFragment : Fragment() {
                     return@launch
                 }
                 cardLorebook = card?.lorebook
+                importingCard = card != null
                 val parsed = if (card != null) RpCharacterBackup(listOf(card.character))
                     else json.decodeFromString(RpCharacterBackup.serializer(), text!!)
                 // A blank name is not a character. Counting it asked to update a card import then skipped.
@@ -443,13 +444,15 @@ class RpHubFragment : Fragment() {
 
     /** The book of the card being imported, written just before the character so its pin binds. */
     private var cardLorebook: RpLorebookExport? = null
+    /** The file was a card, not our backup: a character already here keeps its style and prompt. */
+    private var importingCard = false
 
     private suspend fun applyCharacterBackup(backup: RpCharacterBackup) {
         if (!isAdded) return
         try {
             val repo = chatViewModel.getRpRepository()
             cardLorebook?.let {
-                repo.importLorebooks(listOf(it), activateFirstIfNone = false)
+                repo.importLorebooks(listOf(it), activateFirstIfNone = false, keepActive = true)
                 RpCharacterPrefsBackup.bindPending(prefs, repo.getAllLorebooksOnce())
             }
             cardLorebook = null
@@ -468,7 +471,9 @@ class RpHubFragment : Fragment() {
             val carried = CharacterImportSideLog.read(CharacterImportSideLog.file(app)).orEmpty()
             // The side file is written before the transaction commits. A kill after the rows
             // land is finished on the next launch, including the portraits.
-            val imported = repo.importCharacters(backup.characters) { rows ->
+            val fromCard = importingCard
+            importingCard = false
+            val imported = repo.importCharacters(backup.characters, keepLocalExtras = fromCard) { rows ->
                 val fresh = CharacterImportSideLog.notesFor(rows, backup.characters)
                 val freshIds = fresh.map { it.id }.toSet()
                 CharacterImportSideLog.write(

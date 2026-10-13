@@ -21,7 +21,7 @@ class RpReplyCleanerTest {
 
     @Test
     fun keepsProseThatOnlyStartsLikeALeak() {
-        val story = "Instructions were clear, she said.\nNo limits, he whispered.\nFormat your thoughts first."
+        val story = "Instructions were clear, she said.\nNo limits, he whispered.\nFormat your thoughts first.\nImportant: meet me at dawn."
         assertEquals(story, RpReplyCleaner.clean(story))
     }
 
