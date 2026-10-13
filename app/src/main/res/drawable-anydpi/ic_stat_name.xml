@@ -1,15 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status bar icon: the blade G from ic_launcher_gradation_mono.xml, centred. Only alpha counts. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="960"
-    android:viewportHeight="960"
-    android:tint="#FFFFFF">
-  <group android:scaleX="1.1621053"
-      android:scaleY="1.1621053"
-      android:translateX="-77.810524"
-      android:translateY="-54.56842">
-    <path
-        android:pathData="M160,840v-200q0,-33 23.5,-56.5T240,560h480q33,0 56.5,23.5T800,640v200L160,840ZM360,520q-83,0 -141.5,-58.5T160,320q0,-83 58.5,-141.5T360,120h240q83,0 141.5,58.5T800,320q0,83 -58.5,141.5T600,520L360,520ZM240,760h480v-120L240,640v120ZM360,440h240q50,0 85,-35t35,-85q0,-50 -35,-85t-85,-35L360,200q-50,0 -85,35t-35,85q0,50 35,85t85,35ZM388.5,348.5Q400,337 400,320t-11.5,-28.5Q377,280 360,280t-28.5,11.5Q320,303 320,320t11.5,28.5Q343,360 360,360t28.5,-11.5ZM628.5,348.5Q640,337 640,320t-11.5,-28.5Q617,280 600,280t-28.5,11.5Q560,303 560,320t11.5,28.5Q583,360 600,360t28.5,-11.5ZM480,760ZM480,320Z"
-        android:fillColor="#000000"/>
-  </group>
+    android:viewportWidth="900"
+    android:viewportHeight="900">
+    <group
+        android:translateX="-72"
+        android:translateY="-47">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M720 130C600 170 430 240 350 340C280 430 262 540 285 630C310 730 420 800 535 818L582 645C520 655 440 640 412 570C390 510 410 440 470 405C510 382 560 378 598 378Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M532 490L780 490C782 610 740 720 660 790C620 825 580 848 548 864L609 645C618 612 612 590 590 572Z" />
+    </group>
 </vector>

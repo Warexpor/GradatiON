@@ -13,7 +13,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.content.Intent
 import android.content.SharedPreferences
-import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.IBinder
 import android.speech.tts.TextToSpeech
@@ -278,7 +277,6 @@ class ForegroundService : Service(), TextToSpeech.OnInitListener {
             val builder = NotificationCompat.Builder(context, ANSWER_CHANNEL_ID)
                 .setContentTitle(title)
                 .setContentText(contentText)
-                .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcherrobot))
                 .setSmallIcon(R.drawable.ic_stat_name)
                 .setContentIntent(pendingIntent)
                 .setOngoing(false)
