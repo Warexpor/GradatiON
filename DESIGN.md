@@ -8,7 +8,7 @@ Grok-derived token extraction and `SHELL.md`, which are both still in git histor
 
 1. **Monochrome.** (hard) Use only pure neutral grays, with R, G and B equal. There's no accent
    hue, no blue tint, no red or green for errors, no solid white buttons and nothing glowy.
-   - Exception: delete actions use the dim crimson `delete_action`, never an orange-leaning red.
+   - Exception: delete actions use `delete_action`, a true red (iOS system red).
    - Exception: code syntax highlighting and diffs keep their colors (git green and red).
 2. **Liquid Glass everywhere.** Dialogs, sheets, menus, pills, toggles and bars are all glass.
    The one exception is the RP character panel, an opaque sheet with no edge line.

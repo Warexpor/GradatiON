@@ -24,8 +24,8 @@
     <!-- Text selection wash — brighter light gray than soft fill -->
     <color name="xai_text_highlight">#FFC8C8C8</color>
     <color name="xai_error">#FF1A1A1A</color>
-    <!-- Delete actions only. User call: red, but a dim crimson (cool hue, low value) so it never reads orange or loud. -->
-    <color name="delete_action">#FFA63A45</color>
+    <!-- Delete actions only. User call: a true red (iOS system red), not the old dim crimson. -->
+    <color name="delete_action">#FFFF3B30</color>
     <color name="xai_progress">#FF888888</color>
     <color name="xai_link">#FF1B1B1B</color>
     <color name="xai_send_disabled">#FFD6D6D6</color>

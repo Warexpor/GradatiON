@@ -305,7 +305,7 @@ class ScreenshotTest : ScreenshotHarness() {
 
     @Test fun historyDark() = withChat { a, _ ->
         seedHistory()
-        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); idle()
+        a.findViewById<View>(R.id.openSavedChatsButton).performClick(); settle()
         val list = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.savedChatsRecyclerView)
         val header = list.findViewHolderForAdapterPosition(0)?.itemView
             ?.findViewById<android.widget.TextView>(R.id.historySectionHeader)

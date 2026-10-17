@@ -50,7 +50,7 @@ the state of work in progress in `docs/handoff.md`.
 ## Design rules
 - Only pure neutral grays, with R, G and B equal. Dark base #111111, light is a dimmed off-white. No blue tint,
   no solid white buttons, nothing glowy, no red or green for errors.
-  Exceptions (user calls): delete actions use the dim crimson `delete_action`; code syntax highlighting and
+  Exceptions (user calls): delete actions use the true red `delete_action`; code syntax highlighting and
   diffs keep their colors (git green/red).
 - iOS Liquid Glass on every surface except the RP character panel, which is an opaque sheet with no edge line (user call).
   Lens edge on Android 13+, plain blur on 12, and a solid frosted fill
