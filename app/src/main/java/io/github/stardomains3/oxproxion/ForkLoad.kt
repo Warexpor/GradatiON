@@ -13,6 +13,10 @@ import kotlinx.serialization.json.Json
  * plain message list. A chat with more branches keeps all of them, oldest first, with the
  * one on screen as an empty list ([Branches]).
  */
+/** Roleplay: the Facts a parked branch had, and how many messages they covered. */
+@Serializable
+data class BranchFacts(val text: String, val run: Int = 0)
+
 internal object ForkLoad {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -22,6 +26,8 @@ internal object ForkLoad {
         val active: Int,
         /** Roleplay: each branch's reply versions, by position. Empty maps for a plain chat. */
         val versions: List<Map<Int, RpVersions>> = List(tails.size) { emptyMap() },
+        /** Roleplay: each parked branch's Facts. Null for the one on screen, and in a plain chat. */
+        val facts: List<BranchFacts?> = List(tails.size) { null },
     )
 
     @Serializable
@@ -29,6 +35,7 @@ internal object ForkLoad {
         val active: Int,
         val branches: List<List<FlexibleMessage>>,
         val versions: List<Map<Int, RpVersions>> = emptyList(),
+        val facts: List<BranchFacts?> = emptyList(),
     )
 
     fun messages(raw: String?): List<FlexibleMessage>? {
@@ -57,7 +64,8 @@ internal object ForkLoad {
             }?.let { s ->
                 val versions = s.versions.takeIf { it.size == s.branches.size }
                     ?: List(s.branches.size) { emptyMap() }
-                Branches(s.branches, s.active, versions)
+                val facts = s.facts.takeIf { it.size == s.branches.size } ?: List(s.branches.size) { null }
+                Branches(s.branches, s.active, versions, facts)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Unreadable chat fork; leaving it in place (${e.javaClass.simpleName})")
@@ -70,15 +78,25 @@ internal object ForkLoad {
         tails: List<List<FlexibleMessage>>,
         active: Int,
         versions: List<Map<Int, RpVersions>> = emptyList(),
+        facts: List<BranchFacts?> = emptyList(),
     ): String {
         val kept = versions.takeIf { v -> v.size == tails.size && v.any { it.isNotEmpty() } }
             ?.mapIndexed { i, v -> if (i == active) emptyMap() else v }
             .orEmpty()
-        if (tails.size == 2 && active == 1 && kept.none { it.isNotEmpty() }) {
+        val notes = facts.takeIf { f -> f.size == tails.size && f.any { it != null } }
+            ?.mapIndexed { i, f -> if (i == active) null else f }
+            .orEmpty()
+        if (tails.size == 2 && active == 1 && kept.none { it.isNotEmpty() } && notes.none { it != null }) {
             return json.encodeToString(ListSerializer(FlexibleMessage.serializer()), tails[0])
         }
         val slots = tails.mapIndexed { i, t -> if (i == active) emptyList() else t }
-        return json.encodeToString(Stored.serializer(), Stored(active, slots, kept.takeIf { v -> v.any { it.isNotEmpty() } }.orEmpty()))
+        val stored = Stored(
+            active,
+            slots,
+            kept.takeIf { v -> v.any { it.isNotEmpty() } }.orEmpty(),
+            notes.takeIf { f -> f.any { it != null } }.orEmpty(),
+        )
+        return json.encodeToString(Stored.serializer(), stored)
     }
 
     private const val TAG = "ForkLoad"

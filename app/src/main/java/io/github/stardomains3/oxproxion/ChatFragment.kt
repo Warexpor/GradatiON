@@ -149,6 +149,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var historyDrawerContainer: FrameLayout? = null
     private var historyDrawerScrim: View? = null
     private var currentSpeakingPosition = -1
+    /** The message being read aloud, so the row it is on can follow a delete or a cut above it. */
+    private var speakingMessage: FlexibleMessage? = null
     private lateinit var settingsButton: MaterialButton
     private lateinit var homeButton: MaterialButton
     private lateinit var presetsButton: MaterialButton
@@ -955,6 +957,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             presetsButton.isVisible = !isPresetsOnChatScreen && !isTopBarEnabled
         }
         viewModel.chatMessages.observe(viewLifecycleOwner) { messages ->
+            followSpokenMessage(messages)
             val serial = viewModel.threadOpenSerial
             val opening = ChatOpen.opensThread(
                 newOpen = serial != shownOpenSerial,
@@ -2561,6 +2564,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         if (isSpeaking) TtsHolder.ready()?.stop()
         isSpeaking = false
         currentSpeakingPosition = -1
+        speakingMessage = null
         TtsHolder.release(this)
         super.onDestroyView()
     }
@@ -3767,6 +3771,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
             isSpeaking = true
             currentSpeakingPosition = position
+            speakingMessage = viewModel.chatMessages.value?.getOrNull(position)
             chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)
             updateIconDirectlyOrNotify(position, R.drawable.ic_msg_stop)
             val safeText = AnswerShadeText.clipForSpeak(text)
@@ -3800,8 +3805,28 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         return findViewByPosition(pos)?.let { chatRecyclerView.getChildViewHolder(it) }
     }
 
+    /**
+     * Messages moved: the reading follows its message to its new row, and stops when that
+     * message is gone (deleted, cut, or swapped for another version).
+     */
+    private fun followSpokenMessage(messages: List<FlexibleMessage>) {
+        if (!isSpeaking) return
+        val spoken = speakingMessage ?: return
+        if (messages.getOrNull(currentSpeakingPosition) === spoken) return
+        val now = messages.indexOfFirst { it === spoken }
+        if (now < 0) {
+            TtsHolder.ready()?.stop()
+            onSpeechFinished()
+            return
+        }
+        currentSpeakingPosition = now
+        chatAdapter.updateTtsState(isSpeaking, now)
+        chatRecyclerView.post { if (::chatAdapter.isInitialized) chatAdapter.notifyItemChanged(now) }
+    }
+
     private fun onSpeechFinished() {
         isSpeaking = false
+        speakingMessage = null
         val pos = currentSpeakingPosition
         currentSpeakingPosition = -1
         chatAdapter.updateTtsState(isSpeaking, currentSpeakingPosition)

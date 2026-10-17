@@ -153,6 +153,8 @@ class SharedPreferencesHelper(context: Context) {
         /** Composer edit is waiting to be sent. Separate from the fork so a regenerate does not look like one. */
         private const val KEY_CHAT_FORK_EDITING_PREFIX = "chat_fork_editing_"
         private const val KEY_CHAT_FORK_EDIT_DRAFT_PREFIX = "chat_fork_edit_draft_"
+        private const val KEY_CHAT_FORK_EDIT_CUT_PREFIX = "chat_fork_edit_cut_"
+        private const val KEY_CHAT_FORK_EDIT_FROM_PREFIX = "chat_fork_edit_from_"
         private const val KEY_VOLUME_SCROLL = "volume_scroll_enabled"
         private const val KEY_ENABLED_TOOLS = "enabled_tools"
         private const val KEY_TOOLS_ENABLED = "tools_enabled_preference"
@@ -841,6 +843,8 @@ class SharedPreferencesHelper(context: Context) {
             remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_EDIT_CUT_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_EDIT_FROM_PREFIX$sessionId")
         }
     }
 
@@ -848,13 +852,21 @@ class SharedPreferencesHelper(context: Context) {
      * The composer cut a turn and is waiting to send the replacement. [draft] is the line
      * that was already in the field. A kill before Cancel still has to put that line back.
      */
-    fun setChatForkEditing(sessionId: Long, editing: Boolean, draft: String?) {
+    fun setChatForkEditing(sessionId: Long, editing: Boolean, draft: String?, cut: Int = -1, from: Int = -1) {
         mainPrefs.edit(commit = true) {
             if (!editing) {
                 remove("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId")
                 remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId")
+                remove("$KEY_CHAT_FORK_EDIT_CUT_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_EDIT_FROM_PREFIX$sessionId")
             } else {
                 putBoolean("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId", true)
+                // Where the edit cut, when that is below the fork's own cut (a later line).
+                if (cut >= 0) putInt("$KEY_CHAT_FORK_EDIT_CUT_PREFIX$sessionId", cut)
+                else remove("$KEY_CHAT_FORK_EDIT_CUT_PREFIX$sessionId")
+                // The branch that was on screen before the edit, which Cancel goes back to.
+                if (from >= 0) putInt("$KEY_CHAT_FORK_EDIT_FROM_PREFIX$sessionId", from)
+                else remove("$KEY_CHAT_FORK_EDIT_FROM_PREFIX$sessionId")
                 putString(
                     "$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId",
                     draft.orEmpty().take(ComposerDrafts.MAX_CHARS),
@@ -862,6 +874,12 @@ class SharedPreferencesHelper(context: Context) {
             }
         }
     }
+
+    fun getChatForkEditFrom(sessionId: Long): Int =
+        mainPrefs.getInt("$KEY_CHAT_FORK_EDIT_FROM_PREFIX$sessionId", -1)
+
+    fun getChatForkEditCut(sessionId: Long): Int =
+        mainPrefs.getInt("$KEY_CHAT_FORK_EDIT_CUT_PREFIX$sessionId", -1)
 
     fun isChatForkEditing(sessionId: Long): Boolean =
         mainPrefs.getBoolean("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId", false)
@@ -886,6 +904,8 @@ class SharedPreferencesHelper(context: Context) {
             remove("$KEY_CHAT_FORK_ANCHOR_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_EDITING_PREFIX$sessionId")
             remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_EDIT_CUT_PREFIX$sessionId")
+            remove("$KEY_CHAT_FORK_EDIT_FROM_PREFIX$sessionId")
             remove("rp_facts_$sessionId")
             remove("rp_facts_prev_$sessionId")
             remove("rp_facts_run_$sessionId")
@@ -920,6 +940,8 @@ class SharedPreferencesHelper(context: Context) {
             blobWrites["$KEY_CHAT_FORK_PREFIX$id"] = null
             editor.remove("$KEY_CHAT_FORK_EDITING_PREFIX$id")
             editor.remove("$KEY_CHAT_FORK_EDIT_DRAFT_PREFIX$id")
+            editor.remove("$KEY_CHAT_FORK_EDIT_CUT_PREFIX$id")
+            editor.remove("$KEY_CHAT_FORK_EDIT_FROM_PREFIX$id")
             blobWrites["$KEY_RP_SWIPE_PREFIX$id"] = null
             editor.remove("rp_facts_$id")
             if (!entry.facts.isNullOrBlank()) editor.putString("rp_facts_$id", entry.facts)
@@ -1964,10 +1986,12 @@ class SharedPreferencesHelper(context: Context) {
 
     /** Facts the model keeps for one chat. Separate from the Memory note the user wrote. */
     fun getRpFacts(sessionId: Long): String = mainPrefs.getString("rp_facts_$sessionId", "") ?: ""
-    fun saveRpFacts(sessionId: Long, text: String) = mainPrefs.edit(commit = true) {
-        // The facts being replaced stay one step back, for the Memory page's Undo.
+    fun saveRpFacts(sessionId: Long, text: String, rememberPrevious: Boolean = true) = mainPrefs.edit(commit = true) {
+        // The facts being replaced stay one step back, for the Memory page's Undo. A branch
+        // switch is not an edit: Undo would bring the other branch's facts back.
         val old = mainPrefs.getString("rp_facts_$sessionId", "").orEmpty()
-        if (old.isNotBlank() && old != text.trim()) putString("rp_facts_prev_$sessionId", old)
+        if (!rememberPrevious) remove("rp_facts_prev_$sessionId")
+        else if (old.isNotBlank() && old != text.trim()) putString("rp_facts_prev_$sessionId", old)
         if (text.isBlank()) remove("rp_facts_$sessionId") else putString("rp_facts_$sessionId", text.trim())
     }
 

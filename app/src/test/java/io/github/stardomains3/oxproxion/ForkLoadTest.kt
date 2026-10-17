@@ -95,5 +95,10 @@ class ForkLoadTest {
         val back = ForkLoad.branches(ForkLoad.encode(up.branches, up.active, up.versions))!!
         assertEquals(up.versions[0], back.versions[0])
         assertEquals(emptyMap<Int, RpVersions>(), back.versions[up.active])
+        // A parked branch's Facts come back too; the one on screen keeps none in the blob.
+        val facts = listOf(BranchFacts("old", 4), null, BranchFacts("live", 9))
+        val withFacts = ForkLoad.branches(ForkLoad.encode(up.branches, up.active, up.versions, facts))!!
+        assertEquals(BranchFacts("old", 4), withFacts.facts[0])
+        assertNull(withFacts.facts[up.active])
     }
 }

@@ -528,7 +528,8 @@ class RpScreenshotTest : ScreenshotHarness() {
         vm.cancelComposerEdit(); idle()
         org.junit.Assert.assertEquals(whole, vm.chatMessages.value.orEmpty().size)
         org.junit.Assert.assertEquals("cancel keeps the swipes", 3, vm.rpSwipeNav.value?.total)
-        // Edit and send: two stories on that line, each with its own reply versions.
+        // Edit and send: two stories on that line, each with its own reply versions and Facts.
+        vm.saveCurrentRpFacts("Sam showed Mira the map.")
         vm.truncateForRpEdit(lineAt); idle()
         input.setText("I leave the map in my coat instead.")
         send.performClick()
@@ -536,6 +537,7 @@ class RpScreenshotTest : ScreenshotHarness() {
         settle()
         org.junit.Assert.assertFalse(vm.isComposerEditOpen())
         org.junit.Assert.assertEquals(2, vm.getRpBranchNav(lineAt)?.totalVariants)
+        vm.saveCurrentRpFacts("Sam kept the map hidden.")
         transcript.scrollToPosition(lineAt); idle()
         org.junit.Assert.assertEquals("your line shows its branches", View.VISIBLE,
             transcript.findViewHolderForAdapterPosition(lineAt)!!.itemView.findViewById<View>(R.id.forkNavigator).visibility)
@@ -543,10 +545,12 @@ class RpScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals(whole, vm.chatMessages.value.orEmpty().size)
         org.junit.Assert.assertEquals(second, replyText())
         org.junit.Assert.assertEquals("the old story's swipes come back with it", 3, vm.rpSwipeNav.value?.total)
+        org.junit.Assert.assertEquals("and its Facts", "Sam showed Mira the map.", vm.currentRpFacts())
         vm.navigateFork(1); idle()
         org.junit.Assert.assertEquals("I leave the map in my coat instead.",
             vm.getMessageText(vm.chatMessages.value.orEmpty()[lineAt].content))
         org.junit.Assert.assertEquals(1, vm.rpSwipeNav.value?.total ?: 1)
+        org.junit.Assert.assertEquals("Sam kept the map hidden.", vm.currentRpFacts())
         vm.loadChat(source); settle()
         vm.loadChat(branchId); settle()
         org.junit.Assert.assertEquals("branches survive a reopen", 2, vm.getRpBranchNav(lineAt)?.totalVariants)
@@ -582,6 +586,16 @@ class RpScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals(buriedText, vm.getMessageText(vm.chatMessages.value.orEmpty()[buried].content))
         org.junit.Assert.assertEquals(second, replyText())
         org.junit.Assert.assertEquals(3, vm.rpSwipeNav.value?.total)
+        // Edit from the first of three stories, leave and come back: Cancel still returns to that story.
+        vm.truncateForRpEdit(lineAt); idle()
+        vm.loadChat(source); settle()
+        vm.loadChat(branchId); settle()
+        org.junit.Assert.assertTrue("Cancel survives a reopen", vm.isComposerEditOpen())
+        vm.cancelComposerEdit(); idle()
+        org.junit.Assert.assertEquals(whole, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals(second, replyText())
+        org.junit.Assert.assertEquals("no stray branch from the cancelled edit", 3, vm.getRpBranchNav(lineAt)?.totalVariants)
+        org.junit.Assert.assertEquals(1, vm.getRpBranchNav(lineAt)?.variantIndex)
         SharedPreferencesHelper(a).saveRpMemory(mira.id, "Owes Sam a favor from the Kessel run. Hates the innkeeper.")
         // Top of a chat with messages: no stray rule under the tabs (the old scroll-progress bar).
         org.junit.Assert.assertEquals(0f, a.findViewById<View>(R.id.progressBar).alpha)

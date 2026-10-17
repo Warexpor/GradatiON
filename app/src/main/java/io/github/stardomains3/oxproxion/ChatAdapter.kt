@@ -1228,14 +1228,14 @@ class ChatAdapter(
 
         /** ⋮ after Regenerate: Read aloud, Rewrite (any Roleplay reply) and Edit. */
         private fun bindMoreActions(
-            speakingHere: Boolean,
             canRewrite: Boolean,
             canBranch: Boolean,
             canRegenerateHere: Boolean = false,
             canDelete: Boolean = false,
         ) {
             val ctx = itemView.context
-            val rows = buildList {
+            // Built on the tap: reading aloud can start or stop after this row was bound.
+            fun rows(speakingHere: Boolean) = buildList {
                 if (ttsAvailable) add(MessageMenu.Item(
                     ctx.getString(if (speakingHere) R.string.msg_menu_stop_reading else R.string.msg_menu_read),
                     if (speakingHere) R.drawable.ic_msg_stop else R.drawable.ic_msg_speak,
@@ -1260,7 +1260,10 @@ class ChatAdapter(
                     if (pos >= 0) onDeleteReply?.invoke(pos)
                 })
             }
-            moreActionsButton.setOnClickListener { onMessageMenu?.invoke(moreActionsButton, rows) }
+            moreActionsButton.setOnClickListener {
+                val speaking = isSpeaking && bindingAdapterPosition == currentSpeakingPosition
+                onMessageMenu?.invoke(moreActionsButton, rows(speaking))
+            }
         }
         private val instructButton: ImageButton = itemView.findViewById(R.id.instructButton)
         private val generatedImageView: ImageView = itemView.findViewById(R.id.generatedImageView)
@@ -1808,7 +1811,6 @@ class ChatAdapter(
             }
             ttsButton.setImageResource(iconRes)
             bindMoreActions(
-                speakingHere = isSpeaking && position == currentPosition,
                 // Any finished reply, the greeting included; an error bubble has nothing to rewrite.
                 canRewrite = isRpMode && !isThinking && !isError && text.isNotBlank(),
                 // Past the greeting: a branch at the greeting is just a new chat.
