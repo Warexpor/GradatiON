@@ -1,3 +1,10 @@
+# Handoff (2026-10-17, RP in-chat branches)
+
+- RP now branches inside the chat like the main chat (same `ForkBranches` cut model). Edit on your line, and Regenerate on a buried reply (button or menu), park the story after that point as a branch. The switcher sits on your line (for a Regenerate, the line above the redone reply), so a reply's own version arrows stay free. Each branch keeps its reply versions (`forkVersions`, stored in the fork blob via `ForkLoad.encode`); switching swaps them with the live `rpSwipeState`. `RpEditUndo` is gone: RP Edit uses the composer edit mark and `preCut`, like Chat.
+- A buried Regenerate that fails or is stopped before any words rolls back to the pre-cut state (`rollBackEmptyRpBranch`). Edit/Delete are refused while a reply or redo runs (`refuseRpCutWhileBusy`). Rewrites and version swipes above an open Edit's cut survive its Cancel (`keepInPreCut`). Pictures named only in another chat's fork blob are kept (`rpSwipeNamesPhoto` scans fork blobs); deleting a chat or the cut cleans its branch pictures.
+- Not done: the last cut index is not persisted, so a deeper Edit cut loses its Cancel on reopen; read-aloud keeps its old row after an RP delete; facts written in one branch can mention the other.
+- Phone checks: RP Edit an older line, send, flip branches; Regenerate a buried reply, flip back; Stop a buried regenerate early; the stale Regenerate button after Continue is gone.
+
 # Handoff (2026-10-13, RP and chat audit fixes)
 
 - From a read-only audit of RP and the chat harness. Fixed on `liquid-glass-redesign`:

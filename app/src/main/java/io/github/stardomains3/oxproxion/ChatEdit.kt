@@ -15,13 +15,12 @@ object ChatEdit {
     fun awaitingSend(
         marked: Boolean,
         sameChat: Boolean,
-        roleplay: Boolean,
         hasFork: Boolean,
         onNewestBranch: Boolean,
         forkIndex: Int,
         messageCount: Int,
     ): Boolean {
-        if (!marked || !sameChat || roleplay) return false
+        if (!marked || !sameChat) return false
         if (!hasFork || !onNewestBranch || forkIndex < 0) return false
         return messageCount <= forkIndex
     }

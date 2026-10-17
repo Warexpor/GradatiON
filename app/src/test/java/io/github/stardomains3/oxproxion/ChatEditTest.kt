@@ -12,7 +12,6 @@ class ChatEditTest {
             ChatEdit.awaitingSend(
                 marked = true,
                 sameChat = true,
-                roleplay = false,
                 hasFork = true,
                 onNewestBranch = true,
                 forkIndex = 2,
@@ -26,7 +25,6 @@ class ChatEditTest {
             ChatEdit.awaitingSend(
                 marked = false,
                 sameChat = true,
-                roleplay = false,
                 hasFork = true,
                 onNewestBranch = true,
                 forkIndex = 2,
@@ -37,7 +35,6 @@ class ChatEditTest {
             ChatEdit.awaitingSend(
                 marked = true,
                 sameChat = true,
-                roleplay = false,
                 hasFork = true,
                 onNewestBranch = true,
                 forkIndex = 2,
@@ -48,18 +45,6 @@ class ChatEditTest {
             ChatEdit.awaitingSend(
                 marked = true,
                 sameChat = false,
-                roleplay = false,
-                hasFork = true,
-                onNewestBranch = true,
-                forkIndex = 2,
-                messageCount = 2,
-            )
-        )
-        assertFalse(
-            ChatEdit.awaitingSend(
-                marked = true,
-                sameChat = true,
-                roleplay = true,
                 hasFork = true,
                 onNewestBranch = true,
                 forkIndex = 2,

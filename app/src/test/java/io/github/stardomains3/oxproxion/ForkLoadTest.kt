@@ -76,4 +76,24 @@ class ForkLoadTest {
         // Two branches, newest on screen: still the old shape.
         assertEquals("assistant", ForkLoad.messages(ForkLoad.encode(listOf(listOf(m("x")), emptyList()), 1))!!.single().role)
     }
+
+    @Test
+    fun roleplayBranchesKeepTheirReplyVersions() {
+        val q = m("q", "user")
+        val v = RpVersions(listOf("a1", "a1b"), 1)
+        // Edit the line at 2: the swipes of the reply at 3 go with the parked story, the greeting's stay out.
+        val greeting = RpVersions(listOf("hi", "hey"), 0)
+        val first = ForkBranches.cut(listOf(m("hi"), q, m("q2", "user"), m("a1b")), 2, null, mapOf(0 to greeting, 3 to v))
+        assertEquals(mapOf(3 to v), first.versions[0])
+        assertEquals(emptyMap<Int, RpVersions>(), first.versions[1])
+        // Edit higher up: the parked story gains the versions between the two cuts.
+        val between = RpVersions(listOf("x", "y"), 0)
+        val up = ForkBranches.cut(listOf(m("hi"), q, m("q3", "user"), m("z")), 1, first, mapOf(1 to between))
+        assertEquals(mapOf(1 to between, 3 to v), up.versions[0])
+        assertEquals(mapOf(1 to between), up.versions[1])
+        // They survive a save, and a plain two-branch fork with none keeps the old shape.
+        val back = ForkLoad.branches(ForkLoad.encode(up.branches, up.active, up.versions))!!
+        assertEquals(up.versions[0], back.versions[0])
+        assertEquals(emptyMap<Int, RpVersions>(), back.versions[up.active])
+    }
 }

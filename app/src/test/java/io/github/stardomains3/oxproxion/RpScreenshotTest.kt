@@ -519,6 +519,69 @@ class RpScreenshotTest : ScreenshotHarness() {
         vm.loadChat(source!!); settle()
         org.junit.Assert.assertEquals("the original stays whole", replyAt + 2, vm.chatMessages.value.orEmpty().size)
         vm.loadChat(branchId!!); settle()
+        // Edit your line: the story after it becomes a branch, Cancel puts it all back.
+        val lineAt = vm.chatMessages.value.orEmpty().indexOfLast { it.role == "user" }
+        val whole = vm.chatMessages.value.orEmpty().size
+        vm.truncateForRpEdit(lineAt); idle()
+        org.junit.Assert.assertEquals(lineAt, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertTrue("roleplay Edit can be cancelled", vm.isComposerEditOpen())
+        vm.cancelComposerEdit(); idle()
+        org.junit.Assert.assertEquals(whole, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals("cancel keeps the swipes", 3, vm.rpSwipeNav.value?.total)
+        // Edit and send: two stories on that line, each with its own reply versions.
+        vm.truncateForRpEdit(lineAt); idle()
+        input.setText("I leave the map in my coat instead.")
+        send.performClick()
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().lastOrNull()?.role == "assistant" }
+        settle()
+        org.junit.Assert.assertFalse(vm.isComposerEditOpen())
+        org.junit.Assert.assertEquals(2, vm.getRpBranchNav(lineAt)?.totalVariants)
+        transcript.scrollToPosition(lineAt); idle()
+        org.junit.Assert.assertEquals("your line shows its branches", View.VISIBLE,
+            transcript.findViewHolderForAdapterPosition(lineAt)!!.itemView.findViewById<View>(R.id.forkNavigator).visibility)
+        vm.navigateFork(-1); idle()
+        org.junit.Assert.assertEquals(whole, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals(second, replyText())
+        org.junit.Assert.assertEquals("the old story's swipes come back with it", 3, vm.rpSwipeNav.value?.total)
+        vm.navigateFork(1); idle()
+        org.junit.Assert.assertEquals("I leave the map in my coat instead.",
+            vm.getMessageText(vm.chatMessages.value.orEmpty()[lineAt].content))
+        org.junit.Assert.assertEquals(1, vm.rpSwipeNav.value?.total ?: 1)
+        vm.loadChat(source); settle()
+        vm.loadChat(branchId); settle()
+        org.junit.Assert.assertEquals("branches survive a reopen", 2, vm.getRpBranchNav(lineAt)?.totalVariants)
+        vm.navigateFork(-1); idle()
+        org.junit.Assert.assertEquals(second, replyText())
+        org.junit.Assert.assertEquals(3, vm.rpSwipeNav.value?.total)
+        // Regenerate a buried reply: that reply is redone and the story after it becomes a branch.
+        val buried = lineAt + 1
+        val buriedText = vm.getMessageText(vm.chatMessages.value.orEmpty()[buried].content)
+        DemoModel.pace = 1f
+        try {
+            // Stopped before any words: everything comes back as it was.
+            org.junit.Assert.assertTrue(vm.regenerateEarlierRpReply(buried))
+            // Nothing is cut or deleted while it runs: the redo would lose what it took off.
+            val line = vm.chatMessages.value.orEmpty()[lineAt]
+            vm.deleteRpMessageOnly(lineAt); idle()
+            org.junit.Assert.assertSame(line, vm.chatMessages.value.orEmpty()[lineAt])
+            vm.cancelCurrentRequest(); idle()
+        } finally {
+            DemoModel.pace = 0.02f
+        }
+        org.junit.Assert.assertEquals(whole, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals(2, vm.getRpBranchNav(lineAt)?.totalVariants)
+        org.junit.Assert.assertEquals(3, vm.rpSwipeNav.value?.total)
+        org.junit.Assert.assertTrue(vm.regenerateEarlierRpReply(buried))
+        waitFor(30_000) { vm.isAwaitingResponse.value == false && vm.chatMessages.value.orEmpty().size == buried + 1 }
+        settle()
+        org.junit.Assert.assertEquals("the redo is the newest reply now", buried + 1, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals(3, vm.getRpBranchNav(lineAt)?.totalVariants)
+        vm.navigateFork(-1); idle()
+        vm.navigateFork(-1); idle()
+        org.junit.Assert.assertEquals(whole, vm.chatMessages.value.orEmpty().size)
+        org.junit.Assert.assertEquals(buriedText, vm.getMessageText(vm.chatMessages.value.orEmpty()[buried].content))
+        org.junit.Assert.assertEquals(second, replyText())
+        org.junit.Assert.assertEquals(3, vm.rpSwipeNav.value?.total)
         SharedPreferencesHelper(a).saveRpMemory(mira.id, "Owes Sam a favor from the Kessel run. Hates the innkeeper.")
         // Top of a chat with messages: no stray rule under the tabs (the old scroll-progress bar).
         org.junit.Assert.assertEquals(0f, a.findViewById<View>(R.id.progressBar).alpha)

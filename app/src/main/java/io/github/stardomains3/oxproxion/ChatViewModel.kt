@@ -485,17 +485,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     private var forkBranches: List<List<FlexibleMessage>> = emptyList()
     private var forkActive: Int = 0
+    /** Roleplay: each parked branch's reply versions, beside [forkBranches]. The live ones are [rpSwipeState]. */
+    private var forkVersions: List<Map<Int, RpVersions>> = emptyList()
     private val forkDisplayVariant: Int get() = forkActive + 1
     /** Where the last cut was made, and everything as it was before it, so Cancel on an Edit puts it all back. */
     private var lastCutIndex: Int = -1
     private var preCut: PreCut? = null
 
-    private class PreCut(
+    private data class PreCut(
         val transcript: List<FlexibleMessage>,
         val index: Int,
         val anchor: Int,
         val branches: List<List<FlexibleMessage>>,
         val active: Int,
+        val versions: List<Map<Int, RpVersions>>,
+        val swipe: RpSwipeState,
     )
     private val hasStashedBranch: Boolean
         get() = forkIndex >= 0 && forkBranches.withIndex().any { (i, t) -> i != forkActive && t.isNotEmpty() }
@@ -663,6 +667,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         (swipe?.pictureUris.orEmpty() + swipe?.earlier?.values.orEmpty().flatMap { it.pictureUris })
             .mapNotNull { ScenePhoto.sceneFileName(it) }.toSet()
 
+    private fun versionPictureNames(versions: List<RpVersions>): Set<String> =
+        versions.flatMap { it.pictureUris }.mapNotNull { ScenePhoto.sceneFileName(it) }.toSet()
+
+    /** Pictures a parked branch still shows, on its messages or its reply versions. */
+    private fun forkPictureNames(): Set<String> =
+        forkBranches.flatten().mapNotNull { ScenePhoto.sceneFileName(it.imageUri) }.toSet() +
+            versionPictureNames(forkVersions.flatMap { it.values })
+
     /**
      * A version that is no longer kept. The file on the reply still showing stays; one that
      * is only named here, and not in any saved message, is removed.
@@ -676,7 +688,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun deleteUnusedScenePhotos(names: Set<String>) {
         if (names.isEmpty()) return
-        val live = _chatMessages.value.orEmpty().mapNotNull { ScenePhoto.sceneFileName(it.imageUri) }.toSet()
+        val live = _chatMessages.value.orEmpty().mapNotNull { ScenePhoto.sceneFileName(it.imageUri) }.toSet() +
+            forkPictureNames()
         val held = synchronized(scenePhotosHeld) { scenePhotosHeld.toSet() }
         val pending = ScenePhoto.sceneFileName(pendingUserImageUri)
         val app = getApplication<Application>()
@@ -1031,6 +1044,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val anchor: Int,
         val branches: List<List<FlexibleMessage>>,
         val active: Int,
+        val versions: List<Map<Int, RpVersions>> = emptyList(),
     )
 
     private data class ChatPersistSnapshot(
@@ -1073,6 +1087,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 anchor = forkAnchorAssistantIndex,
                 branches = forkBranches.map { tail -> tail.map { it.copy() } },
                 active = forkActive,
+                versions = forkVersions,
             ),
             swipe = rpSwipeState.takeIf { !it.isEmpty },
             editDraft = composerEditDrafts[ComposerDrafts.key(id)]
@@ -1208,7 +1223,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         if (!chatSaveSerial.isCurrent(ticket)) return
-        releaseDroppedScenePhotos(sessionId, previousPhotos, messagesToSave + snap.fork?.branches.orEmpty().flatten(), snap.swipe)
+        releaseDroppedScenePhotos(sessionId, previousPhotos, messagesToSave + snap.fork?.branches.orEmpty().flatten(), snap.swipe,
+            snap.fork?.versions.orEmpty().flatMap { it.values })
         if (
             ChatSaveGate.decide(
                 epochAtSchedule = snap.epoch,
@@ -1498,10 +1514,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         previous: List<String>,
         messages: List<FlexibleMessage>,
         swipe: RpSwipeState?,
+        branchVersions: List<RpVersions> = emptyList(),
     ) {
         if (previous.isEmpty()) return
         val kept = messages.mapNotNull { ScenePhoto.sceneFileName(it.imageUri) }.toSet() +
-            swipePictureNames(swipe)
+            swipePictureNames(swipe) + versionPictureNames(branchVersions)
         val dropped = previous.filter { it !in kept }
         if (dropped.isEmpty()) return
         val app = getApplication<Application>()
@@ -1547,7 +1564,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (!ScenePhoto.isSceneFileName(name)) return false
         val shown = _chatMessages.value.orEmpty().mapNotNullTo(HashSet()) {
             ScenePhoto.sceneFileName(it.imageUri)
-        }
+        } + forkPictureNames()
         val held = synchronized(scenePhotosHeld) { scenePhotosHeld.toSet() }
         return ScenePhoto.scenePhotosSafeToDelete(
             listOf(name),
@@ -1689,6 +1706,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             rpSwipeRestoreToken++
         }
+        if (restoreSwipeAlt && isRpMode()) rollBackEmptyRpBranch()
         // Skip when clearing an already-idle transcript (clearOpenTranscript) so we don't
         // re-fire Fragment autosave into an emptied / null sessionId mid-transition.
         if (clearAwaiting && _isAwaitingResponse.value == true) {
@@ -1736,6 +1754,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * Does not require [isRpMode] so Ask↔RP mid-regen can restore before the transcript is swapped.
      */
     private fun restoreRpSwipeAltIfMissingAssistant() {
+        putBackRpSwipeAlt()
+        // A buried Regenerate that failed or stopped with no reply: the story it cut comes back.
+        rollBackEmptyRpBranch()
+    }
+
+    private fun putBackRpSwipeAlt() {
         val messages = _chatMessages.value?.toMutableList() ?: return
         while (messages.isNotEmpty() && isAssistantPlaceholder(messages.last())) {
             messages.removeAt(messages.lastIndex)
@@ -2097,7 +2121,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         newList[position] = updatedMessage
         _chatMessages.value = newList
         syncRpSwipeAltAfterAssistantEdit(position, newContent)
+        keepInPreCut(position)
         autoSaveChat()
+    }
+
+    /**
+     * A change to a message above an open Edit's cut (a Rewrite, a version swipe, a hand edit)
+     * is part of the story Cancel puts back, so it is not undone with the edit.
+     */
+    private fun keepInPreCut(position: Int) {
+        val before = preCut ?: return
+        if (position < 0 || position >= lastCutIndex || position >= before.transcript.size) return
+        val message = _chatMessages.value?.getOrNull(position) ?: return
+        val versions = rpSwipeState.earlier[position]
+        val earlier = if (versions != null) before.swipe.earlier + (position to versions) else before.swipe.earlier - position
+        preCut = before.copy(
+            transcript = before.transcript.toMutableList().also { it[position] = message },
+            swipe = before.swipe.copy(earlier = earlier),
+        )
     }
 
     /** Keep swipe alts in sync when the user edits the last assistant bubble. */
@@ -2110,10 +2151,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             persistRpSwipeState()
             return
         }
-        if (rpSwipeState.alts.isEmpty()) return
+        if (rpSwipeState.alts.isEmpty() || pendingRpSwipeAppend) return
         val messages = _chatMessages.value ?: return
         val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
-        if (position != lastAssistantIndex) return
+        if (position != lastAssistantIndex || position < messages.indexOfLast { it.role == "user" }) return
         val index = rpSwipeState.index.coerceIn(0, rpSwipeState.alts.lastIndex)
         val alts = rpSwipeState.alts.toMutableList()
         alts[index] = newContent
@@ -2173,7 +2214,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (isRpMode()) {
             truncateWithoutFork(userMessageIndex + 1 + rpBetween.size)
-            clearForkMemory()
         } else {
             truncateHistory(userMessageIndex + 1, anchorAssistantIndex = userMessageIndex + 1)
         }
@@ -2728,20 +2768,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val discarded = current.subList(startIndex, current.size)
             .filterNot { isAssistantPlaceholder(it) || isErrorBubble(it) }
             .map { it.copy() }
+        val roleplay = isRpMode()
         if (discarded.isNotEmpty()) {
-            preCut = PreCut(current.map { it.copy() }, forkIndex, forkAnchorAssistantIndex, forkBranches, forkActive)
+            preCut = PreCut(
+                current.map { it.copy() }, forkIndex, forkAnchorAssistantIndex, forkBranches, forkActive,
+                forkVersions, rpSwipeState,
+            )
             lastCutIndex = startIndex
             val prior = forkBranches.takeIf { forkIndex >= 0 && hasStashedBranch }
             val raw = ForkBranches.cut(
                 current.map { it.copy() },
                 startIndex,
-                prior?.let { ForkBranches.State(forkIndex, it, forkActive) },
+                prior?.let { ForkBranches.State(forkIndex, it, forkActive, forkVersions) },
+                live = if (roleplay) liveRpVersions(current) else emptyMap(),
             )
             val cut = raw.copy(branches = raw.branches.map { t -> t.filterNot { isAssistantPlaceholder(it) || isErrorBubble(it) } })
             val movedUp = prior != null && cut.index != forkIndex
             forkIndex = cut.index
             forkBranches = cut.branches
             forkActive = cut.active
+            forkVersions = if (roleplay) cut.versions else emptyList()
             if (prior == null || movedUp || forkAnchorAssistantIndex < 0) {
                 forkAnchorAssistantIndex = if (cut.index == startIndex) anchorAssistantIndex else -1
             }
@@ -2750,41 +2796,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         current.subList(startIndex, current.size).clear()
         _chatMessages.value = current
-    }
-
-    /** A Roleplay Edit that has not been sent: what the chat was before the cut. */
-    private class RpEditUndo(
-        val key: String,
-        val transcript: List<FlexibleMessage>,
-        val swipe: RpSwipeState,
-        val held: Set<String>,
-        val cut: Int,
-        val draft: String,
-    )
-    private var rpEditUndo: RpEditUndo? = null
-
-    private fun openRpEdit(): RpEditUndo? {
-        val undo = rpEditUndo ?: return null
-        if (!isRpMode()) return null
-        // Sent, or another chat opened: the cut stands and its pictures may go.
-        if (undo.key != ComposerDrafts.key(currentSessionId) || (_chatMessages.value?.size ?: 0) > undo.cut) {
-            releaseRpEditUndo()
-            return null
+        if (roleplay) {
+            // The cut turns' versions went with their branch. The ones before the cut stay here.
+            rpSwipeState = RpSwipeState(earlier = rpSwipeState.earlier.filterKeys { it < startIndex })
+            persistOrClearRpSwipe()
+            syncRpSwipeAfterTranscriptChange()
+            updateRpSwipeNav()
         }
-        return undo
     }
 
-    private fun releaseRpEditUndo() {
-        val undo = rpEditUndo ?: return
-        rpEditUndo = null
-        synchronized(scenePhotosHeld) { scenePhotosHeld.removeAll(undo.held) }
+    /** The open transcript's reply versions by position, the newest reply's swipes included. */
+    private fun liveRpVersions(messages: List<FlexibleMessage>): Map<Int, RpVersions> {
+        val last = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        if (last < 0) return rpSwipeState.earlier
+        return RpSwipeRules.archive(rpSwipeState, last, getMessageText(messages[last].content))
     }
 
     /** True while Edit has cut a turn and the replacement has not been sent. */
-    fun isComposerEditOpen(): Boolean = openRpEdit() != null || ChatEdit.awaitingSend(
+    fun isComposerEditOpen(): Boolean = ChatEdit.awaitingSend(
         marked = composerEditKey != null,
         sameChat = composerEditKey == ComposerDrafts.key(currentSessionId),
-        roleplay = isRpMode(),
         hasFork = _hasChatFork.value == true,
         onNewestBranch = forkActive == forkBranches.lastIndex,
         forkIndex = if (lastCutIndex >= 0) lastCutIndex else forkIndex,
@@ -2796,7 +2827,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * A second call for the same open edit does not replace that line with the message text.
      */
     fun openComposerEdit(draft: String) {
-        if (isRpMode()) return
         if (_hasChatFork.value != true || forkActive != forkBranches.lastIndex || forkIndex < 0) return
         if ((_chatMessages.value?.size ?: 0) > (if (lastCutIndex >= 0) lastCutIndex else forkIndex)) return
         val key = ComposerDrafts.key(currentSessionId)
@@ -2809,7 +2839,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The replacement was sent, or a different cut replaced this one. The fork itself can stay. */
     fun finishComposerEdit() {
-        releaseRpEditUndo()
         clearComposerEditMark()
     }
 
@@ -2834,17 +2863,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * is nothing to cancel (the edit was already sent, or this is not the chat it belongs to).
      */
     fun cancelComposerEdit(): EditCancel? {
-        openRpEdit()?.let { undo ->
-            releaseRpEditUndo()
-            _chatMessages.value = undo.transcript
-            rpSwipeState = undo.swipe
-            persistOrClearRpSwipe()
-            updateRpSwipeNav()
-            _rpEarlierVersionsChanged.value = Event(Unit)
-            autoSaveChat()
-            val restored = undo.transcript.getOrNull(undo.cut)?.let { getMessageText(it.content) }.orEmpty()
-            return EditCancel(undo.draft, restored)
-        }
         if (!isComposerEditOpen()) return null
         val id = currentSessionId
         val key = ComposerDrafts.key(id)
@@ -2857,24 +2875,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         composerEditKey = null
         composerEditDrafts.remove(ComposerDrafts.NEW)
         id?.let { sharedPreferencesHelper.setChatForkEditing(it, false, null) }
-        val before = preCut
-        if (before != null) {
-            // Everything as it was before the cut: the transcript and every branch.
-            preCut = null
-            lastCutIndex = -1
-            forkIndex = before.index
-            forkAnchorAssistantIndex = before.anchor
-            forkBranches = before.branches
-            forkActive = before.active
-            _chatMessages.value = before.transcript
-            _hasChatFork.value = hasStashedBranch
-            persistForkToPrefs()
-            autoSaveChat()
-        } else {
+        if (!restorePreCut()) {
             showForkBranch(forkBranches.lastIndex - 1, dropEmptyActive = true)
         }
         val restored = _chatMessages.value?.getOrNull(index)?.let { getMessageText(it.content) }.orEmpty()
         return EditCancel(remembered, restored)
+    }
+
+    /** Everything as it was before the last cut: the transcript, every branch and the swipes. */
+    private fun restorePreCut(): Boolean {
+        val before = preCut ?: return false
+        preCut = null
+        lastCutIndex = -1
+        forkIndex = before.index
+        forkAnchorAssistantIndex = before.anchor
+        forkBranches = before.branches
+        forkActive = before.active
+        forkVersions = before.versions
+        _chatMessages.value = before.transcript
+        _hasChatFork.value = hasStashedBranch
+        persistForkToPrefs()
+        if (isRpMode()) {
+            rpSwipeState = before.swipe
+            persistOrClearRpSwipe()
+            updateRpSwipeNav()
+            _rpEarlierVersionsChanged.value = Event(Unit)
+            clampRpMemoryWatermark()
+        }
+        autoSaveChat()
+        return true
     }
 
     fun truncateHistory(startIndex: Int, anchorAssistantIndex: Int = startIndex) {
@@ -2889,7 +2918,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteMessageAt(index: Int) {
         val size = _chatMessages.value?.size ?: return
-        if (index < 0 || index >= size) return
+        if (index < 0 || index >= size || refuseRpCutWhileBusy()) return
         stopTurnBeforeCut()
         val current = _chatMessages.value?.toMutableList() ?: return
         if (index >= current.size) return
@@ -2897,8 +2926,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _chatMessages.value = current
         // Branches hang off the turn at the cut. With that turn gone they would splice in elsewhere.
         if (forkIndex >= 0 && index < forkIndex) {
+            val parked = forkPictureNames()
             clearForkMemory()
             persistForkToPrefs()
+            deleteUnusedScenePhotos(parked)
         } else {
             preCut = null
             lastCutIndex = -1
@@ -2914,7 +2945,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun deleteRpMessageOnly(index: Int) {
         val size = _chatMessages.value?.size ?: return
-        if (!isRpMode() || index < 0 || index >= size) return
+        if (!isRpMode() || index < 0 || index >= size || refuseRpCutWhileBusy()) return
         stopTurnBeforeCut()
         val current = _chatMessages.value?.toMutableList() ?: return
         if (index >= current.size) return
@@ -2929,10 +2960,33 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             dropUnreferencedSwipePictures()
             rpSwipeState = RpSwipeState(earlier = earlier)
         }
+        shiftForkAfterRemoval(index)
         _chatMessages.value = current
         syncRpSwipeAfterTranscriptChange()
         clampRpMemoryWatermark()
         autoSaveChat()
+    }
+
+    /**
+     * Roleplay: a reply or a redo is running. A regenerate has already taken the newest reply
+     * off the list and keeps it only as a swipe, so a cut now would lose it. Wait instead.
+     */
+    fun refuseRpCutWhileBusy(): Boolean {
+        if (!isRpMode()) return false
+        if (_isAwaitingResponse.value != true && rpRewriteJob?.isActive != true) return false
+        _toastUiEvent.value = Event(str(R.string.rp_wait_for_reply))
+        return true
+    }
+
+    /** One message before the cut is gone: the branches still start right after the same turns. */
+    private fun shiftForkAfterRemoval(index: Int) {
+        preCut = null
+        lastCutIndex = -1
+        if (forkIndex < 0 || index >= forkIndex) return
+        forkIndex--
+        if (forkAnchorAssistantIndex > index) forkAnchorAssistantIndex--
+        forkVersions = forkVersions.map { v -> v.mapKeys { (pos, _) -> pos - 1 } }
+        persistForkToPrefs()
     }
 
     /**
@@ -2980,28 +3034,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /** True when something after [index] would go with it: Delete offers to keep it. */
     fun hasMessagesAfter(index: Int): Boolean = index < (_chatMessages.value?.lastIndex ?: -1)
 
-    /** True when cutting at [index] would drop later turns of the user's, not just its own reply. */
-    fun rpCutDropsLaterTurns(index: Int): Boolean =
-        _chatMessages.value.orEmpty().withIndex().any { (i, m) -> i > index && m.role == "user" }
-
-    /** Truncate for RP user-edit without creating an Ask-mode fork or leaving stale swipe state. */
+    /**
+     * Roleplay's Edit: the story from this line on becomes a branch, the same as Chat's Edit,
+     * so the line can be flipped back with everything after it. Cancel puts it all back.
+     */
     fun truncateForRpEdit(startIndex: Int, draft: String = "") {
         val size = _chatMessages.value?.size ?: return
-        if (startIndex < 0 || startIndex >= size) return
-        stopTurnBeforeCut()
-        val before = _chatMessages.value.orEmpty().filterNot(::isAssistantPlaceholder).map { it.copy() }
-        val swipeBefore = rpSwipeState
-        clearForkMemory()
-        releaseRpEditUndo()
-        // Cancel brings the cut turns back with their pictures, so no save may delete those files meanwhile.
-        val held = (before.drop(startIndex).mapNotNull { ScenePhoto.sceneFileName(it.imageUri) } +
-            swipePictureNames(swipeBefore)).toSet()
-        synchronized(scenePhotosHeld) { scenePhotosHeld.addAll(held) }
-        rpEditUndo = RpEditUndo(ComposerDrafts.key(currentSessionId), before, swipeBefore, held, startIndex, draft)
-        truncateWithoutFork(startIndex)
-        forgetRpSwipeVersions()
-        // The reply now newest gets its archived versions back as the swipe bar.
-        syncRpSwipeAfterTranscriptChange()
+        if (startIndex < 0 || startIndex >= size || refuseRpCutWhileBusy()) return
+        stashAndTruncateFrom(startIndex, anchorAssistantIndex = -1)
+        openComposerEdit(draft)
         clampRpMemoryWatermark()
         autoSaveChat()
     }
@@ -3057,7 +3098,37 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /**
+     * Roleplay: the message a branch starts at shows the branches. Your edited line, or the
+     * reply a Regenerate redid; that switch wins over the reply's own versions.
+     */
+    fun getRpBranchNav(position: Int): ForkNavState? {
+        if (!isRpMode() || _hasChatFork.value != true || !hasStashedBranch) return null
+        if (position != rpBranchRow()) return null
+        return ForkNavState(
+            variantIndex = forkDisplayVariant,
+            totalVariants = forkBranches.size,
+            canGoPrev = forkActive > 0,
+            canGoNext = forkActive < forkBranches.lastIndex
+        )
+    }
+
+    /**
+     * Where the branch switcher sits. A Regenerate's branches start at a reply, which has its own
+     * versions; the switcher goes on your line just above it. An Edit's start at your line.
+     */
+    private fun rpBranchRow(): Int {
+        val messages = _chatMessages.value.orEmpty()
+        val redo = forkBranches.withIndex().any { (i, t) -> i != forkActive && t.firstOrNull()?.role == "assistant" }
+        if (redo && messages.getOrNull(forkIndex - 1)?.role == "user") return forkIndex - 1
+        val at = messages.getOrNull(forkIndex) ?: return -1
+        return if (isAssistantPlaceholder(at)) -1 else forkIndex
+    }
+
+    fun isRpBranchLine(position: Int): Boolean = getRpBranchNav(position) != null
+
     fun navigateFork(direction: Int) {
+        if (isRpMode() && !canInteractWithRpSwipe()) return
         if (_hasChatFork.value != true) return
         val target = forkActive + direction.coerceIn(-1, 1)
         if (target != forkActive && target in forkBranches.indices) showForkBranch(target)
@@ -3068,8 +3139,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         forkAnchorAssistantIndex = -1
         forkBranches = emptyList()
         forkActive = 0
+        forkVersions = emptyList()
         lastCutIndex = -1
         preCut = null
+        rpBranchRegenAt = -1
         composerEditKey = null
         _hasChatFork.value = false
     }
@@ -3095,19 +3168,36 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             .filterNot { isAssistantPlaceholder(it) }
             .map { it.copy() }
         val restoredTail = forkBranches[target].map { it.copy() }
+        val roleplay = isRpMode()
+        val versions = forkVersions.takeIf { roleplay && it.size == forkBranches.size }?.toMutableList()
+            ?: MutableList(forkBranches.size) { emptyMap() }
+        val targetVersions = versions[target]
         val slots = forkBranches.toMutableList()
         slots[forkActive] = activeTail
         slots[target] = emptyList()
+        versions[forkActive] = if (roleplay) liveRpVersions(current).filterKeys { it >= safeIndex } else emptyMap()
+        versions[target] = emptyMap()
         var nextActive = target
         if (activeTail.isEmpty() && dropEmptyActive) {
             slots.removeAt(forkActive)
+            versions.removeAt(forkActive)
             if (forkActive < target) nextActive--
         }
         forkBranches = slots
         forkActive = nextActive
+        forkVersions = if (roleplay) versions else emptyList()
         forkIndex = safeIndex
         val merged = prefix + restoredTail
         _chatMessages.value = merged
+        if (roleplay) {
+            // The branch brings its own reply versions; the newest reply's become the swipe bar again.
+            rpSwipeState = RpSwipeState(earlier = rpSwipeState.earlier.filterKeys { it < safeIndex } + targetVersions)
+            persistOrClearRpSwipe()
+            syncRpSwipeAfterTranscriptChange()
+            updateRpSwipeNav()
+            _rpEarlierVersionsChanged.value = Event(Unit)
+            clampRpMemoryWatermark()
+        }
         forkAnchorAssistantIndex = merged.indices.firstOrNull { i ->
             i >= safeIndex && merged[i].role == "assistant" && !isAssistantPlaceholder(merged[i])
         } ?: forkAnchorAssistantIndex
@@ -3131,7 +3221,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         persistCapturedFork(
             sessionId,
-            CapturedFork(forkIndex, forkAnchorAssistantIndex, forkBranches, forkActive)
+            CapturedFork(forkIndex, forkAnchorAssistantIndex, forkBranches, forkActive, forkVersions)
         )
     }
 
@@ -3141,7 +3231,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         try {
-            val encoded = ForkLoad.encode(fork.branches, fork.active)
+            val encoded = ForkLoad.encode(fork.branches, fork.active, fork.versions)
             sharedPreferencesHelper.saveChatFork(sessionId, fork.index, fork.anchor, encoded)
         } catch (e: Exception) {
             Log.e("ChatViewModel", "Could not save the other branch of chat $sessionId", e)
@@ -3183,6 +3273,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         forkIndex = idx
         forkBranches = decoded.tails
         forkActive = decoded.active
+        forkVersions = decoded.versions
         forkAnchorAssistantIndex = sharedPreferencesHelper.getChatForkAnchor(sessionId)
         if (forkAnchorAssistantIndex < 0) {
             val msgs = _chatMessages.value.orEmpty()
@@ -5396,7 +5487,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             // So Stop mid-prep restores the stashed alt (pending was previously set only at resend).
             pendingRpSwipeAppend = true
         }
-        clearForkMemory()
         rpPrepJob?.cancel()
         rpPrepJob = viewModelScope.launch {
             try {
@@ -5448,8 +5538,55 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * with an Undo, and everything after it is left as it was.
      * @return false if soft-failed (toast already shown).
      */
-    /** A fresh version of any reply. One with the story after it is redone in place, as a version. */
-    fun regenerateEarlierRpReply(position: Int): Boolean = rewriteRpReply(position, "", fresh = true)
+    /** Where a Regenerate on a buried reply cut the story, while its new reply has not landed. */
+    private var rpBranchRegenAt = -1
+
+    /**
+     * Regenerate a reply with the story after it: the story from that reply on becomes a branch,
+     * the same as Chat's Redo, and a new reply streams in its place. The greeting has no line of
+     * yours to answer, so it gets a new version in place instead.
+     */
+    fun regenerateEarlierRpReply(position: Int): Boolean {
+        if (!isRpMode()) return false
+        if (_isAwaitingResponse.value == true || rpRewriteJob?.isActive == true) {
+            _toastUiEvent.postValue(Event(str(R.string.rp_wait_for_reply)))
+            return false
+        }
+        val messages = _chatMessages.value ?: return false
+        val target = messages.getOrNull(position)?.takeIf { it.role == "assistant" && !isAssistantPlaceholder(it) }
+            ?: return false
+        val lastAssistantIndex = messages.indexOfLast { it.role == "assistant" && !isAssistantPlaceholder(it) }
+        val lastUserIndex = messages.indexOfLast { it.role == "user" }
+        if (RpRewrite.streamsAsNewSwipe(position, lastAssistantIndex, lastUserIndex)) return regenerateLastRpReply()
+        if (messages.take(position).none { it.role == "user" }) {
+            if (isNonSwipeableRpAssistantText(getMessageText(target.content))) return false
+            return rewriteRpReply(position, "", fresh = true)
+        }
+        if (!canSendRpMessage()) {
+            _toastUiEvent.postValue(Event(str(R.string.rp_select_character)))
+            return false
+        }
+        // A Continue's piece carries on the reply before it, so its redo is a Continue again.
+        val continuing = messages.getOrNull(position - 1)?.let { it.role == "assistant" && !isAssistantPlaceholder(it) } == true
+        stashAndTruncateFrom(position, anchorAssistantIndex = position)
+        clampRpMemoryWatermark()
+        rpBranchRegenAt = position
+        val started = if (continuing) continueRpStory() else regenerateLastRpReply()
+        if (!started) rollBackEmptyRpBranch()
+        return started
+    }
+
+    /**
+     * A branch Regenerate that never got a reply (stopped before any words, or refused): the
+     * story it cut comes back, swipes and branches as they were.
+     */
+    private fun rollBackEmptyRpBranch() {
+        val at = rpBranchRegenAt.also { rpBranchRegenAt = -1 }
+        if (at < 0 || at != lastCutIndex || isComposerEditOpen()) return
+        // The thinking bubble may still be there; it is not a reply.
+        if (_chatMessages.value.orEmpty().count { !isAssistantPlaceholder(it) } > at) return
+        restorePreCut()
+    }
 
     fun rewriteRpReply(position: Int, instruction: String, fresh: Boolean = false): Boolean {
         val note = instruction.trim()
@@ -5604,6 +5741,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         rpSwipeState = rpSwipeState.copy(earlier = rpSwipeState.earlier + (position to v.copy(index = next)))
         persistRpSwipeState()
         _chatMessages.value = messages
+        keepInPreCut(position)
         autoSaveChat()
     }
 

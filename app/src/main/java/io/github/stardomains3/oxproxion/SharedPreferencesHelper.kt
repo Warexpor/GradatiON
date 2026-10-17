@@ -1953,10 +1953,12 @@ class SharedPreferencesHelper(context: Context) {
      * pictures with the chat it came from, and a version is not in any saved message.
      */
     fun rpSwipeNamesPhoto(name: String, exceptSessions: Set<Long> = emptySet()): Boolean {
-        val skip = exceptSessions.mapTo(HashSet()) { "$KEY_RP_SWIPE_PREFIX$it" }
+        // A parked branch counts too: its messages and versions are only in the fork blob.
+        val skip = exceptSessions.flatMapTo(HashSet()) { listOf("$KEY_RP_SWIPE_PREFIX$it", "$KEY_CHAT_FORK_PREFIX$it") }
         return blobs.keys().any { key ->
-            key.startsWith(KEY_RP_SWIPE_PREFIX) && key !in skip &&
-                name in ScenePhoto.fileNamesIn(blobs.get(key).orEmpty())
+            val tracked = key.startsWith(KEY_RP_SWIPE_PREFIX) ||
+                (key.startsWith(KEY_CHAT_FORK_PREFIX) && key.removePrefix(KEY_CHAT_FORK_PREFIX).all { it.isDigit() })
+            tracked && key !in skip && name in ScenePhoto.fileNamesIn(blobs.get(key).orEmpty())
         }
     }
 

@@ -17,10 +17,19 @@ internal object ForkLoad {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Every branch from the cut, oldest first. [active] is the one on screen; its slot is empty. */
-    data class Branches(val tails: List<List<FlexibleMessage>>, val active: Int)
+    data class Branches(
+        val tails: List<List<FlexibleMessage>>,
+        val active: Int,
+        /** Roleplay: each branch's reply versions, by position. Empty maps for a plain chat. */
+        val versions: List<Map<Int, RpVersions>> = List(tails.size) { emptyMap() },
+    )
 
     @Serializable
-    private data class Stored(val active: Int, val branches: List<List<FlexibleMessage>>)
+    private data class Stored(
+        val active: Int,
+        val branches: List<List<FlexibleMessage>>,
+        val versions: List<Map<Int, RpVersions>> = emptyList(),
+    )
 
     fun messages(raw: String?): List<FlexibleMessage>? {
         if (raw.isNullOrBlank()) return null
@@ -45,7 +54,11 @@ internal object ForkLoad {
             stored.takeIf { s ->
                 s.branches.size >= 2 && s.active in s.branches.indices &&
                     s.branches.withIndex().all { (i, t) -> i == s.active || t.isNotEmpty() }
-            }?.let { Branches(it.branches, it.active) }
+            }?.let { s ->
+                val versions = s.versions.takeIf { it.size == s.branches.size }
+                    ?: List(s.branches.size) { emptyMap() }
+                Branches(s.branches, s.active, versions)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Unreadable chat fork; leaving it in place (${e.javaClass.simpleName})")
             null
@@ -53,12 +66,19 @@ internal object ForkLoad {
     }
 
     /** Two branches with the newer on screen keep the old shape, so a backup stays readable everywhere. */
-    fun encode(tails: List<List<FlexibleMessage>>, active: Int): String {
-        if (tails.size == 2 && active == 1) {
+    fun encode(
+        tails: List<List<FlexibleMessage>>,
+        active: Int,
+        versions: List<Map<Int, RpVersions>> = emptyList(),
+    ): String {
+        val kept = versions.takeIf { v -> v.size == tails.size && v.any { it.isNotEmpty() } }
+            ?.mapIndexed { i, v -> if (i == active) emptyMap() else v }
+            .orEmpty()
+        if (tails.size == 2 && active == 1 && kept.none { it.isNotEmpty() }) {
             return json.encodeToString(ListSerializer(FlexibleMessage.serializer()), tails[0])
         }
         val slots = tails.mapIndexed { i, t -> if (i == active) emptyList() else t }
-        return json.encodeToString(Stored.serializer(), Stored(active, slots))
+        return json.encodeToString(Stored.serializer(), Stored(active, slots, kept.takeIf { v -> v.any { it.isNotEmpty() } }.orEmpty()))
     }
 
     private const val TAG = "ForkLoad"

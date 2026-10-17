@@ -473,6 +473,8 @@ class ChatAdapter(
     fun addMessage(message: FlexibleMessage) {
         messages.add(message)
         notifyItemInserted(messages.size - 1)
+        // Roleplay: the reply before it is no longer the newest, so its Regenerate button goes.
+        if (isRpMode && messages.size >= 2) notifyItemChanged(messages.size - 2)
     }
     private fun applyEditUpdate(newMessages: List<FlexibleMessage>) {
         // 3. Use the stored position directly (Fast!)
@@ -729,6 +731,7 @@ class ChatAdapter(
             }
             if (payloads.all { it == RP_VERSIONS_PAYLOAD }) {
                 (holder as? AssistantViewHolder)?.bindVersionsOnly(position)
+                (holder as? UserViewHolder)?.bindForkNavigator(if (isRpMode) position else -1)
                 return
             }
         }
@@ -920,7 +923,32 @@ class ChatAdapter(
         private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
         private val collapseToggleButton: TextView = itemView.findViewById(R.id.collapseToggleButton)
         private val rpUserHeader: View = itemView.findViewById(R.id.rpUserHeader)
+        private val forkNavigator: View = itemView.findViewById(R.id.forkNavigator)
+        private val forkLabel: TextView = itemView.findViewById(R.id.forkLabel)
+        private val forkPrev: ImageButton = itemView.findViewById(R.id.forkPrev)
+        private val forkNext: ImageButton = itemView.findViewById(R.id.forkNext)
         private var actionsMsgKey: String = ""
+
+        /** Roleplay: the line an Edit branched at shows which story is on screen. */
+        fun bindForkNavigator(position: Int) {
+            val nav = if (position >= 0) forkNavStateForPosition(position) else null
+            if (nav == null) {
+                forkNavigator.visibility = View.GONE
+                return
+            }
+            forkNavigator.visibility = View.VISIBLE
+            forkLabel.text = "${nav.variantIndex} / ${nav.totalVariants}"
+            forkPrev.isEnabled = nav.canGoPrev
+            forkNext.isEnabled = nav.canGoNext
+            forkPrev.alpha = if (nav.canGoPrev) 1f else 0.35f
+            forkNext.alpha = if (nav.canGoNext) 1f else 0.35f
+            forkPrev.setOnClickListener {
+                if (nav.canGoPrev) { Haptics.tap(forkPrev); onForkNavigate(bindingAdapterPosition, -1) }
+            }
+            forkNext.setOnClickListener {
+                if (nav.canGoNext) { Haptics.tap(forkNext); onForkNavigate(bindingAdapterPosition, 1) }
+            }
+        }
 
         /** Your persona over your line, like the character's row over theirs. Book has neither. */
         private fun bindRpUserHeader() {
@@ -1030,6 +1058,7 @@ class ChatAdapter(
 
         fun bind(message: FlexibleMessage) {
             bindRpUserHeader()
+            bindForkNavigator(if (isRpMode && message.role == "user") bindingAdapterPosition else -1)
             messageTextView.textSize = 16f * currentFontScale / 100f
             messageTextView.typeface = currentTypeface
             val rawUserContent = getMessageText(message.content)
@@ -1783,7 +1812,7 @@ class ChatAdapter(
                 // Any finished reply, the greeting included; an error bubble has nothing to rewrite.
                 canRewrite = isRpMode && !isThinking && !isError && text.isNotBlank(),
                 // Past the greeting: a branch at the greeting is just a new chat.
-                canBranch = isRpMode && !isThinking && position > 0,
+                canBranch = isRpMode && !isThinking && !isError && position > 0,
                 // The newest reply has its own Regenerate. One with the story after it gets a version in place.
                 canRegenerateHere = isRpMode && !isThinking && !isError && position > 0 &&
                     regenerateButton.visibility != View.VISIBLE,

@@ -2353,7 +2353,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             onEditMessage = { position, text -> beginEditMessage(position, text) },
             onRedoMessage = { position, _ ->
                 if (viewModel.isRpMode()) {
-                    viewModel.regenerateLastRpReply()
+                    // The reply the button sits under, not whichever is newest now.
+                    viewModel.regenerateEarlierRpReply(position + 1)
                 } else {
                     val systemMessage = sharedPreferencesHelper.getSelectedSystemMessage().prompt
                     viewModel.resendExistingPrompt(position, systemMessage)
@@ -2458,11 +2459,14 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                     }
             },
             forkNavStateForPosition = { position ->
-                if (viewModel.isRpMode()) viewModel.getRpVersionNav(position)
+                if (viewModel.isRpMode()) viewModel.getRpBranchNav(position) ?: viewModel.getRpVersionNav(position)
                 else viewModel.getForkNavForMessage(position)
             },
             onForkNavigate = { position, direction ->
-                if (viewModel.isRpMode()) {
+                if (viewModel.isRpMode() && viewModel.isRpBranchLine(position)) {
+                    // A branch swaps the story from this line down; the line stays where it is.
+                    viewModel.navigateFork(direction)
+                } else if (viewModel.isRpMode()) {
                     // An earlier reply swaps in place; the reader stays where they are.
                     if (position >= 0) viewModel.swipeEarlierRpReply(position, direction)
                 } else {
@@ -2743,6 +2747,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                         val photo = selectedImageBytes
                         if (photo == null) {
                             if (!viewModel.sendRpUserMessage(substitutedPrompt)) return@setOnClickListener
+                            viewModel.finishComposerEdit()
+                            refreshEditBanner()
                             chatEditText.setText("")
                             chatEditText.text.clear()
                             return@setOnClickListener
@@ -2759,6 +2765,8 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                                 if (!isAdded) return@launch
                                 if (selectedImageBytes !== photo) return@launch
                                 if (!viewModel.sendRpUserMessage(draft, imageUrl = "data:$photoMime;base64,$base64")) return@launch
+                                viewModel.finishComposerEdit()
+                                refreshEditBanner()
                                 chatEditText.setText("")
                                 chatEditText.text.clear()
                                 forgetStagedAttachment()
@@ -3921,57 +3929,10 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     /**
      * Edit puts the caption back, and the photo with it. The thread is cut immediately so a
      * second send cannot land on the old turn; the picture is staged as soon as it is read.
-     * Roleplay has no Cancel mark, so the photo is kept for this chat until it is staged.
+     * The cut tail becomes a branch in both modes, and Cancel puts it back.
      * The save that drops the turn must not delete that file in the meantime.
      */
     private fun beginEditMessage(position: Int, text: String) {
-        // Roleplay: an older line has a story after it. Ask before cutting it, and offer a
-        // branch that keeps this chat whole.
-        if (viewModel.isRpMode() && viewModel.rpCutDropsLaterTurns(position)) {
-            hideMenu()
-            GrokConfirmDialog.show(
-                fragment = this,
-                title = getString(R.string.rp_edit_earlier_title),
-                message = getString(R.string.rp_edit_earlier_body),
-                confirmText = getString(R.string.rp_branch),
-                onConfirm = { branchEditMessage(position, text) },
-                destructive = false,
-                secondaryText = getString(R.string.rp_edit_here),
-                onSecondary = { editMessageInPlace(position, text) },
-            )
-            return
-        }
-        editMessageInPlace(position, text)
-    }
-
-    /**
-     * Edit in a branch: a new chat holds the story up to this line, the field gets the line
-     * (and its photo), and the chat it came from keeps everything.
-     */
-    private fun branchEditMessage(position: Int, text: String) {
-        val message = viewModel.chatMessages.value?.getOrNull(position)
-        val editPhoto = ScenePhoto.editPhoto(
-            message?.content?.let { MessageContent.imageUrl(it) },
-            message?.imageUri
-        )
-        val branch = viewModel.branchRpChat(position) ?: return
-        if (editPhoto != null) photoSendInFlight = true
-        forgetStagedAttachment()
-        clearStagedAttachment(discardSceneFile = true)
-        viewLifecycleOwner.lifecycleScope.launch {
-            branch.join()
-            if (!isAdded) return@launch
-            chatEditText.setText(text)
-            chatEditText.setSelection(text.length)
-            chatEditText.showKeyboard()
-            updateSendButtonChrome()
-            // The chat it came from still has this photo, so nothing holds the file.
-            if (editPhoto == null) return@launch
-            stageEditPhoto(editPhoto, heldUri = null, editEpoch = viewModel.openChatEpoch())
-        }
-    }
-
-    private fun editMessageInPlace(position: Int, text: String) {
         val previousDraft = chatEditText.text?.toString().orEmpty()
         val message = viewModel.chatMessages.value?.getOrNull(position)
         val editPhoto = ScenePhoto.editPhoto(

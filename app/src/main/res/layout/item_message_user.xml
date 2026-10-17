@@ -150,6 +150,49 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/messageContainer" />
 
+        <!-- Roleplay: the line an Edit branched at flips between its stories. Always shown. -->
+        <LinearLayout
+            android:id="@+id/forkNavigator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone"
+            android:layout_marginTop="2dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/collapseToggleButton">
+
+            <ImageButton
+                android:id="@+id/forkPrev"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_action_press"
+                android:contentDescription="@string/fork_prev"
+                android:padding="7dp"
+                android:src="@drawable/ic_msg_chevron_left"
+                app:tint="@color/xai_mute" />
+
+            <TextView
+                android:id="@+id/forkLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:textColor="@color/xai_body"
+                android:textSize="13sp"
+                tools:text="1 / 2" />
+
+            <ImageButton
+                android:id="@+id/forkNext"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_action_press"
+                android:contentDescription="@string/fork_next"
+                android:padding="7dp"
+                android:src="@drawable/ic_msg_chevron_right"
+                app:tint="@color/xai_mute" />
+        </LinearLayout>
+
         <!-- Edit + copy primary (right), then local extras; hidden until tap. Bare icons, no
              capsule, the same row the reply has under it. -->
         <LinearLayout
@@ -162,7 +205,7 @@
             android:layout_marginTop="2dp"
             android:layout_marginBottom="2dp"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/collapseToggleButton">
+            app:layout_constraintTop_toBottomOf="@id/forkNavigator">
 
             <ImageButton
                 android:id="@+id/editButton"

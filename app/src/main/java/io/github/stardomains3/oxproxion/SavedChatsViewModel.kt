@@ -50,7 +50,8 @@ class SavedChatsViewModel(application: Application) : AndroidViewModel(applicati
         // Before the row goes: the open chat just parked its field under this id.
         prefs.saveAskComposerDrafts(ComposerDrafts.drop(prefs.getAskComposerDrafts(), sessionId))
         val photos = repository.scenePhotoNames(sessionId)
-        val swipePhotos = ScenePhoto.fileNamesIn(prefs.getRpSwipeJson(sessionId).orEmpty())
+        val swipePhotos = ScenePhoto.fileNamesIn(prefs.getRpSwipeJson(sessionId).orEmpty()) +
+            ScenePhoto.fileNamesIn(prefs.getChatForkMessagesJson(sessionId).orEmpty())
         repository.deleteSession(sessionId)
         val unused = (photos + swipePhotos).distinct().filter {
             !repository.scenePhotoStillUsed(it) &&
