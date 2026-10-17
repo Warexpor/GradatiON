@@ -1,3 +1,8 @@
+# Handoff (2026-10-17, 3.2.0)
+
+- Branches are now `dev` (work) and `main` (released code); every other branch was deleted. `dev` is merged into `main` for each release.
+- Version 3.2.0 (versionCode 30200): CHANGELOG `## 3.2.0`, fastlane `30200.txt`, README bumped. Needs the signed build (`scripts/release.sh` with `~/.gradation-release`), a phone install over 3.1.1, then tag `v3.2.0` and a GitHub release with the APK + `.sha256`.
+
 # Handoff (2026-10-17, RP in-chat branches)
 
 - RP now branches inside the chat like the main chat (same `ForkBranches` cut model). Edit on your line, and Regenerate on a buried reply (button or menu), park the story after that point as a branch. The switcher sits on your line (for a Regenerate, the line above the redone reply), so a reply's own version arrows stay free. Each branch keeps its reply versions (`forkVersions`, stored in the fork blob via `ForkLoad.encode`); switching swaps them with the live `rpSwipeState`. `RpEditUndo` is gone: RP Edit uses the composer edit mark and `preCut`, like Chat.
@@ -8,7 +13,7 @@
 
 # Handoff (2026-10-13, RP and chat audit fixes)
 
-- From a read-only audit of RP and the chat harness. Fixed on `liquid-glass-redesign`:
+- From a read-only audit of RP and the chat harness. Fixed on `dev`:
   - Stop keeps what arrived. RP: the partial is the reply (a new version on a regenerate); only an empty stop rolls back. Main chat: an error mid-stream keeps the partial and puts the error under it.
   - Main-chat branches: any number per chat (`ForkBranches`, stored by `ForkLoad.encode`; two branches keep the old blob shape). One cut point; a deeper cut keeps the whole tail as a branch, a shallower one moves the cut up and carries every branch. Edit Cancel restores the exact pre-cut state from memory (`preCut`).
   - RP Edit can be cancelled (banner) until sent: transcript, versions and pictures come back (`RpEditUndo`, pictures held meanwhile).
@@ -22,13 +27,13 @@
 # Handoff (2026-10-06, 3.1.1)
 
 - `main` is at 1bdf7610: 3.1.0 plus only the jump-buttons fix (versionCode 30101, CHANGELOG `## 3.1.1`, fastlane `30101.txt`). Not signed or tagged yet: run `scripts/release.sh` where the key is, install over 3.1.0, then `git tag v3.1.1 && git push origin v3.1.1`.
-- `liquid-glass-redesign` has main merged in and carries the unreleased RP harness work (history fitted to the model window, neutral format sample, late style reminder, card import; see CHANGELOG `Unreleased`). Still needs a phone check.
+- `dev` has main merged in and carries the unreleased RP harness work (history fitted to the model window, neutral format sample, late style reminder, card import; see CHANGELOG `Unreleased`). Still needs a phone check.
 - Code-mode screenshot tests (`CodeModeScreenshotTest`) are flaky in full runs: a different visibility assertion failed in each of three full runs, and the class passes alone. Not touched.
 
 # Handoff (2026-10-05, 3.1.0 release prep)
 
 - Version 3.1.0 (versionCode 30100). CHANGELOG `## 3.1.0`, fastlane `changelogs/30100.txt`, README, help and the
-  showcase screenshots are updated. `liquid-glass-redesign` is fast-forwarded into `main`.
+  showcase screenshots are updated. `dev` is fast-forwarded into `main`.
 - Not done here: the signed build. Cloud sessions have no release key, so run `scripts/release.sh` on the machine
   with `~/.gradation-release`, install over 3.0.0 on the phone and open an old chat, then
   `git tag v3.1.0 && git push origin v3.1.0` and attach `build-out/gradation-3.1.0.apk` + `.sha256` to the release.
@@ -52,7 +57,7 @@ Bubbles (your name and portrait over your line), turn it off on Layout, and chec
 
 # Handoff (2026-10-04, second app-pass merge and polish)
 
-`gradation/app-pass` at `8b23525d` (198 commits, PRs #137 to #221) is fast-forwarded into `liquid-glass-redesign`.
+`gradation/app-pass` at `8b23525d` (198 commits, PRs #137 to #221) is fast-forwarded into `dev`.
 Its per-PR notes (111 entries) are in `git show 8b23525d:docs/handoff.md`; CHANGELOG.md Unreleased lists the
 changes. In short: Code session transcript on one glass sheet with a running rail, Code home as a remote for agents,
 spacing passes on Code cards; a long Settings pass (glass dialogs, library overflow menus, live prefs while Settings
@@ -78,7 +83,7 @@ Phone, most important first:
 
 # Handoff (2026-10-01, Cursor's app pass merged)
 
-`gradation/app-pass` (about 50 Cursor PRs, 67 commits) is merged into `liquid-glass-redesign`. The per-branch notes
+`gradation/app-pass` (about 50 Cursor PRs, 67 commits) is merged into `dev`. The per-branch notes
 are in that branch's history (`git show origin/gradation/app-pass:docs/handoff.md`); CHANGELOG.md Unreleased lists
 the changes. In short: chat saves keep their snapshot through a leave and never overwrite a newer one; forks, swipe
 versions, pins, facts and unsent lines travel with saves, exports and imports; database recovery keeps the old file
@@ -143,7 +148,7 @@ Leftovers from this list were all done in wave 2.
 ## Handoff (2026-09-29)
 
 ## Unreleased (after 3.0.0)
-`main` is merged into `liquid-glass-redesign` (only the cert fingerprint commit differed). Work since then, all unverified on a phone:
+`main` is merged into `dev` (only the cert fingerprint commit differed). Work since then, all unverified on a phone:
 - RP panel pages pass (2026-09-30, evening). The sheet dropped by its own height after back from a page: `CoordinatorLayout` params had `gravity = BOTTOM`, and `BottomSheetBehavior` adds its offset from the top on every layout, so any in-place content swap doubled it; the gravity is gone and `rpPanelPagesDark` walks every tile page and back asserting the sheet's top. Pages share `RpPageKit` (tile drawing as a 96dp hero with a caption, section labels, `rp_bg_card` cards of 56dp rows with hairlines, footnotes, pinned Save that rides the keyboard). Layout picks from three drawings with a ring on the chosen one; Wallpaper shows a phone-shaped preview; Voice lists Default at once and adds engine voices when TTS is up (rebind swaps only its own segmented listener; `GlassSegmentedGroup` keeps its thumb listener); Style (`RpSettingsFragment`, titled by `newInstance(title)`) is Writing / Story / Mode cards with footnotes. Avatar photos: `AvatarPicker.launch(anchor)` shows a `PickerPopover` under the portrait with Gallery (`ACTION_PICK` on MediaStore images, falls back to the picker) and Photo picker; `sheet_avatar_source` and the Files option are gone. Phone: Gallery opening the phone's own app, the card position under the portrait, keyboard on Memory with the pinned Save.
 - UI weak-spot pass (2026-09-30). Streaming: `StreamRevealPacing` (new) paces the reveal off an EMA of the arrival rate with a small lag behind the buffer that fades out after 150-450 ms without new text, so slow streams no longer drain, stop and lurch; the animator idles 250 ms instead of stopping; word snap only on big backlogs or finishing; fade 220 ms; no one-char first paint. Icons: ~50 legacy Material (viewport 960) icons redrawn as 24dp round strokes in place (file names kept), `ic_licenses` new, 30 unused drawables deleted (brand marks kept, `ModelBrandsTest` needs 30+). Settings rows share one text edge and divider inset; LAN row uses `ic_local_network`; Controls grid packs visible tiles (`reflowControlTiles`) and hides New chat instead of ghosting it. RP: `AvatarPicker` samples big photos properly and recycles; Memory/Voice drafts survive rotation; RP pages pad for the IME; wallpaper and panel avatar decode off main; RP bubble binds skip unchanged layout params; glass press glow caches its shader; empty-home copy points at the characters button. Code home badge is 13sp translucent under a two-line title. Full suite and `assembleDev` pass. Phone: slow-stream feel (try a slow model or `DemoModel.pace` high), IME on RP pages, crop on a 12MP photo, icon weight next to the composer's filled-ring icons.
 - Persona tile: the portrait was drawn through the base tint's alpha (washed out); paint is now opaque before the shader. The tile shows no name any more. Panel header avatar uses centerCrop under the frame's oval outline (a circular `RoundedBitmapDrawable` squashed non-square photos).
@@ -152,7 +157,7 @@ Leftovers from this list were all done in wave 2.
 - End-of-stream pause (third attempt): `ChatAdapter.prepareFinal` parses the finished reply and precomputes its text layout (`PrecomputedTextCompat`, skipped for tables and images) off the main thread; `swapFinal` waits for it instead of parsing on main; `updateLastMessage` no longer drops the cache when the message is unchanged (that late no-op update was the likely reason the earlier fixes did not hold); Markwon's `textSetter` uses the precomputed layout when the view's params match. That was not the cause: the pause was the deliberate 340 ms fade wait in `onCaughtUp` before the swap. The swap now posts immediately (last words may snap out of their fade). Confirmed fixed on the phone.
 
 ## 3.0.0
-Version 3.0.0 (versionCode 30000, derived from `appVersionMajor/Minor/Patch`) is on `main` (ff of `liquid-glass-redesign`). No release APK
+Version 3.0.0 (versionCode 30000, derived from `appVersionMajor/Minor/Patch`) is on `main` (ff of `dev`). No release APK
 yet: the signing key does not exist. The owner runs `scripts/make-release-key.sh` once on their machine, commits the
 fingerprint to `docs/release-cert.sha256`, then `scripts/release.sh` (see `docs/RELEASING.md`), tags `v3.0.0`, attaches
 the APK. `.github/workflows/release.yml` can do the same from repo secrets (untested). README, AGENTS and the changelog
@@ -186,7 +191,7 @@ Follow-up: panel tiles are drawn pictures (`RpTileArt`: memory pills, play disc,
 ## RP redesign pass (latest)
 Dim crimson `delete_action`; `MessageMenu` replaces the reply ⋮ popover; RP home chats list (`RpChatsHome`, `RpChatSummaries`); character panel opens from the reply speaker line (composer pill hidden in RP); solid character panel; Continue is a hidden turn that extends the last reply in place (`continuationBase`, `RpContinuation`, adapter `continuingFrom` seeds the reveal). Full suite passed (485 tests). Phone still has to check: menu/chip feel, home swipe from Ask, Continue seam and fade, panel over a photo background.
 
-Read `CLAUDE.md`, then `AGENTS.md` and `docs/backlog.md`. Branch `liquid-glass-redesign`.
+Read `CLAUDE.md`, then `AGENTS.md` and `docs/backlog.md`. Branch `dev`.
 
 ## Codebase pass (2026-09-28, stopped)
 Same-job copies in the chat path were folded. The three chat files stayed one file each. Fast unit tests passed (`testDebugUnitTest -Pfast --offline`). Not a release build, and the screenshot suite was not re-run.

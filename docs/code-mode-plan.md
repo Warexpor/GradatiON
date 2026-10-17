@@ -85,7 +85,7 @@ Run: `./gradlew :app:testDebugUnitTest --tests '*Code*'`.
 
 ## 2. Rules of this repo (do not break)
 
-- Work only on branch `liquid-glass-redesign`. Never create branches. Fetch + rebase before
+- Work only on branch `dev`. Never create branches. Fetch + rebase before
   pushing; never force-push. Another agent may be polishing chat/theme/settings files at the
   same time: keep Code work in `code/` and new resources; touch shared files minimally.
 - Design: strictly neutral grays (R=G=B, no hue at all, including diffs and status).

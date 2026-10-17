@@ -1,0 +1,3 @@
+GradatiON 3.2.0.
+- Roleplay: in-chat branches, SillyTavern and Chub card import, each Continue as its own bubble.
+- Faster launch and chat open, a new launcher icon, true red delete actions, and about 30 bug fixes.

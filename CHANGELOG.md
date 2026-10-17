@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.2.0 — 2026-10-17
+
+Roleplay branches, imported character cards, a faster launch, a new launcher icon and a 30-bug cleanup. Installs over 3.1.1 and keeps your chats.
 
 ### Added
 - Roleplay imports SillyTavern and Chub character cards, as a PNG or as JSON (V1, V2 and V3). The picture becomes the portrait, the card's example dialogs, scenario and instructions land in their own fields, and the card's own lorebook comes along, pinned to that character.
@@ -9,6 +11,8 @@
 - Roleplay branches. Editing an earlier line of yours offers **Branch**: the edit carries on in a new chat and the original keeps its whole story. A reply's ⋮ menu has **Branch from here**. A branch takes the reply versions and Facts along.
 
 ### Changed
+- The launcher icon is the flat GradatiON G, centred, and notifications use the same G instead of the old robot.
+- Delete actions use a true red instead of the dim crimson.
 - Roleplay Continue adds its own bubble instead of growing the last reply. Each Continue regenerates, swipes and deletes on its own, so a regenerate no longer wipes every Continue before it. The model still reads the pieces as one reply.
 - Roleplay Delete removes only that message, and the story after it stays. "Delete this and everything after" is still offered.
 - Roleplay history is fitted to the model's context window, not only the message count. Thirty long scenes no longer overflow a model that fits thirty short lines. The window size comes from OpenRouter's model list; unknown models assume 32k tokens.
@@ -20,6 +24,7 @@
 - Long chats hold fewer parsed messages in memory (the newest 120), and photos stored inside messages are decoded once instead of on every scroll.
 
 ### Fixed
+- The jump-to-bottom button measures the real end of the chat and stays off other pages.
 - Security: another app could make GradatiON send a message, apply a preset or wipe the chat through the share hand-off, skipping the confirm dialog. Only GradatiON's own share screens can do that now.
 - App lock: the assistant gesture, share and spell-check screens skipped the lock after 30 s away, and a rotation during the fingerprint prompt let them through. A busy sensor no longer turns the lock off for good.
 - Stop before the first word left the thinking bubble in the chat. Stop during a tool call (location, search) left the call unanswered, so every later send failed.
