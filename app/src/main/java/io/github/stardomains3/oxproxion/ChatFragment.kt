@@ -2051,6 +2051,7 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
                 updateJumpToBottom()
             }
         })
+        chatRecyclerView.viewTreeObserver.addOnGlobalLayoutListener(jumpLayoutWatch)
     }
 
     private var topBarFade: android.graphics.drawable.Drawable? = null
@@ -2218,10 +2219,31 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
     private var jumpShown = false
     private var jumpButton: View? = null
 
-    /** The jump button rises in once the latest message is more than a short way below. */
+    /** Set by a tap on the button: it stays down until the glide lands or the reader grabs the list. */
+    private var jumpGliding = false
+
+    /** Layouts move the end without a scroll (a reply lands, a row is deleted, the keyboard). */
+    private val jumpLayoutWatch = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+        if (view != null) updateJumpToBottom()
+    }
+
+    /**
+     * The jump button rises in once the latest message is more than a short way below, and only
+     * over the transcript: not over Code, the characters list or the expanded composer, and not
+     * while the list is already on its way down (a glide, or the reply follow catching up).
+     */
     private fun updateJumpToBottom() {
         val b = jumpButton ?: view?.findViewById<View>(R.id.jumpToBottomButton)?.also { jumpButton = it } ?: return
-        val show = chatAdapter.itemCount > 0 && remainingBelow() > 160 * resources.displayMetrics.density
+        if (listDragging) jumpGliding = false
+        val d = resources.displayMetrics.density
+        val below = if (chatAdapter.itemCount > 0) remainingBelow() else 0
+        if (below < 96 * d) jumpGliding = false
+        val onTranscript = chatFrameView.isShown && !rpShowWas &&
+            !(::codeMode.isInitialized && codeMode.isActive)
+        val following = followStream && followTicker != null
+        // Two edges, so a row resizing near the line does not blink the button.
+        val far = below > (if (jumpShown) 96 else 160) * d
+        val show = onTranscript && far && !jumpGliding && !following
         if (!show) {
             // Hide immediately. A page reset cancels the fade and would leave the button up
             // on a thread that has nothing below.
@@ -2245,8 +2267,21 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         b.animate().alpha(1f).translationY(0f).setDuration(260).setInterpolator(Motion.iosOut).start()
     }
 
+    /**
+     * How far the end of the thread is below the composer's top edge, in px. Measured off the
+     * last row when it is laid out: the scroll range is an average of the rows on screen, so a
+     * tall reply next to short lines swung it by screens and the button came and went at random.
+     */
     private fun remainingBelow(): Int = chatRecyclerView.run {
-        computeVerticalScrollRange() - computeVerticalScrollOffset() - computeVerticalScrollExtent()
+        val last = chatAdapter.itemCount - 1
+        val row = if (last >= 0) this@ChatFragment.layoutManager.findViewByPosition(last) else null
+        if (row != null) {
+            val margin = (row.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
+            return@run (this@ChatFragment.layoutManager.getDecoratedBottom(row) + margin - (height - paddingBottom)).coerceAtLeast(0)
+        }
+        // Not laid out: it is past the screen. The estimate only decides how far the glide goes.
+        val estimate = computeVerticalScrollRange() - computeVerticalScrollOffset() - computeVerticalScrollExtent()
+        if (last >= 0) estimate.coerceAtLeast(height / 2) else estimate
     }
 
     /**
@@ -2551,6 +2586,9 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
         rpUiWas = null
         ambientBackground = null
         topBarFade = null
+        chatRecyclerView.viewTreeObserver.removeOnGlobalLayoutListener(jumpLayoutWatch)
+        jumpGliding = false
+        jumpShown = false
         jumpButton = null
         scrollerCanUp = null
         scrollerCanDown = null
@@ -3495,7 +3533,11 @@ class ChatFragment : Fragment(R.layout.fragment_chat), OnKeyboardShortcutListene
             }
         }
 
-        requireView().findViewById<View>(R.id.jumpToBottomButton).setOnClickListener { glideToBottom() }
+        requireView().findViewById<View>(R.id.jumpToBottomButton).setOnClickListener {
+            jumpGliding = true
+            updateJumpToBottom()
+            glideToBottom()
+        }
 
         scrollToBottomButton.setOnClickListener {
             chatRecyclerView.post {

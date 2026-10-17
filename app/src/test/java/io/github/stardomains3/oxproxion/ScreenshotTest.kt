@@ -12,6 +12,7 @@ import android.media.ImageReader
 import android.os.Looper
 import android.provider.Settings
 import android.view.View
+import androidx.core.view.isVisible
 import android.widget.PopupWindow
 import android.widget.TextView
 import androidx.lifecycle.MutableLiveData
@@ -1640,6 +1641,36 @@ class ScreenshotTest : ScreenshotHarness() {
         org.junit.Assert.assertEquals((32 * d + 0.5f).toInt(), vh.itemView.findViewById<View>(R.id.copyButton).layoutParams.width)
         org.junit.Assert.assertNotNull(vh.itemView.findViewById<View>(R.id.generatedImageView).contentDescription)
         org.junit.Assert.assertTrue(vh.itemView.findViewById<View>(R.id.reasoningHeader).minimumHeight >= (44 * d).toInt())
+    }
+
+    /** The jump button follows where the end really is, and stays off pages that are not the thread. */
+    @Test fun jumpButtonOnlyWhenTheEndIsBelow() = withChat { a, _ ->
+        seedConversation(a); idle()
+        val vm = ViewModelProvider(a)[ChatViewModel::class.java]
+        val f = ChatViewModel::class.java.getDeclaredField("_chatMessages").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val live = f.get(vm) as MutableLiveData<List<FlexibleMessage>>
+        val long = (1..40).joinToString("\n\n") { "Line $it of a long answer." }
+        val short = live.value!!
+        live.value = short + FlexibleMessage("user", JsonPrimitive("More?")) + FlexibleMessage("assistant", JsonPrimitive(long))
+        idle()
+        val rv = a.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.chatRecyclerView)
+        val jump = a.findViewById<View>(R.id.jumpToBottomButton)
+        rv.scrollToPosition(0); idle()
+        org.junit.Assert.assertTrue("far from the end", jump.isVisible)
+        // The tail goes away without a scroll: nothing below, so no button.
+        live.value = short.take(1); idle()
+        org.junit.Assert.assertFalse("nothing below", jump.isVisible)
+        live.value = short + FlexibleMessage("user", JsonPrimitive("More?")) + FlexibleMessage("assistant", JsonPrimitive(long))
+        idle()
+        rv.scrollToPosition(0); idle()
+        org.junit.Assert.assertTrue(jump.isVisible)
+        // A tap puts it away at once, not when the glide lands.
+        jump.performClick()
+        org.junit.Assert.assertFalse("down on tap", jump.isVisible)
+        repeat(4) { idle(); org.robolectric.shadows.ShadowLooper.idleMainLooper(800, java.util.concurrent.TimeUnit.MILLISECONDS) }
+        org.junit.Assert.assertFalse("landed", rv.canScrollVertically(1))
+        org.junit.Assert.assertFalse(jump.isVisible)
     }
 
     /** A reply's ⋮ opens a compact context menu with Edit (and Read aloud / Instruct where they apply). */
