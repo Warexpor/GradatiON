@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher foreground: the flat blade G (same path as ic_gradation_mark.xml), 44dp tall, centred, well inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="22.68"
+        android:translateY="24.18"
+        android:scaleX="0.06"
+        android:scaleY="0.06">
+        <path
+            android:fillColor="#FFECECEC"
+            android:pathData="M720 130C600 170 430 240 350 340C280 430 262 540 285 630C310 730 420 800 535 818L582 645C520 655 440 640 412 570C390 510 410 440 470 405C510 382 560 378 598 378Z" />
+        <path
+            android:fillColor="#FFECECEC"
+            android:pathData="M532 490L780 490C782 610 740 720 660 790C620 825 580 848 548 864L609 645C618 612 612 590 590 572Z" />
+    </group>
+</vector>
